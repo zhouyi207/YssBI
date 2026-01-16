@@ -11,3 +11,5 @@
 🧠 把 Canvas 状态抽成 useViewport() hook
 
 如果你愿意，我可以帮你把这个 InfiniteCanvas 抽象成一个可复用引擎级组件。
+
+- 在 src-tauri 中的 tauri.conf.json 中添加 dragDropEnabled: false 可以使用 html 的拖拽功能
