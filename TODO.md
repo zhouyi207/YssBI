@@ -1,15 +1,7 @@
-你现在已经非常接近 UE / Blender / Figma 级画布系统，下一步可以做：
+# TODOLIST
 
-🌐 显示世界坐标（world space）
+## 前端
 
-🧲 缩放时网格粗细分级（主网格 / 次网格）
+1. 毛玻璃的残影无法解决 - 2026.01.17
 
-🎯 快捷键重置视图（Space / F 键）
-
-⚡ 用 requestAnimationFrame 减少 setState 抖动
-
-🧠 把 Canvas 状态抽成 useViewport() hook
-
-如果你愿意，我可以帮你把这个 InfiniteCanvas 抽象成一个可复用引擎级组件。
-
-- 在 src-tauri 中的 tauri.conf.json 中添加 dragDropEnabled: false 可以使用 html 的拖拽功能
+## 后端

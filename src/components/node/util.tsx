@@ -24,19 +24,21 @@ export function createNodeFromTemplate(
 
   node.inputs = definition.initialInputs?.map((pin) => ({
     id: `${nodeId}-input-${pin.id}`,
+    nodeId,
     name: pin.name,
     type: pin.type,
     direction: "input",
-    connectedTo: [],
+    links: [],
     defaultValue: pin.defaultValue,
   })) ?? [];
 
   node.outputs = definition.initialOutputs?.map((pin) => ({
     id: `${nodeId}-output-${pin.id}`,
+    nodeId,
     name: pin.name,
     type: pin.type,
     direction: "output",
-    connectedTo: [],
+    links: [],
     defaultValue: pin.defaultValue,
   })) ?? [];
 

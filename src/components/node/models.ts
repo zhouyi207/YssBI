@@ -23,10 +23,11 @@ export type PinType =
 
 export interface Pin {
   id: string;           // 唯一标识
+  nodeId: string;       // 所属节点 ID
   name: string;         // 显示名称
   type: PinType;        // 类型
   direction: PinDirection;
-  connectedTo: string[];// 连接的 pin id
+  links: string[];      // 连接的 pin id
   defaultValue?: any;   // 默认值（如果是数据针脚）
   ui?: {
     x?: number;         // 在节点内部的位置
@@ -67,8 +68,8 @@ export abstract class BaseNode {
   // 辅助方法：克隆对象（用于触发 React 更新）
   clone(): this {
     const clone = Object.assign(Object.create(Object.getPrototypeOf(this)), this);
-    clone.inputs = this.inputs.map(p => ({ ...p, connectedTo: [...p.connectedTo] }));
-    clone.outputs = this.outputs.map(p => ({ ...p, connectedTo: [...p.connectedTo] }));
+    clone.inputs = this.inputs.map(p => ({ ...p, links: [...p.links] }));
+    clone.outputs = this.outputs.map(p => ({ ...p, links: [...p.links] }));
     return clone;
   }
 

@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback } from "react";
 import { CanvasContext } from "./CanvasContext";
 import { CanvasState, Gesture } from "./type";
 import { clamp } from "../../types";
+import { Pin } from "../node/models";
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -12,7 +13,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     scale: 1,
   });
 
+  const [gesture, setGesture] = useState<Gesture>(null);
   const gestureRef = useRef<Gesture>(null);
+
   const [selection, setSelection] = useState<{
     startX: number;
     startY: number;
@@ -50,45 +53,19 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     [canvas]
   );
-  /* ================= Pointer Down ================= */
-
-  const onCanvasPointerDown = (e: React.PointerEvent) => {
-    if (e.button === 0) {
-      // 左键开始选择
-      const start = {
-        startX: e.clientX,
-        startY: e.clientY,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      };
-      gestureRef.current = { type: "select", ...start };
-      setSelection(start);
-    } else if (e.button === 1 || e.button === 2) {
-      // 中键或右键开始平移
-      gestureRef.current = {
-        type: "pan",
-        lastX: e.clientX,
-        lastY: e.clientY,
-        moved: false,
-      };
-    }
-
-    window.addEventListener("pointermove", onCanvasPointerMove);
-    window.addEventListener("pointerup", onCanvasPointerUp);
-  };
 
   /* ================= Pointer Move ================= */
 
-  const onCanvasPointerMove = (e: PointerEvent) => {
-    const gesture = gestureRef.current;
-    if (!gesture) return;
+  const onCanvasPointerMove = useCallback((e: PointerEvent) => {
+    const currentGesture = gestureRef.current;
+    if (!currentGesture) return;
 
-    if (gesture.type === "pan") {
-      const dx = e.clientX - gesture.lastX;
-      const dy = e.clientY - gesture.lastY;
+    if (currentGesture.type === "pan") {
+      const dx = e.clientX - currentGesture.lastX;
+      const dy = e.clientY - currentGesture.lastY;
 
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        gesture.moved = true;
+        currentGesture.moved = true;
       }
 
       setCanvas((prev) => ({
@@ -97,30 +74,97 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         y: prev.y + dy,
       }));
 
-      gesture.lastX = e.clientX;
-      gesture.lastY = e.clientY;
-    } else if (gesture.type === "select") {
-      gesture.currentX = e.clientX;
-      gesture.currentY = e.clientY;
-      setSelection({ ...gesture });
+      currentGesture.lastX = e.clientX;
+      currentGesture.lastY = e.clientY;
+      setGesture({ ...currentGesture });
+    } else if (currentGesture.type === "select") {
+      currentGesture.currentX = e.clientX;
+      currentGesture.currentY = e.clientY;
+      setSelection({ ...currentGesture });
+      setGesture({ ...currentGesture });
+    } else if (currentGesture.type === "connect") {
+      currentGesture.currentX = e.clientX;
+      currentGesture.currentY = e.clientY;
+      setGesture({ ...currentGesture });
     }
-  };
+  }, []);
 
   /* ================= Pointer Up ================= */
 
-  const onCanvasPointerUp = (e: PointerEvent) => {
-    const gesture = gestureRef.current;
+  const onCanvasPointerUp = useCallback((e: PointerEvent) => {
+    const currentGesture = gestureRef.current;
 
-    if (gesture?.type === "select") {
+    if (currentGesture?.type === "select") {
       setSelection(null);
-    } else if (gesture?.type === "pan" && !gesture.moved && e.button === 2) {
+    } else if (currentGesture?.type === "pan" && !currentGesture.moved && e.button === 2) {
       setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
+    } else if (currentGesture?.type === "connect") {
+      // Logic handled in Canvas.tsx via gesture state
     }
 
     gestureRef.current = null;
+    setGesture(null);
     window.removeEventListener("pointermove", onCanvasPointerMove);
     window.removeEventListener("pointerup", onCanvasPointerUp);
-  };
+  }, [onCanvasPointerMove]);
+
+  /* ================= Pin Pointer Down ================= */
+  const onPinPointerDown = useCallback((e: React.PointerEvent, pin: Pin) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (e.altKey) {
+      setGesture({ type: "disconnect", pin });
+      return;
+    }
+
+    const start = {
+      type: "connect" as const,
+      startPin: pin,
+      startX: e.clientX,
+      startY: e.clientY,
+      currentX: e.clientX,
+      currentY: e.clientY,
+      isReconnect: e.ctrlKey,
+    };
+
+    gestureRef.current = start;
+    setGesture(start);
+
+    window.addEventListener("pointermove", onCanvasPointerMove);
+    window.addEventListener("pointerup", onCanvasPointerUp);
+  }, [onCanvasPointerMove, onCanvasPointerUp]);
+
+  /* ================= Pointer Down ================= */
+
+  const onCanvasPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button === 0) {
+      // 左键开始选择
+      const start = {
+        type: "select" as const,
+        startX: e.clientX,
+        startY: e.clientY,
+        currentX: e.clientX,
+        currentY: e.clientY,
+      };
+      gestureRef.current = start;
+      setSelection(start);
+      setGesture(start);
+    } else if (e.button === 1 || e.button === 2) {
+      // 中键或右键开始平移
+      const start = {
+        type: "pan" as const,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: false,
+      };
+      gestureRef.current = start;
+      setGesture(start);
+    }
+
+    window.addEventListener("pointermove", onCanvasPointerMove);
+    window.addEventListener("pointerup", onCanvasPointerUp);
+  }, [onCanvasPointerMove, onCanvasPointerUp]);
 
   return (
     <CanvasContext.Provider
@@ -129,7 +173,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         setCanvas,
         onCanvasWheel,
         onCanvasPointerDown,
+        onPinPointerDown,
         selection,
+        gesture,
+        setGesture,
         contextMenu,
         setContextMenu,
       }}

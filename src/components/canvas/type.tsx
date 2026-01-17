@@ -1,3 +1,5 @@
+import { Pin } from "../node/models";
+
 export type CanvasState = {
   x: number;
   y: number;
@@ -17,5 +19,18 @@ export type Gesture =
       startY: number;
       currentX: number;
       currentY: number;
+    }
+  | {
+      type: "connect";
+      startPin: Pin;
+      startX: number; // 屏幕坐标
+      startY: number;
+      currentX: number;
+      currentY: number;
+      isReconnect?: boolean;
+    }
+  | {
+      type: "disconnect";
+      pin: Pin;
     }
   | null;

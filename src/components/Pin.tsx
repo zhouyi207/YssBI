@@ -3,6 +3,7 @@ import { Pin as PinModel } from "./node/models";
 
 export interface PinProps extends PinModel {
   onPinClick?: (id: string, direction: "input" | "output") => void;
+  onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
 }
 
 const PIN_COLORS: Record<string, string> = {
@@ -17,16 +18,18 @@ const PIN_COLORS: Record<string, string> = {
   delegate: "#ec4899",
 };
 
-export const Pin: React.FC<PinProps> = ({
-  id,
-  name,
-  type,
-  direction,
-  connectedTo,
-  ui,
-  onPinClick,
-}) => {
-  const isConnected = connectedTo.length > 0;
+export const Pin: React.FC<PinProps> = (props) => {
+  const {
+    id,
+    name,
+    type,
+    direction,
+    links,
+    ui,
+    onPinClick,
+    onPinPointerDown,
+  } = props;
+  const isConnected = links.length > 0;
   const baseColor = ui?.color ?? PIN_COLORS[type] ?? "#9ca3af";
 
   // 确保在浅色背景下 exec 针脚可见
@@ -41,19 +44,26 @@ export const Pin: React.FC<PinProps> = ({
   return (
     <div
       className={`
-        relative flex items-center h-7 shrink-0
+        relative flex items-center h-7 shrink-0 pin-container
         ${
           direction === "input"
             ? "flex-row justify-start"
             : "flex-row-reverse justify-end"
         }
       `}
-      onPointerDown={(e) => e.stopPropagation()}
+      data-pin-id={id}
+      onPointerDown={(e) => {
+        if (onPinPointerDown) {
+          e.stopPropagation();
+          e.preventDefault();
+          onPinPointerDown(e, props);
+        }
+      }}
     >
       {/* Pin Icon Container */}
       <div
         className={`
-          relative w-5 h-5 flex items-center justify-center cursor-pointer shrink-0 z-20
+          relative w-5 h-5 flex items-center justify-center cursor-pointer shrink-0 z-20 pin-circle
           ${direction === "input" ? "mr-2" : "ml-2"}
         `}
         onClick={(e) => {
@@ -103,7 +113,7 @@ export const Pin: React.FC<PinProps> = ({
       </div>
 
       {/* Label */}
-      <span className="text-[11px] text-gray-900 font-black select-none uppercase tracking-tight px-1 z-10">
+      <span className="text-[11px] text-gray-900 font-black select-none uppercase tracking-tight px-1 z-10 pointer-events-none">
         {name}
       </span>
     </div>
