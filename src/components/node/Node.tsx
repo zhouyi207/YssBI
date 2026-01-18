@@ -9,6 +9,7 @@ export interface NodeProps {
   onAddInput?: (id: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
+  onPointerDown?: (id: string, e: React.PointerEvent) => void;
 }
 
 /* ================= Default Node UI ================= */
@@ -117,8 +118,14 @@ export const Node = React.memo<NodeProps>((props) => {
   });
 
   const onPointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+    const { onPointerDown: currentOnPointerDown, node: currentNode } = propsRef.current;
+    if (currentOnPointerDown) {
+      currentOnPointerDown(currentNode.id, e);
+    } else {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
     draggingRef.current = true;
     last.current = { x: e.clientX, y: e.clientY };
     window.addEventListener("pointermove", onPointerMove);

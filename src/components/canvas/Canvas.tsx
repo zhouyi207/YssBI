@@ -13,6 +13,8 @@ import { Edge } from "../Edge";
 export default function InfiniteCanvas() {
   const {
     canvas,
+    nodes,
+    setNodes,
     onCanvasWheel,
     onCanvasPointerDown,
     onPinPointerDown,
@@ -24,10 +26,15 @@ export default function InfiniteCanvas() {
   } = useCanvas();
   const { drag } = useDrag();
 
-  const [nodes, setNodes] = useState<BaseNode[]>([]);
-  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
-  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const selectedNodeIds = useMemo(() => {
+    const set = new Set<string>();
+    nodes.forEach(n => {
+      if (n.selected) set.add(n.id);
+    });
+    return set;
+  }, [nodes]);
 
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
   useEffect(() => {
     selectedNodeIdsRef.current = selectedNodeIds;
   }, [selectedNodeIds]);
@@ -409,7 +416,6 @@ export default function InfiniteCanvas() {
         y2: (Math.max(selection.startY, selection.currentY) - rect.top - canvas.y) / canvas.scale,
       };
 
-      const newSelected = new Set<string>();
       let changed = false;
 
       setNodes(prev => {
@@ -422,8 +428,6 @@ export default function InfiniteCanvas() {
             n.position.y < box.y2 &&
             n.position.y + nodeHeight > box.y1;
 
-          if (isIntersecting) newSelected.add(n.id);
-
           if (n.selected !== isIntersecting) {
             changed = true;
             const newNode = n.clone();
@@ -434,7 +438,6 @@ export default function InfiniteCanvas() {
         });
 
         if (changed) {
-          setSelectedNodeIds(newSelected);
           return nextNodes;
         }
         return prev;
@@ -454,7 +457,6 @@ export default function InfiniteCanvas() {
             return n;
           });
           if (hasSelected) {
-            setSelectedNodeIds(new Set());
             return nextNodes;
           }
           return prev;
@@ -487,6 +489,67 @@ export default function InfiniteCanvas() {
     });
     return result;
   }, [nodes, pinOffsets, getPinWorldPos]);
+
+  const handleNodePointerDown = useCallback((id: string, e: React.PointerEvent) => {
+    e.stopPropagation();
+    // 如果没有按住 Ctrl/Shift，且当前节点未被选中，则清除其他选中项
+    setNodes(nodes => {
+      const alreadySelected = nodes.find(n => n.id === id)?.selected;
+      if (alreadySelected) return nodes;
+
+      return nodes.map(n => {
+        if (n.id === id) {
+          const newNode = n.clone();
+          newNode.selected = true;
+          return newNode;
+        } else if (n.selected) {
+          const newNode = n.clone();
+          newNode.selected = false;
+          return newNode;
+        }
+        return n;
+      });
+    });
+  }, [setNodes]);
+
+  const deleteSelectedNodes = useCallback(() => {
+    const selectedIds = selectedNodeIdsRef.current;
+    if (selectedIds.size === 0) return;
+
+    setNodes((prev) => {
+      // 1. 收集所有要删除节点的 Pin ID
+      const pinsToDelete = new Set<string>();
+      prev.forEach((node) => {
+        if (selectedIds.has(node.id)) {
+          node.inputs.forEach((p) => pinsToDelete.add(p.id));
+          node.outputs.forEach((p) => pinsToDelete.add(p.id));
+        }
+      });
+
+      // 2. 过滤掉被删除的节点，并清理剩余节点中的连接
+      return prev
+        .filter((node) => !selectedIds.has(node.id))
+        .map((node) => {
+          let nodeChanged = false;
+          const newNode = node.clone();
+
+          const cleanPins = (pins: Pin[]) => {
+            pins.forEach(pin => {
+              const originalLength = pin.links.length;
+              pin.links = pin.links.filter(linkId => !pinsToDelete.has(linkId));
+              if (pin.links.length !== originalLength) {
+                nodeChanged = true;
+              }
+            });
+          };
+
+          cleanPins(newNode.inputs);
+          cleanPins(newNode.outputs);
+
+          return nodeChanged ? newNode : node;
+        });
+    });
+  }, []);
 
   // 2. 多节点拖拽回调
   const handleNodeDrag = useCallback((id: string, dx: number, dy: number) => {
@@ -555,17 +618,35 @@ export default function InfiniteCanvas() {
 
   // 全局记录修饰键状态
   useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      (window as any)._lastAltKey = e.altKey;
+      (window as any)._lastCtrlKey = e.ctrlKey;
+
+      if (e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || e.ctrlKey))) {
+        // 防止在输入框中触发删除节点
+        if (
+          document.activeElement?.tagName === "INPUT" ||
+          document.activeElement?.tagName === "TEXTAREA" ||
+          (document.activeElement as HTMLElement)?.isContentEditable
+        ) {
+          return;
+        }
+        deleteSelectedNodes();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
       (window as any)._lastAltKey = e.altKey;
       (window as any)._lastCtrlKey = e.ctrlKey;
     };
-    window.addEventListener("keydown", handleKeys);
-    window.addEventListener("keyup", handleKeys);
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
     return () => {
-      window.removeEventListener("keydown", handleKeys);
-      window.removeEventListener("keyup", handleKeys);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [deleteSelectedNodes]);
 
   /* ===== Data Drag ===== */
   function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
@@ -708,6 +789,7 @@ export default function InfiniteCanvas() {
               node={node}
               scale={canvas.scale}
               onDrag={handleNodeDrag}
+              onPointerDown={handleNodePointerDown}
               onAddInput={handleNodeAddInput}
               onPinClick={handlePinClick}
               onPinPointerDown={onPinPointerDown}

@@ -1,17 +1,64 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { CanvasContext } from "./CanvasContext";
 import { CanvasState, Gesture } from "./type";
 import { clamp } from "../../types";
-import { Pin } from "../node/models";
+import { Pin, BaseNode } from "../node/models";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { serializeGraph, deserializeGraph } from "./io";
 
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const [nodes, setNodes] = useState<BaseNode[]>([]);
+  const nodesRef = useRef(nodes);
+  
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
   const [canvas, setCanvas] = useState<CanvasState>({
     x: 0,
     y: 0,
     scale: 1,
   });
+
+  const exportGraph = useCallback(async () => {
+    try {
+      const data = serializeGraph(nodesRef.current, canvas);
+      const path = await save({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        defaultPath: `yssbi-graph-${Date.now()}.json`
+      });
+
+      if (path) {
+        await writeTextFile(path, JSON.stringify(data, null, 2));
+      }
+    } catch (e) {
+      console.error("Export failed:", e);
+    }
+  }, [canvas]);
+
+  const importGraph = useCallback(async (json?: string) => {
+    try {
+      let content = json;
+      if (!content) {
+        const selected = await open({
+          multiple: false,
+          filters: [{ name: "JSON", extensions: ["json"] }]
+        });
+        if (!selected || Array.isArray(selected)) return;
+        content = await readTextFile(selected as string);
+      }
+
+      if (!content) return;
+      const { nodes: newNodes, canvas: newCanvas } = deserializeGraph(JSON.parse(content));
+      setNodes(newNodes);
+      setCanvas(newCanvas);
+    } catch (e) {
+      console.error("Import failed:", e);
+    }
+  }, []);
 
   const [gesture, setGesture] = useState<Gesture>(null);
   const gestureRef = useRef<Gesture>(null);
@@ -171,6 +218,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         canvas,
         setCanvas,
+        nodes,
+        setNodes,
         onCanvasWheel,
         onCanvasPointerDown,
         onPinPointerDown,
@@ -179,6 +228,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         setGesture,
         contextMenu,
         setContextMenu,
+        exportGraph,
+        importGraph,
       }}
     >
       {children}

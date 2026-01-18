@@ -1,10 +1,12 @@
 import { createContext, useContext } from "react";
-import { Pin } from "../node/models";
+import { Pin, BaseNode } from "../node/models";
 import { CanvasState, Gesture } from "./type";
 
 interface CanvasContextValue {
   canvas: CanvasState;
   setCanvas: (canvas: CanvasState) => void;
+  nodes: BaseNode[];
+  setNodes: React.Dispatch<React.SetStateAction<BaseNode[]>>;
   onCanvasWheel: (e: React.WheelEvent) => void;
   onCanvasPointerDown: (e: React.PointerEvent) => void;
   onPinPointerDown: (e: React.PointerEvent, pin: Pin) => void;
@@ -22,6 +24,8 @@ interface CanvasContextValue {
     visible: boolean;
   } | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
+  exportGraph: () => Promise<void>;
+  importGraph: (json?: string) => Promise<void>;
 }
 
 export const CanvasContext = createContext<CanvasContextValue | null>(null);
