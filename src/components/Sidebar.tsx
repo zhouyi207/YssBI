@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDrag } from "./drag/DragContext";
-import { NODE_REGISTRY } from "./node/registry";
 import { useCanvas } from "./canvas/CanvasContext";
+import { useUI } from "./ui/UIProvider";
+
 
 const PIN_COLORS: Record<string, string> = {
   exec: "#ffffff",
@@ -26,9 +27,31 @@ export default function Sidebar() {
     deleteVariable 
   } = useCanvas();
 
+  const { showDialog } = useUI();
+
   const [isAdding, setIsAdding] = useState(false);
   const [newVarName, setNewVarName] = useState("");
   const [newVarType, setNewVarType] = useState("int");
+
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    variableId: string;
+  } | null>(null);
+
+  // 点击外部关闭右键菜单
+  useEffect(() => {
+    const hideMenu = () => setContextMenu(null);
+    window.addEventListener("click", hideMenu);
+    window.addEventListener("contextmenu", hideMenu);
+    return () => {
+      window.removeEventListener("click", hideMenu);
+      window.removeEventListener("contextmenu", hideMenu);
+    };
+  }, []);
 
   const handleAddVariable = () => {
     if (newVarName.trim()) {
@@ -38,8 +61,22 @@ export default function Sidebar() {
     }
   };
 
+  const handleRename = (id: string) => {
+    setRenamingId(id);
+    setEditName(variables[id].name);
+  };
+
+  const confirmRename = () => {
+    if (renamingId && editName.trim()) {
+      if (editName.trim() !== variables[renamingId].name) {
+        updateVariable(renamingId, { name: editName.trim() });
+      }
+    }
+    setRenamingId(null);
+  };
+
   // 过滤出通用节点模板（排除变量类别，因为变量现在有专门的管理器）
-  const nodeTemplates = Object.entries(NODE_REGISTRY).filter(([_, node]) => node.category !== "Variable");
+  // const nodeTemplates = NODE_REGISTRY.getAllDefinitions().filter((node) => node.category !== "Variable");
 
   const selectedVar = selectedVariableId ? variables[selectedVariableId] : null;
 
@@ -49,7 +86,7 @@ export default function Sidebar() {
       onWheel={(e) => e.stopPropagation()}
     >
       {/* Variables Manager Section */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="p-3 border-b bg-gray-100/50 flex justify-between items-center">
           <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest">
             Variables
@@ -102,7 +139,13 @@ export default function Sidebar() {
             <div 
               key={id} 
               onClick={() => setSelectedVariableId(id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ x: e.clientX, y: e.clientY, variableId: id });
+              }}
               onPointerDown={(e) => {
+                if (e.button !== 0) return; // 仅左键拖拽
                 e.preventDefault();
                 startDrag({
                   type: "node-template",
@@ -130,7 +173,22 @@ export default function Sidebar() {
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{ backgroundColor: selectedVariableId === id ? 'white' : PIN_COLORS[data.type] }}
               />
-              <span className="flex-1 text-[12px] font-bold truncate">{data.name}</span>
+              {renamingId === id ? (
+                <input
+                  autoFocus
+                  className="flex-1 bg-white/20 text-white border-none outline-none px-1 rounded text-[12px] font-bold"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onBlur={confirmRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirmRename();
+                    if (e.key === "Escape") setRenamingId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="flex-1 text-[12px] font-bold truncate">{data.name}</span>
+              )}
               <span className={`text-[9px] font-black uppercase px-1 rounded ${selectedVariableId === id ? 'bg-blue-500' : 'bg-gray-200 text-gray-500'}`}>
                 {data.type}
               </span>
@@ -140,6 +198,40 @@ export default function Sidebar() {
             <div className="text-center py-8 text-[11px] text-gray-400 italic">No variables yet</div>
           )}
         </div>
+
+        {/* Variable Context Menu */}
+        {contextMenu && (
+          <div 
+            className="fixed z-[100] bg-gray-800 border border-gray-700 rounded shadow-xl py-1 w-32"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div 
+              onClick={() => { handleRename(contextMenu.variableId); setContextMenu(null); }}
+              className="px-3 py-1.5 text-xs text-gray-300 hover:bg-blue-600 hover:text-white cursor-pointer flex items-center gap-2"
+            >
+              <span>Rename</span>
+            </div>
+            <div 
+              onClick={() => {
+                showDialog({
+                  title: "Delete Variable",
+                  message: `Are you sure you want to delete variable '${variables[contextMenu.variableId].name}'?`,
+                  type: "danger",
+                  confirmText: "Delete",
+                  onConfirm: () => {
+                    deleteVariable(contextMenu.variableId);
+                    if (selectedVariableId === contextMenu.variableId) setSelectedVariableId(null);
+                  }
+                });
+                setContextMenu(null);
+              }}
+              className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-600 hover:text-white cursor-pointer flex items-center gap-2"
+            >
+              <span>Delete</span>
+            </div>
+          </div>
+        )}
 
         {/* 2. Properties Window */}
         <div className="h-[45%] bg-white flex flex-col overflow-hidden">
@@ -205,10 +297,17 @@ export default function Sidebar() {
                     <td className="p-2" colSpan={2}>
                       <button 
                         onClick={() => {
-                          if (confirm('Delete this variable?')) {
-                            deleteVariable(selectedVariableId!);
-                            setSelectedVariableId(null);
-                          }
+                          const idToDelete = selectedVariableId!;
+                          showDialog({
+                            title: "Delete Variable",
+                            message: `Are you sure you want to delete variable '${selectedVar.name}'?`,
+                            type: "danger",
+                            confirmText: "Delete",
+                            onConfirm: () => {
+                              deleteVariable(idToDelete);
+                              setSelectedVariableId(null);
+                            }
+                          });
                         }}
                         className="w-full py-1.5 mt-2 border border-red-100 text-red-500 hover:bg-red-50 rounded transition-colors font-bold text-[10px]"
                       >

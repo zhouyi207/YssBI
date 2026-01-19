@@ -36,30 +36,79 @@ export interface Pin {
   };
 }
 
-export abstract class BaseNode {
+/**
+ * 对应后端的 NodeDefinition
+ */
+export interface NodeDefinition {
+  node_type: string;
+  category: string;
+  title: string;
+  inputs: PinDefinition[];
+  outputs: PinDefinition[];
+  ui_style: string;
+  description?: string;
+}
+
+export interface PinDefinition {
+  name: string;
+  type: PinType;
+  defaultValue?: any;
+}
+
+export class BaseNode {
   id: string;
   type: string;
   title: string;
+  category: string;
   position: Position;
   inputs: Pin[] = [];
   outputs: Pin[] = [];
   selected: boolean = false;
-  variableId?: string; // 关联的变量 ID (针对 Get/Set Variable 节点)
+  variableId?: string; // 关联的变量 ID
   
-  // UI 标志位
-  noHeader: boolean = false;
+  // UI 属性，由 NodeDefinition 驱动
+  uiStyle: string = "default";
   centerSymbol?: string;
 
-  constructor(id: string, type: string, title: string, position: Position) {
+  constructor(id: string, definition: NodeDefinition, position: Position) {
     this.id = id;
-    this.type = type;
-    this.title = title;
+    this.type = definition.node_type;
+    this.title = definition.title;
+    this.category = definition.category;
     this.position = position;
+    this.uiStyle = definition.ui_style;
+
+    // 根据定义初始化针脚
+    this.inputs = definition.inputs.map((p, i) => ({
+      id: `${id}_in_${i}`,
+      nodeId: id,
+      name: p.name,
+      type: p.type,
+      direction: "input",
+      links: [],
+      defaultValue: p.defaultValue
+    }));
+
+    this.outputs = definition.outputs.map((p, i) => ({
+      id: `${id}_out_${i}`,
+      nodeId: id,
+      name: p.name,
+      type: p.type,
+      direction: "output",
+      links: [],
+      defaultValue: p.defaultValue
+    }));
+
+    // 特殊逻辑：Math 节点显示中心符号
+    if (this.uiStyle === "math") {
+      if (this.type === "add") this.centerSymbol = "+";
+      // 可以根据 type 设置更多符号
+    }
   }
 
-  abstract get category(): NodeType;
-  
-  abstract execute(inputs: Record<string, any>, properties?: Record<string, any>): any;
+  get noHeader(): boolean {
+    return this.uiStyle === "math";
+  }
 
   // 通用的添加输入方法
   addInput(pin: Pin) {
@@ -74,55 +123,9 @@ export abstract class BaseNode {
     return clone;
   }
 
-  // 新增：轻量级克隆，仅用于拖拽位置更新，不克隆针脚
   cloneWithPosition(newPos: Position): this {
     const clone = Object.assign(Object.create(Object.getPrototypeOf(this)), this);
     clone.position = newPos;
     return clone;
   }
-}
-
-// --- Math 节点类 ---
-export class MathNode extends BaseNode {
-  centerSymbol: string = "";
-  
-  constructor(id: string, type: string, title: string, position: Position, symbol: string) {
-    super(id, type, title, position);
-    this.noHeader = true; // Math 节点默认不显示 Header
-    this.centerSymbol = symbol;
-  }
-
-  get category(): NodeType { return "Math"; }
-
-  execute(inputs: Record<string, any>) {
-    return Object.values(inputs).reduce((a, b) => (Number(a) || 0) + (Number(b) || 0), 0);
-  }
-}
-
-// --- Event 节点类 ---
-export class EventNode extends BaseNode {
-  get category(): NodeType { return "Event"; }
-  execute() { /* 执行流入口 */ }
-}
-
-// --- Branch 节点类 ---
-export class BranchNode extends BaseNode {
-  get category(): NodeType { return "Branch"; }
-  execute(inputs: Record<string, any>) {
-    return !!inputs.condition;
-  }
-}
-
-// --- Variable 节点类 ---
-export class VariableNode extends BaseNode {
-  get category(): NodeType { return "Variable"; }
-  execute(_inputs: Record<string, any>, properties: Record<string, any>) {
-    return properties.value;
-  }
-}
-
-// --- Function 节点类 ---
-export class FunctionNode extends BaseNode {
-  get category(): NodeType { return "Function"; }
-  execute() { /* 函数执行 */ }
 }

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import { Pin } from "../Pin";
-import { Pin as PinModel, MathNode, BaseNode } from "./models";
+import { Pin as PinModel, BaseNode } from "./models";
 
 export interface NodeProps {
   node: BaseNode;
@@ -216,7 +216,7 @@ export const Node = React.memo<NodeProps>((props) => {
       }}
       onPointerDown={onPointerDown}
     >
-      {node instanceof MathNode ? (
+      {node.uiStyle === "math" ? (
         <MathNodeUI {...props} />
       ) : (
         <DefaultNodeUI {...props} />

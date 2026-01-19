@@ -14,13 +14,18 @@ fn execute_graph(data: serde_json::Value) -> Result<Vec<String>, String> {
     context.execute()
 }
 
+#[tauri::command]
+fn get_node_definitions() -> Vec<executor::NodeDefinition> {
+    executor::ExecutionContext::get_definitions()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![execute_graph])
+        .invoke_handler(tauri::generate_handler![execute_graph, get_node_definitions])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

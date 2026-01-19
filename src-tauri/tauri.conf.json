@@ -13,8 +13,9 @@
     "windows": [
       {
         "title": "yssbi",
-        "width": 800,
-        "height": 600
+        "width": 1000,
+        "height": 800,
+        "decorations": false
       }
     ],
     "security": {

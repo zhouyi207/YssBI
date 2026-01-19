@@ -25,6 +25,7 @@ interface CanvasContextValue {
   } | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   exportGraph: () => Promise<void>;
+  saveGraph: () => Promise<void>;
   importGraph: (json?: string) => Promise<void>;
   executeGraph: () => Promise<void>;
   variables: Record<string, { name: string; type: string; value: any }>;

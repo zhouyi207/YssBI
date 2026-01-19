@@ -4,6 +4,7 @@ import { BaseNode, Pin } from "../node/models";
 import { useDrag } from "../drag/DragContext";
 import { useCanvas } from "./CanvasContext";
 import { createNodeFromTemplate } from "../node/util";
+import { NODE_REGISTRY } from "../node/registry";
 import HUD from "./HUD";
 import NodePalette from "./NodePalette";
 import { drawEdge } from "../Edge";
@@ -23,7 +24,8 @@ export default function InfiniteCanvas() {
     setGesture,
     contextMenu,
     setContextMenu,
-    setSelectedVariableId
+    setSelectedVariableId,
+    variables
   } = useCanvas();
   const { drag } = useDrag();
 
@@ -619,6 +621,9 @@ export default function InfiniteCanvas() {
     const clickedNode = nodes.find(n => n.id === id);
     if (clickedNode?.variableId) {
       setSelectedVariableId(clickedNode.variableId);
+    } else {
+      // 需求 5: 点击非变量节点时清除变量选中
+      setSelectedVariableId(null);
     }
 
     // 如果没有按住 Ctrl/Shift，且当前节点未被选中，则清除其他选中项
@@ -661,7 +666,22 @@ export default function InfiniteCanvas() {
   }, [nodes, selectedNodeIds]);
 
   const pasteNodes = useCallback(() => {
-    const clipboard = clipboardRef.current;
+    let clipboard = clipboardRef.current;
+    if (clipboard.length === 0) return;
+
+    // 0. 过滤掉不安全的节点
+    clipboard = clipboard.filter(node => {
+      // 检查节点类型是否存在
+      if (!NODE_REGISTRY.getDefinition(node.type)) return false;
+      
+      // 如果是变量相关节点，检查其引用的变量 ID 是否依然存在
+      if (node.variableId && !variables[node.variableId]) {
+        return false;
+      }
+      
+      return true;
+    });
+    
     if (clipboard.length === 0) return;
 
     // 1. 获取鼠标位置对应的世界坐标
@@ -732,7 +752,7 @@ export default function InfiniteCanvas() {
       });
       return [...next, ...newNodes];
     });
-  }, [getCanvasLocalPoint, setNodes]);
+  }, [getCanvasLocalPoint, setNodes, variables]);
 
   const deleteSelectedNodes = useCallback(() => {
     const selectedIds = selectedNodeIdsRef.current;
@@ -772,6 +792,11 @@ export default function InfiniteCanvas() {
         });
     });
   }, []);
+
+  const cutSelectedNodes = useCallback(() => {
+    copySelectedNodes();
+    deleteSelectedNodes();
+  }, [copySelectedNodes, deleteSelectedNodes]);
 
   // 2. 多节点拖拽回调
   const handleNodeDrag = useCallback((id: string, dx: number, dy: number) => {
@@ -836,7 +861,7 @@ export default function InfiniteCanvas() {
     }
 
     prevDragRef.current = drag;
-  }, [drag]);
+  }, [drag, variables]); // 增加 variables 依赖，确保 handleDropTemplate 使用最新状态
 
   // 全局记录修饰键状态
   useEffect(() => {
@@ -856,6 +881,8 @@ export default function InfiniteCanvas() {
         deleteSelectedNodes();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
         copySelectedNodes();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+        cutSelectedNodes();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
         pasteNodes();
       }
@@ -903,6 +930,12 @@ export default function InfiniteCanvas() {
 
     // 如果是变量
     if (dragState.template.category === "Variable") {
+      // 安全检查：确保变量依然存在
+      if (!variables[dragState.template.variableId]) {
+        console.warn("Variable no longer exists. Aborting drop.");
+        return;
+      }
+
       let spawnType: "get_variable" | "set_variable" | null = null;
 
       if (event.altKey) spawnType = "set_variable";
@@ -1053,6 +1086,11 @@ export default function InfiniteCanvas() {
           <div
             className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
             onClick={() => {
+              if (!variables[variableDropMenu.variableId]) {
+                console.warn("Variable no longer exists.");
+                setVariableDropMenu(null);
+                return;
+              }
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,
@@ -1073,6 +1111,11 @@ export default function InfiniteCanvas() {
           <div
             className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
             onClick={() => {
+              if (!variables[variableDropMenu.variableId]) {
+                console.warn("Variable no longer exists.");
+                setVariableDropMenu(null);
+                return;
+              }
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,

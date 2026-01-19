@@ -1,104 +1,56 @@
-import { MathNode, EventNode, BranchNode, VariableNode, FunctionNode, BaseNode, NodeType, PinType } from "./models";
+import { invoke } from "@tauri-apps/api/core";
+import { NodeDefinition, BaseNode } from "./models";
 import { Position } from "../../types";
 
-export interface PinDefinition {
-  id: string;
-  name: string;
-  type: PinType;
-  defaultValue?: any;
-}
+export class NodeRegistry {
+  private static instance: NodeRegistry;
+  private definitions: Map<string, NodeDefinition> = new Map();
 
-export interface NodeDefinition {
-  type: string;
-  category: NodeType;
-  title: string;
-  className: new (id: string, type: string, title: string, pos: Position, ...args: any[]) => BaseNode;
-  extraArgs?: any[];
-  initialInputs?: PinDefinition[];
-  initialOutputs?: PinDefinition[];
-  ui?: {
-    icon?: string;
-    color?: string;
-  };
-}
+  private constructor() {}
 
-export const NODE_REGISTRY: Record<string, NodeDefinition> = {
-  "get_variable": {
-    type: "get_variable",
-    category: "Variable",
-    title: "Get Variable",
-    className: VariableNode,
-    initialOutputs: [{ id: "val", name: "Value", type: "int" }]
-  },
-  "set_variable": {
-    type: "set_variable",
-    category: "Variable",
-    title: "Set Variable",
-    className: VariableNode,
-    initialInputs: [
-      { id: "exec_in", name: "In", type: "exec" },
-      { id: "val", name: "Value", type: "int" }
-    ],
-    initialOutputs: [
-      { id: "exec_out", name: "Out", type: "exec" },
-      { id: "val", name: "Value", type: "int" }
-    ]
-  },
-  "int_to_bool": {
-    type: "int_to_bool",
-    category: "Math",
-    title: "Int To Bool",
-    className: MathNode,
-    extraArgs: ["➔"],
-    initialInputs: [{ id: "in", name: "Int", type: "int" }],
-    initialOutputs: [{ id: "out", name: "Bool", type: "bool" }]
-  },
-  "print": {
-    type: "print",
-    category: "Function",
-    title: "Print",
-    className: FunctionNode,
-    initialInputs: [
-      { id: "exec_in", name: "In", type: "exec" },
-      { id: "val", name: "Value", type: "string" }
-    ],
-    initialOutputs: [{ id: "exec_out", name: "Out", type: "exec" }],
-    ui: { icon: "⎙" }
-  },
-  "add": {
-    type: "add",
-    category: "Math",
-    title: "Add",
-    className: MathNode,
-    extraArgs: ["+"],
-    initialInputs: [
-      { id: "a", name: "A", type: "int" }, 
-      { id: "b", name: "B", type: "int" }
-    ],
-    initialOutputs: [{ id: "sum", name: "Sum", type: "int" }],
-    ui: { icon: "∑" }
-  },
-  "on_start": {
-    type: "on_start",
-    category: "Event",
-    title: "On Start",
-    className: EventNode,
-    initialOutputs: [{ id: "exec", name: "Out", type: "exec" }],
-    ui: { icon: "🚀" }
-  },
-  "if_else": {
-    type: "if_else",
-    category: "Branch",
-    title: "Branch",
-    className: BranchNode,
-    initialInputs: [
-      { id: "exec_in", name: "In", type: "exec" }, 
-      { id: "condition", name: "Cond", type: "bool" }
-    ],
-    initialOutputs: [
-      { id: "true", name: "True", type: "exec" }, 
-      { id: "false", name: "False", type: "exec" }
-    ],
-    ui: { icon: "⑂" }
+  static getInstance(): NodeRegistry {
+    if (!NodeRegistry.instance) {
+      NodeRegistry.instance = new NodeRegistry();
+    }
+    return NodeRegistry.instance;
   }
-};
+
+  /**
+   * 从后端同步节点定义
+   */
+  async syncFromBackend() {
+    try {
+      const defs = await invoke<NodeDefinition[]>("get_node_definitions");
+      this.definitions.clear();
+      defs.forEach(def => {
+        this.definitions.set(def.node_type, def);
+      });
+      console.log("Node definitions synced:", defs);
+    } catch (error) {
+      console.error("Failed to sync node definitions:", error);
+    }
+  }
+
+  getDefinition(type: string): NodeDefinition | undefined {
+    return this.definitions.get(type);
+  }
+
+  getAllDefinitions(): NodeDefinition[] {
+    return Array.from(this.definitions.values());
+  }
+
+  /**
+   * 根据类型创建一个新的节点实例
+   */
+  createNode(type: string, id: string, position: Position): BaseNode | null {
+    const def = this.getDefinition(type);
+    if (!def) {
+      console.error(`Node type ${type} not found in registry`);
+      return null;
+    }
+    return new BaseNode(id, def, position);
+  }
+}
+
+// 导出单例方便使用
+export const NODE_REGISTRY = NodeRegistry.getInstance();

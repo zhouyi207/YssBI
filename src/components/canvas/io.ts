@@ -14,6 +14,7 @@ export interface GraphData {
     title: string;
     position: { x: number; y: number };
     selected?: boolean;
+    variableId?: string;
     inputs: any[];
     outputs: any[];
   }[];
@@ -79,26 +80,30 @@ export function deserializeGraph(data: any): {
     console.warn("Graph data version mismatch or invalid data");
   }
 
+  const variables = data.variables || {};
+
   const nodes = (data.nodes || []).map((n: any) => {
-    const def = NODE_REGISTRY[n.type];
+    const def = NODE_REGISTRY.getDefinition(n.type);
     if (!def) {
       console.error(`Unknown node type: ${n.type}`);
       return null;
     }
 
-    // 实例化具体的节点类
-    const node = new def.className(
-      n.id,
-      n.type,
-      n.title,
-      n.position,
-      ...(def.extraArgs || [])
-    );
+    // 安全检查：如果节点有关联变量，确保该变量在导入的数据中存在
+    if (n.variableId && !variables[n.variableId]) {
+      console.warn(`Node ${n.id} refers to missing variable ${n.variableId}. Skipping node.`);
+      return null;
+    }
 
+    // 实例化 BaseNode
+    const node = new BaseNode(n.id, def, n.position);
+
+    node.title = n.title;
     node.selected = !!n.selected;
     node.variableId = n.variableId;
 
     // 恢复 Pins 数据，确保 ID 和连接关系完整
+    // 注意：这里的恢复会覆盖 BaseNode 构造函数生成的默认 Pin ID，这正是我们需要的
     node.inputs = (n.inputs || []).map((p: any) => ({
       ...p,
       nodeId: n.id,

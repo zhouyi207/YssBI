@@ -13,7 +13,7 @@ export default function NodePalette({
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    return Object.entries(NODE_REGISTRY).filter(([_type, node]) =>
+    return NODE_REGISTRY.getAllDefinitions().filter((node) =>
       node.category !== "Variable" &&
       node.title.toLowerCase().includes(query.toLowerCase())
     );
@@ -34,17 +34,16 @@ export default function NodePalette({
       />
 
       <div className="max-h-64 overflow-y-auto">
-        {filtered.map(([type, node]) => (
+        {filtered.map((node) => (
           <div
-            key={type}
+            key={node.node_type}
             className="px-3 py-2 hover:bg-gray-600 cursor-pointer flex justify-between items-center transition-colors"
-            onClick={() => onSelect({ type })}
+            onClick={() => onSelect({ type: node.node_type })}
           >
             <div>
               <div className="font-medium text-sm">{node.title}</div>
               <div className="text-[10px] text-gray-400 uppercase font-mono">{node.category}</div>
             </div>
-            {node.ui?.icon && <span className="text-lg opacity-80">{node.ui.icon}</span>}
           </div>
         ))}
       </div>
