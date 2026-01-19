@@ -44,6 +44,7 @@ export abstract class BaseNode {
   inputs: Pin[] = [];
   outputs: Pin[] = [];
   selected: boolean = false;
+  variableId?: string; // 关联的变量 ID (针对 Get/Set Variable 节点)
   
   // UI 标志位
   noHeader: boolean = false;
@@ -118,4 +119,10 @@ export class VariableNode extends BaseNode {
   execute(_inputs: Record<string, any>, properties: Record<string, any>) {
     return properties.value;
   }
+}
+
+// --- Function 节点类 ---
+export class FunctionNode extends BaseNode {
+  get category(): NodeType { return "Function"; }
+  execute() { /* 函数执行 */ }
 }

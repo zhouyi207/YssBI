@@ -1,10 +1,13 @@
 import { useCanvas } from "./canvas/CanvasContext";
 
 export default function Menubar() {
-  const { exportGraph, importGraph } = useCanvas();
+  const { exportGraph, importGraph, executeGraph } = useCanvas();
 
   return (
-    <div className="h-12 bg-gray-900 border-b border-gray-800 flex items-center px-6 gap-6 z-50 shadow-xl">
+    <div 
+      className="menubar-container h-12 bg-gray-900 border-b border-gray-800 flex items-center px-6 gap-6 z-50 shadow-xl"
+      onWheel={(e) => e.stopPropagation()}
+    >
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
           <span className="text-white font-black text-lg">Y</span>
@@ -14,7 +17,7 @@ export default function Menubar() {
         </div>
       </div>
       
-      <div className="h-6 w-[1px] bg-gray-700 mx-2" />
+      <div className="h-6 w-px bg-gray-700 mx-2" />
 
       <div className="flex items-center gap-2">
         <button 
@@ -36,6 +39,20 @@ export default function Menubar() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           <span className="text-sm font-medium">导出</span>
+        </button>
+      </div>
+
+      <div className="h-6 w-px bg-gray-700 mx-2" />
+
+      <div className="flex items-center">
+        <button
+          onClick={() => executeGraph()}
+          className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white transition-all duration-200 active:scale-95 shadow-lg shadow-green-900/20"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <span className="text-sm font-bold">执行</span>
         </button>
       </div>
 

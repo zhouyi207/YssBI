@@ -14,6 +14,7 @@ export default function NodePalette({
 
   const filtered = useMemo(() => {
     return Object.entries(NODE_REGISTRY).filter(([_type, node]) =>
+      node.category !== "Variable" &&
       node.title.toLowerCase().includes(query.toLowerCase())
     );
   }, [query]);

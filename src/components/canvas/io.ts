@@ -17,6 +17,7 @@ export interface GraphData {
     inputs: any[];
     outputs: any[];
   }[];
+  variables?: Record<string, { name: string; type: string; value: any }>;
   metadata: {
     exportTime: string;
     appVersion: string;
@@ -28,7 +29,11 @@ const CURRENT_VERSION = "1.0.0";
 /**
  * 将当前画布状态序列化为可存储的 JSON 对象
  */
-export function serializeGraph(nodes: BaseNode[], canvas: CanvasState): GraphData {
+export function serializeGraph(
+  nodes: BaseNode[],
+  canvas: CanvasState,
+  variables?: Record<string, { name: string; type: string; value: any }>
+): GraphData {
   return {
     version: CURRENT_VERSION,
     canvas,
@@ -38,6 +43,7 @@ export function serializeGraph(nodes: BaseNode[], canvas: CanvasState): GraphDat
       title: node.title,
       position: node.position,
       selected: node.selected,
+      variableId: node.variableId,
       inputs: node.inputs.map((p) => ({
         id: p.id,
         name: p.name,
@@ -53,6 +59,7 @@ export function serializeGraph(nodes: BaseNode[], canvas: CanvasState): GraphDat
         defaultValue: p.defaultValue,
       })),
     })),
+    variables,
     metadata: {
       exportTime: new Date().toISOString(),
       appVersion: "0.1.0",
@@ -63,7 +70,11 @@ export function serializeGraph(nodes: BaseNode[], canvas: CanvasState): GraphDat
 /**
  * 将 JSON 对象反序列化为运行时的节点实例
  */
-export function deserializeGraph(data: any): { nodes: BaseNode[]; canvas: CanvasState } {
+export function deserializeGraph(data: any): { 
+  nodes: BaseNode[]; 
+  canvas: CanvasState; 
+  variables?: Record<string, { name: string; type: string; value: any }> 
+} {
   if (!data || data.version !== CURRENT_VERSION) {
     console.warn("Graph data version mismatch or invalid data");
   }
@@ -85,6 +96,7 @@ export function deserializeGraph(data: any): { nodes: BaseNode[]; canvas: Canvas
     );
 
     node.selected = !!n.selected;
+    node.variableId = n.variableId;
 
     // 恢复 Pins 数据，确保 ID 和连接关系完整
     node.inputs = (n.inputs || []).map((p: any) => ({
@@ -105,5 +117,6 @@ export function deserializeGraph(data: any): { nodes: BaseNode[]; canvas: Canvas
   return {
     nodes,
     canvas: data.canvas || { x: 0, y: 0, scale: 1 },
+    variables: data.variables,
   };
 }

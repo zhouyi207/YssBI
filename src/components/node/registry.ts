@@ -1,4 +1,4 @@
-import { MathNode, EventNode, BranchNode, VariableNode, BaseNode, NodeType, PinType } from "./models";
+import { MathNode, EventNode, BranchNode, VariableNode, FunctionNode, BaseNode, NodeType, PinType } from "./models";
 import { Position } from "../../types";
 
 export interface PinDefinition {
@@ -35,8 +35,35 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
     category: "Variable",
     title: "Set Variable",
     className: VariableNode,
-    initialInputs: [{ id: "val", name: "Value", type: "int" }],
-    initialOutputs: [{ id: "val", name: "Value", type: "int" }]
+    initialInputs: [
+      { id: "exec_in", name: "In", type: "exec" },
+      { id: "val", name: "Value", type: "int" }
+    ],
+    initialOutputs: [
+      { id: "exec_out", name: "Out", type: "exec" },
+      { id: "val", name: "Value", type: "int" }
+    ]
+  },
+  "int_to_bool": {
+    type: "int_to_bool",
+    category: "Math",
+    title: "Int To Bool",
+    className: MathNode,
+    extraArgs: ["➔"],
+    initialInputs: [{ id: "in", name: "Int", type: "int" }],
+    initialOutputs: [{ id: "out", name: "Bool", type: "bool" }]
+  },
+  "print": {
+    type: "print",
+    category: "Function",
+    title: "Print",
+    className: FunctionNode,
+    initialInputs: [
+      { id: "exec_in", name: "In", type: "exec" },
+      { id: "val", name: "Value", type: "string" }
+    ],
+    initialOutputs: [{ id: "exec_out", name: "Out", type: "exec" }],
+    ui: { icon: "⎙" }
   },
   "add": {
     type: "add",

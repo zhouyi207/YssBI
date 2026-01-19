@@ -11,7 +11,35 @@ interface EdgeProps {
   startIsInput?: boolean;
 }
 
-export const Edge: React.FC<EdgeProps> = ({
+export function drawEdge(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string = "#999",
+  thickness: number = 2,
+  startIsInput: boolean = false
+) {
+  const dx = Math.abs(x1 - x2);
+  const curvature = Math.max(dx * 0.5, 40);
+  const dir = startIsInput ? -1 : 1;
+  
+  const c1x = x1 + curvature * dir;
+  const c1y = y1;
+  const c2x = x2 - curvature * dir;
+  const c2y = y2;
+  
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness;
+  ctx.lineCap = "round";
+  ctx.stroke();
+}
+
+export const Edge = React.memo<EdgeProps>(({
   x1,
   y1,
   x2,
@@ -20,12 +48,10 @@ export const Edge: React.FC<EdgeProps> = ({
   thickness = 2,
   startIsInput = false,
 }) => {
-  // 曲线曲率：基于水平距离，最小 40
+  // ... (keep the same implementation)
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);
 
-  // 如果起点是输出 (Standard)，则起点切线向右 (+)，终点切线向左 (-)
-  // 如果起点是输入 (Flipped)，则起点切线向左 (-)，终点切线向右 (+)
   const dir = startIsInput ? -1 : 1;
   
   const c1x = x1 + curvature * dir;
@@ -45,4 +71,4 @@ export const Edge: React.FC<EdgeProps> = ({
       className="pointer-events-none"
     />
   );
-};
+});

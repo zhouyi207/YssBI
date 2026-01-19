@@ -21,6 +21,7 @@ export default function HUD() {
   return (
     <div
       className={`
+          hud-container
           absolute left-3 bottom-3 px-3 py-2
           rounded bg-black/70 text-xs text-gray-200
           transition-opacity duration-500

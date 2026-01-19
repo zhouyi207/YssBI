@@ -26,6 +26,13 @@ interface CanvasContextValue {
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   exportGraph: () => Promise<void>;
   importGraph: (json?: string) => Promise<void>;
+  executeGraph: () => Promise<void>;
+  variables: Record<string, { name: string; type: string; value: any }>;
+  selectedVariableId: string | null;
+  setSelectedVariableId: (id: string | null) => void;
+  updateVariable: (id: string, data: Partial<{ name: string; type: string; value: any }>) => void;
+  addVariable: (name: string, type: string) => void;
+  deleteVariable: (id: string) => void;
 }
 
 export const CanvasContext = createContext<CanvasContextValue | null>(null);
