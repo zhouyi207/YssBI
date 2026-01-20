@@ -16,9 +16,10 @@ export const TabBar: React.FC = () => {
               ${activeTabId === tab.id ? "bg-gray-800 text-blue-400" : "text-gray-400 hover:bg-gray-800/50"}
             `}
           >
-            <span className="text-xs truncate max-w-[120px]">
-              {tab.title}{tab.isDirty ? "*" : ""}
-            </span>
+            <div className="flex items-center gap-1 min-w-0 max-w-[120px]">
+              <span className="text-xs truncate flex-1">{tab.title}</span>
+              {tab.isDirty && <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />}
+            </div>
             <button
               onClick={(e) => closeTab(tab.id, e)}
               className="p-0.5 rounded-full hover:bg-gray-700 text-gray-500 hover:text-white transition-colors"

@@ -17,14 +17,14 @@ const isSingleLinkPin = (p: Pin) => p.type === "exec" || p.direction === "input"
 const isCompatiblePins = (a: Pin, b: Pin) => {
   if (a.direction === b.direction) return false;
   if (a.type === b.type) return true;
-  
+
   // Wildcard type 'object' can connect to any data pin, but not 'exec'
   if (a.type === "exec" || b.type === "exec") return false;
   if (a.type === "object" || b.type === "object") return true;
-  
+
   // Allow int to float connection (standard casting)
   if ((a.type === "int" && b.type === "float") || (a.type === "float" && b.type === "int")) return true;
-  
+
   return false;
 };
 
@@ -67,7 +67,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   const [canvas, setCanvas] = useState<CanvasState>({ x: 0, y: 0, scale: 1 });
-  
+
   const [variables, setVariables] = useState<Record<string, { name: string; type: string; value: any }>>({
     "default_var": { name: "default_var", type: "int", value: 0 }
   });
@@ -117,7 +117,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // --- Tabs Management ---
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: "default", title: "Untitled", path: null }
+    { id: "default", title: "Untitled", path: null, isDirty: false }
   ]);
   const [activeTabId, setActiveTabId] = useState<string | null>("default");
   const tabDataRef = useRef<Record<string, TabData>>({});
@@ -157,7 +157,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addTab = useCallback((title: string = "Untitled", data?: TabData) => {
     const id = `tab-${crypto.randomUUID()}`;
-    const newTab: Tab = { id, title, path: data?.currentPath || null };
+    // Initialize isDirty to false for new tabs
+    const newTab: Tab = { id, title, path: data?.currentPath || null, isDirty: false };
     if (data) tabDataRef.current[id] = data;
     setTabs(prev => [...prev, newTab]);
     handleSetActiveTabId(id);
@@ -187,6 +188,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const clipboardRef = useRef<BaseNode[]>([]);
 
   /* ================= History (Undo/Redo) ================= */
+  const markDirty = useCallback((dirty: boolean) => {
+    setTabs(prev => prev.map(t => {
+      if (t.id === activeTabId) {
+        return { ...t, isDirty: dirty };
+      }
+      return t;
+    }));
+  }, [activeTabId]);
+
   const saveHistory = useCallback(() => {
     const currentState = serializeGraph(nodesRef.current, canvas, variablesRef.current, globalVariablesRef.current, functionsRef.current, macrosRef.current);
     setHistory(prev => {
@@ -196,7 +206,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       return { past: [...prev.past, currentState].slice(-50), future: [] };
     });
-  }, [canvas]);
+    markDirty(true);
+  }, [canvas, markDirty]);
 
   const undo = useCallback(() => {
     setHistory(prev => {
@@ -213,7 +224,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       setMacros(newMacros);
       return { past: newPast, future: [currentState, ...prev.future] };
     });
-  }, [canvas]);
+    markDirty(true);
+  }, [canvas, markDirty]);
 
   const redo = useCallback(() => {
     setHistory(prev => {
@@ -230,7 +242,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       setMacros(newMacros);
       return { past: [...prev.past, currentState], future: newFuture };
     });
-  }, [canvas]);
+    markDirty(true);
+  }, [canvas, markDirty]);
 
   const copy = useCallback(() => {
     const selectedNodes = nodesRef.current.filter(n => n.selected);
@@ -408,7 +421,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     } else {
       setVariables(prev => ({ ...prev, [id]: { ...prev[id], ...data } }));
     }
-    
+
     if (data.name || data.type) {
       setNodes(prevNodes => {
         let nodesChanged = false;
@@ -503,7 +516,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         await writeTextFile(path, JSON.stringify(data, null, 2));
         const filename = path.split(/[\\/]/).pop() || "Untitled";
         setCurrentPath(path);
-        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, title: filename, path } : t));
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, title: filename, path, isDirty: false } : t));
         showToast("已另存为", "success", 2000);
       }
     } catch (e) {
@@ -517,6 +530,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const data = serializeGraph(nodesRef.current, canvas, variablesRef.current, globalVariablesRef.current, functionsRef.current, macrosRef.current);
       await writeTextFile(currentPath, JSON.stringify(data, null, 2));
+      markDirty(false);
       showToast("已保存", "success", 2000);
     } catch (e) {
       console.error("Save failed:", e); saveGraphAs();
@@ -534,7 +548,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!content) return;
       const filename = path ? (path.split(/[\\/]/).pop() || "Untitled") : "Imported Graph";
       const { nodes: newNodes, canvas: newCanvas, localVariables: newVars, globalVariables: newGlobalVars, functions: newFuncs, macros: newMacros } = deserializeGraph(JSON.parse(content));
-      
+
       // We merge global variables from the file into our current session's global variables
       setGlobalVariables(prev => ({ ...prev, ...newGlobalVars }));
       setFunctions(prev => ({ ...prev, ...newFuncs }));
@@ -652,7 +666,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const onCanvasPointerUp = useCallback((e: PointerEvent) => {
     const currentGesture = gestureRef.current;
-    
+
     if (currentGesture?.type === "select") {
       setSelection(null);
     } else if (currentGesture?.type === "pan" && !currentGesture.moved && e.button === 2) {
@@ -706,7 +720,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <CanvasContext.Provider
       value={{
-        canvas, setCanvas, nodes, setNodes, onCanvasWheel, onCanvasPointerDown, onPinPointerDown, selection, gesture, setGesture, contextMenu, setContextMenu, saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables, selectedVariableId, setSelectedVariableId, addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable, 
+        canvas, setCanvas, nodes, setNodes, onCanvasWheel, onCanvasPointerDown, onPinPointerDown, selection, gesture, setGesture, contextMenu, setContextMenu, saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables, selectedVariableId, setSelectedVariableId, addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
         functions, addFunction, deleteFunction,
         macros, addMacro, deleteMacro,
         undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory, connectPins,
