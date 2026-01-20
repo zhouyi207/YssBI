@@ -18,7 +18,9 @@ export interface GraphData {
     inputs: any[];
     outputs: any[];
   }[];
-  variables?: Record<string, { name: string; type: string; value: any }>;
+  variables?: Record<string, { name: string; type: string; value: any; scope?: "local" | "global" }>;
+  functions?: Record<string, { name: string }>;
+  macros?: Record<string, { name: string }>;
   metadata: {
     exportTime: string;
     appVersion: string;
@@ -33,8 +35,25 @@ const CURRENT_VERSION = "1.0.0";
 export function serializeGraph(
   nodes: BaseNode[],
   canvas: CanvasState,
-  variables?: Record<string, { name: string; type: string; value: any }>
+  localVariables?: Record<string, { name: string; type: string; value: any }>,
+  globalVariables?: Record<string, { name: string; type: string; value: any }>,
+  functions?: Record<string, { name: string }>,
+  macros?: Record<string, { name: string }>
 ): GraphData {
+  const mergedVariables: Record<string, { name: string; type: string; value: any; scope?: "local" | "global" }> = {};
+  
+  if (localVariables) {
+    Object.entries(localVariables).forEach(([id, data]) => {
+      mergedVariables[id] = { ...data, scope: "local" };
+    });
+  }
+  
+  if (globalVariables) {
+    Object.entries(globalVariables).forEach(([id, data]) => {
+      mergedVariables[id] = { ...data, scope: "global" };
+    });
+  }
+
   return {
     version: CURRENT_VERSION,
     canvas,
@@ -60,7 +79,9 @@ export function serializeGraph(
         defaultValue: p.defaultValue,
       })),
     })),
-    variables,
+    variables: mergedVariables,
+    functions,
+    macros,
     metadata: {
       exportTime: new Date().toISOString(),
       appVersion: "0.1.0",
@@ -74,13 +95,27 @@ export function serializeGraph(
 export function deserializeGraph(data: any): { 
   nodes: BaseNode[]; 
   canvas: CanvasState; 
-  variables?: Record<string, { name: string; type: string; value: any }> 
+  localVariables: Record<string, { name: string; type: string; value: any }>;
+  globalVariables: Record<string, { name: string; type: string; value: any }>;
+  functions: Record<string, { name: string }>;
+  macros: Record<string, { name: string }>;
 } {
   if (!data || data.version !== CURRENT_VERSION) {
     console.warn("Graph data version mismatch or invalid data");
   }
 
   const variables = data.variables || {};
+  const localVariables: Record<string, any> = {};
+  const globalVariables: Record<string, any> = {};
+
+  Object.entries(variables).forEach(([id, data]: [string, any]) => {
+    const { scope, ...rest } = data;
+    if (scope === "global") {
+      globalVariables[id] = rest;
+    } else {
+      localVariables[id] = rest;
+    }
+  });
 
   const nodes = (data.nodes || []).map((n: any) => {
     const def = NODE_REGISTRY.getDefinition(n.type);
@@ -89,21 +124,16 @@ export function deserializeGraph(data: any): {
       return null;
     }
 
-    // 安全检查：如果节点有关联变量，确保该变量在导入的数据中存在
     if (n.variableId && !variables[n.variableId]) {
       console.warn(`Node ${n.id} refers to missing variable ${n.variableId}. Skipping node.`);
       return null;
     }
 
-    // 实例化 BaseNode
     const node = new BaseNode(n.id, def, n.position);
-
     node.title = n.title;
     node.selected = !!n.selected;
     node.variableId = n.variableId;
 
-    // 恢复 Pins 数据，确保 ID 和连接关系完整
-    // 注意：这里的恢复会覆盖 BaseNode 构造函数生成的默认 Pin ID，这正是我们需要的
     node.inputs = (n.inputs || []).map((p: any) => ({
       ...p,
       nodeId: n.id,
@@ -122,6 +152,9 @@ export function deserializeGraph(data: any): {
   return {
     nodes,
     canvas: data.canvas || { x: 0, y: 0, scale: 1 },
-    variables: data.variables,
+    localVariables,
+    globalVariables,
+    functions: data.functions || {},
+    macros: data.macros || {},
   };
 }

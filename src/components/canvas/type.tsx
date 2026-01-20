@@ -34,3 +34,10 @@ export type Gesture =
       pin: Pin;
     }
   | null;
+
+export interface Tab {
+  id: string;
+  title: string;
+  path: string | null;
+  isDirty?: boolean;
+}

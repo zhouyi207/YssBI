@@ -4,7 +4,6 @@ import { BaseNode, Pin } from "../node/models";
 import { useDrag } from "../drag/DragContext";
 import { useCanvas } from "./CanvasContext";
 import { createNodeFromTemplate } from "../node/util";
-import { NODE_REGISTRY } from "../node/registry";
 import HUD from "./HUD";
 import NodePalette from "./NodePalette";
 import { drawEdge } from "../Edge";
@@ -21,12 +20,34 @@ export default function InfiniteCanvas() {
     onPinPointerDown,
     selection,
     gesture,
-    setGesture,
     contextMenu,
     setContextMenu,
     setSelectedVariableId,
-    variables
+    variables,
+    globalVariables,
+    undo,
+    redo,
+    saveHistory,
+    copy,
+    paste,
+    cut,
+    deleteSelected,
+    saveGraph,
+    saveGraphAs,
+    importGraph,
+    addTab,
+    pendingConnection,
+    setPendingConnection,
+    connectPins
   } = useCanvas();
+
+  // 计算当前激活的引脚 ID
+  const activePinId = useMemo(() => {
+    if (gesture?.type === "connect") return gesture.startPin.id;
+    if (pendingConnection) return pendingConnection.id;
+    return null;
+  }, [gesture, pendingConnection]);
+
   const { drag } = useDrag();
 
   // 优化：使用 Ref 记录最新的 canvas 状态，避免 useEffect 频繁卸载/挂载监听器
@@ -254,21 +275,25 @@ export default function InfiniteCanvas() {
     });
 
     // 绘制当前正在拖拽的连接线
-    if (gesture?.type === "connect") {
-      const start = getPinWorldPos(gesture.startPin.id);
-      const end = getCanvasLocalPoint(gesture.currentX, gesture.currentY);
+    if (gesture?.type === "connect" || (pendingConnection && contextMenu?.visible)) {
+      const pin = gesture?.type === "connect" ? gesture.startPin : pendingConnection!;
+      const start = getPinWorldPos(pin.id);
+      const end = gesture?.type === "connect" 
+        ? getCanvasLocalPoint(gesture.currentX, gesture.currentY)
+        : getCanvasLocalPoint(contextMenu?.x || 0, contextMenu?.y || 0);
+        
       drawEdge(
         ctx,
         start.x, start.y,
         end.x, end.y,
-        gesture.startPin.ui?.color ?? (gesture.startPin.type === "exec" ? "#ffffff" : "#3b82f6"),
+        pin.ui?.color ?? (pin.type === "exec" ? "#ffffff" : "#3b82f6"),
         2 / canvas.scale,
-        gesture.startPin.direction === "input"
+        pin.direction === "input"
       );
     }
 
     ctx.restore();
-  }, [nodes, canvas, gesture, pinOffsets, getPinWorldPos, getCanvasLocalPoint]);
+  }, [nodes, canvas, gesture, pendingConnection, contextMenu, pinOffsets, getPinWorldPos, getCanvasLocalPoint]);
 
   // 同步画布尺寸并触发重绘
   useLayoutEffect(() => {
@@ -291,239 +316,6 @@ export default function InfiniteCanvas() {
     drawAllEdges();
   }, [drawAllEdges]);
 
-  const isCompatiblePins = (a: Pin, b: Pin) => {
-    return a.direction !== b.direction && a.type === b.type;
-  };
-
-  const isSingleLinkPin = (pin: Pin) => {
-    if (pin.type === "exec") return true;
-    return pin.direction === "input";
-  };
-
-  const updatePinLink = (node: BaseNode, pinId: string, otherId: string) => {
-    const pin = [...node.inputs, ...node.outputs].find((p) => p.id === pinId);
-    if (!pin) return false;
-
-    if (isSingleLinkPin(pin)) {
-      if (pin.links.length === 1 && pin.links[0] === otherId) return false;
-      pin.links = [otherId];
-    } else {
-      if (pin.links.includes(otherId)) return false;
-      pin.links = [...pin.links, otherId];
-    }
-    return true;
-  };
-
-  const removePinLink = (node: BaseNode, pinId: string, otherId: string) => {
-    const pin = [...node.inputs, ...node.outputs].find((p) => p.id === pinId);
-    if (!pin || !pin.links.includes(otherId)) return false;
-    pin.links = pin.links.filter(id => id !== otherId);
-    return true;
-  };
-
-  const connectPins = useCallback((nodes: BaseNode[], pinAId: string, pinBId: string) => {
-    const pinA = pinIndexRef.current.get(pinAId);
-    const pinB = pinIndexRef.current.get(pinBId);
-    if (!pinA || !pinB || !isCompatiblePins(pinA, pinB)) return nodes;
-
-    const outputPin = pinA.direction === "output" ? pinA : pinB;
-    const inputPin = pinA.direction === "input" ? pinA : pinB;
-    const outputNodeId = pinNodeIdIndexRef.current.get(outputPin.id);
-    const inputNodeId = pinNodeIdIndexRef.current.get(inputPin.id);
-    if (!outputNodeId || !inputNodeId) return nodes;
-
-    // 记录需要清理的旧连接
-    const toCleanup: { pinId: string; oldPeerId: string }[] = [];
-    if (isSingleLinkPin(outputPin) && outputPin.links.length > 0) {
-      toCleanup.push({ pinId: outputPin.id, oldPeerId: outputPin.links[0] });
-    }
-    if (isSingleLinkPin(inputPin) && inputPin.links.length > 0) {
-      toCleanup.push({ pinId: inputPin.id, oldPeerId: inputPin.links[0] });
-    }
-
-    return nodes.map((node) => {
-      let nodeChanged = false;
-
-      // 检查是否是需要清理旧连接的节点
-      toCleanup.forEach(({ pinId, oldPeerId }) => {
-        if (node.id === pinNodeIdIndexRef.current.get(oldPeerId)) {
-          const newNode = nodeChanged ? (node as any) : node.clone();
-          if (removePinLink(newNode, oldPeerId, pinId)) {
-            nodeChanged = true;
-            node = newNode;
-          }
-        }
-      });
-
-      // 检查是否是需要建立新连接的节点
-      if (node.id === outputNodeId || node.id === inputNodeId) {
-        const newNode = nodeChanged ? (node as any) : node.clone();
-        const a = updatePinLink(newNode, outputPin.id, inputPin.id);
-        const b = updatePinLink(newNode, inputPin.id, outputPin.id);
-        if (a || b) {
-          nodeChanged = true;
-          node = newNode;
-        }
-      }
-
-      return node;
-    });
-  }, []);
-
-  const lastConnectRef = useRef<{ startPin: Pin } | null>(null);
-
-  useEffect(() => {
-    if (gesture?.type === "connect") {
-      lastConnectRef.current = { startPin: gesture.startPin };
-
-      // 需求 4: Ctrl + 移动引脚连接 (重连逻辑)
-      if (gesture.isReconnect && gesture.startPin.links.length > 0) {
-        const sourcePin = gesture.startPin;
-        const peerId = sourcePin.links[sourcePin.links.length - 1]; // 取最后一个连接
-        const peerPin = pinIndexRef.current.get(peerId);
-
-        if (peerPin) {
-          // 1. 断开原有的连接
-          const sourceNodeId = pinNodeIdIndexRef.current.get(sourcePin.id);
-          const peerNodeId = pinNodeIdIndexRef.current.get(peerPin.id);
-
-          setNodes(prev => prev.map(n => {
-            if (n.id === sourceNodeId || n.id === peerNodeId) {
-              const newNode = n.clone();
-              removePinLink(newNode, n.id === sourceNodeId ? sourcePin.id : peerPin.id, n.id === sourceNodeId ? peerPin.id : sourcePin.id);
-              return newNode;
-            }
-            return n;
-          }));
-
-          // 2. 将连接起点切换为对端 Pin，实现“从对端拉出线”的效果
-          setGesture({
-            ...gesture,
-            startPin: peerPin,
-            isReconnect: false // 已经处理过重连，转为普通连接
-          });
-        }
-      }
-    } else if (gesture?.type === "disconnect") {
-      // 需求 5: Alt + 点击断开
-      const targetPin = gesture.pin;
-      const peerIds = [...targetPin.links];
-      const targetNodeId = pinNodeIdIndexRef.current.get(targetPin.id);
-
-      setNodes(prev => prev.map(n => {
-        let changed = false;
-        const newNode = n.id === targetNodeId || peerIds.some(id => pinNodeIdIndexRef.current.get(id) === n.id) ? n.clone() : n;
-
-        if (n.id === targetNodeId) {
-          const p = [...newNode.inputs, ...newNode.outputs].find(p => p.id === targetPin.id);
-          if (p && p.links.length > 0) {
-            p.links = [];
-            changed = true;
-          }
-        }
-
-        peerIds.forEach(peerId => {
-          if (pinNodeIdIndexRef.current.get(peerId) === n.id) {
-            if (removePinLink(newNode, peerId, targetPin.id)) {
-              changed = true;
-            }
-          }
-        });
-
-        return changed ? newNode : n;
-      }));
-
-      setGesture(null);
-    }
-  }, [gesture, setGesture]); // 添加 setGesture 依赖项
-
-  // 处理连接逻辑
-  useEffect(() => {
-    const handlePointerUp = (e: PointerEvent) => {
-      const lastConnect = lastConnectRef.current;
-      if (!lastConnect) return;
-
-      // 清理，防止重复触发 (除非新的 gesture 再次设置它)
-      lastConnectRef.current = null;
-
-      // 使用 elementsFromPoint 以穿透可能存在的遮挡物
-      const elements = document.elementsFromPoint(e.clientX, e.clientY);
-      const pinEl = elements.find(el => el.closest("[data-pin-id]"))?.closest("[data-pin-id]");
-
-      const targetPinId = pinEl?.getAttribute("data-pin-id");
-      const sourcePin = lastConnect.startPin;
-
-      if (!targetPinId) {
-        // 需求 3: 连接线如果没有连接节点自动打开右键的菜单栏
-        setContextMenu({
-          x: e.clientX,
-          y: e.clientY,
-          visible: true
-        });
-        return;
-      }
-
-      if (targetPinId === sourcePin.id) return;
-
-      const source = pinIndexRef.current.get(sourcePin.id);
-      const target = pinIndexRef.current.get(targetPinId);
-      if (!source || !target) return;
-      if (!isCompatiblePins(source, target)) return;
-
-      const outputPin = source.direction === "output" ? source : target;
-      const inputPin = source.direction === "input" ? source : target;
-      const outputNodeId = pinNodeIdIndexRef.current.get(outputPin.id);
-      const inputNodeId = pinNodeIdIndexRef.current.get(inputPin.id);
-      if (!outputNodeId || !inputNodeId) return;
-
-      setNodes((prev) => {
-        // 记录需要清理的旧连接
-        const toCleanup: { pinId: string; oldPeerId: string }[] = [];
-        if (isSingleLinkPin(outputPin) && outputPin.links.length > 0) {
-          toCleanup.push({ pinId: outputPin.id, oldPeerId: outputPin.links[0] });
-        }
-        if (isSingleLinkPin(inputPin) && inputPin.links.length > 0) {
-          toCleanup.push({ pinId: inputPin.id, oldPeerId: inputPin.links[0] });
-        }
-
-        let changed = false;
-        const next = prev.map((node) => {
-          let nodeChanged = false;
-
-          // 检查是否是需要清理旧连接的节点
-          toCleanup.forEach(({ pinId, oldPeerId }) => {
-            // 如果节点包含 oldPeerId，需要移除对 pinId 的引用
-            if (node.id === pinNodeIdIndexRef.current.get(oldPeerId)) {
-              const newNode = nodeChanged ? (node as any) : node.clone();
-              if (removePinLink(newNode, oldPeerId, pinId)) {
-                nodeChanged = true;
-                node = newNode;
-              }
-            }
-          });
-
-          // 检查是否是需要建立新连接的节点
-          if (node.id === outputNodeId || node.id === inputNodeId) {
-            const newNode = nodeChanged ? (node as any) : node.clone();
-            const a = updatePinLink(newNode, outputPin.id, inputPin.id);
-            const b = updatePinLink(newNode, inputPin.id, outputPin.id);
-            if (a || b) {
-              nodeChanged = true;
-              node = newNode;
-            }
-          }
-
-          if (nodeChanged) changed = true;
-          return node;
-        });
-        return changed ? next : prev;
-      });
-    };
-
-    window.addEventListener("pointerup", handlePointerUp, { capture: true });
-    return () => window.removeEventListener("pointerup", handlePointerUp, { capture: true });
-  }, []); // 仅在挂载时添加一次监听器，通过 Ref 获取最新状态
-
   const handleNodePaletteSelect = (tpl: { type: string }) => {
     if (!contextMenu || !ref.current) return;
 
@@ -533,9 +325,30 @@ export default function InfiniteCanvas() {
 
     const newNode = createNodeFromTemplate({ x, y }, canvas.scale, tpl.type);
     if (newNode) {
-      setNodes((prev) => [...prev, newNode]);
+      saveHistory();
+      
+      const newNodes = [...nodes, newNode];
+      setNodes(newNodes);
+
+      // 如果有待处理的连接，尝试自动连接
+      if (pendingConnection) {
+        const isInput = pendingConnection.direction === "input";
+        const targetDirection = isInput ? "outputs" : "inputs";
+        
+        // 寻找新节点中第一个符合类型的引脚
+        const pins = targetDirection === "inputs" ? newNode.inputs : newNode.outputs;
+        const compatiblePin = pins.find(p => p.type === pendingConnection.type);
+        
+        if (compatiblePin) {
+          // 延迟一帧调用 connectPins 确保 nodes 已更新
+          setTimeout(() => {
+            connectPins(pendingConnection.id, compatiblePin.id);
+          }, 0);
+        }
+      }
     }
     setContextMenu(null);
+    setPendingConnection(null);
   };
 
   // 1. 自动隐藏菜单逻辑
@@ -545,14 +358,17 @@ export default function InfiniteCanvas() {
       // 检查点击是否在菜单容器之外
       const isInsideMenu = target.closest(".menu-container");
       if (!isInsideMenu) {
-        if (contextMenu?.visible) setContextMenu(null);
+        if (contextMenu?.visible) {
+          setContextMenu(null);
+          setPendingConnection(null);
+        }
         if (variableDropMenu) setVariableDropMenu(null);
       }
     };
 
     window.addEventListener("pointerdown", handleClickOutside, true); // 使用捕获阶段
     return () => window.removeEventListener("pointerdown", handleClickOutside, true);
-  }, [contextMenu, variableDropMenu, setContextMenu]);
+  }, [contextMenu, variableDropMenu, setContextMenu, setPendingConnection]);
 
   useEffect(() => {
     if (selection && ref.current) {
@@ -612,11 +428,15 @@ export default function InfiniteCanvas() {
       }
     }
     prevSelectionRef.current = selection;
-  }, [selection, canvas.x, canvas.y, canvas.scale]);
+  }, [selection, canvas.x, canvas.y, canvas.scale, setNodes]);
 
   const handleNodePointerDown = useCallback((id: string, e: React.PointerEvent) => {
     e.stopPropagation();
     
+    // 准备保存历史，如果在指针抬起前发生了移动，或者改变了选中状态
+    // 注意：目前的 saveHistory 会保存全量状态，比较安全
+    saveHistory();
+
     // 如果是变量节点，自动在侧边栏显示其属性
     const clickedNode = nodes.find(n => n.id === id);
     if (clickedNode?.variableId) {
@@ -644,10 +464,9 @@ export default function InfiniteCanvas() {
         return n;
       });
     });
-  }, [setNodes, nodes, setSelectedVariableId]);
+  }, [setNodes, nodes, setSelectedVariableId, saveHistory]);
 
   const lastMousePosRef = useRef({ x: 0, y: 0 });
-  const clipboardRef = useRef<BaseNode[]>([]);
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
@@ -656,147 +475,6 @@ export default function InfiniteCanvas() {
     window.addEventListener("pointermove", handlePointerMove, { capture: true });
     return () => window.removeEventListener("pointermove", handlePointerMove, { capture: true });
   }, []);
-
-  const copySelectedNodes = useCallback(() => {
-    const selectedNodes = nodes.filter(n => selectedNodeIds.has(n.id));
-    if (selectedNodes.length === 0) return;
-
-    // 深度克隆节点以保存当前状态
-    clipboardRef.current = selectedNodes.map(n => n.clone());
-  }, [nodes, selectedNodeIds]);
-
-  const pasteNodes = useCallback(() => {
-    let clipboard = clipboardRef.current;
-    if (clipboard.length === 0) return;
-
-    // 0. 过滤掉不安全的节点
-    clipboard = clipboard.filter(node => {
-      // 检查节点类型是否存在
-      if (!NODE_REGISTRY.getDefinition(node.type)) return false;
-      
-      // 如果是变量相关节点，检查其引用的变量 ID 是否依然存在
-      if (node.variableId && !variables[node.variableId]) {
-        return false;
-      }
-      
-      return true;
-    });
-    
-    if (clipboard.length === 0) return;
-
-    // 1. 获取鼠标位置对应的世界坐标
-    const worldPos = getCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y);
-
-    // 2. 计算剪贴板中节点的包围盒左上角
-    let minX = Infinity;
-    let minY = Infinity;
-    clipboard.forEach(node => {
-      minX = Math.min(minX, node.position.x);
-      minY = Math.min(minY, node.position.y);
-    });
-
-    const offsetX = worldPos.x - minX;
-    const offsetY = worldPos.y - minY;
-
-    // 3. 生成新 ID 映射
-    const pinIdMap = new Map<string, string>();
-    const newNodes = clipboard.map(node => {
-      const newNode = node.clone();
-      const newNodeId = `node-${crypto.randomUUID()}`;
-      newNode.id = newNodeId;
-      newNode.position = {
-        x: node.position.x + offsetX,
-        y: node.position.y + offsetY
-      };
-      newNode.selected = true; // 粘贴后选中
-
-      // 更新 pins 的 ID 和 nodeId
-      const updatePins = (pins: Pin[]) => {
-        return pins.map(pin => {
-          const oldId = pin.id;
-          // 保持原有 ID 的后缀，以便识别
-          const suffix = oldId.split('-').pop();
-          const newId = `${newNodeId}-${pin.direction}-${suffix}-${crypto.randomUUID().slice(0, 8)}`;
-          pin.id = newId;
-          pin.nodeId = newNodeId;
-          pinIdMap.set(oldId, newId);
-          return pin;
-        });
-      };
-
-      newNode.inputs = updatePins(newNode.inputs);
-      newNode.outputs = updatePins(newNode.outputs);
-
-      return newNode;
-    });
-
-    // 4. 修正连接线：仅保留粘贴节点之间的连接
-    newNodes.forEach(node => {
-      [...node.inputs, ...node.outputs].forEach(pin => {
-        pin.links = pin.links
-          .map(oldLinkId => pinIdMap.get(oldLinkId))
-          .filter((newLinkId): newLinkId is string => !!newLinkId);
-      });
-    });
-
-    // 5. 更新状态
-    setNodes(prev => {
-      // 取消之前的选中
-      const next = prev.map(n => {
-        if (n.selected) {
-          const cloned = n.clone();
-          cloned.selected = false;
-          return cloned;
-        }
-        return n;
-      });
-      return [...next, ...newNodes];
-    });
-  }, [getCanvasLocalPoint, setNodes, variables]);
-
-  const deleteSelectedNodes = useCallback(() => {
-    const selectedIds = selectedNodeIdsRef.current;
-    if (selectedIds.size === 0) return;
-
-    setNodes((prev) => {
-      // 1. 收集所有要删除节点的 Pin ID
-      const pinsToDelete = new Set<string>();
-      prev.forEach((node) => {
-        if (selectedIds.has(node.id)) {
-          node.inputs.forEach((p) => pinsToDelete.add(p.id));
-          node.outputs.forEach((p) => pinsToDelete.add(p.id));
-        }
-      });
-
-      // 2. 过滤掉被删除的节点，并清理剩余节点中的连接
-      return prev
-        .filter((node) => !selectedIds.has(node.id))
-        .map((node) => {
-          let nodeChanged = false;
-          const newNode = node.clone();
-
-          const cleanPins = (pins: Pin[]) => {
-            pins.forEach(pin => {
-              const originalLength = pin.links.length;
-              pin.links = pin.links.filter(linkId => !pinsToDelete.has(linkId));
-              if (pin.links.length !== originalLength) {
-                nodeChanged = true;
-              }
-            });
-          };
-
-          cleanPins(newNode.inputs);
-          cleanPins(newNode.outputs);
-
-          return nodeChanged ? newNode : node;
-        });
-    });
-  }, []);
-
-  const cutSelectedNodes = useCallback(() => {
-    copySelectedNodes();
-    deleteSelectedNodes();
-  }, [copySelectedNodes, deleteSelectedNodes]);
 
   // 2. 多节点拖拽回调
   const handleNodeDrag = useCallback((id: string, dx: number, dy: number) => {
@@ -819,10 +497,11 @@ export default function InfiniteCanvas() {
         return node;
       })
     );
-  }, []);
+  }, [setNodes]);
 
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
+    saveHistory();
     setNodes((prev) =>
       prev.map((node) => {
         if (node.id === id) {
@@ -841,7 +520,7 @@ export default function InfiniteCanvas() {
         return node;
       })
     );
-  }, []);
+  }, [saveHistory, setNodes]);
 
   const handlePinClick = useCallback((pinId: string, _direction: "input" | "output") => {
     console.log(`Pin clicked: ${pinId}`);
@@ -878,13 +557,34 @@ export default function InfiniteCanvas() {
       if (isInput) return;
 
       if (e.key === "Delete" || e.key === "Backspace") {
-        deleteSelectedNodes();
+        deleteSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        redo();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-        copySelectedNodes();
+        copy();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
-        cutSelectedNodes();
+        cut();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
-        pasteNodes();
+        paste(getCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          saveGraphAs();
+        } else {
+          saveGraph();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        importGraph();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        addTab();
       }
     };
 
@@ -899,7 +599,7 @@ export default function InfiniteCanvas() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [deleteSelectedNodes, copySelectedNodes, pasteNodes]);
+  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addTab]);
 
   /* ===== Data Drag ===== */
   function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
@@ -930,8 +630,8 @@ export default function InfiniteCanvas() {
 
     // 如果是变量
     if (dragState.template.category === "Variable") {
-      // 安全检查：确保变量依然存在
-      if (!variables[dragState.template.variableId]) {
+      // 安全检查：确保变量依然存在（检查局部和全局）
+      if (!variables[dragState.template.variableId] && !globalVariables[dragState.template.variableId]) {
         console.warn("Variable no longer exists. Aborting drop.");
         return;
       }
@@ -942,17 +642,17 @@ export default function InfiniteCanvas() {
       else if (event.ctrlKey) spawnType = "get_variable";
 
       if (spawnType) {
+        saveHistory();
         const newNode = createNodeFromTemplate({ x, y }, canvas.scale, spawnType);
         if (newNode) {
           setNodes((prev) => [...prev, newNode]);
 
           if (targetPinId && spawnType === "get_variable") {
-            const targetPin = pinIndexRef.current.get(targetPinId);
-            if (targetPin && targetPin.direction === "input") {
-              const outputPin = newNode.outputs[0];
-              if (outputPin) {
-                setNodes(prev => connectPins(prev, outputPin.id, targetPin.id));
-              }
+            const outputPin = newNode.outputs[0];
+            if (outputPin) {
+              setTimeout(() => {
+                connectPins(outputPin.id, targetPinId);
+              }, 0);
             }
           }
         }
@@ -960,20 +660,16 @@ export default function InfiniteCanvas() {
       }
 
       if (targetPinId) {
-        const targetPin = pinIndexRef.current.get(targetPinId);
-        if (targetPin && targetPin.direction === "input") {
-          const newNode = createNodeFromTemplate({ x, y }, canvas.scale, "get_variable");
-          if (newNode) {
-            setNodes(prev => {
-              const next = [...prev, newNode];
-              const outputPin = newNode.outputs[0];
-              if (outputPin) {
-                return connectPins(next, outputPin.id, targetPin.id);
-              }
-              return next;
-            });
-            return;
+        const newNode = createNodeFromTemplate({ x, y }, canvas.scale, "get_variable");
+        if (newNode) {
+          setNodes(prev => [...prev, newNode]);
+          const outputPin = newNode.outputs[0];
+          if (outputPin) {
+            setTimeout(() => {
+              connectPins(outputPin.id, targetPinId);
+            }, 0);
           }
+          return;
         }
       }
 
@@ -995,6 +691,7 @@ export default function InfiniteCanvas() {
       dragState.template.type
     );
     if (newNode) {
+      saveHistory();
       setNodes((prev) => [...prev, newNode]);
     }
   }
@@ -1038,6 +735,7 @@ export default function InfiniteCanvas() {
               key={node.id}
               node={node}
               scale={canvas.scale}
+              activePinId={activePinId}
               onDrag={handleNodeDrag}
               onPointerDown={handleNodePointerDown}
               onAddInput={handleNodeAddInput}
@@ -1073,6 +771,7 @@ export default function InfiniteCanvas() {
           x={contextMenu.x}
           y={contextMenu.y}
           onSelect={handleNodePaletteSelect}
+          filterPin={pendingConnection}
         />
       )}
 
@@ -1086,11 +785,12 @@ export default function InfiniteCanvas() {
           <div
             className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
             onClick={() => {
-              if (!variables[variableDropMenu.variableId]) {
+              if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
                 console.warn("Variable no longer exists.");
                 setVariableDropMenu(null);
                 return;
               }
+              saveHistory();
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,
@@ -1111,11 +811,12 @@ export default function InfiniteCanvas() {
           <div
             className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
             onClick={() => {
-              if (!variables[variableDropMenu.variableId]) {
+              if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
                 console.warn("Variable no longer exists.");
                 setVariableDropMenu(null);
                 return;
               }
+              saveHistory();
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,

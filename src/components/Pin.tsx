@@ -4,6 +4,7 @@ import { Pin as PinModel } from "./node/models";
 export interface PinProps extends PinModel {
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
+  isActive?: boolean;
 }
 
 const PIN_COLORS: Record<string, string> = {
@@ -28,8 +29,9 @@ export const Pin: React.FC<PinProps> = (props) => {
     ui,
     onPinClick,
     onPinPointerDown,
+    isActive,
   } = props;
-  const isConnected = links.length > 0;
+  const isConnected = links.length > 0 || isActive;
   const baseColor = ui?.color ?? PIN_COLORS[type] ?? "#9ca3af";
 
   // 确保在浅色背景下 exec 针脚可见

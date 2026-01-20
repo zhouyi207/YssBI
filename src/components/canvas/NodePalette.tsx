@@ -1,23 +1,39 @@
 import { useState, useMemo } from "react";
 import { NODE_REGISTRY } from "../node/registry";
+import { Pin } from "../node/models";
 
 export default function NodePalette({
   x,
   y,
   onSelect,
+  filterPin,
 }: {
   x: number;
   y: number;
   onSelect: (tpl: { type: string }) => void;
+  filterPin?: Pin | null;
 }) {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    return NODE_REGISTRY.getAllDefinitions().filter((node) =>
-      node.category !== "Variable" &&
-      node.title.toLowerCase().includes(query.toLowerCase())
-    );
-  }, [query]);
+    const allDefs = NODE_REGISTRY.getAllDefinitions();
+    return allDefs.filter((node) => {
+      // 基本搜索和类别过滤
+      if (node.category === "Variable") return false;
+      const matchesQuery = node.title.toLowerCase().includes(query.toLowerCase());
+      if (!matchesQuery) return false;
+
+      // 如果有 filterPin，进一步筛选具有匹配引脚的节点
+      if (filterPin) {
+        const targetDirection = filterPin.direction === "input" ? "outputs" : "inputs";
+        const pins = node[targetDirection] || [];
+        const hasCompatiblePin = pins.some(p => p.type === filterPin.type);
+        if (!hasCompatiblePin) return false;
+      }
+
+      return true;
+    });
+  }, [query, filterPin]);
 
   return (
     <div

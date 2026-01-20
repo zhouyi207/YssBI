@@ -26,3 +26,11 @@
 .animate-zoom-in {
   animation: zoomIn 0.2s ease-out forwards;
 }
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

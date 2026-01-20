@@ -7,6 +7,7 @@ const appWindow = getCurrentWindow();
 
 interface MenuItem {
   label: string;
+  shortcut?: string;
   onClick?: () => void;
 }
 
@@ -43,8 +44,13 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
                   : "text-gray-600 cursor-default"
               }`}
             >
-              <span>{item.label}</span>
-              {!item.onClick && <span className="text-[9px] opacity-40 ml-2">⏳</span>}
+              <div className="flex items-center gap-4 flex-1 justify-between">
+                <span>{item.label}</span>
+                {item.shortcut && (
+                  <span className="text-[10px] opacity-40 font-mono">{item.shortcut}</span>
+                )}
+              </div>
+              {!item.onClick && !item.shortcut && <span className="text-[9px] opacity-40 ml-2">⏳</span>}
             </div>
           ))}
         </div>
@@ -54,7 +60,20 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
 };
 
 export default function Menubar() {
-  const { exportGraph, importGraph, executeGraph, saveGraph } = useCanvas();
+    const { 
+    saveGraphAs, 
+    importGraph, 
+    saveGraph, 
+    undo, 
+    redo, 
+    copy, 
+    paste, 
+    cut, 
+    deleteSelected,
+    canUndo, 
+    canRedo,
+    addTab
+  } = useCanvas();
 
   const openNewWindow = async () => {
     try {
@@ -72,17 +91,19 @@ export default function Menubar() {
   };
 
   const fileItems: MenuItem[] = [
-    { label: "Open...", onClick: () => importGraph() },
-    { label: "Save", onClick: () => saveGraph() },
-    { label: "Export As...", onClick: () => exportGraph() },
+    { label: "New File", shortcut: "Ctrl+N", onClick: () => addTab() },
+    { label: "Open File...", shortcut: "Ctrl+O", onClick: () => importGraph() },
+    { label: "Save", shortcut: "Ctrl+S", onClick: () => saveGraph() },
+    { label: "Save As...", shortcut: "Ctrl+Shift+S", onClick: () => saveGraphAs() },
   ];
 
   const editItems: MenuItem[] = [
-    { label: "Undo" },
-    { label: "Redo" },
-    { label: "Copy" },
-    { label: "Paste" },
-    { label: "Delete" },
+    { label: "Undo", shortcut: "Ctrl+Z", onClick: canUndo ? undo : undefined },
+    { label: "Redo", shortcut: "Ctrl+Y", onClick: canRedo ? redo : undefined },
+    { label: "Cut", shortcut: "Ctrl+X", onClick: cut },
+    { label: "Copy", shortcut: "Ctrl+C", onClick: copy },
+    { label: "Paste", shortcut: "Ctrl+V", onClick: () => paste() },
+    { label: "Delete", shortcut: "Del", onClick: deleteSelected },
   ];
 
   const dataItems: MenuItem[] = [
@@ -138,19 +159,8 @@ export default function Menubar() {
 
       <div className="flex-1 min-w-[20px]" data-tauri-drag-region />
 
-      {/* Right side: Controls & Window Buttons */}
+      {/* Right side: Window Buttons */}
       <div className="flex items-center h-full">
-        {/* Execution Button (Small version) */}
-        <button
-          onClick={() => executeGraph()}
-          className="flex items-center gap-1 px-3 py-1 mr-4 rounded bg-green-600 hover:bg-green-500 text-white transition-all active:scale-95 text-xs font-bold"
-        >
-          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          执行
-        </button>
-
         {/* Window Controls */}
         <div className="flex items-center h-full">
           <button

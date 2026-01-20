@@ -5,6 +5,7 @@ import { Pin as PinModel, BaseNode } from "./models";
 export interface NodeProps {
   node: BaseNode;
   scale: number;
+  activePinId?: string | null;
   onDrag?: (id: string, dx: number, dy: number) => void;
   onAddInput?: (id: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -16,6 +17,7 @@ export interface NodeProps {
 
 const DefaultNodeUI: React.FC<NodeProps> = ({
   node,
+  activePinId,
   onPinClick,
   onPinPointerDown,
 }) => {
@@ -41,13 +43,13 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
           <div className="flex gap-2 px-2 pt-2 whitespace-nowrap items-start">
             <div className="flex flex-col gap-1 flex-1">
               {inputsExec.map((pin) => (
-                <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+                <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
               ))}
             </div>
             <div className="flex-1" />
             <div className="flex flex-col gap-1 flex-1 items-end">
               {outputsExec.map((pin) => (
-                <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+                <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
               ))}
             </div>
           </div>
@@ -57,13 +59,13 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
         <div className="flex-1 flex gap-2 px-2 py-2 whitespace-nowrap items-center">
           <div className="flex flex-col gap-1 flex-1">
             {inputsData.map((pin) => (
-              <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+              <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
             ))}
           </div>
           <div className="flex-1" />
           <div className="flex flex-col gap-1 flex-1 items-end">
             {outputsData.map((pin) => (
-              <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+              <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
             ))}
           </div>
         </div>
@@ -76,6 +78,7 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
 
 const MathNodeUI: React.FC<NodeProps> = ({
   node,
+  activePinId,
   onAddInput,
   onPinClick,
   onPinPointerDown,
@@ -100,13 +103,13 @@ const MathNodeUI: React.FC<NodeProps> = ({
         <div className="flex gap-4 px-2 pt-2 z-10 items-start">
           <div className="flex flex-col gap-1 items-start flex-1">
             {inputsExec.map((pin) => (
-              <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+              <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
             ))}
           </div>
           <div className="flex-1" />
           <div className="flex flex-col gap-1 items-end flex-1">
             {outputsExec.map((pin) => (
-              <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+              <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
             ))}
           </div>
         </div>
@@ -116,7 +119,7 @@ const MathNodeUI: React.FC<NodeProps> = ({
       <div className="flex-1 flex gap-4 px-2 py-2 items-center z-10">
         <div className="flex flex-col gap-1 items-start flex-1">
           {inputsData.map((pin) => (
-            <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+            <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
           ))}
           {onAddInput && (
             <button
@@ -134,7 +137,7 @@ const MathNodeUI: React.FC<NodeProps> = ({
         <div className="flex-1" />
         <div className="flex flex-col gap-1 items-end flex-1">
           {outputsData.map((pin) => (
-            <Pin key={pin.id} {...pin} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
+            <Pin key={pin.id} {...pin} isActive={activePinId === pin.id} onPinClick={onPinClick} onPinPointerDown={onPinPointerDown} />
           ))}
         </div>
       </div>
@@ -226,6 +229,7 @@ export const Node = React.memo<NodeProps>((props) => {
 }, (prev, next) => {
   // 性能优化核心：只有以下属性变化时才重绘节点
   return (
+    prev.activePinId === next.activePinId &&
     prev.node.id === next.node.id &&
     prev.node.position.x === next.node.position.x &&
     prev.node.position.y === next.node.position.y &&
