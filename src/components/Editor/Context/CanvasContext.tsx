@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
-import { Pin, BaseNode } from "../node/models";
-import { CanvasState, Gesture, Tab } from "./type";
+import { Pin, BaseNode } from "../Types/nodes";
+import { CanvasState, Gesture, Tab } from "../Types/canvas";
 
 interface CanvasContextValue {
   canvas: CanvasState;
@@ -9,6 +9,7 @@ interface CanvasContextValue {
   setNodes: React.Dispatch<React.SetStateAction<BaseNode[]>>;
   onCanvasWheel: (e: React.WheelEvent) => void;
   onCanvasPointerDown: (e: React.PointerEvent) => void;
+  onNodePointerDown: (e: React.PointerEvent, node: BaseNode) => void;
   onPinPointerDown: (e: React.PointerEvent, pin: Pin) => void;
   selection: {
     startX: number;
@@ -30,18 +31,25 @@ interface CanvasContextValue {
   executeGraph: () => Promise<void>;
   variables: Record<string, { name: string; type: string; value: any }>;
   globalVariables: Record<string, { name: string; type: string; value: any }>;
-  selectedVariableId: string | null;
-  setSelectedVariableId: (id: string | null) => void;
+  selectedItemId: string | null;
+  selectedItemType: 'variable' | 'event' | 'function' | 'macro' | null;
+  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | null) => void;
   updateVariable: (id: string, data: Partial<{ name: string; type: string; value: any }>) => void;
   addVariable: (name: string, type: string, isGlobal?: boolean) => void;
   deleteVariable: (id: string) => void;
   promoteVariable: (id: string) => void;
   demoteVariable: (id: string) => void;
-  functions: Record<string, { name: string }>;
+  functions: Record<string, import("../Types/canvas").SubGraphData>;
   addFunction: (name: string) => void;
+  updateFunction: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteFunction: (id: string) => void;
-  macros: Record<string, { name: string }>;
+  events: Record<string, import("../Types/canvas").SubGraphData>;
+  addEvent: (name: string) => void;
+  updateEvent: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
+  deleteEvent: (id: string) => void;
+  macros: Record<string, import("../Types/canvas").SubGraphData>;
   addMacro: (name: string) => void;
+  updateMacro: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteMacro: (id: string) => void;
   undo: () => void;
   redo: () => void;
@@ -56,8 +64,9 @@ interface CanvasContextValue {
   // Tabs API
   tabs: Tab[];
   activeTabId: string | null;
-  setActiveTabId: (id: string) => void;
+  setActiveTabId: (id: string | null) => void;
   addTab: (title?: string) => void;
+  openSubGraph: (id: string, name: string, type: "event" | "function" | "macro") => void;
   closeTab: (id: string, e?: React.MouseEvent) => void;
   pendingConnection: Pin | null;
   setPendingConnection: (pin: Pin | null) => void;

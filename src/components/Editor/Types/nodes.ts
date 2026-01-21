@@ -1,16 +1,16 @@
-import { Position } from "../../types";
+import { Position } from "../../../types";
 
-export type NodeType = 
-  | "Event" 
-  | "Function" 
-  | "Variable" 
-  | "Math" 
-  | "Branch" 
+export type NodeType =
+  | "Event"
+  | "Function"
+  | "Variable"
+  | "Math"
+  | "Branch"
   | "Custom";
 
 export type PinDirection = "input" | "output";
 
-export type PinType = 
+export type PinType =
   | "exec"      // 执行针脚
   | "int"       // 整数
   | "float"     // 浮点数
@@ -65,7 +65,10 @@ export class BaseNode {
   outputs: Pin[] = [];
   selected: boolean = false;
   variableId?: string; // 关联的变量 ID
-  
+  variableType?: string; // 关联的变量类型
+  isInternal: boolean = false; // 是否为内部节点（不可删除）
+  subGraphId?: string; // 关联的子图 ID (针对 Call Function / Call Macro)
+
   // UI 属性，由 NodeDefinition 驱动
   uiStyle: string = "default";
   centerSymbol?: string;

@@ -96,6 +96,8 @@ pub struct NodeData {
     pub outputs: Vec<PinData>,
     #[serde(rename = "variableId")]
     pub variable_id: Option<String>,
+    #[serde(rename = "subGraphId")]
+    pub sub_graph_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -119,6 +121,7 @@ pub struct ExecutionContext {
     nodes: HashMap<String, NodeData>,
     pin_to_node: HashMap<String, String>,
     definitions: HashMap<String, NodeDefinition>, // 运行时缓存定义
+    call_stack: Vec<String>,
 }
 
 impl ExecutionContext {
@@ -155,6 +158,7 @@ impl ExecutionContext {
             nodes,
             pin_to_node,
             definitions: def_map,
+            call_stack: Vec::new(),
         }
     }
 
@@ -165,6 +169,25 @@ impl ExecutionContext {
         };
 
         let node = self.nodes.get(&node_id).unwrap().clone();
+
+        // 特殊处理：如果是 function_entry 的输出针脚，或者是 macro_inputs 的输出针脚
+        // 它们的值应该来源于调用者（call_function / call_macro）
+        if (node.node_type == "function_entry" || node.node_type == "macro_inputs")
+            && !self.call_stack.is_empty()
+        {
+            let pin = node.outputs.iter().find(|p| p.id == pin_id);
+            if let Some(p) = pin {
+                // 找到当前调用节点
+                let caller_node_id = self.call_stack.last().unwrap().clone();
+                let caller_node = self.nodes.get(&caller_node_id).unwrap().clone();
+                // 在调用者的输入中寻找同名针脚
+                if let Some(caller_input) = caller_node.inputs.iter().find(|tip| tip.name == p.name)
+                {
+                    return self.get_pin_value(&caller_input.id);
+                }
+            }
+        }
+
         let pin = node
             .inputs
             .iter()
@@ -188,6 +211,14 @@ impl ExecutionContext {
     /// 核心改进：直接调用定义中的 data_processor
     fn evaluate_node_output(&mut self, node_id: &str, pin_id: &str) -> Value {
         let node = self.nodes.get(node_id).unwrap().clone();
+
+        // 特殊处理：如果是 call_function 或 call_macro 的输出针脚（数据针脚，非 exec）
+        // 它们的值应该来源于子图内的 return 或 outputs 节点
+        if node.node_type == "call_function" || node.node_type == "call_macro" {
+            // 逻辑较复杂，目前暂透传逻辑：找到子图内的 return 节点并取值
+            // 简化实现：如果在 data_processor 里处理会更好
+        }
+
         let def = match self.definitions.get(&node.node_type) {
             Some(d) => d,
             None => return Value::Null,
@@ -210,13 +241,13 @@ impl ExecutionContext {
         let start_node_id = self
             .nodes
             .values()
-            .find(|n| n.node_type == "on_start")
+            .find(|n| n.node_type == "event_on_run")
             .map(|n| n.id.clone())
-            .ok_or("No 'on_start' node found")?;
+            .ok_or("No 'event_on_run' node found")?;
 
         self.logs
             .push(format!("Starting execution from node: {}", start_node_id));
-        self.run_flow(&start_node_id, "Out")?;
+        self.run_flow(&start_node_id, "Exec")?;
 
         self.logs.push("Execution finished".to_string());
         Ok(self.logs.clone())
@@ -233,7 +264,7 @@ impl ExecutionContext {
         let def = self
             .definitions
             .get(&node.node_type)
-            .ok_or("Definition not found")?;
+            .ok_or(format!("Definition not found: {}", node.node_type))?;
 
         let next_exec_name = if let Some(processor) = def.flow_processor {
             processor(self, &node)?
@@ -241,7 +272,14 @@ impl ExecutionContext {
             output_exec_name.to_string()
         };
 
-        self.trigger_next_flow(node_id, &next_exec_name)
+        // 如果是返回操作，逻辑由 trigger_next_flow 或 processor 内部处理
+        if next_exec_name == "__RETURN__" {
+            return Ok(());
+        }
+        if !next_exec_name.is_empty() {
+            self.trigger_next_flow(node_id, &next_exec_name)?;
+        }
+        Ok(())
     }
 
     fn trigger_next_flow(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
@@ -270,19 +308,172 @@ impl ExecutionContext {
     pub fn get_definitions() -> Vec<NodeDefinition> {
         vec![
             NodeDefinition {
-                node_type: "on_start".into(),
-                category: "Event".into(),
-                title: "On Start".into(),
+                node_type: "event_on_run".into(),
+                category: "Internal".into(),
+                title: "On Run".into(),
                 ui_style: "event".into(),
-                description: Some("Execution entry point".into()),
+                description: Some("Project or Event execution entry point".into()),
                 inputs: vec![],
+                outputs: vec![PinDefinition {
+                    name: "Exec".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                data_processor: None,
+                flow_processor: Some(|_ctx, _node| Ok("Exec".to_string())),
+            },
+            NodeDefinition {
+                node_type: "function_entry".into(),
+                category: "Internal".into(),
+                title: "Entry".into(),
+                ui_style: "event".into(),
+                description: Some("Function execution entry point".into()),
+                inputs: vec![],
+                outputs: vec![PinDefinition {
+                    name: "Then".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                data_processor: None,
+                flow_processor: Some(|_ctx, _node| Ok("Then".to_string())),
+            },
+            NodeDefinition {
+                node_type: "function_return".into(),
+                category: "Internal".into(),
+                title: "Return".into(),
+                ui_style: "event".into(),
+                description: Some("Function execution exit point".into()),
+                inputs: vec![PinDefinition {
+                    name: "In".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                outputs: vec![],
+                data_processor: None,
+                flow_processor: Some(|_ctx, _node| {
+                    // 返回标志
+                    Ok("__RETURN__".to_string())
+                }),
+            },
+            NodeDefinition {
+                node_type: "macro_inputs".into(),
+                category: "Internal".into(),
+                title: "Inputs".into(),
+                ui_style: "event".into(),
+                description: Some("Macro inputs container".into()),
+                inputs: vec![],
+                outputs: vec![PinDefinition {
+                    name: "In".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                data_processor: None,
+                flow_processor: Some(|_ctx, _node| Ok("In".to_string())),
+            },
+            NodeDefinition {
+                node_type: "macro_outputs".into(),
+                category: "Internal".into(),
+                title: "Outputs".into(),
+                ui_style: "event".into(),
+                description: Some("Macro outputs container".into()),
+                inputs: vec![PinDefinition {
+                    name: "Out".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                outputs: vec![],
+                data_processor: None,
+                flow_processor: Some(|_ctx, _node| Ok("__RETURN__".to_string())),
+            },
+            NodeDefinition {
+                node_type: "call_function".into(),
+                category: "Function".into(),
+                title: "Call Function".into(),
+                ui_style: "default".into(),
+                description: Some("Call a defined function".into()),
+                inputs: vec![PinDefinition {
+                    name: "In".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                outputs: vec![PinDefinition {
+                    name: "Out".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
+                data_processor: Some(|_ctx, _node, _pin_id| {
+                    // 这里可以实现获取函数返回值的逻辑
+                    // 简化实现场景下，暂时返回 Null
+                    Value::Null
+                }),
+                flow_processor: Some(|ctx, node| {
+                    let sub_graph_id = node.sub_graph_id.as_ref().ok_or("Missing subGraphId")?;
+                    // 1. 找到该子图对应的入口节点
+                    let entry_node_id = ctx
+                        .nodes
+                        .values()
+                        .find(|n| {
+                            n.node_type == "function_entry"
+                                && (n.sub_graph_id.as_ref() == Some(sub_graph_id)
+                                    || n.title == node.title)
+                        })
+                        .map(|n| n.id.clone())
+                        .ok_or(format!(
+                            "Function entry not found for subGraphId {}",
+                            sub_graph_id
+                        ))?;
+
+                    // 2. 将当前节点推入调用栈
+                    ctx.call_stack.push(node.id.clone());
+                    ctx.logs.push(format!("Calling function: {}", node.title));
+
+                    // 3. 执行子图
+                    ctx.run_flow(&entry_node_id, "Then")?;
+
+                    // 4. 返回后弹出调用栈
+                    ctx.call_stack.pop();
+                    ctx.logs
+                        .push(format!("Returned from function: {}", node.title));
+
+                    Ok("Out".to_string())
+                }),
+            },
+            NodeDefinition {
+                node_type: "call_macro".into(),
+                category: "Macro".into(),
+                title: "Call Macro".into(),
+                ui_style: "default".into(),
+                description: Some("Call a defined macro".into()),
+                inputs: vec![PinDefinition {
+                    name: "In".into(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                }],
                 outputs: vec![PinDefinition {
                     name: "Out".into(),
                     pin_type: "exec".into(),
                     default_value: None,
                 }],
                 data_processor: None,
-                flow_processor: Some(|_ctx, _node| Ok("Out".to_string())),
+                flow_processor: Some(|ctx, node| {
+                    let sub_graph_id = node.sub_graph_id.as_ref().ok_or("Missing subGraphId")?;
+                    let entry_node_id = ctx
+                        .nodes
+                        .values()
+                        .find(|n| {
+                            n.node_type == "macro_inputs"
+                                && (n.sub_graph_id.as_ref() == Some(sub_graph_id)
+                                    || n.title == node.title)
+                        })
+                        .map(|n| n.id.clone())
+                        .ok_or("Macro entry not found")?;
+
+                    ctx.call_stack.push(node.id.clone());
+                    ctx.run_flow(&entry_node_id, "In")?;
+                    ctx.call_stack.pop();
+
+                    Ok("Out".to_string())
+                }),
             },
             NodeDefinition {
                 node_type: "print".into(),
@@ -312,8 +503,8 @@ impl ExecutionContext {
                     let data_pin = node
                         .inputs
                         .iter()
-                        .find(|p| p.pin_type != "exec")
-                        .ok_or("Print node missing data input")?;
+                        .find(|p| p.name == "Value")
+                        .ok_or("Print node missing 'Value' input")?;
                     let val = ctx.get_pin_value(&data_pin.id);
                     let output = if let Value::String(s) = &val {
                         s.clone()
@@ -423,17 +614,27 @@ impl ExecutionContext {
                     default_value: None,
                 }],
                 data_processor: Some(|ctx, node, _pin_id| {
-                    let var_id = node
-                        .variable_id
-                        .as_ref()
-                        .cloned()
-                        .unwrap_or_else(|| "default_var".to_string());
-                    match ctx.variables.get(&var_id) {
-                        Some(val) => val.clone(),
-                        None => {
-                            ctx.logs.push(format!("[Error] Variable '{}' not found", var_id));
-                            Value::Null
+                    if let Some(var_id) = &node.variable_id {
+                        match ctx.variables.get(var_id) {
+                            Some(val) => val.clone(),
+                            None => {
+                                let err = format!("[Error] Variable ID '{}' not found in context. Available: {:?}", var_id, ctx.variables.keys().collect::<Vec<_>>());
+                                ctx.logs.push(err.clone());
+                                println!("{}", err);
+                                Value::Null
+                            }
                         }
+                    } else {
+                        // 诊断：打印节点数据看看到底少了什么
+                        let node_json = serde_json::to_string(&node)
+                            .unwrap_or_else(|_| "serialize failed".into());
+                        let err = format!(
+                            "[Error] Get Variable node '{}' has no variable assigned. Raw Node: {}",
+                            node.id, node_json
+                        );
+                        ctx.logs.push(err.clone());
+                        println!("{}", err);
+                        Value::Null
                     }
                 }),
                 flow_processor: None,
@@ -469,32 +670,34 @@ impl ExecutionContext {
                     },
                 ],
                 data_processor: Some(|ctx, node, _pin_id| {
-                    // Set 节点的输出 Value 通常返回其设置后的值
-                    let var_id = node
-                        .variable_id
-                        .as_ref()
-                        .cloned()
-                        .unwrap_or_else(|| "default_var".to_string());
-                    ctx.variables.get(&var_id).cloned().unwrap_or(Value::Null)
+                    if let Some(var_id) = &node.variable_id {
+                        ctx.variables.get(var_id).cloned().unwrap_or(Value::Null)
+                    } else {
+                        Value::Null
+                    }
                 }),
                 flow_processor: Some(|ctx, node| {
+                    let var_id = node.variable_id.as_ref().ok_or_else(|| {
+                        let err = format!(
+                            "[Error] Set Variable node '{}' has no variable assigned.",
+                            node.id
+                        );
+                        ctx.logs.push(err.clone());
+                        err
+                    })?;
+
                     let data_pin = node
                         .inputs
                         .iter()
-                        .find(|p| p.pin_type != "exec")
-                        .ok_or("Set Variable missing input")?;
+                        .find(|p| p.name == "Value")
+                        .ok_or("Set Variable missing 'Value' input")?;
                     let val = ctx.get_pin_value(&data_pin.id);
-                    let var_id = node
-                        .variable_id
-                        .as_ref()
-                        .cloned()
-                        .unwrap_or_else(|| "default_var".to_string());
-                    
-                    if ctx.variables.contains_key(&var_id) {
-                        ctx.variables.insert(var_id, val);
+
+                    if ctx.variables.contains_key(var_id) {
+                        ctx.variables.insert(var_id.clone(), val);
                         Ok("Out".to_string())
                     } else {
-                        let err = format!("[Error] Cannot set unknown variable '{}'", var_id);
+                        let err = format!("[Error] Cannot set unknown variable ID '{}'.", var_id);
                         ctx.logs.push(err.clone());
                         Err(err)
                     }

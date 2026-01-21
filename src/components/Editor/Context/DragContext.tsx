@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import { DragState } from "./type";
+import { DragState } from "../Types/drag";
 
 interface DragContextValue {
   drag: DragState;

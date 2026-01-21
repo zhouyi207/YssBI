@@ -1,16 +1,16 @@
 import { useEffect } from "react";
 import "./App.css";
-import InfiniteCanvas from "./components/canvas/Canvas";
-import Sidebar from "./components/Sidebar";
-import { RightSidebar } from "./components/RightSidebar";
-import { DragProvider } from "./components/drag/DragProvider";
-import { DragLayer } from "./components/drag/DragLayer";
-import { CanvasProvider } from "./components/canvas/CanvasProvider";
-import Menubar from "./components/Menubar";
-import { TabBar } from "./components/canvas/TabBar";
-import { NODE_REGISTRY } from "./components/node/registry";
+import InfiniteCanvas from "./components/Editor/Canvas/Canvas";
+import Sidebar from "./components/Editor/Layout/Sidebar";
+import { RightSidebar } from "./components/Editor/Layout/RightSidebar";
+import { DragProvider } from "./components/Editor/Context/DragProvider";
+import { DragLayer } from "./components/Editor/Layout/DragLayer";
+import { CanvasProvider } from "./components/Editor/Context/CanvasProvider";
+import Menubar from "./components/Editor/Layout/Menubar";
+import { TabBar } from "./components/Editor/Canvas/TabBar";
+import { NODE_REGISTRY } from "./components/Editor/Nodes/registry";
 
-import { UIProvider } from "./components/ui/UIProvider";
+import { UIProvider } from "./components/Editor/Context/UIProvider";
 
 export default function App() {
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function App() {
           >
             {/* 顶部菜单栏 */}
             <Menubar />
-            
+
             <div className="flex flex-1 overflow-hidden">
               {/* 左侧 Sidebar */}
               <Sidebar />

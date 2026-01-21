@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { NodeDefinition, BaseNode } from "./models";
-import { Position } from "../../types";
+import { NodeDefinition, BaseNode } from "../Types/nodes";
+import { Position } from "../../../types";
 
 export class NodeRegistry {
   private static instance: NodeRegistry;
   private definitions: Map<string, NodeDefinition> = new Map();
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): NodeRegistry {
     if (!NodeRegistry.instance) {

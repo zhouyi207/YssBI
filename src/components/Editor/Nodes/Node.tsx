@@ -1,16 +1,15 @@
-import React, { useRef, useEffect } from "react";
-import { Pin } from "../Pin";
-import { Pin as PinModel, BaseNode } from "./models";
+import React from "react";
+import { Pin } from "../Pins/Pin";
+import { Pin as PinModel, BaseNode } from "../Types/nodes";
 
 export interface NodeProps {
   node: BaseNode;
   scale: number;
   activePinId?: string | null;
-  onDrag?: (id: string, dx: number, dy: number) => void;
   onAddInput?: (id: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
-  onPointerDown?: (id: string, e: React.PointerEvent) => void;
+  onPointerDown?: (e: React.PointerEvent, node: BaseNode) => void;
 }
 
 /* ================= Default Node UI ================= */
@@ -36,7 +35,7 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
           {node.category}
         </div>
       </div>
-      
+
       <div className="flex flex-col min-h-[60px]">
         {/* Top Row: Flow Pins (Exec) */}
         {(inputsExec.length > 0 || outputsExec.length > 0) && (
@@ -148,76 +147,26 @@ const MathNodeUI: React.FC<NodeProps> = ({
 /* ================= Main Dispatcher ================= */
 
 export const Node = React.memo<NodeProps>((props) => {
-  const { node } = props;
-  const draggingRef = useRef(false);
-  const last = useRef({ x: 0, y: 0 });
-  const propsRef = useRef(props);
+  const { node, onPointerDown } = props;
 
-  // 始终保持最新的 props 引用，供事件监听器使用
-  useEffect(() => {
-    propsRef.current = props;
-  });
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    const { onPointerDown: currentOnPointerDown, node: currentNode } = propsRef.current;
-    if (currentOnPointerDown) {
-      currentOnPointerDown(currentNode.id, e);
-    } else {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-
-    draggingRef.current = true;
-    last.current = { x: e.clientX, y: e.clientY };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  };
-
-  const onPointerMove = (e: PointerEvent) => {
-    if (!draggingRef.current) return;
-    const { scale: currentScale, onDrag: currentOnDrag, node: currentNode } = propsRef.current;
-    
-    const dx = (e.clientX - last.current.x) / currentScale;
-    const dy = (e.clientY - last.current.y) / currentScale;
-    
-    if (currentOnDrag) {
-      currentOnDrag(currentNode.id, dx, dy);
-    }
-    last.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const onPointerUp = () => {
-    draggingRef.current = false;
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-  };
-
-  // 组件卸载时清理监听器
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-  }, []);
 
   return (
     <div
       id={node.id}
-      className={`absolute select-none rounded shadow-md border cursor-move ${
-        node.selected
-          ? "border-blue-500 ring-2 ring-blue-500/50 z-30"
-          : "border-gray-300 z-10"
-      }`}
+      data-node-id={node.id}
+      className={`absolute select-none rounded shadow-md border cursor-move ${node.selected
+        ? "border-blue-500 ring-2 ring-blue-500/50 z-30"
+        : "border-gray-300 z-10"
+        }`}
       style={{
         minWidth: node.noHeader ? 120 : 160,
         minHeight: node.noHeader ? 60 : undefined,
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
         background: "rgba(255, 255, 255, 0.6)",
-        // backdropFilter 在大量元素时会极大增加 GPU 负担，如果依然卡顿建议注释掉下面一行
-        // backdropFilter: "blur(4px)",
         WebkitBackdropFilter: "blur(4px)",
       }}
-      onPointerDown={onPointerDown}
+      onPointerDown={(e) => onPointerDown?.(e, node)}
     >
       {node.uiStyle === "math" ? (
         <MathNodeUI {...props} />
@@ -237,8 +186,17 @@ export const Node = React.memo<NodeProps>((props) => {
     prev.scale === next.scale &&
     prev.node.inputs.length === next.node.inputs.length &&
     prev.node.outputs.length === next.node.outputs.length &&
-    // 检查连接状态和针脚类型 (配合 clone 逻辑)
-    prev.node.inputs.every((p, i) => p.links === next.node.inputs[i].links && p.type === next.node.inputs[i].type) &&
-    prev.node.outputs.every((p, i) => p.links === next.node.outputs[i].links && p.type === next.node.outputs[i].type)
+    prev.node.inputs.every((p, i) => {
+      const nextPin = next.node.inputs[i];
+      return p.type === nextPin.type &&
+        p.links.length === nextPin.links.length &&
+        p.links.every((link, j) => link === nextPin.links[j]);
+    }) &&
+    prev.node.outputs.every((p, i) => {
+      const nextPin = next.node.outputs[i];
+      return p.type === nextPin.type &&
+        p.links.length === nextPin.links.length &&
+        p.links.every((link, j) => link === nextPin.links[j]);
+    })
   );
 });

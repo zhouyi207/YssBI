@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { NODE_REGISTRY } from "../node/registry";
-import { Pin } from "../node/models";
+import { NODE_REGISTRY } from "./registry";
+import { Pin } from "../Types/nodes";
 
 export default function NodePalette({
   x,
@@ -19,7 +19,6 @@ export default function NodePalette({
     const allDefs = NODE_REGISTRY.getAllDefinitions();
     return allDefs.filter((node) => {
       // 基本搜索和类别过滤
-      if (node.category === "Variable") return false;
       const matchesQuery = node.title.toLowerCase().includes(query.toLowerCase());
       if (!matchesQuery) return false;
 

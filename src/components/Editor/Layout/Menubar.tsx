@@ -1,6 +1,6 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCanvas } from "./canvas/CanvasContext";
+import { useCanvas } from "../Context/CanvasContext";
 import { useState } from "react";
 
 const appWindow = getCurrentWindow();
@@ -24,7 +24,7 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
         {label}
       </button>
       {isOpen && (
-        <div 
+        <div
           onMouseEnter={() => setIsOpen(true)}
           onMouseLeave={() => setIsOpen(false)}
           className="absolute left-0 top-full w-44 bg-gray-800 border border-gray-700 rounded shadow-xl py-1 z-50"
@@ -38,11 +38,10 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
                   setIsOpen(false);
                 }
               }}
-              className={`px-4 py-1.5 text-xs flex justify-between items-center transition-colors ${
-                item.onClick 
-                  ? "text-gray-300 hover:bg-blue-600 hover:text-white cursor-pointer" 
-                  : "text-gray-600 cursor-default"
-              }`}
+              className={`px-4 py-1.5 text-xs flex justify-between items-center transition-colors ${item.onClick
+                  ? "text-gray-300 hover:bg-blue-600 hover:text-white cursor-pointer"
+                : "text-gray-600 cursor-default"
+                }`}
             >
               <div className="flex items-center gap-4 flex-1 justify-between">
                 <span>{item.label}</span>
@@ -60,19 +59,22 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
 };
 
 export default function Menubar() {
-    const { 
-    saveGraphAs, 
-    importGraph, 
-    saveGraph, 
-    undo, 
-    redo, 
-    copy, 
-    paste, 
-    cut, 
+  const {
+    saveGraphAs,
+    importGraph,
+    saveGraph,
+    undo,
+    redo,
+    copy,
+    paste,
+    cut,
     deleteSelected,
-    canUndo, 
+    canUndo,
     canRedo,
-    addTab
+    activeTabId,
+    addEvent,
+    addFunction,
+    addMacro
   } = useCanvas();
 
   const openNewWindow = async () => {
@@ -91,19 +93,21 @@ export default function Menubar() {
   };
 
   const fileItems: MenuItem[] = [
-    { label: "New File", shortcut: "Ctrl+N", onClick: () => addTab() },
-    { label: "Open File...", shortcut: "Ctrl+O", onClick: () => importGraph() },
-    { label: "Save", shortcut: "Ctrl+S", onClick: () => saveGraph() },
-    { label: "Save As...", shortcut: "Ctrl+Shift+S", onClick: () => saveGraphAs() },
+    { label: "New Event Graph", shortcut: "Ctrl+N", onClick: () => addEvent("New Event") },
+    { label: "New Function", onClick: () => addFunction("New Function") },
+    { label: "New Macro", onClick: () => addMacro("New Macro") },
+    { label: "Open Project...", shortcut: "Ctrl+O", onClick: () => importGraph() },
+    { label: "Save Project", shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
+    { label: "Save Project As...", shortcut: "Ctrl+Shift+S", onClick: activeTabId ? () => saveGraphAs() : undefined },
   ];
 
   const editItems: MenuItem[] = [
-    { label: "Undo", shortcut: "Ctrl+Z", onClick: canUndo ? undo : undefined },
-    { label: "Redo", shortcut: "Ctrl+Y", onClick: canRedo ? redo : undefined },
-    { label: "Cut", shortcut: "Ctrl+X", onClick: cut },
-    { label: "Copy", shortcut: "Ctrl+C", onClick: copy },
-    { label: "Paste", shortcut: "Ctrl+V", onClick: () => paste() },
-    { label: "Delete", shortcut: "Del", onClick: deleteSelected },
+    { label: "Undo", shortcut: "Ctrl+Z", onClick: (activeTabId && canUndo) ? undo : undefined },
+    { label: "Redo", shortcut: "Ctrl+Y", onClick: (activeTabId && canRedo) ? redo : undefined },
+    { label: "Cut", shortcut: "Ctrl+X", onClick: activeTabId ? cut : undefined },
+    { label: "Copy", shortcut: "Ctrl+C", onClick: activeTabId ? copy : undefined },
+    { label: "Paste", shortcut: "Ctrl+V", onClick: activeTabId ? () => paste() : undefined },
+    { label: "Delete", shortcut: "Del", onClick: activeTabId ? deleteSelected : undefined },
   ];
 
   const dataItems: MenuItem[] = [
@@ -132,7 +136,7 @@ export default function Menubar() {
   ];
 
   return (
-    <div 
+    <div
       className="menubar-container h-10 bg-gray-900 border-b border-gray-800 flex items-center z-50 shadow-xl select-none"
       onWheel={(e) => e.stopPropagation()}
       data-tauri-drag-region

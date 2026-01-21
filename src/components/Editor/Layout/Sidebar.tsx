@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useDrag } from "./drag/DragContext";
-import { useCanvas } from "./canvas/CanvasContext";
-import { useUI } from "./ui/UIProvider";
+import { useDrag } from "../Context/DragContext";
+import { useCanvas } from "../Context/CanvasContext";
+import { useUI } from "../Context/UIProvider";
 
 const PIN_COLORS: Record<string, string> = {
   exec: "#ffffff",
@@ -25,12 +25,12 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, isOpen, onToggle, onAdd, children }) => (
   <div className="border-b border-gray-200">
-    <div 
+    <div
       className="flex items-center justify-between p-2 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors group"
       onClick={onToggle}
     >
       <div className="flex items-center gap-2">
-        <svg 
+        <svg
           width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
           className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
         >
@@ -41,7 +41,7 @@ const Section: React.FC<SectionProps> = ({ title, isOpen, onToggle, onAdd, child
         </span>
       </div>
       {onAdd && (
-        <button 
+        <button
           onClick={(e) => { e.stopPropagation(); onAdd(); }}
           className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600"
         >
@@ -57,12 +57,13 @@ const Section: React.FC<SectionProps> = ({ title, isOpen, onToggle, onAdd, child
 
 export default function Sidebar() {
   const { startDrag } = useDrag();
-  const { 
-    variables, 
+  const {
+    variables,
     globalVariables,
-    selectedVariableId, 
-    setSelectedVariableId, 
-    addVariable, 
+    selectedItemId,
+    selectedItemType,
+    setSelectedInfo,
+    addVariable,
     deleteVariable,
     promoteVariable,
     demoteVariable,
@@ -71,45 +72,43 @@ export default function Sidebar() {
     deleteFunction,
     macros,
     addMacro,
-    deleteMacro
+    deleteMacro,
+    events,
+    addEvent,
+    deleteEvent,
+    openSubGraph
   } = useCanvas();
 
   const { showDialog } = useUI();
 
   // Collapsible states
   const [sections, setSections] = useState({
-    variables: true,
+    events: true,
     functions: true,
-    macros: true
+    macros: true,
+    variables: true,
   });
 
   const toggleSection = (name: keyof typeof sections) => {
     setSections(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
-  // Add Item states
-  const [addingType, setAddingType] = useState<'variable' | 'function' | 'macro' | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newVarType, setNewVarType] = useState("int");
-  const [newVarIsGlobal, setNewVarIsGlobal] = useState(false);
-
-  const handleAdd = () => {
-    if (!newName.trim()) return;
-    if (addingType === 'variable') {
-      addVariable(newName.trim(), newVarType, newVarIsGlobal);
-    } else if (addingType === 'function') {
-      addFunction(newName.trim());
-    } else if (addingType === 'macro') {
-      addMacro(newName.trim());
+  // Helper to get unique name
+  const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
+    const names = Object.values(items).map(i => i.name);
+    let name = baseName;
+    let counter = 1;
+    while (names.includes(name)) {
+      name = `${baseName}_${counter}`;
+      counter++;
     }
-    setNewName("");
-    setAddingType(null);
+    return name;
   };
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
-    type: 'variable' | 'function' | 'macro';
+    type: 'variable' | 'function' | 'macro' | 'event';
     id: string;
   } | null>(null);
 
@@ -123,52 +122,66 @@ export default function Sidebar() {
     };
   }, []);
 
-  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro', extra?: any) => {
-    const isSelected = selectedVariableId === id; // For now only variables are selectable for details
-    
+  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event', extra?: any) => {
+    const isSelected = selectedItemId === id && selectedItemType === type;
+
     return (
-      <div 
-        key={id} 
-        onClick={() => type === 'variable' && setSelectedVariableId(id)}
+      <div
+        key={id}
+        onClick={() => {
+          setSelectedInfo(id, type);
+        }}
+        onDoubleClick={() => {
+          if (type !== 'variable') openSubGraph(id, name, type);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setContextMenu({ x: e.clientX, y: e.clientY, type, id });
         }}
         onPointerDown={(e) => {
-          if (e.button !== 0) return; 
+          if (e.button !== 0) return;
           if ((e.target as HTMLElement).closest('button')) return;
           if (type === 'variable') {
             e.preventDefault();
             startDrag({
               type: "node-template",
-              template: { 
+              template: {
                 type: "get_variable",
                 category: "Variable",
                 variableId: id,
                 variableName: name,
                 variableType: extra?.type
               },
-              x: e.clientX,
-              y: e.clientY,
-              startX: e.clientX,
-              startY: e.clientY,
+              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+            });
+          } else if (type === 'function' || type === 'macro') {
+            e.preventDefault();
+            startDrag({
+              type: "node-template",
+              template: {
+                type: `call_${type}`,
+                category: type === 'function' ? "Functions" : "Macros",
+                subGraphId: id,
+                subName: name,
+              },
+              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
             });
           }
         }}
         className={`
-          group flex items-center gap-2 p-1.5 rounded cursor-grab transition-all
-          ${isSelected 
-            ? 'bg-blue-600 text-white shadow-md' 
-            : 'hover:bg-gray-100 text-gray-700 border border-transparent'}
+          group flex items-center gap-2 p-1.5 rounded cursor-grab transition-all border
+          ${isSelected
+            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+            : 'hover:bg-gray-100 text-gray-700 border-transparent'}
         `}
       >
-        <div 
+        <div
           className="w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: isSelected ? 'white' : (extra?.type ? PIN_COLORS[extra.type] : '#9ca3af') }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
-        
+
         {type === 'variable' && (
           <>
             {!extra?.isGlobal ? (
@@ -204,37 +217,49 @@ export default function Sidebar() {
   };
 
   return (
-    <div 
+    <div
       className="sidebar-container w-64 border-r bg-white flex flex-col h-full overflow-hidden shadow-sm select-none"
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex-1 overflow-y-auto min-h-0 relative">
         {/* Sections */}
-        <Section 
-          title="Functions" 
-          isOpen={sections.functions} 
+        <Section
+          title="Events"
+          isOpen={sections.events}
+          onToggle={() => toggleSection('events')}
+          onAdd={() => addEvent(getUniqueName("NewEvent", events))}
+        >
+          {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
+          {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No events</div>}
+        </Section>
+        <Section
+          title="Functions"
+          isOpen={sections.functions}
           onToggle={() => toggleSection('functions')}
-          onAdd={() => setAddingType('function')}
+          onAdd={() => addFunction(getUniqueName("NewFunction", functions))}
         >
           {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
           {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No functions</div>}
         </Section>
 
-        <Section 
-          title="Macros" 
-          isOpen={sections.macros} 
+        <Section
+          title="Macros"
+          isOpen={sections.macros}
           onToggle={() => toggleSection('macros')}
-          onAdd={() => setAddingType('macro')}
+          onAdd={() => addMacro(getUniqueName("NewMacro", macros))}
         >
           {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
           {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No macros</div>}
         </Section>
 
-        <Section 
-          title="Variables" 
-          isOpen={sections.variables} 
+        <Section
+          title="Variables"
+          isOpen={sections.variables}
           onToggle={() => toggleSection('variables')}
-          onAdd={() => setAddingType('variable')}
+          onAdd={() => {
+            const allVars = { ...variables, ...globalVariables };
+            addVariable(getUniqueName("NewVar", allVars), "int", false);
+          }}
         >
           {/* Global */}
           {Object.keys(globalVariables).length > 0 && (
@@ -261,72 +286,20 @@ export default function Sidebar() {
           )}
         </Section>
 
-        {/* Add Popup UI */}
-        {addingType && (
-          <div className="p-3 bg-blue-50 border-b border-blue-100 space-y-2">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] font-bold text-blue-600 uppercase">Add {addingType}</span>
-              <button onClick={() => setAddingType(null)} className="text-gray-400 hover:text-red-500">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <input 
-              autoFocus
-              className="w-full text-xs p-1.5 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder={`${addingType.charAt(0).toUpperCase() + addingType.slice(1)} Name...`}
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAdd()}
-            />
-            {addingType === 'variable' && (
-              <div className="flex gap-2">
-                <select 
-                  className="flex-1 text-[10px] p-1 rounded border border-blue-200 bg-white"
-                  value={newVarType}
-                  onChange={e => setNewVarType(e.target.value)}
-                >
-                  <option value="int">Int</option>
-                  <option value="float">Float</option>
-                  <option value="bool">Bool</option>
-                  <option value="string">String</option>
-                </select>
-                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded px-1.5">
-                  <input 
-                    type="checkbox" 
-                    id="global-check" 
-                    checked={newVarIsGlobal} 
-                    onChange={e => setNewVarIsGlobal(e.target.checked)}
-                    className="w-3 h-3"
-                  />
-                  <label htmlFor="global-check" className="text-[9px] font-bold text-gray-500 cursor-pointer">GLOBAL</label>
-                </div>
-              </div>
-            )}
-            <button 
-              onClick={handleAdd}
-              className="w-full py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded hover:bg-blue-700"
-            >
-              Confirm
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Context Menu */}
       {contextMenu && (
-        <div 
+        <div
           className="fixed z-[100] bg-gray-800 border border-gray-700 rounded shadow-xl py-1 w-32"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div 
+          <div
             onClick={() => {
-              const name = contextMenu.type === 'variable' 
+              const name = contextMenu.type === 'variable'
                 ? (variables[contextMenu.id]?.name || globalVariables[contextMenu.id]?.name)
-                : (contextMenu.type === 'function' ? functions[contextMenu.id]?.name : macros[contextMenu.id]?.name);
-              
+                : (contextMenu.type === 'function' ? functions[contextMenu.id]?.name : (contextMenu.type === 'macro' ? macros[contextMenu.id]?.name : events[contextMenu.id]?.name));
               showDialog({
                 title: `Delete ${contextMenu.type}`,
                 message: `Are you sure you want to delete ${contextMenu.type} '${name}'?`,
@@ -335,11 +308,13 @@ export default function Sidebar() {
                 onConfirm: () => {
                   if (contextMenu.type === 'variable') {
                     deleteVariable(contextMenu.id);
-                    if (selectedVariableId === contextMenu.id) setSelectedVariableId(null);
+                    if (selectedItemId === contextMenu.id) setSelectedInfo(null, null);
                   } else if (contextMenu.type === 'function') {
                     deleteFunction(contextMenu.id);
                   } else if (contextMenu.type === 'macro') {
                     deleteMacro(contextMenu.id);
+                  } else if (contextMenu.type === 'event') {
+                    deleteEvent(contextMenu.id);
                   }
                 }
               });

@@ -1,12 +1,13 @@
 import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
-import { Node } from "../node/Node";
-import { BaseNode, Pin } from "../node/models";
-import { useDrag } from "../drag/DragContext";
-import { useCanvas } from "./CanvasContext";
-import { createNodeFromTemplate } from "../node/util";
+import { Node } from "../Nodes/Node";
+import { BaseNode, Pin } from "../Types/nodes";
+import { useDrag } from "../Context/DragContext";
+import { useCanvas } from "../Context/CanvasContext";
+import { createNodeFromTemplate } from "../Utils/nodeUtils";
+import { createInternalNode } from "../Utils/internalNodes";
 import HUD from "./HUD";
-import NodePalette from "./NodePalette";
-import { drawEdge } from "../Edge";
+import NodePalette from "../Nodes/NodePalette";
+import { drawEdge } from "../Edges/Edge";
 
 /* ================= Canvas ================= */
 
@@ -17,12 +18,12 @@ export default function InfiniteCanvas() {
     nodes,
     setNodes,
     onCanvasPointerDown,
+    onNodePointerDown,
     onPinPointerDown,
     selection,
     gesture,
     contextMenu,
     setContextMenu,
-    setSelectedVariableId,
     variables,
     globalVariables,
     undo,
@@ -35,18 +36,20 @@ export default function InfiniteCanvas() {
     saveGraph,
     saveGraphAs,
     importGraph,
-    addTab,
+    addEvent,
+    addFunction,
+    addMacro,
+    activeTabId,
     pendingConnection,
     setPendingConnection,
+    tabs,
+    setActiveTabId,
+    closeTab,
+    functions,
+    macros,
     connectPins
   } = useCanvas();
 
-  // 计算当前激活的引脚 ID
-  const activePinId = useMemo(() => {
-    if (gesture?.type === "connect") return gesture.startPin.id;
-    if (pendingConnection) return pendingConnection.id;
-    return null;
-  }, [gesture, pendingConnection]);
 
   const { drag } = useDrag();
 
@@ -65,7 +68,7 @@ export default function InfiniteCanvas() {
       // 检查点击来源：如果是 UI 组件，则完全忽略
       const target = e.target as HTMLElement;
       if (
-        target.closest(".menubar-container") || 
+        target.closest(".menubar-container") ||
         target.closest(".sidebar-container") ||
         target.closest(".menu-container") ||
         target.closest(".hud-container")
@@ -86,7 +89,7 @@ export default function InfiniteCanvas() {
 
       // 阻止浏览器默认的缩放或滚动行为
       e.preventDefault();
-      
+
       // 直接在此处执行缩放逻辑，使用 Ref 保证性能和稳定性
       const factor = 0.001;
       const currentCanvas = canvasRef.current;
@@ -136,13 +139,12 @@ export default function InfiniteCanvas() {
   const ref = useRef<HTMLDivElement>(null);
 
   const prevDragRef = useRef(drag);
-  const prevSelectionRef = useRef(selection);
 
   const pinIndex = useMemo(() => {
     const map = new Map<string, Pin>();
     nodes.forEach((node) => {
-      node.inputs.forEach((pin) => map.set(pin.id, pin));
-      node.outputs.forEach((pin) => map.set(pin.id, pin));
+      node.inputs.forEach((pin: Pin) => map.set(pin.id, pin));
+      node.outputs.forEach((pin: Pin) => map.set(pin.id, pin));
     });
     return map;
   }, [nodes]);
@@ -150,8 +152,8 @@ export default function InfiniteCanvas() {
   const pinNodeIdIndex = useMemo(() => {
     const map = new Map<string, string>();
     nodes.forEach((node) => {
-      node.inputs.forEach((pin) => map.set(pin.id, node.id));
-      node.outputs.forEach((pin) => map.set(pin.id, node.id));
+      node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
+      node.outputs.forEach((pin: Pin) => map.set(pin.id, node.id));
     });
     return map;
   }, [nodes]);
@@ -161,10 +163,7 @@ export default function InfiniteCanvas() {
     pinIndexRef.current = pinIndex;
   }, [pinIndex]);
 
-  const pinNodeIdIndexRef = useRef(pinNodeIdIndex);
-  useEffect(() => {
-    pinNodeIdIndexRef.current = pinNodeIdIndex;
-  }, [pinNodeIdIndex]);
+
 
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
 
@@ -209,7 +208,7 @@ export default function InfiniteCanvas() {
       }
       return nextOffsets;
     });
-  }, [nodes.length, nodes.map(n => n.inputs.length + n.outputs.length).join(",")]); // 仅在节点数或针脚数变化时重新测量
+  }, [activeTabId, nodes.length, nodes.map(n => n.id).join(",")]); // 切换 Tab 或节点变化时必须重新测量
 
   const nodeMap = useMemo(() => {
     const map = new Map<string, BaseNode>();
@@ -219,15 +218,15 @@ export default function InfiniteCanvas() {
 
   // 获取 Pin 的世界坐标 (Node位置 + 偏移)
   const getPinWorldPos = useCallback((pinId: string) => {
-    const nodeId = pinNodeIdIndexRef.current.get(pinId);
+    const nodeId = pinNodeIdIndex.get(pinId);
     const node = nodeMap.get(nodeId || "");
     const offset = pinOffsets[pinId];
-    if (!node || !offset) return { x: 0, y: 0 };
+    if (!node || !offset) return null;
     return {
       x: node.position.x + offset.x,
       y: node.position.y + offset.y
     };
-  }, [nodeMap, pinOffsets]);
+  }, [nodeMap, pinNodeIdIndex, pinOffsets]);
 
   const getCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const root = ref.current;
@@ -257,12 +256,12 @@ export default function InfiniteCanvas() {
 
     // 绘制已有连接
     nodes.forEach((node) => {
-      node.outputs.forEach((pin) => {
-        pin.links.forEach((targetId) => {
+      node.outputs.forEach((pin: Pin) => {
+        pin.links.forEach((targetId: string) => {
           const start = getPinWorldPos(pin.id);
           const end = getPinWorldPos(targetId);
-          if (start.x === 0 && start.y === 0) return;
-          
+          if (!start || !end) return;
+
           drawEdge(
             ctx,
             start.x, start.y,
@@ -278,10 +277,12 @@ export default function InfiniteCanvas() {
     if (gesture?.type === "connect" || (pendingConnection && contextMenu?.visible)) {
       const pin = gesture?.type === "connect" ? gesture.startPin : pendingConnection!;
       const start = getPinWorldPos(pin.id);
-      const end = gesture?.type === "connect" 
+      if (!start) return;
+
+      const end = gesture?.type === "connect"
         ? getCanvasLocalPoint(gesture.currentX, gesture.currentY)
         : getCanvasLocalPoint(contextMenu?.x || 0, contextMenu?.y || 0);
-        
+
       drawEdge(
         ctx,
         start.x, start.y,
@@ -299,25 +300,48 @@ export default function InfiniteCanvas() {
   useLayoutEffect(() => {
     const canvasEl = edgeCanvasRef.current;
     if (!canvasEl || !ref.current) return;
-    
+
     const rect = ref.current.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    
+
     // 设置实际像素大小 (防止模糊)
     canvasEl.width = rect.width * dpr;
     canvasEl.height = rect.height * dpr;
     // 设置 CSS 大小
     canvasEl.style.width = `${rect.width}px`;
     canvasEl.style.height = `${rect.height}px`;
-    
+
     const ctx = canvasEl.getContext("2d");
     if (ctx) ctx.scale(dpr, dpr);
-    
+
     drawAllEdges();
   }, [drawAllEdges]);
 
   const handleNodePaletteSelect = (tpl: { type: string }) => {
     if (!contextMenu || !ref.current) return;
+
+    // Check if this is an internal node type that should only exist once
+    const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
+    if (internalNodeTypes.includes(tpl.type)) {
+      // Check if this internal node already exists
+      const existingNode = nodes.find(n => n.type === tpl.type && n.isInternal);
+      if (existingNode) {
+        // Move canvas to center on the existing node
+        const rect = ref.current.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        setCanvas({
+          ...canvas,
+          x: centerX - existingNode.position.x * canvas.scale,
+          y: centerY - existingNode.position.y * canvas.scale
+        });
+
+        setContextMenu(null);
+        setPendingConnection(null);
+        return;
+      }
+    }
 
     const rect = ref.current.getBoundingClientRect();
     const x = (contextMenu.x - rect.left - canvas.x) / canvas.scale;
@@ -326,7 +350,7 @@ export default function InfiniteCanvas() {
     const newNode = createNodeFromTemplate({ x, y }, canvas.scale, tpl.type);
     if (newNode) {
       saveHistory();
-      
+
       const newNodes = [...nodes, newNode];
       setNodes(newNodes);
 
@@ -334,11 +358,11 @@ export default function InfiniteCanvas() {
       if (pendingConnection) {
         const isInput = pendingConnection.direction === "input";
         const targetDirection = isInput ? "outputs" : "inputs";
-        
+
         // 寻找新节点中第一个符合类型的引脚
         const pins = targetDirection === "inputs" ? newNode.inputs : newNode.outputs;
         const compatiblePin = pins.find(p => p.type === pendingConnection.type);
-        
+
         if (compatiblePin) {
           // 延迟一帧调用 connectPins 确保 nodes 已更新
           setTimeout(() => {
@@ -370,101 +394,11 @@ export default function InfiniteCanvas() {
     return () => window.removeEventListener("pointerdown", handleClickOutside, true);
   }, [contextMenu, variableDropMenu, setContextMenu, setPendingConnection]);
 
-  useEffect(() => {
-    if (selection && ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      const box = {
-        x1: (Math.min(selection.startX, selection.currentX) - rect.left - canvas.x) / canvas.scale,
-        y1: (Math.min(selection.startY, selection.currentY) - rect.top - canvas.y) / canvas.scale,
-        x2: (Math.max(selection.startX, selection.currentX) - rect.left - canvas.x) / canvas.scale,
-        y2: (Math.max(selection.startY, selection.currentY) - rect.top - canvas.y) / canvas.scale,
-      };
+  // Selection and node intersection is now managed by the CanvasProvider's gesture system
 
-      let changed = false;
+  // Removed local handleNodePointerDown and handleNodeDrag
+  // using provider ones instead
 
-      setNodes(prev => {
-        const nextNodes = prev.map(n => {
-          const nodeWidth = n.noHeader ? 80 : 150;
-          const nodeHeight = n.noHeader ? 60 : 100;
-          const isIntersecting =
-            n.position.x < box.x2 &&
-            n.position.x + nodeWidth > box.x1 &&
-            n.position.y < box.y2 &&
-            n.position.y + nodeHeight > box.y1;
-
-          if (n.selected !== isIntersecting) {
-            changed = true;
-            const newNode = n.clone();
-            newNode.selected = isIntersecting;
-            return newNode;
-          }
-          return n;
-        });
-
-        if (changed) {
-          return nextNodes;
-        }
-        return prev;
-      });
-    } else if (prevSelectionRef.current && !selection) {
-      const s = prevSelectionRef.current;
-      if (Math.abs(s.startX - s.currentX) < 5 && Math.abs(s.startY - s.currentY) < 5) {
-        setNodes(prev => {
-          let hasSelected = false;
-          const nextNodes = prev.map(n => {
-            if (n.selected) {
-              hasSelected = true;
-              const newNode = n.clone();
-              newNode.selected = false;
-              return newNode;
-            }
-            return n;
-          });
-          if (hasSelected) {
-            return nextNodes;
-          }
-          return prev;
-        });
-      }
-    }
-    prevSelectionRef.current = selection;
-  }, [selection, canvas.x, canvas.y, canvas.scale, setNodes]);
-
-  const handleNodePointerDown = useCallback((id: string, e: React.PointerEvent) => {
-    e.stopPropagation();
-    
-    // 准备保存历史，如果在指针抬起前发生了移动，或者改变了选中状态
-    // 注意：目前的 saveHistory 会保存全量状态，比较安全
-    saveHistory();
-
-    // 如果是变量节点，自动在侧边栏显示其属性
-    const clickedNode = nodes.find(n => n.id === id);
-    if (clickedNode?.variableId) {
-      setSelectedVariableId(clickedNode.variableId);
-    } else {
-      // 需求 5: 点击非变量节点时清除变量选中
-      setSelectedVariableId(null);
-    }
-
-    // 如果没有按住 Ctrl/Shift，且当前节点未被选中，则清除其他选中项
-    setNodes(nodes => {
-      const alreadySelected = nodes.find(n => n.id === id)?.selected;
-      if (alreadySelected) return nodes;
-
-      return nodes.map(n => {
-        if (n.id === id) {
-          const newNode = n.clone();
-          newNode.selected = true;
-          return newNode;
-        } else if (n.selected) {
-          const newNode = n.clone();
-          newNode.selected = false;
-          return newNode;
-        }
-        return n;
-      });
-    });
-  }, [setNodes, nodes, setSelectedVariableId, saveHistory]);
 
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
@@ -477,27 +411,7 @@ export default function InfiniteCanvas() {
   }, []);
 
   // 2. 多节点拖拽回调
-  const handleNodeDrag = useCallback((id: string, dx: number, dy: number) => {
-    const currentSelected = selectedNodeIdsRef.current;
-    setNodes((prev) =>
-      prev.map((node) => {
-        if (currentSelected.has(id)) {
-          if (currentSelected.has(node.id)) {
-            return node.cloneWithPosition({
-              x: node.position.x + dx,
-              y: node.position.y + dy,
-            });
-          }
-        } else if (node.id === id) {
-          return node.cloneWithPosition({
-            x: node.position.x + dx,
-            y: node.position.y + dy,
-          });
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
+  // handleNodeDrag removed
 
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
@@ -549,7 +463,7 @@ export default function InfiniteCanvas() {
       (window as any)._lastCtrlKey = e.ctrlKey;
 
       // 防止在输入框中触发快捷键
-      const isInput = 
+      const isInput =
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA" ||
         (document.activeElement as HTMLElement)?.isContentEditable;
@@ -584,7 +498,22 @@ export default function InfiniteCanvas() {
         importGraph();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        addTab();
+        addEvent("New Graph");
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        if (activeTabId) closeTab(activeTabId);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "Tab") {
+        e.preventDefault();
+        if (tabs.length > 1) {
+          const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+          let nextIndex;
+          if (e.shiftKey) {
+            nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+          } else {
+            nextIndex = (currentIndex + 1) % tabs.length;
+          }
+          setActiveTabId(tabs[nextIndex].id);
+        }
       }
     };
 
@@ -599,7 +528,7 @@ export default function InfiniteCanvas() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addTab]);
+  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addEvent, closeTab, activeTabId, tabs, setActiveTabId]);
 
   /* ===== Data Drag ===== */
   function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
@@ -683,6 +612,28 @@ export default function InfiniteCanvas() {
         variableType: dragState.template.variableType,
       });
       return;
+    } else if (dragState.template.type === "call_function" || dragState.template.type === "call_macro") {
+      saveHistory();
+      const type = dragState.template.type;
+      const subId = dragState.template.subGraphId;
+      const subName = dragState.template.subName;
+      const subData = (type === 'call_function') ? functions[subId] : macros[subId];
+      if (!subData) return;
+      const node = createInternalNode(
+        `node-${crypto.randomUUID()}`,
+        type,
+        subName,
+        type === 'call_function' ? "Functions" : "Macros",
+        { x, y },
+        [{ id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
+        ...(subData.inputs || []).map(p => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[] }))],
+        [{ id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
+        ...(subData.outputs || []).map(p => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[] }))],
+        false
+      );
+      node.subGraphId = subId;
+      setNodes((prev) => [...prev, node]);
+      return;
     }
 
     const newNode = createNodeFromTemplate(
@@ -697,6 +648,73 @@ export default function InfiniteCanvas() {
   }
 
   const GRID = 40;
+
+  const activePin = useMemo(() => {
+    if (gesture?.type === "connect") return gesture.startPin;
+    if (pendingConnection && contextMenu?.visible) return pendingConnection;
+    return null;
+  }, [gesture, pendingConnection, contextMenu]);
+
+  if (activeTabId === null) {
+    return (
+      <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#1e1e1e] select-none overflow-hidden">
+        {/* Simplified Logo */}
+        <div className="mb-8 opacity-20 group">
+          <svg className="w-32 h-32 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+          </svg>
+        </div>
+        {/* Shortcut Hints */}
+        <div className="flex flex-col gap-4 items-start text-gray-500 text-sm font-medium">
+          <div className="flex items-center gap-12 justify-between w-full min-w-[340px] hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addEvent("New Event")}>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <span>新建 Event Graph</span>
+            </div>
+            <span className="text-[10px] text-gray-600 italic">Core logic</span>
+          </div>
+          <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addFunction("New Function")}>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span>新建 Function</span>
+            </div>
+            <span className="text-[10px] text-gray-600 italic">Reusable routine</span>
+          </div>
+          <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addMacro("New Macro")}>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+              <span>新建 Macro</span>
+            </div>
+            <span className="text-[10px] text-gray-600 italic">Node pattern</span>
+          </div>
+          <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => importGraph()}>
+            <span>打开文件</span>
+            <span className="flex gap-1">
+              <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Ctrl</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">O</kbd>
+            </span>
+          </div>
+          <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-not-allowed opacity-50">
+            <span>显示所有命令</span>
+            <span className="flex gap-1">
+              <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Ctrl</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Shift</kbd>
+              <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">P</kbd>
+            </span>
+          </div>
+        </div>
+        {/* Subtle grid background for the empty state too, but very faint */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage: `linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)`,
+            backgroundSize: '40px 40px'
+          }}
+        />
+      </div>
+    );
+  }
+
 
   return (
     <div
@@ -723,7 +741,7 @@ export default function InfiniteCanvas() {
           ref={edgeCanvasRef}
           className="absolute inset-0 pointer-events-none"
         />
-        
+
         <div
           style={{
             transform: `translate(${canvas.x}px, ${canvas.y}px) scale(${canvas.scale})`,
@@ -735,9 +753,8 @@ export default function InfiniteCanvas() {
               key={node.id}
               node={node}
               scale={canvas.scale}
-              activePinId={activePinId}
-              onDrag={handleNodeDrag}
-              onPointerDown={handleNodePointerDown}
+              activePinId={activePin?.id}
+              onPointerDown={onNodePointerDown}
               onAddInput={handleNodeAddInput}
               onPinClick={handlePinClick}
               onPinPointerDown={onPinPointerDown}
@@ -795,7 +812,7 @@ export default function InfiniteCanvas() {
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,
                 "get_variable",
-                { 
+                {
                   title: `Get ${variableDropMenu.variableName}`,
                   variableId: variableDropMenu.variableId,
                   variableType: variableDropMenu.variableType // 传入初始变量类型
@@ -821,7 +838,7 @@ export default function InfiniteCanvas() {
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                 canvas.scale,
                 "set_variable",
-                { 
+                {
                   title: `Set ${variableDropMenu.variableName}`,
                   variableId: variableDropMenu.variableId,
                   variableType: variableDropMenu.variableType // 传入初始变量类型

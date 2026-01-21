@@ -1,7 +1,7 @@
 // drag/DragProvider.tsx
 import React, { useEffect, useState } from "react";
 import { DragContext } from "./DragContext";
-import { DragState } from "./type";
+import { DragState } from "../Types/drag";
 
 export const DragProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -15,10 +15,10 @@ export const DragProvider: React.FC<{ children: React.ReactNode }> = ({
       setDrag((d) =>
         d
           ? {
-              ...d,
-              x: e.clientX,
-              y: e.clientY,
-            }
+            ...d,
+            x: e.clientX,
+            y: e.clientY,
+          }
           : null
       );
     };

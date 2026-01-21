@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useCanvas } from "./CanvasContext";
+import { useCanvas } from "../Context/CanvasContext";
 
 export default function HUD() {
   const { canvas } = useCanvas();
