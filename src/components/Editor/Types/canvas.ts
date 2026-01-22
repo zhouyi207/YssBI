@@ -54,6 +54,7 @@ export interface EditorGroup {
   tabs: Tab[];
   activeTabId: string | null;
   canvas: CanvasState;
+  selectedNodeIds: string[];
 }
 
 

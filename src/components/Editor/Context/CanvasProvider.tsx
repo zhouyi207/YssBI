@@ -11,6 +11,8 @@ import { createInternalNode, syncInternalNodePins } from "../Utils/internalNodes
 import { isCompatiblePins, isSingleLinkPin } from "../Utils/pinUtils";
 import { clamp } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
+import { useViewportStore } from "../Store/useViewportStore";
+import { useNodeStore } from "../Store/useNodeStore";
 
 /* ================= Helper Functions ================= */
 
@@ -52,7 +54,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const [tabHistory, setTabHistory] = useState<Record<string, { past: any[], future: any[] }>>({});
 
   const [groups, setGroups] = useState<EditorGroup[]>([
-    { id: "main-group", tabs: [], activeTabId: null, canvas: { x: 0, y: 0, scale: 1 } }
+    { id: "main-group", tabs: [], activeTabId: null, canvas: { x: 0, y: 0, scale: 1 }, selectedNodeIds: [] }
   ]);
   const [activeGroupId, setActiveGroupId] = useState("main-group");
   const activeGroupIdRef = useRef(activeGroupId);
@@ -66,6 +68,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const activeTabId = activeGroup.activeTabId;
   const activeTabIdRef = useRef(activeTabId); useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
 
+  const selectedNodeIds = activeGroup.selectedNodeIds;
+  const selectedNodeIdsRef = useRef(selectedNodeIds); useEffect(() => { selectedNodeIdsRef.current = selectedNodeIds; }, [selectedNodeIds]);
+
   // Derived scoped states
   const nodes = useMemo(() => (activeTabId ? tabNodes[activeTabId] || [] : []), [tabNodes, activeTabId]);
   const canvas = activeGroup.canvas;
@@ -75,17 +80,37 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   // Current Refs
   const nodesRef = useRef(nodes); useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   const variablesRef = useRef(variables); useEffect(() => { variablesRef.current = variables; }, [variables]);
-  const canvasRef = useRef(canvas); useEffect(() => { canvasRef.current = canvas; }, [canvas]);
+  const canvasRef = useRef(canvas); 
+  useEffect(() => { 
+    // We update canvasRef whenever the store changes or groups changes
+    const unsub = useViewportStore.subscribe((state) => {
+      const currentGroupId = activeGroupIdRef.current;
+      if (state.viewports[currentGroupId]) {
+        canvasRef.current = state.viewports[currentGroupId];
+      }
+    });
+    return unsub;
+  }, []);
+  useEffect(() => { canvasRef.current = canvas; }, [canvas]);
 
   // --- Scoped Setters ---
   const setNodes = useCallback((updater: BaseNode[] | ((prev: BaseNode[]) => BaseNode[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
-    setTabNodes(prev => ({
-      ...prev,
-      [tId]: typeof updater === 'function' ? (updater as any)(prev[tId] || []) : updater
-    }));
+    setTabNodes(prev => {
+      const currentNodes = prev[tId] || [];
+      const nextNodes = typeof updater === 'function' ? (updater as any)(currentNodes) : updater;
+      // 同步到高性能 Store
+      useNodeStore.getState().setNodes(nextNodes);
+      return { ...prev, [tId]: nextNodes };
+    });
   }, []);
+
+  // 当活动 Tab 切换或节点数据变化时，同步节点到 NodeStore
+  useEffect(() => {
+    const currentNodes = (activeTabId && tabNodes[activeTabId]) ? tabNodes[activeTabId] : [];
+    useNodeStore.getState().setNodes(currentNodes);
+  }, [activeTabId, tabNodes]);
 
   const setVariables = useCallback((updater: any) => {
     const tId = activeTabIdRef.current;
@@ -97,11 +122,19 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const setCanvas = useCallback((updater: CanvasState | ((prev: CanvasState) => CanvasState), targetGroupId?: string) => {
-    setGroups(prev => prev.map(g => g.id === (targetGroupId || activeGroupIdRef.current) ? {
-      ...g,
-      canvas: typeof updater === 'function' ? (updater as any)(g.canvas) : updater
-    } : g));
+    const gid = targetGroupId || activeGroupIdRef.current;
+    useViewportStore.getState().setViewport(gid, updater);
   }, []);
+
+  // Sync groups canvas to store initially or when groups change from outside
+  useEffect(() => {
+    groups.forEach(g => {
+      const storeState = useViewportStore.getState().viewports[g.id];
+      if (!storeState || storeState.x !== g.canvas.x || storeState.y !== g.canvas.y || storeState.scale !== g.canvas.scale) {
+        useViewportStore.getState().setViewport(g.id, g.canvas);
+      }
+    });
+  }, [groups]);
 
   const setHistory = useCallback((updater: any) => {
     const tId = activeTabIdRef.current;
@@ -110,6 +143,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       ...prev,
       [tId]: typeof updater === 'function' ? updater(prev[tId] || { past: [], future: [] }) : updater
     }));
+  }, []);
+
+  const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
+    setGroups(prev => prev.map(g => g.id === (targetGroupId || activeGroupIdRef.current) ? {
+      ...g,
+      selectedNodeIds: typeof updater === 'function' ? updater(g.selectedNodeIds) : updater
+    } : g));
   }, []);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -176,7 +216,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const src = groups.find(g => g.id === sourceGroupId);
     if (!src) return;
     const nid = `group-${crypto.randomUUID()}`;
-    const newG: EditorGroup = { id: nid, tabs: [...src.tabs], activeTabId: src.activeTabId, canvas: { ...src.canvas } };
+    const newG: EditorGroup = { id: nid, tabs: [...src.tabs], activeTabId: src.activeTabId, canvas: { ...src.canvas }, selectedNodeIds: [...src.selectedNodeIds] };
     setGroups(prev => [...prev, newG]);
     setActiveGroupId(nid);
   }, [groups]);
@@ -333,7 +373,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const id = `event-${crypto.randomUUID()}`;
     const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", name, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
     const sub: SubGraphData = { id, name, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
-    setEvents(prev => ({ ...prev, [id]: sub }));
+    setEvents({ ...eventsRef.current, [id]: sub }); // Use ref to avoid stale state in rapid calls
     openSubGraph(id, name, "event", sub);
   }, [openSubGraph]);
 
@@ -417,8 +457,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [setHistory]);
 
   const deleteSelected = useCallback(() => {
+    const sIds = new Set(selectedNodeIdsRef.current);
+    if (sIds.size === 0) return;
+
     setNodes((prev: BaseNode[]) => {
-      const idsToDelete = new Set(prev.filter(n => n.selected && !n.isInternal).map(n => n.id));
+      const idsToDelete = new Set(prev.filter(n => sIds.has(n.id) && !n.isInternal).map(n => n.id));
       if (idsToDelete.size === 0) return prev;
       return prev.filter(n => !idsToDelete.has(n.id)).map(n => {
         const clone = n.clone();
@@ -427,11 +470,16 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         return clone;
       });
     });
-  }, [setNodes]);
+    setSelectedNodeIds([]);
+  }, [setNodes, setSelectedNodeIds]);
 
   /* --- Clipboard & Edit Actions --- */
   const clipboardRef = useRef<BaseNode[]>([]);
-  const copy = useCallback(() => { const sel = nodesRef.current.filter(n => n.selected && !n.isInternal); if (sel.length > 0) clipboardRef.current = sel.map(n => n.clone()); }, []);
+  const copy = useCallback(() => {
+    const sIds = new Set(selectedNodeIdsRef.current);
+    const sel = nodesRef.current.filter(n => sIds.has(n.id) && !n.isInternal);
+    if (sel.length > 0) clipboardRef.current = sel.map(n => n.clone());
+  }, []);
   const cut = useCallback(() => { copy(); deleteSelected(); }, [copy, deleteSelected]);
 
   const paste = useCallback((pos?: { x: number; y: number }) => {
@@ -446,12 +494,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // 1. Generate new IDs and Map
     const idMap = new Map<string, string>();
+    const newSelectedIds: string[] = [];
     const newNodes = clipboard.map(n => {
       const newNode = n.clone();
       const nid = `node-${crypto.randomUUID()}`;
       newNode.id = nid;
       newNode.position = { x: n.position.x + offX, y: n.position.y + offY };
-      newNode.selected = true;
+      newSelectedIds.push(nid);
       const updatePins = (ps: Pin[]) => ps.forEach(p => {
         const old = p.id;
         p.id = `${nid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -471,8 +520,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       });
     });
 
-    setNodes((prev: BaseNode[]) => [...prev.map(n => { const c = n.clone(); c.selected = false; return c; }), ...newNodes]);
-  }, [saveHistory, setNodes]);
+    setNodes((prev: BaseNode[]) => [...prev, ...newNodes]);
+    setSelectedNodeIds(newSelectedIds);
+  }, [saveHistory, setNodes, setSelectedNodeIds]);
 
   // --- Interaction Elements & Handlers ---
   const connectPins = useCallback((a: string, b: string) => {
@@ -517,21 +567,29 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
     if (e.button === 0) {
-      if (!e.shiftKey) { setNodes(prev => prev.map(n => { if (!n.selected) return n; const c = n.clone(); c.selected = false; return c; })); }
+      if (!e.shiftKey) { setSelectedNodeIds([], groupId); }
       setGesture({ type: "select", startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, groupId });
     }
-  }, [setNodes]);
+  }, [setSelectedNodeIds]);
 
   const onNodePointerDown = useCallback((nodeId: string, e: React.PointerEvent, groupId?: string) => {
     e.stopPropagation(); if (e.button !== 0) return;
-    setNodes(prev => {
-      const node = prev.find(n => n.id === nodeId); if (!node) return prev;
-      if (e.shiftKey) { const next = prev.map(n => n.id === nodeId ? n.clone() : n); next.find(n => n.id === nodeId)!.selected = !node.selected; return next; }
-      if (node.selected) return prev;
-      return prev.map(n => { const c = n.clone(); c.selected = (n.id === nodeId); return c; });
-    });
+    const gid = groupId || activeGroupIdRef.current;
+    const currentSelected = groups.find(g => g.id === gid)?.selectedNodeIds || [];
+
+    if (e.shiftKey) {
+      if (currentSelected.includes(nodeId)) {
+        setSelectedNodeIds(prev => prev.filter(id => id !== nodeId), gid);
+      } else {
+        setSelectedNodeIds(prev => [...prev, nodeId], gid);
+      }
+    } else {
+      if (!currentSelected.includes(nodeId)) {
+        setSelectedNodeIds([nodeId], gid);
+      }
+    }
     setGesture({ type: "drag", nodeId, lastX: e.clientX, lastY: e.clientY, moved: false, groupId });
-  }, [setNodes]);
+  }, [setSelectedNodeIds, groups]);
 
   const onPinPointerDown = useCallback((pinId: string, e: React.PointerEvent, groupId?: string) => {
     e.stopPropagation();
@@ -575,8 +633,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const g = gestureRef.current; if (!g) return;
       if (g.type === "pan") {
         const dx = e.clientX - g.lastX, dy = e.clientY - g.lastY;
-        setCanvas(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }), g.groupId);
+        useViewportStore.getState().setViewport(g.groupId || activeGroupIdRef.current, prev => ({
+          ...prev,
+          x: prev.x + dx,
+          y: prev.y + dy
+        }));
         g.lastX = e.clientX; g.lastY = e.clientY; g.moved = true;
+        return;
       } else if (g.type === "select") { g.currentX = e.clientX; g.currentY = e.clientY; setSelection({ ...g }); }
       else if (g.type === "connect") { g.currentX = e.clientX; g.currentY = e.clientY; }
       else if (g.type === "drag") {
@@ -584,7 +647,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         const dy = (e.clientY - g.lastY) / canvasRef.current.scale;
         if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
           g.moved = true;
-          setNodes(prev => prev.map(n => { if (!n.selected) return n; const c = n.clone(); c.position = { x: n.position.x + dx, y: n.position.y + dy }; return c; }));
+          const sIds = selectedNodeIdsRef.current;
+          // 极致优化：直接更新 NodeStore，只有选中的节点组件会运行其内部代码
+          sIds.forEach(id => {
+            useNodeStore.getState().updateNodePosition(id, dx, dy);
+          });
           g.lastX = e.clientX; g.lastY = e.clientY;
         }
       }
@@ -597,26 +664,40 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!g.moved && e.button === 2) {
           setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
         }
+        const gid = g.groupId || activeGroupIdRef.current;
+        const finalCanvas = useViewportStore.getState().viewports[gid];
+        if (finalCanvas) {
+          setGroups(prev => prev.map(group => group.id === gid ? { ...group, canvas: finalCanvas } : group));
+        }
       }
       else if (g.type === "select") {
         const rect = selectionRef.current;
         if (rect) {
           const x1 = Math.min(rect.startX, rect.currentX), y1 = Math.min(rect.startY, rect.currentY);
           const x2 = Math.max(rect.startX, rect.currentX), y2 = Math.max(rect.startY, rect.currentY);
-          setNodes((prev: BaseNode[]) => prev.map(n => {
-            const el = document.getElementById(n.id); if (!el) return n;
+          const gid = g.groupId || activeGroupIdRef.current;
+          const newSelectedIds: string[] = [];
+
+          nodesRef.current.forEach(n => {
+            const el = document.getElementById(n.id); if (!el) return;
             const r = el.getBoundingClientRect();
             const overlap = !(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1);
-            if (n.selected === overlap) return n;
-            const c = n.clone(); c.selected = overlap; return c;
-          }));
+            if (overlap) newSelectedIds.push(n.id);
+          });
+          setSelectedNodeIds(newSelectedIds, gid);
         }
         setSelection(null);
       } else if (g.type === "connect") {
         const target = (e.target as HTMLElement).closest("[data-pin-id]");
         if (target) connectPins(g.startPin.id, target.getAttribute("data-pin-id")!);
         else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
-      } else if (g.type === "drag" && g.moved) saveHistory();
+      } else if (g.type === "drag" && g.moved) {
+        // 拖拽结束：同步 Store 中的最新位置到持久化状态
+        const sIds = selectedNodeIdsRef.current;
+        const storeNodes = useNodeStore.getState().nodes;
+        setNodes(prev => prev.map(n => sIds.includes(n.id) ? storeNodes[n.id] : n));
+        saveHistory();
+      }
       setGesture(null);
     };
 
@@ -630,14 +711,15 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const id = "default-event"; const name = "Event Graph"; const type = "event";
       const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", "On Run", "Internal", { x: 100, y: 100 }, [], [{ name: "Exec", type: "exec" }])];
       setEvents({ [id]: { id, name, type, nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] } });
-      setGroups([{ id: "main-group", tabs: [{ id, title: name, type }], activeTabId: id, canvas: { x: 0, y: 0, scale: 1 } }]);
+      setGroups([{ id: "main-group", tabs: [{ id, title: name, type }], activeTabId: id, canvas: { x: 0, y: 0, scale: 1 }, selectedNodeIds: [] }]);
       setSelectedInfo(id, type); setTabNodes({ [id]: tNodes }); setTabHistory({ [id]: { past: [], future: [] } });
+      setSelectedNodeIds([], "main-group");
     }
   }, []);
 
   return (
     <CanvasContext.Provider value={{
-      canvas, setCanvas, nodes, setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, selection, gesture, setGesture, contextMenu, setContextMenu,
+      setCanvas, nodes, setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, selection, gesture, setGesture, contextMenu, setContextMenu,
       saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
       selectedItemId, selectedItemType, setSelectedInfo,
       addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
@@ -647,7 +729,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory, connectPins,
       groups, activeGroupId, setActiveGroupId, splitEditorRight, closeGroup,
       activeTabId, setActiveTabId: handleSetActiveTabId, openSubGraph, addTab: () => addEvent("New Item"), closeTab, openSettingsTab, pendingConnection, setPendingConnection,
-      tabNodes, tabVariables
+      tabNodes, tabVariables,
+      selectedNodeIds, setSelectedNodeIds
     }}>
       {children}
     </CanvasContext.Provider>

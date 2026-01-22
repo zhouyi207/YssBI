@@ -1,9 +1,11 @@
 import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { Node } from "../Nodes/Node";
-import { BaseNode, Pin } from "../Types/nodes";
+import { Pin } from "../Types/nodes";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas } from "../Context/CanvasContext";
 import { useTheme } from "../Context/ThemeContext";
+import { useViewportStore } from "../Store/useViewportStore";
+import { useNodeStore } from "../Store/useNodeStore";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import HUD from "./HUD";
@@ -11,245 +13,88 @@ import NodePalette from "../Nodes/NodePalette";
 import { VscRunAll } from "react-icons/vsc";
 import { drawEdge } from "../Edges/Edge";
 
-/* ================= Canvas ================= */
+/* ================= Canvas Components ================= */
 
-export default function InfiniteCanvas() {
-  const {
-    canvas,
-    setCanvas,
-    nodes,
-    setNodes,
-    onCanvasPointerDown,
-    onNodePointerDown,
-    onPinPointerDown,
-    selection,
-    gesture,
-    contextMenu,
-    setContextMenu,
-    variables,
-    globalVariables,
-    undo,
-    redo,
-    saveHistory,
-    copy,
-    paste,
-    cut,
-    deleteSelected,
-    executeGraph,
-    saveGraph,
-    saveGraphAs,
-    importGraph,
-    addEvent,
-    addFunction,
-    addMacro,
-    activeTabId,
-    pendingConnection,
-    setPendingConnection,
-    tabs,
-    setActiveTabId,
-    closeTab,
-    functions,
-    macros,
-    connectPins,
-    splitEditorRight,
-    groupId,
-    activeGroupId // Added activeGroupId
-  } = useCanvas();
-  const { theme } = useTheme();
+const GRID = 40;
 
+const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
-  const { drag } = useDrag();
+const ViewportGrid = ({ groupId }: { groupId: string }) => {
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  // 优化：使用 Ref 记录最新的 canvas 状态，避免 useEffect 频繁卸载/挂载监听器
-  const canvasRef = useRef(canvas);
   useEffect(() => {
-    canvasRef.current = canvas;
-  }, [canvas]);
+    // 零 React 重绘：直接订阅 Store 并同步 DOM 样式
+    return useViewportStore.subscribe(state => {
+      const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
+      const el = gridRef.current;
+      if (el) {
+        el.style.backgroundSize = `${GRID * canvas.scale}px ${GRID * canvas.scale}px`;
+        el.style.backgroundPosition = `${canvas.x}px ${canvas.y}px`;
+      }
+    });
+  }, [groupId]);
 
-  // 使用原生事件监听器以更好地控制 preventDefault 和 stopPropagation
+  const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+  return (
+    <div
+      ref={gridRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        backgroundImage: `
+          linear-gradient(var(--grid-lines) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-lines) 1px, transparent 1px)
+        `,
+        backgroundSize: `${GRID * initial.scale}px ${GRID * initial.scale}px`,
+        backgroundPosition: `${initial.x}px ${initial.y}px`,
+      }}
+    />
+  );
+};
+
+const TransformContainer = ({ groupId, children }: { groupId: string, children: React.ReactNode }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const canvasEl = ref.current;
-    if (!canvasEl) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      // 检查点击来源：如果是 UI 组件，则完全忽略
-      const target = e.target as HTMLElement;
-      if (
-        target.closest(".menubar-container") ||
-        target.closest(".sidebar-container") ||
-        target.closest(".menu-container") ||
-        target.closest(".hud-container")
-      ) {
-        return;
+    // 零 React 重绘：平移缩放时直接操作 transform，跳过 Virtual DOM Diff
+    return useViewportStore.subscribe(state => {
+      const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
+      const el = containerRef.current;
+      if (el) {
+        // 使用 translate3d 触发 GPU 加速，确保 CSS 格式正确
+        el.style.transform = `translate3d(${canvas.x}px, ${canvas.y}px, 0) scale(${canvas.scale})`;
       }
+    });
+  }, [groupId]);
 
-      // 如果鼠标不在画布范围内，也不处理
-      const rect = canvasEl.getBoundingClientRect();
-      if (
-        e.clientX < rect.left ||
-        e.clientX > rect.right ||
-        e.clientY < rect.top ||
-        e.clientY > rect.bottom
-      ) {
-        return;
-      }
+  const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        transform: `translate3d(${initial.x}px, ${initial.y}px, 0) scale(${initial.scale})`,
+        transformOrigin: "0 0",
+        willChange: "transform", // 提示浏览器开启图层优化
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
-      // 阻止浏览器默认的缩放或滚动行为
-      e.preventDefault();
-
-      // 直接在此处执行缩放逻辑，使用 Ref 保证性能和稳定性
-      const factor = 0.001;
-      const currentCanvas = canvasRef.current;
-      const nextScale = Math.min(Math.max(currentCanvas.scale * (1 - e.deltaY * factor), 0.2), 4);
-
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const worldX = (mouseX - currentCanvas.x) / currentCanvas.scale;
-      const worldY = (mouseY - currentCanvas.y) / currentCanvas.scale;
-
-      setCanvas({
-        scale: nextScale,
-        x: mouseX - worldX * nextScale,
-        y: mouseY - worldY * nextScale,
-      });
-    };
-
-    window.addEventListener("wheel", handleWheel, { passive: false, capture: true });
-    return () => window.removeEventListener("wheel", handleWheel, { capture: true });
-  }, [setCanvas]); // 仅依赖 setCanvas
-
+const EdgesLayer = ({
+  groupId,
+  visibleNodeIds,
+  pinNodeIdIndex,
+  getPinWorldPos,
+  getCanvasLocalPoint,
+  gesture,
+  pendingConnection,
+  contextMenu,
+  activeGroupId,
+  theme
+}: any) => {
   const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const selectedNodeIds = useMemo(() => {
-    const set = new Set<string>();
-    nodes.forEach(n => {
-      if (n.selected) set.add(n.id);
-    });
-    return set;
-  }, [nodes]);
-
-  const selectedNodeIdsRef = useRef(selectedNodeIds);
-  useEffect(() => {
-    selectedNodeIdsRef.current = selectedNodeIds;
-  }, [selectedNodeIds]);
-
-  const [variableDropMenu, setVariableDropMenu] = useState<{
-    x: number;
-    y: number;
-    worldX: number;
-    worldY: number;
-    variableId: string;
-    variableName: string;
-    variableType: string;
-  } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const prevDragRef = useRef(drag);
-
-  const pinIndex = useMemo(() => {
-    const map = new Map<string, Pin>();
-    nodes.forEach((node) => {
-      node.inputs.forEach((pin: Pin) => map.set(pin.id, pin));
-      node.outputs.forEach((pin: Pin) => map.set(pin.id, pin));
-    });
-    return map;
-  }, [nodes]);
-
-  const pinNodeIdIndex = useMemo(() => {
-    const map = new Map<string, string>();
-    nodes.forEach((node) => {
-      node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
-      node.outputs.forEach((pin: Pin) => map.set(pin.id, node.id));
-    });
-    return map;
-  }, [nodes]);
-
-  const pinIndexRef = useRef(pinIndex);
-  useEffect(() => {
-    pinIndexRef.current = pinIndex;
-  }, [pinIndex]);
-
-
-
-  const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
-
-  // 测量 Pin 相对于节点的偏移量 (仅在节点或 Pin 数量变化时运行)
-  // 修复：使用 scoped querySelector 替代 getElementById，确保在分屏时测量的是当前视口内的节点
-  useLayoutEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-    const nextOffsets: Record<string, { x: number; y: number }> = {};
-
-    nodes.forEach(node => {
-      // 关键修复：只在当前 Canvas 容器内查找节点
-      const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
-      if (!nodeEl) return;
-
-      const nodeRect = nodeEl.getBoundingClientRect();
-      const pins = nodeEl.querySelectorAll<HTMLElement>("[data-pin-id]");
-
-      pins.forEach(pinEl => {
-        const pinId = pinEl.dataset.pinId;
-        if (!pinId) return;
-
-        // Find the actual visual center (the circle)
-        const circleEl = pinEl.querySelector(".pin-circle");
-        const targetEl = circleEl || pinEl;
-        const rect = targetEl.getBoundingClientRect();
-
-        nextOffsets[pinId] = {
-          x: (rect.left + rect.width / 2 - nodeRect.left) / canvas.scale,
-          y: (rect.top + rect.height / 2 - nodeRect.top) / canvas.scale,
-        };
-      });
-    });
-
-    setPinOffsets(prev => {
-      // Check if anything actually changed
-      const currentKeys = Object.keys(nextOffsets);
-      const prevKeys = Object.keys(prev);
-
-      if (currentKeys.length === prevKeys.length) {
-        const isSame = currentKeys.every(k =>
-          prev[k] &&
-          Math.abs(prev[k].x - nextOffsets[k].x) < 0.1 &&
-          Math.abs(prev[k].y - nextOffsets[k].y) < 0.1
-        );
-        if (isSame) return prev;
-      }
-      return nextOffsets;
-    });
-  }, [activeTabId, nodes, canvas.scale]); // Re-measure on tab switch, node array change, or scale change (to be safe)
-
-  const nodeMap = useMemo(() => {
-    const map = new Map<string, BaseNode>();
-    nodes.forEach(n => map.set(n.id, n));
-    return map;
-  }, [nodes]);
-
-  // 获取 Pin 的世界坐标 (Node位置 + 偏移)
-  const getPinWorldPos = useCallback((pinId: string) => {
-    const nodeId = pinNodeIdIndex.get(pinId);
-    const node = nodeMap.get(nodeId || "");
-    const offset = pinOffsets[pinId];
-    if (!node || !offset) return null;
-    return {
-      x: node.position.x + offset.x,
-      y: node.position.y + offset.y
-    };
-  }, [nodeMap, pinNodeIdIndex, pinOffsets]);
-
-  const getCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
-    const root = ref.current;
-    if (!root) return { x: 0, y: 0 };
-    const rect = root.getBoundingClientRect();
-    // 转换为 Canvas World 坐标
-    return {
-      x: (clientX - rect.left - canvas.x) / canvas.scale,
-      y: (clientY - rect.top - canvas.y) / canvas.scale
-    };
-  }, [canvas.x, canvas.y, canvas.scale]);
+  const rafRef = useRef<number | null>(null);
 
   // 绘制连接线的核心逻辑 (GPU 加速)
   const drawAllEdges = useCallback(() => {
@@ -257,6 +102,8 @@ export default function InfiniteCanvas() {
     if (!canvasEl) return;
     const ctx = canvasEl.getContext("2d");
     if (!ctx) return;
+
+    const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
 
     // 清除画布
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
@@ -267,8 +114,17 @@ export default function InfiniteCanvas() {
     ctx.scale(canvas.scale, canvas.scale);
 
     // 绘制已有连接
-    nodes.forEach((node) => {
-      node.outputs.forEach((pin: Pin) => {
+    const allNodes = useNodeStore.getState().nodes;
+    const activeIds = useNodeStore.getState().activeNodeIds;
+
+    activeIds.forEach(id => {
+      const node = allNodes[id];
+      if (!node) return;
+      
+      // 暂时移除 Edges 层的视口裁剪判断，确保所有连接线都能绘制
+      // 因为 getPinWorldPos 内部已经处理了未渲染节点的 null 返回
+      
+      node.outputs.forEach((pin: any) => {
         pin.links.forEach((targetId: string) => {
           const start = getPinWorldPos(pin.id);
           const end = getPinWorldPos(targetId);
@@ -310,14 +166,39 @@ export default function InfiniteCanvas() {
     }
 
     ctx.restore();
-  }, [nodes, canvas, gesture, pendingConnection, contextMenu, pinOffsets, getPinWorldPos, getCanvasLocalPoint, theme.connectionLines, groupId, activeGroupId]);
+  }, [gesture, pendingConnection, contextMenu, getPinWorldPos, getCanvasLocalPoint, theme, groupId, activeGroupId, visibleNodeIds, pinNodeIdIndex]);
+
+  const requestDraw = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      drawAllEdges();
+      rafRef.current = null;
+    });
+  }, [drawAllEdges]);
+
+  // 监听 ViewportStore 和 NodeStore 的变化，触发重绘
+  useEffect(() => {
+    const unsubViewport = useViewportStore.subscribe(() => {
+      requestDraw();
+    });
+    const unsubNodes = useNodeStore.subscribe(() => {
+      requestDraw();
+    });
+    return () => {
+      unsubViewport();
+      unsubNodes();
+    };
+  }, [requestDraw]);
 
   // 同步画布尺寸并触发重绘
   useLayoutEffect(() => {
     const canvasEl = edgeCanvasRef.current;
-    if (!canvasEl || !ref.current) return;
+    if (!canvasEl) return;
 
-    const rect = ref.current.getBoundingClientRect();
+    // 确保从正确的父元素获取尺寸
+    const rect = canvasEl.parentElement?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+
     const dpr = window.devicePixelRatio || 1;
 
     // 设置实际像素大小 (防止模糊)
@@ -328,10 +209,298 @@ export default function InfiniteCanvas() {
     canvasEl.style.height = `${rect.height}px`;
 
     const ctx = canvasEl.getContext("2d");
-    if (ctx) ctx.scale(dpr, dpr);
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // 使用 setTransform 替代 scale 避免累加
+    }
 
     drawAllEdges();
   }, [drawAllEdges]);
+
+  return <canvas ref={edgeCanvasRef} className="absolute inset-0 pointer-events-none" />;
+};
+
+export default function InfiniteCanvas() {
+  const {
+    setCanvas,
+    setNodes,
+    onCanvasPointerDown,
+    onNodePointerDown,
+    onPinPointerDown,
+    selection,
+    gesture,
+    contextMenu,
+    setContextMenu,
+    variables,
+    globalVariables,
+    undo,
+    redo,
+    saveHistory,
+    copy,
+    paste,
+    cut,
+    deleteSelected,
+    executeGraph,
+    saveGraph,
+    saveGraphAs,
+    importGraph,
+    addEvent,
+    addFunction,
+    addMacro,
+    activeTabId,
+    pendingConnection,
+    setPendingConnection,
+    tabs,
+    setActiveTabId,
+    closeTab,
+    functions,
+    macros,
+    connectPins,
+    splitEditorRight,
+    groupId,
+    activeGroupId, // Added activeGroupId
+    selectedNodeIds
+  } = useCanvas();
+  const { theme } = useTheme();
+  const { drag } = useDrag();
+
+  const activeNodeIds = useNodeStore(state => state.activeNodeIds);
+  const scale = useViewportStore(useCallback(state => state.viewports[groupId]?.scale || 1, [groupId]));
+
+  // --- 视口裁剪 (Culling) 逻辑 ---
+  const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
+  
+  const updateVisibleNodes = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+    const allNodes = useNodeStore.getState().nodes;
+    const activeIds = useNodeStore.getState().activeNodeIds;
+    
+    // 计算当前视口在世界坐标系中的范围 (增加 500px 缓冲)
+    const padding = 500 / canvas.scale;
+    const left = -canvas.x / canvas.scale - padding;
+    const top = -canvas.y / canvas.scale - padding;
+    const right = (rect.width - canvas.x) / canvas.scale + padding;
+    const bottom = (rect.height - canvas.y) / canvas.scale + padding;
+
+    const visible = new Set<string>();
+    activeIds.forEach(id => {
+      const node = allNodes[id];
+      if (!node) return;
+      // 简单的矩形相交判断 (假设节点最大宽高为 300x300)
+      if (node.position.x + 300 > left && node.position.x < right &&
+          node.position.y + 300 > top && node.position.y < bottom) {
+        visible.add(id);
+      }
+    });
+    setVisibleNodes(visible);
+  }, [groupId]);
+
+  // 当节点列表变化、缩放变化或平移结束时更新裁剪
+  useEffect(() => {
+    return useNodeStore.subscribe((state, prevState) => {
+      if (state.activeNodeIds !== prevState.activeNodeIds) {
+        updateVisibleNodes();
+      }
+    });
+  }, [updateVisibleNodes]);
+
+  useEffect(() => {
+    updateVisibleNodes();
+  }, [scale, activeNodeIds, updateVisibleNodes]);
+
+  // 监听平移结束（通过 gesture 状态判断）
+  useEffect(() => {
+    if (!gesture) {
+      updateVisibleNodes();
+    }
+  }, [gesture, updateVisibleNodes]);
+
+  // 使用原生事件监听器以更好地控制 preventDefault 和 stopPropagation
+  useEffect(() => {
+    const canvasEl = ref.current;
+    if (!canvasEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // 检查点击来源：如果是 UI 组件，则完全忽略
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(".menubar-container") ||
+        target.closest(".sidebar-container") ||
+        target.closest(".menu-container") ||
+        target.closest(".hud-container")
+      ) {
+        return;
+      }
+
+      // 如果鼠标不在画布范围内，也不处理
+      const rect = canvasEl.getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      ) {
+        return;
+      }
+
+      // 阻止浏览器默认的缩放或滚动行为
+      e.preventDefault();
+
+      // 直接在此处执行缩放逻辑，使用 Store 保证性能
+      const factor = 0.001;
+      const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+      const nextScale = Math.min(Math.max(currentCanvas.scale * (1 - e.deltaY * factor), 0.2), 4);
+
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const worldX = (mouseX - currentCanvas.x) / currentCanvas.scale;
+      const worldY = (mouseY - currentCanvas.y) / currentCanvas.scale;
+
+      setCanvas({
+        scale: nextScale,
+        x: mouseX - worldX * nextScale,
+        y: mouseY - worldY * nextScale,
+      });
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false, capture: true });
+    return () => window.removeEventListener("wheel", handleWheel, { capture: true });
+  }, [setCanvas, groupId]); // Added groupId dependency
+
+  const selectedNodeIdsSet = useMemo(() => {
+    return new Set(selectedNodeIds);
+  }, [selectedNodeIds]);
+
+  const selectedNodeIdsRef = useRef(selectedNodeIdsSet);
+  useEffect(() => {
+    selectedNodeIdsRef.current = selectedNodeIdsSet;
+  }, [selectedNodeIdsSet]);
+
+  const [variableDropMenu, setVariableDropMenu] = useState<{
+    x: number;
+    y: number;
+    worldX: number;
+    worldY: number;
+    variableId: string;
+    variableName: string;
+    variableType: string;
+  } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const prevDragRef = useRef(drag);
+
+  const pinIndex = useMemo(() => {
+    const map = new Map<string, Pin>();
+    const allNodes = useNodeStore.getState().nodes;
+    activeNodeIds.forEach(id => {
+      const node = allNodes[id];
+      if (!node) return;
+      node.inputs.forEach((pin: Pin) => map.set(pin.id, pin));
+      node.outputs.forEach((pin: Pin) => map.set(pin.id, pin));
+    });
+    return map;
+  }, [activeTabId, activeNodeIds]); // Recompute when tab switch or node list changes
+
+  const pinNodeIdIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    const allNodes = useNodeStore.getState().nodes;
+    activeNodeIds.forEach(id => {
+      const node = allNodes[id];
+      if (!node) return;
+      node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
+      node.outputs.forEach((pin: Pin) => map.set(pin.id, node.id));
+    });
+    return map;
+  }, [activeTabId, activeNodeIds]);
+
+  const pinIndexRef = useRef(pinIndex);
+  useEffect(() => {
+    pinIndexRef.current = pinIndex;
+  }, [pinIndex]);
+
+
+
+  const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
+
+  // 测量 Pin 相对于节点的偏移量 (仅在节点或 Pin 数量变化时运行)
+  // 修复：使用 scoped querySelector 替代 getElementById，确保在分屏时测量的是当前视口内的节点
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const nextOffsets: Record<string, { x: number; y: number }> = {};
+    const allNodes = useNodeStore.getState().nodes;
+    const activeIds = useNodeStore.getState().activeNodeIds;
+
+    activeIds.forEach(id => {
+      const node = allNodes[id];
+      if (!node) return;
+      // 关键修复：只在当前 Canvas 容器内查找节点
+      const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
+      if (!nodeEl) return;
+
+      const nodeRect = nodeEl.getBoundingClientRect();
+      const pins = nodeEl.querySelectorAll<HTMLElement>("[data-pin-id]");
+
+      pins.forEach(pinEl => {
+        const pinId = pinEl.dataset.pinId;
+        if (!pinId) return;
+
+        // Find the actual visual center (the circle)
+        const circleEl = pinEl.querySelector(".pin-circle");
+        const targetEl = circleEl || pinEl;
+        const rect = targetEl.getBoundingClientRect();
+
+        nextOffsets[pinId] = {
+          x: (rect.left + rect.width / 2 - nodeRect.left) / scale,
+          y: (rect.top + rect.height / 2 - nodeRect.top) / scale,
+        };
+      });
+    });
+
+    setPinOffsets(prev => {
+      // Check if anything actually changed
+      const currentKeys = Object.keys(nextOffsets);
+      const prevKeys = Object.keys(prev);
+
+      if (currentKeys.length === prevKeys.length) {
+        const isSame = currentKeys.every(k =>
+          prev[k] &&
+          Math.abs(prev[k].x - nextOffsets[k].x) < 0.1 &&
+          Math.abs(prev[k].y - nextOffsets[k].y) < 0.1
+        );
+        if (isSame) return prev;
+      }
+      return nextOffsets;
+    });
+  }, [activeTabId, scale, visibleNodeIds, activeNodeIds]); // Re-measure on tab switch, node array change, or scale change
+
+  // 获取 Pin 的 world 坐标
+  const getPinWorldPos = useCallback((pinId: string) => {
+    const nodeId = pinNodeIdIndex.get(pinId);
+    const node = useNodeStore.getState().nodes[nodeId || ""];
+    const offset = pinOffsets[pinId];
+    if (!node || !offset) return null;
+    return {
+      x: node.position.x + offset.x,
+      y: node.position.y + offset.y
+    };
+  }, [pinNodeIdIndex, pinOffsets]);
+
+  const getCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
+    const root = ref.current;
+    if (!root) return { x: 0, y: 0 };
+    const rect = root.getBoundingClientRect();
+    const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+    return {
+      x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
+      y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale
+    };
+  }, [groupId]);
+
+  // 获取 Pin 的世界坐标 (Node位置 + 偏移)
 
   const handleNodePaletteSelect = (tpl: { type: string }) => {
     if (!contextMenu || !ref.current) return;
@@ -340,17 +509,19 @@ export default function InfiniteCanvas() {
     const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
     if (internalNodeTypes.includes(tpl.type)) {
       // Check if this internal node already exists
-      const existingNode = nodes.find(n => n.type === tpl.type && n.isInternal);
+      const allNodes = Object.values(useNodeStore.getState().nodes);
+      const existingNode = allNodes.find(n => n.type === tpl.type && n.isInternal);
       if (existingNode) {
         // Move canvas to center on the existing node
         const rect = ref.current.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
 
+        const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
         setCanvas({
-          ...canvas,
-          x: centerX - existingNode.position.x * canvas.scale,
-          y: centerY - existingNode.position.y * canvas.scale
+          ...currentCanvas,
+          x: centerX - existingNode.position.x * currentCanvas.scale,
+          y: centerY - existingNode.position.y * currentCanvas.scale
         });
 
         setContextMenu(null);
@@ -360,14 +531,16 @@ export default function InfiniteCanvas() {
     }
 
     const rect = ref.current.getBoundingClientRect();
-    const x = (contextMenu.x - rect.left - canvas.x) / canvas.scale;
-    const y = (contextMenu.y - rect.top - canvas.y) / canvas.scale;
+    const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+    const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
+    const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-    const newNode = createNodeFromTemplate({ x, y }, canvas.scale, tpl.type);
+    const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, tpl.type);
     if (newNode) {
       saveHistory();
 
-      const newNodes = [...nodes, newNode];
+      const currentNodes = Object.values(useNodeStore.getState().nodes);
+      const newNodes = [...currentNodes, newNode];
       setNodes(newNodes);
 
       // 如果有待处理的连接，尝试自动连接
@@ -432,8 +605,9 @@ export default function InfiniteCanvas() {
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
     saveHistory();
-    setNodes((prev) =>
-      prev.map((node) => {
+    const currentNodes = Object.values(useNodeStore.getState().nodes);
+    setNodes(
+      currentNodes.map((node) => {
         if (node.id === id) {
           const newNode = node.clone();
           const newIndex = newNode.inputs.length;
@@ -578,8 +752,9 @@ export default function InfiniteCanvas() {
     const screenX = dragState.x - rect.left;
     const screenY = dragState.y - rect.top;
 
-    const x = (screenX - canvas.x) / canvas.scale;
-    const y = (screenY - canvas.y) / canvas.scale;
+    const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+    const x = (screenX - currentCanvas.x) / currentCanvas.scale;
+    const y = (screenY - currentCanvas.y) / currentCanvas.scale;
 
     // 检查是否落在了 pin 上 (需求 3: 拖动变量到赋值框)
     const elements = document.elementsFromPoint(dragState.x, dragState.y);
@@ -601,9 +776,10 @@ export default function InfiniteCanvas() {
 
       if (spawnType) {
         saveHistory();
-        const newNode = createNodeFromTemplate({ x, y }, canvas.scale, spawnType);
+        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType);
         if (newNode) {
-          setNodes((prev) => [...prev, newNode]);
+          const currentNodes = Object.values(useNodeStore.getState().nodes);
+          setNodes([...currentNodes, newNode]);
 
           if (targetPinId && spawnType === "get_variable") {
             const outputPin = newNode.outputs[0];
@@ -618,9 +794,10 @@ export default function InfiniteCanvas() {
       }
 
       if (targetPinId) {
-        const newNode = createNodeFromTemplate({ x, y }, canvas.scale, "get_variable");
+        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable");
         if (newNode) {
-          setNodes(prev => [...prev, newNode]);
+          const currentNodes = Object.values(useNodeStore.getState().nodes);
+          setNodes([...currentNodes, newNode]);
           const outputPin = newNode.outputs[0];
           if (outputPin) {
             setTimeout(() => {
@@ -661,22 +838,22 @@ export default function InfiniteCanvas() {
         false
       );
       node.subGraphId = subId;
-      setNodes((prev) => [...prev, node]);
+      const currentNodes = Object.values(useNodeStore.getState().nodes);
+      setNodes([...currentNodes, node]);
       return;
     }
 
     const newNode = createNodeFromTemplate(
       { x, y },
-      canvas.scale,
+      currentCanvas.scale,
       dragState.template.type
     );
     if (newNode) {
       saveHistory();
-      setNodes((prev) => [...prev, newNode]);
+      const currentNodes = Object.values(useNodeStore.getState().nodes);
+      setNodes([...currentNodes, newNode]);
     }
   }
-
-  const GRID = 40;
 
   const activePin = useMemo(() => {
     if (gesture?.type === "connect") return gesture.startPin;
@@ -751,49 +928,43 @@ export default function InfiniteCanvas() {
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
       {/* ================= Grid ================= */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(var(--grid-lines) 1px, transparent 1px),
-            linear-gradient(90deg, var(--grid-lines) 1px, transparent 1px)
-          `,
-          backgroundSize: `${GRID * canvas.scale}px ${GRID * canvas.scale}px`,
-          backgroundPosition: `${canvas.x}px ${canvas.y}px`,
-        }}
-      />
+      <ViewportGrid groupId={groupId} />
 
       {/* ================= World ================= */}
       <div
         className="absolute inset-0"
-        onPointerDown={(e) => onCanvasPointerDown(e, groupId)}
+        onPointerDown={onCanvasPointerDown}
         onContextMenu={(e) => e.preventDefault()}
       >
         {/* GPU 加速的连接线层 */}
-        <canvas
-          ref={edgeCanvasRef}
-          className="absolute inset-0 pointer-events-none"
+        <EdgesLayer
+          groupId={groupId}
+          visibleNodeIds={visibleNodeIds}
+          pinNodeIdIndex={pinNodeIdIndex}
+          getPinWorldPos={getPinWorldPos}
+          getCanvasLocalPoint={getCanvasLocalPoint}
+          gesture={gesture}
+          pendingConnection={pendingConnection}
+          contextMenu={contextMenu}
+          activeGroupId={activeGroupId}
+          theme={theme}
         />
 
-        <div
-          style={{
-            transform: `translate(${canvas.x}px, ${canvas.y}px) scale(${canvas.scale})`,
-            transformOrigin: "0 0",
-          }}
-        >
-          {nodes.map((node) => (
+        <TransformContainer groupId={groupId}>
+          {activeNodeIds.filter(id => visibleNodeIds.has(id)).map((nodeId) => (
             <Node
-              key={node.id}
-              node={node}
-              scale={canvas.scale}
+              key={nodeId}
+              id={nodeId}
+              scale={scale}
+              selected={selectedNodeIdsSet.has(nodeId)}
               activePinId={activePin?.id}
-              onPointerDown={(e, n) => onNodePointerDown(n.id, e)}
+              onPointerDown={(id, e) => onNodePointerDown(id, e)}
               onAddInput={handleNodeAddInput}
               onPinClick={handlePinClick}
               onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
             />
           ))}
-        </div>
+        </TransformContainer>
       </div>
       <HUD />
 
@@ -855,7 +1026,7 @@ export default function InfiniteCanvas() {
               saveHistory();
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                canvas.scale,
+                scale,
                 "get_variable",
                 {
                   title: `Get ${variableDropMenu.variableName}`,
@@ -863,7 +1034,10 @@ export default function InfiniteCanvas() {
                   variableType: variableDropMenu.variableType // 传入初始变量类型
                 }
               );
-              if (newNode) setNodes((prev) => [...prev, newNode]);
+              if (newNode) {
+                const currentNodes = Object.values(useNodeStore.getState().nodes);
+                setNodes([...currentNodes, newNode]);
+              }
               setVariableDropMenu(null);
             }}
           >
@@ -881,7 +1055,7 @@ export default function InfiniteCanvas() {
               saveHistory();
               const newNode = createNodeFromTemplate(
                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                canvas.scale,
+                scale,
                 "set_variable",
                 {
                   title: `Set ${variableDropMenu.variableName}`,
@@ -889,7 +1063,10 @@ export default function InfiniteCanvas() {
                   variableType: variableDropMenu.variableType // 传入初始变量类型
                 }
               );
-              if (newNode) setNodes((prev) => [...prev, newNode]);
+              if (newNode) {
+                const currentNodes = Object.values(useNodeStore.getState().nodes);
+                setNodes([...currentNodes, newNode]);
+              }
               setVariableDropMenu(null);
             }}
           >

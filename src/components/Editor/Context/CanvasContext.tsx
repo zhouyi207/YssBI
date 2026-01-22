@@ -4,7 +4,7 @@ import { CanvasState, Gesture, EditorGroup } from "../Types/canvas";
 
 
 interface CanvasContextValue {
-  canvas: CanvasState;
+  // canvas: CanvasState; // Remove this from the context value to avoid widespread re-renders
   setCanvas: (updater: CanvasState | ((prev: CanvasState) => CanvasState), targetGroupId?: string) => void;
   nodes: BaseNode[];
   setNodes: React.Dispatch<React.SetStateAction<BaseNode[]>>;
@@ -81,6 +81,8 @@ interface CanvasContextValue {
   setPendingConnection: (pin: Pin | null) => void;
   tabNodes: Record<string, BaseNode[]>;
   tabVariables: Record<string, Record<string, { name: string; type: string; value: any }>>;
+  selectedNodeIds: string[];
+  setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
 }
 
 export const CanvasContext = createContext<CanvasContextValue | null>(null);
@@ -103,7 +105,7 @@ export function useCanvas() {
   const activeTabId = group.activeTabId;
   const nodes = activeTabId ? ctx.tabNodes[activeTabId] || [] : [];
   const variables = activeTabId ? ctx.tabVariables[activeTabId] || {} : {};
-  const canvas = group.canvas;
+  const selectedNodeIds = group.selectedNodeIds;
 
   // Helper to activate this group when interaction starts
   const ensureActive = () => {
@@ -146,8 +148,8 @@ export function useCanvas() {
     activeTabId,
     // Override global state with localized state
     nodes,
-    canvas,
     variables,
+    selectedNodeIds,
     // Override handlers
     onCanvasPointerDown: wrappedOnCanvasPointerDown,
     onNodePointerDown: wrappedOnNodePointerDown,

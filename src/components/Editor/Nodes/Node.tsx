@@ -1,20 +1,26 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, BaseNode } from "../Types/nodes";
+import { useNodeStore } from "../Store/useNodeStore";
 
 export interface NodeProps {
-  node: BaseNode;
+  id: string;
   scale: number;
+  selected?: boolean;
   activePinId?: string | null;
   onAddInput?: (id: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
-  onPointerDown?: (e: React.PointerEvent, node: BaseNode) => void;
+  onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
+}
+
+interface InternalNodeProps extends NodeProps {
+  node: BaseNode;
 }
 
 /* ================= Default Node UI ================= */
 
-const DefaultNodeUI: React.FC<NodeProps> = ({
+const DefaultNodeUI: React.FC<InternalNodeProps> = ({
   node,
   activePinId,
   onPinClick,
@@ -75,7 +81,7 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
 
 /* ================= Math Node UI ================= */
 
-const MathNodeUI: React.FC<NodeProps> = ({
+const MathNodeUI: React.FC<InternalNodeProps> = ({
   node,
   activePinId,
   onAddInput,
@@ -147,15 +153,16 @@ const MathNodeUI: React.FC<NodeProps> = ({
 /* ================= Main Dispatcher ================= */
 
 export const Node = React.memo<NodeProps>((props) => {
-  const { node, onPointerDown } = props;
+  const { id, onPointerDown, selected } = props;
+  const node = useNodeStore(state => state.nodes[id]);
 
-
+  if (!node) return null;
 
   return (
     <div
       id={node.id}
       data-node-id={node.id}
-      className={`absolute select-none rounded shadow-2xl border cursor-move ${node.selected
+      className={`absolute select-none rounded shadow-2xl border cursor-move ${selected
         ? "border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30"
         : "border-[#2b2b2b] z-10"
         }`}
@@ -165,37 +172,22 @@ export const Node = React.memo<NodeProps>((props) => {
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
         background: "var(--node-base)",
       }}
-      onPointerDown={(e) => onPointerDown?.(e, node)}
+      onPointerDown={(e) => onPointerDown?.(node.id, e)}
     >
       {node.uiStyle === "math" ? (
-        <MathNodeUI {...props} />
+        <MathNodeUI {...props} node={node} />
       ) : (
-        <DefaultNodeUI {...props} />
+        <DefaultNodeUI {...props} node={node} />
       )}
     </div>
   );
 }, (prev, next) => {
-  // 性能优化核心：只有以下属性变化时才重绘节点
+  // 极致性能优化：只有选中的状态、缩放、或 Pin 的激活状态改变时，才可能重绘
+  // 节点内部的位置由 useNodeStore 订阅驱动，不需要在父组件层级对比
   return (
+    prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
-    prev.node.id === next.node.id &&
-    prev.node.position.x === next.node.position.x &&
-    prev.node.position.y === next.node.position.y &&
-    prev.node.selected === next.node.selected &&
-    prev.scale === next.scale &&
-    prev.node.inputs.length === next.node.inputs.length &&
-    prev.node.outputs.length === next.node.outputs.length &&
-    prev.node.inputs.every((p, i) => {
-      const nextPin = next.node.inputs[i];
-      return p.type === nextPin.type &&
-        p.links.length === nextPin.links.length &&
-        p.links.every((link, j) => link === nextPin.links[j]);
-    }) &&
-    prev.node.outputs.every((p, i) => {
-      const nextPin = next.node.outputs[i];
-      return p.type === nextPin.type &&
-        p.links.length === nextPin.links.length &&
-        p.links.every((link, j) => link === nextPin.links[j]);
-    })
+    prev.id === next.id &&
+    prev.scale === next.scale
   );
 });

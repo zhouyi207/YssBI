@@ -63,7 +63,6 @@ export class BaseNode {
   position: Position;
   inputs: Pin[] = [];
   outputs: Pin[] = [];
-  selected: boolean = false;
   variableId?: string; // 关联的变量 ID
   variableType?: string; // 关联的变量类型
   isInternal: boolean = false; // 是否为内部节点（不可删除）

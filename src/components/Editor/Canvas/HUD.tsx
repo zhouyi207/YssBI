@@ -1,8 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useCanvas } from "../Context/CanvasContext";
+import { useViewportStore } from "../Store/useViewportStore";
+
+const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
 export default function HUD() {
-  const { canvas } = useCanvas();
+  const { groupId } = useCanvas();
+  const canvas = useViewportStore(useCallback(state => state.viewports[groupId] || DEFAULT_VIEWPORT, [groupId]));
   const [showHUD, setShowHUD] = useState(false);
   const hudTimer = useRef<number | null>(null);
 
