@@ -27,10 +27,26 @@
   animation: zoomIn 0.2s ease-out forwards;
 }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* TabBar minimalist scrollbar */
+.tab-scrollbar::-webkit-scrollbar {
+  height: 3px !important;
+  display: block !important;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.tab-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
 }
+.tab-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  border-radius: 3px;
+}
+.tab-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #333333 !important;
+}
+.tab-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555555 !important;
+}
+.tab-scrollbar {
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+

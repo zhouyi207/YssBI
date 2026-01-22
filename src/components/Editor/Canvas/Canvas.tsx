@@ -3,10 +3,12 @@ import { Node } from "../Nodes/Node";
 import { BaseNode, Pin } from "../Types/nodes";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas } from "../Context/CanvasContext";
+import { useTheme } from "../Context/ThemeContext";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import HUD from "./HUD";
 import NodePalette from "../Nodes/NodePalette";
+import { VscRunAll } from "react-icons/vsc";
 import { drawEdge } from "../Edges/Edge";
 
 /* ================= Canvas ================= */
@@ -33,6 +35,7 @@ export default function InfiniteCanvas() {
     paste,
     cut,
     deleteSelected,
+    executeGraph,
     saveGraph,
     saveGraphAs,
     importGraph,
@@ -47,8 +50,12 @@ export default function InfiniteCanvas() {
     closeTab,
     functions,
     macros,
-    connectPins
+    connectPins,
+    splitEditorRight,
+    groupId,
+    activeGroupId // Added activeGroupId
   } = useCanvas();
+  const { theme } = useTheme();
 
 
   const { drag } = useDrag();
@@ -168,25 +175,29 @@ export default function InfiniteCanvas() {
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
 
   // 测量 Pin 相对于节点的偏移量 (仅在节点或 Pin 数量变化时运行)
+  // 修复：使用 scoped querySelector 替代 getElementById，确保在分屏时测量的是当前视口内的节点
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
 
     nodes.forEach(node => {
-      const nodeEl = root.querySelector(`[id="${node.id}"]`);
+      // 关键修复：只在当前 Canvas 容器内查找节点
+      const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
       if (!nodeEl) return;
-      const nodeRect = nodeEl.getBoundingClientRect();
 
+      const nodeRect = nodeEl.getBoundingClientRect();
       const pins = nodeEl.querySelectorAll<HTMLElement>("[data-pin-id]");
+
       pins.forEach(pinEl => {
         const pinId = pinEl.dataset.pinId;
         if (!pinId) return;
+
+        // Find the actual visual center (the circle)
         const circleEl = pinEl.querySelector(".pin-circle");
         const targetEl = circleEl || pinEl;
         const rect = targetEl.getBoundingClientRect();
 
-        // 计算相对于节点左上角的偏移，并还原缩放
         nextOffsets[pinId] = {
           x: (rect.left + rect.width / 2 - nodeRect.left) / canvas.scale,
           y: (rect.top + rect.height / 2 - nodeRect.top) / canvas.scale,
@@ -195,20 +206,21 @@ export default function InfiniteCanvas() {
     });
 
     setPinOffsets(prev => {
-      // 简单深度比较，避免无谓更新
-      if (Object.keys(prev).length === Object.keys(nextOffsets).length) {
-        let same = true;
-        for (const key in nextOffsets) {
-          if (!prev[key] || prev[key].x !== nextOffsets[key].x || prev[key].y !== nextOffsets[key].y) {
-            same = false;
-            break;
-          }
-        }
-        if (same) return prev;
+      // Check if anything actually changed
+      const currentKeys = Object.keys(nextOffsets);
+      const prevKeys = Object.keys(prev);
+
+      if (currentKeys.length === prevKeys.length) {
+        const isSame = currentKeys.every(k =>
+          prev[k] &&
+          Math.abs(prev[k].x - nextOffsets[k].x) < 0.1 &&
+          Math.abs(prev[k].y - nextOffsets[k].y) < 0.1
+        );
+        if (isSame) return prev;
       }
       return nextOffsets;
     });
-  }, [activeTabId, nodes.length, nodes.map(n => n.id).join(",")]); // 切换 Tab 或节点变化时必须重新测量
+  }, [activeTabId, nodes, canvas.scale]); // Re-measure on tab switch, node array change, or scale change (to be safe)
 
   const nodeMap = useMemo(() => {
     const map = new Map<string, BaseNode>();
@@ -266,7 +278,7 @@ export default function InfiniteCanvas() {
             ctx,
             start.x, start.y,
             end.x, end.y,
-            pin.ui?.color ?? (pin.type === "exec" ? "#ffffff" : "#3b82f6"),
+            pin.ui?.color ?? (theme[`${pin.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines,
             2 / canvas.scale // 保持视觉粗细一致
           );
         });
@@ -274,7 +286,11 @@ export default function InfiniteCanvas() {
     });
 
     // 绘制当前正在拖拽的连接线
-    if (gesture?.type === "connect" || (pendingConnection && contextMenu?.visible)) {
+    const isInteracting = gesture?.type === "connect" || (pendingConnection && contextMenu?.visible);
+    // 关键修复：只有当前 active 的 Canvas 才绘制交互线，防止其他分屏视口错误绘制
+    const shouldDrawInteraction = isInteracting && (activeGroupId === groupId);
+
+    if (shouldDrawInteraction) {
       const pin = gesture?.type === "connect" ? gesture.startPin : pendingConnection!;
       const start = getPinWorldPos(pin.id);
       if (!start) return;
@@ -287,14 +303,14 @@ export default function InfiniteCanvas() {
         ctx,
         start.x, start.y,
         end.x, end.y,
-        pin.ui?.color ?? (pin.type === "exec" ? "#ffffff" : "#3b82f6"),
+        pin.ui?.color ?? (theme[`${pin.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines,
         2 / canvas.scale,
         pin.direction === "input"
       );
     }
 
     ctx.restore();
-  }, [nodes, canvas, gesture, pendingConnection, contextMenu, pinOffsets, getPinWorldPos, getCanvasLocalPoint]);
+  }, [nodes, canvas, gesture, pendingConnection, contextMenu, pinOffsets, getPinWorldPos, getCanvasLocalPoint, theme.connectionLines, groupId, activeGroupId]);
 
   // 同步画布尺寸并触发重绘
   useLayoutEffect(() => {
@@ -462,13 +478,23 @@ export default function InfiniteCanvas() {
       (window as any)._lastAltKey = e.altKey;
       (window as any)._lastCtrlKey = e.ctrlKey;
 
-      // 防止在输入框中触发快捷键
+      // 防止在输入框中触发破坏性快捷键（如 Delete），
+      // 但允许全局控制快捷键（如 Ctrl+S, Ctrl+Z, Ctrl+Tab）
       const isInput =
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA" ||
         (document.activeElement as HTMLElement)?.isContentEditable;
 
-      if (isInput) return;
+      const isControlKey = e.ctrlKey || e.metaKey;
+
+      if (isInput) {
+        // 在输入框中，仅允许特定的全局快捷键通过
+        const allowedInInput =
+          (isControlKey && ["s", "z", "y", "n", "o", "w"].includes(e.key.toLowerCase())) ||
+          (isControlKey && e.key === "Tab");
+
+        if (!allowedInInput) return;
+      }
 
       if (e.key === "Delete" || e.key === "Backspace") {
         deleteSelected();
@@ -514,6 +540,9 @@ export default function InfiniteCanvas() {
           }
           setActiveTabId(tabs[nextIndex].id);
         }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        splitEditorRight(groupId);
       }
     };
 
@@ -528,7 +557,7 @@ export default function InfiniteCanvas() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addEvent, closeTab, activeTabId, tabs, setActiveTabId]);
+  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addEvent, closeTab, activeTabId, tabs, setActiveTabId, splitEditorRight, groupId]);
 
   /* ===== Data Drag ===== */
   function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
@@ -657,7 +686,7 @@ export default function InfiniteCanvas() {
 
   if (activeTabId === null) {
     return (
-      <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#1e1e1e] select-none overflow-hidden">
+      <div className="relative w-full h-full flex flex-col items-center justify-center bg-[var(--workbench-bg)] select-none overflow-hidden">
         {/* Simplified Logo */}
         <div className="mb-8 opacity-20 group">
           <svg className="w-32 h-32 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
@@ -719,15 +748,15 @@ export default function InfiniteCanvas() {
   return (
     <div
       ref={ref}
-      className="relative w-full h-full overflow-hidden bg-gray-900 select-none"
+      className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
       {/* ================= Grid ================= */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(#333 1px, transparent 1px),
-            linear-gradient(90deg, #333 1px, transparent 1px)
+            linear-gradient(var(--grid-lines) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid-lines) 1px, transparent 1px)
           `,
           backgroundSize: `${GRID * canvas.scale}px ${GRID * canvas.scale}px`,
           backgroundPosition: `${canvas.x}px ${canvas.y}px`,
@@ -735,7 +764,11 @@ export default function InfiniteCanvas() {
       />
 
       {/* ================= World ================= */}
-      <div className="absolute inset-0" onPointerDown={onCanvasPointerDown}>
+      <div
+        className="absolute inset-0"
+        onPointerDown={(e) => onCanvasPointerDown(e, groupId)}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         {/* GPU 加速的连接线层 */}
         <canvas
           ref={edgeCanvasRef}
@@ -754,21 +787,33 @@ export default function InfiniteCanvas() {
               node={node}
               scale={canvas.scale}
               activePinId={activePin?.id}
-              onPointerDown={onNodePointerDown}
+              onPointerDown={(e, n) => onNodePointerDown(n.id, e)}
               onAddInput={handleNodeAddInput}
               onPinClick={handlePinClick}
-              onPinPointerDown={onPinPointerDown}
+              onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
             />
           ))}
         </div>
       </div>
-      {/* ================= HUD ================= */}
       <HUD />
+
+      {/* ================= FAB (Floating Action Button) for Execution ================= */}
+      {tabs.find(t => t.id === activeTabId)?.type === "event" && (
+        <div className="absolute top-4 right-4 z-40">
+          <button
+            onClick={() => executeGraph()}
+            className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
+          >
+            <VscRunAll size={18} />
+            <span>执行</span>
+          </button>
+        </div>
+      )}
 
       {/* ================= Selection Box ================= */}
       {selection && ref.current && (
         <div
-          className="absolute border border-blue-500 bg-blue-500/20 pointer-events-none z-50"
+          className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
           style={{
             left:
               Math.min(selection.startX, selection.currentX) -
@@ -783,7 +828,7 @@ export default function InfiniteCanvas() {
       )}
 
       {/* ================= Node Palette ================= */}
-      {contextMenu?.visible && (
+      {activeGroupId === groupId && contextMenu?.visible && (
         <NodePalette
           x={contextMenu.x}
           y={contextMenu.y}
@@ -793,7 +838,7 @@ export default function InfiniteCanvas() {
       )}
 
       {/* ================= Variable Drop Menu ================= */}
-      {variableDropMenu && (
+      {activeGroupId === groupId && variableDropMenu && (
         <div
           className="fixed z-50 bg-gray-800 text-white rounded shadow-lg overflow-hidden border border-gray-700 py-1 menu-container"
           style={{ left: variableDropMenu.x, top: variableDropMenu.y }}

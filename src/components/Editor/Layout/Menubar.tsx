@@ -19,7 +19,7 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
       <button
         onMouseEnter={() => setIsOpen(true)}
         onMouseLeave={() => setIsOpen(false)}
-        className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+        className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-[var(--sidebar-bg)] rounded transition-colors"
       >
         {label}
       </button>
@@ -27,7 +27,7 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
         <div
           onMouseEnter={() => setIsOpen(true)}
           onMouseLeave={() => setIsOpen(false)}
-          className="absolute left-0 top-full w-44 bg-gray-800 border border-gray-700 rounded shadow-xl py-1 z-50"
+          className="absolute left-0 top-full w-44 bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-xl py-1 z-50"
         >
           {items.map((item, i) => (
             <div
@@ -39,7 +39,7 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
                 }
               }}
               className={`px-4 py-1.5 text-xs flex justify-between items-center transition-colors ${item.onClick
-                  ? "text-gray-300 hover:bg-blue-600 hover:text-white cursor-pointer"
+                ? "text-gray-300 hover:bg-[var(--accent-color)] hover:text-white cursor-pointer"
                 : "text-gray-600 cursor-default"
                 }`}
             >
@@ -74,7 +74,8 @@ export default function Menubar() {
     activeTabId,
     addEvent,
     addFunction,
-    addMacro
+    addMacro,
+    openSettingsTab
   } = useCanvas();
 
   const openNewWindow = async () => {
@@ -137,17 +138,17 @@ export default function Menubar() {
 
   return (
     <div
-      className="menubar-container h-10 bg-gray-900 border-b border-gray-800 flex items-center z-50 shadow-xl select-none"
+      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none"
       onWheel={(e) => e.stopPropagation()}
       data-tauri-drag-region
     >
       {/* Left: Icon & Brand */}
       <div className="flex items-center gap-2 px-4 pointer-events-none">
-        <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
+        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
           <span className="text-white font-black text-xs">Y</span>
         </div>
         <div className="text-white font-bold text-sm tracking-tight">
-          Yss<span className="text-blue-500">BI</span>
+          Yss<span className="text-[var(--accent-color)]">BI</span>
         </div>
       </div>
 
@@ -165,11 +166,22 @@ export default function Menubar() {
 
       {/* Right side: Window Buttons */}
       <div className="flex items-center h-full">
+        {/* Settings Button */}
+        <button
+          onClick={() => openSettingsTab()}
+          className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
+          title="Settings"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
         {/* Window Controls */}
         <div className="flex items-center h-full">
           <button
             onClick={() => appWindow.minimize()}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -177,7 +189,7 @@ export default function Menubar() {
           </button>
           <button
             onClick={() => appWindow.toggleMaximize()}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" strokeWidth={2} />

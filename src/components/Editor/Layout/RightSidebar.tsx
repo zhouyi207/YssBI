@@ -1,6 +1,7 @@
 import React from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
+import { Select } from "../Shared/UI/Select";
 
 export const RightSidebar: React.FC = () => {
   const {
@@ -71,7 +72,7 @@ export const RightSidebar: React.FC = () => {
               const newPins = [...pins, { id: `pin-${crypto.randomUUID()}`, name: "NewPin", type: "int" }];
               handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
             }}
-            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-blue-500 transition-colors"
+            className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-[var(--accent-color)] transition-colors"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <path d="M12 5v14M5 12h14" />
@@ -80,7 +81,7 @@ export const RightSidebar: React.FC = () => {
         </div>
         <div className="space-y-1">
           {pins.map((pin, idx) => (
-            <div key={pin.id} className="flex gap-1 items-center bg-gray-50 p-1 rounded group">
+            <div key={pin.id} className="flex gap-1 items-center bg-white/5 p-1 rounded group">
               <input
                 className="flex-1 bg-transparent border-none text-[10px] focus:ring-0 p-0 font-medium"
                 value={pin.name}
@@ -90,22 +91,16 @@ export const RightSidebar: React.FC = () => {
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
               />
-              <select
-                className="bg-transparent border-none text-[9px] focus:ring-0 p-0 text-gray-500 font-bold"
+              <Select
+                className="w-24"
                 value={pin.type}
-                onChange={(e) => {
+                options={["exec", "int", "float", "bool", "string", "object"]}
+                onChange={(val) => {
                   const newPins = [...pins];
-                  newPins[idx] = { ...newPins[idx], type: e.target.value };
+                  newPins[idx] = { ...newPins[idx], type: val };
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
-              >
-                <option value="exec">Exec</option>
-                <option value="int">Int</option>
-                <option value="float">Float</option>
-                <option value="bool">Bool</option>
-                <option value="string">String</option>
-                <option value="object">Object</option>
-              </select>
+              />
               <button
                 onClick={() => {
                   const newPins = pins.filter((_, i) => i !== idx);
@@ -127,10 +122,10 @@ export const RightSidebar: React.FC = () => {
 
   return (
     <div
-      className="right-sidebar-container w-64 border-l bg-white flex flex-col h-full overflow-hidden shadow-sm select-none"
+      className="right-sidebar-container w-64 border-l border-[#2b2b2b] bg-[var(--sidebar-bg)] flex flex-col h-full overflow-hidden shadow-sm select-none"
       onWheel={(e) => e.stopPropagation()}
     >
-      <div className="p-2 border-b bg-gray-50 flex justify-between items-center h-10 shrink-0">
+      <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0">
         <span className="text-[10px] font-black text-gray-400 font-mono tracking-tighter uppercase">
           Details {selectedData ? `: ${selectedData.name}` : ''}
         </span>
@@ -138,10 +133,10 @@ export const RightSidebar: React.FC = () => {
 
       {selectedData ? (
         <div className="flex-1 overflow-y-auto pb-4">
-          <table className="w-full text-[11px] border-collapse">
+          <table className="w-full text-[11px] border-collapse text-[#cccccc]">
             <tbody>
-              <tr className="border-b">
-                <td className="p-2 font-bold text-gray-500 bg-gray-50/50 w-20">Name</td>
+              <tr className="border-b border-[#2b2b2b]">
+                <td className="p-2 font-bold text-gray-400 bg-white/5 w-20">Name</td>
                 <td className="p-2">
                   <input
                     className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
@@ -152,28 +147,28 @@ export const RightSidebar: React.FC = () => {
               </tr>
               {selectedItemType === 'variable' && (
                 <>
-                  <tr className="border-b">
-                    <td className="p-2 font-bold text-gray-500 bg-gray-50/50">Type</td>
+                  <tr className="border-b border-[#2b2b2b]">
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
                     <td className="p-2">
-                      <select
-                        className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
+                      <Select
                         value={selectedData.type}
-                        onChange={(e) => handleUpdate({ type: e.target.value })}
-                      >
-                        <option value="int">Integer</option>
-                        <option value="float">Float</option>
-                        <option value="bool">Boolean</option>
-                        <option value="string">String</option>
-                      </select>
+                        options={[
+                          { label: "Integer", value: "int" },
+                          { label: "Float", value: "float" },
+                          { label: "Boolean", value: "bool" },
+                          { label: "String", value: "string" }
+                        ]}
+                        onChange={(val) => handleUpdate({ type: val })}
+                      />
                     </td>
                   </tr>
-                  <tr className="border-b">
-                    <td className="p-2 font-bold text-gray-500 bg-gray-50/50">Value</td>
+                  <tr className="border-b border-[#2b2b2b]">
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
                     <td className="p-2">
                       {selectedData.type === "bool" ? (
                         <input
                           type="checkbox"
-                          className="rounded text-blue-600 focus:ring-blue-500"
+                          className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
                           checked={!!selectedData.value}
                           onChange={(e) => handleUpdate({ value: e.target.checked })}
                         />
@@ -193,8 +188,8 @@ export const RightSidebar: React.FC = () => {
                 </>
               )}
               {(selectedItemType === 'function' || selectedItemType === 'macro') && (
-                <tr className="border-b">
-                  <td className="p-2 font-bold text-gray-500 bg-gray-50/50">Type</td>
+                <tr className="border-b border-[#2b2b2b]">
+                  <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
                   <td className="p-2 text-gray-400 italic">
                     {selectedItemType.charAt(0).toUpperCase() + selectedItemType.slice(1)}
                   </td>
@@ -213,7 +208,7 @@ export const RightSidebar: React.FC = () => {
           <div className="p-2">
             <button
               onClick={handleDelete}
-              className="w-full py-1.5 mt-4 border border-red-100 text-red-500 hover:bg-red-50 rounded transition-colors font-bold text-[9px] uppercase tracking-wider"
+              className="w-full py-1.5 mt-4 border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded transition-colors font-bold text-[9px] uppercase tracking-wider"
             >
               Delete {selectedItemType}
             </button>

@@ -12,6 +12,7 @@ export type Gesture =
     lastX: number;
     lastY: number;
     moved: boolean;
+    groupId?: string;
   }
   | {
     type: "select";
@@ -19,6 +20,7 @@ export type Gesture =
     startY: number;
     currentX: number;
     currentY: number;
+    groupId?: string;
   }
   | {
     type: "connect";
@@ -28,6 +30,7 @@ export type Gesture =
     currentX: number;
     currentY: number;
     isReconnect?: boolean;
+    groupId?: string;
   }
   | {
     type: "drag";
@@ -35,14 +38,22 @@ export type Gesture =
     lastX: number;
     lastY: number;
     moved: boolean;
+    groupId?: string;
   }
   | null;
 
 export interface Tab {
   id: string;
   title: string;
-  type: "event" | "function" | "macro" | "project";
+  type: "event" | "function" | "macro" | "project" | "setting";
   isDirty?: boolean;
+}
+
+export interface EditorGroup {
+  id: string;
+  tabs: Tab[];
+  activeTabId: string | null;
+  canvas: CanvasState;
 }
 
 

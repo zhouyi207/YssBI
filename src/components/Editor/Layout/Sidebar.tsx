@@ -1,59 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
+import {
+  VscEye,
+  VscEyeClosed,
+  VscAdd
+} from "react-icons/vsc";
+import { PiGraph, PiFunction } from "react-icons/pi";
+import { TiFlowSwitch } from "react-icons/ti";
+import { HiVariable } from "react-icons/hi2";
+
 
 const PIN_COLORS: Record<string, string> = {
-  exec: "#ffffff",
-  int: "#3b82f6",
-  float: "#3b82f6",
-  bool: "#f64146",
-  string: "#10b981",
-  object: "#8b5cf6",
+  exec: "var(--exec-color)",
+  int: "var(--int-color)",
+  float: "var(--float-color)",
+  bool: "var(--bool-color)",
+  string: "var(--string-color)",
+  object: "var(--object-color)",
   array: "#ef4444",
   struct: "#f97316",
   delegate: "#ec4899",
 };
-
-interface SectionProps {
-  title: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  onAdd?: () => void;
-  children: React.ReactNode;
-}
-
-const Section: React.FC<SectionProps> = ({ title, isOpen, onToggle, onAdd, children }) => (
-  <div className="border-b border-gray-200">
-    <div
-      className="flex items-center justify-between p-2 bg-gray-50/50 hover:bg-gray-100 cursor-pointer transition-colors group"
-      onClick={onToggle}
-    >
-      <div className="flex items-center gap-2">
-        <svg
-          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
-          className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
-        >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-        <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest select-none">
-          {title}
-        </span>
-      </div>
-      {onAdd && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onAdd(); }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-blue-600"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
-      )}
-    </div>
-    {isOpen && <div className="p-1">{children}</div>}
-  </div>
-);
 
 export default function Sidebar() {
   const { startDrag } = useDrag();
@@ -64,34 +33,61 @@ export default function Sidebar() {
     selectedItemType,
     setSelectedInfo,
     addVariable,
-    deleteVariable,
     promoteVariable,
     demoteVariable,
     functions,
     addFunction,
-    deleteFunction,
     macros,
     addMacro,
-    deleteMacro,
     events,
     addEvent,
-    deleteEvent,
-    openSubGraph
+    openSubGraph,
+    tabs,
+    groups,
+    closeGroup,
+    activeGroupId
   } = useCanvas();
 
   const { showDialog } = useUI();
 
-  // Collapsible states
-  const [sections, setSections] = useState({
-    events: true,
-    functions: true,
-    macros: true,
-    variables: true,
-  });
+  // Activity Bar & Sidebar View State
+  const [activeTab, setActiveTab] = useState<'events' | 'functions' | 'macros' | 'variables' | null>('variables');
+  const activityBarRef = useRef<HTMLDivElement>(null);
+  const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
 
-  const toggleSection = (name: keyof typeof sections) => {
-    setSections(prev => ({ ...prev, [name]: !prev[name] }));
+  const toggleTab = (tab: 'events' | 'functions' | 'macros' | 'variables') => {
+    if (activeTab === tab) {
+      setActiveTab(null); // Collapse
+    } else {
+      setActiveTab(tab);
+    }
   };
+
+  // Auto-collapse/close empty groups in split view
+  useEffect(() => {
+    if (tabs.length === 0 && groups.length > 1) {
+      closeGroup(activeGroupId);
+    }
+  }, [tabs.length, groups.length, activeGroupId, closeGroup]);
+
+  // Update vertical sliding indicator
+  useEffect(() => {
+    const bar = activityBarRef.current;
+    if (!bar || !activeTab) {
+      setIndicatorTop(prev => ({ ...prev, opacity: 0 }));
+      return;
+    }
+
+    const activeEl = bar.querySelector(`[data-tab-id="${activeTab}"]`) as HTMLElement;
+    if (activeEl) {
+      setIndicatorTop({
+        top: activeEl.offsetTop,
+        opacity: 1
+      });
+    } else {
+      setIndicatorTop(prev => ({ ...prev, opacity: 0 }));
+    }
+  }, [activeTab]);
 
   // Helper to get unique name
   const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
@@ -105,23 +101,6 @@ export default function Sidebar() {
     return name;
   };
 
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    type: 'variable' | 'function' | 'macro' | 'event';
-    id: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const hideMenu = () => setContextMenu(null);
-    window.addEventListener("click", hideMenu);
-    window.addEventListener("contextmenu", hideMenu);
-    return () => {
-      window.removeEventListener("click", hideMenu);
-      window.removeEventListener("contextmenu", hideMenu);
-    };
-  }, []);
-
   const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event', extra?: any) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
 
@@ -133,11 +112,6 @@ export default function Sidebar() {
         }}
         onDoubleClick={() => {
           if (type !== 'variable') openSubGraph(id, name, type);
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setContextMenu({ x: e.clientX, y: e.clientY, type, id });
         }}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -172,8 +146,8 @@ export default function Sidebar() {
         className={`
           group flex items-center gap-2 p-1.5 rounded cursor-grab transition-all border
           ${isSelected
-            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-            : 'hover:bg-gray-100 text-gray-700 border-transparent'}
+            ? 'bg-[var(--accent-color)] text-white border-[var(--accent-color)] shadow-sm'
+            : 'hover:bg-white/5 text-gray-300 border-transparent'}
         `}
       >
         <div
@@ -190,10 +164,7 @@ export default function Sidebar() {
                 className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
                 title="提升为全局变量"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                <VscEye size={12} />
               </button>
             ) : (
               <button
@@ -201,13 +172,10 @@ export default function Sidebar() {
                 className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
                 title="降级为局部变量"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.45 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
+                <VscEyeClosed size={12} />
               </button>
             )}
-            <span className={`text-[9px] font-black uppercase px-1 rounded ${isSelected ? 'bg-blue-500' : 'bg-gray-200 text-gray-500'}`}>
+            <span className={`text-[9px] font-black uppercase px-1 rounded ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
               {extra?.type}
             </span>
           </>
@@ -216,113 +184,113 @@ export default function Sidebar() {
     );
   };
 
-  return (
-    <div
-      className="sidebar-container w-64 border-r bg-white flex flex-col h-full overflow-hidden shadow-sm select-none"
-      onWheel={(e) => e.stopPropagation()}
+  const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean, onClick: () => void, children: React.ReactNode, title: string, id: string }) => (
+    <button
+      onClick={onClick}
+      title={title}
+      data-tab-id={id}
+      className={`relative w-full h-12 flex items-center justify-center transition-colors group ${active ? 'text-white' : 'text-[#858585] hover:text-[#cccccc]'}`}
     >
-      <div className="flex-1 overflow-y-auto min-h-0 relative">
-        {/* Sections */}
-        <Section
-          title="Events"
-          isOpen={sections.events}
-          onToggle={() => toggleSection('events')}
-          onAdd={() => addEvent(getUniqueName("NewEvent", events))}
-        >
-          {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
-          {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No events</div>}
-        </Section>
-        <Section
-          title="Functions"
-          isOpen={sections.functions}
-          onToggle={() => toggleSection('functions')}
-          onAdd={() => addFunction(getUniqueName("NewFunction", functions))}
-        >
-          {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
-          {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No functions</div>}
-        </Section>
+      {children}
+    </button>
+  );
 
-        <Section
-          title="Macros"
-          isOpen={sections.macros}
-          onToggle={() => toggleSection('macros')}
-          onAdd={() => addMacro(getUniqueName("NewMacro", macros))}
-        >
-          {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
-          {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2">No macros</div>}
-        </Section>
-
-        <Section
-          title="Variables"
-          isOpen={sections.variables}
-          onToggle={() => toggleSection('variables')}
-          onAdd={() => {
-            const allVars = { ...variables, ...globalVariables };
-            addVariable(getUniqueName("NewVar", allVars), "int", false);
+  return (
+    <div className="flex h-full overflow-hidden select-none bg-[var(--sidebar-bg)] border-r border-[#2b2b2b]" onWheel={(e) => e.stopPropagation()}>
+      {/* Activity Bar */}
+      <div ref={activityBarRef} className="relative w-12 bg-[#333333] flex flex-col items-center py-2 shrink-0 border-r border-[#2b2b2b]">
+        {/* Sliding Indicator (Vertical) */}
+        <div
+          className="absolute left-0 top-0 w-0.5 h-12 bg-[var(--accent-color)] transition-all duration-300 ease-in-out z-10 pointer-events-none"
+          style={{
+            transform: `translateY(${indicatorTop.top}px)`,
+            opacity: indicatorTop.opacity
           }}
-        >
-          {/* Global */}
-          {Object.keys(globalVariables).length > 0 && (
-            <div className="mb-2">
-              <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                Global
-                <div className="h-px flex-1 bg-gray-100" />
-              </div>
-              {Object.entries(globalVariables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
-            </div>
-          )}
-          {/* Local */}
-          <div>
-            {Object.keys(globalVariables).length > 0 && (
-              <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                Local
-                <div className="h-px flex-1 bg-gray-100" />
-              </div>
-            )}
-            {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
-          </div>
-          {Object.keys(variables).length === 0 && Object.keys(globalVariables).length === 0 && (
-            <div className="text-[10px] text-gray-400 italic p-2">No variables</div>
-          )}
-        </Section>
+        />
 
+        <ActivityIcon id="events" active={activeTab === 'events'} onClick={() => toggleTab('events')} title="Events">
+          <PiGraph size={24} />
+        </ActivityIcon>
+        <ActivityIcon id="functions" active={activeTab === 'functions'} onClick={() => toggleTab('functions')} title="Functions">
+          <PiFunction size={24} />
+        </ActivityIcon>
+        <ActivityIcon id="macros" active={activeTab === 'macros'} onClick={() => toggleTab('macros')} title="Macros">
+          <TiFlowSwitch size={24} />
+        </ActivityIcon>
+        <ActivityIcon id="variables" active={activeTab === 'variables'} onClick={() => toggleTab('variables')} title="Variables">
+          <HiVariable size={24} />
+        </ActivityIcon>
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="fixed z-[100] bg-gray-800 border border-gray-700 rounded shadow-xl py-1 w-32"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            onClick={() => {
-              const name = contextMenu.type === 'variable'
-                ? (variables[contextMenu.id]?.name || globalVariables[contextMenu.id]?.name)
-                : (contextMenu.type === 'function' ? functions[contextMenu.id]?.name : (contextMenu.type === 'macro' ? macros[contextMenu.id]?.name : events[contextMenu.id]?.name));
-              showDialog({
-                title: `Delete ${contextMenu.type}`,
-                message: `Are you sure you want to delete ${contextMenu.type} '${name}'?`,
-                type: "danger",
-                confirmText: "Delete",
-                onConfirm: () => {
-                  if (contextMenu.type === 'variable') {
-                    deleteVariable(contextMenu.id);
-                    if (selectedItemId === contextMenu.id) setSelectedInfo(null, null);
-                  } else if (contextMenu.type === 'function') {
-                    deleteFunction(contextMenu.id);
-                  } else if (contextMenu.type === 'macro') {
-                    deleteMacro(contextMenu.id);
-                  } else if (contextMenu.type === 'event') {
-                    deleteEvent(contextMenu.id);
-                  }
+      {/* Sidebar Content Panel */}
+      {activeTab && (
+        <div className="w-52 flex flex-col min-h-0 bg-[var(--sidebar-bg)]">
+          {/* Header */}
+          <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>
+            <button
+              onClick={() => {
+                if (activeTab === 'events') addEvent(getUniqueName("NewEvent", events));
+                else if (activeTab === 'functions') addFunction(getUniqueName("NewFunction", functions));
+                else if (activeTab === 'macros') addMacro(getUniqueName("NewMacro", macros));
+                else if (activeTab === 'variables') {
+                  const allVars = { ...variables, ...globalVariables };
+                  addVariable(getUniqueName("NewVar", allVars), "int", false);
                 }
-              });
-              setContextMenu(null);
-            }}
-            className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-600 hover:text-white cursor-pointer flex items-center gap-2"
-          >
-            <span>Delete</span>
+              }}
+              className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
+            >
+              <VscAdd size={16} />
+            </button>
+          </div>
+
+          {/* List Content */}
+          <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
+            {activeTab === 'events' && (
+              <>
+                {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
+                {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No events</div>}
+              </>
+            )}
+            {activeTab === 'functions' && (
+              <>
+                {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
+                {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No functions</div>}
+              </>
+            )}
+            {activeTab === 'macros' && (
+              <>
+                {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
+                {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
+              </>
+            )}
+            {activeTab === 'variables' && (
+              <>
+                {/* Global */}
+                {Object.keys(globalVariables).length > 0 && (
+                  <div className="mb-2">
+                    <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
+                      Global
+                      <div className="h-px flex-1 bg-white/5" />
+                    </div>
+                    {Object.entries(globalVariables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                  </div>
+                )}
+                {/* Local */}
+                <div className="mb-2">
+                  {Object.keys(globalVariables).length > 0 && (
+                    <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
+                      Local
+                      <div className="h-px flex-1 bg-white/5" />
+                    </div>
+                  )}
+                  {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
+                </div>
+                {Object.keys(variables).length === 0 && Object.keys(globalVariables).length === 0 && (
+                  <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

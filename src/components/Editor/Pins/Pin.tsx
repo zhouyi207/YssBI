@@ -8,12 +8,12 @@ export interface PinProps extends PinModel {
 }
 
 const PIN_COLORS: Record<string, string> = {
-  exec: "#ffffff",
-  int: "#3b82f6",
-  float: "#3b82f6",
-  bool: "#f64146",
-  string: "#10b981",
-  object: "#8b5cf6",
+  exec: "var(--exec-color)",
+  int: "var(--int-color)",
+  float: "var(--float-color)",
+  bool: "var(--bool-color)",
+  string: "var(--string-color)",
+  object: "var(--object-color)",
   array: "#ef4444",
   struct: "#f97316",
   delegate: "#ec4899",

@@ -27,7 +27,7 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold bg-black/5 rounded-t border-b border-black/5">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold bg-white/5 rounded-t border-b border-black/20 text-[#cccccc]">
         <div className="flex items-center gap-2">
           <span>{node.title}</span>
         </div>
@@ -155,16 +155,15 @@ export const Node = React.memo<NodeProps>((props) => {
     <div
       id={node.id}
       data-node-id={node.id}
-      className={`absolute select-none rounded shadow-md border cursor-move ${node.selected
-        ? "border-blue-500 ring-2 ring-blue-500/50 z-30"
-        : "border-gray-300 z-10"
+      className={`absolute select-none rounded shadow-2xl border cursor-move ${node.selected
+        ? "border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30"
+        : "border-[#2b2b2b] z-10"
         }`}
       style={{
         minWidth: node.noHeader ? 120 : 160,
         minHeight: node.noHeader ? 60 : undefined,
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
-        background: "rgba(255, 255, 255, 0.6)",
-        WebkitBackdropFilter: "blur(4px)",
+        background: "var(--node-base)",
       }}
       onPointerDown={(e) => onPointerDown?.(e, node)}
     >
