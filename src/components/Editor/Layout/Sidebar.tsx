@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas } from "../Context/CanvasContext";
-import { useUI } from "../Context/UIProvider";
 import {
   VscEye,
   VscEyeClosed,
@@ -24,7 +23,7 @@ const PIN_COLORS: Record<string, string> = {
   delegate: "#ec4899",
 };
 
-export default function Sidebar() {
+export default function Sidebar({ width }: { width?: number }) {
   const { startDrag } = useDrag();
   const {
     variables,
@@ -48,7 +47,7 @@ export default function Sidebar() {
     activeGroupId
   } = useCanvas();
 
-  const { showDialog } = useUI();
+
 
   // Activity Bar & Sidebar View State
   const [activeTab, setActiveTab] = useState<'events' | 'functions' | 'macros' | 'variables' | null>('variables');
@@ -224,7 +223,10 @@ export default function Sidebar() {
 
       {/* Sidebar Content Panel */}
       {activeTab && (
-        <div className="w-52 flex flex-col min-h-0 bg-[var(--sidebar-bg)]">
+        <div
+          className="flex flex-col min-h-0 bg-[var(--sidebar-bg)] transition-[width] duration-0"
+          style={{ width: width ? width : 208 }} // 208px is w-52 default
+        >
           {/* Header */}
           <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
             <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>

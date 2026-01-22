@@ -6,12 +6,14 @@ import { useCanvas } from "../Context/CanvasContext";
 import { useTheme } from "../Context/ThemeContext";
 import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore } from "../Store/useNodeStore";
+import { useGestureStore } from "../Store/useGestureStore";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import HUD from "./HUD";
 import NodePalette from "../Nodes/NodePalette";
 import { VscRunAll } from "react-icons/vsc";
 import { drawEdge } from "../Edges/Edge";
+import { ConnectionLine } from "./ConnectionLine";
 
 /* ================= Canvas Components ================= */
 
@@ -90,7 +92,7 @@ const EdgesLayer = ({
   gesture,
   pendingConnection,
   contextMenu,
-  activeGroupId,
+  activeTabId,
   theme
 }: any) => {
   const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -114,16 +116,15 @@ const EdgesLayer = ({
     ctx.scale(canvas.scale, canvas.scale);
 
     // 绘制已有连接
-    const allNodes = useNodeStore.getState().nodes;
-    const activeIds = useNodeStore.getState().activeNodeIds;
+    const nodes = useNodeStore.getState().getNodes(activeTabId || "");
 
-    activeIds.forEach(id => {
-      const node = allNodes[id];
+    nodes.forEach(node => {
+      // const node = allNodes[id]; // Removed
       if (!node) return;
-      
+
       // 暂时移除 Edges 层的视口裁剪判断，确保所有连接线都能绘制
       // 因为 getPinWorldPos 内部已经处理了未渲染节点的 null 返回
-      
+
       node.outputs.forEach((pin: any) => {
         pin.links.forEach((targetId: string) => {
           const start = getPinWorldPos(pin.id);
@@ -141,32 +142,11 @@ const EdgesLayer = ({
       });
     });
 
-    // 绘制当前正在拖拽的连接线
-    const isInteracting = gesture?.type === "connect" || (pendingConnection && contextMenu?.visible);
-    // 关键修复：只有当前 active 的 Canvas 才绘制交互线，防止其他分屏视口错误绘制
-    const shouldDrawInteraction = isInteracting && (activeGroupId === groupId);
 
-    if (shouldDrawInteraction) {
-      const pin = gesture?.type === "connect" ? gesture.startPin : pendingConnection!;
-      const start = getPinWorldPos(pin.id);
-      if (!start) return;
-
-      const end = gesture?.type === "connect"
-        ? getCanvasLocalPoint(gesture.currentX, gesture.currentY)
-        : getCanvasLocalPoint(contextMenu?.x || 0, contextMenu?.y || 0);
-
-      drawEdge(
-        ctx,
-        start.x, start.y,
-        end.x, end.y,
-        pin.ui?.color ?? (theme[`${pin.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines,
-        2 / canvas.scale,
-        pin.direction === "input"
-      );
-    }
+    // Removed interaction drawing from EdgesLayer as it's now handled by useGestureStore and ConnectionLine
 
     ctx.restore();
-  }, [gesture, pendingConnection, contextMenu, getPinWorldPos, getCanvasLocalPoint, theme, groupId, activeGroupId, visibleNodeIds, pinNodeIdIndex]);
+  }, [gesture, pendingConnection, contextMenu, getPinWorldPos, getCanvasLocalPoint, theme, groupId, activeTabId, visibleNodeIds, pinNodeIdIndex]);
 
   const requestDraw = useCallback(() => {
     if (rafRef.current) return;
@@ -221,13 +201,13 @@ const EdgesLayer = ({
 
 export default function InfiniteCanvas() {
   const {
+    nodes, // Added nodes
     setCanvas,
     setNodes,
     onCanvasPointerDown,
     onNodePointerDown,
     onPinPointerDown,
-    selection,
-    gesture,
+
     contextMenu,
     setContextMenu,
     variables,
@@ -262,21 +242,23 @@ export default function InfiniteCanvas() {
   } = useCanvas();
   const { theme } = useTheme();
   const { drag } = useDrag();
+  const gesture = useGestureStore(state => state.gesture);
 
-  const activeNodeIds = useNodeStore(state => state.activeNodeIds);
+  // const activeNodeIds = useNodeStore(state => state.activeNodeIds); // Removed
   const scale = useViewportStore(useCallback(state => state.viewports[groupId]?.scale || 1, [groupId]));
 
   // --- 视口裁剪 (Culling) 逻辑 ---
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
-  
+
   const updateVisibleNodes = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-    const allNodes = useNodeStore.getState().nodes;
-    const activeIds = useNodeStore.getState().activeNodeIds;
-    
+    const currentTabId = activeTabId || "";
+    // Fetch directly from store to ensure we have the very latest data during the callback execution
+    const nodes = useNodeStore.getState().getNodes(currentTabId);
+
     // 计算当前视口在世界坐标系中的范围 (增加 500px 缓冲)
     const padding = 500 / canvas.scale;
     const left = -canvas.x / canvas.scale - padding;
@@ -285,30 +267,25 @@ export default function InfiniteCanvas() {
     const bottom = (rect.height - canvas.y) / canvas.scale + padding;
 
     const visible = new Set<string>();
-    activeIds.forEach(id => {
-      const node = allNodes[id];
+    nodes.forEach(node => {
+      // const node = allNodes[id];
       if (!node) return;
+      const id = node.id;
       // 简单的矩形相交判断 (假设节点最大宽高为 300x300)
       if (node.position.x + 300 > left && node.position.x < right &&
-          node.position.y + 300 > top && node.position.y < bottom) {
+        node.position.y + 300 > top && node.position.y < bottom) {
         visible.add(id);
       }
     });
     setVisibleNodes(visible);
-  }, [groupId]);
+  }, [groupId, activeTabId, nodes]);
 
   // 当节点列表变化、缩放变化或平移结束时更新裁剪
-  useEffect(() => {
-    return useNodeStore.subscribe((state, prevState) => {
-      if (state.activeNodeIds !== prevState.activeNodeIds) {
-        updateVisibleNodes();
-      }
-    });
-  }, [updateVisibleNodes]);
+  // Removed dead subscription to activeNodeIds
 
   useEffect(() => {
     updateVisibleNodes();
-  }, [scale, activeNodeIds, updateVisibleNodes]);
+  }, [scale, nodes, updateVisibleNodes]); // Depend on nodes instead of activeNodeIds
 
   // 监听平移结束（通过 gesture 状态判断）
   useEffect(() => {
@@ -394,27 +371,25 @@ export default function InfiniteCanvas() {
 
   const pinIndex = useMemo(() => {
     const map = new Map<string, Pin>();
-    const allNodes = useNodeStore.getState().nodes;
-    activeNodeIds.forEach(id => {
-      const node = allNodes[id];
-      if (!node) return;
+    // nodes is available from useCanvas destructuring in InfiniteCanvas scope
+    // But we are inside InfiniteCanvas component so we can use 'nodes'.
+    // If we want to be safe around layout effects/memos triggering, using the prop is correct.
+
+    nodes.forEach(node => {
       node.inputs.forEach((pin: Pin) => map.set(pin.id, pin));
       node.outputs.forEach((pin: Pin) => map.set(pin.id, pin));
     });
     return map;
-  }, [activeTabId, activeNodeIds]); // Recompute when tab switch or node list changes
+  }, [nodes]); // Depend on nodes instead of deprecated activeNodeIds
 
   const pinNodeIdIndex = useMemo(() => {
     const map = new Map<string, string>();
-    const allNodes = useNodeStore.getState().nodes;
-    activeNodeIds.forEach(id => {
-      const node = allNodes[id];
-      if (!node) return;
+    nodes.forEach(node => {
       node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
       node.outputs.forEach((pin: Pin) => map.set(pin.id, node.id));
     });
     return map;
-  }, [activeTabId, activeNodeIds]);
+  }, [nodes]);
 
   const pinIndexRef = useRef(pinIndex);
   useEffect(() => {
@@ -431,12 +406,10 @@ export default function InfiniteCanvas() {
     const root = ref.current;
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
-    const allNodes = useNodeStore.getState().nodes;
-    const activeIds = useNodeStore.getState().activeNodeIds;
+    // Use nodes from the updated useCanvas hook or store directly for the active tab
+    const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
 
-    activeIds.forEach(id => {
-      const node = allNodes[id];
-      if (!node) return;
+    currentNodes.forEach(node => {
       // 关键修复：只在当前 Canvas 容器内查找节点
       const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
       if (!nodeEl) return;
@@ -475,12 +448,14 @@ export default function InfiniteCanvas() {
       }
       return nextOffsets;
     });
-  }, [activeTabId, scale, visibleNodeIds, activeNodeIds]); // Re-measure on tab switch, node array change, or scale change
+  }, [activeTabId, scale, visibleNodeIds, nodes]); // Re-measure on tab switch, node array change, or scale change
 
   // 获取 Pin 的 world 坐标
   const getPinWorldPos = useCallback((pinId: string) => {
     const nodeId = pinNodeIdIndex.get(pinId);
-    const node = useNodeStore.getState().nodes[nodeId || ""];
+    if (!nodeId) return null;
+    const tabNodes = useNodeStore.getState().getNodes(activeTabId || "");
+    const node = tabNodes.find(n => n.id === nodeId);
     const offset = pinOffsets[pinId];
     if (!node || !offset) return null;
     return {
@@ -509,8 +484,8 @@ export default function InfiniteCanvas() {
     const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
     if (internalNodeTypes.includes(tpl.type)) {
       // Check if this internal node already exists
-      const allNodes = Object.values(useNodeStore.getState().nodes);
-      const existingNode = allNodes.find(n => n.type === tpl.type && n.isInternal);
+      const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
+      const existingNode = currentNodes.find(n => n.type === tpl.type && n.isInternal);
       if (existingNode) {
         // Move canvas to center on the existing node
         const rect = ref.current.getBoundingClientRect();
@@ -539,9 +514,7 @@ export default function InfiniteCanvas() {
     if (newNode) {
       saveHistory();
 
-      const currentNodes = Object.values(useNodeStore.getState().nodes);
-      const newNodes = [...currentNodes, newNode];
-      setNodes(newNodes);
+      setNodes((prev) => [...prev, newNode]);
 
       // 如果有待处理的连接，尝试自动连接
       if (pendingConnection) {
@@ -605,9 +578,8 @@ export default function InfiniteCanvas() {
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
     saveHistory();
-    const currentNodes = Object.values(useNodeStore.getState().nodes);
-    setNodes(
-      currentNodes.map((node) => {
+    setNodes((prev) =>
+      prev.map((node) => {
         if (node.id === id) {
           const newNode = node.clone();
           const newIndex = newNode.inputs.length;
@@ -778,8 +750,7 @@ export default function InfiniteCanvas() {
         saveHistory();
         const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType);
         if (newNode) {
-          const currentNodes = Object.values(useNodeStore.getState().nodes);
-          setNodes([...currentNodes, newNode]);
+          setNodes((prev) => [...prev, newNode]);
 
           if (targetPinId && spawnType === "get_variable") {
             const outputPin = newNode.outputs[0];
@@ -796,8 +767,7 @@ export default function InfiniteCanvas() {
       if (targetPinId) {
         const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable");
         if (newNode) {
-          const currentNodes = Object.values(useNodeStore.getState().nodes);
-          setNodes([...currentNodes, newNode]);
+          setNodes((prev) => [...prev, newNode]);
           const outputPin = newNode.outputs[0];
           if (outputPin) {
             setTimeout(() => {
@@ -838,8 +808,7 @@ export default function InfiniteCanvas() {
         false
       );
       node.subGraphId = subId;
-      const currentNodes = Object.values(useNodeStore.getState().nodes);
-      setNodes([...currentNodes, node]);
+      setNodes((prev) => [...prev, node]);
       return;
     }
 
@@ -850,8 +819,7 @@ export default function InfiniteCanvas() {
     );
     if (newNode) {
       saveHistory();
-      const currentNodes = Object.values(useNodeStore.getState().nodes);
-      setNodes([...currentNodes, newNode]);
+      setNodes((prev) => [...prev, newNode]);
     }
   }
 
@@ -946,17 +914,27 @@ export default function InfiniteCanvas() {
           gesture={gesture}
           pendingConnection={pendingConnection}
           contextMenu={contextMenu}
-          activeGroupId={activeGroupId}
+          activeTabId={activeTabId} // Pass activeTabId
           theme={theme}
         />
 
+        {/* Optimized Connection Line */}
+        <ConnectionLine
+          groupId={groupId}
+          getPinWorldPos={getPinWorldPos}
+          getCanvasLocalPoint={getCanvasLocalPoint}
+          pendingConnection={pendingConnection}
+          menuPos={contextMenu}
+        />
+
         <TransformContainer groupId={groupId}>
-          {activeNodeIds.filter(id => visibleNodeIds.has(id)).map((nodeId) => (
+          {nodes.filter(n => visibleNodeIds.has(n.id)).map((node) => (
             <Node
-              key={nodeId}
-              id={nodeId}
+              key={node.id}
+              id={node.id}
+              node={node}
               scale={scale}
-              selected={selectedNodeIdsSet.has(nodeId)}
+              selected={selectedNodeIdsSet.has(node.id)}
               activePinId={activePin?.id}
               onPointerDown={(id, e) => onNodePointerDown(id, e)}
               onAddInput={handleNodeAddInput}
@@ -982,30 +960,32 @@ export default function InfiniteCanvas() {
       )}
 
       {/* ================= Selection Box ================= */}
-      {selection && ref.current && (
+      {gesture?.type === 'select' && ref.current && (
         <div
           className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
           style={{
             left:
-              Math.min(selection.startX, selection.currentX) -
+              Math.min(gesture.startX, gesture.currentX) -
               ref.current.getBoundingClientRect().left,
             top:
-              Math.min(selection.startY, selection.currentY) -
+              Math.min(gesture.startY, gesture.currentY) -
               ref.current.getBoundingClientRect().top,
-            width: Math.abs(selection.startX - selection.currentX),
-            height: Math.abs(selection.startY - selection.currentY),
+            width: Math.abs(gesture.startX - gesture.currentX),
+            height: Math.abs(gesture.startY - gesture.currentY),
           }}
         />
       )}
 
       {/* ================= Node Palette ================= */}
       {activeGroupId === groupId && contextMenu?.visible && (
-        <NodePalette
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onSelect={handleNodePaletteSelect}
-          filterPin={pendingConnection}
-        />
+        <div className="menu-container">
+          <NodePalette
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onSelect={handleNodePaletteSelect}
+            filterPin={pendingConnection}
+          />
+        </div>
       )}
 
       {/* ================= Variable Drop Menu ================= */}
@@ -1035,8 +1015,7 @@ export default function InfiniteCanvas() {
                 }
               );
               if (newNode) {
-                const currentNodes = Object.values(useNodeStore.getState().nodes);
-                setNodes([...currentNodes, newNode]);
+                setNodes((prev) => [...prev, newNode]);
               }
               setVariableDropMenu(null);
             }}
@@ -1064,8 +1043,7 @@ export default function InfiniteCanvas() {
                 }
               );
               if (newNode) {
-                const currentNodes = Object.values(useNodeStore.getState().nodes);
-                setNodes([...currentNodes, newNode]);
+                setNodes((prev) => [...prev, newNode]);
               }
               setVariableDropMenu(null);
             }}

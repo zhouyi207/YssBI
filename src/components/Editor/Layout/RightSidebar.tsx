@@ -3,7 +3,7 @@ import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
 
-export const RightSidebar: React.FC = () => {
+export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
   const {
     variables,
     globalVariables,
@@ -122,7 +122,8 @@ export const RightSidebar: React.FC = () => {
 
   return (
     <div
-      className="right-sidebar-container w-64 border-l border-[#2b2b2b] bg-[var(--sidebar-bg)] flex flex-col h-full overflow-hidden shadow-sm select-none"
+      className="right-sidebar-container border-l border-[#2b2b2b] bg-[var(--sidebar-bg)] flex flex-col h-full overflow-hidden shadow-sm select-none"
+      style={{ width: width ? width : 256 }} // 256px is w-64 default
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0">

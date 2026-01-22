@@ -2,25 +2,31 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useViewportStore } from "../Store/useViewportStore";
 
-const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
+
 
 export default function HUD() {
   const { groupId } = useCanvas();
-  const canvas = useViewportStore(useCallback(state => state.viewports[groupId] || DEFAULT_VIEWPORT, [groupId]));
+
+  // Use individual selectors to avoid new object reference on every store update
+  const x = useViewportStore(state => state.viewports[groupId]?.x || 0);
+  const y = useViewportStore(state => state.viewports[groupId]?.y || 0);
+  const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
+
   const [showHUD, setShowHUD] = useState(false);
   const hudTimer = useRef<number | null>(null);
 
-  const triggerHUD = () => {
+  const triggerHUD = useCallback(() => {
     setShowHUD(true);
     if (hudTimer.current) window.clearTimeout(hudTimer.current);
     hudTimer.current = window.setTimeout(() => {
       setShowHUD(false);
     }, 1000);
-  };
+  }, []); // Stable callback
 
+  // Trigger HUD on viewport changes
   useEffect(() => {
     triggerHUD();
-  }, [canvas]);
+  }, [x, y, scale, triggerHUD]);
 
   return (
     <div
@@ -32,9 +38,9 @@ export default function HUD() {
           ${showHUD ? "opacity-100" : "opacity-0"}
         `}
     >
-      <div>X: {canvas?.x.toFixed(0)}</div>
-      <div>Y: {canvas?.y.toFixed(0)}</div>
-      <div>Zoom: {canvas?.scale ? (canvas.scale * 100).toFixed(0) : 0}%</div>
+      <div>X: {x.toFixed(0)}</div>
+      <div>Y: {y.toFixed(0)}</div>
+      <div>Zoom: {(scale * 100).toFixed(0)}%</div>
     </div>
   );
 }

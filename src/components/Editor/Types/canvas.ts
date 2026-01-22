@@ -53,8 +53,9 @@ export interface EditorGroup {
   id: string;
   tabs: Tab[];
   activeTabId: string | null;
-  canvas: CanvasState;
+  // canvas: CanvasState; // Removed: managed by useViewportStore
   selectedNodeIds: string[];
+  width?: number; // Added for resize support
 }
 
 

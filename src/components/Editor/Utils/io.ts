@@ -32,7 +32,7 @@ export function serializeSubGraph(
       type: node.type,
       title: node.title,
       position: node.position,
-      selected: node.selected,
+
       isInternal: node.isInternal,
       variableId: node.variableId,
       subGraphId: node.subGraphId,
@@ -90,7 +90,7 @@ export function deserializeSubGraph(data: SubGraphData): {
     node.isInternal = !!n.isInternal;
     node.subGraphId = n.subGraphId;
     node.title = n.title;
-    node.selected = !!n.selected;
+
     node.variableId = n.variableId;
 
     if (n.variableId && !variables[n.variableId]) {

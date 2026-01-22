@@ -1,10 +1,11 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, BaseNode } from "../Types/nodes";
-import { useNodeStore } from "../Store/useNodeStore";
+
 
 export interface NodeProps {
   id: string;
+  node: BaseNode;
   scale: number;
   selected?: boolean;
   activePinId?: string | null;
@@ -14,13 +15,11 @@ export interface NodeProps {
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
 }
 
-interface InternalNodeProps extends NodeProps {
-  node: BaseNode;
-}
+
 
 /* ================= Default Node UI ================= */
 
-const DefaultNodeUI: React.FC<InternalNodeProps> = ({
+const DefaultNodeUI: React.FC<NodeProps> = ({
   node,
   activePinId,
   onPinClick,
@@ -81,7 +80,7 @@ const DefaultNodeUI: React.FC<InternalNodeProps> = ({
 
 /* ================= Math Node UI ================= */
 
-const MathNodeUI: React.FC<InternalNodeProps> = ({
+const MathNodeUI: React.FC<NodeProps> = ({
   node,
   activePinId,
   onAddInput,
@@ -153,8 +152,7 @@ const MathNodeUI: React.FC<InternalNodeProps> = ({
 /* ================= Main Dispatcher ================= */
 
 export const Node = React.memo<NodeProps>((props) => {
-  const { id, onPointerDown, selected } = props;
-  const node = useNodeStore(state => state.nodes[id]);
+  const { node, onPointerDown, selected } = props;
 
   if (!node) return null;
 
@@ -182,12 +180,11 @@ export const Node = React.memo<NodeProps>((props) => {
     </div>
   );
 }, (prev, next) => {
-  // 极致性能优化：只有选中的状态、缩放、或 Pin 的激活状态改变时，才可能重绘
-  // 节点内部的位置由 useNodeStore 订阅驱动，不需要在父组件层级对比
+  // 极致性能优化：节点对象引用变化时重绘
   return (
     prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
-    prev.id === next.id &&
+    prev.node === next.node &&
     prev.scale === next.scale
   );
 });

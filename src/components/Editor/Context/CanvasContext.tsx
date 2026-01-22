@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import { Pin, BaseNode } from "../Types/nodes";
-import { CanvasState, Gesture, EditorGroup } from "../Types/canvas";
+import { CanvasState, EditorGroup } from "../Types/canvas";
+import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
 
 
 interface CanvasContextValue {
@@ -12,15 +13,6 @@ interface CanvasContextValue {
   onCanvasPointerDown: (e: React.PointerEvent, groupId?: string) => void;
   onNodePointerDown: (nodeId: string, e: React.PointerEvent, groupId?: string) => void;
   onPinPointerDown: (pinId: string, e: React.PointerEvent, groupId?: string) => void;
-  selection: {
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
-  } | null;
-
-  gesture: Gesture;
-  setGesture: (gesture: Gesture) => void;
   contextMenu: {
     x: number;
     y: number;
@@ -79,8 +71,7 @@ interface CanvasContextValue {
   openSettingsTab: () => void;
   pendingConnection: Pin | null;
   setPendingConnection: (pin: Pin | null) => void;
-  tabNodes: Record<string, BaseNode[]>;
-  tabVariables: Record<string, Record<string, { name: string; type: string; value: any }>>;
+
   selectedNodeIds: string[];
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
 }
@@ -98,13 +89,18 @@ export function useCanvas() {
   // If we are in a specific group context, use that ID. Otherwise fallback to the globally active one.
   const activeGroupId = currentGroupId || ctx.activeGroupId;
 
+
   // Resolve the group object for this context
   const group = ctx.groups.find(g => g.id === activeGroupId) || ctx.groups[0];
 
   // Resolve the data specifically for this group's active tab
   const activeTabId = group.activeTabId;
-  const nodes = activeTabId ? ctx.tabNodes[activeTabId] || [] : [];
-  const variables = activeTabId ? ctx.tabVariables[activeTabId] || {} : {};
+
+  // Use the custom hook to efficiently retrieve nodes for the active tab
+  // This avoids re-subscribing to the entire node map or creating new selector closures
+  const nodes = useTabNodes(activeTabId);
+
+  const variables = useTabVariables(activeTabId);
   const selectedNodeIds = group.selectedNodeIds;
 
   // Helper to activate this group when interaction starts

@@ -1,55 +1,199 @@
 import { create } from 'zustand';
 import { BaseNode } from '../Types/nodes';
 
-interface NodeStore {
-  nodes: Record<string, BaseNode>;
-  // 当前活动 Tab 的所有节点 ID 列表
-  activeNodeIds: string[];
-  
-  // 动作
-  setNodes: (nodes: BaseNode[]) => void;
-  updateNode: (id: string, updater: (prev: BaseNode) => BaseNode) => void;
-  updateNodePosition: (id: string, dx: number, dy: number) => void;
+export interface Variable {
+  name: string;
+  type: string;
+  value: any;
 }
 
-export const useNodeStore = create<NodeStore>((set) => ({
-  nodes: {},
-  activeNodeIds: [],
+interface TabSnapshot {
+  nodes: BaseNode[];
+  variables: Record<string, Variable>;
+}
 
-  setNodes: (nodesArray) => {
-    const nodesMap: Record<string, BaseNode> = {};
-    const ids: string[] = [];
-    nodesArray.forEach(n => {
-      nodesMap[n.id] = n;
-      ids.push(n.id);
-    });
-    set({ nodes: nodesMap, activeNodeIds: ids });
-  },
+export interface TabState {
+  nodes: BaseNode[];
+  variables: Record<string, Variable>;
+  history: {
+    past: TabSnapshot[];
+    future: TabSnapshot[];
+  };
+}
 
-  updateNode: (id, updater) => set((state) => {
-    const node = state.nodes[id];
-    if (!node) return state;
+interface NodeStore {
+  tabs: Record<string, TabState>;
+
+  // Lifecycle
+  initTab: (tabId: string, nodes: BaseNode[], variables: Record<string, Variable>) => void;
+
+  // Nodes
+  setNodes: (tabId: string, nodes: BaseNode[]) => void;
+  updateNode: (tabId: string, nodeId: string, updater: (prev: BaseNode) => BaseNode) => void;
+  updateNodePosition: (tabId: string, nodeId: string, dx: number, dy: number) => void;
+
+  // Variables
+  setVariables: (tabId: string, variables: Record<string, Variable>) => void;
+  updateVariable: (tabId: string, varId: string, data: Partial<Variable>) => void;
+  addVariable: (tabId: string, varId: string, variable: Variable) => void;
+  removeVariable: (tabId: string, varId: string) => void;
+
+  // History
+  saveSnapshot: (tabId: string) => void;
+  undo: (tabId: string) => void;
+  redo: (tabId: string) => void;
+
+  // Getters
+  getNodes: (tabId: string) => BaseNode[];
+}
+
+const createTabState = (nodes: BaseNode[] = [], variables: Record<string, Variable> = {}): TabState => ({
+  nodes,
+  variables,
+  history: { past: [], future: [] }
+});
+
+export const useNodeStore = create<NodeStore>((set, get) => ({
+  tabs: {},
+
+  initTab: (tabId, nodes, variables) => set(state => ({
+    tabs: { ...state.tabs, [tabId]: createTabState(nodes, variables) }
+  })),
+
+  setNodes: (tabId, nodesArray) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return { tabs: { ...state.tabs, [tabId]: createTabState(nodesArray) } };
     return {
-      nodes: {
-        ...state.nodes,
-        [id]: updater(node)
+      tabs: { ...state.tabs, [tabId]: { ...tab, nodes: nodesArray } }
+    };
+  }),
+
+  updateNode: (tabId, nodeId, updater) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    const idx = tab.nodes.findIndex(n => n.id === nodeId);
+    if (idx === -1) return state;
+
+    const newNodes = [...tab.nodes];
+    newNodes[idx] = updater(newNodes[idx]);
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, nodes: newNodes } } };
+  }),
+
+  updateNodePosition: (tabId, nodeId, dx, dy) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    const idx = tab.nodes.findIndex(n => n.id === nodeId);
+    if (idx === -1) return state;
+
+    const n = tab.nodes[idx];
+    const newNode = n.clone();
+    newNode.position = { x: n.position.x + dx, y: n.position.y + dy };
+    const newNodes = [...tab.nodes];
+    newNodes[idx] = newNode;
+
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, nodes: newNodes } } };
+  }),
+
+  setVariables: (tabId, variables) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, variables } } };
+  }),
+
+  addVariable: (tabId, varId, variable) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, variables: { ...tab.variables, [varId]: variable } } } };
+  }),
+
+  updateVariable: (tabId, varId, data) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    const v = tab.variables[varId];
+    if (!v) return state;
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, variables: { ...tab.variables, [varId]: { ...v, ...data } } } } };
+  }),
+
+  removeVariable: (tabId, varId) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    const newVars = { ...tab.variables };
+    delete newVars[varId];
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, variables: newVars } } };
+  }),
+
+  saveSnapshot: (tabId) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab) return state;
+    // Deep clone nodes and variables
+    const snapshot: TabSnapshot = {
+      nodes: tab.nodes.map(n => n.clone()),
+      variables: JSON.parse(JSON.stringify(tab.variables))
+    };
+    const past = [...tab.history.past, snapshot].slice(-50);
+    return { tabs: { ...state.tabs, [tabId]: { ...tab, history: { past, future: [] } } } };
+  }),
+
+  undo: (tabId) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab || tab.history.past.length === 0) return state;
+    const past = [...tab.history.past];
+    const prev = past.pop()!;
+    const current: TabSnapshot = {
+      nodes: tab.nodes.map(n => n.clone()),
+      variables: JSON.parse(JSON.stringify(tab.variables))
+    };
+    return {
+      tabs: {
+        ...state.tabs,
+        [tabId]: {
+          ...tab,
+          nodes: prev.nodes,
+          variables: prev.variables,
+          history: { past, future: [current, ...tab.history.future] }
+        }
       }
     };
   }),
 
-  updateNodePosition: (id, dx, dy) => set((state) => {
-    const node = state.nodes[id];
-    if (!node) return state;
-    
-    // 关键优化：直接修改位置对象以获取最高性能，或者返回新对象触发订阅
-    const newNode = node.clone();
-    newNode.position = { x: node.position.x + dx, y: node.position.y + dy };
-    
+  redo: (tabId) => set(state => {
+    const tab = state.tabs[tabId];
+    if (!tab || tab.history.future.length === 0) return state;
+    const future = [...tab.history.future];
+    const next = future.shift()!;
+    const current: TabSnapshot = {
+      nodes: tab.nodes.map(n => n.clone()),
+      variables: JSON.parse(JSON.stringify(tab.variables))
+    };
     return {
-      nodes: {
-        ...state.nodes,
-        [id]: newNode
+      tabs: {
+        ...state.tabs,
+        [tabId]: {
+          ...tab,
+          nodes: next.nodes,
+          variables: next.variables,
+          history: { past: [...tab.history.past, current], future }
+        }
       }
     };
   }),
+
+  getNodes: (tabId) => get().tabs[tabId]?.nodes || [],
 }));
+
+const EMPTY_NODES: BaseNode[] = [];
+const EMPTY_VARS: Record<string, Variable> = {};
+
+export const useTabNodes = (tabId: string | null) => {
+  return useNodeStore((state) => {
+    if (!tabId) return EMPTY_NODES;
+    return state.tabs[tabId]?.nodes || EMPTY_NODES;
+  });
+};
+
+export const useTabVariables = (tabId: string | null) => {
+  return useNodeStore((state) => {
+    if (!tabId) return EMPTY_VARS;
+    return state.tabs[tabId]?.variables || EMPTY_VARS;
+  });
+};

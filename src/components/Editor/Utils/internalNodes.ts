@@ -66,3 +66,24 @@ export function syncInternalNodePins(node: BaseNode, subGraphPins: SubGraphPinDe
         node.inputs = fixedExecPin ? [fixedExecPin, ...newPins] : newPins;
     }
 }
+
+export function syncSubGraphInstanceNodes(nodes: any[], subGraphId: string, inputs?: SubGraphPinDef[], outputs?: SubGraphPinDef[], name?: string) {
+    return nodes.map((n: any) => {
+        if (n.subGraphId !== subGraphId) return n;
+        const newNode = (n instanceof BaseNode) ? n.clone() : Object.assign(Object.create(Object.getPrototypeOf(n)), n);
+        if (name) newNode.title = name;
+        const synchronizePins = (newPinDefs: SubGraphPinDef[], existingPins: any[], direction: 'input' | 'output') => {
+            const execPins = existingPins.filter((p: any) => p.type === 'exec');
+            const dataPins = existingPins.filter((p: any) => p.type !== 'exec');
+            const newDataPins = newPinDefs.map(newDef => {
+                const newPinId = `${newNode.id}_${direction === 'input' ? 'in' : 'out'}_${newDef.id}`;
+                const existingPin = dataPins.find((p: any) => p.id === newPinId) || dataPins.find((p: any) => p.name === newDef.name && p.type === newDef.type);
+                return { id: newPinId, nodeId: newNode.id, name: newDef.name, type: newDef.type as any, direction, links: existingPin ? existingPin.links : [] };
+            });
+            return [...execPins, ...newDataPins];
+        };
+        if (inputs) newNode.inputs = synchronizePins(inputs, n.inputs, 'input') as any;
+        if (outputs) newNode.outputs = synchronizePins(outputs, n.outputs, 'output') as any;
+        return newNode;
+    });
+}
