@@ -410,13 +410,34 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     if (sIds.size === 0) return;
 
     setNodes((prev: BaseNode[]) => {
-      const idsToDelete = new Set(prev.filter(n => sIds.has(n.id) && !n.isInternal).map(n => n.id));
+      const nodesToDelete = prev.filter(n => sIds.has(n.id) && !n.isInternal);
+      const idsToDelete = new Set(nodesToDelete.map(n => n.id));
       if (idsToDelete.size === 0) return prev;
+
+      // 收集所有将被删除的 pin ID，以便精确清理连接线
+      const pinsToDelete = new Set<string>();
+      nodesToDelete.forEach(n => {
+        [...n.inputs, ...n.outputs].forEach(p => pinsToDelete.add(p.id));
+      });
+
       return prev.filter(n => !idsToDelete.has(n.id)).map(n => {
         const clone = n.clone();
-        clone.inputs.forEach(p => p.links = p.links.filter(l => !idsToDelete.has(l.split('-')[0])));
-        clone.outputs.forEach(p => p.links = p.links.filter(l => !idsToDelete.has(l.split('-')[0])));
-        return clone;
+        let changed = false;
+        clone.inputs.forEach(p => {
+          const newLinks = p.links.filter(l => !pinsToDelete.has(l));
+          if (newLinks.length !== p.links.length) {
+            p.links = newLinks;
+            changed = true;
+          }
+        });
+        clone.outputs.forEach(p => {
+          const newLinks = p.links.filter(l => !pinsToDelete.has(l));
+          if (newLinks.length !== p.links.length) {
+            p.links = newLinks;
+            changed = true;
+          }
+        });
+        return changed ? clone : n;
       });
     });
     setSelectedNodeIds([]);
@@ -455,7 +476,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       newSelectedIds.push(nid);
       const updatePins = (ps: Pin[]) => ps.forEach(p => {
         const old = p.id;
-        p.id = `${nid}-${crypto.randomUUID().slice(0, 8)}`;
+        p.id = `${nid}_${crypto.randomUUID().slice(0, 8)}`;
         p.nodeId = nid;
         idMap.set(old, p.id);
       });

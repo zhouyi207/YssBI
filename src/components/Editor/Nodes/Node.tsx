@@ -167,8 +167,11 @@ export const Node = React.memo<NodeProps>((props) => {
       style={{
         minWidth: node.noHeader ? 120 : 160,
         minHeight: node.noHeader ? 60 : undefined,
-        transform: `translate(${node.position.x}px, ${node.position.y}px)`,
+        transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
         background: "var(--node-base)",
+        // 强制开启硬件加速的抗锯齿，并保持文本清晰
+        WebkitFontSmoothing: "antialiased",
+        MozOsxFontSmoothing: "grayscale",
       }}
       onPointerDown={(e) => onPointerDown?.(node.id, e)}
     >

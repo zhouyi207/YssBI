@@ -9,199 +9,20 @@ import { useNodeStore } from "../Store/useNodeStore";
 import { useGestureStore } from "../Store/useGestureStore";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
-import HUD from "./HUD";
-import NodePalette from "../Nodes/NodePalette";
-import { VscRunAll } from "react-icons/vsc";
-import { drawEdge } from "../Edges/Edge";
 import { ConnectionLine } from "./ConnectionLine";
+
+// Extracted Components
+import { ViewportGrid } from "./ViewportGrid";
+import { TransformContainer } from "./TransformContainer";
+import { EdgesLayer } from "./EdgesLayer";
+import CanvasOverlays from "./CanvasOverlays";
+import { DEFAULT_VIEWPORT } from "./constants";
 
 /* ================= Canvas Components ================= */
 
-const GRID = 40;
-
-const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
-
-const ViewportGrid = ({ groupId }: { groupId: string }) => {
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // 零 React 重绘：直接订阅 Store 并同步 DOM 样式
-    return useViewportStore.subscribe(state => {
-      const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
-      const el = gridRef.current;
-      if (el) {
-        el.style.backgroundSize = `${GRID * canvas.scale}px ${GRID * canvas.scale}px`;
-        el.style.backgroundPosition = `${canvas.x}px ${canvas.y}px`;
-      }
-    });
-  }, [groupId]);
-
-  const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-  return (
-    <div
-      ref={gridRef}
-      className="absolute inset-0 pointer-events-none"
-      style={{
-        backgroundImage: `
-          linear-gradient(var(--grid-lines) 1px, transparent 1px),
-          linear-gradient(90deg, var(--grid-lines) 1px, transparent 1px)
-        `,
-        backgroundSize: `${GRID * initial.scale}px ${GRID * initial.scale}px`,
-        backgroundPosition: `${initial.x}px ${initial.y}px`,
-      }}
-    />
-  );
-};
-
-const TransformContainer = ({ groupId, children }: { groupId: string, children: React.ReactNode }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // 零 React 重绘：平移缩放时直接操作 transform，跳过 Virtual DOM Diff
-    return useViewportStore.subscribe(state => {
-      const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
-      const el = containerRef.current;
-      if (el) {
-        // 使用 translate3d 触发 GPU 加速，确保 CSS 格式正确
-        el.style.transform = `translate3d(${canvas.x}px, ${canvas.y}px, 0) scale(${canvas.scale})`;
-      }
-    });
-  }, [groupId]);
-
-  const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        transform: `translate3d(${initial.x}px, ${initial.y}px, 0) scale(${initial.scale})`,
-        transformOrigin: "0 0",
-        willChange: "transform", // 提示浏览器开启图层优化
-      }}
-    >
-      {children}
-    </div>
-  );
-};
-
-const EdgesLayer = ({
-  groupId,
-  visibleNodeIds,
-  pinNodeIdIndex,
-  getPinWorldPos,
-  getCanvasLocalPoint,
-  gesture,
-  pendingConnection,
-  contextMenu,
-  activeTabId,
-  theme
-}: any) => {
-  const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number | null>(null);
-
-  // 绘制连接线的核心逻辑 (GPU 加速)
-  const drawAllEdges = useCallback(() => {
-    const canvasEl = edgeCanvasRef.current;
-    if (!canvasEl) return;
-    const ctx = canvasEl.getContext("2d");
-    if (!ctx) return;
-
-    const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-
-    // 清除画布
-    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-
-    // 设置变换矩阵 (同步画布的平移和缩放)
-    ctx.save();
-    ctx.translate(canvas.x, canvas.y);
-    ctx.scale(canvas.scale, canvas.scale);
-
-    // 绘制已有连接
-    const nodes = useNodeStore.getState().getNodes(activeTabId || "");
-
-    nodes.forEach(node => {
-      // const node = allNodes[id]; // Removed
-      if (!node) return;
-
-      // 暂时移除 Edges 层的视口裁剪判断，确保所有连接线都能绘制
-      // 因为 getPinWorldPos 内部已经处理了未渲染节点的 null 返回
-
-      node.outputs.forEach((pin: any) => {
-        pin.links.forEach((targetId: string) => {
-          const start = getPinWorldPos(pin.id);
-          const end = getPinWorldPos(targetId);
-          if (!start || !end) return;
-
-          drawEdge(
-            ctx,
-            start.x, start.y,
-            end.x, end.y,
-            pin.ui?.color ?? (theme[`${pin.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines,
-            2 / canvas.scale // 保持视觉粗细一致
-          );
-        });
-      });
-    });
-
-
-    // Removed interaction drawing from EdgesLayer as it's now handled by useGestureStore and ConnectionLine
-
-    ctx.restore();
-  }, [gesture, pendingConnection, contextMenu, getPinWorldPos, getCanvasLocalPoint, theme, groupId, activeTabId, visibleNodeIds, pinNodeIdIndex]);
-
-  const requestDraw = useCallback(() => {
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      drawAllEdges();
-      rafRef.current = null;
-    });
-  }, [drawAllEdges]);
-
-  // 监听 ViewportStore 和 NodeStore 的变化，触发重绘
-  useEffect(() => {
-    const unsubViewport = useViewportStore.subscribe(() => {
-      requestDraw();
-    });
-    const unsubNodes = useNodeStore.subscribe(() => {
-      requestDraw();
-    });
-    return () => {
-      unsubViewport();
-      unsubNodes();
-    };
-  }, [requestDraw]);
-
-  // 同步画布尺寸并触发重绘
-  useLayoutEffect(() => {
-    const canvasEl = edgeCanvasRef.current;
-    if (!canvasEl) return;
-
-    // 确保从正确的父元素获取尺寸
-    const rect = canvasEl.parentElement?.getBoundingClientRect();
-    if (!rect || rect.width === 0 || rect.height === 0) return;
-
-    const dpr = window.devicePixelRatio || 1;
-
-    // 设置实际像素大小 (防止模糊)
-    canvasEl.width = rect.width * dpr;
-    canvasEl.height = rect.height * dpr;
-    // 设置 CSS 大小
-    canvasEl.style.width = `${rect.width}px`;
-    canvasEl.style.height = `${rect.height}px`;
-
-    const ctx = canvasEl.getContext("2d");
-    if (ctx) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // 使用 setTransform 替代 scale 避免累加
-    }
-
-    drawAllEdges();
-  }, [drawAllEdges]);
-
-  return <canvas ref={edgeCanvasRef} className="absolute inset-0 pointer-events-none" />;
-};
-
 export default function InfiniteCanvas() {
   const {
-    nodes, // Added nodes
+    nodes,
     setCanvas,
     setNodes,
     onCanvasPointerDown,
@@ -219,7 +40,6 @@ export default function InfiniteCanvas() {
     paste,
     cut,
     deleteSelected,
-    executeGraph,
     saveGraph,
     saveGraphAs,
     importGraph,
@@ -237,18 +57,18 @@ export default function InfiniteCanvas() {
     connectPins,
     splitEditorRight,
     groupId,
-    activeGroupId, // Added activeGroupId
     selectedNodeIds
   } = useCanvas();
   const { theme } = useTheme();
   const { drag } = useDrag();
   const gesture = useGestureStore(state => state.gesture);
 
-  // const activeNodeIds = useNodeStore(state => state.activeNodeIds); // Removed
   const scale = useViewportStore(useCallback(state => state.viewports[groupId]?.scale || 1, [groupId]));
 
   // --- 视口裁剪 (Culling) 逻辑 ---
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
+
+  const ref = useRef<HTMLDivElement>(null);
 
   const updateVisibleNodes = useCallback(() => {
     const el = ref.current;
@@ -281,11 +101,10 @@ export default function InfiniteCanvas() {
   }, [groupId, activeTabId, nodes]);
 
   // 当节点列表变化、缩放变化或平移结束时更新裁剪
-  // Removed dead subscription to activeNodeIds
 
   useEffect(() => {
     updateVisibleNodes();
-  }, [scale, nodes, updateVisibleNodes]); // Depend on nodes instead of activeNodeIds
+  }, [scale, nodes, updateVisibleNodes]);
 
   // 监听平移结束（通过 gesture 状态判断）
   useEffect(() => {
@@ -345,7 +164,7 @@ export default function InfiniteCanvas() {
 
     window.addEventListener("wheel", handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener("wheel", handleWheel, { capture: true });
-  }, [setCanvas, groupId]); // Added groupId dependency
+  }, [setCanvas, groupId]);
 
   const selectedNodeIdsSet = useMemo(() => {
     return new Set(selectedNodeIds);
@@ -365,22 +184,18 @@ export default function InfiniteCanvas() {
     variableName: string;
     variableType: string;
   } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
 
   const prevDragRef = useRef(drag);
 
   const pinIndex = useMemo(() => {
     const map = new Map<string, Pin>();
-    // nodes is available from useCanvas destructuring in InfiniteCanvas scope
-    // But we are inside InfiniteCanvas component so we can use 'nodes'.
-    // If we want to be safe around layout effects/memos triggering, using the prop is correct.
 
     nodes.forEach(node => {
       node.inputs.forEach((pin: Pin) => map.set(pin.id, pin));
       node.outputs.forEach((pin: Pin) => map.set(pin.id, pin));
     });
     return map;
-  }, [nodes]); // Depend on nodes instead of deprecated activeNodeIds
+  }, [nodes]);
 
   const pinNodeIdIndex = useMemo(() => {
     const map = new Map<string, string>();
@@ -401,12 +216,10 @@ export default function InfiniteCanvas() {
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
 
   // 测量 Pin 相对于节点的偏移量 (仅在节点或 Pin 数量变化时运行)
-  // 修复：使用 scoped querySelector 替代 getElementById，确保在分屏时测量的是当前视口内的节点
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
-    // Use nodes from the updated useCanvas hook or store directly for the active tab
     const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
 
     currentNodes.forEach(node => {
@@ -448,7 +261,7 @@ export default function InfiniteCanvas() {
       }
       return nextOffsets;
     });
-  }, [activeTabId, scale, visibleNodeIds, nodes]); // Re-measure on tab switch, node array change, or scale change
+  }, [activeTabId, scale, visibleNodeIds, nodes]);
 
   // 获取 Pin 的 world 坐标
   const getPinWorldPos = useCallback((pinId: string) => {
@@ -475,67 +288,6 @@ export default function InfiniteCanvas() {
     };
   }, [groupId]);
 
-  // 获取 Pin 的世界坐标 (Node位置 + 偏移)
-
-  const handleNodePaletteSelect = (tpl: { type: string }) => {
-    if (!contextMenu || !ref.current) return;
-
-    // Check if this is an internal node type that should only exist once
-    const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
-    if (internalNodeTypes.includes(tpl.type)) {
-      // Check if this internal node already exists
-      const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
-      const existingNode = currentNodes.find(n => n.type === tpl.type && n.isInternal);
-      if (existingNode) {
-        // Move canvas to center on the existing node
-        const rect = ref.current.getBoundingClientRect();
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
-        setCanvas({
-          ...currentCanvas,
-          x: centerX - existingNode.position.x * currentCanvas.scale,
-          y: centerY - existingNode.position.y * currentCanvas.scale
-        });
-
-        setContextMenu(null);
-        setPendingConnection(null);
-        return;
-      }
-    }
-
-    const rect = ref.current.getBoundingClientRect();
-    const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
-    const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
-    const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
-
-    const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, tpl.type);
-    if (newNode) {
-      saveHistory();
-
-      setNodes((prev) => [...prev, newNode]);
-
-      // 如果有待处理的连接，尝试自动连接
-      if (pendingConnection) {
-        const isInput = pendingConnection.direction === "input";
-        const targetDirection = isInput ? "outputs" : "inputs";
-
-        // 寻找新节点中第一个符合类型的引脚
-        const pins = targetDirection === "inputs" ? newNode.inputs : newNode.outputs;
-        const compatiblePin = pins.find(p => p.type === pendingConnection.type);
-
-        if (compatiblePin) {
-          // 延迟一帧调用 connectPins 确保 nodes 已更新
-          setTimeout(() => {
-            connectPins(pendingConnection.id, compatiblePin.id);
-          }, 0);
-        }
-      }
-    }
-    setContextMenu(null);
-    setPendingConnection(null);
-  };
 
   // 1. 自动隐藏菜单逻辑
   useEffect(() => {
@@ -556,11 +308,6 @@ export default function InfiniteCanvas() {
     return () => window.removeEventListener("pointerdown", handleClickOutside, true);
   }, [contextMenu, variableDropMenu, setContextMenu, setPendingConnection]);
 
-  // Selection and node intersection is now managed by the CanvasProvider's gesture system
-
-  // Removed local handleNodePointerDown and handleNodeDrag
-  // using provider ones instead
-
 
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
@@ -572,9 +319,6 @@ export default function InfiniteCanvas() {
     return () => window.removeEventListener("pointermove", handlePointerMove, { capture: true });
   }, []);
 
-  // 2. 多节点拖拽回调
-  // handleNodeDrag removed
-
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
     saveHistory();
@@ -584,7 +328,7 @@ export default function InfiniteCanvas() {
           const newNode = node.clone();
           const newIndex = newNode.inputs.length;
           newNode.addInput({
-            id: `${id}-input-${newIndex}-${Date.now()}`,
+            id: `${id}_input_${newIndex}_${Date.now()}`,
             nodeId: id,
             name: String.fromCharCode(65 + newIndex),
             type: "int", // 修改这里：PinType 中已改为 int
@@ -616,7 +360,7 @@ export default function InfiniteCanvas() {
     }
 
     prevDragRef.current = drag;
-  }, [drag, variables]); // 增加 variables 依赖，确保 handleDropTemplate 使用最新状态
+  }, [drag, variables]);
 
   // 全局记录修饰键状态
   useEffect(() => {
@@ -795,6 +539,7 @@ export default function InfiniteCanvas() {
       const subName = dragState.template.subName;
       const subData = (type === 'call_function') ? functions[subId] : macros[subId];
       if (!subData) return;
+
       const node = createInternalNode(
         `node-${crypto.randomUUID()}`,
         type,
@@ -944,115 +689,12 @@ export default function InfiniteCanvas() {
           ))}
         </TransformContainer>
       </div>
-      <HUD />
 
-      {/* ================= FAB (Floating Action Button) for Execution ================= */}
-      {tabs.find(t => t.id === activeTabId)?.type === "event" && (
-        <div className="absolute top-4 right-4 z-40">
-          <button
-            onClick={() => executeGraph()}
-            className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
-          >
-            <VscRunAll size={18} />
-            <span>执行</span>
-          </button>
-        </div>
-      )}
-
-      {/* ================= Selection Box ================= */}
-      {gesture?.type === 'select' && ref.current && (
-        <div
-          className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
-          style={{
-            left:
-              Math.min(gesture.startX, gesture.currentX) -
-              ref.current.getBoundingClientRect().left,
-            top:
-              Math.min(gesture.startY, gesture.currentY) -
-              ref.current.getBoundingClientRect().top,
-            width: Math.abs(gesture.startX - gesture.currentX),
-            height: Math.abs(gesture.startY - gesture.currentY),
-          }}
-        />
-      )}
-
-      {/* ================= Node Palette ================= */}
-      {activeGroupId === groupId && contextMenu?.visible && (
-        <div className="menu-container">
-          <NodePalette
-            x={contextMenu.x}
-            y={contextMenu.y}
-            onSelect={handleNodePaletteSelect}
-            filterPin={pendingConnection}
-          />
-        </div>
-      )}
-
-      {/* ================= Variable Drop Menu ================= */}
-      {activeGroupId === groupId && variableDropMenu && (
-        <div
-          className="fixed z-50 bg-gray-800 text-white rounded shadow-lg overflow-hidden border border-gray-700 py-1 menu-container"
-          style={{ left: variableDropMenu.x, top: variableDropMenu.y }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div
-            className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
-            onClick={() => {
-              if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
-                console.warn("Variable no longer exists.");
-                setVariableDropMenu(null);
-                return;
-              }
-              saveHistory();
-              const newNode = createNodeFromTemplate(
-                { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                scale,
-                "get_variable",
-                {
-                  title: `Get ${variableDropMenu.variableName}`,
-                  variableId: variableDropMenu.variableId,
-                  variableType: variableDropMenu.variableType // 传入初始变量类型
-                }
-              );
-              if (newNode) {
-                setNodes((prev) => [...prev, newNode]);
-              }
-              setVariableDropMenu(null);
-            }}
-          >
-            <div className="w-2 h-2 rounded-full bg-blue-400" />
-            Get {variableDropMenu.variableName}
-          </div>
-          <div
-            className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
-            onClick={() => {
-              if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
-                console.warn("Variable no longer exists.");
-                setVariableDropMenu(null);
-                return;
-              }
-              saveHistory();
-              const newNode = createNodeFromTemplate(
-                { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                scale,
-                "set_variable",
-                {
-                  title: `Set ${variableDropMenu.variableName}`,
-                  variableId: variableDropMenu.variableId,
-                  variableType: variableDropMenu.variableType // 传入初始变量类型
-                }
-              );
-              if (newNode) {
-                setNodes((prev) => [...prev, newNode]);
-              }
-              setVariableDropMenu(null);
-            }}
-          >
-            <div className="w-2 h-2 rounded-full bg-orange-400" />
-            Set {variableDropMenu.variableName}
-          </div>
-        </div>
-      )}
+      <CanvasOverlays
+        canvasRef={ref}
+        variableDropMenu={variableDropMenu}
+        setVariableDropMenu={setVariableDropMenu}
+      />
     </div>
   );
 }
