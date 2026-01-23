@@ -1,15 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { forwardRef, useContext } from "react";
 import { useDrag } from "../Context/DragContext";
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas, GroupContext } from "../Context/CanvasContext";
 import {
   VscEye,
   VscEyeClosed,
   VscAdd
 } from "react-icons/vsc";
-import { PiGraph, PiFunction } from "react-icons/pi";
-import { TiFlowSwitch } from "react-icons/ti";
-import { HiVariable } from "react-icons/hi2";
-
+import { useLayoutStore } from "../../../store/layoutStore";
 
 const PIN_COLORS: Record<string, string> = {
   exec: "var(--exec-color)",
@@ -23,8 +20,9 @@ const PIN_COLORS: Record<string, string> = {
   delegate: "#ec4899",
 };
 
-export default function Sidebar({ width }: { width?: number }) {
+const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { startDrag } = useDrag();
+  const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
   const {
     variables,
     globalVariables,
@@ -41,52 +39,11 @@ export default function Sidebar({ width }: { width?: number }) {
     events,
     addEvent,
     openSubGraph,
-    tabs,
-    groups,
-    closeGroup,
-    activeGroupId
   } = useCanvas();
 
-
-
-  // Activity Bar & Sidebar View State
-  const [activeTab, setActiveTab] = useState<'events' | 'functions' | 'macros' | 'variables' | null>('variables');
-  const activityBarRef = useRef<HTMLDivElement>(null);
-  const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
-
-  const toggleTab = (tab: 'events' | 'functions' | 'macros' | 'variables') => {
-    if (activeTab === tab) {
-      setActiveTab(null); // Collapse
-    } else {
-      setActiveTab(tab);
-    }
-  };
-
-  // Auto-collapse/close empty groups in split view
-  useEffect(() => {
-    if (tabs.length === 0 && groups.length > 1) {
-      closeGroup(activeGroupId);
-    }
-  }, [tabs.length, groups.length, activeGroupId, closeGroup]);
-
-  // Update vertical sliding indicator
-  useEffect(() => {
-    const bar = activityBarRef.current;
-    if (!bar || !activeTab) {
-      setIndicatorTop(prev => ({ ...prev, opacity: 0 }));
-      return;
-    }
-
-    const activeEl = bar.querySelector(`[data-tab-id="${activeTab}"]`) as HTMLElement;
-    if (activeEl) {
-      setIndicatorTop({
-        top: activeEl.offsetTop,
-        opacity: 1
-      });
-    } else {
-      setIndicatorTop(prev => ({ ...prev, opacity: 0 }));
-    }
-  }, [activeTab]);
+  // Read active tab from Layout Store
+  const sidebarNode = useLayoutStore(s => s.nodes[nodeId || 'sidebar']);
+  const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | null;
 
   // Helper to get unique name
   const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
@@ -183,119 +140,83 @@ export default function Sidebar({ width }: { width?: number }) {
     );
   };
 
-  const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean, onClick: () => void, children: React.ReactNode, title: string, id: string }) => (
-    <button
-      onClick={onClick}
-      title={title}
-      data-tab-id={id}
-      className={`relative w-full h-12 flex items-center justify-center transition-colors group ${active ? 'text-white' : 'text-[#858585] hover:text-[#cccccc]'}`}
-    >
-      {children}
-    </button>
-  );
-
   return (
-    <div className="flex h-full overflow-hidden select-none bg-[var(--sidebar-bg)] border-r border-[#2b2b2b]" onWheel={(e) => e.stopPropagation()}>
-      {/* Activity Bar */}
-      <div ref={activityBarRef} className="relative w-12 bg-[#333333] flex flex-col items-center py-2 shrink-0 border-r border-[#2b2b2b]">
-        {/* Sliding Indicator (Vertical) */}
-        <div
-          className="absolute left-0 top-0 w-0.5 h-12 bg-[var(--accent-color)] transition-all duration-300 ease-in-out z-10 pointer-events-none"
-          style={{
-            transform: `translateY(${indicatorTop.top}px)`,
-            opacity: indicatorTop.opacity
-          }}
-        />
+    <div
+      ref={ref}
+      className="flex h-full w-full overflow-hidden select-none bg-[var(--sidebar-bg)]"
+      onWheel={(e) => e.stopPropagation()}
+    >
+      <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
+        {/* Header */}
+        <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>
+          <button
+            onClick={() => {
+              if (activeTab === 'events') addEvent(getUniqueName("NewEvent", events));
+              else if (activeTab === 'functions') addFunction(getUniqueName("NewFunction", functions));
+              else if (activeTab === 'macros') addMacro(getUniqueName("NewMacro", macros));
+              else if (activeTab === 'variables') {
+                const allVars = { ...variables, ...globalVariables };
+                addVariable(getUniqueName("NewVar", allVars), "int", false);
+              }
+            }}
+            className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
+          >
+            <VscAdd size={16} />
+          </button>
+        </div>
 
-        <ActivityIcon id="events" active={activeTab === 'events'} onClick={() => toggleTab('events')} title="Events">
-          <PiGraph size={24} />
-        </ActivityIcon>
-        <ActivityIcon id="functions" active={activeTab === 'functions'} onClick={() => toggleTab('functions')} title="Functions">
-          <PiFunction size={24} />
-        </ActivityIcon>
-        <ActivityIcon id="macros" active={activeTab === 'macros'} onClick={() => toggleTab('macros')} title="Macros">
-          <TiFlowSwitch size={24} />
-        </ActivityIcon>
-        <ActivityIcon id="variables" active={activeTab === 'variables'} onClick={() => toggleTab('variables')} title="Variables">
-          <HiVariable size={24} />
-        </ActivityIcon>
-      </div>
-
-      {/* Sidebar Content Panel */}
-      {activeTab && (
-        <div
-          className="flex flex-col min-h-0 bg-[var(--sidebar-bg)] transition-[width] duration-0"
-          style={{ width: width ? width : 208 }} // 208px is w-52 default
-        >
-          {/* Header */}
-          <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>
-            <button
-              onClick={() => {
-                if (activeTab === 'events') addEvent(getUniqueName("NewEvent", events));
-                else if (activeTab === 'functions') addFunction(getUniqueName("NewFunction", functions));
-                else if (activeTab === 'macros') addMacro(getUniqueName("NewMacro", macros));
-                else if (activeTab === 'variables') {
-                  const allVars = { ...variables, ...globalVariables };
-                  addVariable(getUniqueName("NewVar", allVars), "int", false);
-                }
-              }}
-              className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
-            >
-              <VscAdd size={16} />
-            </button>
-          </div>
-
-          {/* List Content */}
-          <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
-            {activeTab === 'events' && (
-              <>
-                {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
-                {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No events</div>}
-              </>
-            )}
-            {activeTab === 'functions' && (
-              <>
-                {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
-                {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No functions</div>}
-              </>
-            )}
-            {activeTab === 'macros' && (
-              <>
-                {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
-                {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
-              </>
-            )}
-            {activeTab === 'variables' && (
-              <>
-                {/* Global */}
+        {/* List Content */}
+        <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
+          {activeTab === 'events' && (
+            <>
+              {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
+              {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No events</div>}
+            </>
+          )}
+          {activeTab === 'functions' && (
+            <>
+              {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
+              {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No functions</div>}
+            </>
+          )}
+          {activeTab === 'macros' && (
+            <>
+              {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
+              {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
+            </>
+          )}
+          {activeTab === 'variables' && (
+            <>
+              {/* Global */}
+              {Object.keys(globalVariables).length > 0 && (
+                <div className="mb-2">
+                  <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
+                    Global
+                    <div className="h-px flex-1 bg-white/5" />
+                  </div>
+                  {Object.entries(globalVariables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                </div>
+              )}
+              {/* Local */}
+              <div className="mb-2">
                 {Object.keys(globalVariables).length > 0 && (
-                  <div className="mb-2">
-                    <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                      Global
-                      <div className="h-px flex-1 bg-white/5" />
-                    </div>
-                    {Object.entries(globalVariables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                  <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
+                    Local
+                    <div className="h-px flex-1 bg-white/5" />
                   </div>
                 )}
-                {/* Local */}
-                <div className="mb-2">
-                  {Object.keys(globalVariables).length > 0 && (
-                    <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                      Local
-                      <div className="h-px flex-1 bg-white/5" />
-                    </div>
-                  )}
-                  {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
-                </div>
-                {Object.keys(variables).length === 0 && Object.keys(globalVariables).length === 0 && (
-                  <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
-                )}
-              </>
-            )}
-          </div>
+                {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
+              </div>
+              {Object.keys(variables).length === 0 && Object.keys(globalVariables).length === 0 && (
+                <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
-}
+});
+
+export default Sidebar;

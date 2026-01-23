@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { create } from 'zustand';
 import { BaseNode } from '../Types/nodes';
 
@@ -185,15 +186,17 @@ const EMPTY_NODES: BaseNode[] = [];
 const EMPTY_VARS: Record<string, Variable> = {};
 
 export const useTabNodes = (tabId: string | null) => {
-  return useNodeStore((state) => {
+  const selector = useCallback((state: NodeStore) => {
     if (!tabId) return EMPTY_NODES;
     return state.tabs[tabId]?.nodes || EMPTY_NODES;
-  });
+  }, [tabId]);
+  return useNodeStore(selector);
 };
 
 export const useTabVariables = (tabId: string | null) => {
-  return useNodeStore((state) => {
+  const selector = useCallback((state: NodeStore) => {
     if (!tabId) return EMPTY_VARS;
     return state.tabs[tabId]?.variables || EMPTY_VARS;
-  });
+  }, [tabId]);
+  return useNodeStore(selector);
 };

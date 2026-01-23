@@ -1,7 +1,9 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useCallback } from "react";
 import { Pin, BaseNode } from "../Types/nodes";
 import { CanvasState, EditorGroup } from "../Types/canvas";
 import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
+import { useLayoutStore } from "../../../store/layoutStore";
+import { useShallow } from 'zustand/react/shallow';
 
 
 interface CanvasContextValue {
@@ -58,6 +60,7 @@ interface CanvasContextValue {
   // Groups API
   groups: EditorGroup[];
   activeGroupId: string;
+  activeEditorGroupId: string;
   setActiveGroupId: (id: string) => void;
   splitEditorRight: (groupId: string) => void;
   closeGroup: (groupId: string) => void;
@@ -86,27 +89,35 @@ export function useCanvas() {
   }
 
   const currentGroupId = useContext(GroupContext);
+  const activeGroupIdFromStore = useLayoutStore(useCallback(s => s.activeGroupId, []));
+  
   // If we are in a specific group context, use that ID. Otherwise fallback to the globally active one.
-  const activeGroupId = currentGroupId || ctx.activeGroupId;
+  const activeGroupId = currentGroupId || activeGroupIdFromStore || 'editor1';
 
+  // Resolve the group object for this context from layoutStore
+  const nodeSelector = useCallback(s => s.nodes[activeGroupId], [activeGroupId]);
+  const node = useLayoutStore(useShallow(nodeSelector));
+  
+  // 核心逻辑：如果当前 Context 指向的是非编辑器节点（如 Sidebar/Detail），
+  // 则数据逻辑（tabs/nodes/variables）应该回退到当前活跃的编辑器组。
+  const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
+  const isEditor = node?.type === 'component' && !!node.data?.tabs;
+  
+  const functionalNode = isEditor ? node : (useLayoutStore.getState().nodes[activeEditorGroupId || ''] || node);
 
-  // Resolve the group object for this context
-  const group = ctx.groups.find(g => g.id === activeGroupId) || ctx.groups[0];
-
-  // Resolve the data specifically for this group's active tab
-  const activeTabId = group.activeTabId;
+  const tabs = functionalNode?.data?.tabs || [];
+  const activeTabId = functionalNode?.data?.activeTabId || null;
 
   // Use the custom hook to efficiently retrieve nodes for the active tab
-  // This avoids re-subscribing to the entire node map or creating new selector closures
   const nodes = useTabNodes(activeTabId);
-
   const variables = useTabVariables(activeTabId);
-  const selectedNodeIds = group.selectedNodeIds;
+  const selectedNodeIds = functionalNode?.data?.params?.selectedNodeIds || [];
 
   // Helper to activate this group when interaction starts
+  const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
   const ensureActive = () => {
-    if (ctx.activeGroupId !== activeGroupId) {
-      ctx.setActiveGroupId(activeGroupId);
+    if (activeGroupIdFromStore !== activeGroupId) {
+      setActiveGroup(activeGroupId);
     }
   };
 
@@ -140,7 +151,7 @@ export function useCanvas() {
   return {
     ...ctx,
     groupId: activeGroupId,
-    tabs: group.tabs,
+    tabs,
     activeTabId,
     // Override global state with localized state
     nodes,

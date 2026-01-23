@@ -50,3 +50,24 @@
   scrollbar-gutter: stable;
 }
 
+/* Sash Resizing Classes */
+body.col-resize, body.col-resize * {
+  cursor: col-resize !important;
+}
+
+body.row-resize, body.row-resize * {
+  cursor: row-resize !important;
+}
+
+/* Prevent text selection and interaction during drag */
+body.layout-sash-dragging {
+  user-select: none !important;
+  -webkit-user-select: none;
+}
+
+body.layout-sash-dragging iframe,
+body.layout-sash-dragging canvas {
+  pointer-events: none !important;
+}
+
+

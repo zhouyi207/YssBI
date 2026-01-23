@@ -11,6 +11,8 @@ import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore, useTabVariables } from "../Store/useNodeStore";
 import { useProjectStore } from "../Store/useProjectStore";
 import { useCanvasInteraction } from "../Hooks/useCanvasInteraction";
+import { useLayoutStore } from "../../../store/layoutStore";
+import { useShallow } from 'zustand/react/shallow';
 
 /* ================= Helper Functions ================= */
 
@@ -22,69 +24,89 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const { showToast } = useUI();
 
   // --- Project Metadata ---
-  const currentPath = useProjectStore(s => s.currentPath);
-  const setCurrentPath = useProjectStore(s => s.setCurrentPath);
+  const currentPath = useProjectStore(useCallback(s => s.currentPath, []));
+  const setCurrentPath = useProjectStore(useCallback(s => s.setCurrentPath, []));
 
   // --- Collection State (The "Database") uses Store ---
-  const events = useProjectStore(s => s.events);
-  const functions = useProjectStore(s => s.functions);
-  const macros = useProjectStore(s => s.macros);
-  const globalVariables = useProjectStore(s => s.globalVariables);
+  const events = useProjectStore(useCallback(s => s.events, []));
+  const functions = useProjectStore(useCallback(s => s.functions, []));
+  const macros = useProjectStore(useCallback(s => s.macros, []));
+  const globalVariables = useProjectStore(useCallback(s => s.globalVariables, []));
 
-  // No specific Refs needed for these anymore if we access safe state or use store getter in callbacks, 
-  // but for some closures we might want to keep using store methods directly.
-  // The original implementation used refs for sync access in callbacks.
-  // We can use `useProjectStore.getState()` for sync access in callbacks.
-  // --- Multi-View Editor State ---
-
-  const [groups, setGroups] = useState<EditorGroup[]>([
-    { id: "main-group", tabs: [], activeTabId: null, selectedNodeIds: [] }
-  ]);
-  const [activeGroupId, setActiveGroupId] = useState("main-group");
-  const activeGroupIdRef = useRef(activeGroupId);
+  // --- Multi-View Editor State (已迁移至 layoutStore) ---
+  const activeGroupId = useLayoutStore(useCallback(s => s.activeGroupId, []));
+  const activeEditorGroupId = useLayoutStore(useCallback(s => s.activeEditorGroupId, []));
+  const activeGroupIdRef = useRef(activeGroupId || '');
   useEffect(() => {
-    activeGroupIdRef.current = activeGroupId;
-    const vp = useViewportStore.getState().viewports[activeGroupId];
-    if (vp) canvasRef.current = vp;
+    activeGroupIdRef.current = activeGroupId || '';
   }, [activeGroupId]);
 
-  const activeGroup = useMemo(() =>
-    groups.find(g => g.id === activeGroupId) || groups[0],
-    [groups, activeGroupId]
-  );
+  const activeNodeSelector = useCallback(s => activeGroupId ? s.nodes[activeGroupId] : null, [activeGroupId]);
+  const activeNode = useLayoutStore(activeNodeSelector);
 
-  const activeTabId = activeGroup.activeTabId;
+  // 获取真正活跃的编辑器节点（用于添加变量、节点等逻辑）
+  const activeEditorNodeSelector = useCallback(s => activeEditorGroupId ? s.nodes[activeEditorGroupId] : null, [activeEditorGroupId]);
+  const activeEditorNode = useLayoutStore(activeEditorNodeSelector);
+  
+  const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const currentFocusedTabId = activeNode?.data?.activeTabId || null; // 当前视觉上获得焦点的 Tab (如果有)
+
+  const groupNodesSelector = useCallback(s =>
+    Object.values(s.nodes)
+      .filter(n => n.type === 'component' && n.data?.tabs),
+    []);
+  const groupNodes = useLayoutStore(useShallow(groupNodesSelector));
+
+  const groups = useMemo(() => groupNodes.map(n => ({
+    id: n.id,
+    tabs: n.data?.tabs || [],
+    activeTabId: n.data?.activeTabId || null,
+    selectedNodeIds: n.data?.params?.selectedNodeIds || []
+  })), [groupNodes]);
+
+  const setActiveTabId = useCallback((id: string | null) => {
+    if (activeGroupId) {
+      useLayoutStore.getState().updateNode(activeGroupId, {
+        data: {
+          ...useLayoutStore.getState().nodes[activeGroupId].data,
+          activeTabId: id || undefined
+        }
+      });
+    }
+  }, [activeGroupId]);
+
   const activeTabIdRef = useRef(activeTabId); useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
 
-  const selectedNodeIds = activeGroup.selectedNodeIds;
+  const selectedNodeIds = useMemo(() => activeNode?.data?.params?.selectedNodeIds || [], [activeNode?.data?.params?.selectedNodeIds]);
   const selectedNodeIdsRef = useRef(selectedNodeIds); useEffect(() => { selectedNodeIdsRef.current = selectedNodeIds; }, [selectedNodeIds]);
 
   // Derived scoped states
   const variables = useTabVariables(activeTabId);
 
-  const EMPTY_HISTORY = { past: [], future: [] };
+  const EMPTY_HISTORY = useMemo(() => ({ past: [], future: [] }), []);
 
-  const history = useNodeStore(s => (activeTabId && s.tabs[activeTabId]) ? s.tabs[activeTabId].history : EMPTY_HISTORY);
+  const historySelector = useCallback(s => (activeTabId && s.tabs[activeTabId]) ? s.tabs[activeTabId].history : EMPTY_HISTORY, [activeTabId, EMPTY_HISTORY]);
+  const history = useNodeStore(useShallow(historySelector));
 
   // Current Refs
   const variablesRef = useRef(variables); useEffect(() => { variablesRef.current = variables; }, [variables]);
 
   // Canvas Ref - initialized from store and subscribed
-  const canvasRef = useRef(useViewportStore.getState().viewports[activeGroupId] || DEFAULT_VIEWPORT);
+  const canvasRef = useRef(useViewportStore.getState().viewports[activeGroupId || ''] || DEFAULT_VIEWPORT);
   useEffect(() => {
     // We update canvasRef whenever the store changes or groups changes
     const unsub = useViewportStore.subscribe((state) => {
-      const currentGroupId = activeGroupIdRef.current;
-      if (state.viewports[currentGroupId]) {
+      const currentGroupId = useLayoutStore.getState().activeGroupId;
+      if (currentGroupId && state.viewports[currentGroupId]) {
         canvasRef.current = state.viewports[currentGroupId];
       }
     });
     // Initial sync in case we missed it
-    const current = useViewportStore.getState().viewports[activeGroupIdRef.current];
+    const current = useViewportStore.getState().viewports[useLayoutStore.getState().activeGroupId || ''];
     if (current) canvasRef.current = current;
 
     return unsub;
-  }, []); // Empty dependency: one global subscription is enough as it reads Ref for groupId
+  }, []);
 
   // --- Scoped Setters ---
   const setNodes = useCallback((updater: BaseNode[] | ((prev: BaseNode[]) => BaseNode[])) => {
@@ -95,19 +117,27 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     useNodeStore.getState().setNodes(tId, nextNodes);
   }, []);
 
-
-
   const setCanvas = useCallback((updater: CanvasState | ((prev: CanvasState) => CanvasState), targetGroupId?: string) => {
-    const gid = targetGroupId || activeGroupIdRef.current;
-    useViewportStore.getState().setViewport(gid, updater);
-  }, []);
+    const gid = targetGroupId || activeGroupId;
+    if (gid) useViewportStore.getState().setViewport(gid, updater);
+  }, [activeGroupId]);
 
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-    setGroups(prev => prev.map(g => g.id === (targetGroupId || activeGroupIdRef.current) ? {
-      ...g,
-      selectedNodeIds: typeof updater === 'function' ? updater(g.selectedNodeIds) : updater
-    } : g));
-  }, []);
+    const gid = targetGroupId || activeGroupId;
+    if (gid) {
+      const node = useLayoutStore.getState().nodes[gid];
+      if (node) {
+        const current = node.data?.params?.selectedNodeIds || [];
+        const next = typeof updater === 'function' ? updater(current) : updater;
+        useLayoutStore.getState().updateNode(gid, {
+          data: {
+            ...node.data,
+            params: { ...node.data?.params, selectedNodeIds: next }
+          }
+        });
+      }
+    }
+  }, [activeGroupId]);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<'variable' | 'event' | 'function' | 'macro' | 'setting' | null>(null);
@@ -115,18 +145,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const setSelectedInfo = useCallback((id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null) => {
     setSelectedItemId(id);
     setSelectedItemType(type);
-  }, []);
-
-  // --- Tab & Group Management ---
-  const setTabs = useCallback((updater: Tab[] | ((prev: Tab[]) => Tab[])) => {
-    setGroups(prev => prev.map(g => g.id === activeGroupIdRef.current ? {
-      ...g,
-      tabs: typeof updater === 'function' ? (updater as any)(g.tabs) : updater
-    } : g));
-  }, []);
-
-  const setActiveTabId = useCallback((id: string | null) => {
-    setGroups(prev => prev.map(g => g.id === activeGroupIdRef.current ? { ...g, activeTabId: id } : g));
   }, []);
 
   const handleSetActiveTabId = useCallback((newId: string | null, forceType?: 'event' | 'function' | 'macro' | 'setting', initialData?: SubGraphData) => {
@@ -154,64 +172,56 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [setActiveTabId, setSelectedInfo]);
 
   const openSubGraph = useCallback((id: string, name: string, type: "event" | "function" | "macro", initialData?: SubGraphData) => {
-    setTabs(prev => prev.find(t => t.id === id) ? prev : [...prev, { id, title: name, type }]);
+    const layoutStore = useLayoutStore.getState();
+    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'editor1';
+
+    // 使用 layoutStore 添加标签
+    layoutStore.addTab(targetGroupId, {
+      id,
+      title: name,
+      component: 'GraphEditor'
+    });
+
     handleSetActiveTabId(id, type, initialData);
-  }, [handleSetActiveTabId, setTabs]);
+  }, [handleSetActiveTabId]);
 
   const openSettingsTab = useCallback(() => {
     const id = "settings-tab";
-    setTabs(prev => prev.find(t => t.id === id) ? prev : [...prev, { id, title: "Settings", type: "setting" }]);
+    const layoutStore = useLayoutStore.getState();
+    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'editor1';
+
+    layoutStore.addTab(targetGroupId, {
+      id,
+      title: "Settings",
+      component: 'SettingsView'
+    });
+
     handleSetActiveTabId(id, "setting");
-  }, [handleSetActiveTabId, setTabs]);
+  }, [handleSetActiveTabId]);
 
   const closeTab = useCallback((id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setTabs(prev => {
-      const index = prev.findIndex(t => t.id === id);
-      const newTabs = prev.filter(t => t.id !== id);
-      if (newTabs.length === 0) setTimeout(() => handleSetActiveTabId(null), 0);
-      else if (id === activeTabId) setTimeout(() => handleSetActiveTabId(newTabs[Math.min(index, newTabs.length - 1)].id), 0);
-      return newTabs;
-    });
-  }, [activeTabId, handleSetActiveTabId, setTabs]);
+    const nodes = useLayoutStore.getState().nodes;
+    const node = Object.values(nodes).find(n => n.data?.tabs?.find(t => t.id === id));
+    if (node) {
+      const newTabs = (node.data?.tabs || []).filter(t => t.id !== id);
+      useLayoutStore.getState().updateNode(node.id, {
+        data: { ...node.data, tabs: newTabs }
+      });
+    }
+  }, []);
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
-    const src = groups.find(g => g.id === sourceGroupId);
-    if (!src) return;
-    const nid = `group-${crypto.randomUUID()}`;
-    // Initialize viewport for new group with same state as source
-    const srcViewport = useViewportStore.getState().viewports[sourceGroupId] || DEFAULT_VIEWPORT;
-    useViewportStore.getState().setViewport(nid, { ...srcViewport });
-
-    const newG: EditorGroup = { id: nid, tabs: [...src.tabs], activeTabId: src.activeTabId, selectedNodeIds: [...src.selectedNodeIds] };
-    setGroups(prev => [...prev, newG]);
-    setActiveGroupId(nid);
-  }, [groups]);
+    useLayoutStore.getState().splitNode(sourceGroupId, 'row', 'GraphEditor');
+  }, []);
 
   const closeGroup = useCallback((id: string) => {
-    setGroups(prev => {
-      if (prev.length <= 1) return prev;
-      const next = prev.filter(g => g.id !== id);
-      if (activeGroupId === id) setActiveGroupId(next[next.length - 1].id);
-      return next;
-    });
-  }, [activeGroupId]);
+    useLayoutStore.getState().removeNode(id);
+  }, []);
 
   // --- Synchronization ---
-  // Auto-sync tab changes to project store
   useEffect(() => {
     const unsub = useNodeStore.subscribe((state) => {
-      // Simple debounce or throttle could be added here if performance is an issue.
-      // For now, we sync immediately but only if we can identify changes.
-      // Since useNodeStore updates immutably, we can rely on reference checks if we want.
-      // But ProjectService.syncTab/syncWithTabs handles diffing at the object level to some extent (by overwriting).
-
-      // To optimize: Check which tab changed. 
-      // But global subscribe doesn't give us the delta easily without comparison.
-      // Let's rely on useProjectStore.syncWithTabs for now which iterates tabs.
-      // Or better: Iterate tabs and check if changed? 
-      // Given the requirement, let's just debounce the sync.
-
       const timeout = setTimeout(() => {
         useProjectStore.getState().syncWithTabs(state.tabs);
       }, 500);
@@ -221,7 +231,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const syncActiveToCollection = useCallback(() => {
-    // Flush manual sync if needed (e.g. before save)
     useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
   }, []);
 
@@ -289,27 +298,25 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (e) { showToast(`执行失败: ${e}`, "error", 5000); }
   }, [syncActiveToCollection, showToast]);
 
-  // --- Subgraph Creation & Sync ---
-
-
   const updateFunction = useCallback((id: string, data: Partial<SubGraphData>) => {
     useProjectStore.getState().updateFunction(id, data);
   }, []);
 
   const updateEvent = useCallback((id: string, data: Partial<SubGraphData>) => {
     useProjectStore.getState().updateEvent(id, data);
-    if (data.name) setTabs(prev => prev.map(t => t.id === id ? { ...t, title: data.name! } : t));
-  }, [setTabs]);
+  }, []);
 
   const updateMacro = useCallback((id: string, data: Partial<SubGraphData>) => {
-    // updateFunction(id, data);
-    // Since we moved logic to store, we should call store updateMacro or updateFunction?
-    // updateMacro acts like updateFunction in this context but specifically for macros.
-    // However, updateFunction calls `useProjectStore.getState().updateFunction(id, data)` which now contains the cascading logic.
-    // Currently updateMacro maps to updateFunction alias in Provider, but in store they are separate.
-    // Store's updateMacro ALSO has cascading logic now.
     useProjectStore.getState().updateMacro(id, data);
   }, []);
+
+  const addEvent = useCallback((name: string) => {
+    const id = `event-${crypto.randomUUID()}`;
+    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", name, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
+    const sub: SubGraphData = { id, name, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
+    useProjectStore.getState().addEvent(id, sub);
+    openSubGraph(id, name, "event", sub);
+  }, [openSubGraph]);
 
   const addFunction = useCallback((name: string) => {
     const id = `func-${crypto.randomUUID()}`;
@@ -320,14 +327,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const sub: SubGraphData = { id, name, type: "function", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
     useProjectStore.getState().addFunction(id, sub);
     openSubGraph(id, name, "function", sub);
-  }, [openSubGraph]);
-
-  const addEvent = useCallback((name: string) => {
-    const id = `event-${crypto.randomUUID()}`;
-    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", name, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
-    const sub: SubGraphData = { id, name, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
-    useProjectStore.getState().addEvent(id, sub);
-    openSubGraph(id, name, "event", sub);
   }, [openSubGraph]);
 
   const addMacro = useCallback((name: string) => {
@@ -345,8 +344,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteEvent = useCallback((id: string) => { useProjectStore.getState().deleteEvent(id); closeTab(id); }, [closeTab]);
   const deleteMacro = useCallback((id: string) => { useProjectStore.getState().deleteMacro(id); closeTab(id); }, [closeTab]);
 
-  // --- Variable Persistence ---
-  // --- Variable Persistence ---
   const addVariable = useCallback((name: string, type: string, isGlobal: boolean = false) => {
     const id = `var-${crypto.randomUUID()}`;
     const v = { name, type, value: type === "int" ? 0 : type === "bool" ? false : type === "float" ? 0.0 : "" };
@@ -389,7 +386,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     if (tid) useNodeStore.getState().addVariable(tid, id, v);
   }, []);
 
-  // --- Edit Actions (Undo/Redo/Clipboard) ---
   const saveHistory = useCallback(() => {
     const tid = activeTabIdRef.current; if (!tid) return;
     useNodeStore.getState().saveSnapshot(tid);
@@ -414,7 +410,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const idsToDelete = new Set(nodesToDelete.map(n => n.id));
       if (idsToDelete.size === 0) return prev;
 
-      // 收集所有将被删除的 pin ID，以便精确清理连接线
       const pinsToDelete = new Set<string>();
       nodesToDelete.forEach(n => {
         [...n.inputs, ...n.outputs].forEach(p => pinsToDelete.add(p.id));
@@ -443,7 +438,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedNodeIds([]);
   }, [setNodes, setSelectedNodeIds]);
 
-  /* --- Clipboard & Edit Actions --- */
   const clipboardRef = useRef<BaseNode[]>([]);
   const copy = useCallback(() => {
     const sIds = new Set(selectedNodeIdsRef.current);
@@ -465,7 +459,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const minY = Math.min(...clipboard.map(n => n.position.y));
     const offX = tX - minX, offY = tY - minY;
 
-    // 1. Generate new IDs and Map
     const idMap = new Map<string, string>();
     const newSelectedIds: string[] = [];
     const newNodes = clipboard.map(n => {
@@ -485,10 +478,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       return newNode;
     });
 
-    // 2. Refresh links: Only keep links that point to nodes also in the clipboard (internal connections)
     newNodes.forEach(n => {
       [...n.inputs, ...n.outputs].forEach(p => {
-        // If the link target was mapped (exists in clipboard), update it. Otherwise drop it.
         p.links = p.links.map(l => idMap.get(l)).filter(Boolean) as string[];
       });
     });
@@ -497,7 +488,6 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedNodeIds(newSelectedIds);
   }, [saveHistory, setNodes, setSelectedNodeIds]);
 
-  // --- Interaction Hooks ---
   const {
     contextMenu, setContextMenu,
     pendingConnection, setPendingConnection,
@@ -517,41 +507,58 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     saveHistory
   });
 
-  // --- Initial Project Seed ---
   useEffect(() => {
     const st = useProjectStore.getState();
     const hasEvents = Object.keys(st.events).length > 0;
 
-    if (!hasEvents && activeGroup.tabs.length === 0) {
+    if (!hasEvents && (activeNode?.data?.tabs?.length || 0) === 0) {
       const id = "default-event"; const name = "Event Graph"; const type = "event";
       const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", "On Run", "Internal", { x: 100, y: 100 }, [], [{ name: "Exec", type: "exec" }])];
       st.addEvent(id, { id, name, type, nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] });
-      setGroups([{ id: "main-group", tabs: [{ id, title: name, type }], activeTabId: id, selectedNodeIds: [] }]);
+
+      const targetGroupId = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'editor1';
+      useLayoutStore.getState().addTab(targetGroupId, { id, title: name, component: 'GraphEditor' });
+
       setSelectedInfo(id, type);
-      // setTabNodes({ [id]: tNodes });
       useNodeStore.getState().initTab(id, tNodes, {});
-      setSelectedNodeIds([], "main-group");
     }
   }, []);
 
-  // Pass [] as nodes to Context because it's now handled by useCanvas hook which connects to useNodeStore
-  // We keep setNodes for backward compatibility of the context, enabling the provider to act as controller
+  const handleAddTab = useCallback(() => addEvent("New Item"), [addEvent]);
+  const handleSetActiveGroupId = useCallback((id: string) => useLayoutStore.getState().setActiveGroup(id), []);
+
+  const contextValue = useMemo(() => ({
+    setCanvas, nodes: [], setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu, setContextMenu,
+    saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
+    selectedItemId, selectedItemType, setSelectedInfo,
+    addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
+    events, addEvent, updateEvent, deleteEvent,
+    functions, addFunction, updateFunction, deleteFunction,
+    macros, addMacro, updateMacro, deleteMacro,
+    undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory,     connectPins,
+    activeGroupId: activeGroupId || 'editor1',
+    activeEditorGroupId: activeEditorGroupId || 'editor1',
+    setActiveGroupId: handleSetActiveGroupId,
+    splitEditorRight, closeGroup,
+    activeTabId, setActiveTabId, openSubGraph, addTab: handleAddTab, closeTab, openSettingsTab, pendingConnection, setPendingConnection,
+    groups,
+    selectedNodeIds, setSelectedNodeIds
+  }), [
+    setCanvas, setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu,
+    saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
+    selectedItemId, selectedItemType, setSelectedInfo,
+    addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
+    events, addEvent, updateEvent, deleteEvent,
+    functions, addFunction, updateFunction, deleteFunction,
+    macros, addMacro, updateMacro, deleteMacro,
+    undo, redo, copy, paste, cut, deleteSelected, history.past.length, history.future.length, saveHistory, connectPins,
+    activeGroupId, handleSetActiveGroupId, splitEditorRight, closeGroup,
+    activeTabId, setActiveTabId, openSubGraph, handleAddTab, closeTab, openSettingsTab, pendingConnection,
+    groups, selectedNodeIds, setSelectedNodeIds
+  ]);
 
   return (
-    <CanvasContext.Provider value={{
-      setCanvas, nodes: [], setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu, setContextMenu,
-      saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
-      selectedItemId, selectedItemType, setSelectedInfo,
-      addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
-      events, addEvent, updateEvent, deleteEvent,
-      functions, addFunction, updateFunction, deleteFunction,
-      macros, addMacro, updateMacro, deleteMacro,
-      undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory, connectPins,
-      groups, activeGroupId, setActiveGroupId, splitEditorRight, closeGroup,
-      activeTabId, setActiveTabId: handleSetActiveTabId, openSubGraph, addTab: () => addEvent("New Item"), closeTab, openSettingsTab, pendingConnection, setPendingConnection,
-
-      selectedNodeIds, setSelectedNodeIds
-    }}>
+    <CanvasContext.Provider value={contextValue}>
       {children}
     </CanvasContext.Provider>
   );

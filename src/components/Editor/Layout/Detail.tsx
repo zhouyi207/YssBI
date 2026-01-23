@@ -1,9 +1,11 @@
-import React from "react";
-import { useCanvas } from "../Context/CanvasContext";
+import { forwardRef, useContext } from "react";
+import { useCanvas, GroupContext } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
+import { useLayoutStore } from "../../../store/layoutStore";
 
-export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
+export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ width: propWidth }, ref) => {
+  const nodeId = useContext(GroupContext); // 获取布局上下文 ID
   const {
     variables,
     globalVariables,
@@ -24,6 +26,11 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
   } = useCanvas();
   const { showDialog } = useUI();
 
+  // Read state from Layout Store
+  const detailNode = useLayoutStore(s => s.nodes[nodeId || 'detail']);
+  const storeWidth = detailNode?.pixelSize ?? 300;
+  const width = propWidth ?? storeWidth;
+
   // Find the selected item's data
   let selectedData: any = null;
   if (selectedItemId && selectedItemType) {
@@ -38,7 +45,6 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
     }
   }
 
-
   const handleUpdate = (data: any) => {
     if (!selectedItemId || !selectedItemType) return;
     if (selectedItemType === 'variable') updateVariable(selectedItemId, data);
@@ -46,6 +52,7 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
     else if (selectedItemType === 'function') updateFunction(selectedItemId, data);
     else if (selectedItemType === 'macro') updateMacro(selectedItemId, data);
   };
+
   const handleDelete = () => {
     if (!selectedItemId || !selectedItemType) return;
     showDialog({
@@ -62,6 +69,7 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
       }
     });
   };
+
   const renderPinEditor = (title: string, pins: any[] = [], isInput: boolean) => {
     return (
       <div className="mt-4 px-2">
@@ -122,8 +130,8 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
 
   return (
     <div
-      className="right-sidebar-container border-l border-[#2b2b2b] bg-[var(--sidebar-bg)] flex flex-col h-full overflow-hidden shadow-sm select-none"
-      style={{ width: width ? width : 256 }} // 256px is w-64 default
+      ref={ref}
+      className="right-sidebar-container bg-[var(--sidebar-bg)] flex flex-col h-full w-full overflow-hidden select-none"
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0">
@@ -231,4 +239,4 @@ export const RightSidebar: React.FC<{ width?: number }> = ({ width }) => {
       )}
     </div>
   );
-};
+});
