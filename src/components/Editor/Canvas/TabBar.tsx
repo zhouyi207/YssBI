@@ -31,44 +31,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const nodes = useLayoutStore.getState().nodes;
-    const node = nodes[layoutNodeId];
-    if (!node) return;
-
-    const currentTabs = node.data?.tabs || [];
-    const newTabs = currentTabs.filter(t => t.id !== id);
-    
-    if (newTabs.length === 0) {
-        // VS Code 逻辑：如果是最后一个编辑器组，不销毁，只显示空状态
-        const editorGroups = Object.values(nodes).filter(n => n.type === 'component' && n.data?.tabs);
-        
-        if (editorGroups.length > 1) {
-            removeNode(layoutNodeId);
-        } else {
-            // 最后一个组，保留但清空
-            updateNode(layoutNodeId, {
-                data: {
-                    ...node.data,
-                    tabs: [],
-                    activeTabId: undefined
-                }
-            });
-        }
-    } else {
-        let newActiveTabId = node.data?.activeTabId;
-        if (newActiveTabId === id) {
-            // 激活前一个或后一个
-            const closingIndex = currentTabs.findIndex(t => t.id === id);
-            newActiveTabId = newTabs[Math.max(0, closingIndex - 1)].id;
-        }
-        updateNode(layoutNodeId, {
-            data: {
-                ...node.data,
-                tabs: newTabs,
-                activeTabId: newActiveTabId
-            }
-        });
-    }
+    useLayoutStore.getState().removeTab(layoutNodeId, id);
   };
 
   const handleSplit = (e: React.MouseEvent) => {

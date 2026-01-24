@@ -173,7 +173,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const openSubGraph = useCallback((id: string, name: string, type: "event" | "function" | "macro", initialData?: SubGraphData) => {
     const layoutStore = useLayoutStore.getState();
-    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'editor1';
+    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
 
     // 使用 layoutStore 添加标签
     layoutStore.addTab(targetGroupId, {
@@ -188,7 +188,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const openSettingsTab = useCallback(() => {
     const id = "settings-tab";
     const layoutStore = useLayoutStore.getState();
-    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'editor1';
+    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
 
     layoutStore.addTab(targetGroupId, {
       id,
@@ -204,10 +204,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const nodes = useLayoutStore.getState().nodes;
     const node = Object.values(nodes).find(n => n.data?.tabs?.find(t => t.id === id));
     if (node) {
-      const newTabs = (node.data?.tabs || []).filter(t => t.id !== id);
-      useLayoutStore.getState().updateNode(node.id, {
-        data: { ...node.data, tabs: newTabs }
-      });
+      useLayoutStore.getState().removeTab(node.id, id);
     }
   }, []);
 
@@ -516,7 +513,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", "On Run", "Internal", { x: 100, y: 100 }, [], [{ name: "Exec", type: "exec" }])];
       st.addEvent(id, { id, name, type, nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] });
 
-      const targetGroupId = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'editor1';
+      const targetGroupId = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'default_editor';
       useLayoutStore.getState().addTab(targetGroupId, { id, title: name, component: 'GraphEditor' });
 
       setSelectedInfo(id, type);
@@ -536,8 +533,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     functions, addFunction, updateFunction, deleteFunction,
     macros, addMacro, updateMacro, deleteMacro,
     undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory,     connectPins,
-    activeGroupId: activeGroupId || 'editor1',
-    activeEditorGroupId: activeEditorGroupId || 'editor1',
+    activeGroupId: activeGroupId || 'default_editor',
+    activeEditorGroupId: activeEditorGroupId || 'default_editor',
     setActiveGroupId: handleSetActiveGroupId,
     splitEditorRight, closeGroup,
     activeTabId, setActiveTabId, openSubGraph, addTab: handleAddTab, closeTab, openSettingsTab, pendingConnection, setPendingConnection,

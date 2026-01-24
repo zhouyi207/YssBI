@@ -92,7 +92,7 @@ export function useCanvas() {
   const activeGroupIdFromStore = useLayoutStore(useCallback(s => s.activeGroupId, []));
   
   // If we are in a specific group context, use that ID. Otherwise fallback to the globally active one.
-  const activeGroupId = currentGroupId || activeGroupIdFromStore || 'editor1';
+  const activeGroupId = currentGroupId || activeGroupIdFromStore || 'default_editor';
 
   // Resolve the group object for this context from layoutStore
   const nodeSelector = useCallback(s => s.nodes[activeGroupId], [activeGroupId]);
