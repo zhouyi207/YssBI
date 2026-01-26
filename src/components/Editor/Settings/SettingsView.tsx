@@ -1,10 +1,26 @@
 import React, { useState } from "react";
-import { useTheme } from "../Context/ThemeContext";
+import { useSettings } from "../Context/ThemeContext";
 import { Select } from "../Shared/UI/Select";
 
 export const SettingsView: React.FC = () => {
-    const { theme, updateTheme } = useTheme();
+    const { 
+        theme, 
+        editor, 
+        appearance, 
+        project,
+        isLoading,
+        updateTheme, 
+        updateEditor, 
+        updateAppearance, 
+        updateProject,
+        resetAllToDefaults,
+        resetThemeToDefaults,
+        resetEditorToDefaults,
+        resetAppearanceToDefaults,
+    } = useSettings();
+    
     const [activeSection, setActiveSection] = useState("editor");
+    const [isResetting, setIsResetting] = useState(false);
 
     const sections = [
         { id: "editor", label: "Editor" },
@@ -13,34 +29,96 @@ export const SettingsView: React.FC = () => {
         { id: "color", label: "Color" }
     ];
 
+    const handleResetAll = async () => {
+        if (window.confirm("确定要恢复所有默认设置吗？此操作不可撤销。")) {
+            setIsResetting(true);
+            try {
+                await resetAllToDefaults();
+            } finally {
+                setIsResetting(false);
+            }
+        }
+    };
+
+    const handleResetSection = async (section: string) => {
+        const sectionNames: Record<string, string> = {
+            editor: "编辑器",
+            appearance: "外观",
+            color: "颜色/主题",
+        };
+        
+        if (window.confirm(`确定要恢复${sectionNames[section] || section}的默认设置吗？`)) {
+            setIsResetting(true);
+            try {
+                switch (section) {
+                    case "editor":
+                        await resetEditorToDefaults();
+                        break;
+                    case "appearance":
+                        await resetAppearanceToDefaults();
+                        break;
+                    case "color":
+                        await resetThemeToDefaults();
+                        break;
+                }
+            } finally {
+                setIsResetting(false);
+            }
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="w-full h-full bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center">
+                <div className="text-sm text-[#858585]">加载设置中...</div>
+            </div>
+        );
+    }
+
     const renderContent = () => {
         switch (activeSection) {
             case "editor":
                 return (
                     <div className="space-y-8">
                         <div>
-                            <h2 className="text-xl text-gray-100 mb-6">Editor</h2>
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl text-gray-100">Editor</h2>
+                                <button
+                                    onClick={() => handleResetSection("editor")}
+                                    disabled={isResetting}
+                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
+                                >
+                                    恢复默认
+                                </button>
+                            </div>
                             <div className="space-y-6">
                                 <SettingItem
                                     label="Show Grid"
                                     description="Controls whether the background grid is visible."
                                     type="checkbox"
+                                    checked={editor.showGrid}
+                                    onChange={(val) => updateEditor({ showGrid: val === "true" || val === true })}
                                 />
                                 <SettingItem
                                     label="Auto Save"
                                     description="Controls whether changed files are saved automatically after a delay."
                                     type="checkbox"
+                                    checked={editor.autoSave}
+                                    onChange={(val) => updateEditor({ autoSave: val === "true" || val === true })}
                                 />
                                 <SettingItem
                                     label="Snap to Grid"
                                     description="Controls whether nodes should snap to the grid corners when dragged."
                                     type="checkbox"
+                                    checked={editor.snapToGrid}
+                                    onChange={(val) => updateEditor({ snapToGrid: val === "true" || val === true })}
                                 />
                                 <SettingItem
                                     label="Font Size"
                                     description="Controls the font size in pixels for node titles and labels."
                                     type="number"
-                                    defaultValue="12"
+                                    value={String(editor.fontSize)}
+                                    onChange={(val) => updateEditor({ fontSize: parseInt(val as string) || 12 })}
                                 />
                             </div>
                         </div>
@@ -56,7 +134,8 @@ export const SettingsView: React.FC = () => {
                                     label="Project Name"
                                     description="The name displayed in the title bar and used for exports."
                                     type="text"
-                                    defaultValue="YssBI Project"
+                                    value={project.projectName}
+                                    onChange={(val) => updateProject({ projectName: val as string })}
                                 />
                                 <SettingItem
                                     label="Project Version"
@@ -69,6 +148,8 @@ export const SettingsView: React.FC = () => {
                                     label="Export Path"
                                     description="Default directory where the project will be exported."
                                     type="text"
+                                    value={project.exportPath}
+                                    onChange={(val) => updateProject({ exportPath: val as string })}
                                     placeholder="/path/to/export"
                                 />
                             </div>
@@ -79,24 +160,39 @@ export const SettingsView: React.FC = () => {
                 return (
                     <div className="space-y-8">
                         <div>
-                            <h2 className="text-xl text-gray-100 mb-6">Appearance</h2>
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl text-gray-100">Appearance</h2>
+                                <button
+                                    onClick={() => handleResetSection("appearance")}
+                                    disabled={isResetting}
+                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
+                                >
+                                    恢复默认
+                                </button>
+                            </div>
                             <div className="space-y-6">
                                 <SettingItem
                                     label="Color Theme"
                                     description="Controls the overall color theme of the editor."
                                     type="select"
                                     options={["Dark Modern (Default)", "OLED Black", "Light Modern"]}
+                                    value={appearance.colorTheme}
+                                    onChange={(val) => updateAppearance({ colorTheme: val as string })}
                                 />
                                 <SettingItem
                                     label="Activity Bar Position"
                                     description="Controls the visibility and position of the activity bar."
                                     type="select"
                                     options={["Left", "Right", "Hidden"]}
+                                    value={appearance.activityBarPosition}
+                                    onChange={(val) => updateAppearance({ activityBarPosition: val as string })}
                                 />
                                 <SettingItem
                                     label="Smooth Scroll"
                                     description="Enable smooth scrolling in the canvas and menus."
                                     type="checkbox"
+                                    checked={appearance.smoothScroll}
+                                    onChange={(val) => updateAppearance({ smoothScroll: val === "true" || val === true })}
                                 />
                             </div>
                         </div>
@@ -106,7 +202,16 @@ export const SettingsView: React.FC = () => {
                 return (
                     <div className="space-y-8">
                         <div>
-                            <h2 className="text-xl text-gray-100 mb-6">Colors</h2>
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl text-gray-100">Colors</h2>
+                                <button
+                                    onClick={() => handleResetSection("color")}
+                                    disabled={isResetting}
+                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
+                                >
+                                    恢复默认
+                                </button>
+                            </div>
 
                             <div className="mb-8">
                                 <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">Editor UI</h3>
@@ -266,6 +371,17 @@ export const SettingsView: React.FC = () => {
                 </main>
             </div>
 
+            {/* 底部全局恢复默认设置按钮 */}
+            <div className="h-12 border-t border-[#2b2b2b] flex items-center justify-end px-6 shrink-0 bg-[#1e1e1e]">
+                <button
+                    onClick={handleResetAll}
+                    disabled={isResetting}
+                    className="px-4 py-1.5 text-sm bg-[#c94f4f] hover:bg-[#d95f5f] text-white rounded transition-colors disabled:opacity-50"
+                >
+                    {isResetting ? "恢复中..." : "恢复所有默认设置"}
+                </button>
+            </div>
+
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .custom-scrollbar::-webkit-scrollbar { width: 10px; }
@@ -283,13 +399,26 @@ interface SettingItemProps {
     type: "checkbox" | "text" | "number" | "select" | "color";
     defaultValue?: string;
     value?: string;
-    onChange?: (val: string) => void;
+    checked?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onChange?: (val: any) => void;
     placeholder?: string;
     disabled?: boolean;
     options?: string[];
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({ label, description, type, defaultValue, value, onChange, placeholder, disabled, options }) => {
+const SettingItem: React.FC<SettingItemProps> = ({ 
+    label, 
+    description, 
+    type, 
+    defaultValue, 
+    value, 
+    checked,
+    onChange, 
+    placeholder, 
+    disabled, 
+    options 
+}) => {
     return (
         <div className="group border-l-2 border-transparent hover:border-[#007acc] pl-4 transition-colors">
             <div className="mb-1 text-sm font-semibold text-[#cccccc] group-hover:text-[#007acc] transition-colors">{label}</div>
@@ -299,14 +428,16 @@ const SettingItem: React.FC<SettingItemProps> = ({ label, description, type, def
                 {type === "checkbox" && (
                     <input
                         type="checkbox"
-                        defaultChecked
+                        checked={checked ?? true}
+                        onChange={(e) => onChange?.(e.target.checked)}
                         className="w-4 h-4 rounded-sm border-[#3c3c3c] bg-[#3c3c3c] text-[#007acc] focus:ring-0 focus:ring-offset-0 cursor-pointer"
                     />
                 )}
                 {type === "text" && (
                     <input
                         type="text"
-                        defaultValue={defaultValue}
+                        value={value ?? defaultValue ?? ""}
+                        onChange={(e) => onChange?.(e.target.value)}
                         placeholder={placeholder}
                         disabled={disabled}
                         className="w-full max-w-md bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-2 py-1 text-sm text-[#cccccc] disabled:opacity-50"
@@ -315,7 +446,8 @@ const SettingItem: React.FC<SettingItemProps> = ({ label, description, type, def
                 {type === "number" && (
                     <input
                         type="number"
-                        defaultValue={defaultValue}
+                        value={value ?? defaultValue ?? ""}
+                        onChange={(e) => onChange?.(e.target.value)}
                         className="w-24 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-2 py-1 text-sm text-[#cccccc]"
                     />
                 )}

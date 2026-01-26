@@ -13,9 +13,10 @@
     "windows": [
       {
         "title": "yssbi",
-        "width": 1000,
-        "height": 800,
-        "decorations": false
+        "width": 1560,
+        "height": 840,
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {

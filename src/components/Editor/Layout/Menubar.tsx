@@ -5,8 +5,6 @@ import { useState } from "react";
 import { useLayoutStore } from "../../../store/layoutStore";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 
-const appWindow = getCurrentWindow();
-
 interface MenuItem {
   label: string;
   shortcut?: string;
@@ -236,7 +234,7 @@ export default function Menubar() {
         {/* Window Controls */}
         <div className="flex items-center h-full">
           <button
-            onClick={() => appWindow.minimize()}
+            onClick={() => getCurrentWindow().minimize()}
             className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +242,7 @@ export default function Menubar() {
             </svg>
           </button>
           <button
-            onClick={() => appWindow.toggleMaximize()}
+            onClick={() => getCurrentWindow().toggleMaximize()}
             className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,7 +250,7 @@ export default function Menubar() {
             </svg>
           </button>
           <button
-            onClick={() => appWindow.close()}
+            onClick={() => getCurrentWindow().close()}
             className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

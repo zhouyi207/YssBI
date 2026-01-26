@@ -1,52 +1,174 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { 
+    SettingsService, 
+    ThemeSettings, 
+    EditorSettings, 
+    AppearanceSettings, 
+    ProjectSettings,
+    WindowSettings,
+    AppSettings,
+    DEFAULT_THEME,
+    DEFAULT_EDITOR,
+    DEFAULT_APPEARANCE,
+    DEFAULT_PROJECT,
+    DEFAULT_WINDOW,
+} from "../../../services/settingsService";
 
-interface ThemeSettings {
-    workbenchBackground: string;
-    sidebarBackground: string;
-    accentColor: string;
-    gridLines: string;
-    nodeBase: string;
-    connectionLines: string;
-    selectionRegion: string;
-    // Pin & Type Colors
-    execColor: string;
-    intColor: string;
-    floatColor: string;
-    boolColor: string;
-    stringColor: string;
-    objectColor: string;
-}
+// 重新导出类型供其他组件使用
+export type { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, WindowSettings, AppSettings };
+export { DEFAULT_THEME, DEFAULT_EDITOR, DEFAULT_APPEARANCE, DEFAULT_PROJECT, DEFAULT_WINDOW };
 
-interface ThemeContextValue {
+interface SettingsContextValue {
+    // 状态
     theme: ThemeSettings;
+    editor: EditorSettings;
+    appearance: AppearanceSettings;
+    project: ProjectSettings;
+    isLoading: boolean;
+    
+    // 更新方法
     updateTheme: (updates: Partial<ThemeSettings>) => void;
+    updateEditor: (updates: Partial<EditorSettings>) => void;
+    updateAppearance: (updates: Partial<AppearanceSettings>) => void;
+    updateProject: (updates: Partial<ProjectSettings>) => void;
+    
+    // 恢复默认方法
+    resetAllToDefaults: () => Promise<void>;
+    resetThemeToDefaults: () => Promise<void>;
+    resetEditorToDefaults: () => Promise<void>;
+    resetAppearanceToDefaults: () => Promise<void>;
+    
+    // 重新加载设置
+    reloadSettings: () => Promise<void>;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-const DEFAULT_THEME: ThemeSettings = {
-    workbenchBackground: "#181818",
-    sidebarBackground: "#1f1f1f",
-    accentColor: "#007acc",
-    gridLines: "#222222",
-    nodeBase: "#2b2b2b",
-    connectionLines: "#888888",
-    selectionRegion: "#007acc33",
-    execColor: "#ffffff",
-    intColor: "#3592c4",
-    floatColor: "#4ab3e3",
-    boolColor: "#c94f4f",
-    stringColor: "#7bb0a6",
-    objectColor: "#9179c9",
-};
+const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
+    const [editor, setEditor] = useState<EditorSettings>(DEFAULT_EDITOR);
+    const [appearance, setAppearance] = useState<AppearanceSettings>(DEFAULT_APPEARANCE);
+    const [project, setProject] = useState<ProjectSettings>(DEFAULT_PROJECT);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const updateTheme = (updates: Partial<ThemeSettings>) => {
-        setTheme(prev => ({ ...prev, ...updates }));
-    };
+    // 加载设置
+    const loadSettings = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const settings = await SettingsService.loadSettings();
+            setTheme(settings.theme);
+            setEditor(settings.editor);
+            setAppearance(settings.appearance);
+            setProject(settings.project);
+            console.log("Settings loaded into context");
+        } catch (error) {
+            console.error("Failed to load settings:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
+    // 初始化时加载设置
+    useEffect(() => {
+        loadSettings();
+    }, [loadSettings]);
+
+    // 保存设置的防抖
+    const saveSettingsDebounced = useCallback(
+        (() => {
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            return (settings: AppSettings) => {
+                if (timeoutId) clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    SettingsService.saveSettings(settings).catch(console.error);
+                }, 500); // 500ms 防抖
+            };
+        })(),
+        []
+    );
+
+    // 更新主题
+    const updateTheme = useCallback((updates: Partial<ThemeSettings>) => {
+        setTheme(prev => {
+            const newTheme = { ...prev, ...updates };
+            // 异步保存
+            const cached = SettingsService.getCachedSettings();
+            if (cached) {
+                saveSettingsDebounced({ ...cached, theme: newTheme });
+            }
+            return newTheme;
+        });
+    }, [saveSettingsDebounced]);
+
+    // 更新编辑器设置
+    const updateEditor = useCallback((updates: Partial<EditorSettings>) => {
+        setEditor(prev => {
+            const newEditor = { ...prev, ...updates };
+            const cached = SettingsService.getCachedSettings();
+            if (cached) {
+                saveSettingsDebounced({ ...cached, editor: newEditor });
+            }
+            return newEditor;
+        });
+    }, [saveSettingsDebounced]);
+
+    // 更新外观设置
+    const updateAppearance = useCallback((updates: Partial<AppearanceSettings>) => {
+        setAppearance(prev => {
+            const newAppearance = { ...prev, ...updates };
+            const cached = SettingsService.getCachedSettings();
+            if (cached) {
+                saveSettingsDebounced({ ...cached, appearance: newAppearance });
+            }
+            return newAppearance;
+        });
+    }, [saveSettingsDebounced]);
+
+    // 更新项目设置
+    const updateProject = useCallback((updates: Partial<ProjectSettings>) => {
+        setProject(prev => {
+            const newProject = { ...prev, ...updates };
+            const cached = SettingsService.getCachedSettings();
+            if (cached) {
+                saveSettingsDebounced({ ...cached, project: newProject });
+            }
+            return newProject;
+        });
+    }, [saveSettingsDebounced]);
+
+    // 恢复所有默认设置
+    const resetAllToDefaults = useCallback(async () => {
+        const defaults = await SettingsService.resetToDefaults();
+        setTheme(defaults.theme);
+        setEditor(defaults.editor);
+        setAppearance(defaults.appearance);
+        setProject(defaults.project);
+    }, []);
+
+    // 恢复默认主题设置
+    const resetThemeToDefaults = useCallback(async () => {
+        const settings = await SettingsService.resetThemeToDefaults();
+        setTheme(settings.theme);
+    }, []);
+
+    // 恢复默认编辑器设置
+    const resetEditorToDefaults = useCallback(async () => {
+        const settings = await SettingsService.resetEditorToDefaults();
+        setEditor(settings.editor);
+    }, []);
+
+    // 恢复默认外观设置
+    const resetAppearanceToDefaults = useCallback(async () => {
+        const settings = await SettingsService.resetAppearanceToDefaults();
+        setAppearance(settings.appearance);
+    }, []);
+
+    // 重新加载设置
+    const reloadSettings = useCallback(async () => {
+        await loadSettings();
+    }, [loadSettings]);
+
+    // 应用主题到 CSS 变量
     useEffect(() => {
         const root = document.documentElement;
         root.style.setProperty("--workbench-bg", theme.workbenchBackground);
@@ -65,18 +187,46 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         root.style.setProperty("--object-color", theme.objectColor);
 
         // Compute some derived colors if needed (like hover states)
-        root.style.setProperty("--accent-color-hover", theme.accentColor + "cc"); // simplified transparent hover
+        root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");
     }, [theme]);
 
+    const contextValue: SettingsContextValue = {
+        theme,
+        editor,
+        appearance,
+        project,
+        isLoading,
+        updateTheme,
+        updateEditor,
+        updateAppearance,
+        updateProject,
+        resetAllToDefaults,
+        resetThemeToDefaults,
+        resetEditorToDefaults,
+        resetAppearanceToDefaults,
+        reloadSettings,
+    };
+
     return (
-        <ThemeContext.Provider value={{ theme, updateTheme }}>
+        <SettingsContext.Provider value={contextValue}>
             {children}
-        </ThemeContext.Provider>
+        </SettingsContext.Provider>
     );
 };
 
+// 为了向后兼容，保留 useTheme hook
 export const useTheme = () => {
-    const ctx = useContext(ThemeContext);
+    const ctx = useContext(SettingsContext);
     if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
+    return {
+        theme: ctx.theme,
+        updateTheme: ctx.updateTheme,
+    };
+};
+
+// 新的完整设置 hook
+export const useSettings = () => {
+    const ctx = useContext(SettingsContext);
+    if (!ctx) throw new Error("useSettings must be used within ThemeProvider");
     return ctx;
 };
