@@ -7,6 +7,7 @@ export interface LayoutTab {
     id: string;
     title: string;
     component: string;
+    type?: "event" | "function" | "macro" | "project" | "setting";
     params?: Record<string, any>;
 }
 

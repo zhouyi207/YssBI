@@ -1,8 +1,8 @@
 import { createContext, useContext, useCallback } from "react";
 import { Pin, BaseNode } from "../Types/nodes";
-import { CanvasState, EditorGroup } from "../Types/canvas";
+import { CanvasState } from "../Types/canvas";
 import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
-import { useLayoutStore } from "../../../store/layoutStore";
+import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 
 
@@ -31,20 +31,20 @@ interface CanvasContextValue {
   selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null;
   setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null) => void;
   updateVariable: (id: string, data: Partial<{ name: string; type: string; value: any }>) => void;
-  addVariable: (name: string, type: string, isGlobal?: boolean) => void;
+  addVariable: (name?: string, type?: string, isGlobal?: boolean) => void;
   deleteVariable: (id: string) => void;
   promoteVariable: (id: string) => void;
   demoteVariable: (id: string) => void;
   functions: Record<string, import("../Types/canvas").SubGraphData>;
-  addFunction: (name: string) => void;
+  addFunction: (name?: string) => void;
   updateFunction: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteFunction: (id: string) => void;
   events: Record<string, import("../Types/canvas").SubGraphData>;
-  addEvent: (name: string) => void;
+  addEvent: (name?: string) => void;
   updateEvent: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteEvent: (id: string) => void;
   macros: Record<string, import("../Types/canvas").SubGraphData>;
-  addMacro: (name: string) => void;
+  addMacro: (name?: string) => void;
   updateMacro: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteMacro: (id: string) => void;
   undo: () => void;
@@ -58,7 +58,7 @@ interface CanvasContextValue {
   saveHistory: () => void;
   connectPins: (pinAId: string, pinBId: string) => void;
   // Groups API
-  groups: EditorGroup[];
+  groups: any[];
   activeGroupId: string;
   activeEditorGroupId: string;
   setActiveGroupId: (id: string) => void;
@@ -68,7 +68,6 @@ interface CanvasContextValue {
   // Tabs API (Now per-group)
   activeTabId: string | null;
   setActiveTabId: (id: string | null) => void;
-  addTab: (title?: string) => void;
   openSubGraph: (id: string, name: string, type: "event" | "function" | "macro") => void;
   closeTab: (id: string, e?: React.MouseEvent) => void;
   openSettingsTab: () => void;
@@ -89,18 +88,18 @@ export function useCanvas() {
   }
 
   const currentGroupId = useContext(GroupContext);
-  const activeGroupIdFromStore = useLayoutStore(useCallback(s => s.activeGroupId, []));
+  const activeGroupIdFromStore = useLayoutStore(useCallback((s: LayoutState) => s.activeGroupId, []));
   
   // If we are in a specific group context, use that ID. Otherwise fallback to the globally active one.
   const activeGroupId = currentGroupId || activeGroupIdFromStore || 'default_editor';
 
   // Resolve the group object for this context from layoutStore
-  const nodeSelector = useCallback(s => s.nodes[activeGroupId], [activeGroupId]);
+  const nodeSelector = useCallback((s: LayoutState) => s.nodes[activeGroupId], [activeGroupId]);
   const node = useLayoutStore(useShallow(nodeSelector));
   
   // 核心逻辑：如果当前 Context 指向的是非编辑器节点（如 Sidebar/Detail），
   // 则数据逻辑（tabs/nodes/variables）应该回退到当前活跃的编辑器组。
-  const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
+  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
   const isEditor = node?.type === 'component' && !!node.data?.tabs;
   
   const functionalNode = isEditor ? node : (useLayoutStore.getState().nodes[activeEditorGroupId || ''] || node);

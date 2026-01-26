@@ -104,25 +104,51 @@ export function useCanvasInteraction({
     const onPinPointerDown = useCallback((pinId: string, e: React.PointerEvent, groupId?: string) => {
         e.stopPropagation();
 
-        // Alt + Click to Disconnect
+        // Alt + Click to Disconnect (Optimized)
         if (e.altKey && e.button === 0) {
             saveHistory();
-            setNodes(prev => prev.map(n => {
-                const newNode = n.clone();
-                let changed = false;
-                [...newNode.inputs, ...newNode.outputs].forEach(p => {
-                    // Remove if this pin is the target
-                    if (p.id === pinId) {
-                        if (p.links.length > 0) { p.links = []; changed = true; }
+            setNodes(prev => {
+                // 找出哪些节点包含目标 Pin 或与其连接的 Pin
+                const targetPinId = pinId;
+                const nodeIdsToUpdate = new Set<string>();
+                const linkedPinIds = new Set<string>();
+
+                for (const node of prev) {
+                    const allPins = [...node.inputs, ...node.outputs];
+                    const p = allPins.find(x => x.id === targetPinId);
+                    if (p) {
+                        nodeIdsToUpdate.add(node.id);
+                        p.links.forEach(l => linkedPinIds.add(l));
                     }
-                    // Remove if this pin links TO the target
-                    else if (p.links.includes(pinId)) {
-                        p.links = p.links.filter(l => l !== pinId);
-                        changed = true;
+                }
+
+                if (linkedPinIds.size > 0) {
+                    for (const node of prev) {
+                        if (nodeIdsToUpdate.has(node.id)) continue;
+                        const allPins = [...node.inputs, ...node.outputs];
+                        if (allPins.some(p => linkedPinIds.has(p.id))) {
+                            nodeIdsToUpdate.add(node.id);
+                        }
                     }
+                }
+
+                if (nodeIdsToUpdate.size === 0) return prev;
+
+                return prev.map(n => {
+                    if (!nodeIdsToUpdate.has(n.id)) return n;
+                    const newNode = n.clone();
+                    let changed = false;
+                    [...newNode.inputs, ...newNode.outputs].forEach(p => {
+                        if (p.id === targetPinId) {
+                            if (p.links.length > 0) { p.links = []; changed = true; }
+                        } else if (p.links.includes(targetPinId)) {
+                            p.links = p.links.filter(l => l !== targetPinId);
+                            changed = true;
+                        }
+                    });
+                    return changed ? newNode : n;
                 });
-                return changed ? newNode : n;
-            }));
+            });
             return;
         }
 

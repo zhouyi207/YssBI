@@ -1,4 +1,4 @@
-import { forwardRef, useContext } from "react";
+import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas, GroupContext } from "../Context/CanvasContext";
 import {
@@ -41,21 +41,44 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     openSubGraph,
   } = useCanvas();
 
+  const listRef = useRef<HTMLDivElement>(null);
+
   // Read active tab from Layout Store
   const sidebarNode = useLayoutStore(s => s.nodes[nodeId || 'sidebar']);
   const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | null;
 
-  // Helper to get unique name
-  const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
-    const names = Object.values(items).map(i => i.name);
-    let name = baseName;
-    let counter = 1;
-    while (names.includes(name)) {
-      name = `${baseName}_${counter}`;
-      counter++;
+  // 记录每个 Tab 的数量，用于触发滚动
+  const eventsCount = Object.keys(events).length;
+  const functionsCount = Object.keys(functions).length;
+  const macrosCount = Object.keys(macros).length;
+  const variablesCount = Object.keys(variables).length + Object.keys(globalVariables).length;
+
+  // 记录上一次的数量，用于判断是否是“增加”
+  const prevCounts = useRef({ events: eventsCount, functions: functionsCount, macros: macrosCount, variables: variablesCount });
+
+  // 监听数量变化并滚动到底部
+  useEffect(() => {
+    const isAdded = 
+      eventsCount > prevCounts.current.events ||
+      functionsCount > prevCounts.current.functions ||
+      macrosCount > prevCounts.current.macros ||
+      variablesCount > prevCounts.current.variables;
+
+    if (isAdded && listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
-    return name;
-  };
+
+    // 更新记录
+    prevCounts.current = { 
+      events: eventsCount, 
+      functions: functionsCount, 
+      macros: macrosCount, 
+      variables: variablesCount 
+    };
+  }, [eventsCount, functionsCount, macrosCount, variablesCount]);
 
   const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event', extra?: any) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
@@ -63,11 +86,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     return (
       <div
         key={id}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
           setSelectedInfo(id, type);
         }}
-        onDoubleClick={() => {
-          if (type !== 'variable') openSubGraph(id, name, type);
+        onDoubleClick={(e) => {
+          if (type !== 'variable') {
+            e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
+            openSubGraph(id, name, type);
+          }
         }}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -151,13 +178,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
           <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>
           <button
-            onClick={() => {
-              if (activeTab === 'events') addEvent(getUniqueName("NewEvent", events));
-              else if (activeTab === 'functions') addFunction(getUniqueName("NewFunction", functions));
-              else if (activeTab === 'macros') addMacro(getUniqueName("NewMacro", macros));
+            onClick={(e) => {
+              e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
+              if (activeTab === 'events') addEvent();
+              else if (activeTab === 'functions') addFunction();
+              else if (activeTab === 'macros') addMacro();
               else if (activeTab === 'variables') {
-                const allVars = { ...variables, ...globalVariables };
-                addVariable(getUniqueName("NewVar", allVars), "int", false);
+                addVariable("New Variable", "int", false);
               }
             }}
             className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
@@ -167,7 +194,30 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         </div>
 
         {/* List Content */}
-        <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
+        <div 
+          ref={listRef}
+          className="flex-1 overflow-y-auto p-1 custom-scrollbar scroll-smooth"
+        >
+          <style>{`
+            .custom-scrollbar::-webkit-scrollbar {
+              width: 5px;
+              height: 5px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+              background: rgba(255, 255, 255, 0.05);
+              border-radius: 10px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+              background: rgba(255, 255, 255, 0.1);
+            }
+            .custom-scrollbar {
+              scrollbar-width: thin;
+              scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
+            }
+          `}</style>
           {activeTab === 'events' && (
             <>
               {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}

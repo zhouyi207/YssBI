@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { LayoutNode, LayoutTree, LayoutDirection } from '../types/layout';
+import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '../types/layout';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).slice(2, 11);
 
-interface LayoutState {
+export interface LayoutState {
     rootId: string;
     nodes: LayoutTree;
 
@@ -25,7 +25,7 @@ interface LayoutState {
     moveNode: (sourceId: string, targetId: string, position: 'center' | 'top' | 'bottom' | 'left' | 'right') => void;
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
-    addTab: (nodeId: string, tab: { id: string, title: string, component: string, params?: any }) => void;
+    addTab: (nodeId: string, tab: LayoutTab) => void;
 
     // UI State
     isDragging: boolean;
@@ -33,6 +33,9 @@ interface LayoutState {
     activeGroupId: string | null;
     activeEditorGroupId: string | null;
     setActiveGroup: (id: string | null) => void;
+    openSettings: () => void;
+    isAltPressed: boolean;
+    setAltPressed: (pressed: boolean) => void;
 }
 
 // Initial Layout Structure
@@ -50,7 +53,7 @@ const INITIAL_NODES: LayoutTree = {
         parentId: INITIAL_ROOT_ID,
         pixelSize: 260, // Default width
         minSize: 240,     // Allow collapsing to 0
-        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'variables' },
+        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'events' },
     },
     'main': {
         id: 'main',
@@ -141,6 +144,15 @@ export const useLayoutStore = create<LayoutState>()(
             }
             if (state.activeEditorGroupId === id) {
                 state.activeEditorGroupId = remainingEditors[0]?.id || null;
+            }
+            
+            // 最后验证：确保激活的编辑器存在且有效
+            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
+                if (remainingEditors.length > 0) {
+                    state.activeGroupId = remainingEditors[0].id;
+                    state.activeEditorGroupId = remainingEditors[0].id;
+                }
             }
         }),
 
@@ -295,7 +307,71 @@ export const useLayoutStore = create<LayoutState>()(
             const tabToMove = sourceTabs.find(t => t.id === tabId);
             if (!tabToMove) return;
 
-            // 从源节点移除
+            // 检查目标节点是否已经有这个标签页
+            const targetTabs = targetNode.data?.tabs || [];
+            const existingTabIndex = targetTabs.findIndex(t => t.id === tabId);
+            
+            // 如果目标节点已经有这个标签页，只激活它
+            if (existingTabIndex !== -1 && sourceNodeId !== targetNodeId) {
+                // 从源节点移除
+                sourceNode.data!.tabs = sourceTabs.filter(t => t.id !== tabId);
+                if (sourceNode.data!.activeTabId === tabId) {
+                    const closingIndex = sourceTabs.findIndex(t => t.id === tabId);
+                    const nextIndex = Math.max(0, closingIndex - 1);
+                    sourceNode.data!.activeTabId = sourceNode.data!.tabs[nextIndex]?.id;
+                }
+                
+                // 清理空的源节点
+                if (sourceNode.data!.tabs.length === 0) {
+                    const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                    if (editorGroups.length > 1) {
+                        const parent = state.nodes[sourceNode.parentId!];
+                        if (parent && parent.children) {
+                            parent.children = parent.children.filter(id => id !== sourceNodeId);
+                        }
+                        delete state.nodes[sourceNodeId];
+                        
+                        // 如果删除的是当前激活的编辑器，切换到目标编辑器
+                        if (state.activeGroupId === sourceNodeId) {
+                            state.activeGroupId = targetNodeId;
+                            state.activeEditorGroupId = targetNodeId;
+                        }
+                        if (state.activeEditorGroupId === sourceNodeId) {
+                            state.activeEditorGroupId = targetNodeId;
+                        }
+                    }
+                }
+                
+                // 只激活目标节点中已存在的标签页
+                targetNode.data!.activeTabId = tabId;
+                // 确保目标编辑器被激活
+                state.activeGroupId = targetNodeId;
+                state.activeEditorGroupId = targetNodeId;
+                return;
+            }
+
+            // 如果是同一个节点内部移动，只做重新排序
+            if (sourceNodeId === targetNodeId) {
+                const currentIndex = sourceTabs.findIndex(t => t.id === tabId);
+                if (currentIndex === -1) return;
+                
+                const newTabs = [...sourceTabs];
+                const [removed] = newTabs.splice(currentIndex, 1);
+                
+                if (targetTabIndex !== undefined) {
+                    // 如果目标索引大于当前索引，需要减 1，因为已经移除了一个元素
+                    const adjustedIndex = targetTabIndex > currentIndex ? targetTabIndex - 1 : targetTabIndex;
+                    newTabs.splice(adjustedIndex, 0, removed);
+                } else {
+                    newTabs.push(removed);
+                }
+                
+                sourceNode.data!.tabs = newTabs;
+                sourceNode.data!.activeTabId = tabId;
+                return;
+            }
+
+            // 正常的跨节点移动：从源节点移除
             const closingIndex = sourceTabs.findIndex(t => t.id === tabId);
             sourceNode.data!.tabs = sourceTabs.filter(t => t.id !== tabId);
             if (sourceNode.data!.activeTabId === tabId) {
@@ -312,11 +388,19 @@ export const useLayoutStore = create<LayoutState>()(
                         parent.children = parent.children.filter(id => id !== sourceNodeId);
                     }
                     delete state.nodes[sourceNodeId];
+                    
+                    // 如果删除的是当前激活的编辑器，切换到目标编辑器
+                    if (state.activeGroupId === sourceNodeId) {
+                        state.activeGroupId = targetNodeId;
+                        state.activeEditorGroupId = targetNodeId;
+                    }
+                    if (state.activeEditorGroupId === sourceNodeId) {
+                        state.activeEditorGroupId = targetNodeId;
+                    }
                 }
             }
 
-            // 添加到目标节点
-            const targetTabs = targetNode.data?.tabs || [];
+            // 添加到目标节点（此时已确认目标节点没有这个标签页）
             if (targetTabIndex !== undefined) {
                 targetTabs.splice(targetTabIndex, 0, tabToMove);
             } else {
@@ -327,6 +411,20 @@ export const useLayoutStore = create<LayoutState>()(
                 tabs: targetTabs,
                 activeTabId: tabId
             };
+            
+            // 确保目标编辑器被激活
+            state.activeGroupId = targetNodeId;
+            state.activeEditorGroupId = targetNodeId;
+            
+            // 最后验证：确保激活的编辑器存在且有效
+            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
+                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                if (editorGroups.length > 0) {
+                    state.activeGroupId = editorGroups[0].id;
+                    state.activeEditorGroupId = editorGroups[0].id;
+                }
+            }
         }),
 
         removeTab: (nodeId, tabId) => set((state) => {
@@ -378,6 +476,16 @@ export const useLayoutStore = create<LayoutState>()(
                 node.data.tabs = newTabs;
                 node.data.activeTabId = newActiveTabId;
             }
+            
+            // 最后验证：确保激活的编辑器存在且有效
+            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
+                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                if (editorGroups.length > 0) {
+                    state.activeGroupId = editorGroups[0].id;
+                    state.activeEditorGroupId = editorGroups[0].id;
+                }
+            }
         }),
 
         addTab: (nodeId, tab) => set((state) => {
@@ -396,9 +504,19 @@ export const useLayoutStore = create<LayoutState>()(
                 ...node.data,
                 tabs: [...tabs, tab],
                 activeTabId: tab.id,
-                component: 'GraphEditor' // 确保是编辑器组
+                component: node.data?.component || 'GraphEditor'
             };
         }),
+
+        openSettings: () => {
+            const targetId = get().activeEditorGroupId || 'default_editor';
+            get().addTab(targetId, {
+                id: 'settings',
+                title: 'Settings',
+                component: 'SettingsEditor',
+                type: 'setting'
+            });
+        },
 
         setDragging: (isDragging) => set((state) => {
             state.isDragging = isDragging;
@@ -411,6 +529,13 @@ export const useLayoutStore = create<LayoutState>()(
             const node = id ? state.nodes[id] : null;
             if (node?.type === 'component' && !node.data?.isFixed) {
                 state.activeEditorGroupId = id;
+            }
+        }),
+
+        isAltPressed: false,
+        setAltPressed: (pressed) => set((state) => {
+            if (state.isAltPressed !== pressed) {
+                state.isAltPressed = pressed;
             }
         }),
     }))

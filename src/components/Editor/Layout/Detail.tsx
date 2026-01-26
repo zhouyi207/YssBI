@@ -135,7 +135,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ width: p
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0">
-        <span className="text-[10px] font-black text-gray-400 font-mono tracking-tighter uppercase">
+        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
           Details {selectedData ? `: ${selectedData.name}` : ''}
         </span>
       </div>

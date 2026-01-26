@@ -16,13 +16,14 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 );
 
 export default function ActivityBar() {
-    const [activeTab, setActiveTab] = useState<'events' | 'functions' | 'macros' | 'variables' | null>('variables');
+    const sidebarNode = useLayoutStore(s => s.nodes['sidebar']);
+    const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | null;
+    
     const activityBarRef = useRef<HTMLDivElement>(null);
     const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
 
     // Access layout store to control Sidebar visibility
     const updateNode = useLayoutStore(s => s.updateNode);
-    const sidebarNode = useLayoutStore(s => s.nodes['sidebar']);
 
     // Ref to track previous size to restore
     const previousSizeRef = useRef(260);
@@ -37,9 +38,7 @@ export default function ActivityBar() {
             visible = false;
         }
 
-        setActiveTab(newTab as any);
-
-        // Update Sidebar Visibility
+        // Update Sidebar Visibility and Tab
         if (visible) {
             // If becoming visible, ensure pixelSize is restored if it was 0
             const currentSize = sidebarNode?.pixelSize || 0;

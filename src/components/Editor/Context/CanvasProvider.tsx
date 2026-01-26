@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { CanvasContext } from "./CanvasContext";
-import { CanvasState, Tab, SubGraphData, EditorGroup } from "../Types/canvas";
+import { CanvasState, SubGraphData } from "../Types/canvas";
 import { Pin, BaseNode } from "../Types/nodes";
 import { deserializeSubGraph } from "../Utils/io";
 import { ProjectService } from "../../../services/projectService";
@@ -11,7 +11,7 @@ import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore, useTabVariables } from "../Store/useNodeStore";
 import { useProjectStore } from "../Store/useProjectStore";
 import { useCanvasInteraction } from "../Hooks/useCanvasInteraction";
-import { useLayoutStore } from "../../../store/layoutStore";
+import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 
 /* ================= Helper Functions ================= */
@@ -34,24 +34,23 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const globalVariables = useProjectStore(useCallback(s => s.globalVariables, []));
 
   // --- Multi-View Editor State (已迁移至 layoutStore) ---
-  const activeGroupId = useLayoutStore(useCallback(s => s.activeGroupId, []));
-  const activeEditorGroupId = useLayoutStore(useCallback(s => s.activeEditorGroupId, []));
+  const activeGroupId = useLayoutStore(useCallback((s: LayoutState) => s.activeGroupId, []));
+  const activeEditorGroupId = useLayoutStore(useCallback((s: LayoutState) => s.activeEditorGroupId, []));
   const activeGroupIdRef = useRef(activeGroupId || '');
   useEffect(() => {
     activeGroupIdRef.current = activeGroupId || '';
   }, [activeGroupId]);
 
-  const activeNodeSelector = useCallback(s => activeGroupId ? s.nodes[activeGroupId] : null, [activeGroupId]);
+  const activeNodeSelector = useCallback((s: LayoutState) => activeGroupId ? s.nodes[activeGroupId] : null, [activeGroupId]);
   const activeNode = useLayoutStore(activeNodeSelector);
 
   // 获取真正活跃的编辑器节点（用于添加变量、节点等逻辑）
-  const activeEditorNodeSelector = useCallback(s => activeEditorGroupId ? s.nodes[activeEditorGroupId] : null, [activeEditorGroupId]);
+  const activeEditorNodeSelector = useCallback((s: LayoutState) => activeEditorGroupId ? s.nodes[activeEditorGroupId] : null, [activeEditorGroupId]);
   const activeEditorNode = useLayoutStore(activeEditorNodeSelector);
   
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const currentFocusedTabId = activeNode?.data?.activeTabId || null; // 当前视觉上获得焦点的 Tab (如果有)
 
-  const groupNodesSelector = useCallback(s =>
+  const groupNodesSelector = useCallback((s: LayoutState) =>
     Object.values(s.nodes)
       .filter(n => n.type === 'component' && n.data?.tabs),
     []);
@@ -59,16 +58,20 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const groups = useMemo(() => groupNodes.map(n => ({
     id: n.id,
-    tabs: n.data?.tabs || [],
+    tabs: (n.data?.tabs || []).map(t => ({
+      ...t,
+      type: t.type || 'event'
+    })) as any[],
     activeTabId: n.data?.activeTabId || null,
     selectedNodeIds: n.data?.params?.selectedNodeIds || []
   })), [groupNodes]);
 
-  const setActiveTabId = useCallback((id: string | null) => {
-    if (activeGroupId) {
-      useLayoutStore.getState().updateNode(activeGroupId, {
+  const setActiveTabId = useCallback((id: string | null, targetGroupId?: string) => {
+    const groupId = targetGroupId || activeGroupId;
+    if (groupId) {
+      useLayoutStore.getState().updateNode(groupId, {
         data: {
-          ...useLayoutStore.getState().nodes[activeGroupId].data,
+          ...useLayoutStore.getState().nodes[groupId].data,
           activeTabId: id || undefined
         }
       });
@@ -85,13 +88,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const EMPTY_HISTORY = useMemo(() => ({ past: [], future: [] }), []);
 
-  const historySelector = useCallback(s => (activeTabId && s.tabs[activeTabId]) ? s.tabs[activeTabId].history : EMPTY_HISTORY, [activeTabId, EMPTY_HISTORY]);
+  const historySelector = useCallback((s: any) => (activeTabId && s.tabs[activeTabId]) ? s.tabs[activeTabId].history : EMPTY_HISTORY, [activeTabId, EMPTY_HISTORY]);
   const history = useNodeStore(useShallow(historySelector));
 
   // Current Refs
   const variablesRef = useRef(variables); useEffect(() => { variablesRef.current = variables; }, [variables]);
 
-  // Canvas Ref - initialized from store and subscribed
   const canvasRef = useRef(useViewportStore.getState().viewports[activeGroupId || ''] || DEFAULT_VIEWPORT);
   useEffect(() => {
     // We update canvasRef whenever the store changes or groups changes
@@ -125,7 +127,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
     const gid = targetGroupId || activeGroupId;
     if (gid) {
-      const node = useLayoutStore.getState().nodes[gid];
+      const state = useLayoutStore.getState() as LayoutState;
+      const node = state.nodes[gid];
       if (node) {
         const current = node.data?.params?.selectedNodeIds || [];
         const next = typeof updater === 'function' ? updater(current) : updater;
@@ -147,8 +150,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedItemType(type);
   }, []);
 
-  const handleSetActiveTabId = useCallback((newId: string | null, forceType?: 'event' | 'function' | 'macro' | 'setting', initialData?: SubGraphData) => {
-    setActiveTabId(newId);
+  const handleSetActiveTabId = useCallback((newId: string | null, forceType?: 'event' | 'function' | 'macro' | 'setting', initialData?: SubGraphData, targetGroupId?: string) => {
+    setActiveTabId(newId, targetGroupId);
     if (!newId) return;
     const id = newId!;
     // Check if tab is already initialized in store
@@ -171,6 +174,20 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     if (type) setSelectedInfo(id, type as any);
   }, [setActiveTabId, setSelectedInfo]);
 
+  const switchSidebarTab = useCallback((tab: 'events' | 'functions' | 'macros' | 'variables') => {
+    const layoutStore = useLayoutStore.getState();
+    const sidebarNode = layoutStore.nodes['sidebar'];
+    if (sidebarNode) {
+      layoutStore.updateNode('sidebar', {
+        data: { ...sidebarNode.data, visible: true, currentTab: tab }
+      });
+      // Also ensure it's not collapsed
+      if ((sidebarNode.pixelSize || 0) < 50) {
+        layoutStore.updateNode('sidebar', { pixelSize: 260 });
+      }
+    }
+  }, []);
+
   const openSubGraph = useCallback((id: string, name: string, type: "event" | "function" | "macro", initialData?: SubGraphData) => {
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
@@ -179,24 +196,22 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     layoutStore.addTab(targetGroupId, {
       id,
       title: name,
-      component: 'GraphEditor'
+      component: 'GraphEditor',
+      type
     });
 
-    handleSetActiveTabId(id, type, initialData);
+    // 激活目标编辑器组，确保选项卡显示为激活状态
+    layoutStore.setActiveGroup(targetGroupId);
+
+    // 传递 targetGroupId 确保在正确的组上设置 activeTabId
+    handleSetActiveTabId(id, type, initialData, targetGroupId);
   }, [handleSetActiveTabId]);
 
   const openSettingsTab = useCallback(() => {
-    const id = "settings-tab";
     const layoutStore = useLayoutStore.getState();
-    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
-
-    layoutStore.addTab(targetGroupId, {
-      id,
-      title: "Settings",
-      component: 'SettingsView'
-    });
-
-    handleSetActiveTabId(id, "setting");
+    const targetGroupId = layoutStore.activeEditorGroupId || 'default_editor';
+    layoutStore.openSettings();
+    handleSetActiveTabId("settings", "setting", undefined, targetGroupId);
   }, [handleSetActiveTabId]);
 
   const closeTab = useCallback((id: string, e?: React.MouseEvent) => {
@@ -307,49 +322,81 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     useProjectStore.getState().updateMacro(id, data);
   }, []);
 
-  const addEvent = useCallback((name: string) => {
-    const id = `event-${crypto.randomUUID()}`;
-    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", name, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
-    const sub: SubGraphData = { id, name, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
-    useProjectStore.getState().addEvent(id, sub);
-    openSubGraph(id, name, "event", sub);
-  }, [openSubGraph]);
+  // Helper to get unique name
+  const getUniqueName = useCallback((baseName: string, items: Record<string, { name: string }>) => {
+    const names = Object.values(items).map(i => i.name);
+    let name = baseName;
+    let counter = 1;
+    while (names.includes(name)) {
+      name = `${baseName}_${counter}`;
+      counter++;
+    }
+    return name;
+  }, []);
 
-  const addFunction = useCallback((name: string) => {
+  const addEvent = useCallback((name?: string) => {
+    const st = useProjectStore.getState();
+    const finalName = getUniqueName(name || "New Event", st.events);
+    const id = `event-${crypto.randomUUID()}`;
+    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", finalName, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
+    const sub: SubGraphData = { id, name: finalName, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
+    st.addEvent(id, sub);
+    openSubGraph(id, finalName, "event", sub);
+    switchSidebarTab('events');
+  }, [getUniqueName, openSubGraph, switchSidebarTab]);
+
+  const addFunction = useCallback((name?: string) => {
+    const st = useProjectStore.getState();
+    const finalName = getUniqueName(name || "New Function", st.functions);
     const id = `func-${crypto.randomUUID()}`;
     const tNodes = [
-      createInternalNode(`node-${crypto.randomUUID()}`, "function_entry", name, "Internal", { x: 50, y: 150 }, [], [{ name: "Then", type: "exec" }]),
+      createInternalNode(`node-${crypto.randomUUID()}`, "function_entry", finalName, "Internal", { x: 50, y: 150 }, [], [{ name: "Then", type: "exec" }]),
       createInternalNode(`node-${crypto.randomUUID()}`, "function_return", "Return", "Internal", { x: 550, y: 150 }, [{ name: "In", type: "exec" }], [])
     ];
-    const sub: SubGraphData = { id, name, type: "function", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
-    useProjectStore.getState().addFunction(id, sub);
-    openSubGraph(id, name, "function", sub);
-  }, [openSubGraph]);
+    const sub: SubGraphData = { id, name: finalName, type: "function", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
+    st.addFunction(id, sub);
+    openSubGraph(id, finalName, "function", sub);
+    switchSidebarTab('functions');
+  }, [getUniqueName, openSubGraph, switchSidebarTab]);
 
-  const addMacro = useCallback((name: string) => {
+  const addMacro = useCallback((name?: string) => {
+    const st = useProjectStore.getState();
+    const finalName = getUniqueName(name || "New Macro", st.macros);
     const id = `macro-${crypto.randomUUID()}`;
     const tNodes = [
       createInternalNode(`node-${crypto.randomUUID()}`, "macro_inputs", "Inputs", "Internal", { x: 50, y: 150 }, [], [{ name: "In", type: "exec" }]),
       createInternalNode(`node-${crypto.randomUUID()}`, "macro_outputs", "Outputs", "Internal", { x: 550, y: 150 }, [{ name: "Out", type: "exec" }], [])
     ];
-    const sub: SubGraphData = { id, name, type: "macro", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
-    useProjectStore.getState().addMacro(id, sub);
-    openSubGraph(id, name, "macro", sub);
-  }, [openSubGraph]);
+    const sub: SubGraphData = { id, name: finalName, type: "macro", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
+    st.addMacro(id, sub);
+    openSubGraph(id, finalName, "macro", sub);
+    switchSidebarTab('macros');
+  }, [getUniqueName, openSubGraph, switchSidebarTab]);
 
   const deleteFunction = useCallback((id: string) => { useProjectStore.getState().deleteFunction(id); closeTab(id); }, [closeTab]);
   const deleteEvent = useCallback((id: string) => { useProjectStore.getState().deleteEvent(id); closeTab(id); }, [closeTab]);
   const deleteMacro = useCallback((id: string) => { useProjectStore.getState().deleteMacro(id); closeTab(id); }, [closeTab]);
 
-  const addVariable = useCallback((name: string, type: string, isGlobal: boolean = false) => {
+  const addVariable = useCallback((name?: string, type: string = "int", isGlobal: boolean = false) => {
+    const st = useProjectStore.getState();
+    const allVars = { ...st.globalVariables };
+    // Also include local variables of current tab if any
+    const tid = activeTabIdRef.current;
+    if (tid) {
+      const tabVars = useNodeStore.getState().tabs[tid]?.variables || {};
+      Object.assign(allVars, tabVars);
+    }
+
+    const finalName = getUniqueName(name || "New Variable", allVars);
     const id = `var-${crypto.randomUUID()}`;
-    const v = { name, type, value: type === "int" ? 0 : type === "bool" ? false : type === "float" ? 0.0 : "" };
-    if (isGlobal) useProjectStore.getState().addGlobalVariable(id, v);
+    const v = { name: finalName, type, value: type === "int" ? 0 : type === "bool" ? false : type === "float" ? 0.0 : "" };
+    
+    if (isGlobal) st.addGlobalVariable(id, v);
     else {
-      const tid = activeTabIdRef.current;
       if (tid) useNodeStore.getState().addVariable(tid, id, v);
     }
-  }, []);
+    switchSidebarTab('variables');
+  }, [getUniqueName, switchSidebarTab]);
 
   const updateVariable = useCallback((id: string, data: any) => {
     const isGlobal = !!useProjectStore.getState().globalVariables[id];
@@ -509,20 +556,139 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const hasEvents = Object.keys(st.events).length > 0;
 
     if (!hasEvents && (activeNode?.data?.tabs?.length || 0) === 0) {
-      const id = "default-event"; const name = "Event Graph"; const type = "event";
+      const id = "default-event"; const name = "New Graph"; const type = "event";
       const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", "On Run", "Internal", { x: 100, y: 100 }, [], [{ name: "Exec", type: "exec" }])];
       st.addEvent(id, { id, name, type, nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] });
 
       const targetGroupId = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'default_editor';
-      useLayoutStore.getState().addTab(targetGroupId, { id, title: name, component: 'GraphEditor' });
+      useLayoutStore.getState().addTab(targetGroupId, { id, title: name, component: 'GraphEditor', type });
 
       setSelectedInfo(id, type);
       useNodeStore.getState().initTab(id, tNodes, {});
     }
   }, []);
 
-  const handleAddTab = useCallback(() => addEvent("New Item"), [addEvent]);
   const handleSetActiveGroupId = useCallback((id: string) => useLayoutStore.getState().setActiveGroup(id), []);
+
+  const lastMousePosRef = useRef({ x: 0, y: 0 });
+
+  const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
+    const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'default_editor';
+    const el = document.getElementById(`layout-node-${gid}`);
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    const currentCanvas = useViewportStore.getState().viewports[gid] || DEFAULT_VIEWPORT;
+    return {
+      x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
+      y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale
+    };
+  }, []);
+
+  // Global Key & Mouse Listeners
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 全局记录修饰键状态 (给 DND 等逻辑使用)
+      (window as any)._lastAltKey = e.altKey;
+      (window as any)._lastCtrlKey = e.ctrlKey;
+
+      if (e.key === 'Alt') {
+        e.preventDefault(); // 阻止浏览器默认行为（如 Windows 上的菜单聚焦），提高响应速度
+        if (e.repeat) return; // Ignore repeats
+        useLayoutStore.getState().setAltPressed(true);
+      }
+
+      // 处理快捷键
+      const isInput =
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable;
+
+      const isControlKey = e.ctrlKey || e.metaKey;
+
+      if (isInput) {
+        // 在输入框中，仅允许特定的全局快捷键通过
+        const allowedInInput =
+          (isControlKey && ["s", "z", "y", "n", "o", "w"].includes(e.key.toLowerCase())) ||
+          (isControlKey && e.key === "Tab");
+
+        if (!allowedInInput) return;
+      }
+
+      // 快捷键映射
+      if (e.key === "Delete" || e.key === "Backspace") {
+        deleteSelected();
+      } else if (isControlKey && e.key.toLowerCase() === "z") {
+        if (e.shiftKey) redo(); else undo();
+      } else if (isControlKey && e.key.toLowerCase() === "y") {
+        redo();
+      } else if (isControlKey && e.key.toLowerCase() === "c") {
+        copy();
+      } else if (isControlKey && e.key.toLowerCase() === "x") {
+        cut();
+      } else if (isControlKey && e.key.toLowerCase() === "v") {
+        paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+      } else if (isControlKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (e.shiftKey) saveGraphAs(); else saveGraph();
+      } else if (isControlKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        importGraph();
+      } else if (isControlKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        addEvent();
+      } else if (isControlKey && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        const tid = activeTabIdRef.current;
+        if (tid) closeTab(tid);
+      } else if (isControlKey && e.key === "Tab") {
+        e.preventDefault();
+        // 这里逻辑较复杂，暂时保留在 CanvasProvider 中通过 ref 或直接访问 store
+        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        if (gid) {
+          const node = useLayoutStore.getState().nodes[gid];
+          const tabs = node?.data?.tabs || [];
+          const activeTabId = node?.data?.activeTabId;
+          if (tabs.length > 1) {
+            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+            const nextIndex = e.shiftKey ? (currentIndex - 1 + tabs.length) % tabs.length : (currentIndex + 1) % tabs.length;
+            setActiveTabId(tabs[nextIndex].id);
+          }
+        }
+      } else if (isControlKey && e.key === "\\") {
+        e.preventDefault();
+        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        if (gid) splitEditorRight(gid);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      (window as any)._lastAltKey = e.altKey;
+      (window as any)._lastCtrlKey = e.ctrlKey;
+      if (e.key === 'Alt') {
+        useLayoutStore.getState().setAltPressed(false);
+      }
+    };
+
+    const handleBlur = () => {
+      useLayoutStore.getState().setAltPressed(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('keyup', handleKeyUp, { capture: true });
+    window.addEventListener('pointermove', handlePointerMove, { capture: true });
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('keyup', handleKeyUp, { capture: true });
+      window.removeEventListener('pointermove', handlePointerMove, { capture: true });
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [deleteSelected, undo, redo, copy, cut, paste, saveGraph, saveGraphAs, importGraph, addEvent, closeTab, setActiveTabId, splitEditorRight, getActiveCanvasLocalPoint]);
 
   const contextValue = useMemo(() => ({
     setCanvas, nodes: [], setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu, setContextMenu,
@@ -537,7 +703,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     activeEditorGroupId: activeEditorGroupId || 'default_editor',
     setActiveGroupId: handleSetActiveGroupId,
     splitEditorRight, closeGroup,
-    activeTabId, setActiveTabId, openSubGraph, addTab: handleAddTab, closeTab, openSettingsTab, pendingConnection, setPendingConnection,
+    activeTabId, setActiveTabId, openSubGraph, closeTab, openSettingsTab, pendingConnection, setPendingConnection,
     groups,
     selectedNodeIds, setSelectedNodeIds
   }), [
@@ -550,7 +716,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     macros, addMacro, updateMacro, deleteMacro,
     undo, redo, copy, paste, cut, deleteSelected, history.past.length, history.future.length, saveHistory, connectPins,
     activeGroupId, handleSetActiveGroupId, splitEditorRight, closeGroup,
-    activeTabId, setActiveTabId, openSubGraph, handleAddTab, closeTab, openSettingsTab, pendingConnection,
+    activeTabId, setActiveTabId, openSubGraph, closeTab, openSettingsTab, pendingConnection,
     groups, selectedNodeIds, setSelectedNodeIds
   ]);
 

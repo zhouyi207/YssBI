@@ -33,27 +33,13 @@ export default function Canvas() {
     setContextMenu,
     variables,
     globalVariables,
-    undo,
-    redo,
     saveHistory,
-    copy,
-    paste,
-    cut,
-    deleteSelected,
-    saveGraph,
-    saveGraphAs,
-    importGraph,
-    addEvent,
     activeTabId,
     pendingConnection,
     setPendingConnection,
-    tabs,
-    setActiveTabId,
-    closeTab,
     functions,
     macros,
     connectPins,
-    splitEditorRight,
     groupId,
     selectedNodeIds
   } = useCanvas();
@@ -307,16 +293,6 @@ export default function Canvas() {
   }, [contextMenu, variableDropMenu, setContextMenu, setPendingConnection]);
 
 
-  const lastMousePosRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handlePointerMove = (e: PointerEvent) => {
-      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener("pointermove", handlePointerMove, { capture: true });
-    return () => window.removeEventListener("pointermove", handlePointerMove, { capture: true });
-  }, []);
-
   // 3. 动态添加输入
   const handleNodeAddInput = useCallback((id: string) => {
     saveHistory();
@@ -359,93 +335,6 @@ export default function Canvas() {
 
     prevDragRef.current = drag;
   }, [drag, variables]);
-
-  // 全局记录修饰键状态
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      (window as any)._lastAltKey = e.altKey;
-      (window as any)._lastCtrlKey = e.ctrlKey;
-
-      // 防止在输入框中触发破坏性快捷键（如 Delete），
-      // 但允许全局控制快捷键（如 Ctrl+S, Ctrl+Z, Ctrl+Tab）
-      const isInput =
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      const isControlKey = e.ctrlKey || e.metaKey;
-
-      if (isInput) {
-        // 在输入框中，仅允许特定的全局快捷键通过
-        const allowedInInput =
-          (isControlKey && ["s", "z", "y", "n", "o", "w"].includes(e.key.toLowerCase())) ||
-          (isControlKey && e.key === "Tab");
-
-        if (!allowedInInput) return;
-      }
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        deleteSelected();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) {
-          redo();
-        } else {
-          undo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-        redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-        copy();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
-        cut();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
-        paste(getCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        if (e.shiftKey) {
-          saveGraphAs();
-        } else {
-          saveGraph();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
-        e.preventDefault();
-        importGraph();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        addEvent("New Graph");
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w") {
-        e.preventDefault();
-        if (activeTabId) closeTab(activeTabId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "Tab") {
-        e.preventDefault();
-        if (tabs.length > 1) {
-          const currentIndex = tabs.findIndex(t => t.id === activeTabId);
-          let nextIndex;
-          if (e.shiftKey) {
-            nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-          } else {
-            nextIndex = (currentIndex + 1) % tabs.length;
-          }
-          setActiveTabId(tabs[nextIndex].id);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
-        e.preventDefault();
-        splitEditorRight(groupId);
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      (window as any)._lastAltKey = e.altKey;
-      (window as any)._lastCtrlKey = e.ctrlKey;
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [deleteSelected, copy, paste, cut, undo, redo, getCanvasLocalPoint, saveGraph, saveGraphAs, importGraph, addEvent, closeTab, activeTabId, tabs, setActiveTabId, splitEditorRight, groupId]);
 
   /* ===== Data Drag ===== */
   function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
