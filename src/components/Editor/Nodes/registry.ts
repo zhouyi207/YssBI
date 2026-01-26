@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { NodeDefinition, BaseNode } from "../Types/nodes";
 import { Position } from "../../../types";
+import { useSchemaStore } from "../Store/useSchemaStore";
 
 export class NodeRegistry {
   private static instance: NodeRegistry;
   private definitions: Map<string, NodeDefinition> = new Map();
+  private _isInitialized: boolean = false;
 
   private constructor() { }
 
@@ -15,19 +17,34 @@ export class NodeRegistry {
     return NodeRegistry.instance;
   }
 
+  get isInitialized(): boolean {
+    return this._isInitialized;
+  }
+
   /**
-   * 从后端同步节点定义
+   * 从后端同步节点定义和 Schema
    */
   async syncFromBackend() {
     try {
-      const defs = await invoke<NodeDefinition[]>("get_node_definitions");
+      // 并行加载节点定义和 schema
+      const [defs] = await Promise.all([
+        invoke<NodeDefinition[]>("get_node_definitions"),
+        useSchemaStore.getState().loadSchema(),
+      ]);
+
       this.definitions.clear();
       defs.forEach(def => {
         this.definitions.set(def.node_type, def);
       });
-      console.log("Node definitions synced:", defs);
+      
+      this._isInitialized = true;
+      console.log("[NodeRegistry] Initialization complete:", {
+        nodeDefinitions: defs.length,
+        schemaLoaded: useSchemaStore.getState().isLoaded,
+      });
     } catch (error) {
-      console.error("Failed to sync node definitions:", error);
+      console.error("[NodeRegistry] Failed to sync from backend:", error);
+      throw error;
     }
   }
 

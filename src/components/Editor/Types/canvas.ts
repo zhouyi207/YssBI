@@ -64,6 +64,7 @@ export interface PinDefinition {
   name: string;
   type: string;
 }
+
 export interface SubGraphData {
   id: string;
   name: string;
@@ -74,6 +75,7 @@ export interface SubGraphData {
   inputs?: PinDefinition[];
   outputs?: PinDefinition[];
 }
+
 export interface ProjectData {
   version: string;
   globalVariables: Record<string, { name: string; type: string; value: any }>;

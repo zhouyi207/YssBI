@@ -1,23 +1,12 @@
 import React, { useMemo } from "react";
 import { Pin as PinModel } from "../Types/nodes";
+import { useSchemaStore } from "../Store/useSchemaStore";
 
 export interface PinProps extends PinModel {
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
 }
-
-const PIN_COLORS: Record<string, string> = {
-  exec: "var(--exec-color)",
-  int: "var(--int-color)",
-  float: "var(--float-color)",
-  bool: "var(--bool-color)",
-  string: "var(--string-color)",
-  object: "var(--object-color)",
-  array: "#ef4444",
-  struct: "#f97316",
-  delegate: "#ec4899",
-};
 
 // 提取主题逻辑，避免每次渲染都创建新对象
 const getPinTheme = (type: string, isConnected: boolean, baseColor: string) => {
@@ -47,8 +36,10 @@ export const Pin: React.FC<PinProps> = (props) => {
     isActive,
   } = props;
 
+  // 从 schema store 获取颜色（getPinColor 已内置默认值）
+  const schemaColor = useSchemaStore((s) => s.getPinColor(type));
   const isConnected = links.length > 0 || (isActive ?? false);
-  const baseColor = ui?.color ?? PIN_COLORS[type] ?? "#9ca3af";
+  const baseColor = ui?.color ?? schemaColor;
 
   // 使用 useMemo 缓存主题计算结果
   const theme = useMemo(

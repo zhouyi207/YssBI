@@ -1,15 +1,18 @@
-import { Position } from "../../../types";
+/**
+ * 节点类型定义
+ *
+ * 注意：PinType 现在从后端 schema 获取，这里保留类型定义用于 TypeScript 类型检查。
+ * 实际的类型元数据（颜色、转换规则等）请使用 useSchemaStore。
+ */
 
-export type NodeType =
-  | "Event"
-  | "Function"
-  | "Variable"
-  | "Math"
-  | "Branch"
-  | "Custom";
+import { Position } from "../../../types";
 
 export type PinDirection = "input" | "output";
 
+/**
+ * Pin 类型标识符
+ * 实际的类型定义（颜色、转换规则）从后端 schema 获取
+ */
 export type PinType =
   | "exec"      // 执行针脚
   | "int"       // 整数
@@ -19,7 +22,8 @@ export type PinType =
   | "object"    // 对象
   | "array"     // 数组
   | "struct"    // 结构体
-  | "delegate"; // 委托/事件
+  | "delegate"  // 委托/事件
+  | string;     // 允许自定义类型
 
 export interface Pin {
   id: string;           // 唯一标识
@@ -32,7 +36,7 @@ export interface Pin {
   ui?: {
     x?: number;         // 在节点内部的位置
     y?: number;
-    color?: string;     // 可选，按类型渲染
+    color?: string;     // 可选，按类型渲染（优先使用 schema 颜色）
   };
 }
 
@@ -101,10 +105,17 @@ export class BaseNode {
       defaultValue: p.defaultValue
     }));
 
-    // 特殊逻辑：Math 节点显示中心符号
+    // 注意：centerSymbol 现在应该从 schema 获取
+    // 这里保留作为后备，实际使用请通过 useSchemaStore.getCenterSymbol()
     if (this.uiStyle === "math") {
-      if (this.type === "add") this.centerSymbol = "+";
-      // 可以根据 type 设置更多符号
+      // 后备逻辑：如果 schema 未加载，使用硬编码
+      const mathSymbols: Record<string, string> = {
+        add: "+",
+        subtract: "-",
+        multiply: "×",
+        divide: "÷",
+      };
+      this.centerSymbol = mathSymbols[this.type];
     }
   }
 

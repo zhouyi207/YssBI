@@ -1,6 +1,7 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, BaseNode } from "../Types/nodes";
+import { useSchemaStore } from "../Store/useSchemaStore";
 
 
 export interface NodeProps {
@@ -92,12 +93,16 @@ const MathNodeUI: React.FC<NodeProps> = ({
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
 
+  // 优先从 schema 获取 centerSymbol，回退到节点属性
+  const schemaCenterSymbol = useSchemaStore((s) => s.getCenterSymbol(node.uiStyle, node.type));
+  const centerSymbol = schemaCenterSymbol ?? node.centerSymbol;
+
   return (
     <div className="relative flex flex-col min-h-full">
-      {node.centerSymbol && (
+      {centerSymbol && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="text-2xl font-bold opacity-30 text-black/40">
-            {node.centerSymbol}
+            {centerSymbol}
           </span>
         </div>
       )}
