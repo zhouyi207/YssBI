@@ -99,8 +99,8 @@ export const DEFAULT_PROJECT: ProjectSettings = {
 };
 
 export const DEFAULT_WINDOW: WindowSettings = {
-    width: 1560,
-    height: 840,
+    width: 1600,
+    height: 900,
     x: null,
     y: null,
     isMaximized: false,

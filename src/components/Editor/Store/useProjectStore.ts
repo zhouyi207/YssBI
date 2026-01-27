@@ -1,44 +1,52 @@
 import { create } from 'zustand';
 import { SubGraphData, ProjectData } from "../Types/canvas";
+import { VariableDefinition } from "../Types/variables";
 import { ProjectService } from "../../../services/projectService";
-import { TabState, Variable, useNodeStore } from "./useNodeStore";
+import { TabState, useNodeStore } from "./useNodeStore";
 import { syncInternalNodePins, syncSubGraphInstanceNodes } from "../Utils/internalNodes";
 
 interface ProjectStore {
-    // State
+    // State (作为后端数据的缓存)
     events: Record<string, SubGraphData>;
     functions: Record<string, SubGraphData>;
     macros: Record<string, SubGraphData>;
-    globalVariables: Record<string, Variable>;
+    globalVariables: Record<string, VariableDefinition>;
     currentPath: string | null;
 
-    // Actions
+    // 内部 Setters (供事件订阅使用)
     setEvents: (events: Record<string, SubGraphData>) => void;
     setFunctions: (functions: Record<string, SubGraphData>) => void;
     setMacros: (macros: Record<string, SubGraphData>) => void;
-    setGlobalVariables: (vars: Record<string, Variable>) => void;
+    setGlobalVariables: (vars: Record<string, VariableDefinition>) => void;
     setCurrentPath: (path: string | null) => void;
 
+    // Event 操作 (调用后端 API)
     addEvent: (id: string, data: SubGraphData) => void;
     updateEvent: (id: string, data: Partial<SubGraphData>) => void;
     deleteEvent: (id: string) => void;
 
+    // Function 操作 (调用后端 API)
     addFunction: (id: string, data: SubGraphData) => void;
     updateFunction: (id: string, data: Partial<SubGraphData>) => void;
     deleteFunction: (id: string) => void;
 
+    // Macro 操作 (调用后端 API)
     addMacro: (id: string, data: SubGraphData) => void;
     updateMacro: (id: string, data: Partial<SubGraphData>) => void;
     deleteMacro: (id: string) => void;
 
-    addGlobalVariable: (id: string, v: Variable) => void;
-    updateGlobalVariable: (id: string, data: Partial<Variable>) => void;
+    // Global Variable 操作 (调用后端 API)
+    addGlobalVariable: (id: string, v: VariableDefinition) => void;
+    updateGlobalVariable: (id: string, data: Partial<VariableDefinition>) => void;
     deleteGlobalVariable: (id: string) => void;
 
-    // Logic
+    // 项目级操作
     loadProject: (project: ProjectData, path: string | null) => void;
     syncWithTabs: (tabs: Record<string, TabState>) => void;
     syncTab: (tabId: string, tabState: TabState) => void;
+
+    // 同步到后端
+    syncToBackend: () => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -48,21 +56,45 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     globalVariables: {},
     currentPath: null,
 
+    // 内部 Setters
     setEvents: (events) => set({ events }),
     setFunctions: (functions) => set({ functions }),
     setMacros: (macros) => set({ macros }),
     setGlobalVariables: (globalVariables) => set({ globalVariables }),
     setCurrentPath: (currentPath) => set({ currentPath }),
 
-    addEvent: (id, data) => set((state) => ({ events: { ...state.events, [id]: data } })),
-    updateEvent: (id, data) => set((state) => ({ events: { ...state.events, [id]: { ...state.events[id], ...data } } })),
-    deleteEvent: (id) => set((state) => {
-        const next = { ...state.events };
-        delete next[id];
-        return { events: next };
-    }),
+    // Event 操作
+    addEvent: (id, data) => {
+        // 先更新本地状态以获得即时反馈
+        set((state) => ({ events: { ...state.events, [id]: data } }));
+        // 异步同步到后端
+        ProjectService.createEvent(id, data).catch(console.error);
+    },
 
-    addFunction: (id, data) => set((state) => ({ functions: { ...state.functions, [id]: data } })),
+    updateEvent: (id, data) => {
+        set((state) => ({ events: { ...state.events, [id]: { ...state.events[id], ...data } } }));
+        // 获取完整数据并同步到后端
+        const fullData = get().events[id];
+        if (fullData) {
+            ProjectService.updateEvent(id, fullData).catch(console.error);
+        }
+    },
+
+    deleteEvent: (id) => {
+        set((state) => {
+            const next = { ...state.events };
+            delete next[id];
+            return { events: next };
+        });
+        ProjectService.deleteEvent(id).catch(console.error);
+    },
+
+    // Function 操作
+    addFunction: (id, data) => {
+        set((state) => ({ functions: { ...state.functions, [id]: data } }));
+        ProjectService.createFunction(id, data).catch(console.error);
+    },
+
     updateFunction: (id, data) => {
         set((state) => {
             const nextFunctions = { ...state.functions, [id]: { ...state.functions[id], ...data } };
@@ -83,7 +115,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
             const nextEvents = cascade(state.events);
             const nextMacros = cascade(state.macros);
-            // recursive function calls?
             const nextFunctionsRecursive = cascade(nextFunctions);
 
             // Update live tabs
@@ -93,7 +124,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 const newNodes = syncSubGraphInstanceNodes(currentNodes, id, data.inputs, data.outputs, data.name);
 
                 if (tid === id) {
-                    // Update definition tab internal nodes
                     const updatedSelf = newNodes.map(n => {
                         if (!n.isInternal) return n;
                         const clone = n.clone();
@@ -114,26 +144,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 macros: nextMacros
             };
         });
+
+        // 同步到后端
+        const fullData = get().functions[id];
+        if (fullData) {
+            ProjectService.updateFunction(id, fullData).catch(console.error);
+        }
     },
-    deleteFunction: (id) => set((state) => {
-        const next = { ...state.functions };
-        delete next[id];
-        return { functions: next };
-    }),
 
-    addMacro: (id, data) => set((state) => ({ macros: { ...state.macros, [id]: data } })),
+    deleteFunction: (id) => {
+        set((state) => {
+            const next = { ...state.functions };
+            delete next[id];
+            return { functions: next };
+        });
+        ProjectService.deleteFunction(id).catch(console.error);
+    },
+
+    // Macro 操作
+    addMacro: (id, data) => {
+        set((state) => ({ macros: { ...state.macros, [id]: data } }));
+        ProjectService.createMacro(id, data).catch(console.error);
+    },
+
     updateMacro: (id, data) => {
-        // Macros behave similarly to functions regarding instances
-        get().updateFunction(id, data);
-        // But we need to update 'macros' state specifically if updateFunction only updated 'functions' state?
-        // Actually updateFunction logic above updates ALL collections via 'cascade'.
-        // BUT updateFunction specifically updates 'state.functions[id]'.
-        // So we need to do the same for macro definition itself.
-
         set((state) => {
             const nextMacros = { ...state.macros, [id]: { ...state.macros[id], ...data } };
 
-            // Cascade update (reuse logic if possible, but for now duplicate strictly for clarity)
             const cascade = (collection: Record<string, SubGraphData>) => {
                 const nextCollection = { ...collection };
                 let changed = false;
@@ -178,21 +215,47 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 functions: nextFunctions
             };
         });
+
+        // 同步到后端
+        const fullData = get().macros[id];
+        if (fullData) {
+            ProjectService.updateMacro(id, fullData).catch(console.error);
+        }
     },
-    deleteMacro: (id) => set((state) => {
-        const next = { ...state.macros };
-        delete next[id];
-        return { macros: next };
-    }),
 
-    addGlobalVariable: (id, v) => set((state) => ({ globalVariables: { ...state.globalVariables, [id]: v } })),
-    updateGlobalVariable: (id, data) => set((state) => ({ globalVariables: { ...state.globalVariables, [id]: { ...state.globalVariables[id], ...data } } })),
-    deleteGlobalVariable: (id) => set((state) => {
-        const next = { ...state.globalVariables };
-        delete next[id];
-        return { globalVariables: next };
-    }),
+    deleteMacro: (id) => {
+        set((state) => {
+            const next = { ...state.macros };
+            delete next[id];
+            return { macros: next };
+        });
+        ProjectService.deleteMacro(id).catch(console.error);
+    },
 
+    // Global Variable 操作
+    addGlobalVariable: (id, v) => {
+        set((state) => ({ globalVariables: { ...state.globalVariables, [id]: v } }));
+        ProjectService.createGlobalVariable(id, v).catch(console.error);
+    },
+
+    updateGlobalVariable: (id, data) => {
+        set((state) => ({ globalVariables: { ...state.globalVariables, [id]: { ...state.globalVariables[id], ...data } } }));
+        const fullData = get().globalVariables[id];
+        if (fullData) {
+            ProjectService.updateGlobalVariable(id, fullData).catch(console.error);
+        }
+    },
+
+    deleteGlobalVariable: (id) => {
+        set((state) => {
+            const next = { ...state.globalVariables };
+            delete next[id];
+            return { globalVariables: next };
+        });
+        ProjectService.deleteGlobalVariable(id).catch(console.error);
+    },
+
+    // 项目级操作
     loadProject: (project, path) => set({
         events: project.events || {},
         functions: project.functions || {},
@@ -203,8 +266,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     syncWithTabs: (tabs) => {
         const { events, functions, macros } = get();
-        // Use ProjectService to effectively clone and update based on tabs
-        // Note: ProjectService.syncStoreToCollections logic requires us to pass the 'current' state
         const { nextEvents, nextFunctions, nextMacros, changed } = ProjectService.syncStoreToCollections(
             tabs,
             events,
@@ -218,12 +279,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 functions: nextFunctions,
                 macros: nextMacros
             });
+
+            // 同步到后端
+            get().syncToBackend().catch(console.error);
         }
     },
 
     syncTab: (tabId, tabState) => {
         const { events, functions, macros } = get();
-        // Small efficiency update: only update the relevant collection
         const nextEvents = { ...events };
         const nextFunctions = { ...functions };
         const nextMacros = { ...macros };
@@ -241,6 +304,47 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 functions: f,
                 macros: m
             });
+
+            // 同步单个子图到后端
+            const updatedSubGraph = e[tabId] || f[tabId] || m[tabId];
+            if (updatedSubGraph) {
+                if (e[tabId]) {
+                    ProjectService.updateEvent(tabId, updatedSubGraph).catch(console.error);
+                } else if (f[tabId]) {
+                    ProjectService.updateFunction(tabId, updatedSubGraph).catch(console.error);
+                } else if (m[tabId]) {
+                    ProjectService.updateMacro(tabId, updatedSubGraph).catch(console.error);
+                }
+            }
+        }
+    },
+
+    // 批量同步到后端
+    syncToBackend: async () => {
+        const { events, functions, macros, globalVariables, currentPath } = get();
+        const projectData: ProjectData = {
+            events,
+            functions,
+            macros,
+            globalVariables,
+            metadata: {
+                exportTime: new Date().toISOString(),
+                appVersion: "0.1.0"
+            }
+        };
+        console.log('[SyncToBackend] Syncing project data to backend:', {
+            eventsCount: Object.keys(events).length,
+            functionsCount: Object.keys(functions).length,
+            macrosCount: Object.keys(macros).length,
+            globalVariablesCount: Object.keys(globalVariables).length,
+        });
+        try {
+            // 自动同步时不触发事件（避免循环）
+            await ProjectService.setProjectData(projectData, currentPath || undefined, false);
+            console.log('[SyncToBackend] Successfully synced to backend');
+        } catch (e) {
+            console.error('[SyncToBackend] Failed to sync to backend:', e);
+            throw e;
         }
     }
 }));

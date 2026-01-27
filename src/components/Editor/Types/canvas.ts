@@ -1,4 +1,5 @@
 import { Pin } from "./nodes";
+import { VariableDefinition } from "./variables";
 
 export type CanvasState = {
   x: number;
@@ -71,14 +72,15 @@ export interface SubGraphData {
   type: "event" | "function" | "macro";
   nodes: any[];
   canvas: CanvasState;
-  variables: Record<string, { name: string; type: string; value: any }>;
+  /** 局部变量（函数/宏作用域） */
+  variables: Record<string, VariableDefinition>;
   inputs?: PinDefinition[];
   outputs?: PinDefinition[];
 }
 
 export interface ProjectData {
-  version: string;
-  globalVariables: Record<string, { name: string; type: string; value: any }>;
+  /** 全局变量 */
+  globalVariables: Record<string, VariableDefinition>;
   events: Record<string, SubGraphData>;
   functions: Record<string, SubGraphData>;
   macros: Record<string, SubGraphData>;

@@ -1,72 +1,25 @@
 //! YssBI 后端模块
 //!
-//! 包含所有核心功能：schema 定义、节点系统、执行器等。
+//! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
 pub mod executor;
 pub mod nodes;
+pub mod project;
 pub mod schema;
+pub mod state;
 
+use tauri_plugin_log::log::info;
 use nodes::{GraphData, NodeDefinition};
+use project::{CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData};
 use schema::{
-    CategoryDefinition, EditorSchema, PinTypeDefinition, UIStyleDefinition,
-    VariableTypeDefinition, get_editor_schema,
+    get_editor_schema, CategoryDefinition, EditorSchema, PinTypeDefinition, UIStyleDefinition,
+    VariableDefinition, VariableTypeDefinition,
 };
+use state::{emit_project_event, ProjectEvent, ProjectState};
 use std::collections::HashMap;
+use tauri::{AppHandle, State};
 
-// ==================== Tauri 命令 ====================
-
-/// 执行图
-#[tauri::command]
-fn execute_graph(data: serde_json::Value) -> Result<Vec<String>, String> {
-    println!("Received project data for execution: {}", data);
-
-    let mut all_nodes = Vec::new();
-    let mut all_variables = HashMap::new();
-    let version = data["version"].as_str().unwrap_or("1.0.0").to_string();
-
-    // 收集全局变量
-    if let Some(globals) = data["globalVariables"].as_object() {
-        for (id, var) in globals {
-            all_variables.insert(id.clone(), var.clone());
-        }
-    }
-
-    // 从所有子图收集节点和局部变量
-    let categories = ["events", "functions", "macros"];
-    for cat in categories {
-        if let Some(subgraphs) = data[cat].as_object() {
-            for (sg_id, sub) in subgraphs {
-                if let Some(nodes_arr) = sub["nodes"].as_array() {
-                    for node_val in nodes_arr {
-                        let mut node = node_val.clone();
-                        if node["subGraphId"].is_null() {
-                            node["subGraphId"] = serde_json::Value::String(sg_id.clone());
-                        }
-                        all_nodes.push(node);
-                    }
-                }
-                if let Some(vars) = sub["variables"].as_object() {
-                    for (vid, v) in vars {
-                        all_variables.insert(vid.clone(), v.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    // 构造 GraphData
-    let graph_json = serde_json::json!({
-        "version": version,
-        "nodes": all_nodes,
-        "variables": all_variables
-    });
-    let graph: GraphData = serde_json::from_value(graph_json)
-        .map_err(|e| format!("Failed to parse project to graph: {}", e))?;
-
-    // 执行
-    let mut context = executor::ExecutionContext::new(graph);
-    context.execute()
-}
+// ==================== Schema 命令 ====================
 
 /// 获取所有节点定义
 #[tauri::command]
@@ -110,16 +63,788 @@ fn check_type_connection(from_type: String, to_type: String) -> bool {
     schema::can_connect(&from_type, &to_type)
 }
 
+// ==================== 项目状态命令 ====================
+
+/// 获取当前项目状态
+#[tauri::command]
+fn get_project_state(state: State<'_, ProjectState>) -> ProjectData {
+    let data = state.get_data();
+    info!(
+        "[get_project_state] events={}, functions={}, macros={}, globalVars={}",
+        data.events.len(),
+        data.functions.len(),
+        data.macros.len(),
+        data.global_variables.len()
+    );
+    // 打印每个 event 的详细信息
+    for (id, event) in &data.events {
+        info!(
+            "[get_project_state] Event '{}': name='{}', nodes={}",
+            id,
+            event.name,
+            event.nodes.len()
+        );
+    }
+    data
+}
+
+/// 获取当前项目路径
+#[tauri::command]
+fn get_project_path(state: State<'_, ProjectState>) -> Option<String> {
+    let path = state.get_current_path();
+    info!("[get_project_path] path={:?}", path);
+    path
+}
+
+/// 新建项目（清空当前状态）
+#[tauri::command]
+fn new_project(app: AppHandle, state: State<'_, ProjectState>) -> Result<(), String> {
+    info!("[new_project] Clearing project state");
+    state.clear();
+    emit_project_event(&app, ProjectEvent::ProjectCleared);
+    Ok(())
+}
+
+/// 加载项目（从状态管理器）
+#[tauri::command]
+fn load_project_to_state(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    path: String,
+) -> Result<ProjectData, String> {
+    info!("[load_project_to_state] Loading from path: {}", path);
+    let project = project::load_project_from_file(&path)?;
+    info!(
+        "[load_project_to_state] Loaded: global_vars={}, events={}, functions={}, macros={}",
+        project.global_variables.len(),
+        project.events.len(),
+        project.functions.len(),
+        project.macros.len()
+    );
+
+    // 记录加载的变量详情
+    for (id, var) in &project.global_variables {
+        info!(
+            "[load_project_to_state] Global Variable '{}': name={}, type={:?}",
+            id, var.name, var.data_type
+        );
+    }
+
+    state.set_data(project.clone());
+    state.set_current_path(Some(path.clone()));
+    emit_project_event(
+        &app,
+        ProjectEvent::ProjectLoaded {
+            data: project.clone(),
+            path: Some(path),
+        },
+    );
+    Ok(project)
+}
+
+/// 保存项目（从状态管理器）
+#[tauri::command]
+fn save_project_from_state(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    path: String,
+) -> Result<(), String> {
+    info!("[save_project_from_state] Saving to path: {}", path);
+    let mut project = state.get_data();
+    project.update_metadata();
+    project::save_project_to_file(&project, &path)?;
+    state.set_current_path(Some(path.clone()));
+    emit_project_event(&app, ProjectEvent::ProjectSaved { path });
+    Ok(())
+}
+
+/// 设置项目数据（用于前端批量同步）
+#[tauri::command]
+fn set_project_data(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    data: ProjectData,
+    path: Option<String>,
+    emit_event: Option<bool>, // 是否触发事件，默认 false
+) -> Result<(), String> {
+    info!(
+        "[set_project_data] Receiving data: events={}, functions={}, macros={}, global_vars={}",
+        data.events.len(),
+        data.functions.len(),
+        data.macros.len(),
+        data.global_variables.len()
+    );
+    // 打印每个 event 的详细信息
+    for (id, event) in &data.events {
+        info!(
+            "[set_project_data] Event '{}': name='{}', nodes={}",
+            id,
+            event.name,
+            event.nodes.len()
+        );
+    }
+    state.set_data(data.clone());
+    if let Some(p) = path.clone() {
+        state.set_current_path(Some(p));
+    }
+    info!("[set_project_data] Data stored successfully");
+    
+    // 只在明确要求时才触发事件（避免重复触发）
+    if emit_event.unwrap_or(false) {
+        info!("[set_project_data] Emitting ProjectLoaded event");
+        emit_project_event(&app, ProjectEvent::ProjectLoaded { data, path });
+    }
+    Ok(())
+}
+
+// ==================== Events CRUD 命令 ====================
+
+/// 获取所有事件子图
+#[tauri::command]
+fn get_events(state: State<'_, ProjectState>) -> HashMap<String, SubGraphData> {
+    let events = state.get_events();
+    info!("[get_events] Returning {} events", events.len());
+    events
+}
+
+/// 获取单个事件子图
+#[tauri::command]
+fn get_event(state: State<'_, ProjectState>, id: String) -> Option<SubGraphData> {
+    let event = state.get_event(&id);
+    info!("[get_event] id={}, found={}", id, event.is_some());
+    event
+}
+
+/// 创建事件子图
+#[tauri::command]
+fn create_event(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    info!(
+        "[create_event] id={}, name={}, nodes={}",
+        id,
+        data.name,
+        data.nodes.len()
+    );
+    let result = state.create_event(id.clone(), data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::EventCreated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 更新事件子图
+#[tauri::command]
+fn update_event(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    info!(
+        "[update_event] id={}, name={}, nodes={}",
+        id,
+        data.name,
+        data.nodes.len()
+    );
+    let result = state.update_event(&id, data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::EventUpdated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 删除事件子图
+#[tauri::command]
+fn delete_event(app: AppHandle, state: State<'_, ProjectState>, id: String) -> Result<(), String> {
+    state.delete_event(&id)?;
+    emit_project_event(&app, ProjectEvent::EventDeleted { id });
+    Ok(())
+}
+
+// ==================== Functions CRUD 命令 ====================
+
+/// 获取所有函数子图
+#[tauri::command]
+fn get_functions(state: State<'_, ProjectState>) -> HashMap<String, SubGraphData> {
+    state.get_functions()
+}
+
+/// 获取单个函数子图
+#[tauri::command]
+fn get_function(state: State<'_, ProjectState>, id: String) -> Option<SubGraphData> {
+    state.get_function(&id)
+}
+
+/// 创建函数子图
+#[tauri::command]
+fn create_function(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    let result = state.create_function(id.clone(), data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::FunctionCreated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 更新函数子图
+#[tauri::command]
+fn update_function(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    let result = state.update_function(&id, data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::FunctionUpdated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 删除函数子图
+#[tauri::command]
+fn delete_function(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+) -> Result<(), String> {
+    state.delete_function(&id)?;
+    emit_project_event(&app, ProjectEvent::FunctionDeleted { id });
+    Ok(())
+}
+
+// ==================== Macros CRUD 命令 ====================
+
+/// 获取所有宏子图
+#[tauri::command]
+fn get_macros(state: State<'_, ProjectState>) -> HashMap<String, SubGraphData> {
+    state.get_macros()
+}
+
+/// 获取单个宏子图
+#[tauri::command]
+fn get_macro(state: State<'_, ProjectState>, id: String) -> Option<SubGraphData> {
+    state.get_macro(&id)
+}
+
+/// 创建宏子图
+#[tauri::command]
+fn create_macro(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    let result = state.create_macro(id.clone(), data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::MacroCreated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 更新宏子图
+#[tauri::command]
+fn update_macro(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: SubGraphData,
+) -> Result<SubGraphData, String> {
+    let result = state.update_macro(&id, data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::MacroUpdated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 删除宏子图
+#[tauri::command]
+fn delete_macro(app: AppHandle, state: State<'_, ProjectState>, id: String) -> Result<(), String> {
+    state.delete_macro(&id)?;
+    emit_project_event(&app, ProjectEvent::MacroDeleted { id });
+    Ok(())
+}
+
+// ==================== Global Variables CRUD 命令 ====================
+
+/// 获取所有全局变量
+#[tauri::command]
+fn get_global_variables(state: State<'_, ProjectState>) -> HashMap<String, VariableDefinition> {
+    state.get_global_variables()
+}
+
+/// 获取单个全局变量
+#[tauri::command]
+fn get_global_variable(state: State<'_, ProjectState>, id: String) -> Option<VariableDefinition> {
+    state.get_global_variable(&id)
+}
+
+/// 创建全局变量
+#[tauri::command]
+fn create_global_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: VariableDefinition,
+) -> Result<VariableDefinition, String> {
+    let result = state.create_global_variable(id.clone(), data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::GlobalVariableCreated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 更新全局变量
+#[tauri::command]
+fn update_global_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+    data: VariableDefinition,
+) -> Result<VariableDefinition, String> {
+    let result = state.update_global_variable(&id, data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::GlobalVariableUpdated {
+            id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 删除全局变量
+#[tauri::command]
+fn delete_global_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    id: String,
+) -> Result<(), String> {
+    state.delete_global_variable(&id)?;
+    emit_project_event(&app, ProjectEvent::GlobalVariableDeleted { id });
+    Ok(())
+}
+
+// ==================== Local Variables CRUD 命令 ====================
+
+/// 获取子图的局部变量
+#[tauri::command]
+fn get_local_variables(
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+) -> Result<HashMap<String, VariableDefinition>, String> {
+    state.get_local_variables(&subgraph_id)
+}
+
+/// 创建局部变量
+#[tauri::command]
+fn create_local_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    variable_id: String,
+    data: VariableDefinition,
+) -> Result<VariableDefinition, String> {
+    let result = state.create_local_variable(&subgraph_id, variable_id.clone(), data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::LocalVariableCreated {
+            subgraph_id,
+            variable_id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 更新局部变量
+#[tauri::command]
+fn update_local_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    variable_id: String,
+    data: VariableDefinition,
+) -> Result<VariableDefinition, String> {
+    let result = state.update_local_variable(&subgraph_id, &variable_id, data)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::LocalVariableUpdated {
+            subgraph_id,
+            variable_id,
+            data: result.clone(),
+        },
+    );
+    Ok(result)
+}
+
+/// 删除局部变量
+#[tauri::command]
+fn delete_local_variable(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    variable_id: String,
+) -> Result<(), String> {
+    state.delete_local_variable(&subgraph_id, &variable_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::LocalVariableDeleted {
+            subgraph_id,
+            variable_id,
+        },
+    );
+    Ok(())
+}
+
+// ==================== Nodes 命令 ====================
+
+/// 获取子图的节点列表
+#[tauri::command]
+fn get_nodes(
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+) -> Result<Vec<SerializedNode>, String> {
+    state.get_nodes(&subgraph_id)
+}
+
+/// 设置子图的节点列表
+#[tauri::command]
+fn set_nodes(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    nodes: Vec<SerializedNode>,
+) -> Result<(), String> {
+    state.set_nodes(&subgraph_id, nodes.clone())?;
+    emit_project_event(&app, ProjectEvent::NodesUpdated { subgraph_id, nodes });
+    Ok(())
+}
+
+/// 更新子图的画布状态
+#[tauri::command]
+fn update_canvas(
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    canvas: CanvasState,
+) -> Result<(), String> {
+    state.update_canvas(&subgraph_id, canvas)
+}
+
+/// 更新子图的输入输出定义
+#[tauri::command]
+fn update_subgraph_io(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    inputs: Option<Vec<PinDefinition>>,
+    outputs: Option<Vec<PinDefinition>>,
+) -> Result<SubGraphData, String> {
+    state.update_subgraph_io(&subgraph_id, inputs, outputs)?;
+    // 返回更新后的子图数据
+    let updated = state
+        .get_event(&subgraph_id)
+        .or_else(|| state.get_function(&subgraph_id))
+        .or_else(|| state.get_macro(&subgraph_id))
+        .ok_or_else(|| format!("Subgraph '{}' not found after update", subgraph_id))?;
+
+    // 发送相应的更新事件
+    if state.get_event(&subgraph_id).is_some() {
+        emit_project_event(
+            &app,
+            ProjectEvent::EventUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    } else if state.get_function(&subgraph_id).is_some() {
+        emit_project_event(
+            &app,
+            ProjectEvent::FunctionUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    } else {
+        emit_project_event(
+            &app,
+            ProjectEvent::MacroUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    }
+
+    Ok(updated)
+}
+
+/// 重命名子图
+#[tauri::command]
+fn rename_subgraph(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    new_name: String,
+) -> Result<SubGraphData, String> {
+    state.rename_subgraph(&subgraph_id, new_name)?;
+    // 返回更新后的子图数据
+    let updated = state
+        .get_event(&subgraph_id)
+        .or_else(|| state.get_function(&subgraph_id))
+        .or_else(|| state.get_macro(&subgraph_id))
+        .ok_or_else(|| format!("Subgraph '{}' not found after rename", subgraph_id))?;
+
+    // 发送相应的更新事件
+    if state.get_event(&subgraph_id).is_some() {
+        emit_project_event(
+            &app,
+            ProjectEvent::EventUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    } else if state.get_function(&subgraph_id).is_some() {
+        emit_project_event(
+            &app,
+            ProjectEvent::FunctionUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    } else {
+        emit_project_event(
+            &app,
+            ProjectEvent::MacroUpdated {
+                id: subgraph_id,
+                data: updated.clone(),
+            },
+        );
+    }
+
+    Ok(updated)
+}
+
+// ==================== 执行命令 ====================
+
+/// 执行图（从状态管理器获取数据）
+#[tauri::command]
+fn execute_graph(state: State<'_, ProjectState>) -> Result<Vec<String>, String> {
+    let data = state.get_data();
+    execute_project_data(data)
+}
+
+/// 执行指定的项目数据（兼容旧接口）
+#[tauri::command]
+fn execute_project(data: ProjectData) -> Result<Vec<String>, String> {
+    execute_project_data(data)
+}
+
+fn execute_project_data(data: ProjectData) -> Result<Vec<String>, String> {
+    info!("[execute_project_data] Received project data for execution");
+
+    let mut nodes = Vec::new();
+    let mut variables = HashMap::new();
+
+    // 1. 收集全局变量
+    for (id, var) in &data.global_variables {
+        // 将 VariableDefinition 转换为 VariableData
+        let value = var.static_value.clone()
+            .or_else(|| var.default_value.clone())
+            .unwrap_or(serde_json::Value::Null);
+        variables.insert(
+            id.clone(),
+            nodes::VariableData {
+                name: var.name.clone(),
+                var_type: format!("{:?}", var.data_type).to_lowercase(),
+                value,
+            },
+        );
+    }
+
+    // 2. 从所有子图收集节点和局部变量
+    let collections = vec![
+        (&data.events),
+        (&data.functions),
+        (&data.macros),
+    ];
+
+    for subgraphs in collections {
+        for (sg_id, sub) in subgraphs {
+            // 收集子图节点
+            for sn in &sub.nodes {
+                let node = nodes::NodeData {
+                    id: sn.id.clone(),
+                    node_type: sn.node_type.clone(),
+                    title: sn.title.clone(),
+                    inputs: sn.inputs.iter().map(|p| nodes::PinData {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        pin_type: p.pin_type.clone(),
+                        links: p.links.clone(),
+                        default_value: p.default_value.clone(),
+                    }).collect(),
+                    outputs: sn.outputs.iter().map(|p| nodes::PinData {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        pin_type: p.pin_type.clone(),
+                        links: p.links.clone(),
+                        default_value: p.default_value.clone(),
+                    }).collect(),
+                    variable_id: sn.variable_id.clone(),
+                    sub_graph_id: Some(sg_id.clone()),
+                };
+                nodes.push(node);
+            }
+
+            // 收集局部变量
+            for (id, var) in &sub.variables {
+                let value = var.static_value.clone()
+                    .or_else(|| var.default_value.clone())
+                    .unwrap_or(serde_json::Value::Null);
+                variables.insert(
+                    id.clone(),
+                    nodes::VariableData {
+                        name: var.name.clone(),
+                        var_type: format!("{:?}", var.data_type).to_lowercase(),
+                        value,
+                    },
+                );
+            }
+        }
+    }
+
+    info!(
+        "[execute_project_data] Collected {} nodes and {} variables",
+        nodes.len(),
+        variables.len()
+    );
+
+    // 打印变量名，方便调试
+    for (id, var) in &variables {
+        info!("[execute_project_data] Variable '{}' (type={})", id, var.var_type);
+    }
+
+    // 3. 构造 GraphData
+    let graph = nodes::GraphData {
+        version: "1.0.0".to_string(),
+        nodes,
+        variables: Some(variables),
+    };
+
+    // 4. 执行
+    let mut context = executor::ExecutionContext::new(graph);
+    context.execute()
+}
+
+// ==================== 兼容旧接口的项目文件命令 ====================
+
+/// 保存项目到指定路径（兼容旧接口）
+#[tauri::command]
+fn save_project(path: String, project_json: String) -> Result<(), String> {
+    let mut project: ProjectData = serde_json::from_str(&project_json)
+        .map_err(|e| format!("Failed to parse project data: {}", e))?;
+
+    // 更新元数据时间戳
+    project.update_metadata();
+
+    project::save_project_to_file(&project, &path)
+}
+
+/// 从指定路径加载项目（兼容旧接口）
+#[tauri::command]
+fn load_project(path: String) -> Result<ProjectData, String> {
+    project::load_project_from_file(&path)
+}
+
+/// 解析项目 JSON（不涉及文件操作）
+#[tauri::command]
+fn parse_project(json: String) -> Result<ProjectData, String> {
+    ProjectData::from_json(&json)
+}
+
+/// 序列化项目为 JSON（不涉及文件操作）
+#[tauri::command]
+fn serialize_project(project: ProjectData) -> Result<String, String> {
+    project.to_json()
+}
+
 // ==================== 应用入口 ====================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .format(|out, message, record| {
+                    use chrono::Local;
+                    // 简化日志格式: [时间][来源][级别] 消息
+                    let target = record.target();
+                    // 简化 webview 目标名称
+                    let short_target = if target.starts_with("webview:") {
+                        "FE"
+                    } else if target.contains("yssbi") {
+                        "BE"
+                    } else {
+                        target
+                    };
+                    let now = Local::now();
+                    out.finish(format_args!(
+                        "[{}][{}][{}] {}",
+                        now.format("%H:%M:%S%.3f"),
+                        short_target,
+                        record.level(),
+                        message
+                    ))
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // 注册全局状态管理器
+        .manage(ProjectState::new())
         .invoke_handler(tauri::generate_handler![
-            execute_graph,
+            // Schema 命令
             get_node_definitions,
             get_editor_schema_command,
             get_pin_types,
@@ -127,6 +852,56 @@ pub fn run() {
             get_ui_styles,
             get_variable_types,
             check_type_connection,
+            // 项目状态命令
+            get_project_state,
+            get_project_path,
+            new_project,
+            load_project_to_state,
+            save_project_from_state,
+            set_project_data,
+            // Events CRUD
+            get_events,
+            get_event,
+            create_event,
+            update_event,
+            delete_event,
+            // Functions CRUD
+            get_functions,
+            get_function,
+            create_function,
+            update_function,
+            delete_function,
+            // Macros CRUD
+            get_macros,
+            get_macro,
+            create_macro,
+            update_macro,
+            delete_macro,
+            // Global Variables CRUD
+            get_global_variables,
+            get_global_variable,
+            create_global_variable,
+            update_global_variable,
+            delete_global_variable,
+            // Local Variables CRUD
+            get_local_variables,
+            create_local_variable,
+            update_local_variable,
+            delete_local_variable,
+            // Nodes 命令
+            get_nodes,
+            set_nodes,
+            update_canvas,
+            update_subgraph_io,
+            rename_subgraph,
+            // 执行命令
+            execute_graph,
+            execute_project,
+            // 兼容旧接口
+            save_project,
+            load_project,
+            parse_project,
+            serialize_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

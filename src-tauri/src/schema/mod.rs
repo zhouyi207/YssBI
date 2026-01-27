@@ -8,6 +8,7 @@ pub mod pin_types;
 pub mod ui_styles;
 pub mod validation;
 pub mod variable_types;
+pub mod variables;
 
 // 重新导出常用类型
 pub use categories::{get_category_definitions, CategoryDefinition};
@@ -17,10 +18,13 @@ pub use pin_types::{
 };
 pub use ui_styles::{get_center_symbol, get_ui_style_definitions, UIStyleDefinition};
 pub use validation::{
-    get_graph_validation_rules, get_node_validation_rules, GraphValidationRule,
-    NodeValidationRule, ValidationLevel, ValidationMessage, ValidationResult,
+    get_graph_validation_rules, get_node_validation_rules, GraphValidationRule, NodeValidationRule,
+    ValidationLevel, ValidationMessage, ValidationResult,
 };
 pub use variable_types::{get_variable_type_definitions, VariableTypeDefinition};
+pub use variables::{
+    DataSourceConfig, TransformOperation, VariableDataType, VariableDefinition, VariableScope,
+};
 
 use serde::Serialize;
 

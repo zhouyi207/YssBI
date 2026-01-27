@@ -15,20 +15,15 @@ pub fn get_all_node_definitions() -> Vec<NodeDefinition> {
         create_function_return(),
         create_macro_inputs(),
         create_macro_outputs(),
-        
         // ========== 函数调用节点 ==========
         create_call_function(),
         create_call_macro(),
-        
         // ========== 功能节点 ==========
         create_print(),
-        
         // ========== 数学节点 ==========
         create_add(),
-        
         // ========== 分支节点 ==========
         create_if_else(),
-        
         // ========== 变量节点 ==========
         create_get_variable(),
         create_set_variable(),
@@ -152,7 +147,7 @@ fn create_call_function() -> NodeDefinition {
             let sub_graph_id_clone = sub_graph_id.clone();
             let node_title = node.title.clone();
             let node_id = node.id.clone();
-            
+
             // 找到入口节点
             let entry_node_id = ctx
                 .find_node_by(&|n| {
@@ -199,7 +194,7 @@ fn create_call_macro() -> NodeDefinition {
             let sub_graph_id_clone = sub_graph_id.clone();
             let node_title = node.title.clone();
             let node_id = node.id.clone();
-            
+
             let entry_node_id = ctx
                 .find_node_by(&|n| {
                     n.node_type == "macro_inputs"
@@ -453,7 +448,10 @@ fn create_set_variable() -> NodeDefinition {
             if ctx.set_variable(var_id, val) {
                 Ok("Out".to_string())
             } else {
-                Err(format!("[Error] Cannot set unknown variable ID '{}'.", var_id))
+                Err(format!(
+                    "[Error] Cannot set unknown variable ID '{}'.",
+                    var_id
+                ))
             }
         }),
     }

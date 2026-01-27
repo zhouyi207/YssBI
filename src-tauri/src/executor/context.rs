@@ -3,10 +3,11 @@
 //! 负责图的执行逻辑。
 
 use crate::nodes::{
-    ExecutionContextTrait, GraphData, NodeData, NodeDefinition, get_all_node_definitions,
+    get_all_node_definitions, ExecutionContextTrait, GraphData, NodeData, NodeDefinition,
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use tauri_plugin_log::log::info;
 
 /// 执行上下文
 pub struct ExecutionContext {
@@ -74,10 +75,12 @@ impl ExecutionContext {
             .map(|n| n.id.clone())
             .ok_or("No 'event_on_run' node found")?;
 
-        self.logs
-            .push(format!("Starting execution from node: {}", start_node_id));
+        let log_msg = format!("Starting execution from node: {}", start_node_id);
+        info!("{}", log_msg);
+        self.logs.push(log_msg);
         self.run_flow_internal(&start_node_id, "Exec")?;
 
+        info!("Execution finished");
         self.logs.push("Execution finished".to_string());
         Ok(self.logs.clone())
     }
@@ -85,10 +88,9 @@ impl ExecutionContext {
     /// 内部：执行流程
     fn run_flow_internal(&mut self, node_id: &str, output_exec_name: &str) -> Result<(), String> {
         let node = self.nodes.get(node_id).ok_or("Node not found")?.clone();
-        self.logs.push(format!(
-            ">>> Executing Node: {} ({})",
-            node.title, node.node_type
-        ));
+        let log_msg = format!(">>> Executing Node: {} ({})", node.title, node.node_type);
+        info!("{}", log_msg);
+        self.logs.push(log_msg);
 
         let def = self
             .definitions
@@ -149,10 +151,16 @@ impl ExecutionContext {
             Value::Null
         };
 
-        self.logs.push(format!(
-            "  [Data] Node {} output pin {} -> {:?}",
-            node.title, pin_id, val
-        ));
+        let pin_name = node.outputs.iter().find(|p| p.id == pin_id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| pin_id.to_string());
+
+        let log_msg = format!(
+            "  [Data] Node '{}' pin '{}' -> {:?}",
+            node.title, pin_name, val
+        );
+        info!("{}", log_msg);
+        self.logs.push(log_msg);
         val
     }
 }
@@ -216,6 +224,7 @@ impl ExecutionContextTrait for ExecutionContext {
     }
 
     fn log(&mut self, message: String) {
+        info!("{}", message);
         self.logs.push(message);
     }
 

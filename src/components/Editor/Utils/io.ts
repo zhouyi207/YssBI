@@ -1,9 +1,7 @@
 import { BaseNode } from "../Types/nodes";
-import { CanvasState, ProjectData, SubGraphData } from "../Types/canvas";
+import { CanvasState, SubGraphData } from "../Types/canvas";
 import { NODE_REGISTRY } from "../Nodes/registry";
-
-
-const CURRENT_VERSION = "1.0.0";
+import { VariableDefinition } from "../Types/variables";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -14,7 +12,7 @@ export function serializeSubGraph(
   type: "event" | "function" | "macro",
   nodes: BaseNode[],
   canvas: CanvasState,
-  variables: Record<string, { name: string; type: string; value: any }>,
+  variables: Record<string, VariableDefinition>,
   inputs: import("../Types/canvas").PinDefinition[] = [],
   outputs: import("../Types/canvas").PinDefinition[] = []
 ): SubGraphData {
@@ -35,6 +33,8 @@ export function serializeSubGraph(
 
       isInternal: node.isInternal,
       variableId: node.variableId,
+      variableType: node.variableType,
+      variableName: node.variableName,
       subGraphId: node.subGraphId,
       inputs: node.inputs.map((p) => ({
         id: p.id,
@@ -60,13 +60,11 @@ export function serializeSubGraph(
 export function deserializeSubGraph(data: SubGraphData): {
   nodes: BaseNode[];
   canvas: CanvasState;
-  variables: Record<string, { name: string; type: string; value: any }>;
+  variables: Record<string, VariableDefinition>;
   inputs: import("../Types/canvas").PinDefinition[];
   outputs: import("../Types/canvas").PinDefinition[];
 } {
-
-
-  const variables = data.variables || {};
+  const variables: Record<string, VariableDefinition> = data.variables || {};
 
 
   const nodes = (data.nodes || []).map((n: any) => {
@@ -91,7 +89,10 @@ export function deserializeSubGraph(data: SubGraphData): {
     node.subGraphId = n.subGraphId;
     node.title = n.title;
 
+    // 变量节点相关字段
     node.variableId = n.variableId;
+    node.variableType = n.variableType;
+    node.variableName = n.variableName;
 
     if (n.variableId && !variables[n.variableId]) {
       console.warn(`Node ${n.id} in ${data.name} refers to missing variable ${n.variableId}.`);
@@ -119,48 +120,4 @@ export function deserializeSubGraph(data: SubGraphData): {
     inputs: data.inputs || [],
     outputs: data.outputs || [],
   };
-}
-/**
- * 序列化整个项目
- */
-export function serializeProject(
-  globalVariables: Record<string, { name: string; type: string; value: any }>,
-  events: Record<string, SubGraphData>,
-  functions: Record<string, SubGraphData>,
-  macros: Record<string, SubGraphData>
-): ProjectData {
-  return {
-    version: CURRENT_VERSION,
-    globalVariables,
-    events,
-    functions,
-    macros,
-    metadata: {
-      exportTime: new Date().toISOString(),
-      appVersion: "0.1.0",
-    },
-  };
-}
-
-/**
- * 反序列化整个项目
- */
-export function deserializeProject(jsonStr: string): ProjectData {
-  try {
-    const data = JSON.parse(jsonStr);
-    if (data.version !== CURRENT_VERSION) {
-      console.warn("Project version mismatch");
-    }
-    return {
-      version: data.version || CURRENT_VERSION,
-      globalVariables: data.globalVariables || {},
-      events: data.events || {},
-      functions: data.functions || {},
-      macros: data.macros || {},
-      metadata: data.metadata || { exportTime: new Date().toISOString(), appVersion: "0.1.0" },
-    };
-  } catch (e) {
-    console.error("Failed to parse project JSON", e);
-    throw e;
-  }
 }

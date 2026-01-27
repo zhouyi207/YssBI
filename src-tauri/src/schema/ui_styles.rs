@@ -101,11 +101,12 @@ pub fn get_ui_style_definitions() -> Vec<UIStyleDefinition> {
 
 /// 根据名称获取样式定义
 pub fn get_ui_style_by_name(name: &str) -> Option<UIStyleDefinition> {
-    get_ui_style_definitions().into_iter().find(|s| s.name == name)
+    get_ui_style_definitions()
+        .into_iter()
+        .find(|s| s.name == name)
 }
 
 /// 获取节点的中心符号
 pub fn get_center_symbol(style_name: &str, node_type: &str) -> Option<String> {
-    get_ui_style_by_name(style_name)
-        .and_then(|style| style.center_symbols.get(node_type).cloned())
+    get_ui_style_by_name(style_name).and_then(|style| style.center_symbols.get(node_type).cloned())
 }

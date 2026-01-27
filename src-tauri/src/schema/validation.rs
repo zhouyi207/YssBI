@@ -59,17 +59,13 @@ pub enum ValidationLevel {
 #[serde(tag = "type")]
 pub enum GraphRuleType {
     /// 必须有入口节点
-    RequireEntryNode {
-        entry_node_types: Vec<String>,
-    },
+    RequireEntryNode { entry_node_types: Vec<String> },
     /// 禁止循环引用
     NoCycles,
     /// 所有 exec 路径必须终止
     AllPathsTerminate,
     /// 不允许悬空的数据针脚 (未使用的输出)
-    NoUnusedOutputs {
-        excluded_types: Vec<String>,
-    },
+    NoUnusedOutputs { excluded_types: Vec<String> },
 }
 
 /// 验证结果
@@ -100,42 +96,36 @@ pub fn get_node_validation_rules() -> Vec<NodeValidationRule> {
         // Print 节点：In 和 Value 必须连接
         NodeValidationRule {
             node_type: "print".into(),
-            input_rules: vec![
-                PinValidationRule {
-                    pin_name: "In".into(),
-                    required: true,
-                    min_connections: 1,
-                    max_connections: Some(1),
-                },
-            ],
+            input_rules: vec![PinValidationRule {
+                pin_name: "In".into(),
+                required: true,
+                min_connections: 1,
+                max_connections: Some(1),
+            }],
             output_rules: vec![],
             custom_message: None,
         },
         // Branch 节点：条件必须连接
         NodeValidationRule {
             node_type: "if_else".into(),
-            input_rules: vec![
-                PinValidationRule {
-                    pin_name: "In".into(),
-                    required: true,
-                    min_connections: 1,
-                    max_connections: Some(1),
-                },
-            ],
+            input_rules: vec![PinValidationRule {
+                pin_name: "In".into(),
+                required: true,
+                min_connections: 1,
+                max_connections: Some(1),
+            }],
             output_rules: vec![],
             custom_message: None,
         },
         // Set Variable：必须有变量 ID
         NodeValidationRule {
             node_type: "set_variable".into(),
-            input_rules: vec![
-                PinValidationRule {
-                    pin_name: "In".into(),
-                    required: true,
-                    min_connections: 1,
-                    max_connections: Some(1),
-                },
-            ],
+            input_rules: vec![PinValidationRule {
+                pin_name: "In".into(),
+                required: true,
+                min_connections: 1,
+                max_connections: Some(1),
+            }],
             output_rules: vec![],
             custom_message: Some("必须关联一个变量".into()),
         },

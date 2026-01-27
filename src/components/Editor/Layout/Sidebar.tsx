@@ -58,7 +58,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   // 监听数量变化并滚动到底部
   useEffect(() => {
-    const isAdded = 
+    const isAdded =
       eventsCount > prevCounts.current.events ||
       functionsCount > prevCounts.current.functions ||
       macrosCount > prevCounts.current.macros ||
@@ -72,11 +72,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     }
 
     // 更新记录
-    prevCounts.current = { 
-      events: eventsCount, 
-      functions: functionsCount, 
-      macros: macrosCount, 
-      variables: variablesCount 
+    prevCounts.current = {
+      events: eventsCount,
+      functions: functionsCount,
+      macros: macrosCount,
+      variables: variablesCount
     };
   }, [eventsCount, functionsCount, macrosCount, variablesCount]);
 
@@ -108,7 +108,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 category: "Variable",
                 variableId: id,
                 variableName: name,
-                variableType: extra?.type
+                variableType: extra?.data_type
               },
               x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
             });
@@ -135,7 +135,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       >
         <div
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: isSelected ? 'white' : (extra?.type ? PIN_COLORS[extra.type] : '#9ca3af') }}
+          style={{ backgroundColor: isSelected ? 'white' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af') }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
 
@@ -159,7 +159,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </button>
             )}
             <span className={`text-[9px] font-black uppercase px-1 rounded ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
-              {extra?.type}
+              {extra?.data_type}
             </span>
           </>
         )}
@@ -194,7 +194,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         </div>
 
         {/* List Content */}
-        <div 
+        <div
           ref={listRef}
           className="flex-1 overflow-y-auto p-1 custom-scrollbar scroll-smooth"
         >

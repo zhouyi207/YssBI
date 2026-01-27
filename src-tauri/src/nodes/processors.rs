@@ -10,33 +10,33 @@ use serde_json::Value;
 
 /// 执行上下文 trait
 /// 定义处理器需要的上下文接口
-/// 
+///
 /// 注意：所有方法必须是 dyn-compatible（不能有泛型参数）
 pub trait ExecutionContextTrait {
     /// 获取针脚的值
     fn get_pin_value(&mut self, pin_id: &str) -> Value;
-    
+
     /// 获取变量值
     fn get_variable(&self, var_id: &str) -> Option<&Value>;
-    
+
     /// 设置变量值
     fn set_variable(&mut self, var_id: &str, value: Value) -> bool;
-    
+
     /// 添加日志
     fn log(&mut self, message: String);
-    
+
     /// 执行子流程
     fn run_flow(&mut self, node_id: &str, output_pin: &str) -> Result<(), String>;
-    
+
     /// 压入调用栈
     fn push_call_stack(&mut self, node_id: String);
-    
+
     /// 弹出调用栈
     fn pop_call_stack(&mut self);
-    
+
     /// 获取调用栈顶部节点 ID
     fn get_call_stack_top(&self) -> Option<&String>;
-    
+
     /// 根据条件查找节点（使用 trait object 而非泛型以保持 dyn-compatible）
     fn find_node_by(&self, predicate: &dyn Fn(&NodeData) -> bool) -> Option<String>;
 }

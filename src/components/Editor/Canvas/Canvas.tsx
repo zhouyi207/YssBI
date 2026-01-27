@@ -379,7 +379,11 @@ export default function Canvas() {
 
       if (spawnType) {
         saveHistory();
-        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType);
+        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType, {
+          variableId: dragState.template.variableId,
+          variableName: dragState.template.variableName,
+          variableType: dragState.template.variableType
+        });
         if (newNode) {
           setNodes((prev) => [...prev, newNode]);
 
@@ -396,7 +400,11 @@ export default function Canvas() {
       }
 
       if (targetPinId) {
-        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable");
+        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable", {
+          variableId: dragState.template.variableId,
+          variableName: dragState.template.variableName,
+          variableType: dragState.template.variableType
+        });
         if (newNode) {
           setNodes((prev) => [...prev, newNode]);
           const outputPin = newNode.outputs[0];

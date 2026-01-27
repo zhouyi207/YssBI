@@ -12,6 +12,12 @@ export function createNodeFromTemplate(
     const node = NODE_REGISTRY.createNode(type, id, position);
     if (node && overrides) {
         Object.assign(node, overrides);
+
+        // Handle variable specific initialization
+        if ((node.type === 'get_variable' || node.type === 'set_variable') &&
+            node.variableId && node.variableType && node.variableName) {
+            node.setVariable(node.variableId, node.variableName, node.variableType);
+        }
     }
     return node;
 }

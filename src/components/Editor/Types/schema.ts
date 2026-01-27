@@ -163,3 +163,40 @@ export interface EditorSchema {
   node_validation_rules: NodeValidationRule[];
   graph_validation_rules: GraphValidationRule[];
 }
+
+// ==================== 重新导出变量定义类型 ====================
+
+export type {
+  VariableDataType,
+  VariableScope,
+  GlobalScope,
+  FunctionScope,
+  MacroScope,
+  DataSourceConfig,
+  CsvSource,
+  JsonSource,
+  ExcelSource,
+  SqlSource,
+  ApiSource,
+  TransformSource,
+  InlineSource,
+  TransformOperation,
+  Aggregation,
+  AggregateFunction,
+  VariableDefinition,
+  VariableRuntimeState,
+  VariablePreview,
+  VariablePreviewType,
+  DataFrameStats,
+  ColumnInfo,
+} from "./variables";
+
+export {
+  isPrimitiveType,
+  isComplexType,
+  getDataTypeDisplayName,
+  getDefaultValueForType,
+  createVariableDefinition,
+  createPrimitiveVariable,
+  createComplexVariable,
+} from "./variables";

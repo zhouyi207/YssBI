@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback } from "react";
 import { Pin, BaseNode } from "../Types/nodes";
 import { CanvasState } from "../Types/canvas";
+import { VariableDefinition } from "../Types/variables";
 import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
 import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
@@ -25,12 +26,12 @@ interface CanvasContextValue {
   saveGraph: () => Promise<void>;
   importGraph: (json?: string) => Promise<void>;
   executeGraph: () => Promise<void>;
-  variables: Record<string, { name: string; type: string; value: any }>;
-  globalVariables: Record<string, { name: string; type: string; value: any }>;
+  variables: Record<string, VariableDefinition>;
+  globalVariables: Record<string, VariableDefinition>;
   selectedItemId: string | null;
   selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null;
   setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null) => void;
-  updateVariable: (id: string, data: Partial<{ name: string; type: string; value: any }>) => void;
+  updateVariable: (id: string, data: Partial<VariableDefinition>) => void;
   addVariable: (name?: string, type?: string, isGlobal?: boolean) => void;
   deleteVariable: (id: string) => void;
   promoteVariable: (id: string) => void;

@@ -1,5 +1,5 @@
 //! Pin 类型定义模块
-//! 
+//!
 //! 定义所有可用的 Pin 类型及其属性，包括颜色、兼容性规则等。
 
 use serde::{Deserialize, Serialize};
@@ -181,14 +181,29 @@ mod tests {
 
     #[test]
     fn test_implicit_conversion() {
-        assert_eq!(check_type_compatibility("int", "float"), TypeConversion::Implicit);
-        assert_eq!(check_type_compatibility("int", "string"), TypeConversion::Implicit);
+        assert_eq!(
+            check_type_compatibility("int", "float"),
+            TypeConversion::Implicit
+        );
+        assert_eq!(
+            check_type_compatibility("int", "string"),
+            TypeConversion::Implicit
+        );
     }
 
     #[test]
     fn test_object_accepts_any() {
-        assert_eq!(check_type_compatibility("int", "object"), TypeConversion::Implicit);
-        assert_eq!(check_type_compatibility("string", "object"), TypeConversion::Implicit);
-        assert_eq!(check_type_compatibility("exec", "object"), TypeConversion::Incompatible);
+        assert_eq!(
+            check_type_compatibility("int", "object"),
+            TypeConversion::Implicit
+        );
+        assert_eq!(
+            check_type_compatibility("string", "object"),
+            TypeConversion::Implicit
+        );
+        assert_eq!(
+            check_type_compatibility("exec", "object"),
+            TypeConversion::Incompatible
+        );
     }
 }

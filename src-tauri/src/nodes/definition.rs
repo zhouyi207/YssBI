@@ -2,8 +2,8 @@
 //!
 //! 定义 NodeDefinition 结构体及其序列化逻辑。
 
-use super::types::PinDefinition;
 use super::processors::{DataProcessor, FlowProcessor};
+use super::types::PinDefinition;
 use serde::{Deserialize, Serialize};
 
 /// 节点元数据定义

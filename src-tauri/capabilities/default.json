@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["*"],
+  "windows": [
+    "*"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-create",
@@ -34,7 +36,15 @@
     "fs:scope-appconfig",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "**" }, { "path": "$APPCONFIG/**" }]
-    }
+      "allow": [
+        {
+          "path": "**"
+        },
+        {
+          "path": "$APPCONFIG/**"
+        }
+      ]
+    },
+    "log:default"
   ]
 }

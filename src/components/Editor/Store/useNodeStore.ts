@@ -1,21 +1,16 @@
 import { useCallback } from 'react';
 import { create } from 'zustand';
 import { BaseNode } from '../Types/nodes';
-
-export interface Variable {
-  name: string;
-  type: string;
-  value: any;
-}
+import { VariableDefinition } from '../Types/variables';
 
 interface TabSnapshot {
   nodes: BaseNode[];
-  variables: Record<string, Variable>;
+  variables: Record<string, VariableDefinition>;
 }
 
 export interface TabState {
   nodes: BaseNode[];
-  variables: Record<string, Variable>;
+  variables: Record<string, VariableDefinition>;
   history: {
     past: TabSnapshot[];
     future: TabSnapshot[];
@@ -26,7 +21,8 @@ interface NodeStore {
   tabs: Record<string, TabState>;
 
   // Lifecycle
-  initTab: (tabId: string, nodes: BaseNode[], variables: Record<string, Variable>) => void;
+  initTab: (tabId: string, nodes: BaseNode[], variables: Record<string, VariableDefinition>) => void;
+  clearTabs: () => void;
 
   // Nodes
   setNodes: (tabId: string, nodes: BaseNode[]) => void;
@@ -34,9 +30,9 @@ interface NodeStore {
   updateNodePosition: (tabId: string, nodeId: string, dx: number, dy: number) => void;
 
   // Variables
-  setVariables: (tabId: string, variables: Record<string, Variable>) => void;
-  updateVariable: (tabId: string, varId: string, data: Partial<Variable>) => void;
-  addVariable: (tabId: string, varId: string, variable: Variable) => void;
+  setVariables: (tabId: string, variables: Record<string, VariableDefinition>) => void;
+  updateVariable: (tabId: string, varId: string, data: Partial<VariableDefinition>) => void;
+  addVariable: (tabId: string, varId: string, variable: VariableDefinition) => void;
   removeVariable: (tabId: string, varId: string) => void;
 
   // History
@@ -48,7 +44,7 @@ interface NodeStore {
   getNodes: (tabId: string) => BaseNode[];
 }
 
-const createTabState = (nodes: BaseNode[] = [], variables: Record<string, Variable> = {}): TabState => ({
+const createTabState = (nodes: BaseNode[] = [], variables: Record<string, VariableDefinition> = {}): TabState => ({
   nodes,
   variables,
   history: { past: [], future: [] }
@@ -60,6 +56,8 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
   initTab: (tabId, nodes, variables) => set(state => ({
     tabs: { ...state.tabs, [tabId]: createTabState(nodes, variables) }
   })),
+
+  clearTabs: () => set({ tabs: {} }),
 
   setNodes: (tabId, nodesArray) => set(state => {
     const tab = state.tabs[tabId];
@@ -183,7 +181,7 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
 }));
 
 const EMPTY_NODES: BaseNode[] = [];
-const EMPTY_VARS: Record<string, Variable> = {};
+const EMPTY_VARS: Record<string, VariableDefinition> = {};
 
 export const useTabNodes = (tabId: string | null) => {
   const selector = useCallback((state: NodeStore) => {

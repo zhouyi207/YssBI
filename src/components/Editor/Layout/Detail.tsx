@@ -4,7 +4,7 @@ import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
 import { useLayoutStore } from "../../../store/layoutStore";
 
-export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ width: propWidth }, ref) => {
+export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const nodeId = useContext(GroupContext); // 获取布局上下文 ID
   const {
     variables,
@@ -27,9 +27,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ width: p
   const { showDialog } = useUI();
 
   // Read state from Layout Store
-  const detailNode = useLayoutStore(s => s.nodes[nodeId || 'detail']);
-  const storeWidth = detailNode?.pixelSize ?? 300;
-  const width = propWidth ?? storeWidth;
+  // Removed unused width logic and detailNode to fix lint errors
 
   // Find the selected item's data
   let selectedData: any = null;
@@ -160,35 +158,35 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ width: p
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
                     <td className="p-2">
                       <Select
-                        value={selectedData.type}
+                        value={selectedData.data_type}
                         options={[
                           { label: "Integer", value: "int" },
                           { label: "Float", value: "float" },
                           { label: "Boolean", value: "bool" },
                           { label: "String", value: "string" }
                         ]}
-                        onChange={(val) => handleUpdate({ type: val })}
+                        onChange={(val) => handleUpdate({ data_type: val })}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-[#2b2b2b]">
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
                     <td className="p-2">
-                      {selectedData.type === "bool" ? (
+                      {selectedData.data_type === "bool" ? (
                         <input
                           type="checkbox"
                           className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
-                          checked={!!selectedData.value}
-                          onChange={(e) => handleUpdate({ value: e.target.checked })}
+                          checked={!!selectedData.static_value}
+                          onChange={(e) => handleUpdate({ static_value: e.target.checked })}
                         />
                       ) : (
                         <input
                           className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
-                          type={selectedData.type === "string" ? "text" : "number"}
-                          value={selectedData.value}
+                          type={selectedData.data_type === "string" ? "text" : "number"}
+                          value={selectedData.static_value ?? ''}
                           onChange={(e) => {
-                            const val = selectedData.type === "string" ? e.target.value : Number(e.target.value);
-                            handleUpdate({ value: val });
+                            const val = selectedData.data_type === "string" ? e.target.value : Number(e.target.value);
+                            handleUpdate({ static_value: val });
                           }}
                         />
                       )}

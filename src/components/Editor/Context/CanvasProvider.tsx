@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import { CanvasContext } from "./CanvasContext";
 import { CanvasState, SubGraphData } from "../Types/canvas";
 import { Pin, BaseNode } from "../Types/nodes";
+import { VariableDefinition, VariableDataType, createPrimitiveVariable, getDefaultValueForType } from "../Types/variables";
 import { deserializeSubGraph } from "../Utils/io";
 import { ProjectService } from "../../../services/projectService";
 import { useUI } from "./UIProvider";
@@ -233,13 +234,27 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // --- Synchronization ---
   useEffect(() => {
+    let syncTimeout: ReturnType<typeof setTimeout> | null = null;
+    
     const unsub = useNodeStore.subscribe((state) => {
-      const timeout = setTimeout(() => {
+      // 清除之前的 timeout
+      if (syncTimeout) {
+        clearTimeout(syncTimeout);
+      }
+      
+      // 延迟同步，避免频繁更新
+      syncTimeout = setTimeout(() => {
+        console.log('[Sync] Syncing tabs to backend...');
         useProjectStore.getState().syncWithTabs(state.tabs);
       }, 500);
-      return () => clearTimeout(timeout);
     });
-    return unsub;
+    
+    return () => {
+      if (syncTimeout) {
+        clearTimeout(syncTimeout);
+      }
+      unsub();
+    };
   }, []);
 
   const syncActiveToCollection = useCallback(() => {
@@ -284,16 +299,52 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const importGraph = useCallback(async (json?: string) => {
     try {
-      const result = await ProjectService.loadProject(json);
-      if (!result) return;
+      let p: any;
+      let path: string | null = null;
 
-      const { project: p, path } = result;
+      if (json) {
+        // 如果提供了 JSON 内容，解析后同步到后端
+        const result = await ProjectService.loadProject(json);
+        if (!result) return;
+        p = result.project;
+        path = result.path;
+        
+        // 手动同步到后端状态管理器（触发事件）
+        await ProjectService.setProjectData(p, path || undefined, true);
+      } else {
+        // 从文件加载，直接使用 loadProjectToState（会自动触发事件）
+        const result = await ProjectService.loadProjectToState();
+        if (!result) return;
+        p = result.project;
+        path = result.path;
+      }
+
+      // 清除旧的 tabs 数据
+      useNodeStore.getState().clearTabs();
+
+      // 清除 layoutStore 中的 tabs
+      const layoutStore = useLayoutStore.getState();
+      const editorGroupId = layoutStore.activeEditorGroupId || 'default_editor';
+      const editorNode = layoutStore.nodes[editorGroupId];
+      if (editorNode?.data?.tabs) {
+        layoutStore.updateNode(editorGroupId, {
+          data: { ...editorNode.data, tabs: [], activeTabId: undefined }
+        });
+      }
+
+      // 加载新项目（同步到前端状态）
       useProjectStore.getState().loadProject(p, path);
 
+      // 打开第一个子图
       const first = Object.values(p.events)[0] || Object.values(p.functions)[0];
       if (first) openSubGraph(first.id, first.name, first.type as any, first);
-    } catch (e) { console.error(e); }
-  }, [openSubGraph]);
+      
+      showToast("项目已加载", "success", 2000);
+    } catch (e) { 
+      console.error(e); 
+      showToast("加载项目失败", "error", 3000);
+    }
+  }, [openSubGraph, showToast]);
 
   const executeGraph = useCallback(async () => {
     try {
@@ -305,9 +356,25 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.functions,
         st.macros
       );
-      res.split('\n').filter(l => l.trim()).forEach(log => { if (log.includes("[Error]")) showToast(log, "error", 5000); });
-      showToast("执行完成", "info", 2000);
-    } catch (e) { showToast(`执行失败: ${e}`, "error", 5000); }
+      
+      // 显示所有日志输出
+      const logs = res.split('\n').filter(l => l.trim());
+      logs.forEach(log => {
+        if (log.includes("[Error]")) {
+          showToast(log, "error", 5000);
+        } else if (log.includes("[NODE PRINT]")) {
+          // 提取打印内容并显示
+          const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
+          showToast(`输出: ${printContent}`, "info", 3000);
+          console.log(printContent); // 同时输出到控制台
+        }
+      });
+      
+      showToast("执行完成", "success", 2000);
+    } catch (e) { 
+      console.error("执行失败:", e);
+      showToast(`执行失败: ${e}`, "error", 5000); 
+    }
   }, [syncActiveToCollection, showToast]);
 
   const updateFunction = useCallback((id: string, data: Partial<SubGraphData>) => {
@@ -389,11 +456,29 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const finalName = getUniqueName(name || "New Variable", allVars);
     const id = `var-${crypto.randomUUID()}`;
-    const v = { name: finalName, type, value: type === "int" ? 0 : type === "bool" ? false : type === "float" ? 0.0 : "" };
+    const dataType = type as VariableDataType;
+    const defaultValue = getDefaultValueForType(dataType);
     
-    if (isGlobal) st.addGlobalVariable(id, v);
-    else {
-      if (tid) useNodeStore.getState().addVariable(tid, id, v);
+    // 创建新的 VariableDefinition
+    const v = createPrimitiveVariable(id, finalName, dataType, defaultValue);
+    
+    // 设置作用域
+    if (isGlobal) {
+      v.scope = { type: "global" };
+      st.addGlobalVariable(id, v);
+    } else {
+      if (tid) {
+        // 确定当前 tab 的类型来设置作用域
+        const tabSource = st.events[tid] || st.functions[tid] || st.macros[tid];
+        if (tabSource?.type === "function") {
+          v.scope = { type: "function", function_id: tid };
+        } else if (tabSource?.type === "macro") {
+          v.scope = { type: "macro", macro_id: tid };
+        } else {
+          v.scope = { type: "global" }; // event 中的变量也算全局
+        }
+        useNodeStore.getState().addVariable(tid, id, v);
+      }
     }
     switchSidebarTab('variables');
   }, [getUniqueName, switchSidebarTab]);
@@ -551,22 +636,54 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     saveHistory
   });
 
+  // 初始化：检查是否有已有数据，如果有则打开第一个子图
+  // 注意：不再自动创建默认事件，用户需要手动创建
   useEffect(() => {
-    const st = useProjectStore.getState();
-    const hasEvents = Object.keys(st.events).length > 0;
+    const checkAndInitialize = () => {
+      console.log('[CanvasProvider] checkAndInitialize called');
+      
+      const st = useProjectStore.getState();
+      const layoutStore = useLayoutStore.getState();
+      const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
+      const editorNode = layoutStore.nodes[targetGroupId];
+      const currentTabs = editorNode?.data?.tabs || [];
 
-    if (!hasEvents && (activeNode?.data?.tabs?.length || 0) === 0) {
-      const id = "default-event"; const name = "New Graph"; const type = "event";
-      const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", "On Run", "Internal", { x: 100, y: 100 }, [], [{ name: "Exec", type: "exec" }])];
-      st.addEvent(id, { id, name, type, nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] });
+      console.log('[CanvasProvider] State check:', {
+        targetGroupId,
+        currentTabsLength: currentTabs.length,
+        eventsCount: Object.keys(st.events).length,
+        eventIds: Object.keys(st.events),
+      });
 
-      const targetGroupId = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || 'default_editor';
-      useLayoutStore.getState().addTab(targetGroupId, { id, title: name, component: 'GraphEditor', type });
+      // 如果已经有打开的标签页，不需要初始化
+      if (currentTabs.length > 0) {
+        console.log('[CanvasProvider] Already has tabs, skipping initialization');
+        return;
+      }
 
-      setSelectedInfo(id, type);
-      useNodeStore.getState().initTab(id, tNodes, {});
-    }
-  }, []);
+      // 检查是否有已有数据
+      const hasEvents = Object.keys(st.events).length > 0;
+      const hasFunctions = Object.keys(st.functions).length > 0;
+      const hasMacros = Object.keys(st.macros).length > 0;
+
+      if (hasEvents || hasFunctions || hasMacros) {
+        // 有已有数据，打开第一个子图
+        const first = Object.values(st.events)[0] || Object.values(st.functions)[0] || Object.values(st.macros)[0];
+        if (first) {
+          console.log('[CanvasProvider] Opening existing subgraph:', first.id, first.name);
+          openSubGraph(first.id, first.name, first.type as any, first);
+        }
+      } else {
+        // 没有数据，不自动创建，等待用户手动创建
+        console.log('[CanvasProvider] No data, waiting for user to create subgraph');
+      }
+    };
+
+    // 立即执行一次（因为 App.tsx 已经等待 initProjectSync 完成）
+    checkAndInitialize();
+
+    return () => {};
+  }, [openSubGraph]);
 
   const handleSetActiveGroupId = useCallback((id: string) => useLayoutStore.getState().setActiveGroup(id), []);
 

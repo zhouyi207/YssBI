@@ -43,17 +43,13 @@ pub enum EditorWidget {
     /// 复选框
     Checkbox,
     /// 下拉选择
-    Select {
-        options: Vec<SelectOption>,
-    },
+    Select { options: Vec<SelectOption> },
     /// 颜色选择器
     Color,
     /// JSON 编辑器 (用于 object/struct 类型)
     JsonEditor,
     /// 数组编辑器
-    ArrayEditor {
-        item_type: String,
-    },
+    ArrayEditor { item_type: String },
 }
 
 /// 下拉选项

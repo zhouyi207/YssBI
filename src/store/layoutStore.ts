@@ -66,7 +66,7 @@ const INITIAL_NODES: LayoutTree = {
         id: 'default_editor',
         type: 'component',
         parentId: 'main',
-        data: { 
+        data: {
             component: 'GraphEditor',
             tabs: []
         },
@@ -124,7 +124,7 @@ export const useLayoutStore = create<LayoutState>()(
             const parent = state.nodes[node.parentId];
             if (parent && parent.children) {
                 parent.children = parent.children.filter(childId => childId !== id);
-                
+
                 // 如果父容器变空了（且不是根节点），递归删除父容器
                 if (parent.children.length === 0 && parent.parentId) {
                     // 这里可以调用自身逻辑，但由于是 immer，直接操作 state 即可
@@ -145,7 +145,7 @@ export const useLayoutStore = create<LayoutState>()(
             if (state.activeEditorGroupId === id) {
                 state.activeEditorGroupId = remainingEditors[0]?.id || null;
             }
-            
+
             // 最后验证：确保激活的编辑器存在且有效
             const activeNode = state.nodes[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
@@ -174,7 +174,7 @@ export const useLayoutStore = create<LayoutState>()(
                 parentId: parentNode.id,
                 children: [],
                 size: 1,
-                data: { 
+                data: {
                     component: newComponentType,
                     tabs: newTabs,
                     activeTabId: activeTab?.id
@@ -232,14 +232,14 @@ export const useLayoutStore = create<LayoutState>()(
                 if (sourceNode.type === 'component' && targetNode.type === 'component') {
                     const sourceTabs = sourceNode.data?.tabs || [];
                     const targetTabs = targetNode.data?.tabs || [];
-                    
+
                     // 合并 tabs
                     targetNode.data = {
                         ...targetNode.data,
                         tabs: [...targetTabs, ...sourceTabs],
                         activeTabId: sourceNode.data?.activeTabId || targetNode.data?.activeTabId
                     };
-                    
+
                     // 从父节点移除源节点
                     const sourceParent = state.nodes[sourceNode.parentId!];
                     if (sourceParent && sourceParent.children) {
@@ -310,7 +310,7 @@ export const useLayoutStore = create<LayoutState>()(
             // 检查目标节点是否已经有这个标签页
             const targetTabs = targetNode.data?.tabs || [];
             const existingTabIndex = targetTabs.findIndex(t => t.id === tabId);
-            
+
             // 如果目标节点已经有这个标签页，只激活它
             if (existingTabIndex !== -1 && sourceNodeId !== targetNodeId) {
                 // 从源节点移除
@@ -320,7 +320,7 @@ export const useLayoutStore = create<LayoutState>()(
                     const nextIndex = Math.max(0, closingIndex - 1);
                     sourceNode.data!.activeTabId = sourceNode.data!.tabs[nextIndex]?.id;
                 }
-                
+
                 // 清理空的源节点
                 if (sourceNode.data!.tabs.length === 0) {
                     const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
@@ -330,7 +330,7 @@ export const useLayoutStore = create<LayoutState>()(
                             parent.children = parent.children.filter(id => id !== sourceNodeId);
                         }
                         delete state.nodes[sourceNodeId];
-                        
+
                         // 如果删除的是当前激活的编辑器，切换到目标编辑器
                         if (state.activeGroupId === sourceNodeId) {
                             state.activeGroupId = targetNodeId;
@@ -341,7 +341,7 @@ export const useLayoutStore = create<LayoutState>()(
                         }
                     }
                 }
-                
+
                 // 只激活目标节点中已存在的标签页
                 targetNode.data!.activeTabId = tabId;
                 // 确保目标编辑器被激活
@@ -354,10 +354,10 @@ export const useLayoutStore = create<LayoutState>()(
             if (sourceNodeId === targetNodeId) {
                 const currentIndex = sourceTabs.findIndex(t => t.id === tabId);
                 if (currentIndex === -1) return;
-                
+
                 const newTabs = [...sourceTabs];
                 const [removed] = newTabs.splice(currentIndex, 1);
-                
+
                 if (targetTabIndex !== undefined) {
                     // 如果目标索引大于当前索引，需要减 1，因为已经移除了一个元素
                     const adjustedIndex = targetTabIndex > currentIndex ? targetTabIndex - 1 : targetTabIndex;
@@ -365,7 +365,7 @@ export const useLayoutStore = create<LayoutState>()(
                 } else {
                     newTabs.push(removed);
                 }
-                
+
                 sourceNode.data!.tabs = newTabs;
                 sourceNode.data!.activeTabId = tabId;
                 return;
@@ -388,7 +388,7 @@ export const useLayoutStore = create<LayoutState>()(
                         parent.children = parent.children.filter(id => id !== sourceNodeId);
                     }
                     delete state.nodes[sourceNodeId];
-                    
+
                     // 如果删除的是当前激活的编辑器，切换到目标编辑器
                     if (state.activeGroupId === sourceNodeId) {
                         state.activeGroupId = targetNodeId;
@@ -411,11 +411,11 @@ export const useLayoutStore = create<LayoutState>()(
                 tabs: targetTabs,
                 activeTabId: tabId
             };
-            
+
             // 确保目标编辑器被激活
             state.activeGroupId = targetNodeId;
             state.activeEditorGroupId = targetNodeId;
-            
+
             // 最后验证：确保激活的编辑器存在且有效
             const activeNode = state.nodes[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
@@ -436,17 +436,17 @@ export const useLayoutStore = create<LayoutState>()(
             if (closingIndex === -1) return;
 
             const newTabs = currentTabs.filter(t => t.id !== tabId);
-            
+
             if (newTabs.length === 0) {
                 // 如果是最后一个标签
                 const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
-                
+
                 if (editorGroups.length > 1) {
                     // 如果有多个组，移除该组
                     const parent = state.nodes[node.parentId!];
                     if (parent && parent.children) {
                         parent.children = parent.children.filter(id => id !== nodeId);
-                        
+
                         if (parent.children.length === 0 && parent.parentId) {
                             const grandParent = state.nodes[parent.parentId];
                             if (grandParent && grandParent.children) {
@@ -476,7 +476,7 @@ export const useLayoutStore = create<LayoutState>()(
                 node.data.tabs = newTabs;
                 node.data.activeTabId = newActiveTabId;
             }
-            
+
             // 最后验证：确保激活的编辑器存在且有效
             const activeNode = state.nodes[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {

@@ -3,6 +3,7 @@ import { useCanvas } from "../Context/CanvasContext";
 import { useGestureStore } from "../Store/useGestureStore";
 import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore } from "../Store/useNodeStore";
+import { BaseNode } from "../Types/nodes";
 import HUD from "./HUD";
 import NodePalette from "../Nodes/NodePalette";
 import { VscRunAll } from "react-icons/vsc";
@@ -28,6 +29,8 @@ export default function CanvasOverlays({
         connectPins,
         variables,
         globalVariables,
+        functions,
+        macros,
         tabs,
         activeTabId,
         activeGroupId,
@@ -39,15 +42,15 @@ export default function CanvasOverlays({
     const gesture = useGestureStore(state => state.gesture);
     const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
 
-    const handleNodePaletteSelect = (tpl: { type: string }) => {
+    const handleNodePaletteSelect = (item: import("../Nodes/NodePalette").PaletteItem) => {
         if (!contextMenu || !canvasRef.current) return;
 
         // Check if this is an internal node type that should only exist once
         const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
-        if (internalNodeTypes.includes(tpl.type)) {
+        if (internalNodeTypes.includes(item.type)) {
             // Check if this internal node already exists
             const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
-            const existingNode = currentNodes.find(n => n.type === tpl.type && n.isInternal);
+            const existingNode = currentNodes.find(n => n.type === item.type && n.isInternal);
             if (existingNode) {
                 // Move canvas to center on the existing node
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -72,10 +75,45 @@ export default function CanvasOverlays({
         const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
         const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-        const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, tpl.type);
+        let newNode: BaseNode | null = null;
+
+        if (item.type === 'call_function' || item.type === 'call_macro') {
+            const subId = item.overrides?.subGraphId;
+            if (subId) {
+                const subData = item.type === 'call_function' ? functions[subId] : macros[subId];
+                if (subData) {
+                    const subName = subData.name;
+                    const type = item.type;
+
+                    newNode = new BaseNode(
+                        `node_${Date.now()}`,
+                        {
+                            node_type: type,
+                            category: type === 'call_function' ? "Functions" : "Macros",
+                            title: subName,
+                            inputs: [
+                                { id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
+                                ...(subData.inputs || []).map((p: any) => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[] }))
+                            ],
+                            outputs: [
+                                { id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
+                                ...(subData.outputs || []).map((p: any) => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[] }))
+                            ],
+                            ui_style: "default"
+                        },
+                        { x, y }
+                    );
+                    newNode.subGraphId = subId;
+                    newNode.isInternal = false;
+                }
+            }
+        } else {
+            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.type, item.overrides);
+        }
+
         if (newNode) {
             saveHistory();
-            setNodes((prev) => [...prev, newNode]);
+            setNodes((prev) => [...prev, newNode!]);
 
             // 如果有待处理的连接，尝试自动连接
             if (pendingConnection) {
@@ -140,6 +178,10 @@ export default function CanvasOverlays({
                         y={contextMenu.y}
                         onSelect={handleNodePaletteSelect}
                         filterPin={pendingConnection}
+                        variables={variables}
+                        globalVariables={globalVariables}
+                        functions={functions}
+                        macros={macros}
                     />
                 </div>
             )}
@@ -167,7 +209,8 @@ export default function CanvasOverlays({
                                 {
                                     title: `Get ${variableDropMenu.variableName}`,
                                     variableId: variableDropMenu.variableId,
-                                    variableType: variableDropMenu.variableType
+                                    variableType: variableDropMenu.variableType,
+                                    variableName: variableDropMenu.variableName
                                 }
                             );
                             if (newNode) {
@@ -195,7 +238,8 @@ export default function CanvasOverlays({
                                 {
                                     title: `Set ${variableDropMenu.variableName}`,
                                     variableId: variableDropMenu.variableId,
-                                    variableType: variableDropMenu.variableType
+                                    variableType: variableDropMenu.variableType,
+                                    variableName: variableDropMenu.variableName
                                 }
                             );
                             if (newNode) {

@@ -121,7 +121,9 @@ pub fn get_category_definitions() -> Vec<CategoryDefinition> {
 
 /// 根据名称获取分类定义
 pub fn get_category_by_name(name: &str) -> Option<CategoryDefinition> {
-    get_category_definitions().into_iter().find(|c| c.name == name)
+    get_category_definitions()
+        .into_iter()
+        .find(|c| c.name == name)
 }
 
 /// 获取所有在面板中可见的分类

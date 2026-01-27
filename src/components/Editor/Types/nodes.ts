@@ -67,8 +67,11 @@ export class BaseNode {
   position: Position;
   inputs: Pin[] = [];
   outputs: Pin[] = [];
-  variableId?: string; // 关联的变量 ID
-  variableType?: string; // 关联的变量类型
+  // 变量节点相关字段 (用于 variable_get / variable_set 节点)
+  variableId?: string;    // 关联的变量 ID
+  variableType?: string;  // 关联的变量数据类型 (int, float, string, etc.)
+  variableName?: string;  // 关联的变量名称 (用于显示)
+
   isInternal: boolean = false; // 是否为内部节点（不可删除）
   subGraphId?: string; // 关联的子图 ID (针对 Call Function / Call Macro)
 
@@ -141,4 +144,98 @@ export class BaseNode {
     clone.position = newPos;
     return clone;
   }
+
+  /**
+   * 更新变量节点的关联变量信息
+   * 会同步更新节点的输入/输出 pin 类型
+   */
+  setVariable(variableId: string, variableName: string, variableType: string): this {
+    this.variableId = variableId;
+    this.variableName = variableName;
+    this.variableType = variableType;
+
+    // 更新节点标题显示变量名
+    if (this.type === 'get_variable') {
+      this.title = `Get ${variableName}`;
+      // 更新输出 pin 的类型
+      const valuePin = this.outputs.find(p => p.name === 'Value' || p.name === 'value');
+      if (valuePin) {
+        valuePin.type = variableType;
+      }
+    } else if (this.type === 'set_variable') {
+      this.title = `Set ${variableName}`;
+      // 更新输入 pin 的类型
+      const valuePin = this.inputs.find(p => p.name === 'Value' || p.name === 'value');
+      if (valuePin) {
+        valuePin.type = variableType;
+      }
+      // 更新输出 pin 的类型 (pass-through)
+      const outPin = this.outputs.find(p => p.name === 'Value' || p.name === 'value');
+      if (outPin) {
+        outPin.type = variableType;
+      }
+    }
+
+    return this;
+  }
+}
+
+/**
+ * 创建变量 Get 节点
+ */
+export function createVariableGetNode(
+  id: string,
+  position: Position,
+  variableId: string,
+  variableName: string,
+  variableType: string
+): BaseNode {
+  const definition: NodeDefinition = {
+    node_type: 'get_variable',
+    category: 'Variables',
+    title: `Get ${variableName}`,
+    inputs: [],
+    outputs: [{ name: 'Value', type: variableType }],
+    ui_style: 'compact',
+  };
+
+  const node = new BaseNode(id, definition, position);
+  node.variableId = variableId;
+  node.variableName = variableName;
+  node.variableType = variableType;
+
+  return node;
+}
+
+/**
+ * 创建变量 Set 节点
+ */
+export function createVariableSetNode(
+  id: string,
+  position: Position,
+  variableId: string,
+  variableName: string,
+  variableType: string
+): BaseNode {
+  const definition: NodeDefinition = {
+    node_type: 'set_variable',
+    category: 'Variables',
+    title: `Set ${variableName}`,
+    inputs: [
+      { name: 'Exec', type: 'exec' },
+      { name: 'Value', type: variableType },
+    ],
+    outputs: [
+      { name: 'Then', type: 'exec' },
+      { name: 'Value', type: variableType },
+    ],
+    ui_style: 'default',
+  };
+
+  const node = new BaseNode(id, definition, position);
+  node.variableId = variableId;
+  node.variableName = variableName;
+  node.variableType = variableType;
+
+  return node;
 }
