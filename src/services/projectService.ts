@@ -307,6 +307,15 @@ export class ProjectService {
         return toFrontendSubGraphData(result);
     }
 
+    // ==================== 数据导入 ====================
+
+    /**
+     * 从 CSV 导入数据
+     */
+    static async importCSV(path: string): Promise<any> {
+        return await invoke("import_csv", { path });
+    }
+
     // ==================== 执行 ====================
 
     /**

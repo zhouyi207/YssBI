@@ -18,6 +18,34 @@ use schema::{
 use state::{emit_project_event, ProjectEvent, ProjectState};
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
+use chrono::Utc;
+use polars::prelude::*;
+use crate::nodes::processors::ExecutionContextTrait;
+
+// ==================== 数据导入命令 ====================
+
+/// 从 CSV 导入数据
+#[tauri::command]
+async fn import_csv(
+    state: State<'_, ProjectState>,
+    path: String,
+) -> Result<crate::project::DataFrameData, String> {
+    info!("[import_csv] Importing from: {}", path);
+    
+    // 使用 Polars 读取 CSV
+    let df = CsvReadOptions::default()
+        .with_has_header(true)
+        .with_infer_schema_length(Some(100))
+        .try_into_reader_with_file_path(Some(path.clone().into()))
+        .map_err(|e| format!("Failed to open CSV: {}", e))?
+        .finish()
+        .map_err(|e| format!("Failed to parse CSV: {}", e))?;
+
+    let id = format!("df_{:x}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let df_data = state.add_dataframe(id, df, Some(path))?;
+    
+    Ok(df_data)
+}
 
 // ==================== Schema 命令 ====================
 
@@ -677,6 +705,7 @@ fn execute_project(app: AppHandle, data: ProjectData) -> Result<Vec<String>, Str
 
 fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>, String> {
     info!("[execute_project_data] Received project data for execution");
+    let mut logs = vec!["[System] Received event for execution".to_string()];
 
     let mut nodes = Vec::new();
     let mut variables = HashMap::new();
@@ -770,6 +799,10 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     // 4. 执行
     let mut context = executor::ExecutionContext::new(graph);
     context.set_app_handle(app);
+    
+    // 添加初始系统日志
+    context.log("[System] Received event for execution".to_string());
+    
     context.execute()
 }
 
@@ -903,6 +936,8 @@ pub fn run() {
             load_project,
             parse_project,
             serialize_project,
+            // 数据导入
+            import_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

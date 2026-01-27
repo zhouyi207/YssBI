@@ -1,11 +1,9 @@
-import { forwardRef, useContext } from "react";
-import { useCanvas, GroupContext } from "../Context/CanvasContext";
+import { forwardRef } from "react";
+import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
-import { useLayoutStore } from "../../../store/layoutStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
-  const nodeId = useContext(GroupContext); // 获取布局上下文 ID
   const {
     variables,
     globalVariables,
@@ -214,15 +212,23 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                   <tr className="border-b border-[#2b2b2b]">
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Columns</td>
                     <td className="p-2 text-gray-400">
-                      {selectedData.columns?.length || 0} columns
+                      {selectedData.columnCount || selectedData.columns?.length || 0} columns
                     </td>
                   </tr>
                   <tr className="border-b border-[#2b2b2b]">
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Rows</td>
                     <td className="p-2 text-gray-400">
-                      {selectedData.rows?.length || 0} rows
+                      {selectedData.rowCount || selectedData.rows?.length || 0} rows
                     </td>
                   </tr>
+                  {selectedData.sourcePath && (
+                    <tr className="border-b border-[#2b2b2b]">
+                      <td className="p-2 font-bold text-gray-400 bg-white/5">Source</td>
+                      <td className="p-2 text-gray-400 break-all text-[9px]">
+                        {selectedData.sourcePath}
+                      </td>
+                    </tr>
+                  )}
                 </>
               )}
 

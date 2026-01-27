@@ -387,7 +387,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.globalVariables,
         eventsToExecute,  // 只传入当前 event
         st.functions,
-        st.macros
+        st.macros,
+        st.dataframes      // 确保也传入 dataframes 元数据
       );
       
       // 显示所有日志输出
@@ -400,6 +401,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
           showToast(`输出: ${printContent}`, "info", 3000);
           console.log(printContent); // 同时输出到控制台
+        } else if (log.includes("[System] Received event")) {
+          showToast(log, "info", 2000);
         }
       });
       
@@ -427,7 +430,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.globalVariables,
         st.events,  // 执行所有 events
         st.functions,
-        st.macros
+        st.macros,
+        st.dataframes // 确保也传入 dataframes 元数据
       );
       
       // 显示所有日志输出
@@ -440,6 +444,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
           showToast(`输出: ${printContent}`, "info", 3000);
           console.log(printContent); // 同时输出到控制台
+        } else if (log.includes("[System] Received event")) {
+          showToast(log, "info", 2000);
         }
       });
       

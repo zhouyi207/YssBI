@@ -5,6 +5,9 @@ import { useState } from "react";
 import { useLayoutStore } from "../../../store/layoutStore";
 import { useUI } from "../Context/UIProvider";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
+import { open } from "@tauri-apps/plugin-dialog";
+import { ProjectService } from "../../../services/projectService";
+import { useProjectStore } from "../Store/useProjectStore";
 
 interface MenuItem {
   label: string;
@@ -95,15 +98,25 @@ export default function Menubar() {
   const handleImportData = () => {
     showImportDialog({
       onSelect: async (type) => {
-        showToast(`正在准备从 ${type.toUpperCase()} 导入数据...`, "info");
-        // 这里未来会根据 type 调用不同的 tauri 对话框或命令
-        // 目前先模拟创建一个空的 DataFrame
-        if (type === 'csv' || type === 'xlsx') {
-          // 模拟成功导入
-          setTimeout(() => {
-            addDataFrame(`Imported_${type.toUpperCase()}_Data`);
-            showToast(`${type.toUpperCase()} 数据导入成功`, "success");
-          }, 500);
+        if (type === 'csv') {
+          try {
+            const selected = await open({
+              multiple: false,
+              filters: [{ name: "CSV File", extensions: ["csv"] }]
+            });
+
+            if (selected && !Array.isArray(selected)) {
+              showToast(`正在从 CSV 导入数据...`, "info");
+              const dfData = await ProjectService.importCSV(selected);
+              
+              // 更新前端 store
+              useProjectStore.getState().addDataFrame(dfData.id, dfData);
+              showToast(`CSV 数据导入成功: ${dfData.row_count} 行`, "success");
+            }
+          } catch (error) {
+            console.error("Failed to import CSV:", error);
+            showToast(`CSV 导入失败: ${error}`, "error");
+          }
         } else {
           showToast(`${type.toUpperCase()} 导入功能开发中...`, "warning");
         }

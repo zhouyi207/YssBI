@@ -83,6 +83,9 @@ export interface DataFrameData {
   name: string;
   columns: string[];
   rows: any[][];
+  rowCount: number;
+  columnCount: number;
+  sourcePath?: string;
 }
 
 export interface ProjectData {

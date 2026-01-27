@@ -129,6 +129,12 @@ pub struct DataFrameData {
     pub columns: Vec<String>,
     #[serde(default)]
     pub rows: Vec<Vec<serde_json::Value>>,
+    #[serde(rename = "rowCount", default)]
+    pub row_count: usize,
+    #[serde(rename = "columnCount", default)]
+    pub column_count: usize,
+    #[serde(rename = "sourcePath", skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
 }
 
 // ==================== 项目数据 ====================

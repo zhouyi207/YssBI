@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter};
+use polars::prelude::*;
 
 use crate::project::{
-    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType,
+    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType, DataFrameData,
 };
 use crate::schema::VariableDefinition;
 
@@ -21,6 +22,8 @@ pub struct ProjectState {
     pub data: Arc<RwLock<ProjectData>>,
     /// 当前项目文件路径
     pub current_path: Arc<RwLock<Option<String>>>,
+    /// Polars 数据帧存储 (内存中)
+    pub df_store: Arc<RwLock<HashMap<String, DataFrame>>>,
 }
 
 impl Default for ProjectState {
@@ -34,6 +37,7 @@ impl ProjectState {
         Self {
             data: Arc::new(RwLock::new(ProjectData::default())),
             current_path: Arc::new(RwLock::new(None)),
+            df_store: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -46,13 +50,18 @@ impl ProjectState {
     pub fn set_data(&self, data: ProjectData) {
         use tauri_plugin_log::log::info;
         info!(
-            "[ProjectState] Setting data: global_vars={}, events={}, functions={}, macros={}",
+            "[ProjectState] Setting data: global_vars={}, events={}, functions={}, macros={}, dataframes={}",
             data.global_variables.len(),
             data.events.len(),
             data.functions.len(),
-            data.macros.len()
+            data.macros.len(),
+            data.dataframes.len()
         );
         *self.data.write().unwrap() = data;
+        
+        // 关键修复：设置新项目数据时，清空内存中的 DataFrame 存储
+        // 实际的 DataFrame 会在需要时重新加载或通过 import 命令重新添加
+        self.df_store.write().unwrap().clear();
     }
 
     /// 获取当前路径
@@ -69,6 +78,8 @@ impl ProjectState {
     pub fn clear(&self) {
         *self.data.write().unwrap() = ProjectData::default();
         *self.current_path.write().unwrap() = None;
+        // 关键修复：清空项目时也清空内存中的 DataFrame
+        self.df_store.write().unwrap().clear();
     }
 }
 
@@ -490,6 +501,73 @@ impl ProjectState {
         let subgraph = get_subgraph_mut!(project, subgraph_id)
             .ok_or_else(|| format!("Subgraph '{}' not found", subgraph_id))?;
         subgraph.name = new_name;
+        Ok(())
+    }
+
+    // ==================== DataFrame 操作 ====================
+
+    pub fn add_dataframe(&self, id: String, df: DataFrame, source_path: Option<String>) -> Result<DataFrameData, String> {
+        let row_count = df.height();
+        let column_count = df.width();
+        let columns = df.get_column_names().iter().map(|s| s.to_string()).collect();
+        
+        // 生成预览数据 (前 100 行)
+        let preview_df = df.head(Some(100));
+        let mut rows = Vec::new();
+        
+        // 转换预览数据为 JSON
+        for i in 0..preview_df.height() {
+            let mut row = Vec::new();
+            for col_idx in 0..preview_df.width() {
+                let val = preview_df.get_columns()[col_idx].get(i).unwrap();
+                let json_val = match val {
+                    AnyValue::Null => serde_json::Value::Null,
+                    AnyValue::Boolean(b) => serde_json::Value::Bool(b),
+                    AnyValue::String(s) => serde_json::Value::String(s.to_string()),
+                    AnyValue::StringOwned(s) => serde_json::Value::String(s.to_string()),
+                    AnyValue::Int8(v) => serde_json::json!(v),
+                    AnyValue::Int16(v) => serde_json::json!(v),
+                    AnyValue::Int32(v) => serde_json::json!(v),
+                    AnyValue::Int64(v) => serde_json::json!(v),
+                    AnyValue::UInt8(v) => serde_json::json!(v),
+                    AnyValue::UInt16(v) => serde_json::json!(v),
+                    AnyValue::UInt32(v) => serde_json::json!(v),
+                    AnyValue::UInt64(v) => serde_json::json!(v),
+                    AnyValue::Float32(v) => serde_json::json!(v),
+                    AnyValue::Float64(v) => serde_json::json!(v),
+                    _ => serde_json::Value::String(format!("{:?}", val)),
+                };
+                row.push(json_val);
+            }
+            rows.push(row);
+        }
+
+        let df_data = DataFrameData {
+            id: id.clone(),
+            name: id.clone(), // 默认使用 ID 作为名称
+            columns,
+            rows,
+            row_count,
+            column_count,
+            source_path,
+        };
+
+        // 存入内存 store
+        self.df_store.write().unwrap().insert(id.clone(), df);
+        
+        // 更新项目数据
+        self.data.write().unwrap().dataframes.insert(id, df_data.clone());
+        
+        Ok(df_data)
+    }
+
+    pub fn get_dataframe(&self, id: &str) -> Option<DataFrame> {
+        self.df_store.read().unwrap().get(id).cloned()
+    }
+
+    pub fn delete_dataframe(&self, id: &str) -> Result<(), String> {
+        self.df_store.write().unwrap().remove(id);
+        self.data.write().unwrap().dataframes.remove(id);
         Ok(())
     }
 }
