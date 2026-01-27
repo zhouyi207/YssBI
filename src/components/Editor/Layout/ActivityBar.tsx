@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { PiGraph, PiFunction } from "react-icons/pi";
 import { TiFlowSwitch } from "react-icons/ti";
 import { HiVariable } from "react-icons/hi2";
+import { VscDatabase } from "react-icons/vsc";
 import { useLayoutStore } from "../../../store/layoutStore";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean, onClick: () => void, children: React.ReactNode, title: string, id: string }) => (
@@ -17,7 +18,7 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 
 export default function ActivityBar() {
     const sidebarNode = useLayoutStore(s => s.nodes['sidebar']);
-    const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | null;
+    const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
     
     const activityBarRef = useRef<HTMLDivElement>(null);
     const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
@@ -28,8 +29,8 @@ export default function ActivityBar() {
     // Ref to track previous size to restore
     const previousSizeRef = useRef(260);
 
-    const toggleTab = (tab: 'events' | 'functions' | 'macros' | 'variables') => {
-        let newTab: 'events' | 'functions' | 'macros' | 'variables' | null = tab;
+    const toggleTab = (tab: 'events' | 'functions' | 'macros' | 'variables' | 'data') => {
+        let newTab: 'events' | 'functions' | 'macros' | 'variables' | 'data' | null = tab;
         let visible = true;
 
         if (activeTab === tab) {
@@ -99,6 +100,9 @@ export default function ActivityBar() {
             </ActivityIcon>
             <ActivityIcon id="variables" active={activeTab === 'variables'} onClick={() => toggleTab('variables')} title="Variables">
                 <HiVariable size={24} />
+            </ActivityIcon>
+            <ActivityIcon id="data" active={activeTab === 'data'} onClick={() => toggleTab('data')} title="Data">
+                <VscDatabase size={24} />
             </ActivityIcon>
         </div>
     );

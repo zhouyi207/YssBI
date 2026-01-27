@@ -61,6 +61,7 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
                 events: {},
                 functions: {},
                 macros: {},
+                dataframes: {},
                 metadata: { exportTime: '', appVersion: '' },
               },
               null
@@ -174,6 +175,7 @@ export async function initProjectSync(): Promise<ProjectData | null> {
       functionsCount: Object.keys(projectData.functions || {}).length,
       macrosCount: Object.keys(projectData.macros || {}).length,
       globalVariablesCount: Object.keys(projectData.globalVariables || {}).length,
+      dataframesCount: Object.keys(projectData.dataframes || {}).length,
     });
 
     // 同步到前端 Store

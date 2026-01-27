@@ -78,12 +78,21 @@ export interface SubGraphData {
   outputs?: PinDefinition[];
 }
 
+export interface DataFrameData {
+  id: string;
+  name: string;
+  columns: string[];
+  rows: any[][];
+}
+
 export interface ProjectData {
   /** 全局变量 */
   globalVariables: Record<string, VariableDefinition>;
   events: Record<string, SubGraphData>;
   functions: Record<string, SubGraphData>;
   macros: Record<string, SubGraphData>;
+  /** 数据帧 */
+  dataframes: Record<string, DataFrameData>;
   metadata: {
     exportTime: string;
     appVersion: string;

@@ -15,11 +15,23 @@ import { getCurrentWindow, PhysicalSize, PhysicalPosition } from "@tauri-apps/ap
 import { SettingsService, DEFAULT_WINDOW } from "./services/settingsService";
 import { useProjectSync, initProjectSync } from "./components/Editor/Hooks/useProjectSync";
 import { installGlobalConsoleForwarder } from "./utils/logger";
+import PlotWindow from "./components/Editor/Plot/PlotWindow";
 
 // 安装全局 console 转发器，将所有前端日志转发到后端
 installGlobalConsoleForwarder();
 
 export default function App() {
+  // 检查是否是 Plot 窗口
+  const isPlotWindow = window.location.hash === '#/plot';
+  
+  // 如果是 Plot 窗口，只渲染 PlotWindow 组件
+  if (isPlotWindow) {
+    return (
+      <ThemeProvider>
+        <PlotWindow />
+      </ThemeProvider>
+    );
+  }
   const rootId = useLayoutStore(s => s.rootId);
   const [initialized, setInitialized] = useState(false);
 

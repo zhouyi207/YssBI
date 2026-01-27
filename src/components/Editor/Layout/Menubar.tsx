@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCanvas } from "../Context/CanvasContext";
 import { useState } from "react";
 import { useLayoutStore } from "../../../store/layoutStore";
+import { useUI } from "../Context/UIProvider";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 
 interface MenuItem {
@@ -83,11 +84,32 @@ export default function Menubar() {
     addEvent,
     addFunction,
     addMacro,
+    addDataFrame,
   } = useCanvas();
 
+  const { showImportDialog, showToast } = useUI();
   const openSettings = useLayoutStore(s => s.openSettings);
   const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
   const splitNode = useLayoutStore(s => s.splitNode);
+
+  const handleImportData = () => {
+    showImportDialog({
+      onSelect: async (type) => {
+        showToast(`正在准备从 ${type.toUpperCase()} 导入数据...`, "info");
+        // 这里未来会根据 type 调用不同的 tauri 对话框或命令
+        // 目前先模拟创建一个空的 DataFrame
+        if (type === 'csv' || type === 'xlsx') {
+          // 模拟成功导入
+          setTimeout(() => {
+            addDataFrame(`Imported_${type.toUpperCase()}_Data`);
+            showToast(`${type.toUpperCase()} 数据导入成功`, "success");
+          }, 500);
+        } else {
+          showToast(`${type.toUpperCase()} 导入功能开发中...`, "warning");
+        }
+      }
+    });
+  };
 
   const handleSplitRight = () => {
     if (activeEditorGroupId) {
@@ -154,7 +176,7 @@ export default function Menubar() {
 
   const dataItems: MenuItem[] = [
     { label: "Manage Variables" },
-    { label: "Import Data" },
+    { label: "Import Data", onClick: handleImportData },
     { label: "-" },
     { label: "Schema Viewer" },
   ];

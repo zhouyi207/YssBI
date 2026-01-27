@@ -7,6 +7,7 @@ use crate::nodes::{
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
 /// 执行上下文
@@ -23,6 +24,8 @@ pub struct ExecutionContext {
     definitions: HashMap<String, NodeDefinition>,
     /// 调用栈
     call_stack: Vec<String>,
+    /// Tauri 应用句柄（可选）
+    app_handle: Option<AppHandle>,
 }
 
 impl ExecutionContext {
@@ -63,7 +66,13 @@ impl ExecutionContext {
             pin_to_node,
             definitions: def_map,
             call_stack: Vec::new(),
+            app_handle: None,
         }
+    }
+
+    /// 设置 Tauri 应用句柄（用于支持窗口操作）
+    pub fn set_app_handle(&mut self, app_handle: AppHandle) {
+        self.app_handle = Some(app_handle);
     }
 
     /// 执行图
@@ -249,5 +258,53 @@ impl ExecutionContextTrait for ExecutionContext {
             .values()
             .find(|n| predicate(n))
             .map(|n| n.id.clone())
+    }
+
+    fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String> {
+        let app_handle = self
+            .app_handle
+            .as_ref()
+            .ok_or("AppHandle not available in execution context")?
+            .clone();
+
+        let log_msg = format!("Opening window: {} ({})", title, url);
+        info!("{}", log_msg);
+        self.logs.push(log_msg.clone());
+
+        // 在新线程中创建窗口，避免阻塞执行流程
+        let label_clone = label.clone();
+        let title_clone = title.clone();
+        let url_clone = url.clone();
+        
+        std::thread::spawn(move || {
+            // 创建新窗口
+            match WebviewWindowBuilder::new(
+                &app_handle,
+                label_clone.clone(),
+                WebviewUrl::App(url_clone.into()),
+            )
+            .title(title_clone)
+            .inner_size(800.0, 600.0)
+            .min_inner_size(400.0, 300.0)
+            .resizable(true)
+            .decorations(false)  // 禁用系统窗口装饰，使用自定义标题栏
+            .transparent(false)  // 不透明背景
+            .center()            // 居中显示
+            .build() {
+                Ok(_) => {
+                    info!("Window '{}' opened successfully", label_clone);
+                }
+                Err(e) => {
+                    info!("Failed to create window '{}': {}", label_clone, e);
+                }
+            }
+        });
+
+        // 立即返回，不等待窗口创建完成
+        let success_msg = format!("Window '{}' creation initiated", label);
+        info!("{}", success_msg);
+        self.logs.push(success_msg);
+
+        Ok(())
     }
 }

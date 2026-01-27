@@ -26,11 +26,12 @@ interface CanvasContextValue {
   saveGraph: () => Promise<void>;
   importGraph: (json?: string) => Promise<void>;
   executeGraph: () => Promise<void>;
+  executeAllEvents: () => Promise<void>;
   variables: Record<string, VariableDefinition>;
   globalVariables: Record<string, VariableDefinition>;
   selectedItemId: string | null;
-  selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null;
-  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null) => void;
+  selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null;
+  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null) => void;
   updateVariable: (id: string, data: Partial<VariableDefinition>) => void;
   addVariable: (name?: string, type?: string, isGlobal?: boolean) => void;
   deleteVariable: (id: string) => void;
@@ -48,6 +49,10 @@ interface CanvasContextValue {
   addMacro: (name?: string) => void;
   updateMacro: (id: string, data: Partial<import("../Types/canvas").SubGraphData>) => void;
   deleteMacro: (id: string) => void;
+  dataframes: Record<string, import("../Types/canvas").DataFrameData>;
+  addDataFrame: (name?: string) => void;
+  updateDataFrame: (id: string, data: Partial<import("../Types/canvas").DataFrameData>) => void;
+  deleteDataFrame: (id: string) => void;
   undo: () => void;
   redo: () => void;
   copy: () => void;

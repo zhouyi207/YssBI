@@ -1,0 +1,226 @@
+import React, { useEffect, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+/**
+ * Plot 窗口组件
+ * 用于显示数据可视化图表
+ */
+export const PlotWindow: React.FC = () => {
+  const [isReady, setIsReady] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    // 窗口初始化
+    setIsReady(true);
+    console.log('[PlotWindow] Plot window initialized');
+
+    // 监听窗口最大化状态变化
+    const setupListeners = async () => {
+      const currentWindow = getCurrentWindow();
+      
+      // 检查初始状态
+      const maximized = await currentWindow.isMaximized();
+      setIsMaximized(maximized);
+
+      // 监听最大化状态变化
+      const unlisten = await currentWindow.onResized(async () => {
+        const maximized = await currentWindow.isMaximized();
+        setIsMaximized(maximized);
+      });
+
+      return unlisten;
+    };
+
+    let cleanup: (() => void) | null = null;
+    setupListeners().then(unlisten => {
+      cleanup = unlisten;
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, []);
+
+  const handleMinimize = async () => {
+    try {
+      const currentWindow = getCurrentWindow();
+      await currentWindow.minimize();
+    } catch (e) {
+      console.error('Failed to minimize window:', e);
+    }
+  };
+
+  const handleMaximize = async () => {
+    try {
+      const currentWindow = getCurrentWindow();
+      await currentWindow.toggleMaximize();
+    } catch (e) {
+      console.error('Failed to maximize window:', e);
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      const currentWindow = getCurrentWindow();
+      await currentWindow.close();
+    } catch (e) {
+      console.error('Failed to close window:', e);
+    }
+  };
+
+  return (
+    <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] overflow-hidden">
+      {/* 自定义标题栏 */}
+      <div 
+        data-tauri-drag-region
+        className="flex items-center justify-between h-10 px-3 bg-[var(--titlebar-bg)] border-b border-[var(--border-color)] select-none"
+      >
+        {/* 标题 */}
+        <div data-tauri-drag-region className="flex items-center gap-2 flex-1">
+          <svg
+            className="w-4 h-4 text-blue-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
+          </svg>
+          <h1 className="text-sm font-medium text-[var(--text-primary)]">Plot Visualization</h1>
+        </div>
+
+        {/* 窗口控制按钮 */}
+        <div className="flex items-center">
+          {/* 最小化按钮 */}
+          <button
+            onClick={handleMinimize}
+            className="flex items-center justify-center w-10 h-10 hover:bg-[var(--hover-bg)] transition-colors"
+            title="最小化"
+          >
+            <svg
+              className="w-4 h-4 text-[var(--text-secondary)]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 12H4"
+              />
+            </svg>
+          </button>
+
+          {/* 最大化/还原按钮 */}
+          <button
+            onClick={handleMaximize}
+            className="flex items-center justify-center w-10 h-10 hover:bg-[var(--hover-bg)] transition-colors"
+            title={isMaximized ? '还原' : '最大化'}
+          >
+            {isMaximized ? (
+              <svg
+                className="w-4 h-4 text-[var(--text-secondary)]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-4 h-4 text-[var(--text-secondary)]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                />
+              </svg>
+            )}
+          </button>
+
+          {/* 关闭按钮 */}
+          <button
+            onClick={handleClose}
+            className="flex items-center justify-center w-10 h-10 hover:bg-red-500 hover:text-white transition-colors group"
+            title="关闭"
+          >
+            <svg
+              className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 主内容区 */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="mb-4">
+            <svg
+              className="w-24 h-24 mx-auto text-blue-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-2">
+            Plot 窗口已就绪
+          </h2>
+          <p className="text-[var(--text-secondary)] mb-4">
+            这是一个独立的可视化窗口
+          </p>
+          <div className="inline-flex items-center px-4 py-2 bg-blue-500/10 rounded-lg">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
+            <span className="text-sm text-[var(--text-secondary)]">
+              {isReady ? '窗口活跃' : '正在初始化...'}
+            </span>
+          </div>
+          
+          {/* 未来可以在这里添加图表库，如 Chart.js, ECharts 等 */}
+          <div className="mt-8 text-sm text-[var(--text-secondary)]">
+            <p>提示：未来可以在这里显示：</p>
+            <ul className="mt-2 space-y-1">
+              <li>• 折线图、柱状图、散点图</li>
+              <li>• 数据表格</li>
+              <li>• 实时数据流</li>
+              <li>• 自定义可视化组件</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PlotWindow;

@@ -118,6 +118,19 @@ pub struct SubGraphData {
     pub outputs: Vec<PinDefinition>,
 }
 
+// ==================== 数据帧数据 ====================
+
+/// 数据帧数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataFrameData {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub columns: Vec<String>,
+    #[serde(default)]
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
 // ==================== 项目数据 ====================
 
 /// 项目元数据
@@ -153,6 +166,9 @@ pub struct ProjectData {
     /// 宏子图
     #[serde(default)]
     pub macros: HashMap<String, SubGraphData>,
+    /// 数据帧
+    #[serde(default)]
+    pub dataframes: HashMap<String, DataFrameData>,
     /// 项目元数据
     #[serde(default)]
     pub metadata: ProjectMetadata,
@@ -165,6 +181,7 @@ impl Default for ProjectData {
             events: HashMap::new(),
             functions: HashMap::new(),
             macros: HashMap::new(),
+            dataframes: HashMap::new(),
             metadata: ProjectMetadata::default(),
         }
     }

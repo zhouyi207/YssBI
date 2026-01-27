@@ -39,6 +39,9 @@ pub trait ExecutionContextTrait {
 
     /// 根据条件查找节点（使用 trait object 而非泛型以保持 dyn-compatible）
     fn find_node_by(&self, predicate: &dyn Fn(&NodeData) -> bool) -> Option<String>;
+
+    /// 打开新窗口（用于 plot 等可视化节点）
+    fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String>;
 }
 
 /// 数据节点处理器

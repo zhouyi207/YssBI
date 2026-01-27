@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useGestureStore } from "../Store/useGestureStore";
 import { useViewportStore } from "../Store/useViewportStore";
@@ -6,7 +6,7 @@ import { useNodeStore } from "../Store/useNodeStore";
 import { BaseNode } from "../Types/nodes";
 import HUD from "./HUD";
 import NodePalette from "../Nodes/NodePalette";
-import { VscRunAll } from "react-icons/vsc";
+import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 import { DEFAULT_VIEWPORT } from "./constants";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 
@@ -36,8 +36,11 @@ export default function CanvasOverlays({
         activeGroupId,
         groupId,
         executeGraph,
+        executeAllEvents,
         setCanvas // Needed for internal node centering
     } = useCanvas();
+
+    const [showExecuteMenu, setShowExecuteMenu] = useState(false);
 
     const gesture = useGestureStore(state => state.gesture);
     const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
@@ -143,13 +146,59 @@ export default function CanvasOverlays({
             {/* ================= FAB (Floating Action Button) for Execution ================= */}
             {tabs.find(t => t.id === activeTabId)?.type === "event" && (
                 <div className="absolute top-4 right-4 z-40">
-                    <button
-                        onClick={() => executeGraph()}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
-                    >
-                        <VscRunAll size={18} />
-                        <span>执行</span>
-                    </button>
+                    <div className="relative">
+                        <div className="flex items-center gap-1">
+                            {/* 主执行按钮 */}
+                            <button
+                                onClick={() => executeGraph()}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
+                            >
+                                <VscRunAll size={18} />
+                                <span>执行当前</span>
+                            </button>
+                            {/* 下拉按钮 */}
+                            <button
+                                onClick={() => setShowExecuteMenu(!showExecuteMenu)}
+                                className="flex items-center px-2 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-green-700"
+                            >
+                                <VscChevronDown size={14} />
+                            </button>
+                        </div>
+                        
+                        {/* 下拉菜单 */}
+                        {showExecuteMenu && (
+                            <>
+                                {/* 点击遮罩关闭菜单 */}
+                                <div 
+                                    className="fixed inset-0 z-40" 
+                                    onClick={() => setShowExecuteMenu(false)}
+                                />
+                                <div className="absolute top-full right-0 mt-2 w-48 bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 overflow-hidden">
+                                    <button
+                                        onClick={() => {
+                                            executeGraph();
+                                            setShowExecuteMenu(false);
+                                        }}
+                                        className="w-full px-4 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--hover-bg)] flex items-center gap-2"
+                                    >
+                                        <VscRunAll size={16} />
+                                        <span>执行当前 Event</span>
+                                    </button>
+                                    <div className="h-px bg-[var(--border-color)]" />
+                                    <button
+                                        onClick={() => {
+                                            executeAllEvents();
+                                            setShowExecuteMenu(false);
+                                        }}
+                                        className="w-full px-4 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--hover-bg)] flex items-center gap-2"
+                                    >
+                                        <VscRunAll size={16} />
+                                        <span>执行所有 Events</span>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 

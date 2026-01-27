@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { SubGraphData, ProjectData } from "../Types/canvas";
+import { SubGraphData, ProjectData, DataFrameData } from "../Types/canvas";
 import { VariableDefinition } from "../Types/variables";
 import { ProjectService } from "../../../services/projectService";
 import { TabState, useNodeStore } from "./useNodeStore";
@@ -11,6 +11,7 @@ interface ProjectStore {
     functions: Record<string, SubGraphData>;
     macros: Record<string, SubGraphData>;
     globalVariables: Record<string, VariableDefinition>;
+    dataframes: Record<string, DataFrameData>;
     currentPath: string | null;
 
     // 内部 Setters (供事件订阅使用)
@@ -18,6 +19,7 @@ interface ProjectStore {
     setFunctions: (functions: Record<string, SubGraphData>) => void;
     setMacros: (macros: Record<string, SubGraphData>) => void;
     setGlobalVariables: (vars: Record<string, VariableDefinition>) => void;
+    setDataFrames: (dfs: Record<string, DataFrameData>) => void;
     setCurrentPath: (path: string | null) => void;
 
     // Event 操作 (调用后端 API)
@@ -40,6 +42,11 @@ interface ProjectStore {
     updateGlobalVariable: (id: string, data: Partial<VariableDefinition>) => void;
     deleteGlobalVariable: (id: string) => void;
 
+    // DataFrame 操作
+    addDataFrame: (id: string, df: DataFrameData) => void;
+    updateDataFrame: (id: string, data: Partial<DataFrameData>) => void;
+    deleteDataFrame: (id: string) => void;
+
     // 项目级操作
     loadProject: (project: ProjectData, path: string | null) => void;
     syncWithTabs: (tabs: Record<string, TabState>) => void;
@@ -54,6 +61,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     functions: {},
     macros: {},
     globalVariables: {},
+    dataframes: {},
     currentPath: null,
 
     // 内部 Setters
@@ -61,6 +69,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     setFunctions: (functions) => set({ functions }),
     setMacros: (macros) => set({ macros }),
     setGlobalVariables: (globalVariables) => set({ globalVariables }),
+    setDataFrames: (dataframes) => set({ dataframes }),
     setCurrentPath: (currentPath) => set({ currentPath }),
 
     // Event 操作
@@ -255,12 +264,41 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ProjectService.deleteGlobalVariable(id).catch(console.error);
     },
 
+    // DataFrame 操作
+    addDataFrame: (id, df) => {
+        set((state) => ({ dataframes: { ...state.dataframes, [id]: df } }));
+        // 同步到后端
+        get().syncToBackend().catch(console.error);
+    },
+
+    updateDataFrame: (id, data) => {
+        set((state) => ({
+            dataframes: {
+                ...state.dataframes,
+                [id]: { ...state.dataframes[id], ...data }
+            }
+        }));
+        // 同步到后端
+        get().syncToBackend().catch(console.error);
+    },
+
+    deleteDataFrame: (id) => {
+        set((state) => {
+            const next = { ...state.dataframes };
+            delete next[id];
+            return { dataframes: next };
+        });
+        // 同步到后端
+        get().syncToBackend().catch(console.error);
+    },
+
     // 项目级操作
     loadProject: (project, path) => set({
         events: project.events || {},
         functions: project.functions || {},
         macros: project.macros || {},
         globalVariables: project.globalVariables || {},
+        dataframes: project.dataframes || {},
         currentPath: path
     }),
 
@@ -321,12 +359,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // 批量同步到后端
     syncToBackend: async () => {
-        const { events, functions, macros, globalVariables, currentPath } = get();
+        const { events, functions, macros, globalVariables, dataframes, currentPath } = get();
         const projectData: ProjectData = {
             events,
             functions,
             macros,
             globalVariables,
+            dataframes,
             metadata: {
                 exportTime: new Date().toISOString(),
                 appVersion: "0.1.0"
@@ -337,6 +376,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             functionsCount: Object.keys(functions).length,
             macrosCount: Object.keys(macros).length,
             globalVariablesCount: Object.keys(globalVariables).length,
+            dataframesCount: Object.keys(dataframes || {}).length,
         });
         try {
             // 自动同步时不触发事件（避免循环）

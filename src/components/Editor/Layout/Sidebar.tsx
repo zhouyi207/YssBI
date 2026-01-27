@@ -38,6 +38,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addMacro,
     events,
     addEvent,
+    dataframes,
+    addDataFrame,
     openSubGraph,
   } = useCanvas();
 
@@ -45,16 +47,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   // Read active tab from Layout Store
   const sidebarNode = useLayoutStore(s => s.nodes[nodeId || 'sidebar']);
-  const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | null;
+  const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
 
   // 记录每个 Tab 的数量，用于触发滚动
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
   const macrosCount = Object.keys(macros).length;
   const variablesCount = Object.keys(variables).length + Object.keys(globalVariables).length;
+  const dataframesCount = Object.keys(dataframes || {}).length;
 
   // 记录上一次的数量，用于判断是否是“增加”
-  const prevCounts = useRef({ events: eventsCount, functions: functionsCount, macros: macrosCount, variables: variablesCount });
+  const prevCounts = useRef({ events: eventsCount, functions: functionsCount, macros: macrosCount, variables: variablesCount, dataframes: dataframesCount });
 
   // 监听数量变化并滚动到底部
   useEffect(() => {
@@ -62,7 +65,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       eventsCount > prevCounts.current.events ||
       functionsCount > prevCounts.current.functions ||
       macrosCount > prevCounts.current.macros ||
-      variablesCount > prevCounts.current.variables;
+      variablesCount > prevCounts.current.variables ||
+      dataframesCount > prevCounts.current.dataframes;
 
     if (isAdded && listRef.current) {
       listRef.current.scrollTo({
@@ -76,11 +80,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       events: eventsCount,
       functions: functionsCount,
       macros: macrosCount,
-      variables: variablesCount
+      variables: variablesCount,
+      dataframes: dataframesCount
     };
-  }, [eventsCount, functionsCount, macrosCount, variablesCount]);
+  }, [eventsCount, functionsCount, macrosCount, variablesCount, dataframesCount]);
 
-  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event', extra?: any) => {
+  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
 
     return (
@@ -91,7 +96,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           setSelectedInfo(id, type);
         }}
         onDoubleClick={(e) => {
-          if (type !== 'variable') {
+          if (type !== 'variable' && type !== 'data') {
             e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
             openSubGraph(id, name, type);
           }
@@ -135,7 +140,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       >
         <div
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: isSelected ? 'white' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af') }}
+          style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af')) }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
 
@@ -186,6 +191,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               else if (activeTab === 'variables') {
                 addVariable("New Variable", "int", false);
               }
+              else if (activeTab === 'data') {
+                addDataFrame("New DataFrame");
+              }
             }}
             className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
           >
@@ -234,6 +242,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             <>
               {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
               {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
+            </>
+          )}
+          {activeTab === 'data' && (
+            <>
+              {Object.entries(dataframes).map(([id, data]) => renderItem(id, data.name, 'data', data))}
+              {Object.keys(dataframes).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No data</div>}
             </>
           )}
           {activeTab === 'variables' && (

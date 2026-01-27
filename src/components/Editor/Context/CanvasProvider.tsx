@@ -19,6 +19,17 @@ import { useShallow } from 'zustand/react/shallow';
 
 const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
+const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
+  const names = Object.values(items).map(i => i.name);
+  let name = baseName;
+  let counter = 1;
+  while (names.includes(name)) {
+    name = `${baseName}_${counter}`;
+    counter++;
+  }
+  return name;
+};
+
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -33,6 +44,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const functions = useProjectStore(useCallback(s => s.functions, []));
   const macros = useProjectStore(useCallback(s => s.macros, []));
   const globalVariables = useProjectStore(useCallback(s => s.globalVariables, []));
+  const dataframes = useProjectStore(useCallback(s => s.dataframes, []));
 
   // --- Multi-View Editor State (已迁移至 layoutStore) ---
   const activeGroupId = useLayoutStore(useCallback((s: LayoutState) => s.activeGroupId, []));
@@ -144,9 +156,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [activeGroupId]);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [selectedItemType, setSelectedItemType] = useState<'variable' | 'event' | 'function' | 'macro' | 'setting' | null>(null);
+  const [selectedItemType, setSelectedItemType] = useState<'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null>(null);
 
-  const setSelectedInfo = useCallback((id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'setting' | null) => {
+  const setSelectedInfo = useCallback((id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null) => {
     setSelectedItemId(id);
     setSelectedItemType(type);
   }, []);
@@ -349,10 +361,31 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const executeGraph = useCallback(async () => {
     try {
       syncActiveToCollection();
+      
+      // 获取当前活跃的 tab
+      const currentTabId = activeTabIdRef.current;
+      if (!currentTabId) {
+        showToast("请先打开一个 Event 才能执行", "warning", 3000);
+        return;
+      }
+
       const st = useProjectStore.getState();
+      
+      // 检查当前 tab 是否是 event
+      const currentEvent = st.events[currentTabId];
+      if (!currentEvent) {
+        showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
+        return;
+      }
+
+      // 只执行当前的 event
+      const eventsToExecute = { [currentTabId]: currentEvent };
+      
+      console.log(`[Execute] 执行当前 Event: ${currentEvent.name} (${currentTabId})`);
+      
       const res = await ProjectService.executeProject(
         st.globalVariables,
-        st.events,
+        eventsToExecute,  // 只传入当前 event
         st.functions,
         st.macros
       );
@@ -370,7 +403,47 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
       
-      showToast("执行完成", "success", 2000);
+      showToast(`执行完成: ${currentEvent.name}`, "success", 2000);
+    } catch (e) { 
+      console.error("执行失败:", e);
+      showToast(`执行失败: ${e}`, "error", 5000); 
+    }
+  }, [syncActiveToCollection, showToast]);
+
+  const executeAllEvents = useCallback(async () => {
+    try {
+      syncActiveToCollection();
+      const st = useProjectStore.getState();
+      
+      const eventCount = Object.keys(st.events).length;
+      if (eventCount === 0) {
+        showToast("没有可执行的 Event", "warning", 3000);
+        return;
+      }
+
+      console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
+      
+      const res = await ProjectService.executeProject(
+        st.globalVariables,
+        st.events,  // 执行所有 events
+        st.functions,
+        st.macros
+      );
+      
+      // 显示所有日志输出
+      const logs = res.split('\n').filter(l => l.trim());
+      logs.forEach(log => {
+        if (log.includes("[Error]")) {
+          showToast(log, "error", 5000);
+        } else if (log.includes("[NODE PRINT]")) {
+          // 提取打印内容并显示
+          const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
+          showToast(`输出: ${printContent}`, "info", 3000);
+          console.log(printContent); // 同时输出到控制台
+        }
+      });
+      
+      showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
     } catch (e) { 
       console.error("执行失败:", e);
       showToast(`执行失败: ${e}`, "error", 5000); 
@@ -389,17 +462,29 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     useProjectStore.getState().updateMacro(id, data);
   }, []);
 
-  // Helper to get unique name
-  const getUniqueName = useCallback((baseName: string, items: Record<string, { name: string }>) => {
-    const names = Object.values(items).map(i => i.name);
-    let name = baseName;
-    let counter = 1;
-    while (names.includes(name)) {
-      name = `${baseName}_${counter}`;
-      counter++;
-    }
-    return name;
+  const addDataFrame = useCallback((name?: string) => {
+    const st = useProjectStore.getState();
+    const finalName = getUniqueName(name || "New DataFrame", st.dataframes);
+    const id = `df-${crypto.randomUUID()}`;
+    const df: import("../Types/canvas").DataFrameData = {
+      id,
+      name: finalName,
+      columns: [],
+      rows: []
+    };
+    st.addDataFrame(id, df);
+    setSelectedInfo(id, 'data');
+    switchSidebarTab('data');
+  }, [setSelectedInfo, switchSidebarTab]);
+
+  const updateDataFrame = useCallback((id: string, data: Partial<import("../Types/canvas").DataFrameData>) => {
+    useProjectStore.getState().updateDataFrame(id, data);
   }, []);
+
+  const deleteDataFrame = useCallback((id: string) => {
+    useProjectStore.getState().deleteDataFrame(id);
+    if (selectedItemId === id) setSelectedInfo(null, null);
+  }, [selectedItemId, setSelectedInfo]);
 
   const addEvent = useCallback((name?: string) => {
     const st = useProjectStore.getState();
@@ -410,7 +495,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     st.addEvent(id, sub);
     openSubGraph(id, finalName, "event", sub);
     switchSidebarTab('events');
-  }, [getUniqueName, openSubGraph, switchSidebarTab]);
+  }, [openSubGraph, switchSidebarTab]);
 
   const addFunction = useCallback((name?: string) => {
     const st = useProjectStore.getState();
@@ -424,7 +509,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     st.addFunction(id, sub);
     openSubGraph(id, finalName, "function", sub);
     switchSidebarTab('functions');
-  }, [getUniqueName, openSubGraph, switchSidebarTab]);
+  }, [openSubGraph, switchSidebarTab]);
 
   const addMacro = useCallback((name?: string) => {
     const st = useProjectStore.getState();
@@ -438,7 +523,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     st.addMacro(id, sub);
     openSubGraph(id, finalName, "macro", sub);
     switchSidebarTab('macros');
-  }, [getUniqueName, openSubGraph, switchSidebarTab]);
+  }, [openSubGraph, switchSidebarTab]);
 
   const deleteFunction = useCallback((id: string) => { useProjectStore.getState().deleteFunction(id); closeTab(id); }, [closeTab]);
   const deleteEvent = useCallback((id: string) => { useProjectStore.getState().deleteEvent(id); closeTab(id); }, [closeTab]);
@@ -481,7 +566,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
     switchSidebarTab('variables');
-  }, [getUniqueName, switchSidebarTab]);
+  }, [switchSidebarTab]);
 
   const updateVariable = useCallback((id: string, data: any) => {
     const isGlobal = !!useProjectStore.getState().globalVariables[id];
@@ -809,12 +894,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const contextValue = useMemo(() => ({
     setCanvas, nodes: [], setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu, setContextMenu,
-    saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
+    saveGraphAs, saveGraph, importGraph, executeGraph, executeAllEvents, variables, globalVariables,
     selectedItemId, selectedItemType, setSelectedInfo,
     addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
     events, addEvent, updateEvent, deleteEvent,
     functions, addFunction, updateFunction, deleteFunction,
     macros, addMacro, updateMacro, deleteMacro,
+    dataframes, addDataFrame, updateDataFrame, deleteDataFrame,
     undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory,     connectPins,
     activeGroupId: activeGroupId || 'default_editor',
     activeEditorGroupId: activeEditorGroupId || 'default_editor',
@@ -825,12 +911,13 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     selectedNodeIds, setSelectedNodeIds
   }), [
     setCanvas, setNodes, onCanvasWheel, onCanvasPointerDown, onNodePointerDown, onPinPointerDown, contextMenu,
-    saveGraphAs, saveGraph, importGraph, executeGraph, variables, globalVariables,
+    saveGraphAs, saveGraph, importGraph, executeGraph, executeAllEvents, variables, globalVariables,
     selectedItemId, selectedItemType, setSelectedInfo,
     addVariable, updateVariable, deleteVariable, promoteVariable, demoteVariable,
     events, addEvent, updateEvent, deleteEvent,
     functions, addFunction, updateFunction, deleteFunction,
     macros, addMacro, updateMacro, deleteMacro,
+    dataframes, addDataFrame, updateDataFrame, deleteDataFrame,
     undo, redo, copy, paste, cut, deleteSelected, history.past.length, history.future.length, saveHistory, connectPins,
     activeGroupId, handleSetActiveGroupId, splitEditorRight, closeGroup,
     activeTabId, setActiveTabId, openSubGraph, closeTab, openSettingsTab, pendingConnection,

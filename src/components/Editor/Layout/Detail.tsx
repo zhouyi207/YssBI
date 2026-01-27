@@ -12,6 +12,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     events,
     functions,
     macros,
+    dataframes,
     selectedItemId,
     selectedItemType,
     setSelectedInfo,
@@ -22,7 +23,9 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     updateFunction,
     deleteFunction,
     updateMacro,
-    deleteMacro
+    deleteMacro,
+    updateDataFrame,
+    deleteDataFrame
   } = useCanvas();
   const { showDialog } = useUI();
 
@@ -40,6 +43,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       selectedData = functions[selectedItemId];
     } else if (selectedItemType === 'macro') {
       selectedData = macros[selectedItemId];
+    } else if (selectedItemType === 'data') {
+      selectedData = dataframes[selectedItemId];
     }
   }
 
@@ -49,6 +54,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     else if (selectedItemType === 'event') updateEvent(selectedItemId, data);
     else if (selectedItemType === 'function') updateFunction(selectedItemId, data);
     else if (selectedItemType === 'macro') updateMacro(selectedItemId, data);
+    else if (selectedItemType === 'data') updateDataFrame(selectedItemId, data);
   };
 
   const handleDelete = () => {
@@ -63,6 +69,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
         else if (selectedItemType === 'event') deleteEvent(selectedItemId);
         else if (selectedItemType === 'function') deleteFunction(selectedItemId);
         else if (selectedItemType === 'macro') deleteMacro(selectedItemId);
+        else if (selectedItemType === 'data') deleteDataFrame(selectedItemId);
         setSelectedInfo(null, null);
       }
     });
@@ -201,6 +208,22 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                     {selectedItemType.charAt(0).toUpperCase() + selectedItemType.slice(1)}
                   </td>
                 </tr>
+              )}
+              {selectedItemType === 'data' && (
+                <>
+                  <tr className="border-b border-[#2b2b2b]">
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Columns</td>
+                    <td className="p-2 text-gray-400">
+                      {selectedData.columns?.length || 0} columns
+                    </td>
+                  </tr>
+                  <tr className="border-b border-[#2b2b2b]">
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Rows</td>
+                    <td className="p-2 text-gray-400">
+                      {selectedData.rows?.length || 0} rows
+                    </td>
+                  </tr>
+                </>
               )}
 
             </tbody>

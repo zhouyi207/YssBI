@@ -664,18 +664,18 @@ fn rename_subgraph(
 
 /// 执行图（从状态管理器获取数据）
 #[tauri::command]
-fn execute_graph(state: State<'_, ProjectState>) -> Result<Vec<String>, String> {
+fn execute_graph(app: AppHandle, state: State<'_, ProjectState>) -> Result<Vec<String>, String> {
     let data = state.get_data();
-    execute_project_data(data)
+    execute_project_data(app, data)
 }
 
 /// 执行指定的项目数据（兼容旧接口）
 #[tauri::command]
-fn execute_project(data: ProjectData) -> Result<Vec<String>, String> {
-    execute_project_data(data)
+fn execute_project(app: AppHandle, data: ProjectData) -> Result<Vec<String>, String> {
+    execute_project_data(app, data)
 }
 
-fn execute_project_data(data: ProjectData) -> Result<Vec<String>, String> {
+fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>, String> {
     info!("[execute_project_data] Received project data for execution");
 
     let mut nodes = Vec::new();
@@ -769,6 +769,7 @@ fn execute_project_data(data: ProjectData) -> Result<Vec<String>, String> {
 
     // 4. 执行
     let mut context = executor::ExecutionContext::new(graph);
+    context.set_app_handle(app);
     context.execute()
 }
 

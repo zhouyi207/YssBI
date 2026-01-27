@@ -55,6 +55,7 @@ export class ProjectService {
             events: convertSubGraphMap(data.events || {}),
             functions: convertSubGraphMap(data.functions || {}),
             macros: convertSubGraphMap(data.macros || {}),
+            dataframes: data.dataframes || {},
             metadata: data.metadata || { exportTime: "", appVersion: "" },
         };
         console.log('[ProjectService.getProjectState] Converted data:', result);
@@ -98,6 +99,7 @@ export class ProjectService {
                     events: convertSubGraphMap(data.events || {}),
                     functions: convertSubGraphMap(data.functions || {}),
                     macros: convertSubGraphMap(data.macros || {}),
+                    dataframes: data.dataframes || {},
                     metadata: data.metadata || { exportTime: "", appVersion: "" },
                 },
                 path: filePath,
@@ -140,6 +142,7 @@ export class ProjectService {
             events: data.events,
             functions: data.functions,
             macros: data.macros,
+            dataframes: data.dataframes,
             metadata: data.metadata,
         };
         console.log('[ProjectService.setProjectData] Sending to backend:', {
@@ -147,6 +150,7 @@ export class ProjectService {
             functionsCount: Object.keys(backendData.functions).length,
             macrosCount: Object.keys(backendData.macros).length,
             globalVariablesCount: Object.keys(backendData.globalVariables).length,
+            dataframesCount: Object.keys(backendData.dataframes || {}).length,
             emitEvent,
         });
         await invoke("set_project_data", { data: backendData, path: path || null, emitEvent });
@@ -319,15 +323,17 @@ export class ProjectService {
         globalVariables: Record<string, any>,
         events: Record<string, SubGraphData>,
         functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>
+        macros: Record<string, SubGraphData>,
+        dataframes: Record<string, any> = {}
     ): Promise<string> {
-        const project = this.buildProjectData(globalVariables, events, functions, macros);
+        const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
         // 直接使用 project，字段名已经匹配
         const backendData = {
             globalVariables: project.globalVariables,
             events: project.events,
             functions: project.functions,
             macros: project.macros,
+            dataframes: project.dataframes,
             metadata: project.metadata,
         };
         const res: string[] = await invoke("execute_project", { data: backendData });
@@ -399,13 +405,15 @@ export class ProjectService {
         globalVariables: Record<string, any>,
         events: Record<string, SubGraphData>,
         functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>
+        macros: Record<string, SubGraphData>,
+        dataframes: Record<string, any> = {}
     ): ProjectData {
         return {
             globalVariables,
             events,
             functions,
             macros,
+            dataframes,
             metadata: {
                 exportTime: new Date().toISOString(),
                 appVersion: "0.1.0",
@@ -420,12 +428,13 @@ export class ProjectService {
         globalVariables: Record<string, any>,
         events: Record<string, SubGraphData>,
         functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>
+        macros: Record<string, SubGraphData>,
+        dataframes: Record<string, any> = {}
     ): Promise<string | null> {
         try {
             const path = await save({ filters: [{ name: "YssBI Project", extensions: ["json"] }] });
             if (path) {
-                const project = this.buildProjectData(globalVariables, events, functions, macros);
+                const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
                 // 调用后端保存项目
                 await invoke("save_project", {
                     path,
@@ -448,9 +457,10 @@ export class ProjectService {
         globalVariables: Record<string, any>,
         events: Record<string, SubGraphData>,
         functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>
+        macros: Record<string, SubGraphData>,
+        dataframes: Record<string, any> = {}
     ): Promise<void> {
-        const project = this.buildProjectData(globalVariables, events, functions, macros);
+        const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
         // 调用后端保存项目
         await invoke("save_project", {
             path,
