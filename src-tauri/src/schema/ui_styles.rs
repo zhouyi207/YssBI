@@ -48,7 +48,7 @@ pub fn get_ui_style_definitions() -> Vec<UIStyleDefinition> {
             display_name: "事件样式".into(),
             has_header: true,
             compact: false,
-            header_color: Some("#CC3333".into()),
+            header_color: Some("#e06c75".into()), // 采用 Boolean 类型的红色，保持一致性
             background_color: None,
             min_width: Some(120),
             min_height: None,
@@ -60,7 +60,7 @@ pub fn get_ui_style_definitions() -> Vec<UIStyleDefinition> {
             has_header: false,
             compact: true,
             header_color: None,
-            background_color: Some("#2D2D2D".into()),
+            background_color: Some("#2d2d2d".into()), // 与 nodeBase 保持一致
             min_width: Some(60),
             min_height: Some(60),
             center_symbols: {

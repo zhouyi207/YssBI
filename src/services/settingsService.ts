@@ -16,7 +16,11 @@ export interface ThemeSettings {
     floatColor: string;
     boolColor: string;
     stringColor: string;
+    dateColor: string;
+    datetimeColor: string;
+    dataframeColor: string;
     objectColor: string;
+    arrayColor: string;
 }
 
 export interface EditorSettings {
@@ -65,19 +69,24 @@ export interface PartialAppSettings {
 // ==================== 默认值定义 ====================
 
 export const DEFAULT_THEME: ThemeSettings = {
-    workbenchBackground: "#181818",
-    sidebarBackground: "#1f1f1f",
-    accentColor: "#007acc",
-    gridLines: "#222222",
-    nodeBase: "#2b2b2b",
-    connectionLines: "#888888",
-    selectionRegion: "#007acc33",
+    workbenchBackground: "#121212", // 更深的背景
+    sidebarBackground: "#181818",   // 侧边栏稍亮，区分层次
+    accentColor: "#0078d4",         // 标准的 Azure/VSCode 蓝色
+    gridLines: "#252525",           // 网格线
+    nodeBase: "#2d2d2d",            // 节点底色
+    connectionLines: "#6b6b6b",     // 连接线
+    selectionRegion: "#0078d433",
+    // Pin & Type Colors - 采用更符合专业分析工具的饱和度
     execColor: "#ffffff",
-    intColor: "#3592c4",
-    floatColor: "#4ab3e3",
-    boolColor: "#c94f4f",
-    stringColor: "#7bb0a6",
-    objectColor: "#9179c9",
+    intColor: "#35b2b2",            // 蓝绿色 (Integer)
+    floatColor: "#9ecd4d",          // 嫩绿色 (Float)
+    boolColor: "#e06c75",           // 柔和红色 (Boolean)
+    stringColor: "#e5c07b",         // 柔和琥珀色 (String)
+    dateColor: "#c678dd",           // 紫色 (Date/Time)
+    datetimeColor: "#c678dd",
+    dataframeColor: "#61afef",      // 天蓝色 (DataFrame)
+    objectColor: "#abb2bf",         // 灰色 (Object)
+    arrayColor: "#d19a66",          // 橙色 (Array)
 };
 
 export const DEFAULT_EDITOR: EditorSettings = {

@@ -11,10 +11,11 @@ pub struct PinTypeDefinition {
     pub name: String,
     /// 显示名称
     pub display_name: String,
-    /// UI 颜色 (十六进制)
-    pub color: String,
     /// 是否为执行类型 (exec pin)
     pub is_exec: bool,
+    /// 是否支持数组模式 (UI 渲染用)
+    #[serde(default)]
+    pub supports_array: bool,
     /// 可以隐式转换到的类型列表
     pub implicit_convert_to: Vec<String>,
     /// 可以显式转换到的类型列表
@@ -43,8 +44,8 @@ pub fn get_pin_type_definitions() -> Vec<PinTypeDefinition> {
         PinTypeDefinition {
             name: "exec".into(),
             display_name: "Exec".into(),
-            color: "#FFFFFF".into(),
             is_exec: true,
+            supports_array: false,
             implicit_convert_to: vec![],
             explicit_convert_to: vec![],
             default_value: None,
@@ -53,81 +54,163 @@ pub fn get_pin_type_definitions() -> Vec<PinTypeDefinition> {
         PinTypeDefinition {
             name: "bool".into(),
             display_name: "Boolean".into(),
-            color: "#9D0006".into(),
             is_exec: false,
+            supports_array: true,
             implicit_convert_to: vec!["string".into()],
-            explicit_convert_to: vec!["int".into(), "float".into()],
+            explicit_convert_to: vec!["int32".into(), "int64".into(), "float64".into()],
             default_value: Some(serde_json::Value::Bool(false)),
         },
-        // 整数类型
+        // 整数类型 (Polars 各个级别)
         PinTypeDefinition {
-            name: "int".into(),
-            display_name: "Integer".into(),
-            color: "#1C9898".into(),
+            name: "int8".into(),
+            display_name: "Int8".into(),
             is_exec: false,
-            implicit_convert_to: vec!["float".into(), "string".into()],
+            supports_array: true,
+            implicit_convert_to: vec!["int16".into(), "int32".into(), "int64".into(), "float64".into(), "string".into()],
             explicit_convert_to: vec!["bool".into()],
-            default_value: Some(serde_json::Value::Number(0.into())),
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "int16".into(),
+            display_name: "Int16".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["int32".into(), "int64".into(), "float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into(), "int8".into()],
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "int32".into(),
+            display_name: "Int32".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["int64".into(), "float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into(), "int16".into()],
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "int64".into(),
+            display_name: "Int64".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into(), "int32".into()],
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "uint32".into(),
+            display_name: "UInt32".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["int64".into(), "uint64".into(), "float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into()],
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "uint64".into(),
+            display_name: "UInt64".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into(), "uint32".into()],
+            default_value: Some(serde_json::json!(0)),
         },
         // 浮点数类型
         PinTypeDefinition {
-            name: "float".into(),
-            display_name: "Float".into(),
-            color: "#9ECD4D".into(),
+            name: "float32".into(),
+            display_name: "Float32".into(),
             is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["float64".into(), "string".into()],
+            explicit_convert_to: vec!["int32".into(), "bool".into()],
+            default_value: Some(serde_json::json!(0.0)),
+        },
+        PinTypeDefinition {
+            name: "float64".into(),
+            display_name: "Float64".into(),
+            is_exec: false,
+            supports_array: true,
             implicit_convert_to: vec!["string".into()],
-            explicit_convert_to: vec!["int".into(), "bool".into()],
+            explicit_convert_to: vec!["int64".into(), "bool".into()],
             default_value: Some(serde_json::json!(0.0)),
         },
         // 字符串类型
         PinTypeDefinition {
             name: "string".into(),
             display_name: "String".into(),
-            color: "#FF00FF".into(),
             is_exec: false,
+            supports_array: true,
             implicit_convert_to: vec![],
-            explicit_convert_to: vec!["int".into(), "float".into(), "bool".into()],
+            explicit_convert_to: vec!["int32".into(), "float64".into(), "bool".into()],
             default_value: Some(serde_json::Value::String("".into())),
         },
-        // 对象类型 (通配符，可以接受任何类型)
+        // 时间日期类型
+        PinTypeDefinition {
+            name: "date".into(),
+            display_name: "Date".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["string".into()],
+            explicit_convert_to: vec![],
+            default_value: None,
+        },
+        PinTypeDefinition {
+            name: "datetime".into(),
+            display_name: "DateTime".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["string".into()],
+            explicit_convert_to: vec![],
+            default_value: None,
+        },
+        // 数据对象
+        PinTypeDefinition {
+            name: "dataframe".into(),
+            display_name: "DataFrame".into(),
+            is_exec: false,
+            supports_array: false,
+            implicit_convert_to: vec!["object".into()],
+            explicit_convert_to: vec![],
+            default_value: None,
+        },
+        // 对象类型 (通配符)
         PinTypeDefinition {
             name: "object".into(),
             display_name: "Object".into(),
-            color: "#0D7EA6".into(),
             is_exec: false,
+            supports_array: true,
             implicit_convert_to: vec![],
             explicit_convert_to: vec![],
             default_value: Some(serde_json::Value::Null),
         },
-        // 数组类型
+        // 为了向后兼容，保留一些通用名称
+        PinTypeDefinition {
+            name: "int".into(),
+            display_name: "Integer".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["int64".into(), "float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into()],
+            default_value: Some(serde_json::json!(0)),
+        },
+        PinTypeDefinition {
+            name: "float".into(),
+            display_name: "Float".into(),
+            is_exec: false,
+            supports_array: true,
+            implicit_convert_to: vec!["float64".into(), "string".into()],
+            explicit_convert_to: vec!["bool".into()],
+            default_value: Some(serde_json::json!(0.0)),
+        },
+        // 数组类型 (旧版兼容)
         PinTypeDefinition {
             name: "array".into(),
             display_name: "Array".into(),
-            color: "#FF7F00".into(),
             is_exec: false,
+            supports_array: false,
             implicit_convert_to: vec!["object".into()],
             explicit_convert_to: vec!["string".into()],
             default_value: Some(serde_json::json!([])),
-        },
-        // 结构体类型
-        PinTypeDefinition {
-            name: "struct".into(),
-            display_name: "Struct".into(),
-            color: "#0055FF".into(),
-            is_exec: false,
-            implicit_convert_to: vec!["object".into()],
-            explicit_convert_to: vec!["string".into()],
-            default_value: Some(serde_json::json!({})),
-        },
-        // 委托/事件类型
-        PinTypeDefinition {
-            name: "delegate".into(),
-            display_name: "Delegate".into(),
-            color: "#FF3333".into(),
-            is_exec: false,
-            implicit_convert_to: vec![],
-            explicit_convert_to: vec![],
-            default_value: None,
         },
     ]
 }

@@ -574,12 +574,28 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     switchSidebarTab('variables');
   }, [switchSidebarTab]);
 
-  const updateVariable = useCallback((id: string, data: any) => {
-    const isGlobal = !!useProjectStore.getState().globalVariables[id];
-    if (isGlobal) useProjectStore.getState().updateGlobalVariable(id, data);
-    else {
-      const tid = activeTabIdRef.current;
-      if (tid) useNodeStore.getState().updateVariable(tid, id, data);
+  const updateVariable = useCallback((id: string, data: Partial<VariableDefinition>) => {
+    const st = useProjectStore.getState();
+    const isGlobal = !!st.globalVariables[id];
+    
+    if (isGlobal) {
+      st.updateGlobalVariable(id, data);
+    } else {
+      // 尝试从所有标签页中找到该变量并更新
+      const nodeStore = useNodeStore.getState();
+      let found = false;
+      
+      for (const [tid, tabState] of Object.entries(nodeStore.tabs)) {
+        if (tabState.variables[id]) {
+          nodeStore.updateVariable(tid, id, data);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.warn(`[CanvasProvider] Variable ${id} not found in any scope.`);
+      }
     }
   }, []);
 

@@ -12,21 +12,33 @@ use std::collections::HashMap;
 #[serde(rename_all = "snake_case")]
 pub enum VariableDataType {
     /// 整数
-    Int,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Uint32,
+    Uint64,
     /// 浮点数
-    Float,
+    Float32,
+    Float64,
     /// 布尔值
     Bool,
     /// 字符串
     String,
+    /// 时间日期
+    Date,
+    Datetime,
     /// 对象
     Object,
-    /// 数组
+    /// 数组 (Legacy)
     Array,
     /// 数据框 (DataFrame)
     Dataframe,
     /// 任意类型
     Any,
+    /// 兼容旧版
+    Int,
+    Float,
 }
 
 impl Default for VariableDataType {
@@ -228,6 +240,10 @@ pub struct VariableDefinition {
     pub source_config: Option<DataSourceConfig>,
 
     // ===== 可选配置 =====
+    /// 是否为数组
+    #[serde(default)]
+    pub is_array: bool,
+
     /// 是否为常量
     #[serde(default)]
     pub is_constant: bool,
@@ -256,6 +272,7 @@ impl VariableDefinition {
             scope: VariableScope::default(),
             static_value: None,
             source_config: None,
+            is_array: false,
             is_constant: false,
             default_value: None,
             is_exposed: false,
@@ -292,9 +309,19 @@ impl VariableDefinition {
         matches!(
             self.data_type,
             VariableDataType::Int
+                | VariableDataType::Int8
+                | VariableDataType::Int16
+                | VariableDataType::Int32
+                | VariableDataType::Int64
+                | VariableDataType::Uint32
+                | VariableDataType::Uint64
                 | VariableDataType::Float
+                | VariableDataType::Float32
+                | VariableDataType::Float64
                 | VariableDataType::Bool
                 | VariableDataType::String
+                | VariableDataType::Date
+                | VariableDataType::Datetime
         )
     }
 

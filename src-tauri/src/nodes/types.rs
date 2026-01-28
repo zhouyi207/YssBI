@@ -15,6 +15,8 @@ pub struct PinData {
     pub links: Vec<String>,
     #[serde(rename = "defaultValue")]
     pub default_value: Option<Value>,
+    #[serde(rename = "isArray", default)]
+    pub is_array: bool,
 }
 
 /// Pin 定义（元数据）
@@ -25,6 +27,19 @@ pub struct PinDefinition {
     pub pin_type: String,
     #[serde(rename = "defaultValue")]
     pub default_value: Option<Value>,
+    #[serde(rename = "isArray", default)]
+    pub is_array: bool,
+}
+
+impl Default for PinDefinition {
+    fn default() -> Self {
+        Self {
+            name: "".into(),
+            pin_type: "object".into(),
+            default_value: None,
+            is_array: false,
+        }
+    }
 }
 
 /// 节点数据（运行时）

@@ -96,11 +96,11 @@ export default function CanvasOverlays({
                             title: subName,
                             inputs: [
                                 { id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
-                                ...(subData.inputs || []).map((p: any) => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[] }))
+                                ...(subData.inputs || []).map((p: any) => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[], isArray: p.isArray }))
                             ],
                             outputs: [
                                 { id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
-                                ...(subData.outputs || []).map((p: any) => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[] }))
+                                ...(subData.outputs || []).map((p: any) => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[], isArray: p.isArray }))
                             ],
                             ui_style: "default"
                         },
@@ -259,7 +259,8 @@ export default function CanvasOverlays({
                                     title: `Get ${variableDropMenu.variableName}`,
                                     variableId: variableDropMenu.variableId,
                                     variableType: variableDropMenu.variableType,
-                                    variableName: variableDropMenu.variableName
+                                    variableName: variableDropMenu.variableName,
+                                    variableIsArray: variableDropMenu.variableIsArray
                                 }
                             );
                             if (newNode) {
@@ -288,7 +289,8 @@ export default function CanvasOverlays({
                                     title: `Set ${variableDropMenu.variableName}`,
                                     variableId: variableDropMenu.variableId,
                                     variableType: variableDropMenu.variableType,
-                                    variableName: variableDropMenu.variableName
+                                    variableName: variableDropMenu.variableName,
+                                    variableIsArray: variableDropMenu.variableIsArray
                                 }
                             );
                             if (newNode) {

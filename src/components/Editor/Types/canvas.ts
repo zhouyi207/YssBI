@@ -64,6 +64,7 @@ export interface PinDefinition {
   id: string;
   name: string;
   type: string;
+  isArray?: boolean;
 }
 
 export interface SubGraphData {

@@ -1,12 +1,15 @@
-import { forwardRef } from "react";
+import { forwardRef, useMemo } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
 import { useLayoutStore } from "../../../store/layoutStore";
+import { useSchemaStore } from "../Store/useSchemaStore";
+import { getDataTypeDisplayName, VariableDataType, isPrimitiveType } from "../Types/variables";
+import { useNodeStore } from "../Store/useNodeStore";
+import { useShallow } from "zustand/react/shallow";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {
-    variables,
     globalVariables,
     events,
     functions,
@@ -28,24 +31,33 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
   } = useCanvas();
   const { showDialog } = useUI();
 
-  // Read state from Layout Store to ensure we're targeting the right editor context
-  const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
+  // 使用 useShallow 确保只有当变量内容真正变化时才重新渲染
+  const allTabsVariables = useNodeStore(useShallow(s => {
+    const vars: Record<string, any> = {};
+    Object.values(s.tabs).forEach(tab => {
+      Object.assign(vars, tab.variables);
+    });
+    return vars;
+  }));
+
+  const variableTypes = useSchemaStore(s => s.variableTypes);
 
   // Find the selected item's data
-  let selectedData: any = null;
-  if (selectedItemId && selectedItemType) {
+  const selectedData = useMemo(() => {
+    if (!selectedItemId || !selectedItemType) return null;
     if (selectedItemType === 'variable') {
-      selectedData = variables[selectedItemId] || globalVariables[selectedItemId];
+      return allTabsVariables[selectedItemId] || globalVariables[selectedItemId];
     } else if (selectedItemType === 'event') {
-      selectedData = events[selectedItemId];
+      return events[selectedItemId];
     } else if (selectedItemType === 'function') {
-      selectedData = functions[selectedItemId];
+      return functions[selectedItemId];
     } else if (selectedItemType === 'macro') {
-      selectedData = macros[selectedItemId];
+      return macros[selectedItemId];
     } else if (selectedItemType === 'data') {
-      selectedData = dataframes[selectedItemId];
+      return dataframes[selectedItemId];
     }
-  }
+    return null;
+  }, [selectedItemId, selectedItemType, allTabsVariables, globalVariables, events, functions, macros, dataframes]);
 
   const handleUpdate = (data: any) => {
     if (!selectedItemId || !selectedItemType) return;
@@ -115,6 +127,17 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
               />
               <button
                 onClick={() => {
+                  const newPins = [...pins];
+                  newPins[idx] = { ...newPins[idx], isArray: !newPins[idx].isArray };
+                  handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
+                }}
+                className={`p-1 rounded transition-colors ${pin.isArray ? 'text-blue-400 bg-blue-500/10' : 'text-gray-500 hover:bg-white/5'}`}
+                title="Toggle Array"
+              >
+                <span className="text-[9px] font-black">[]</span>
+              </button>
+              <button
+                onClick={() => {
                   const newPins = pins.filter((_, i) => i !== idx);
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
@@ -165,39 +188,64 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                     <td className="p-2">
                       <Select
                         value={selectedData.data_type}
-                        options={[
-                          { label: "Integer", value: "int" },
-                          { label: "Float", value: "float" },
-                          { label: "Boolean", value: "bool" },
-                          { label: "String", value: "string" }
-                        ]}
-                        onChange={(val) => handleUpdate({ data_type: val })}
+                        options={Array.from(variableTypes.values()).map(t => ({
+                          label: t.display_name,
+                          value: t.name
+                        }))}
+                        onChange={(val) => handleUpdate({ data_type: val as VariableDataType })}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Is Array</td>
                     <td className="p-2">
-                      {selectedData.data_type === "bool" ? (
-                        <input
-                          type="checkbox"
-                          className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
-                          checked={!!selectedData.static_value}
-                          onChange={(e) => handleUpdate({ static_value: e.target.checked })}
-                        />
-                      ) : (
-                        <input
-                          className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
-                          type={selectedData.data_type === "string" ? "text" : "number"}
-                          value={selectedData.static_value ?? ''}
-                          onChange={(e) => {
-                            const val = selectedData.data_type === "string" ? e.target.value : Number(e.target.value);
-                            handleUpdate({ static_value: val });
-                          }}
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
+                        checked={!!selectedData.is_array}
+                        disabled={!variableTypes.get(selectedData.data_type)?.supports_array}
+                        onChange={(e) => handleUpdate({ is_array: e.target.checked })}
+                      />
                     </td>
                   </tr>
+                  <tr className="border-b border-[#2b2b2b]">
+                    <td className="p-2 font-bold text-gray-400 bg-white/5">Constant</td>
+                    <td className="p-2">
+                      <input
+                        type="checkbox"
+                        className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
+                        checked={!!selectedData.is_constant}
+                        onChange={(e) => handleUpdate({ is_constant: e.target.checked })}
+                      />
+                    </td>
+                  </tr>
+                  {!selectedData.is_array && isPrimitiveType(selectedData.data_type) && (
+                    <tr className="border-b border-[#2b2b2b]">
+                      <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
+                      <td className="p-2">
+                        {selectedData.data_type === "bool" ? (
+                          <input
+                            type="checkbox"
+                            className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
+                            checked={!!selectedData.static_value}
+                            onChange={(e) => handleUpdate({ static_value: e.target.checked })}
+                          />
+                        ) : (
+                          <input
+                            className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
+                            type={selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime" ? "text" : "number"}
+                            value={selectedData.static_value ?? ''}
+                            onChange={(e) => {
+                              const val = (selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime")
+                                ? e.target.value
+                                : Number(e.target.value);
+                              handleUpdate({ static_value: val });
+                            }}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  )}
                 </>
               )}
               {(selectedItemType === 'function' || selectedItemType === 'macro') && (

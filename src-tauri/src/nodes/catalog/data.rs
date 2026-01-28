@@ -21,6 +21,7 @@ fn create_get_dataframe() -> NodeDefinition {
             name: "DataFrame".into(),
             pin_type: "dataframe".into(),
             default_value: None,
+            is_array: false,
         }],
         data_processor: Some(|_ctx, node, _pin_id| {
             if let Some(df_id) = &node.variable_id {
@@ -46,11 +47,13 @@ fn create_get_column() -> NodeDefinition {
             name: "DataFrame".into(),
             pin_type: "dataframe".into(),
             default_value: None,
+            is_array: false,
         }],
         outputs: vec![PinDefinition {
             name: "Column".into(),
-            pin_type: "array".into(),
+            pin_type: "object".into(), // 使用 object 配合 is_array: true
             default_value: None,
+            is_array: true,
         }],
         data_processor: Some(|_ctx, _node, _pin_id| Value::Null),
         flow_processor: None,

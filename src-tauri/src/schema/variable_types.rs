@@ -17,8 +17,6 @@ pub struct VariableTypeDefinition {
     pub default_value: serde_json::Value,
     /// 编辑器控件类型
     pub editor_widget: EditorWidget,
-    /// 类型颜色 (用于 UI)
-    pub color: String,
     /// 是否支持数组
     pub supports_array: bool,
 }
@@ -64,17 +62,16 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
     vec![
         VariableTypeDefinition {
             name: "bool".into(),
-            display_name: "布尔".into(),
+            display_name: "Boolean".into(),
             pin_type: "bool".into(),
             default_value: serde_json::Value::Bool(false),
             editor_widget: EditorWidget::Checkbox,
-            color: "#9D0006".into(),
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "int".into(),
-            display_name: "整数".into(),
-            pin_type: "int".into(),
+            name: "int32".into(),
+            display_name: "Int32".into(),
+            pin_type: "int32".into(),
             default_value: serde_json::json!(0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -82,13 +79,25 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
                 step: Some(1.0),
                 precision: Some(0),
             },
-            color: "#1C9898".into(),
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "float".into(),
-            display_name: "浮点数".into(),
-            pin_type: "float".into(),
+            name: "int64".into(),
+            display_name: "Int64".into(),
+            pin_type: "int64".into(),
+            default_value: serde_json::json!(0),
+            editor_widget: EditorWidget::Number {
+                min: None,
+                max: None,
+                step: Some(1.0),
+                precision: Some(0),
+            },
+            supports_array: true,
+        },
+        VariableTypeDefinition {
+            name: "float32".into(),
+            display_name: "Float32".into(),
+            pin_type: "float32".into(),
             default_value: serde_json::json!(0.0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -96,40 +105,82 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
                 step: Some(0.1),
                 precision: Some(3),
             },
-            color: "#9ECD4D".into(),
+            supports_array: true,
+        },
+        VariableTypeDefinition {
+            name: "float64".into(),
+            display_name: "Float64".into(),
+            pin_type: "float64".into(),
+            default_value: serde_json::json!(0.0),
+            editor_widget: EditorWidget::Number {
+                min: None,
+                max: None,
+                step: Some(0.1),
+                precision: Some(3),
+            },
             supports_array: true,
         },
         VariableTypeDefinition {
             name: "string".into(),
-            display_name: "字符串".into(),
+            display_name: "String".into(),
             pin_type: "string".into(),
             default_value: serde_json::Value::String("".into()),
             editor_widget: EditorWidget::Text {
                 multiline: false,
                 max_length: None,
-                placeholder: Some("输入文本...".into()),
+                placeholder: Some("Input text...".into()),
             },
-            color: "#FF00FF".into(),
+            supports_array: true,
+        },
+        VariableTypeDefinition {
+            name: "date".into(),
+            display_name: "Date".into(),
+            pin_type: "date".into(),
+            default_value: serde_json::Value::Null,
+            editor_widget: EditorWidget::Text {
+                multiline: false,
+                max_length: None,
+                placeholder: Some("YYYY-MM-DD".into()),
+            },
+            supports_array: true,
+        },
+        VariableTypeDefinition {
+            name: "datetime".into(),
+            display_name: "DateTime".into(),
+            pin_type: "datetime".into(),
+            default_value: serde_json::Value::Null,
+            editor_widget: EditorWidget::Text {
+                multiline: false,
+                max_length: None,
+                placeholder: Some("YYYY-MM-DD HH:mm:ss".into()),
+            },
             supports_array: true,
         },
         VariableTypeDefinition {
             name: "object".into(),
-            display_name: "对象".into(),
+            display_name: "Object".into(),
             pin_type: "object".into(),
             default_value: serde_json::Value::Null,
             editor_widget: EditorWidget::JsonEditor,
-            color: "#0D7EA6".into(),
             supports_array: true,
         },
         VariableTypeDefinition {
+            name: "dataframe".into(),
+            display_name: "DataFrame".into(),
+            pin_type: "dataframe".into(),
+            default_value: serde_json::Value::Null,
+            editor_widget: EditorWidget::JsonEditor,
+            supports_array: false,
+        },
+        // 兼容旧版数组
+        VariableTypeDefinition {
             name: "array".into(),
-            display_name: "数组".into(),
+            display_name: "Array (Legacy)".into(),
             pin_type: "array".into(),
             default_value: serde_json::json!([]),
             editor_widget: EditorWidget::ArrayEditor {
                 item_type: "object".into(),
             },
-            color: "#FF7F00".into(),
             supports_array: false,
         },
     ]
@@ -146,10 +197,14 @@ pub fn get_variable_type_by_name(name: &str) -> Option<VariableTypeDefinition> {
 pub fn validate_variable_value(type_name: &str, value: &serde_json::Value) -> bool {
     match type_name {
         "bool" => value.is_boolean(),
-        "int" => value.is_i64() || value.is_u64(),
-        "float" => value.is_f64() || value.is_i64() || value.is_u64(),
+        "int8" | "int16" | "int32" | "int64" | "int" | "uint32" | "uint64" => {
+            value.is_i64() || value.is_u64()
+        }
+        "float32" | "float64" | "float" => value.is_f64() || value.is_i64() || value.is_u64(),
         "string" => value.is_string(),
+        "date" | "datetime" => value.is_string() || value.is_null(),
         "object" => value.is_object() || value.is_null(),
+        "dataframe" => value.is_string() || value.is_null(), // DataFrame 传递的是 ID 字符串
         "array" => value.is_array(),
         _ => true, // 未知类型默认通过
     }

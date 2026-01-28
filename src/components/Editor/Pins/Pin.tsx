@@ -9,10 +9,11 @@ export interface PinProps extends PinModel {
 }
 
 // 提取主题逻辑，避免每次渲染都创建新对象
-const getPinTheme = (type: string, isConnected: boolean, baseColor: string) => {
+const getPinTheme = (type: string, isConnected: boolean, baseColor: string, isArray?: boolean) => {
   const isExec = type === "exec";
   return {
     isExec,
+    isArray: !!isArray,
     fill: isConnected
       ? baseColor
       : isExec
@@ -34,17 +35,18 @@ export const Pin: React.FC<PinProps> = (props) => {
     onPinClick,
     onPinPointerDown,
     isActive,
+    isArray,
   } = props;
 
-  // 从 schema store 获取颜色（getPinColor 已内置默认值）
-  const schemaColor = useSchemaStore((s) => s.getPinColor(type));
+  // 颜色逻辑已完全迁移至前端主题系统
+  // 从 CSS 变量获取颜色，或者使用 ui?.color 覆盖
   const isConnected = links.length > 0 || (isActive ?? false);
-  const baseColor = ui?.color ?? schemaColor;
+  const baseColor = ui?.color ?? `var(--${type}-color, #CCCCCC)`;
 
   // 使用 useMemo 缓存主题计算结果
   const theme = useMemo(
-    () => getPinTheme(type, isConnected, baseColor),
-    [type, isConnected, baseColor]
+    () => getPinTheme(type, isConnected, baseColor, isArray),
+    [type, isConnected, baseColor, isArray]
   );
 
 
@@ -94,6 +96,18 @@ export const Pin: React.FC<PinProps> = (props) => {
               stroke={theme.stroke}
               strokeWidth={theme.strokeWidth}
               strokeLinejoin="miter"
+            />
+          ) : theme.isArray ? (
+            // 数组/List 显示为圆角矩形
+            <rect
+              x="2"
+              y="2"
+              width="8"
+              height="8"
+              rx="1.5"
+              fill={theme.fill}
+              stroke={theme.stroke}
+              strokeWidth={theme.strokeWidth}
             />
           ) : (
             <circle

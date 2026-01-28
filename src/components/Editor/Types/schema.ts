@@ -13,10 +13,10 @@ export interface PinTypeDefinition {
   name: string;
   /** 显示名称 */
   display_name: string;
-  /** UI 颜色 (十六进制) */
-  color: string;
   /** 是否为执行类型 */
   is_exec: boolean;
+  /** 是否支持数组模式 */
+  supports_array: boolean;
   /** 可以隐式转换到的类型列表 */
   implicit_convert_to: string[];
   /** 可以显式转换到的类型列表 */
@@ -96,8 +96,6 @@ export interface VariableTypeDefinition {
   default_value: any;
   /** 编辑器控件类型 */
   editor_widget: EditorWidget;
-  /** 类型颜色 */
-  color: string;
   /** 是否支持数组 */
   supports_array: boolean;
 }

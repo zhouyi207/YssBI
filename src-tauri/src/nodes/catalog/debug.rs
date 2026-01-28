@@ -20,17 +20,20 @@ fn create_print() -> NodeDefinition {
                 name: "In".into(),
                 pin_type: "exec".into(),
                 default_value: None,
+                is_array: false,
             },
             PinDefinition {
                 name: "Value".into(),
                 pin_type: "string".into(),
                 default_value: Some(Value::String("".into())),
+                is_array: false,
             },
         ],
         outputs: vec![PinDefinition {
             name: "Out".into(),
             pin_type: "exec".into(),
             default_value: None,
+            is_array: false,
         }],
         data_processor: None,
         flow_processor: Some(|ctx, node| {

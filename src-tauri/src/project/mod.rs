@@ -16,6 +16,8 @@ pub struct PinDefinition {
     pub name: String,
     #[serde(rename = "type")]
     pub pin_type: String,
+    #[serde(rename = "isArray", default)]
+    pub is_array: bool,
 }
 
 // ==================== 节点数据 ====================
@@ -31,6 +33,8 @@ pub struct SerializedPin {
     pub links: Vec<String>,
     #[serde(rename = "defaultValue", skip_serializing_if = "Option::is_none")]
     pub default_value: Option<serde_json::Value>,
+    #[serde(rename = "isArray", default)]
+    pub is_array: bool,
 }
 
 /// 序列化的节点数据

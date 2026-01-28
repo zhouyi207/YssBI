@@ -33,6 +33,7 @@ export interface Pin {
   direction: PinDirection;
   links: string[];      // 连接的 pin id
   defaultValue?: any;   // 默认值（如果是数据针脚）
+  isArray?: boolean;    // 是否为数组/List
   ui?: {
     x?: number;         // 在节点内部的位置
     y?: number;
@@ -57,6 +58,7 @@ export interface PinDefinition {
   name: string;
   type: PinType;
   defaultValue?: any;
+  isArray?: boolean;
 }
 
 export class BaseNode {
@@ -95,6 +97,7 @@ export class BaseNode {
       nodeId: id,
       name: p.name,
       type: p.type,
+      isArray: p.isArray,
       direction: "input",
       links: [],
       defaultValue: p.defaultValue
@@ -105,6 +108,7 @@ export class BaseNode {
       nodeId: id,
       name: p.name,
       type: p.type,
+      isArray: p.isArray,
       direction: "output",
       links: [],
       defaultValue: p.defaultValue
@@ -151,7 +155,7 @@ export class BaseNode {
    * 更新变量节点的关联变量信息
    * 会同步更新节点的输入/输出 pin 类型
    */
-  setVariable(variableId: string, variableName: string, variableType: string): this {
+  setVariable(variableId: string, variableName: string, variableType: string, isArray: boolean = false): this {
     this.variableId = variableId;
     this.variableName = variableName;
     this.variableType = variableType;
@@ -163,6 +167,7 @@ export class BaseNode {
       const valuePin = this.outputs.find(p => p.name === 'Value' || p.name === 'value');
       if (valuePin) {
         valuePin.type = variableType;
+        valuePin.isArray = isArray;
       }
     } else if (this.type === 'get_dataframe') {
       this.title = `Get ${variableName}`;
@@ -170,6 +175,7 @@ export class BaseNode {
       const dfPin = this.outputs.find(p => p.name === 'DataFrame');
       if (dfPin) {
         dfPin.type = 'dataframe';
+        dfPin.isArray = false; // DataFrame 本身通常不是数组 pin
       }
     } else if (this.type === 'set_variable') {
       this.title = `Set ${variableName}`;
@@ -177,11 +183,13 @@ export class BaseNode {
       const valuePin = this.inputs.find(p => p.name === 'Value' || p.name === 'value');
       if (valuePin) {
         valuePin.type = variableType;
+        valuePin.isArray = isArray;
       }
       // 更新输出 pin 的类型 (pass-through)
       const outPin = this.outputs.find(p => p.name === 'Value' || p.name === 'value');
       if (outPin) {
         outPin.type = variableType;
+        outPin.isArray = isArray;
       }
     }
 

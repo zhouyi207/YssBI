@@ -16,14 +16,24 @@ import { useState } from "react";
 const PIN_COLORS: Record<string, string> = {
   exec: "var(--exec-color)",
   int: "var(--int-color)",
+  int8: "var(--int-color)",
+  int16: "var(--int-color)",
+  int32: "var(--int-color)",
+  int64: "var(--int-color)",
+  uint32: "var(--int-color)",
+  uint64: "var(--int-color)",
   float: "var(--float-color)",
+  float32: "var(--float-color)",
+  float64: "var(--float-color)",
   bool: "var(--bool-color)",
   string: "var(--string-color)",
+  date: "var(--date-color)",
+  datetime: "var(--datetime-color)",
   object: "var(--object-color)",
-  array: "#ef4444",
-  struct: "#f97316",
-  delegate: "#ec4899",
-  dataframe: "#10b981",
+  array: "var(--array-color)",
+  struct: "#0055FF",
+  delegate: "#FF3333",
+  dataframe: "var(--dataframe-color)",
 };
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
@@ -129,7 +139,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 category: "Variable",
                 variableId: id,
                 variableName: name,
-                variableType: extra?.data_type
+                variableType: extra?.data_type,
+                variableIsArray: extra?.is_array
               },
               x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
             });
@@ -186,7 +197,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               <button
                 onClick={(e) => { e.stopPropagation(); promoteVariable(id); }}
                 className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
-                title="提升为全局变量"
+                title="Promote to global"
               >
                 <VscEye size={12} />
               </button>
@@ -194,13 +205,14 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               <button
                 onClick={(e) => { e.stopPropagation(); demoteVariable(id); }}
                 className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
-                title="降级为局部变量"
+                title="Demote to local"
               >
                 <VscEyeClosed size={12} />
               </button>
             )}
-            <span className={`text-[9px] font-black uppercase px-1 rounded ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
+            <span className={`text-[9px] font-black uppercase px-1 rounded flex items-center gap-1 ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
               {extra?.data_type}
+              {extra?.is_array && <span className="text-[7px] bg-blue-500/20 text-blue-400 px-0.5 rounded">[]</span>}
             </span>
           </>
         )}

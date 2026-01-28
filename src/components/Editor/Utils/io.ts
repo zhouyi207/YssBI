@@ -42,6 +42,7 @@ export function serializeSubGraph(
         type: p.type,
         links: p.links,
         defaultValue: p.defaultValue,
+        isArray: p.isArray,
       })),
       outputs: node.outputs.map((p) => ({
         id: p.id,
@@ -49,6 +50,7 @@ export function serializeSubGraph(
         type: p.type,
         links: p.links,
         defaultValue: p.defaultValue,
+        isArray: p.isArray,
       })),
     })),
   };

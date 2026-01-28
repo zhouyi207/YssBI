@@ -9,14 +9,24 @@
 
 /** 变量数据类型 */
 export type VariableDataType =
-  | "int"
-  | "float"
+  | "int8"
+  | "int16"
+  | "int32"
+  | "int64"
+  | "uint32"
+  | "uint64"
+  | "float32"
+  | "float64"
   | "bool"
   | "string"
+  | "date"
+  | "datetime"
   | "object"
   | "array"
   | "dataframe"
-  | "any";
+  | "any"
+  | "int"      // 兼容旧版
+  | "float";    // 兼容旧版
 
 // ==================== 变量作用域 ====================
 
@@ -219,6 +229,8 @@ export interface VariableDefinition {
   source_config?: DataSourceConfig;
 
   // ===== 可选配置 =====
+  /** 是否为数组 */
+  is_array?: boolean;
   /** 是否为常量 */
   is_constant?: boolean;
   /** 默认值 */
@@ -290,7 +302,12 @@ export interface ColumnInfo {
  * 检查变量是否为简单类型
  */
 export function isPrimitiveType(dataType: VariableDataType): boolean {
-  return ["int", "float", "bool", "string"].includes(dataType);
+  return [
+    "int", "int8", "int16", "int32", "int64", 
+    "uint32", "uint64", 
+    "float", "float32", "float64", 
+    "bool", "string", "date", "datetime"
+  ].includes(dataType);
 }
 
 /**
@@ -306,9 +323,19 @@ export function isComplexType(dataType: VariableDataType): boolean {
 export function getDataTypeDisplayName(dataType: VariableDataType): string {
   const displayNames: Record<VariableDataType, string> = {
     int: "整数",
+    int8: "Int8",
+    int16: "Int16",
+    int32: "Int32",
+    int64: "Int64",
+    uint32: "UInt32",
+    uint64: "UInt64",
     float: "浮点数",
+    float32: "Float32",
+    float64: "Float64",
     bool: "布尔",
     string: "字符串",
+    date: "日期",
+    datetime: "日期时间",
     object: "对象",
     array: "数组",
     dataframe: "数据框",
@@ -323,9 +350,19 @@ export function getDataTypeDisplayName(dataType: VariableDataType): string {
 export function getDefaultValueForType(dataType: VariableDataType): unknown {
   const defaults: Record<VariableDataType, unknown> = {
     int: 0,
+    int8: 0,
+    int16: 0,
+    int32: 0,
+    int64: 0,
+    uint32: 0,
+    uint64: 0,
     float: 0.0,
+    float32: 0.0,
+    float64: 0.0,
     bool: false,
     string: "",
+    date: null,
+    datetime: null,
     object: {},
     array: [],
     dataframe: null,

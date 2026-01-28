@@ -838,6 +838,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                         pin_type: p.pin_type.clone(),
                         links: p.links.clone(),
                         default_value: p.default_value.clone(),
+                        is_array: p.is_array,
                     }).collect(),
                     outputs: sn.outputs.iter().map(|p| nodes::PinData {
                         id: p.id.clone(),
@@ -845,6 +846,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                         pin_type: p.pin_type.clone(),
                         links: p.links.clone(),
                         default_value: p.default_value.clone(),
+                        is_array: p.is_array,
                     }).collect(),
                     variable_id: sn.variable_id.clone(),
                     sub_graph_id: Some(sg_id.clone()),

@@ -17,7 +17,8 @@ export function createNodeFromTemplate(
         if ((node.type === 'get_variable' || node.type === 'set_variable' || node.type === 'get_dataframe') &&
             node.variableId && node.variableName) {
             const vType = node.variableType || 'dataframe';
-            node.setVariable(node.variableId, node.variableName, vType);
+            const isArray = (node as any).variableIsArray || false;
+            node.setVariable(node.variableId, node.variableName, vType, isArray);
         }
 
         if (node.type === 'get_column' && node.initialData) {
@@ -27,6 +28,7 @@ export function createNodeFromTemplate(
                 const outputPin = node.outputs.find(p => p.name === 'Column');
                 if (outputPin) {
                     outputPin.type = columnType || 'array';
+                    outputPin.isArray = true;
                 }
             }
         }

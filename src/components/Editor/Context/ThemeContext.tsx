@@ -184,7 +184,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         root.style.setProperty("--float-color", theme.floatColor);
         root.style.setProperty("--bool-color", theme.boolColor);
         root.style.setProperty("--string-color", theme.stringColor);
+        root.style.setProperty("--date-color", theme.dateColor);
+        root.style.setProperty("--datetime-color", theme.datetimeColor);
+        root.style.setProperty("--dataframe-color", theme.dataframeColor);
         root.style.setProperty("--object-color", theme.objectColor);
+        root.style.setProperty("--array-color", theme.arrayColor);
 
         // Compute some derived colors if needed (like hover states)
         root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");

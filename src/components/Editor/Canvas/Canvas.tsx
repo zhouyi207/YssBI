@@ -404,7 +404,8 @@ export default function Canvas() {
         const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType, {
           variableId: dragState.template.variableId,
           variableName: dragState.template.variableName,
-          variableType: dragState.template.variableType
+          variableType: dragState.template.variableType,
+          variableIsArray: dragState.template.variableIsArray
         });
         if (newNode) {
           setNodes((prev) => [...prev, newNode]);
@@ -425,7 +426,8 @@ export default function Canvas() {
         const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable", {
           variableId: dragState.template.variableId,
           variableName: dragState.template.variableName,
-          variableType: dragState.template.variableType
+          variableType: dragState.template.variableType,
+          variableIsArray: dragState.template.variableIsArray
         });
         if (newNode) {
           setNodes((prev) => [...prev, newNode]);
@@ -447,6 +449,7 @@ export default function Canvas() {
         variableId: dragState.template.variableId,
         variableName: dragState.template.variableName,
         variableType: dragState.template.variableType,
+        variableIsArray: dragState.template.variableIsArray,
       });
       return;
     } else if (dragState.template.type === "call_function" || dragState.template.type === "call_macro") {
@@ -464,9 +467,9 @@ export default function Canvas() {
         type === 'call_function' ? ["Functions"] : ["Macros"],
         { x, y },
         [{ id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
-        ...(subData.inputs || []).map(p => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[] }))],
+        ...(subData.inputs || []).map(p => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[], isArray: p.isArray }))],
         [{ id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
-        ...(subData.outputs || []).map(p => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[] }))],
+        ...(subData.outputs || []).map(p => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[], isArray: p.isArray }))],
         false
       );
       node.subGraphId = subId;

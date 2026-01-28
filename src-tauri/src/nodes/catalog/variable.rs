@@ -21,6 +21,7 @@ fn create_get_variable() -> NodeDefinition {
             name: "Value".into(),
             pin_type: "object".into(),
             default_value: None,
+            is_array: false,
         }],
         data_processor: Some(|ctx, node, _pin_id| {
             if let Some(var_id) = &node.variable_id {
@@ -58,11 +59,13 @@ fn create_set_variable() -> NodeDefinition {
                 name: "In".into(),
                 pin_type: "exec".into(),
                 default_value: None,
+                is_array: false,
             },
             PinDefinition {
                 name: "Value".into(),
                 pin_type: "object".into(),
                 default_value: None,
+                is_array: false,
             },
         ],
         outputs: vec![
@@ -70,11 +73,13 @@ fn create_set_variable() -> NodeDefinition {
                 name: "Out".into(),
                 pin_type: "exec".into(),
                 default_value: None,
+                is_array: false,
             },
             PinDefinition {
                 name: "Value".into(),
                 pin_type: "object".into(),
                 default_value: None,
+                is_array: false,
             },
         ],
         data_processor: Some(|ctx, node, _pin_id| {

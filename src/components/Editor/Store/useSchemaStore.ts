@@ -43,7 +43,6 @@ interface SchemaStore {
 
   // 类型兼容性
   canConnect: (fromType: string, toType: string) => boolean;
-  getPinColor: (pinType: string) => string;
   getCenterSymbol: (styleName: string, nodeType: string) => string | undefined;
 
   // 列表获取
@@ -142,12 +141,6 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
     return false;
   },
 
-  // 获取 Pin 颜色
-  getPinColor: (pinType) => {
-    const def = get().pinTypes.get(pinType);
-    return def?.color ?? "#CCCCCC";
-  },
-
   // 获取中心符号
   getCenterSymbol: (styleName, nodeType) => {
     const style = get().uiStyles.get(styleName);
@@ -172,6 +165,4 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
 export const useSchemaLoaded = () => useSchemaStore((s) => s.isLoaded);
 export const useSchemaLoading = () => useSchemaStore((s) => s.isLoading);
 export const useSchemaError = () => useSchemaStore((s) => s.error);
-export const usePinColor = (pinType: string) =>
-  useSchemaStore((s) => s.getPinColor(pinType));
 export const useCanConnect = () => useSchemaStore((s) => s.canConnect);
