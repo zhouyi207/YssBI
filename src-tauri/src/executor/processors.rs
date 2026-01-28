@@ -39,8 +39,26 @@ pub trait ExecutionContextTrait {
     fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String>;
 }
 
-/// 数据节点处理器
+/// 数据节点处理器 (已弃用，建议使用 NodeProcessor 接口)
 pub type DataProcessor = fn(&mut dyn ExecutionContextTrait, &NodeData, &str) -> Value;
 
-/// 流程节点处理器
+/// 流程节点处理器 (已弃用，建议使用 NodeProcessor 接口)
 pub type FlowProcessor = fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String>;
+
+/// 节点处理器接口
+/// 
+/// 替代原有的函数指针方式，支持更复杂的节点逻辑和动态 Pin 处理。
+pub trait NodeProcessor: Send + Sync {
+    /// 获取节点的元数据定义（用于前端展示）
+    fn get_definition(&self, node: Option<&NodeData>) -> crate::executor::node::NodeDefinition;
+
+    /// 执行流程逻辑
+    fn process_flow(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeData) -> Result<String, String> {
+        Ok("".into())
+    }
+
+    /// 执行数据逻辑
+    fn process_data(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeData, _pin_id: &str) -> Value {
+        Value::Null
+    }
+}

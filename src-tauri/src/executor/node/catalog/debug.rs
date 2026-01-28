@@ -1,56 +1,21 @@
-use crate::executor::node::definition::NodeDefinition;
-use crate::executor::node::data::PinDefinition;
-use serde_json::Value;
+use std::sync::Arc;
+use crate::executor::node::registry::NodeRegistry;
+use crate::executor::node::implementation::GenericNode;
+use crate::executor::pin::{GenericInDataPin, GenericExecPin};
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    vec![
-        create_print(),
-    ]
-}
-
-fn create_print() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "print".into(),
-        category: vec!["Debug".into()],
-        title: "Print".into(),
-        ui_style: "default".into(),
-        description: Some("Print a value to the log".into()),
-        inputs: vec![
-            PinDefinition {
-                name: "In".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-            PinDefinition {
-                name: "Value".into(),
-                pin_type: "string".into(),
-                default_value: Some(Value::String("".into())),
-                is_array: false,
-            },
-        ],
-        outputs: vec![PinDefinition {
-            name: "Out".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        data_processor: None,
-        flow_processor: Some(|ctx, node| {
-            let data_pin = node
-                .inputs
-                .iter()
-                .find(|p| p.name == "Value")
-                .ok_or("Print node missing 'Value' input")?;
-            let val = ctx.get_pin_value(&data_pin.id);
-            let output = if let Value::String(s) = &val {
-                s.clone()
-            } else {
-                val.to_string()
-            };
-            ctx.log(format!("[NODE PRINT]: {}", output));
-            println!("[NODE PRINT]: {}", output);
-            Ok("Out".to_string())
-        }),
-    }
+pub fn register(registry: &NodeRegistry) {
+    let print_node = GenericNode::new_prototype("print", "Print");
+    print_node.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
+    print_node.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    print_node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Value", "string"));
+    
+    print_node.set_flow_processor(Box::new(|ctx, node| {
+        let val = ctx.get_pin_value(&node.inputs[0].id);
+        ctx.log(format!("[Print] {}", val));
+        Ok("Out".into())
+    }));
+    
+    let mut print_node = print_node;
+    print_node.set_metadata(vec!["Debug".into()], "default".into(), Some("Print a value to the log".into()));
+    registry.register("print".into(), Arc::new(print_node));
 }

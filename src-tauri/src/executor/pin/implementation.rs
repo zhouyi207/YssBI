@@ -87,7 +87,7 @@ impl DataPin for GenericInDataPin {
         self.value.read().unwrap().clone()
     }
 
-    fn set_value(&mut self, value: DataValue) -> NodeResult<()> {
+    fn set_value(&self, value: DataValue) -> NodeResult<()> {
         *self.value.write().unwrap() = value.clone();
         self.set_state(DataPinState::Ready);
         
@@ -103,7 +103,7 @@ impl DataPin for GenericInDataPin {
         *self.state.read().unwrap()
     }
 
-    fn set_state(&mut self, new_state: DataPinState) {
+    fn set_state(&self, new_state: DataPinState) {
         let old_state = *self.state.read().unwrap();
         *self.state.write().unwrap() = new_state;
         
@@ -120,7 +120,7 @@ impl DataPin for GenericInDataPin {
         &self.data_type
     }
 
-    fn subscribe(&mut self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {
+    fn subscribe(&self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {
         if let Ok(mut listeners) = self.listeners.lock() {
             listeners.push(callback);
         }
@@ -128,7 +128,7 @@ impl DataPin for GenericInDataPin {
 }
 
 impl InDataPin for GenericInDataPin {
-    fn link_to(&mut self, out_pin_id: PinId) -> NodeResult<()> {
+    fn link_to(&self, out_pin_id: PinId) -> NodeResult<()> {
         *self.upstream.write().unwrap() = Some(out_pin_id);
         
         self.emit_event(DataPinEvent::Connected {
@@ -139,7 +139,7 @@ impl InDataPin for GenericInDataPin {
         Ok(())
     }
 
-    fn unlink(&mut self) -> NodeResult<()> {
+    fn unlink(&self) -> NodeResult<()> {
         if let Some(upstream_id) = *self.upstream.read().unwrap() {
             *self.upstream.write().unwrap() = None;
             
@@ -156,7 +156,7 @@ impl InDataPin for GenericInDataPin {
         *self.upstream.read().unwrap()
     }
 
-    fn read_from_upstream(&mut self) -> NodeResult<DataValue> {
+    fn read_from_upstream(&self) -> NodeResult<DataValue> {
         Ok(self.value())
     }
 }
@@ -241,7 +241,7 @@ impl DataPin for GenericOutDataPin {
         self.value.read().unwrap().clone()
     }
 
-    fn set_value(&mut self, value: DataValue) -> NodeResult<()> {
+    fn set_value(&self, value: DataValue) -> NodeResult<()> {
         *self.value.write().unwrap() = value.clone();
         self.set_state(DataPinState::Ready);
         
@@ -257,7 +257,7 @@ impl DataPin for GenericOutDataPin {
         *self.state.read().unwrap()
     }
 
-    fn set_state(&mut self, new_state: DataPinState) {
+    fn set_state(&self, new_state: DataPinState) {
         let old_state = *self.state.read().unwrap();
         *self.state.write().unwrap() = new_state;
         
@@ -274,7 +274,7 @@ impl DataPin for GenericOutDataPin {
         &self.data_type
     }
 
-    fn subscribe(&mut self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {
+    fn subscribe(&self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {
         if let Ok(mut listeners) = self.listeners.lock() {
             listeners.push(callback);
         }
@@ -282,16 +282,16 @@ impl DataPin for GenericOutDataPin {
 }
 
 impl OutDataPin for GenericOutDataPin {
-    fn write(&mut self, data: DataValue) -> NodeResult<()> {
+    fn write(&self, data: DataValue) -> NodeResult<()> {
         self.set_value(data)
     }
 
-    fn set_error(&mut self, message: String) {
+    fn set_error(&self, message: String) {
         *self.error_message.write().unwrap() = Some(message);
         self.set_state(DataPinState::Error);
     }
 
-    fn reset(&mut self) {
+    fn reset(&self) {
         *self.value.write().unwrap() = DataValue::None;
         *self.error_message.write().unwrap() = None;
         self.set_state(DataPinState::Uninitialized);
@@ -301,7 +301,7 @@ impl OutDataPin for GenericOutDataPin {
         self.downstream.read().unwrap().clone()
     }
 
-    fn add_downstream(&mut self, in_pin_id: PinId) -> NodeResult<()> {
+    fn add_downstream(&self, in_pin_id: PinId) -> NodeResult<()> {
         let mut downstream = self.downstream.write().unwrap();
         if !downstream.contains(&in_pin_id) {
             downstream.push(in_pin_id);
@@ -314,7 +314,7 @@ impl OutDataPin for GenericOutDataPin {
         Ok(())
     }
 
-    fn remove_downstream(&mut self, in_pin_id: PinId) -> NodeResult<()> {
+    fn remove_downstream(&self, in_pin_id: PinId) -> NodeResult<()> {
         let mut downstream = self.downstream.write().unwrap();
         if let Some(pos) = downstream.iter().position(|&id| id == in_pin_id) {
             downstream.remove(pos);
@@ -352,7 +352,7 @@ impl GenericExecPin {
         }
     }
 
-    pub fn set_executor(&mut self, executor: Box<dyn Fn() -> ExecutionResult<()> + Send + Sync + 'static>) {
+    pub fn set_executor(&self, executor: Box<dyn Fn() -> ExecutionResult<()> + Send + Sync + 'static>) {
         *self.executor.lock().unwrap() = Some(executor);
     }
 }
@@ -394,7 +394,7 @@ impl BasePin for GenericExecPin {
 }
 
 impl ExecPin for GenericExecPin {
-    fn trigger(&mut self) -> ExecutionResult<()> {
+    fn trigger(&self) -> ExecutionResult<()> {
         // 检查状态
         let current_state = self.state();
         if current_state != ExecPinState::Idle && current_state != ExecPinState::Blocked {
@@ -426,11 +426,11 @@ impl ExecPin for GenericExecPin {
         *self.state.read().unwrap()
     }
 
-    fn set_state(&mut self, state: ExecPinState) {
+    fn set_state(&self, state: ExecPinState) {
         *self.state.write().unwrap() = state;
     }
 
-    fn add_dependency(&mut self, pin_id: PinId) -> NodeResult<()> {
+    fn add_dependency(&self, pin_id: PinId) -> NodeResult<()> {
         let mut deps = self.dependencies.write().unwrap();
         if !deps.contains(&pin_id) {
             deps.push(pin_id);
@@ -438,7 +438,7 @@ impl ExecPin for GenericExecPin {
         Ok(())
     }
 
-    fn remove_dependency(&mut self, pin_id: PinId) -> NodeResult<()> {
+    fn remove_dependency(&self, pin_id: PinId) -> NodeResult<()> {
         let mut deps = self.dependencies.write().unwrap();
         if let Some(pos) = deps.iter().position(|&id| id == pin_id) {
             deps.remove(pos);
@@ -450,7 +450,7 @@ impl ExecPin for GenericExecPin {
         true
     }
 
-    fn connect_to(&mut self, next_pin_id: PinId) -> NodeResult<()> {
+    fn connect_to(&self, next_pin_id: PinId) -> NodeResult<()> {
         *self.next_pin.write().unwrap() = Some(next_pin_id);
         Ok(())
     }

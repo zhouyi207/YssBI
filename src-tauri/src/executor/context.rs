@@ -20,8 +20,6 @@ pub struct ExecutionContext {
     nodes: HashMap<String, NodeData>,
     /// 针脚到节点的映射 (pin_id -> node_id)
     pin_to_node: HashMap<String, String>,
-    /// 节点定义缓存 (node_type -> NodeDefinition)
-    definitions: HashMap<String, NodeDefinition>,
     /// 调用栈
     call_stack: Vec<String>,
     /// Tauri 应用句柄（可选）
@@ -53,20 +51,13 @@ impl ExecutionContext {
             nodes.insert(node.id.clone(), node);
         }
 
-        // 加载所有节点定义
-        let mut def_map = HashMap::new();
-        for def in get_all_node_definitions() {
-            def_map.insert(def.node_type.clone(), def);
-        }
-
         Self {
-            variables: initial_vars,
-            logs: Vec::new(),
             nodes,
             pin_to_node,
-            definitions: def_map,
+            variables: initial_vars,
             call_stack: Vec::new(),
             app_handle: None,
+            logs: Vec::new(),
         }
     }
 
@@ -101,14 +92,12 @@ impl ExecutionContext {
         info!("{}", log_msg);
         self.logs.push(log_msg);
 
-        let def = self
-            .definitions
-            .get(&node.node_type)
-            .ok_or(format!("Definition not found: {}", node.node_type))?
-            .clone();
+        // 从注册中心获取原型
+        let proto = crate::executor::node::registry::get_registry()
+            .get_prototype(&node.node_type);
 
-        let next_exec_name = if let Some(processor) = def.flow_processor {
-            processor(self, &node)?
+        let next_exec_name = if let Some(p) = proto {
+            p.process_flow(self, &node)?
         } else {
             output_exec_name.to_string()
         };
@@ -149,13 +138,11 @@ impl ExecutionContext {
     fn evaluate_node_output(&mut self, node_id: &str, pin_id: &str) -> Value {
         let node = self.nodes.get(node_id).unwrap().clone();
 
-        let def = match self.definitions.get(&node.node_type) {
-            Some(d) => d.clone(),
-            None => return Value::Null,
-        };
-
-        let val = if let Some(processor) = def.data_processor {
-            processor(self, &node, pin_id)
+        let proto = crate::executor::node::registry::get_registry()
+            .get_prototype(&node.node_type);
+            
+        let val = if let Some(p) = proto {
+            p.process_data(self, &node, pin_id)
         } else {
             Value::Null
         };

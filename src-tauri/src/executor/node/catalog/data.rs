@@ -1,59 +1,23 @@
-use crate::executor::node::definition::NodeDefinition;
-use crate::executor::node::data::PinDefinition;
-use serde_json::Value;
+use std::sync::Arc;
+use crate::executor::node::registry::NodeRegistry;
+use crate::executor::node::implementation::GenericNode;
+use crate::executor::pin::{GenericOutDataPin, GenericInDataPin};
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    vec![
-        create_get_dataframe(),
-        create_get_column(),
-    ]
-}
+pub fn register(registry: &NodeRegistry) {
+    // 1. Get DataFrame
+    let get_df = GenericNode::new_prototype("get_dataframe", "Get DataFrame");
+    get_df.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "DataFrame", "dataframe"));
+    
+    let mut get_df = get_df;
+    get_df.set_metadata(vec!["Data".into()], "default".into(), Some("Get a loaded DataFrame".into()));
+    registry.register("get_dataframe".into(), Arc::new(get_df));
 
-fn create_get_dataframe() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "get_dataframe".into(),
-        category: vec!["Data".into()],
-        title: "Get DataFrame".into(),
-        ui_style: "default".into(),
-        description: Some("Get a loaded DataFrame".into()),
-        inputs: vec![],
-        outputs: vec![PinDefinition {
-            name: "DataFrame".into(),
-            pin_type: "dataframe".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        data_processor: Some(|_ctx, node, _pin_id| {
-            if let Some(df_id) = &node.variable_id {
-                Value::String(df_id.clone())
-            } else {
-                Value::Null
-            }
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_get_column() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "get_column".into(),
-        category: vec!["Data".into()],
-        title: "Get Column".into(),
-        ui_style: "default".into(),
-        description: Some("Get a column from a DataFrame".into()),
-        inputs: vec![PinDefinition {
-            name: "DataFrame".into(),
-            pin_type: "dataframe".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        outputs: vec![PinDefinition {
-            name: "Column".into(),
-            pin_type: "object".into(),
-            default_value: None,
-            is_array: true,
-        }],
-        data_processor: Some(|_ctx, _node, _pin_id| Value::Null),
-        flow_processor: None,
-    }
+    // 2. Get Column
+    let get_col = GenericNode::new_prototype("get_column", "Get Column");
+    get_col.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "DataFrame", "dataframe"));
+    get_col.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Column", "object"));
+    
+    let mut get_col = get_col;
+    get_col.set_metadata(vec!["Data".into()], "default".into(), Some("Get a column from a DataFrame".into()));
+    registry.register("get_column".into(), Arc::new(get_col));
 }

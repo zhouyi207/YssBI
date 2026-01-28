@@ -1,9 +1,7 @@
 pub mod operators;
 
-use crate::executor::node::definition::NodeDefinition;
+use crate::executor::node::registry::NodeRegistry;
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    let mut nodes = Vec::new();
-    nodes.extend(operators::get_nodes());
-    nodes
+pub fn register(registry: &NodeRegistry) {
+    operators::register(registry);
 }

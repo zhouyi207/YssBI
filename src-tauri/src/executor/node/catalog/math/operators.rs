@@ -1,226 +1,83 @@
-use crate::executor::node::definition::NodeDefinition;
-use crate::executor::node::data::PinDefinition;
+use std::sync::Arc;
+use crate::executor::node::registry::NodeRegistry;
+use crate::executor::node::implementation::GenericNode;
+use crate::executor::pin::{GenericOutDataPin, GenericInDataPin};
 use serde_json::Value;
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    vec![
-        create_add(),
-        create_subtract(),
-        create_multiply(),
-        create_divide(),
-        create_equal(),
-        create_greater(),
-        create_less(),
-        create_and(),
-        create_or(),
-        create_not(),
-    ]
-}
+pub fn register(registry: &NodeRegistry) {
+    macro_rules! reg_binary {
+        ($type:expr, $title:expr, $cat:expr, $p1:expr, $p2:expr, $pt:expr, $logic:expr) => {
+            let node = GenericNode::new_prototype($type, $title);
+            node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), $p1, $pt));
+            node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), $p2, $pt));
+            node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", $pt));
+            
+            node.set_data_processor(Box::new(|ctx, node, _pin_id| {
+                let a = ctx.get_pin_value(&node.inputs[0].id);
+                let b = ctx.get_pin_value(&node.inputs[1].id);
+                $logic(a, b)
+            }));
 
-fn create_and() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "and".into(),
-        category: vec!["Logic".into(), "Operators".into()],
-        title: "And (&&)".into(),
-        ui_style: "math".into(),
-        description: Some("Boolean AND".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "bool".into(), default_value: Some(Value::Bool(true)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "bool".into(), default_value: Some(Value::Bool(true)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_bool().unwrap_or(false);
-            Value::Bool(a && b)
-        }),
-        flow_processor: None,
+            let mut node = node;
+            node.set_metadata($cat, "math".into(), None);
+            registry.register($type.into(), Arc::new(node));
+        };
     }
-}
 
-fn create_or() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "or".into(),
-        category: vec!["Logic".into(), "Operators".into()],
-        title: "Or (||)".into(),
-        ui_style: "math".into(),
-        description: Some("Boolean OR".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "bool".into(), default_value: Some(Value::Bool(false)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "bool".into(), default_value: Some(Value::Bool(false)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_bool().unwrap_or(false);
-            Value::Bool(a || b)
-        }),
-        flow_processor: None,
-    }
-}
+    let math_cat = vec!["Math".into(), "Operators".into()];
+    let logic_cat = vec!["Logic".into(), "Operators".into()];
 
-fn create_not() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "not".into(),
-        category: vec!["Logic".into(), "Operators".into()],
-        title: "Not (!)".into(),
-        ui_style: "math".into(),
-        description: Some("Boolean NOT".into()),
-        inputs: vec![
-            PinDefinition { name: "In".into(), pin_type: "bool".into(), default_value: Some(Value::Bool(false)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Out".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let val = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
-            Value::Bool(!val)
-        }),
-        flow_processor: None,
-    }
-}
+    reg_binary!("add", "Add (+)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(0.0);
+        Value::from(va + vb)
+    });
+    reg_binary!("subtract", "Subtract (-)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(0.0);
+        Value::from(va - vb)
+    });
+    reg_binary!("multiply", "Multiply (*)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(0.0);
+        Value::from(va * vb)
+    });
+    reg_binary!("divide", "Divide (/)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(1.0);
+        Value::from(va / vb)
+    });
+    
+    reg_binary!("greater", "Greater (>)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(0.0);
+        Value::from(va > vb)
+    });
+    reg_binary!("less", "Less (<)", math_cat.clone(), "A", "B", "float", |a: Value, b: Value| {
+        let va = a.as_f64().unwrap_or(0.0);
+        let vb = b.as_f64().unwrap_or(0.0);
+        Value::from(va < vb)
+    });
+    reg_binary!("equal", "Equal (==)", math_cat.clone(), "A", "B", "any", |a: Value, b: Value| {
+        Value::from(a == b)
+    });
 
-fn create_add() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "add".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Add (+)".into(),
-        ui_style: "math".into(),
-        description: Some("Add two numbers".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Sum".into(), pin_type: "float".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(0.0);
-            Value::from(a + b)
-        }),
-        flow_processor: None,
-    }
-}
+    reg_binary!("and", "And (&&)", logic_cat.clone(), "A", "B", "bool", |a: Value, b: Value| {
+        Value::from(a.as_bool().unwrap_or(false) && b.as_bool().unwrap_or(false))
+    });
+    reg_binary!("or", "Or (||)", logic_cat.clone(), "A", "B", "bool", |a: Value, b: Value| {
+        Value::from(a.as_bool().unwrap_or(false) || b.as_bool().unwrap_or(false))
+    });
 
-fn create_subtract() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "subtract".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Subtract (-)".into(),
-        ui_style: "math".into(),
-        description: Some("Subtract two numbers".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "float".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(0.0);
-            Value::from(a - b)
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_multiply() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "multiply".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Multiply (*)".into(),
-        ui_style: "math".into(),
-        description: Some("Multiply two numbers".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "float".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(0.0);
-            Value::from(a * b)
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_divide() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "divide".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Divide (/)".into(),
-        ui_style: "math".into(),
-        description: Some("Divide two numbers".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(1.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "float".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(1.0);
-            if b == 0.0 { Value::Null } else { Value::from(a / b) }
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_equal() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "equal".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Equal (==)".into(),
-        ui_style: "math".into(),
-        description: Some("Check if two values are equal".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "any".into(), default_value: None, is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "any".into(), default_value: None, is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id);
-            let b = ctx.get_pin_value(&node.inputs[1].id);
-            Value::Bool(a == b)
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_greater() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "greater".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Greater (>)".into(),
-        ui_style: "math".into(),
-        description: Some("Check if A is greater than B".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(0.0);
-            Value::Bool(a > b)
-        }),
-        flow_processor: None,
-    }
-}
-
-fn create_less() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "less".into(),
-        category: vec!["Math".into(), "Operators".into()],
-        title: "Less (<)".into(),
-        ui_style: "math".into(),
-        description: Some("Check if A is less than B".into()),
-        inputs: vec![
-            PinDefinition { name: "A".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-            PinDefinition { name: "B".into(), pin_type: "float".into(), default_value: Some(Value::from(0.0)), is_array: false },
-        ],
-        outputs: vec![PinDefinition { name: "Result".into(), pin_type: "bool".into(), default_value: None, is_array: false }],
-        data_processor: Some(|ctx, node, _pin_id| {
-            let a = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
-            let b = ctx.get_pin_value(&node.inputs[1].id).as_f64().unwrap_or(0.0);
-            Value::Bool(a < b)
-        }),
-        flow_processor: None,
-    }
+    // Not
+    let not_node = GenericNode::new_prototype("not", "Not (!)");
+    not_node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "In", "bool"));
+    not_node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Out", "bool"));
+    not_node.set_data_processor(Box::new(|ctx, node, _pin_id| {
+        let val = ctx.get_pin_value(&node.inputs[0].id);
+        Value::from(!val.as_bool().unwrap_or(false))
+    }));
+    let mut not_node = not_node;
+    not_node.set_metadata(logic_cat, "math".into(), None);
+    registry.register("not".into(), Arc::new(not_node));
 }

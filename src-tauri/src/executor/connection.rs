@@ -54,7 +54,7 @@ impl ConnectionManager {
         // 注册输入 Pin
         for name in node.input_names() {
             if let Some(pin) = node.get_input_concrete(&name) {
-                let pin_id = pin.lock().unwrap().id();
+                let pin_id = pin.id();
                 pin_to_node.insert(pin_id, node_id);
                 pins.push(pin_id);
             }
@@ -63,7 +63,7 @@ impl ConnectionManager {
         // 注册输出 Pin
         for name in node.output_names() {
             if let Some(pin) = node.get_output_concrete(&name) {
-                let pin_id = pin.lock().unwrap().id();
+                let pin_id = pin.id();
                 pin_to_node.insert(pin_id, node_id);
                 pins.push(pin_id);
             }

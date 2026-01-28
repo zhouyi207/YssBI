@@ -1,103 +1,49 @@
-use crate::executor::node::definition::NodeDefinition;
-use crate::executor::node::data::PinDefinition;
-use serde_json::Value;
+use std::sync::Arc;
+use crate::executor::node::registry::NodeRegistry;
+use crate::executor::node::implementation::GenericNode;
+use crate::executor::pin::{GenericInDataPin, GenericExecPin};
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    vec![
-        create_if_else(),
-        create_sequence(),
-    ]
-}
+pub fn register(registry: &NodeRegistry) {
+    // 1. IfElse Node
+    let if_else = GenericNode::new_prototype("if_else", "If Else");
+    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
+    if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", "bool"));
+    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "True"));
+    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "False"));
+    
+    if_else.set_flow_processor(Box::new(|ctx, node| {
+        let cond = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
+        if cond {
+            Ok("True".into())
+        } else {
+            Ok("False".into())
+        }
+    }));
+    
+    let mut if_else = if_else;
+    if_else.set_metadata(vec!["Control".into()], "default".into(), Some("Branch flow based on condition".into()));
+    registry.register("if_else".into(), Arc::new(if_else));
 
-fn create_if_else() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "if_else".into(),
-        category: vec!["Logic".into(), "Flow Control".into()],
-        title: "Branch".into(),
-        ui_style: "default".into(),
-        description: Some("Branch execution based on condition".into()),
-        inputs: vec![
-            PinDefinition {
-                name: "In".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-            PinDefinition {
-                name: "Cond".into(),
-                pin_type: "bool".into(),
-                default_value: Some(Value::Bool(false)),
-                is_array: false,
-            },
-        ],
-        outputs: vec![
-            PinDefinition {
-                name: "True".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-            PinDefinition {
-                name: "False".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-        ],
-        data_processor: None,
-        flow_processor: Some(|ctx, node| {
-            let data_pin = node
-                .inputs
-                .iter()
-                .find(|p| p.pin_type != "exec")
-                .ok_or("Branch node missing data input")?;
-            let val = ctx.get_pin_value(&data_pin.id);
-            let condition = val
-                .as_bool()
-                .unwrap_or_else(|| val.as_f64().unwrap_or(0.0) != 0.0);
-            let next = if condition { "True" } else { "False" };
-            ctx.log(format!(
-                "  Branch condition is {}, moving to '{}'",
-                condition, next
-            ));
-            Ok(next.to_string())
-        }),
-    }
-}
-
-fn create_sequence() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "sequence".into(),
-        category: vec!["Logic".into(), "Flow Control".into()],
-        title: "Sequence".into(),
-        ui_style: "default".into(),
-        description: Some("Execute multiple pins in order".into()),
-        inputs: vec![
-            PinDefinition {
-                name: "In".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-        ],
-        outputs: vec![
-            PinDefinition {
-                name: "Then 0".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-            PinDefinition {
-                name: "Then 1".into(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            },
-        ],
-        data_processor: None,
-        flow_processor: Some(|ctx, _node| {
-            ctx.run_flow(_node.id.as_str(), "Then 0")?;
-            Ok("Then 1".to_string())
-        }),
-    }
+    // 2. Sequence Node
+    let seq = GenericNode::new_prototype("sequence", "Sequence");
+    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
+    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Then 0"));
+    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Then 1"));
+    
+    seq.set_flow_processor(Box::new(|ctx, node| {
+        // 执行第一个分支，然后由 ExecutionContext 自动处理后续？
+        // 其实 Sequence 需要特殊的执行逻辑，或者它实际上只是触发多个输出。
+        // 目前的 ExecutionContext 一次只能返回一个输出针脚。
+        // 如果要支持 Sequence，ExecutionContext 的 run_flow 应该能返回多个针脚或者由节点自己触发。
+        
+        // 我们这里尝试触发 Then 0，然后 Then 1。
+        // 但由于 run_flow_internal 是递归的，我们需要 ctx 支持 run_flow。
+        
+        ctx.run_flow(&node.id, "Then 0")?;
+        Ok("Then 1".into())
+    }));
+    
+    let mut seq = seq;
+    seq.set_metadata(vec!["Control".into()], "default".into(), Some("Execute outputs in order".into()));
+    registry.register("sequence".into(), Arc::new(seq));
 }

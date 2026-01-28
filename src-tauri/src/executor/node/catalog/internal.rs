@@ -1,107 +1,38 @@
-use crate::executor::node::definition::NodeDefinition;
-use crate::executor::node::data::PinDefinition;
+use std::sync::Arc;
+use crate::executor::node::registry::NodeRegistry;
+use crate::executor::node::implementation::GenericNode;
+use crate::executor::pin::GenericExecPin;
 
-pub fn get_nodes() -> Vec<NodeDefinition> {
-    vec![
-        create_event_on_run(),
-        create_function_entry(),
-        create_function_return(),
-        create_macro_inputs(),
-        create_macro_outputs(),
-    ]
-}
+pub fn register(registry: &NodeRegistry) {
+    // 1. On Run Event
+    let on_run = GenericNode::new_prototype("event_on_run", "On Run");
+    on_run.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    
+    let mut on_run = on_run;
+    on_run.set_metadata(vec!["Internal".into(), "Events".into()], "event".into(), Some("Start execution".into()));
+    registry.register("event_on_run".into(), Arc::new(on_run));
 
-fn create_event_on_run() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "event_on_run".into(),
-        category: vec!["Internal".into()],
-        title: "On Run".into(),
-        ui_style: "event".into(),
-        description: Some("Project or Event execution entry point".into()),
-        inputs: vec![],
-        outputs: vec![PinDefinition {
-            name: "Exec".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        data_processor: None,
-        flow_processor: Some(|_ctx, _node| Ok("Exec".to_string())),
-    }
-}
+    // 2. Function Entry
+    let f_entry = GenericNode::new_prototype("function_entry", "Function Entry");
+    f_entry.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Then"));
+    
+    let mut f_entry = f_entry;
+    f_entry.set_metadata(vec!["Internal".into()], "default".into(), Some("Function start point".into()));
+    registry.register("function_entry".into(), Arc::new(f_entry));
 
-fn create_function_entry() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "function_entry".into(),
-        category: vec!["Internal".into()],
-        title: "Entry".into(),
-        ui_style: "event".into(),
-        description: Some("Function execution entry point".into()),
-        inputs: vec![],
-        outputs: vec![PinDefinition {
-            name: "Then".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        data_processor: None,
-        flow_processor: Some(|_ctx, _node| Ok("Then".to_string())),
-    }
-}
+    // 3. Macro Inputs
+    let m_in = GenericNode::new_prototype("macro_inputs", "Macro Inputs");
+    m_in.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
+    
+    let mut m_in = m_in;
+    m_in.set_metadata(vec!["Internal".into()], "default".into(), Some("Macro entry point".into()));
+    registry.register("macro_inputs".into(), Arc::new(m_in));
 
-fn create_function_return() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "function_return".into(),
-        category: vec!["Internal".into()],
-        title: "Return".into(),
-        ui_style: "event".into(),
-        description: Some("Function execution exit point".into()),
-        inputs: vec![PinDefinition {
-            name: "In".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        outputs: vec![],
-        data_processor: None,
-        flow_processor: Some(|_ctx, _node| Ok("__RETURN__".to_string())),
-    }
-}
-
-fn create_macro_inputs() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "macro_inputs".into(),
-        category: vec!["Internal".into()],
-        title: "Inputs".into(),
-        ui_style: "event".into(),
-        description: Some("Macro inputs container".into()),
-        inputs: vec![],
-        outputs: vec![PinDefinition {
-            name: "In".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        data_processor: None,
-        flow_processor: Some(|_ctx, _node| Ok("In".to_string())),
-    }
-}
-
-fn create_macro_outputs() -> NodeDefinition {
-    NodeDefinition {
-        node_type: "macro_outputs".into(),
-        category: vec!["Internal".into()],
-        title: "Outputs".into(),
-        ui_style: "event".into(),
-        description: Some("Macro outputs container".into()),
-        inputs: vec![PinDefinition {
-            name: "Out".into(),
-            pin_type: "exec".into(),
-            default_value: None,
-            is_array: false,
-        }],
-        outputs: vec![],
-        data_processor: None,
-        flow_processor: Some(|_ctx, _node| Ok("__RETURN__".to_string())),
-    }
+    // 4. Macro Outputs
+    let m_out = GenericNode::new_prototype("macro_outputs", "Macro Outputs");
+    m_out.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    
+    let mut m_out = m_out;
+    m_out.set_metadata(vec!["Internal".into()], "default".into(), Some("Macro exit point".into()));
+    registry.register("macro_outputs".into(), Arc::new(m_out));
 }
