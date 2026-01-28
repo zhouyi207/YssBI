@@ -14,7 +14,7 @@ export const PlotWindow: React.FC = () => {
     setIsReady(true);
     console.log('[PlotWindow] Plot window initialized');
     
-    // 渲染完毕后显示窗口
+    // 立即显示窗口
     getCurrentWindow().show().catch(console.error);
 
     // 监听窗口最大化状态变化

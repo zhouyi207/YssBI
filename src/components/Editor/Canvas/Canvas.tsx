@@ -461,7 +461,7 @@ export default function Canvas() {
         `node-${crypto.randomUUID()}`,
         type,
         subName,
-        type === 'call_function' ? "Functions" : "Macros",
+        type === 'call_function' ? ["Functions"] : ["Macros"],
         { x, y },
         [{ id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
         ...(subData.inputs || []).map(p => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[] }))],

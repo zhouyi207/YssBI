@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 pub struct NodeDefinition {
     /// 节点类型标识符
     pub node_type: String,
-    /// 所属分类
-    pub category: String,
+    /// 所属分类 (层级路径，如 ["Math", "Operators"])
+    pub category: Vec<String>,
     /// 显示标题
     pub title: String,
     /// 输入针脚定义
@@ -38,7 +38,7 @@ impl Serialize for NodeDefinition {
         #[derive(Serialize)]
         struct NodeDefProxy<'a> {
             node_type: &'a String,
-            category: &'a String,
+            category: &'a Vec<String>,
             title: &'a String,
             inputs: &'a Vec<PinDefinition>,
             outputs: &'a Vec<PinDefinition>,

@@ -45,7 +45,7 @@ export interface Pin {
  */
 export interface NodeDefinition {
   node_type: string;
-  category: string;
+  category: string[];
   title: string;
   inputs: PinDefinition[];
   outputs: PinDefinition[];
@@ -63,7 +63,7 @@ export class BaseNode {
   id: string;
   type: string;
   title: string;
-  category: string;
+  category: string[];
   position: Position;
   inputs: Pin[] = [];
   outputs: Pin[] = [];
@@ -201,7 +201,7 @@ export function createVariableGetNode(
 ): BaseNode {
   const definition: NodeDefinition = {
     node_type: 'get_variable',
-    category: 'Variables',
+    category: ['Variables'],
     title: `Get ${variableName}`,
     inputs: [],
     outputs: [{ name: 'Value', type: variableType }],
@@ -228,7 +228,7 @@ export function createVariableSetNode(
 ): BaseNode {
   const definition: NodeDefinition = {
     node_type: 'set_variable',
-    category: 'Variables',
+    category: ['Variables'],
     title: `Set ${variableName}`,
     inputs: [
       { name: 'Exec', type: 'exec' },

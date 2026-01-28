@@ -496,7 +496,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const st = useProjectStore.getState();
     const finalName = getUniqueName(name || "New Event", st.events);
     const id = `event-${crypto.randomUUID()}`;
-    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", finalName, "Internal", { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
+    const tNodes = [createInternalNode(`node-${crypto.randomUUID()}`, "event_on_run", finalName, ["Internal"], { x: 50, y: 150 }, [], [{ name: "Exec", type: "exec" }])];
     const sub: SubGraphData = { id, name: finalName, type: "event", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
     st.addEvent(id, sub);
     openSubGraph(id, finalName, "event", sub);
@@ -508,8 +508,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const finalName = getUniqueName(name || "New Function", st.functions);
     const id = `func-${crypto.randomUUID()}`;
     const tNodes = [
-      createInternalNode(`node-${crypto.randomUUID()}`, "function_entry", finalName, "Internal", { x: 50, y: 150 }, [], [{ name: "Then", type: "exec" }]),
-      createInternalNode(`node-${crypto.randomUUID()}`, "function_return", "Return", "Internal", { x: 550, y: 150 }, [{ name: "In", type: "exec" }], [])
+      createInternalNode(`node-${crypto.randomUUID()}`, "function_entry", finalName, ["Internal"], { x: 50, y: 150 }, [], [{ name: "Then", type: "exec" }]),
+      createInternalNode(`node-${crypto.randomUUID()}`, "function_return", "Return", ["Internal"], { x: 550, y: 150 }, [{ name: "In", type: "exec" }], [])
     ];
     const sub: SubGraphData = { id, name: finalName, type: "function", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
     st.addFunction(id, sub);
@@ -522,8 +522,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const finalName = getUniqueName(name || "New Macro", st.macros);
     const id = `macro-${crypto.randomUUID()}`;
     const tNodes = [
-      createInternalNode(`node-${crypto.randomUUID()}`, "macro_inputs", "Inputs", "Internal", { x: 50, y: 150 }, [], [{ name: "In", type: "exec" }]),
-      createInternalNode(`node-${crypto.randomUUID()}`, "macro_outputs", "Outputs", "Internal", { x: 550, y: 150 }, [{ name: "Out", type: "exec" }], [])
+      createInternalNode(`node-${crypto.randomUUID()}`, "macro_inputs", "Inputs", ["Internal"], { x: 50, y: 150 }, [], [{ name: "In", type: "exec" }]),
+      createInternalNode(`node-${crypto.randomUUID()}`, "macro_outputs", "Outputs", ["Internal"], { x: 550, y: 150 }, [{ name: "Out", type: "exec" }], [])
     ];
     const sub: SubGraphData = { id, name: finalName, type: "macro", nodes: tNodes, canvas: { x: 0, y: 0, scale: 1 }, variables: {}, inputs: [], outputs: [] };
     st.addMacro(id, sub);

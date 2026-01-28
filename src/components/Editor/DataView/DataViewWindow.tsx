@@ -111,10 +111,11 @@ export const DataViewWindow: React.FC = () => {
   };
 
   useEffect(() => {
-    refreshData().then(() => {
-      // 渲染完毕后显示窗口
-      getCurrentWindow().show().catch(console.error);
-    });
+    // 立即显示窗口，避免长时间等待数据刷新导致黑屏或无法显示
+    getCurrentWindow().show().catch(console.error);
+
+    // 刷新数据
+    refreshData();
 
     const setupListeners = async () => {
       const currentWindow = getCurrentWindow();

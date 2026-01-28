@@ -98,6 +98,10 @@ export default function App() {
     const restoreWindow = async () => {
       const appWindow = getCurrentWindow();
       
+      // 尽快显示窗口，可以在尺寸调整前或后
+      // 为了防止长时间不显示，我们在这里先尝试 show
+      await appWindow.show().catch(console.error);
+
       try {
         const settings = await SettingsService.loadSettings();
         const windowSettings = settings.window;
@@ -122,9 +126,6 @@ export default function App() {
       } catch (error) {
         console.error("Failed to restore window settings:", error);
       }
-      
-      // 恢复完成后显示窗口
-      await appWindow.show();
     };
 
     restoreWindow();

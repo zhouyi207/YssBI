@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
+import { useLayoutStore } from "../../../store/layoutStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {
@@ -27,8 +28,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
   } = useCanvas();
   const { showDialog } = useUI();
 
-  // Read state from Layout Store
-  // Removed unused width logic and detailNode to fix lint errors
+  // Read state from Layout Store to ensure we're targeting the right editor context
+  const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
 
   // Find the selected item's data
   let selectedData: any = null;
@@ -227,8 +228,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                               </tr>
                             </thead>
                             <tbody>
-                              {selectedData.columns.map((col: any, idx: number) => (
-                                <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                              {selectedData.columns.map((col: any) => (
+                                <tr key={col.name} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                   <td className="p-1 text-gray-300 font-medium">{col.name}</td>
                                   <td className="p-1 text-[var(--accent-color)]/70">{col.type}</td>
                                 </tr>

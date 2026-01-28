@@ -6,6 +6,7 @@ pub mod definition;
 pub mod processors;
 pub mod registry;
 pub mod types;
+pub mod catalog;
 
 // 重新导出常用类型
 pub use definition::NodeDefinition;

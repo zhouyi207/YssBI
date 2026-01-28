@@ -5,7 +5,7 @@ export function createInternalNode(
     id: string,
     type: string,
     title: string,
-    category: string,
+    category: string[],
     position: Position,
     inputs: PinDefinition[],
     outputs: PinDefinition[],
