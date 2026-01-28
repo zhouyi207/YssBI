@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 use super::implementation::GenericNode;
-use super::definition::NodeDefinition;
 
 /// 节点注册中心
 /// 
@@ -12,10 +11,9 @@ pub struct NodeRegistry {
 
 impl NodeRegistry {
     pub fn new() -> Self {
-        let registry = Self {
+        Self {
             prototypes: RwLock::new(HashMap::new()),
-        };
-        registry
+        }
     }
 
     /// 注册节点原型
@@ -28,12 +26,10 @@ impl NodeRegistry {
         self.prototypes.read().unwrap().get(node_type).cloned()
     }
 
-    /// 获取所有节点的定义（用于前端序列化）
-    pub fn get_all_definitions(&self) -> Vec<NodeDefinition> {
+    /// 获取所有节点的原型（它们现在实现了 Serialize，可直接作为定义发送给前端）
+    pub fn get_all_prototypes(&self) -> Vec<Arc<GenericNode>> {
         let protos = self.prototypes.read().unwrap();
-        protos.values()
-            .map(|proto| proto.to_definition())
-            .collect()
+        protos.values().cloned().collect()
     }
 }
 
@@ -42,13 +38,12 @@ pub static REGISTRY: OnceLock<NodeRegistry> = OnceLock::new();
 pub fn get_registry() -> &'static NodeRegistry {
     REGISTRY.get_or_init(|| {
         let registry = NodeRegistry::new();
-        // 这里可以调用各模块的 register 函数
         super::catalog::register_builtin_nodes(&registry);
         registry
     })
 }
 
-/// 获取所有节点定义
-pub fn get_all_node_definitions() -> Vec<NodeDefinition> {
-    get_registry().get_all_definitions()
+/// 获取所有节点原型（用于前端序列化）
+pub fn get_all_node_definitions() -> Vec<Arc<GenericNode>> {
+    get_registry().get_all_prototypes()
 }

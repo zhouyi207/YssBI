@@ -8,7 +8,8 @@ pub mod schema;
 pub mod state;
 
 use tauri_plugin_log::log::info;
-use executor::{NodeDefinition};
+use executor::{GenericNode};
+use std::sync::Arc;
 use project::{CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData};
 use schema::{
     get_editor_schema, CategoryDefinition, EditorSchema, PinTypeDefinition, UIStyleDefinition,
@@ -139,7 +140,7 @@ fn get_dataframe_rows(
 
 /// 获取所有节点定义
 #[tauri::command]
-fn get_node_definitions() -> Vec<NodeDefinition> {
+fn get_node_definitions() -> Vec<Arc<GenericNode>> {
     let defs = executor::get_all_node_definitions();
     println!("[Backend] Returning {} node definitions", defs.len());
     defs

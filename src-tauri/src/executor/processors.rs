@@ -50,7 +50,7 @@ pub type FlowProcessor = fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result
 /// 替代原有的函数指针方式，支持更复杂的节点逻辑和动态 Pin 处理。
 pub trait NodeProcessor: Send + Sync {
     /// 获取节点的元数据定义（用于前端展示）
-    fn get_definition(&self, node: Option<&NodeData>) -> crate::executor::node::NodeDefinition;
+    fn get_definition(&self, node: Option<&NodeData>) -> std::sync::Arc<crate::executor::node::GenericNode>;
 
     /// 执行流程逻辑
     fn process_flow(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeData) -> Result<String, String> {

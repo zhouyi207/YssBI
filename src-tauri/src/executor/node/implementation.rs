@@ -4,8 +4,13 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 use dashmap::DashMap;
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use serde_json::Value;
 
+<<<<<<< HEAD
+use crate::executor::error::{ExecutionResult, NodeResult};
+use crate::executor::pin::{GenericInExecPin, GenericOutExecPin, GenericInDataPin, GenericOutDataPin, BasePin, ExecPin, InDataPin, OutDataPin, DataPin};
+=======
 <<<<<<< HEAD
 use crate::executor::error::{ExecutionResult, NodeResult, NodeError};
 use crate::executor::pin::{GenericExecPin, GenericInDataPin, GenericOutDataPin, BasePin, ExecPin, InDataPin, OutDataPin, ExecPinState, DataPin};
@@ -13,9 +18,9 @@ use crate::executor::pin::{GenericExecPin, GenericInDataPin, GenericOutDataPin, 
 use crate::executor::error::{ExecutionResult, NodeResult};
 use crate::executor::pin::{GenericInExecPin, GenericOutExecPin, GenericInDataPin, GenericOutDataPin, BasePin, ExecPin, InDataPin, OutDataPin, DataPin};
 >>>>>>> 9639c93 (feat: implement initial node-based executor system including graph management, execution context, and various node types like variable, debug, control, function, internal, and visualization.)
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
 use super::traits::Node;
 use super::types::{NodeId, NodeState};
-use crate::executor::node::definition::NodeDefinition;
 use crate::executor::node::NodeData;
 use crate::executor::processors::ExecutionContextTrait;
 
@@ -39,15 +44,12 @@ pub struct GenericNode {
     in_exec_pins: DashMap<String, Arc<GenericInExecPin>>,
     out_exec_pins: DashMap<String, Arc<GenericOutExecPin>>,
     
-    // 执行器：节点的业务逻辑
-    // 流程处理逻辑
+    // 执行器逻辑
     flow_processor: Mutex<Option<Box<dyn Fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String> + Send + Sync + 'static>>>,
-    // 数据计算逻辑
     data_processor: Mutex<Option<Box<dyn Fn(&mut dyn ExecutionContextTrait, &NodeData, &str) -> Value + Send + Sync + 'static>>>,
 }
 
 impl GenericNode {
-    /// 创建新节点原型（用于注册）
     pub fn new_prototype(node_type: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::nil(),
@@ -66,7 +68,6 @@ impl GenericNode {
         }
     }
 
-    /// 创建带 ID 的节点实例
     pub fn new(id: NodeId, title: impl Into<String>, node_type: impl Into<String>) -> Self {
         Self {
             id,
@@ -85,63 +86,10 @@ impl GenericNode {
         }
     }
 
-    /// 设置元数据
     pub fn set_metadata(&mut self, category: Vec<String>, ui_style: String, description: Option<String>) {
         self.category = category;
         self.ui_style = ui_style;
         self.description = description;
-    }
-
-    /// 获取 NodeDefinition 格式的序列化信息 (用于前端)
-    pub fn to_definition(&self) -> NodeDefinition {
-        use crate::executor::node::data::PinDefinition;
-        
-        let mut inputs = Vec::new();
-        let mut outputs = Vec::new();
-
-        // 收集执行 Pin
-        for entry in self.exec_pins.iter() {
-            inputs.push(PinDefinition {
-                name: entry.key().clone(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            });
-        }
-
-        // 收集数据输入
-        for entry in self.inputs.iter() {
-            let pin = entry.value();
-            inputs.push(PinDefinition {
-                name: entry.key().clone(),
-                pin_type: pin.data_type().to_string(),
-                default_value: None,
-                is_array: false,
-            });
-        }
-
-        // 收集数据输出
-        for entry in self.outputs.iter() {
-            let pin = entry.value();
-            outputs.push(PinDefinition {
-                name: entry.key().clone(),
-                pin_type: pin.data_type().to_string(),
-                default_value: None,
-                is_array: false,
-            });
-        }
-
-        NodeDefinition {
-            node_type: self.node_type.clone(),
-            category: self.category.clone(),
-            title: self.title.read().unwrap().clone(),
-            inputs,
-            outputs,
-            ui_style: self.ui_style.clone(),
-            description: self.description.clone(),
-            data_processor: None,
-            flow_processor: None,
-        }
     }
 
     pub fn add_input(&self, pin: GenericInDataPin) -> Arc<GenericInDataPin> {
@@ -186,50 +134,63 @@ impl GenericNode {
     pub fn process_flow(&self, ctx: &mut dyn ExecutionContextTrait, node: &NodeData) -> Result<String, String> {
         if let Some(p) = self.flow_processor.lock().unwrap().as_ref() {
             p(ctx, node)
-        } else {
-            Ok("".into())
-        }
+        } else { Ok("".into()) }
     }
 
     pub fn process_data(&self, ctx: &mut dyn ExecutionContextTrait, node: &NodeData, pin_id: &str) -> Value {
         if let Some(p) = self.data_processor.lock().unwrap().as_ref() {
             p(ctx, node, pin_id)
-        } else {
-            Value::Null
-        }
+        } else { Value::Null }
     }
 
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
     pub fn node_type(&self) -> &str {
         &self.node_type
     }
 =======
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
     pub fn node_type(&self) -> &str { &self.node_type }
     pub fn input_names(&self) -> Vec<String> { self.in_data_pins.iter().map(|e| e.key().clone()).collect() }
     pub fn output_names(&self) -> Vec<String> { self.out_data_pins.iter().map(|e| e.key().clone()).collect() }
     pub fn get_input_concrete(&self, name: &str) -> Option<Arc<GenericInDataPin>> { self.in_data_pins.get(name).map(|p| p.clone()) }
     pub fn get_output_concrete(&self, name: &str) -> Option<Arc<GenericOutDataPin>> { self.out_data_pins.get(name).map(|p| p.clone()) }
 }
+<<<<<<< HEAD
+=======
 >>>>>>> 9639c93 (feat: implement initial node-based executor system including graph management, execution context, and various node types like variable, debug, control, function, internal, and visualization.)
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
 
-    fn check_disposed(&self) -> NodeResult<()> {
-        if *self.state.read().unwrap() == NodeState::Disposed {
-            return Err(NodeError::NodeDisposed(self.id));
+impl Serialize for GenericNode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("NodeDefinition", 7)?;
+        state.serialize_field("node_type", &self.node_type)?;
+        state.serialize_field("category", &self.category)?;
+        state.serialize_field("title", &*self.title.read().unwrap())?;
+        state.serialize_field("ui_style", &self.ui_style)?;
+        state.serialize_field("description", &self.description)?;
+
+        // 构造 Pin 定义列表 (满足前端 NodeDefinition 格式)
+        #[derive(Serialize)]
+        struct PinDefProxy {
+            name: String,
+            #[serde(rename = "type")]
+            pin_type: String,
+            #[serde(rename = "defaultValue")]
+            default_value: Option<Value>,
+            #[serde(rename = "isArray")]
+            is_array: bool,
         }
-        Ok(())
-    }
 
-    fn update_state(&self) {
-        if self.exec_pins.is_empty() {
-            *self.state.write().unwrap() = NodeState::Idle;
-            return;
-        }
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
 
-        let mut has_running = false;
-        let mut has_failed = false;
-        let mut has_blocked = false;
-        let mut all_completed = true;
-
+<<<<<<< HEAD
+=======
 <<<<<<< HEAD
         for entry in self.exec_pins.iter() {
             let pin = entry.value();
@@ -243,6 +204,7 @@ impl GenericNode {
                 _ => all_completed = false,
             }
 =======
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
         // 1. 收集输入执行 Pin
         for entry in self.in_exec_pins.iter() {
             inputs.push(PinDefProxy {
@@ -251,6 +213,8 @@ impl GenericNode {
                 default_value: None,
                 is_array: false,
             });
+<<<<<<< HEAD
+=======
         }
 
         // 2. 收集输出执行 Pin
@@ -282,45 +246,42 @@ impl GenericNode {
                 is_array: false,
             });
 >>>>>>> 9639c93 (feat: implement initial node-based executor system including graph management, execution context, and various node types like variable, debug, control, function, internal, and visualization.)
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
         }
 
-        let new_state = if has_running {
-            NodeState::Running
-        } else if has_failed {
-            NodeState::Failed
-        } else if has_blocked {
-            NodeState::Blocked
-        } else if all_completed {
-            NodeState::Completed
-        } else {
-            NodeState::Idle
-        };
+        // 2. 收集输出执行 Pin
+        for entry in self.out_exec_pins.iter() {
+            outputs.push(PinDefProxy {
+                name: entry.key().clone(),
+                pin_type: "exec".into(),
+                default_value: None,
+                is_array: false,
+            });
+        }
 
-        *self.state.write().unwrap() = new_state;
-    }
+        // 3. 收集数据输入 Pin
+        for entry in self.in_data_pins.iter() {
+            inputs.push(PinDefProxy {
+                name: entry.key().clone(),
+                pin_type: entry.value().data_type().to_string(),
+                default_value: None,
+                is_array: false,
+            });
+        }
 
-    pub fn input_names(&self) -> Vec<String> {
-        self.inputs.iter().map(|e| e.key().clone()).collect()
-    }
+        // 4. 收集数据输出 Pin
+        for entry in self.out_data_pins.iter() {
+            outputs.push(PinDefProxy {
+                name: entry.key().clone(),
+                pin_type: entry.value().data_type().to_string(),
+                default_value: None,
+                is_array: false,
+            });
+        }
 
-    pub fn output_names(&self) -> Vec<String> {
-        self.outputs.iter().map(|e| e.key().clone()).collect()
-    }
-
-    pub fn exec_pin_names(&self) -> Vec<String> {
-        self.exec_pins.iter().map(|e| e.key().clone()).collect()
-    }
-
-    pub fn get_input_concrete(&self, name: &str) -> Option<Arc<GenericInDataPin>> {
-        self.inputs.get(name).map(|p| p.clone())
-    }
-
-    pub fn get_output_concrete(&self, name: &str) -> Option<Arc<GenericOutDataPin>> {
-        self.outputs.get(name).map(|p| p.clone())
-    }
-
-    pub fn get_exec_pin_concrete(&self, name: &str) -> Option<Arc<GenericExecPin>> {
-        self.exec_pins.get(name).map(|p| p.clone())
+        state.serialize_field("inputs", &inputs)?;
+        state.serialize_field("outputs", &outputs)?;
+        state.end()
     }
 }
 
@@ -329,6 +290,13 @@ impl Node for GenericNode {
     fn name(&self) -> &str { "GenericNode" }
     fn set_name(&mut self, name: String) { *self.title.write().unwrap() = name; }
     fn state(&self) -> NodeState { *self.state.read().unwrap() }
+<<<<<<< HEAD
+    fn execute(&mut self) -> ExecutionResult<()> { Ok(()) }
+    fn reset(&mut self) -> NodeResult<()> { Ok(()) }
+    fn dispose(&mut self) -> NodeResult<()> { Ok(()) }
+    fn inputs(&self) -> Vec<Arc<dyn InDataPin>> { self.in_data_pins.iter().map(|e| e.value().clone() as Arc<dyn InDataPin>).collect() }
+    fn outputs(&self) -> Vec<Arc<dyn OutDataPin>> { self.out_data_pins.iter().map(|e| e.value().clone() as Arc<dyn OutDataPin>).collect() }
+=======
 <<<<<<< HEAD
 
     fn execute(&mut self) -> ExecutionResult<()> {
@@ -374,16 +342,25 @@ impl Node for GenericNode {
     fn outputs(&self) -> Vec<Arc<dyn OutDataPin>> {
         self.outputs.iter().map(|e| e.value().clone() as Arc<dyn OutDataPin>).collect()
     }
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
     fn exec_pins(&self) -> Vec<Arc<dyn ExecPin>> {
-        self.exec_pins.iter().map(|e| e.value().clone() as Arc<dyn ExecPin>).collect()
+        let mut pins: Vec<Arc<dyn ExecPin>> = Vec::new();
+        for e in self.in_exec_pins.iter() {
+            pins.push(e.value().clone() as Arc<dyn ExecPin>);
+        }
+        for e in self.out_exec_pins.iter() {
+            pins.push(e.value().clone() as Arc<dyn ExecPin>);
+        }
+        pins
     }
-    fn get_input(&self, name: &str) -> Option<Arc<dyn InDataPin>> {
-        self.inputs.get(name).map(|p| p.clone() as Arc<dyn InDataPin>)
-    }
-    fn get_output(&self, name: &str) -> Option<Arc<dyn OutDataPin>> {
-        self.outputs.get(name).map(|p| p.clone() as Arc<dyn OutDataPin>)
-    }
+    fn get_input(&self, name: &str) -> Option<Arc<dyn InDataPin>> { self.in_data_pins.get(name).map(|p| p.clone() as Arc<dyn InDataPin>) }
+    fn get_output(&self, name: &str) -> Option<Arc<dyn OutDataPin>> { self.out_data_pins.get(name).map(|p| p.clone() as Arc<dyn OutDataPin>) }
     fn get_exec_pin(&self, name: &str) -> Option<Arc<dyn ExecPin>> {
+<<<<<<< HEAD
+        self.in_exec_pins.get(name)
+            .map(|p| p.clone() as Arc<dyn ExecPin>)
+            .or_else(|| self.out_exec_pins.get(name).map(|p| p.clone() as Arc<dyn ExecPin>))
+=======
         self.exec_pins.get(name).map(|p| p.clone() as Arc<dyn ExecPin>)
 =======
     fn execute(&mut self) -> ExecutionResult<()> { Ok(()) }
@@ -408,14 +385,12 @@ impl Node for GenericNode {
             .map(|p| p.clone() as Arc<dyn ExecPin>)
             .or_else(|| self.out_exec_pins.get(name).map(|p| p.clone() as Arc<dyn ExecPin>))
 >>>>>>> 9639c93 (feat: implement initial node-based executor system including graph management, execution context, and various node types like variable, debug, control, function, internal, and visualization.)
+>>>>>>> e76e66554c9d5f618cb80ed5ecc399c15510152e
     }
 }
 
 impl std::fmt::Debug for GenericNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GenericNode")
-            .field("node_type", &self.node_type)
-            .field("title", &self.title)
-            .finish()
+        f.debug_struct("GenericNode").field("node_type", &self.node_type).finish()
     }
 }

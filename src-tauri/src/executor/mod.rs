@@ -23,7 +23,6 @@ pub use processors::{DataProcessor, FlowProcessor, ExecutionContextTrait};
 pub use node::{
     NodeId, NodeState, Node, GenericNode,
     NodeData, PinData, GraphData, PinDefinition, VariableData,
-    NodeDefinition,
     get_all_node_definitions
 };
 pub use error::{
