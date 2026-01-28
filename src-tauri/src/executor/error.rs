@@ -118,6 +118,12 @@ pub enum ExecutionError {
     #[error("执行超时：NodeId={0}")]
     Timeout(NodeId),
 
+    /// 检测到循环依赖
+    #[error("执行失败：检测到循环依赖，无法执行拓扑排序：{message}")]
+    CycleDetected {
+        message: String,
+    },
+
     /// 通用错误
     #[error("{0}")]
     Generic(String),

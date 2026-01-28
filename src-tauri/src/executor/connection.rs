@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::executor::error::{ConnectionError, ConnectionResult};
 use crate::executor::node::{GenericNode, Node, NodeId};
-use crate::executor::pin::{BasePin, InDataPin, OutDataPin, PinId};
+use crate::executor::pin::{InDataPin, OutDataPin, PinId};
 
 /// 连接信息
 #[derive(Debug, Clone)]
@@ -25,10 +25,10 @@ pub struct Connection {
 pub struct ConnectionManager {
     /// 所有连接（from_pin -> to_pin）
     connections: Mutex<HashMap<PinId, Vec<PinId>>>,
-    
+
     /// Pin 到节点的映射
     pin_to_node: Mutex<HashMap<PinId, NodeId>>,
-    
+
     /// 节点到 Pin 的映射
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
 }
@@ -51,22 +51,18 @@ impl ConnectionManager {
 
         let mut pins = Vec::new();
 
-        // 注册输入 Pin
-        for name in node.input_names() {
-            if let Some(pin) = node.get_input_concrete(&name) {
-                let pin_id = pin.id();
-                pin_to_node.insert(pin_id, node_id);
-                pins.push(pin_id);
-            }
+        // 注册输入 Pin (使用 inputs() 方法直接获取所有输入 pins)
+        for pin in node.inputs() {
+            let pin_id = pin.id();
+            pin_to_node.insert(pin_id, node_id);
+            pins.push(pin_id);
         }
 
-        // 注册输出 Pin
-        for name in node.output_names() {
-            if let Some(pin) = node.get_output_concrete(&name) {
-                let pin_id = pin.id();
-                pin_to_node.insert(pin_id, node_id);
-                pins.push(pin_id);
-            }
+        // 注册输出 Pin (使用 outputs() 方法直接获取所有输出 pins)
+        for pin in node.outputs() {
+            let pin_id = pin.id();
+            pin_to_node.insert(pin_id, node_id);
+            pins.push(pin_id);
         }
 
         node_to_pins.insert(node_id, pins);
@@ -84,9 +80,10 @@ impl ConnectionManager {
         let to_id = to_pin.id();
 
         // 1. 类型检查
-        if from_pin.data_type() != to_pin.data_type() 
-            && to_pin.data_type() != "any" 
-            && from_pin.data_type() != "any" {
+        if from_pin.data_type() != to_pin.data_type()
+            && to_pin.data_type() != "any"
+            && from_pin.data_type() != "any"
+        {
             return Err(ConnectionError::TypeMismatch {
                 from_type: from_pin.data_type().to_string(),
                 to_type: to_pin.data_type().to_string(),
@@ -133,7 +130,7 @@ impl ConnectionManager {
     /// 断开连接
     pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> ConnectionResult<()> {
         let mut connections = self.connections.lock().unwrap();
-        
+
         if let Some(targets) = connections.get_mut(&from_pin) {
             if let Some(pos) = targets.iter().position(|&id| id == to_pin) {
                 targets.remove(pos);
@@ -166,6 +163,55 @@ impl ConnectionManager {
             }
         }
         None
+    }
+
+    /// 获取节点的所有直接上游节点
+    pub fn get_upstream_nodes(&self, node_id: NodeId) -> HashSet<NodeId> {
+        let node_to_pins = self.node_to_pins.lock().unwrap();
+        let pin_to_node = self.pin_to_node.lock().unwrap();
+        let connections = self.connections.lock().unwrap();
+
+        let mut upstream_nodes = HashSet::new();
+
+        if let Some(pins) = node_to_pins.get(&node_id) {
+            for &pin_id in pins {
+                // 遍历所有连接，寻找以当前节点 Pin 为目标的连接
+                for (&from_pin, targets) in connections.iter() {
+                    if targets.contains(&pin_id) {
+                        if let Some(&from_node) = pin_to_node.get(&from_pin) {
+                            if from_node != node_id {
+                                upstream_nodes.insert(from_node);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        upstream_nodes
+    }
+
+    /// 获取节点的所有直接下游节点
+    pub fn get_downstream_nodes(&self, node_id: NodeId) -> HashSet<NodeId> {
+        let node_to_pins = self.node_to_pins.lock().unwrap();
+        let pin_to_node = self.pin_to_node.lock().unwrap();
+        let connections = self.connections.lock().unwrap();
+
+        let mut downstream_nodes = HashSet::new();
+
+        if let Some(pins) = node_to_pins.get(&node_id) {
+            for &pin_id in pins {
+                if let Some(targets) = connections.get(&pin_id) {
+                    for &target_pin in targets {
+                        if let Some(&target_node) = pin_to_node.get(&target_pin) {
+                            if target_node != node_id {
+                                downstream_nodes.insert(target_node);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        downstream_nodes
     }
 
     /// 检查是否会形成循环

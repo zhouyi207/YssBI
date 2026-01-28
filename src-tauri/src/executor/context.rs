@@ -1,29 +1,46 @@
 //! 执行上下文模块
 //!
-//! 负责图的执行逻辑。
+//! 负责图的执行逻辑，使用运行时节点对象（GenericNode）而不是序列化数据。
 
 use crate::executor::{
-    ExecutionContextTrait, GraphData, NodeData,
+    BasePin, ConnectionManager, ExecutionContextTrait, GenericNode, GraphData, Node, NodeData,
+    NodeId, PinId,
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
 /// 执行上下文
 pub struct ExecutionContext {
+    /// 运行时节点（node_id -> GenericNode）
+    nodes: HashMap<NodeId, Arc<Mutex<GenericNode>>>,
+
+    /// 连接管理器
+    connection_manager: Arc<ConnectionManager>,
+
+    /// 原始数据 ID 到运行时 ID 的映射
+    data_id_to_runtime_id: HashMap<String, NodeId>,
+
+    /// 运行时 ID 到原始数据 ID 的映射
+    runtime_id_to_data_id: HashMap<NodeId, String>,
+
+    /// Pin ID 到运行时节点 ID 的映射
+    pin_to_node: HashMap<PinId, NodeId>,
+
     /// 变量存储
     pub variables: HashMap<String, Value>,
+
     /// 执行日志
     pub logs: Vec<String>,
-    /// 节点映射 (node_id -> NodeData)
-    nodes: HashMap<String, NodeData>,
-    /// 针脚到节点的映射 (pin_id -> node_id)
-    pin_to_node: HashMap<String, String>,
+
     /// 调用栈
     call_stack: Vec<String>,
+
     /// 当前执行栈（用于检测循环）
-    execution_stack: Vec<String>,
+    execution_stack: Vec<NodeId>,
+
     /// Tauri 应用句柄（可选）
     app_handle: Option<AppHandle>,
 }
@@ -31,45 +48,106 @@ pub struct ExecutionContext {
 impl ExecutionContext {
     /// 创建新的执行上下文
     pub fn new(graph: GraphData) -> Self {
-        let mut nodes = HashMap::new();
-        let mut pin_to_node = HashMap::new();
-        let mut initial_vars = HashMap::new();
+        let mut ctx = Self {
+            nodes: HashMap::new(),
+            connection_manager: Arc::new(ConnectionManager::new()),
+            data_id_to_runtime_id: HashMap::new(),
+            runtime_id_to_data_id: HashMap::new(),
+            pin_to_node: HashMap::new(),
+            variables: HashMap::new(),
+            logs: Vec::new(),
+            call_stack: Vec::new(),
+            execution_stack: Vec::new(),
+            app_handle: None,
+        };
 
         // 初始化变量
         if let Some(vars) = graph.variables {
             for (id, var_data) in vars {
-                initial_vars.insert(id, var_data.value);
+                ctx.variables.insert(id, var_data.value);
             }
         }
 
-        // 建立节点和针脚映射
-        for node in graph.nodes {
-            eprintln!("[ExecutionContext::new] Loading node: {} (type: {}), inputs: {}, outputs: {}", 
-                      node.id, node.node_type, node.inputs.len(), node.outputs.len());
-            for inp in &node.inputs {
-                eprintln!("  Input pin: {} (type: {}), links: {}", inp.name, inp.pin_type, inp.links.len());
+        // 创建所有节点
+        for node_data in &graph.nodes {
+            if let Err(e) = ctx.create_node_from_data(node_data) {
+                ctx.log(format!("[ERROR] Failed to create node: {}", e));
             }
-            for outp in &node.outputs {
-                eprintln!("  Output pin: {} (type: {}), links: {}", outp.name, outp.pin_type, outp.links.len());
-            }
-            for pin in &node.inputs {
-                pin_to_node.insert(pin.id.clone(), node.id.clone());
-            }
-            for pin in &node.outputs {
-                pin_to_node.insert(pin.id.clone(), node.id.clone());
-            }
-            nodes.insert(node.id.clone(), node);
         }
 
-        Self {
-            nodes,
-            pin_to_node,
-            variables: initial_vars,
-            call_stack: Vec::new(),
-            execution_stack: Vec::new(),
-            app_handle: None,
-            logs: Vec::new(),
+        // 建立连接
+        for node_data in &graph.nodes {
+            if let Err(e) = ctx.create_connections_from_data(node_data) {
+                ctx.log(format!("[ERROR] Failed to create connections: {}", e));
+            }
         }
+
+        ctx
+    }
+
+    /// 从 NodeData 创建运行时节点
+    fn create_node_from_data(&mut self, node_data: &NodeData) -> Result<NodeId, String> {
+        use uuid::Uuid;
+
+        let runtime_id = Uuid::new_v4();
+        let node = GenericNode::new(runtime_id, &node_data.title, &node_data.node_type);
+
+        // 创建输入 Pin
+        for pin_data in &node_data.inputs {
+            if pin_data.pin_type == "exec" {
+                use crate::executor::pin::GenericInExecPin;
+                let exec_pin = GenericInExecPin::new(runtime_id, &pin_data.name);
+                let pin_id = exec_pin.id();
+                node.add_in_exec_pin(exec_pin);
+                self.pin_to_node.insert(pin_id, runtime_id);
+            } else {
+                use crate::executor::pin::GenericInDataPin;
+                let pin = GenericInDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
+                let pin_id = pin.id();
+                node.add_input(pin);
+                self.pin_to_node.insert(pin_id, runtime_id);
+            }
+        }
+
+        // 创建输出 Pin
+        for pin_data in &node_data.outputs {
+            if pin_data.pin_type == "exec" {
+                use crate::executor::pin::GenericOutExecPin;
+                let exec_pin = GenericOutExecPin::new(runtime_id, &pin_data.name);
+                let pin_id = exec_pin.id();
+                node.add_out_exec_pin(exec_pin);
+                self.pin_to_node.insert(pin_id, runtime_id);
+            } else {
+                use crate::executor::pin::GenericOutDataPin;
+                let pin = GenericOutDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
+                let pin_id = pin.id();
+                node.add_output(pin);
+                self.pin_to_node.insert(pin_id, runtime_id);
+            }
+        }
+
+        // 注册节点到连接管理器
+        self.connection_manager
+            .register_node(&node)
+            .map_err(|e| format!("Failed to register node: {:?}", e))?;
+
+        // 存储节点
+        self.nodes.insert(runtime_id, Arc::new(Mutex::new(node)));
+
+        // 映射 ID
+        self.data_id_to_runtime_id
+            .insert(node_data.id.clone(), runtime_id);
+        self.runtime_id_to_data_id
+            .insert(runtime_id, node_data.id.clone());
+
+        Ok(runtime_id)
+    }
+
+    /// 从 NodeData 创建连接
+    fn create_connections_from_data(&mut self, node_data: &NodeData) -> Result<(), String> {
+        // TODO: 实现连接创建逻辑
+        // 这需要建立 pin 之间的实际连接
+        Ok(())
     }
 
     /// 设置 Tauri 应用句柄（用于支持窗口操作）
@@ -79,17 +157,24 @@ impl ExecutionContext {
 
     /// 执行图
     pub fn execute(&mut self) -> Result<Vec<String>, String> {
-        let start_node_id = self
+        self.log_graph_structure();
+
+        // 查找起始节点
+        let start_runtime_id = self
             .nodes
-            .values()
-            .find(|n| n.node_type == "event_on_run")
-            .map(|n| n.id.clone())
+            .iter()
+            .find(|(_, node)| {
+                let node_guard = node.lock().unwrap();
+                node_guard.node_type() == "event_on_run"
+            })
+            .map(|(id, _)| *id)
             .ok_or("No 'event_on_run' node found")?;
 
-        let log_msg = format!("Starting execution from node: {}", start_node_id);
+        let log_msg = format!("Starting execution from node: {:?}", start_runtime_id);
         info!("{}", log_msg);
         self.logs.push(log_msg);
-        self.run_flow_internal(&start_node_id, "Exec")?;
+
+        self.run_flow_internal(start_runtime_id, "Exec")?;
 
         info!("Execution finished");
         self.logs.push("Execution finished".to_string());
@@ -97,9 +182,9 @@ impl ExecutionContext {
     }
 
     /// 内部：执行流程
-    fn run_flow_internal(&mut self, node_id: &str, output_exec_name: &str) -> Result<(), String> {
-        // 检测循环执行：如果当前节点已在执行栈中，说明有循环连接
-        if self.execution_stack.contains(&node_id.to_string()) {
+    fn run_flow_internal(&mut self, node_id: NodeId, output_exec_name: &str) -> Result<(), String> {
+        // 检测循环执行
+        if self.execution_stack.contains(&node_id) {
             let cycle_info = format!(
                 "Cycle detected: execution stack = {:?}",
                 self.execution_stack
@@ -110,19 +195,32 @@ impl ExecutionContext {
         }
 
         // 将当前节点加入执行栈
-        self.execution_stack.push(node_id.to_string());
+        self.execution_stack.push(node_id);
 
-        let node = self.nodes.get(node_id).ok_or("Node not found")?.clone();
-        let log_msg = format!(">>> Executing Node: {} ({})", node.title, node.node_type);
+        let node = self
+            .nodes
+            .get(&node_id)
+            .ok_or_else(|| format!("Node not found: {:?}", node_id))?
+            .clone();
+
+        let node_guard = node.lock().unwrap();
+        let node_type = node_guard.node_type().to_string();
+        let node_name = node_guard.name().to_string();
+        drop(node_guard);
+
+        let log_msg = format!(">>> Executing Node: {} ({})", node_name, node_type);
         info!("{}", log_msg);
         self.logs.push(log_msg);
 
-        // 从注册中心获取原型
-        let proto = crate::executor::node::registry::get_registry()
-            .get_prototype(&node.node_type);
+        // 从注册中心获取原型并执行
+        let proto = crate::executor::node::registry::get_registry().get_prototype(&node_type);
 
-        let next_exec_name = if let Some(p) = proto {
-            p.process_flow(self, &node)?
+        // TODO: 实际执行节点逻辑
+        // 这需要实现 process_flow 的调用
+
+        let next_exec_name = if let Some(_p) = proto {
+            // p.process_flow(self, &node_data)?
+            output_exec_name.to_string()
         } else {
             output_exec_name.to_string()
         };
@@ -132,137 +230,101 @@ impl ExecutionContext {
             self.execution_stack.pop();
             return Ok(());
         }
-        
+
         if !next_exec_name.is_empty() {
             self.trigger_next_flow(node_id, &next_exec_name)?;
         }
-        
+
         // 从执行栈移除当前节点
         self.execution_stack.pop();
         Ok(())
     }
 
     /// 触发下一个流程节点
-    fn trigger_next_flow(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
-        let node = self.nodes.get(node_id).unwrap();
-        
-        eprintln!("[trigger_next_flow] Looking for pin '{}' in node '{}' (type: {})", 
-                  pin_name, node.id, node.node_type);
-        eprintln!("[trigger_next_flow] Node has {} inputs, {} outputs", 
-                  node.inputs.len(), node.outputs.len());
-        
-        // 同时在 inputs 和 outputs 中查找执行 Pin（因为 exec pins 可能在任何一个地方）
-        let exec_pin = node
-            .outputs
-            .iter()
-            .find(|p| p.pin_type == "exec" && p.name.to_lowercase() == pin_name.to_lowercase())
-            .or_else(|| {
-                node.inputs
-                    .iter()
-                    .find(|p| p.pin_type == "exec" && p.name.to_lowercase() == pin_name.to_lowercase())
-            });
+    fn trigger_next_flow(&mut self, node_id: NodeId, pin_name: &str) -> Result<(), String> {
+        let node = self
+            .nodes
+            .get(&node_id)
+            .ok_or_else(|| format!("Node not found: {:?}", node_id))?
+            .clone();
 
-        if let Some(pin) = exec_pin {
-            eprintln!("[trigger_next_flow] Found pin '{}' with {} links", pin.name, pin.links.len());
-            if !pin.links.is_empty() {
-                let next_pin_id = &pin.links[0];
+        let node_guard = node.lock().unwrap();
+
+        info!(
+            "[trigger_next_flow] Looking for pin '{}' in node '{}'",
+            pin_name,
+            node_guard.name()
+        );
+
+        // 查找执行 Pin（通过 name） - 先查找输出，再查找输入
+        let pin_id = if let Some(pin) = node_guard.get_out_exec_pin_by_name(pin_name) {
+            Some(pin.id())
+        } else if let Some(pin) = node_guard.get_in_exec_pin_by_name(pin_name) {
+            Some(pin.id())
+        } else {
+            None
+        };
+
+        drop(node_guard);
+
+        if let Some(pin_id) = pin_id {
+            info!("[trigger_next_flow] Found pin '{}'", pin_name);
+
+            // 获取下游连接
+            let downstream_pins = self.connection_manager.get_downstream(pin_id);
+
+            if !downstream_pins.is_empty() {
+                let next_pin_id = downstream_pins[0];
                 let next_node_id = self
                     .pin_to_node
-                    .get(next_pin_id)
-                    .cloned()
+                    .get(&next_pin_id)
                     .ok_or("Target node not found")?;
-                return self.run_flow_internal(&next_node_id, "Out");
+                return self.run_flow_internal(*next_node_id, "Out");
             }
         } else {
-            eprintln!("[trigger_next_flow] Pin '{}' not found!", pin_name);
+            info!("[trigger_next_flow] Pin '{}' not found!", pin_name);
         }
+
         Ok(())
     }
 
-    /// 计算节点输出值
-    fn evaluate_node_output(&mut self, node_id: &str, pin_id: &str) -> Value {
-        let node = self.nodes.get(node_id).unwrap().clone();
+    /// 记录图结构日志
+    fn log_graph_structure(&mut self) {
+        let mut messages = vec!["=== Execution Graph Structure ===".to_string()];
 
-        let proto = crate::executor::node::registry::get_registry()
-            .get_prototype(&node.node_type);
-            
-        let val = if let Some(p) = proto {
-            p.process_data(self, &node, pin_id)
-        } else {
-            Value::Null
-        };
+        for (node_id, node_arc) in &self.nodes {
+            let node = node_arc.lock().unwrap();
+            messages.push(format!(
+                "Node: {} ({}) - ID: {:?}",
+                node.name(),
+                node.node_type(),
+                node_id
+            ));
 
-        let pin_name = node.inputs.iter().chain(node.outputs.iter())
-            .find(|p| p.id == pin_id)
-            .map(|p| p.name.clone())
-            .unwrap_or_else(|| pin_id.to_string());
+            // 显示上游和下游节点
+            let upstream_nodes = self.connection_manager.get_upstream_nodes(*node_id);
+            let downstream_nodes = self.connection_manager.get_downstream_nodes(*node_id);
 
-        let log_msg = format!(
-            "  [Data] Node '{}' pin '{}' -> {:?}",
-            node.title, pin_name, val
-        );
-        info!("{}", log_msg);
-        self.logs.push(log_msg);
-        val
+            if !upstream_nodes.is_empty() {
+                messages.push(format!("  Upstream nodes: {:?}", upstream_nodes));
+            }
+            if !downstream_nodes.is_empty() {
+                messages.push(format!("  Downstream nodes: {:?}", downstream_nodes));
+            }
+        }
+
+        messages.push("===================================".to_string());
+
+        for msg in messages {
+            self.log(msg);
+        }
     }
 }
 
-// 实现 ExecutionContextTrait
+// 实现 ExecutionContextTrait (暂时保留接口兼容性)
 impl ExecutionContextTrait for ExecutionContext {
-    fn get_pin_value(&mut self, pin_id: &str) -> Value {
-        let node_id = match self.pin_to_node.get(pin_id) {
-            Some(id) => id.clone(),
-            None => return Value::Null,
-        };
-
-        let node = self.nodes.get(&node_id).unwrap().clone();
-
-        // 1. 检查是否是输出针脚。如果是输出针脚，直接计算并返回。
-        if let Some(output_pin) = node.outputs.iter().find(|p| p.id == pin_id) {
-            // 特殊处理 A：如果是 function_entry 或 macro_inputs 的输出针脚，需要从调用端获取数据
-            if (node.node_type == "function_entry" || node.node_type == "macro_inputs")
-                && !self.call_stack.is_empty()
-            {
-                let caller_node_id = self.call_stack.last().unwrap().clone();
-                let caller_node = self.nodes.get(&caller_node_id).unwrap().clone();
-                if let Some(caller_input) = caller_node.inputs.iter().find(|tip| tip.name == output_pin.name)
-                {
-                    return self.get_pin_value(&caller_input.id);
-                }
-            }
-            
-            // 特殊处理 B：如果是 call_function 或 call_macro 的输出针脚，需要从函数内部的 return/outputs 节点获取
-            let sub_graph_id = node.sub_graph_id.clone();
-            let return_node_type = if node.node_type == "call_function" { "function_return" } else { "macro_outputs" };
-            
-            // 找到对应的 return 节点中的输入针脚 ID
-            let target_pin_id = self.nodes.values()
-                .find(|n| n.node_type == return_node_type && n.sub_graph_id == sub_graph_id)
-                .and_then(|ret_node| {
-                    ret_node.inputs.iter()
-                        .find(|tip| tip.name == output_pin.name)
-                        .map(|tip| tip.id.clone())
-                });
-            
-            if let Some(pin_id) = target_pin_id {
-                return self.get_pin_value(&pin_id);
-            }
-
-            // 普通输出针脚，调用节点的数据处理器来计算结果
-            return self.evaluate_node_output(&node_id, pin_id);
-        }
-
-        // 2. 如果是输入针脚，则需要沿着连接找到上游的输出针脚
-        if let Some(input_pin) = node.inputs.iter().find(|p| p.id == pin_id) {
-            if input_pin.links.is_empty() {
-                return input_pin.default_value.clone().unwrap_or(Value::Null);
-            }
-
-            // 获取第一个连接的上游针脚 ID
-            let source_pin_id = &input_pin.links[0];
-            return self.get_pin_value(source_pin_id);
-        }
-
+    fn get_pin_value(&mut self, _pin_id: &str) -> Value {
+        // TODO: 实现基于运行时对象的 pin 值获取
         Value::Null
     }
 
@@ -285,7 +347,12 @@ impl ExecutionContextTrait for ExecutionContext {
     }
 
     fn run_flow(&mut self, node_id: &str, output_pin: &str) -> Result<(), String> {
-        self.trigger_next_flow(node_id, output_pin)
+        // 将 String node_id 转换为 NodeId
+        if let Some(&runtime_id) = self.data_id_to_runtime_id.get(node_id) {
+            self.trigger_next_flow(runtime_id, output_pin)
+        } else {
+            Err(format!("Node not found: {}", node_id))
+        }
     }
 
     fn push_call_stack(&mut self, node_id: String) {
@@ -301,10 +368,8 @@ impl ExecutionContextTrait for ExecutionContext {
     }
 
     fn find_node_by(&self, predicate: &dyn Fn(&NodeData) -> bool) -> Option<String> {
-        self.nodes
-            .values()
-            .find(|n| predicate(n))
-            .map(|n| n.id.clone())
+        // TODO: 需要重新实现，因为我们现在使用 GenericNode 而不是 NodeData
+        None
     }
 
     fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String> {
@@ -318,13 +383,12 @@ impl ExecutionContextTrait for ExecutionContext {
         info!("{}", log_msg);
         self.logs.push(log_msg.clone());
 
-        // 在新线程中创建窗口，避免阻塞执行流程
+        // 在新线程中创建窗口
         let label_clone = label.clone();
         let title_clone = title.clone();
         let url_clone = url.clone();
-        
+
         std::thread::spawn(move || {
-            // 创建新窗口
             match WebviewWindowBuilder::new(
                 &app_handle,
                 label_clone.clone(),
@@ -334,13 +398,17 @@ impl ExecutionContextTrait for ExecutionContext {
             .inner_size(800.0, 600.0)
             .min_inner_size(400.0, 300.0)
             .resizable(true)
-            .visible(false)  // 窗口创建后立即显示
-            .decorations(false)  // 禁用系统窗口装饰，使用自定义标题栏
-            .transparent(false)  // 不透明背景
-            .center()            // 居中显示
-            .build() {
+            .visible(false)
+            .decorations(false)
+            .transparent(false)
+            .center()
+            .build()
+            {
                 Ok(_) => {
-                    info!("Window '{}' created and displayed successfully", label_clone);
+                    info!(
+                        "Window '{}' created and displayed successfully",
+                        label_clone
+                    );
                 }
                 Err(e) => {
                     info!("[ERROR] Failed to create window '{}': {}", label_clone, e);
@@ -348,7 +416,6 @@ impl ExecutionContextTrait for ExecutionContext {
             }
         });
 
-        // 立即返回，不等待窗口创建完成
         let success_msg = format!("Window '{}' creation initiated (URL: {})", label, url);
         info!("{}", success_msg);
         self.logs.push(success_msg);

@@ -10,6 +10,7 @@ import { useGestureStore } from "../Store/useGestureStore";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import { ConnectionLine } from "./ConnectionLine";
+import { useBackendNodeCreation } from "../Hooks/useBackendNodeCreation";
 
 // Extracted Components
 import { ViewportGrid } from "./ViewportGrid";
@@ -46,6 +47,7 @@ export default function Canvas() {
   const { theme } = useTheme();
   const { drag } = useDrag();
   const gesture = useGestureStore(state => state.gesture);
+  const { createNode } = useBackendNodeCreation();
 
   const scale = useViewportStore(useCallback(state => state.viewports[groupId]?.scale || 1, [groupId]));
 
@@ -373,7 +375,9 @@ export default function Canvas() {
         initialData: dragState.template.initialData
       });
       if (newNode) {
-        setNodes((prev) => [...prev, newNode]);
+        // 使用后端 API 创建节点
+        createNode(newNode);
+
         if (targetPinId) {
           const outputPin = newNode.outputs[0];
           if (outputPin) {
@@ -406,9 +410,10 @@ export default function Canvas() {
           variableName: dragState.template.variableName,
           variableType: dragState.template.variableType,
           variableIsArray: dragState.template.variableIsArray
-        });
+        } as any);
         if (newNode) {
-          setNodes((prev) => [...prev, newNode]);
+          // 使用后端 API 创建节点
+          createNode(newNode);
 
           if (targetPinId && spawnType === "get_variable") {
             const outputPin = newNode.outputs[0];
@@ -428,9 +433,11 @@ export default function Canvas() {
           variableName: dragState.template.variableName,
           variableType: dragState.template.variableType,
           variableIsArray: dragState.template.variableIsArray
-        });
+        } as any);
         if (newNode) {
-          setNodes((prev) => [...prev, newNode]);
+          // 使用后端 API 创建节点
+          createNode(newNode);
+
           const outputPin = newNode.outputs[0];
           if (outputPin) {
             setTimeout(() => {
@@ -473,7 +480,9 @@ export default function Canvas() {
         false
       );
       node.subGraphId = subId;
-      setNodes((prev) => [...prev, node]);
+
+      // 使用后端 API 创建节点
+      createNode(node);
       return;
     }
 
@@ -484,7 +493,8 @@ export default function Canvas() {
     );
     if (newNode) {
       saveHistory();
-      setNodes((prev) => [...prev, newNode]);
+      // 使用后端 API 创建节点
+      createNode(newNode);
     }
   }
 

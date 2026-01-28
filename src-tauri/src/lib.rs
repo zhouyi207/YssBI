@@ -6,10 +6,10 @@ pub mod executor;
 pub mod project;
 pub mod schema;
 pub mod state;
-
-use tauri_plugin_log::log::info;
-use executor::{GenericNode};
-use std::sync::Arc;
+use crate::executor::ExecutionContextTrait;
+use chrono::Utc;
+use executor::GenericNode;
+use polars::prelude::*;
 use project::{CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData};
 use schema::{
     get_editor_schema, CategoryDefinition, EditorSchema, PinTypeDefinition, UIStyleDefinition,
@@ -17,10 +17,9 @@ use schema::{
 };
 use state::{emit_project_event, ProjectEvent, ProjectState};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::{AppHandle, State};
-use chrono::Utc;
-use polars::prelude::*;
-use crate::executor::ExecutionContextTrait;
+use tauri_plugin_log::log::info;
 
 // ==================== 数据导入命令 ====================
 
@@ -32,7 +31,7 @@ async fn import_csv(
     path: String,
 ) -> Result<crate::project::DataFrameData, String> {
     info!("[import_csv] Importing from: {}", path);
-    
+
     // 使用 Polars 读取 CSV
     let df = CsvReadOptions::default()
         .with_has_header(true)
@@ -44,13 +43,16 @@ async fn import_csv(
 
     let id = format!("df_{:x}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
     let df_data = state.add_dataframe(id.clone(), df, Some(path))?;
-    
+
     // 通知所有窗口
-    emit_project_event(&app, ProjectEvent::DataFrameCreated {
-        id,
-        data: df_data.clone(),
-    });
-    
+    emit_project_event(
+        &app,
+        ProjectEvent::DataFrameCreated {
+            id,
+            data: df_data.clone(),
+        },
+    );
+
     Ok(df_data)
 }
 
@@ -96,16 +98,18 @@ fn get_dataframe_rows(
     limit: usize,
 ) -> Result<Vec<Vec<serde_json::Value>>, String> {
     let df_store = state.df_store.read().unwrap();
-    let df = df_store.get(&id).ok_or_else(|| format!("DataFrame '{}' not found in memory", id))?;
-    
+    let df = df_store
+        .get(&id)
+        .ok_or_else(|| format!("DataFrame '{}' not found in memory", id))?;
+
     let height = df.height();
     if offset >= height {
         return Ok(vec![]);
     }
-    
+
     let actual_limit = std::cmp::min(limit, height - offset);
     let slice = df.slice(offset as i64, actual_limit);
-    
+
     let mut rows = Vec::new();
     for i in 0..slice.height() {
         let mut row = Vec::new();
@@ -115,7 +119,9 @@ fn get_dataframe_rows(
                 polars::prelude::AnyValue::Null => serde_json::Value::Null,
                 polars::prelude::AnyValue::Boolean(b) => serde_json::Value::Bool(b),
                 polars::prelude::AnyValue::String(s) => serde_json::Value::String(s.to_string()),
-                polars::prelude::AnyValue::StringOwned(s) => serde_json::Value::String(s.to_string()),
+                polars::prelude::AnyValue::StringOwned(s) => {
+                    serde_json::Value::String(s.to_string())
+                }
                 polars::prelude::AnyValue::Int8(v) => serde_json::json!(v),
                 polars::prelude::AnyValue::Int16(v) => serde_json::json!(v),
                 polars::prelude::AnyValue::Int32(v) => serde_json::json!(v),
@@ -132,7 +138,7 @@ fn get_dataframe_rows(
         }
         rows.push(row);
     }
-    
+
     Ok(rows)
 }
 
@@ -142,7 +148,7 @@ fn get_dataframe_rows(
 #[tauri::command]
 fn get_node_definitions() -> Vec<Arc<GenericNode>> {
     let defs = executor::get_all_node_definitions();
-    println!("[Backend] Returning {} node definitions", defs.len());
+    info!("[Backend] Returning {} node definitions", defs.len());
     defs
 }
 
@@ -307,7 +313,7 @@ fn set_project_data(
         state.set_current_path(Some(p));
     }
     info!("[set_project_data] Data stored successfully");
-    
+
     // 只在明确要求时才触发事件（避免重复触发）
     if emit_event.unwrap_or(false) {
         info!("[set_project_data] Emitting ProjectLoaded event");
@@ -676,6 +682,60 @@ fn set_nodes(
     Ok(())
 }
 
+/// 创建单个节点
+#[tauri::command]
+fn create_node(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    node: SerializedNode,
+) -> Result<SerializedNode, String> {
+    info!(
+        "[create_node] subgraph_id={}, node_id={}, node_type={}",
+        subgraph_id, node.id, node.node_type
+    );
+    let result = state.create_node(&subgraph_id, node)?;
+
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id,
+            nodes: all_nodes,
+        },
+    );
+
+    Ok(result)
+}
+
+/// 删除单个节点
+#[tauri::command]
+fn delete_node(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    node_id: String,
+) -> Result<(), String> {
+    info!(
+        "[delete_node] subgraph_id={}, node_id={}",
+        subgraph_id, node_id
+    );
+    state.delete_node(&subgraph_id, &node_id)?;
+
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id,
+            nodes: all_nodes,
+        },
+    );
+
+    Ok(())
+}
+
 /// 更新子图的画布状态
 #[tauri::command]
 fn update_canvas(
@@ -804,7 +864,9 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     // 1. 收集全局变量
     for (id, var) in &data.global_variables {
         // 将 VariableDefinition 转换为 VariableData
-        let value = var.static_value.clone()
+        let value = var
+            .static_value
+            .clone()
             .or_else(|| var.default_value.clone())
             .unwrap_or(serde_json::Value::Null);
         variables.insert(
@@ -818,11 +880,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     }
 
     // 2. 从所有子图收集节点和局部变量
-    let collections = vec![
-        (&data.events),
-        (&data.functions),
-        (&data.macros),
-    ];
+    let collections = vec![(&data.events), (&data.functions), (&data.macros)];
 
     for subgraphs in collections {
         for (sg_id, sub) in subgraphs {
@@ -832,22 +890,30 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| executor::PinData {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        pin_type: p.pin_type.clone(),
-                        links: p.links.clone(),
-                        default_value: p.default_value.clone(),
-                        is_array: p.is_array,
-                    }).collect(),
-                    outputs: sn.outputs.iter().map(|p| executor::PinData {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        pin_type: p.pin_type.clone(),
-                        links: p.links.clone(),
-                        default_value: p.default_value.clone(),
-                        is_array: p.is_array,
-                    }).collect(),
+                    inputs: sn
+                        .inputs
+                        .iter()
+                        .map(|p| executor::PinData {
+                            id: p.id.clone(),
+                            name: p.name.clone(),
+                            pin_type: p.pin_type.clone(),
+                            links: p.links.clone(),
+                            default_value: p.default_value.clone(),
+                            is_array: p.is_array,
+                        })
+                        .collect(),
+                    outputs: sn
+                        .outputs
+                        .iter()
+                        .map(|p| executor::PinData {
+                            id: p.id.clone(),
+                            name: p.name.clone(),
+                            pin_type: p.pin_type.clone(),
+                            links: p.links.clone(),
+                            default_value: p.default_value.clone(),
+                            is_array: p.is_array,
+                        })
+                        .collect(),
                     variable_id: sn.variable_id.clone(),
                     sub_graph_id: Some(sg_id.clone()),
                 };
@@ -856,7 +922,9 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
 
             // 收集局部变量
             for (id, var) in &sub.variables {
-                let value = var.static_value.clone()
+                let value = var
+                    .static_value
+                    .clone()
                     .or_else(|| var.default_value.clone())
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
@@ -879,7 +947,10 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
 
     // 打印变量名，方便调试
     for (id, var) in &variables {
-        info!("[execute_project_data] Variable '{}' (type={})", id, var.var_type);
+        info!(
+            "[execute_project_data] Variable '{}' (type={})",
+            id, var.var_type
+        );
     }
 
     // 3. 构造 GraphData
@@ -892,10 +963,10 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     // 4. 执行
     let mut context = executor::ExecutionContext::new(graph);
     context.set_app_handle(app);
-    
+
     // 添加初始系统日志
     context.log("[System] Received event for execution".to_string());
-    
+
     context.execute()
 }
 
@@ -1018,6 +1089,8 @@ pub fn run() {
             // Nodes 命令
             get_nodes,
             set_nodes,
+            create_node,
+            delete_node,
             update_canvas,
             update_subgraph_io,
             rename_subgraph,

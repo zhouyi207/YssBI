@@ -9,6 +9,8 @@ import NodePalette from "../Nodes/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 import { DEFAULT_VIEWPORT } from "./constants";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
+import { useBackendNodeCreation } from "../Hooks/useBackendNodeCreation";
+
 
 export default function CanvasOverlays({
     canvasRef,
@@ -39,6 +41,9 @@ export default function CanvasOverlays({
         executeAllEvents,
         setCanvas // Needed for internal node centering
     } = useCanvas();
+
+    const { createNode } = useBackendNodeCreation();
+
 
     const [showExecuteMenu, setShowExecuteMenu] = useState(false);
 
@@ -116,7 +121,8 @@ export default function CanvasOverlays({
 
         if (newNode) {
             saveHistory();
-            setNodes((prev) => [...prev, newNode!]);
+            // 使用后端 API 创建节点
+            createNode(newNode);
 
             // 如果有待处理的连接，尝试自动连接
             if (pendingConnection) {
@@ -164,13 +170,13 @@ export default function CanvasOverlays({
                                 <VscChevronDown size={14} />
                             </button>
                         </div>
-                        
+
                         {/* 下拉菜单 */}
                         {showExecuteMenu && (
                             <>
                                 {/* 点击遮罩关闭菜单 */}
-                                <div 
-                                    className="fixed inset-0 z-40" 
+                                <div
+                                    className="fixed inset-0 z-40"
                                     onClick={() => setShowExecuteMenu(false)}
                                 />
                                 <div className="absolute top-full right-0 mt-2 w-48 bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 overflow-hidden">
@@ -264,7 +270,8 @@ export default function CanvasOverlays({
                                 }
                             );
                             if (newNode) {
-                                setNodes((prev) => [...prev, newNode]);
+                                // 使用后端 API 创建节点
+                                createNode(newNode);
                             }
                             setVariableDropMenu(null);
                         }}
@@ -294,7 +301,8 @@ export default function CanvasOverlays({
                                 }
                             );
                             if (newNode) {
-                                setNodes((prev) => [...prev, newNode]);
+                                // 使用后端 API 创建节点
+                                createNode(newNode);
                             }
                             setVariableDropMenu(null);
                         }}

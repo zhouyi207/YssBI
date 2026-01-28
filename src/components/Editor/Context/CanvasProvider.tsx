@@ -14,6 +14,8 @@ import { useProjectStore } from "../Store/useProjectStore";
 import { useCanvasInteraction } from "../Hooks/useCanvasInteraction";
 import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
+import { createNodeInBackend, deleteNodeInBackend } from "../Utils/backendNodeOps";
+
 
 /* ================= Helper Functions ================= */
 
@@ -60,7 +62,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   // 获取真正活跃的编辑器节点（用于添加变量、节点等逻辑）
   const activeEditorNodeSelector = useCallback((s: LayoutState) => activeEditorGroupId ? s.nodes[activeEditorGroupId] : null, [activeEditorGroupId]);
   const activeEditorNode = useLayoutStore(activeEditorNodeSelector);
-  
+
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
 
   const groupNodesSelector = useCallback((s: LayoutState) =>
@@ -247,20 +249,20 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   // --- Synchronization ---
   useEffect(() => {
     let syncTimeout: ReturnType<typeof setTimeout> | null = null;
-    
+
     const unsub = useNodeStore.subscribe((state) => {
       // 清除之前的 timeout
       if (syncTimeout) {
         clearTimeout(syncTimeout);
       }
-      
+
       // 延迟同步，避免频繁更新
       syncTimeout = setTimeout(() => {
         console.log('[Sync] Syncing tabs to backend...');
         useProjectStore.getState().syncWithTabs(state.tabs);
       }, 500);
     });
-    
+
     return () => {
       if (syncTimeout) {
         clearTimeout(syncTimeout);
@@ -320,7 +322,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!result) return;
         p = result.project;
         path = result.path;
-        
+
         // 手动同步到后端状态管理器（触发事件）
         await ProjectService.setProjectData(p, path || undefined, true);
       } else {
@@ -350,10 +352,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       // 打开第一个子图
       const first = Object.values(p.events)[0] || Object.values(p.functions)[0];
       if (first) openSubGraph(first.id, first.name, first.type as any, first);
-      
+
       showToast("项目已加载", "success", 2000);
-    } catch (e) { 
-      console.error(e); 
+    } catch (e) {
+      console.error(e);
       showToast("加载项目失败", "error", 3000);
     }
   }, [openSubGraph, showToast]);
@@ -361,7 +363,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const executeGraph = useCallback(async () => {
     try {
       syncActiveToCollection();
-      
+
       // 获取当前活跃的 tab
       const currentTabId = activeTabIdRef.current;
       if (!currentTabId) {
@@ -370,7 +372,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const st = useProjectStore.getState();
-      
+
       // 检查当前 tab 是否是 event
       const currentEvent = st.events[currentTabId];
       if (!currentEvent) {
@@ -380,9 +382,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // 只执行当前的 event
       const eventsToExecute = { [currentTabId]: currentEvent };
-      
+
       console.log(`[Execute] 执行当前 Event: ${currentEvent.name} (${currentTabId})`);
-      
+
       const res = await ProjectService.executeProject(
         st.globalVariables,
         eventsToExecute,  // 只传入当前 event
@@ -390,7 +392,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.macros,
         st.dataframes      // 确保也传入 dataframes 元数据
       );
-      
+
       // 显示所有日志输出
       const logs = res.split('\n').filter(l => l.trim());
       logs.forEach(log => {
@@ -405,11 +407,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           showToast(log, "info", 2000);
         }
       });
-      
+
       showToast(`执行完成: ${currentEvent.name}`, "success", 2000);
-    } catch (e) { 
+    } catch (e) {
       console.error("执行失败:", e);
-      showToast(`执行失败: ${e}`, "error", 5000); 
+      showToast(`执行失败: ${e}`, "error", 5000);
     }
   }, [syncActiveToCollection, showToast]);
 
@@ -417,7 +419,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       syncActiveToCollection();
       const st = useProjectStore.getState();
-      
+
       const eventCount = Object.keys(st.events).length;
       if (eventCount === 0) {
         showToast("没有可执行的 Event", "warning", 3000);
@@ -425,7 +427,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
-      
+
       const res = await ProjectService.executeProject(
         st.globalVariables,
         st.events,  // 执行所有 events
@@ -433,7 +435,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.macros,
         st.dataframes // 确保也传入 dataframes 元数据
       );
-      
+
       // 显示所有日志输出
       const logs = res.split('\n').filter(l => l.trim());
       logs.forEach(log => {
@@ -448,11 +450,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           showToast(log, "info", 2000);
         }
       });
-      
+
       showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
-    } catch (e) { 
+    } catch (e) {
       console.error("执行失败:", e);
-      showToast(`执行失败: ${e}`, "error", 5000); 
+      showToast(`执行失败: ${e}`, "error", 5000);
     }
   }, [syncActiveToCollection, showToast]);
 
@@ -549,10 +551,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const id = `var-${crypto.randomUUID()}`;
     const dataType = type as VariableDataType;
     const defaultValue = getDefaultValueForType(dataType);
-    
+
     // 创建新的 VariableDefinition
     const v = createPrimitiveVariable(id, finalName, dataType, defaultValue);
-    
+
     // 设置作用域
     if (isGlobal) {
       v.scope = { type: "global" };
@@ -577,14 +579,14 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateVariable = useCallback((id: string, data: Partial<VariableDefinition>) => {
     const st = useProjectStore.getState();
     const isGlobal = !!st.globalVariables[id];
-    
+
     if (isGlobal) {
       st.updateGlobalVariable(id, data);
     } else {
       // 尝试从所有标签页中找到该变量并更新
       const nodeStore = useNodeStore.getState();
       let found = false;
-      
+
       for (const [tid, tabState] of Object.entries(nodeStore.tabs)) {
         if (tabState.variables[id]) {
           nodeStore.updateVariable(tid, id, data);
@@ -592,7 +594,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           break;
         }
       }
-      
+
       if (!found) {
         console.warn(`[CanvasProvider] Variable ${id} not found in any scope.`);
       }
@@ -641,9 +643,11 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     const sIds = new Set(selectedNodeIdsRef.current);
     if (sIds.size === 0) return;
 
+    let idsToDelete = new Set<string>();
+
     setNodes((prev: BaseNode[]) => {
       const nodesToDelete = prev.filter(n => sIds.has(n.id) && !n.isInternal);
-      const idsToDelete = new Set(nodesToDelete.map(n => n.id));
+      idsToDelete = new Set(nodesToDelete.map(n => n.id));
       if (idsToDelete.size === 0) return prev;
 
       const pinsToDelete = new Set<string>();
@@ -672,7 +676,17 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       });
     });
     setSelectedNodeIds([]);
+
+    // 同步删除到后端
+    const tid = activeTabIdRef.current;
+    if (tid && idsToDelete.size > 0) {
+      console.log(`[BACKEND SYNC] Deleting nodes from backend:`, Array.from(idsToDelete));
+      Promise.all(Array.from(idsToDelete).map(id => deleteNodeInBackend(tid, id))).catch(e => {
+        console.error('[CanvasProvider] Failed to sync node deletions:', e);
+      });
+    }
   }, [setNodes, setSelectedNodeIds]);
+
 
   const clipboardRef = useRef<BaseNode[]>([]);
   const copy = useCallback(() => {
@@ -722,7 +736,16 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setNodes((prev: BaseNode[]) => [...prev, ...newNodes]);
     setSelectedNodeIds(newSelectedIds);
+
+    // 同步粘贴的节点到后端
+    const tid = activeTabIdRef.current;
+    if (tid) {
+      Promise.all(newNodes.map(n => createNodeInBackend(tid, n))).catch(e => {
+        console.error('[CanvasProvider] Failed to sync pasted nodes:', e);
+      });
+    }
   }, [saveHistory, setNodes, setSelectedNodeIds]);
+
 
   const {
     contextMenu, setContextMenu,
@@ -748,7 +771,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const checkAndInitialize = () => {
       console.log('[CanvasProvider] checkAndInitialize called');
-      
+
       const st = useProjectStore.getState();
       const layoutStore = useLayoutStore.getState();
       const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
@@ -789,7 +812,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     // 立即执行一次（因为 App.tsx 已经等待 initProjectSync 完成）
     checkAndInitialize();
 
-    return () => {};
+    return () => { };
   }, [openSubGraph]);
 
   const handleSetActiveGroupId = useCallback((id: string) => useLayoutStore.getState().setActiveGroup(id), []);
@@ -923,7 +946,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     functions, addFunction, updateFunction, deleteFunction,
     macros, addMacro, updateMacro, deleteMacro,
     dataframes, addDataFrame, updateDataFrame, deleteDataFrame,
-    undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory,     connectPins,
+    undo, redo, copy, paste, cut, deleteSelected, canUndo: history.past.length > 0, canRedo: history.future.length > 0, saveHistory, connectPins,
     activeGroupId: activeGroupId || 'default_editor',
     activeEditorGroupId: activeEditorGroupId || 'default_editor',
     setActiveGroupId: handleSetActiveGroupId,

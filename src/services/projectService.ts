@@ -285,6 +285,31 @@ export class ProjectService {
         await invoke("set_nodes", { subgraphId, nodes });
     }
 
+    /**
+     * 创建单个节点（后端生成和验证）
+     * @param subgraphId 子图ID
+     * @param node 节点数据
+     * @returns 创建后的节点数据
+     */
+    static async createNode(subgraphId: string, node: any): Promise<any> {
+        console.log('[ProjectService.createNode] Creating node:', { subgraphId, nodeId: node.id, nodeType: node.type });
+        const result = await invoke("create_node", { subgraphId, node });
+        console.log('[ProjectService.createNode] Node created successfully:', result);
+        return result;
+    }
+
+    /**
+     * 删除单个节点
+     * @param subgraphId 子图ID
+     * @param nodeId 节点ID
+     */
+    static async deleteNode(subgraphId: string, nodeId: string): Promise<void> {
+        console.log('[ProjectService.deleteNode] Deleting node:', { subgraphId, nodeId });
+        await invoke("delete_node", { subgraphId, nodeId });
+        console.log('[ProjectService.deleteNode] Node deleted successfully');
+    }
+
+
     static async updateCanvas(subgraphId: string, canvas: CanvasState): Promise<void> {
         await invoke("update_canvas", { subgraphId, canvas });
     }
