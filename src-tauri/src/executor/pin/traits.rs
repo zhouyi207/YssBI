@@ -82,29 +82,50 @@ pub trait OutDataPin: DataPin {
     fn remove_downstream(&self, in_pin_id: PinId) -> NodeResult<()>;
 }
 
-/// 执行 Pin：负责流程控制
+/// 执行 Pin 基础 Trait：负责流程控制
 pub trait ExecPin: BasePin {
-    /// 触发执行
-    fn trigger(&self) -> ExecutionResult<()>;
-
     /// 获取执行状态
     fn state(&self) -> ExecPinState;
 
     /// 设置执行状态
     fn set_state(&self, state: ExecPinState);
+}
 
-    /// 添加依赖的数据 Pin
-    fn add_dependency(&self, pin_id: PinId) -> NodeResult<()>;
+/// 输入执行 Pin：接收上游激活信号
+pub trait InExecPin: ExecPin {
+    /// 连接到上游输出执行 Pin
+    fn link_upstream(&self, out_exec_pin_id: PinId) -> NodeResult<()>;
 
-    /// 移除依赖
-    fn remove_dependency(&self, pin_id: PinId) -> NodeResult<()>;
+    /// 断开上游连接
+    fn unlink_upstream(&self) -> NodeResult<()>;
 
-    /// 检查所有依赖是否就绪
+    /// 获取上游执行 Pin ID
+    fn upstream(&self) -> Option<PinId>;
+
+    /// 添加数据依赖
+    fn add_data_dependency(&self, pin_id: PinId) -> NodeResult<()>;
+
+    /// 移除数据依赖
+    fn remove_data_dependency(&self, pin_id: PinId) -> NodeResult<()>;
+
+    /// 检查所有数据依赖是否就绪
     fn check_dependencies_ready(&self) -> bool;
 
-    /// 连接到下游执行 Pin
-    fn connect_to(&self, next_pin_id: PinId) -> NodeResult<()>;
+    /// 触发执行
+    fn trigger(&self) -> ExecutionResult<()>;
+}
 
-    /// 获取下游执行 Pin
-    fn next(&self) -> Option<PinId>;
+/// 输出执行 Pin：向下游发送激活信号
+pub trait OutExecPin: ExecPin {
+    /// 连接到下游输入执行 Pin
+    fn connect_downstream(&self, in_exec_pin_id: PinId) -> NodeResult<()>;
+
+    /// 断开下游连接
+    fn disconnect_downstream(&self, in_exec_pin_id: PinId) -> NodeResult<()>;
+
+    /// 获取所有下游执行 Pin ID
+    fn downstream(&self) -> Vec<PinId>;
+
+    /// 触发所有下游执行
+    fn trigger_downstream(&self) -> ExecutionResult<()>;
 }

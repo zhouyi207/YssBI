@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::executor::error::{ExecutionResult, NodeResult};
 use crate::executor::types::DataValue;
 use crate::executor::node::NodeId;
-use super::traits::{BasePin, DataPin, ExecPin, InDataPin, OutDataPin};
+use super::traits::{BasePin, DataPin, ExecPin, InDataPin, OutDataPin, InExecPin, OutExecPin};
 use super::types::{DataPinEvent, DataPinState, ExecPinState, PinId};
 
 /// 泛型输入数据 Pin
@@ -328,50 +328,43 @@ impl OutDataPin for GenericOutDataPin {
     }
 }
 
-/// 泛型执行 Pin
-pub struct GenericExecPin {
+/// 泛型输入执行 Pin
+pub struct GenericInExecPin {
     id: PinId,
     node_id: NodeId,
     name: String,
     state: RwLock<ExecPinState>,
-    dependencies: RwLock<Vec<PinId>>,
-    next_pin: RwLock<Option<PinId>>,
-    executor: Mutex<Option<Box<dyn Fn() -> ExecutionResult<()> + Send + Sync + 'static>>>,
+    upstream: RwLock<Option<PinId>>,
+    data_dependencies: RwLock<Vec<PinId>>,
 }
 
-impl GenericExecPin {
+impl GenericInExecPin {
     pub fn new(node_id: NodeId, name: impl Into<String>) -> Self {
         Self {
             id: Uuid::new_v4(),
             node_id,
             name: name.into(),
             state: RwLock::new(ExecPinState::Idle),
-            dependencies: RwLock::new(Vec::new()),
-            next_pin: RwLock::new(None),
-            executor: Mutex::new(None),
+            upstream: RwLock::new(None),
+            data_dependencies: RwLock::new(Vec::new()),
         }
-    }
-
-    pub fn set_executor(&self, executor: Box<dyn Fn() -> ExecutionResult<()> + Send + Sync + 'static>) {
-        *self.executor.lock().unwrap() = Some(executor);
     }
 }
 
-impl std::fmt::Debug for GenericExecPin {
+impl std::fmt::Debug for GenericInExecPin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GenericExecPin")
+        f.debug_struct("GenericInExecPin")
             .field("id", &self.id)
             .field("node_id", &self.node_id)
             .field("name", &self.name)
             .field("state", &self.state)
-            .field("dependencies", &self.dependencies)
-            .field("next_pin", &self.next_pin)
-            .field("executor", &format!("<{}>", if self.executor.lock().unwrap().is_some() { "Some" } else { "None" }))
+            .field("upstream", &self.upstream)
+            .field("data_dependencies", &self.data_dependencies)
             .finish()
     }
 }
 
-impl BasePin for GenericExecPin {
+impl BasePin for GenericInExecPin {
     fn id(&self) -> PinId {
         self.id
     }
@@ -393,35 +386,7 @@ impl BasePin for GenericExecPin {
     }
 }
 
-impl ExecPin for GenericExecPin {
-    fn trigger(&self) -> ExecutionResult<()> {
-        // 检查状态
-        let current_state = self.state();
-        if current_state != ExecPinState::Idle && current_state != ExecPinState::Blocked {
-            return Err(crate::executor::error::ExecutionError::Generic(
-                format!("执行 Pin 状态不正确：{:?}", current_state)
-            ));
-        }
-
-        // 设置状态为 Running
-        self.set_state(ExecPinState::Running);
-
-        // 执行
-        let result = if let Some(executor) = self.executor.lock().unwrap().as_ref() {
-            executor()
-        } else {
-            Ok(())
-        };
-
-        // 更新状态
-        match result {
-            Ok(_) => self.set_state(ExecPinState::Completed),
-            Err(_) => self.set_state(ExecPinState::Failed),
-        }
-
-        result
-    }
-
+impl ExecPin for GenericInExecPin {
     fn state(&self) -> ExecPinState {
         *self.state.read().unwrap()
     }
@@ -429,17 +394,33 @@ impl ExecPin for GenericExecPin {
     fn set_state(&self, state: ExecPinState) {
         *self.state.write().unwrap() = state;
     }
+}
 
-    fn add_dependency(&self, pin_id: PinId) -> NodeResult<()> {
-        let mut deps = self.dependencies.write().unwrap();
+impl InExecPin for GenericInExecPin {
+    fn link_upstream(&self, out_exec_pin_id: PinId) -> NodeResult<()> {
+        *self.upstream.write().unwrap() = Some(out_exec_pin_id);
+        Ok(())
+    }
+
+    fn unlink_upstream(&self) -> NodeResult<()> {
+        *self.upstream.write().unwrap() = None;
+        Ok(())
+    }
+
+    fn upstream(&self) -> Option<PinId> {
+        *self.upstream.read().unwrap()
+    }
+
+    fn add_data_dependency(&self, pin_id: PinId) -> NodeResult<()> {
+        let mut deps = self.data_dependencies.write().unwrap();
         if !deps.contains(&pin_id) {
             deps.push(pin_id);
         }
         Ok(())
     }
 
-    fn remove_dependency(&self, pin_id: PinId) -> NodeResult<()> {
-        let mut deps = self.dependencies.write().unwrap();
+    fn remove_data_dependency(&self, pin_id: PinId) -> NodeResult<()> {
+        let mut deps = self.data_dependencies.write().unwrap();
         if let Some(pos) = deps.iter().position(|&id| id == pin_id) {
             deps.remove(pos);
         }
@@ -450,12 +431,109 @@ impl ExecPin for GenericExecPin {
         true
     }
 
-    fn connect_to(&self, next_pin_id: PinId) -> NodeResult<()> {
-        *self.next_pin.write().unwrap() = Some(next_pin_id);
+    fn trigger(&self) -> ExecutionResult<()> {
+        let current_state = self.state();
+        if current_state != ExecPinState::Idle && current_state != ExecPinState::Blocked {
+            return Err(crate::executor::error::ExecutionError::Generic(
+                format!("执行 Pin 状态不正确：{:?}", current_state)
+            ));
+        }
+
+        self.set_state(ExecPinState::Running);
+        self.set_state(ExecPinState::Completed);
+        Ok(())
+    }
+}
+
+/// 泛型输出执行 Pin
+pub struct GenericOutExecPin {
+    id: PinId,
+    node_id: NodeId,
+    name: String,
+    state: RwLock<ExecPinState>,
+    downstream: RwLock<Vec<PinId>>,
+}
+
+impl GenericOutExecPin {
+    pub fn new(node_id: NodeId, name: impl Into<String>) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            node_id,
+            name: name.into(),
+            state: RwLock::new(ExecPinState::Idle),
+            downstream: RwLock::new(Vec::new()),
+        }
+    }
+}
+
+impl std::fmt::Debug for GenericOutExecPin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GenericOutExecPin")
+            .field("id", &self.id)
+            .field("node_id", &self.node_id)
+            .field("name", &self.name)
+            .field("state", &self.state)
+            .field("downstream", &self.downstream)
+            .finish()
+    }
+}
+
+impl BasePin for GenericOutExecPin {
+    fn id(&self) -> PinId {
+        self.id
+    }
+
+    fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl ExecPin for GenericOutExecPin {
+    fn state(&self) -> ExecPinState {
+        *self.state.read().unwrap()
+    }
+
+    fn set_state(&self, state: ExecPinState) {
+        *self.state.write().unwrap() = state;
+    }
+}
+
+impl OutExecPin for GenericOutExecPin {
+    fn connect_downstream(&self, in_exec_pin_id: PinId) -> NodeResult<()> {
+        let mut downstream = self.downstream.write().unwrap();
+        if !downstream.contains(&in_exec_pin_id) {
+            downstream.push(in_exec_pin_id);
+        }
         Ok(())
     }
 
-    fn next(&self) -> Option<PinId> {
-        *self.next_pin.read().unwrap()
+    fn disconnect_downstream(&self, in_exec_pin_id: PinId) -> NodeResult<()> {
+        let mut downstream = self.downstream.write().unwrap();
+        if let Some(pos) = downstream.iter().position(|&id| id == in_exec_pin_id) {
+            downstream.remove(pos);
+        }
+        Ok(())
+    }
+
+    fn downstream(&self) -> Vec<PinId> {
+        self.downstream.read().unwrap().clone()
+    }
+
+    fn trigger_downstream(&self) -> ExecutionResult<()> {
+        self.set_state(ExecPinState::Running);
+        self.set_state(ExecPinState::Completed);
+        Ok(())
     }
 }

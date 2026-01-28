@@ -1,15 +1,15 @@
 use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
-use crate::executor::pin::{GenericInDataPin, GenericExecPin};
+use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
 
 pub fn register(registry: &NodeRegistry) {
     // 1. IfElse Node
     let if_else = GenericNode::new_prototype("if_else", "If Else");
-    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
+    if_else.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
     if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", "bool"));
-    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "True"));
-    if_else.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "False"));
+    if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "True"));
+    if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "False"));
     
     if_else.set_flow_processor(Box::new(|ctx, node| {
         let cond = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
@@ -26,9 +26,9 @@ pub fn register(registry: &NodeRegistry) {
 
     // 2. Sequence Node
     let seq = GenericNode::new_prototype("sequence", "Sequence");
-    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
-    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Then 0"));
-    seq.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Then 1"));
+    seq.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    seq.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Then 0"));
+    seq.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Then 1"));
     
     seq.set_flow_processor(Box::new(|ctx, node| {
         // 执行第一个分支，然后由 ExecutionContext 自动处理后续？

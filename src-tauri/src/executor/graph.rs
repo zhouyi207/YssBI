@@ -61,33 +61,43 @@ impl RuntimeGraph {
         // 创建输入 Pin
         for pin_data in &node_data.inputs {
             if pin_data.pin_type == "exec" {
-                // 执行 Pin 暂时跳过，后续处理
-                continue;
+                // 创建输入执行 Pin
+                use crate::executor::pin::GenericInExecPin;
+                let exec_pin = GenericInExecPin::new(
+                    runtime_id,
+                    &pin_data.name,
+                );
+                node.add_in_exec_pin(exec_pin);
+            } else {
+                use crate::executor::pin::GenericInDataPin;
+                let pin = GenericInDataPin::new(
+                    runtime_id,
+                    &pin_data.name,
+                    &pin_data.pin_type,
+                );
+                node.add_input(pin);
             }
-            
-            use crate::executor::pin::GenericInDataPin;
-            let pin = GenericInDataPin::new(
-                runtime_id,
-                &pin_data.name,
-                &pin_data.pin_type,
-            );
-            node.add_input(pin);
         }
 
         // 创建输出 Pin
         for pin_data in &node_data.outputs {
             if pin_data.pin_type == "exec" {
-                // 执行 Pin 暂时跳过，后续处理
-                continue;
+                // 创建输出执行 Pin
+                use crate::executor::pin::GenericOutExecPin;
+                let exec_pin = GenericOutExecPin::new(
+                    runtime_id,
+                    &pin_data.name,
+                );
+                node.add_out_exec_pin(exec_pin);
+            } else {
+                use crate::executor::pin::GenericOutDataPin;
+                let pin = GenericOutDataPin::new(
+                    runtime_id,
+                    &pin_data.name,
+                    &pin_data.pin_type,
+                );
+                node.add_output(pin);
             }
-            
-            use crate::executor::pin::GenericOutDataPin;
-            let pin = GenericOutDataPin::new(
-                runtime_id,
-                &pin_data.name,
-                &pin_data.pin_type,
-            );
-            node.add_output(pin);
         }
 
         // 注册节点到连接管理器

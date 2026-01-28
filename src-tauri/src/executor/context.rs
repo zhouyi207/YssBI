@@ -22,6 +22,8 @@ pub struct ExecutionContext {
     pin_to_node: HashMap<String, String>,
     /// 调用栈
     call_stack: Vec<String>,
+    /// 当前执行栈（用于检测循环）
+    execution_stack: Vec<String>,
     /// Tauri 应用句柄（可选）
     app_handle: Option<AppHandle>,
 }
@@ -42,6 +44,14 @@ impl ExecutionContext {
 
         // 建立节点和针脚映射
         for node in graph.nodes {
+            eprintln!("[ExecutionContext::new] Loading node: {} (type: {}), inputs: {}, outputs: {}", 
+                      node.id, node.node_type, node.inputs.len(), node.outputs.len());
+            for inp in &node.inputs {
+                eprintln!("  Input pin: {} (type: {}), links: {}", inp.name, inp.pin_type, inp.links.len());
+            }
+            for outp in &node.outputs {
+                eprintln!("  Output pin: {} (type: {}), links: {}", outp.name, outp.pin_type, outp.links.len());
+            }
             for pin in &node.inputs {
                 pin_to_node.insert(pin.id.clone(), node.id.clone());
             }
@@ -56,6 +66,7 @@ impl ExecutionContext {
             pin_to_node,
             variables: initial_vars,
             call_stack: Vec::new(),
+            execution_stack: Vec::new(),
             app_handle: None,
             logs: Vec::new(),
         }
@@ -87,6 +98,20 @@ impl ExecutionContext {
 
     /// 内部：执行流程
     fn run_flow_internal(&mut self, node_id: &str, output_exec_name: &str) -> Result<(), String> {
+        // 检测循环执行：如果当前节点已在执行栈中，说明有循环连接
+        if self.execution_stack.contains(&node_id.to_string()) {
+            let cycle_info = format!(
+                "Cycle detected: execution stack = {:?}",
+                self.execution_stack
+            );
+            info!("[ERROR] {}", cycle_info);
+            self.logs.push(format!("[ERROR] {}", cycle_info));
+            return Err(cycle_info);
+        }
+
+        // 将当前节点加入执行栈
+        self.execution_stack.push(node_id.to_string());
+
         let node = self.nodes.get(node_id).ok_or("Node not found")?.clone();
         let log_msg = format!(">>> Executing Node: {} ({})", node.title, node.node_type);
         info!("{}", log_msg);
@@ -104,23 +129,41 @@ impl ExecutionContext {
 
         // 如果是返回操作
         if next_exec_name == "__RETURN__" {
+            self.execution_stack.pop();
             return Ok(());
         }
+        
         if !next_exec_name.is_empty() {
             self.trigger_next_flow(node_id, &next_exec_name)?;
         }
+        
+        // 从执行栈移除当前节点
+        self.execution_stack.pop();
         Ok(())
     }
 
     /// 触发下一个流程节点
     fn trigger_next_flow(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
         let node = self.nodes.get(node_id).unwrap();
+        
+        eprintln!("[trigger_next_flow] Looking for pin '{}' in node '{}' (type: {})", 
+                  pin_name, node.id, node.node_type);
+        eprintln!("[trigger_next_flow] Node has {} inputs, {} outputs", 
+                  node.inputs.len(), node.outputs.len());
+        
+        // 同时在 inputs 和 outputs 中查找执行 Pin（因为 exec pins 可能在任何一个地方）
         let exec_pin = node
             .outputs
             .iter()
-            .find(|p| p.pin_type == "exec" && p.name.to_lowercase() == pin_name.to_lowercase());
+            .find(|p| p.pin_type == "exec" && p.name.to_lowercase() == pin_name.to_lowercase())
+            .or_else(|| {
+                node.inputs
+                    .iter()
+                    .find(|p| p.pin_type == "exec" && p.name.to_lowercase() == pin_name.to_lowercase())
+            });
 
         if let Some(pin) = exec_pin {
+            eprintln!("[trigger_next_flow] Found pin '{}' with {} links", pin.name, pin.links.len());
             if !pin.links.is_empty() {
                 let next_pin_id = &pin.links[0];
                 let next_node_id = self
@@ -130,6 +173,8 @@ impl ExecutionContext {
                     .ok_or("Target node not found")?;
                 return self.run_flow_internal(&next_node_id, "Out");
             }
+        } else {
+            eprintln!("[trigger_next_flow] Pin '{}' not found!", pin_name);
         }
         Ok(())
     }
@@ -289,22 +334,22 @@ impl ExecutionContextTrait for ExecutionContext {
             .inner_size(800.0, 600.0)
             .min_inner_size(400.0, 300.0)
             .resizable(true)
-            .visible(false)
+            .visible(false)  // 窗口创建后立即显示
             .decorations(false)  // 禁用系统窗口装饰，使用自定义标题栏
             .transparent(false)  // 不透明背景
             .center()            // 居中显示
             .build() {
                 Ok(_) => {
-                    info!("Window '{}' opened successfully", label_clone);
+                    info!("Window '{}' created and displayed successfully", label_clone);
                 }
                 Err(e) => {
-                    info!("Failed to create window '{}': {}", label_clone, e);
+                    info!("[ERROR] Failed to create window '{}': {}", label_clone, e);
                 }
             }
         });
 
         // 立即返回，不等待窗口创建完成
-        let success_msg = format!("Window '{}' creation initiated", label);
+        let success_msg = format!("Window '{}' creation initiated (URL: {})", label, url);
         info!("{}", success_msg);
         self.logs.push(success_msg);
 

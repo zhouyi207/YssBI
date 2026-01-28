@@ -1,17 +1,22 @@
 use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
-use crate::executor::pin::{GenericInDataPin, GenericExecPin};
+use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
 
 pub fn register(registry: &NodeRegistry) {
     let print_node = GenericNode::new_prototype("print", "Print");
-    print_node.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
-    print_node.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    print_node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    print_node.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     print_node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Value", "string"));
     
     print_node.set_flow_processor(Box::new(|ctx, node| {
-        let val = ctx.get_pin_value(&node.inputs[0].id);
-        ctx.log(format!("[Print] {}", val));
+        // Safely get input value
+        if !node.inputs.is_empty() {
+            let val = ctx.get_pin_value(&node.inputs[0].id);
+            ctx.log(format!("[Print] {}", val));
+        } else {
+            ctx.log("[Print] No input value".to_string());
+        }
         Ok("Out".into())
     }));
     

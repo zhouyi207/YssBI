@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
-use crate::executor::pin::{GenericOutDataPin, GenericInDataPin, GenericExecPin};
+use crate::executor::pin::{GenericOutDataPin, GenericInDataPin, GenericOutExecPin, GenericInExecPin};
 use serde_json::Value;
 
 pub fn register(registry: &NodeRegistry) {
@@ -22,8 +22,8 @@ pub fn register(registry: &NodeRegistry) {
 
     // 2. Set Variable
     let set_var = GenericNode::new_prototype("set_variable", "Set Variable");
-    set_var.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
-    set_var.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    set_var.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    set_var.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     set_var.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Value", "object"));
     set_var.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Value", "object"));
     

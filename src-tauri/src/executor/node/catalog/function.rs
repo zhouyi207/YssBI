@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
-use crate::executor::pin::GenericExecPin;
+use crate::executor::pin::{GenericOutExecPin, GenericInExecPin};
 
 pub fn register(registry: &NodeRegistry) {
     // 1. Call Function
     let call_f = GenericNode::new_prototype("call_function", "Call Function");
-    call_f.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
-    call_f.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    call_f.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    call_f.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     
     call_f.set_flow_processor(Box::new(|ctx, node| {
         if let Some(sub_graph_id) = &node.sub_graph_id {
@@ -33,8 +33,8 @@ pub fn register(registry: &NodeRegistry) {
 
     // 2. Call Macro
     let call_m = GenericNode::new_prototype("call_macro", "Call Macro");
-    call_m.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "In"));
-    call_m.add_exec_pin(GenericExecPin::new(uuid::Uuid::nil(), "Out"));
+    call_m.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    call_m.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     
     call_m.set_flow_processor(Box::new(|ctx, node| {
         if let Some(sub_graph_id) = &node.sub_graph_id {
