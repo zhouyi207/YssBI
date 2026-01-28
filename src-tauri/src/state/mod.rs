@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter};
 use polars::prelude::*;
 
 use crate::project::{
-    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType, DataFrameData, DataFrameColumn,
+    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType, DataFrameData,
 };
 use crate::schema::VariableDefinition;
 

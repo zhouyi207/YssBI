@@ -2,12 +2,12 @@
 //!
 //! 负责图的执行逻辑。
 
-use crate::nodes::{
+use crate::executor::{
     get_all_node_definitions, ExecutionContextTrait, GraphData, NodeData, NodeDefinition,
 };
 use serde_json::Value;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
 /// 执行上下文
@@ -160,7 +160,8 @@ impl ExecutionContext {
             Value::Null
         };
 
-        let pin_name = node.outputs.iter().find(|p| p.id == pin_id)
+        let pin_name = node.inputs.iter().chain(node.outputs.iter())
+            .find(|p| p.id == pin_id)
             .map(|p| p.name.clone())
             .unwrap_or_else(|| pin_id.to_string());
 
@@ -184,39 +185,53 @@ impl ExecutionContextTrait for ExecutionContext {
 
         let node = self.nodes.get(&node_id).unwrap().clone();
 
-        // 特殊处理：function_entry 或 macro_inputs 的输出针脚
-        if (node.node_type == "function_entry" || node.node_type == "macro_inputs")
-            && !self.call_stack.is_empty()
-        {
-            let pin = node.outputs.iter().find(|p| p.id == pin_id);
-            if let Some(p) = pin {
+        // 1. 检查是否是输出针脚。如果是输出针脚，直接计算并返回。
+        if let Some(output_pin) = node.outputs.iter().find(|p| p.id == pin_id) {
+            // 特殊处理 A：如果是 function_entry 或 macro_inputs 的输出针脚，需要从调用端获取数据
+            if (node.node_type == "function_entry" || node.node_type == "macro_inputs")
+                && !self.call_stack.is_empty()
+            {
                 let caller_node_id = self.call_stack.last().unwrap().clone();
                 let caller_node = self.nodes.get(&caller_node_id).unwrap().clone();
-                if let Some(caller_input) = caller_node.inputs.iter().find(|tip| tip.name == p.name)
+                if let Some(caller_input) = caller_node.inputs.iter().find(|tip| tip.name == output_pin.name)
                 {
                     return self.get_pin_value(&caller_input.id);
                 }
             }
+            
+            // 特殊处理 B：如果是 call_function 或 call_macro 的输出针脚，需要从函数内部的 return/outputs 节点获取
+            let sub_graph_id = node.sub_graph_id.clone();
+            let return_node_type = if node.node_type == "call_function" { "function_return" } else { "macro_outputs" };
+            
+            // 找到对应的 return 节点中的输入针脚 ID
+            let target_pin_id = self.nodes.values()
+                .find(|n| n.node_type == return_node_type && n.sub_graph_id == sub_graph_id)
+                .and_then(|ret_node| {
+                    ret_node.inputs.iter()
+                        .find(|tip| tip.name == output_pin.name)
+                        .map(|tip| tip.id.clone())
+                });
+            
+            if let Some(pin_id) = target_pin_id {
+                return self.get_pin_value(&pin_id);
+            }
+
+            // 普通输出针脚，调用节点的数据处理器来计算结果
+            return self.evaluate_node_output(&node_id, pin_id);
         }
 
-        let pin = node
-            .inputs
-            .iter()
-            .chain(node.outputs.iter())
-            .find(|p| p.id == pin_id)
-            .unwrap();
+        // 2. 如果是输入针脚，则需要沿着连接找到上游的输出针脚
+        if let Some(input_pin) = node.inputs.iter().find(|p| p.id == pin_id) {
+            if input_pin.links.is_empty() {
+                return input_pin.default_value.clone().unwrap_or(Value::Null);
+            }
 
-        if pin.links.is_empty() {
-            return pin.default_value.clone().unwrap_or(Value::Null);
+            // 获取第一个连接的上游针脚 ID
+            let source_pin_id = &input_pin.links[0];
+            return self.get_pin_value(source_pin_id);
         }
 
-        let source_pin_id = &pin.links[0];
-        let source_node_id = match self.pin_to_node.get(source_pin_id) {
-            Some(id) => id.clone(),
-            None => return Value::Null,
-        };
-
-        self.evaluate_node_output(&source_node_id, source_pin_id)
+        Value::Null
     }
 
     fn get_variable(&self, var_id: &str) -> Option<&Value> {
@@ -238,7 +253,7 @@ impl ExecutionContextTrait for ExecutionContext {
     }
 
     fn run_flow(&mut self, node_id: &str, output_pin: &str) -> Result<(), String> {
-        self.run_flow_internal(node_id, output_pin)
+        self.trigger_next_flow(node_id, output_pin)
     }
 
     fn push_call_stack(&mut self, node_id: String) {

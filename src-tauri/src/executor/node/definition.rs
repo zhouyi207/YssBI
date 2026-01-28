@@ -2,8 +2,8 @@
 //!
 //! 定义 NodeDefinition 结构体及其序列化逻辑。
 
-use super::processors::{DataProcessor, FlowProcessor};
-use super::types::PinDefinition;
+use crate::executor::{DataProcessor, FlowProcessor};
+use super::data::PinDefinition;
 use serde::{Deserialize, Serialize};
 
 /// 节点元数据定义
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct NodeDefinition {
     /// 节点类型标识符
     pub node_type: String,
-    /// 所属分类 (层级路径，如 ["Math", "Operators"])
+    /// 所属分类 (层级路径)
     pub category: Vec<String>,
     /// 显示标题
     pub title: String,
@@ -23,13 +23,12 @@ pub struct NodeDefinition {
     pub ui_style: String,
     /// 节点描述
     pub description: Option<String>,
-    /// 数据处理器（计算输出值）
+    /// 数据处理器
     pub data_processor: Option<DataProcessor>,
-    /// 流程处理器（控制执行流）
+    /// 流程处理器
     pub flow_processor: Option<FlowProcessor>,
 }
 
-// 为 NodeDefinition 手动实现 Serialize
 impl Serialize for NodeDefinition {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -58,7 +57,6 @@ impl Serialize for NodeDefinition {
     }
 }
 
-// 反序列化通常不需要（从后端发往前端）
 impl<'de> Deserialize<'de> for NodeDefinition {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where

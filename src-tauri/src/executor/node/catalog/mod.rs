@@ -7,7 +7,7 @@ pub mod variable;
 pub mod data;
 pub mod visualization;
 
-use crate::nodes::definition::NodeDefinition;
+use super::definition::NodeDefinition;
 
 pub fn get_all_builtin_nodes() -> Vec<NodeDefinition> {
     let mut nodes = Vec::new();

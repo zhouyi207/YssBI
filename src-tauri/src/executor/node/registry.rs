@@ -1,6 +1,4 @@
 //! 节点注册中心
-//!
-//! 存放所有内置节点的定义。
 
 use super::catalog;
 use super::definition::NodeDefinition;

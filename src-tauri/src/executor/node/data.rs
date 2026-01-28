@@ -1,11 +1,11 @@
-//! 节点类型定义模块
+//! 节点数据结构定义
 //!
-//! 定义节点相关的数据结构。
+//! 定义与前端交互以及持久化存储使用的节点和图数据结构。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Pin 数据（运行时）
+/// Pin 数据（运行时/持久化）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PinData {
     pub id: String,
@@ -42,7 +42,7 @@ impl Default for PinDefinition {
     }
 }
 
-/// 节点数据（运行时）
+/// 节点数据（运行时/持久化）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NodeData {
     pub id: String,

@@ -1,5 +1,5 @@
-use crate::nodes::definition::NodeDefinition;
-use crate::nodes::types::PinDefinition;
+use crate::executor::node::definition::NodeDefinition;
+use crate::executor::node::data::PinDefinition;
 
 pub fn get_nodes() -> Vec<NodeDefinition> {
     vec![

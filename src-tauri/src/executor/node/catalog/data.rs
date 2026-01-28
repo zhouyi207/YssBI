@@ -1,5 +1,5 @@
-use crate::nodes::definition::NodeDefinition;
-use crate::nodes::types::PinDefinition;
+use crate::executor::node::definition::NodeDefinition;
+use crate::executor::node::data::PinDefinition;
 use serde_json::Value;
 
 pub fn get_nodes() -> Vec<NodeDefinition> {
@@ -25,8 +25,6 @@ fn create_get_dataframe() -> NodeDefinition {
         }],
         data_processor: Some(|_ctx, node, _pin_id| {
             if let Some(df_id) = &node.variable_id {
-                // 后端执行时需要从 state 获取实际数据，目前先返回 Null
-                // 实际实现应该在 context 中支持 get_dataframe
                 Value::String(df_id.clone())
             } else {
                 Value::Null
@@ -51,7 +49,7 @@ fn create_get_column() -> NodeDefinition {
         }],
         outputs: vec![PinDefinition {
             name: "Column".into(),
-            pin_type: "object".into(), // 使用 object 配合 is_array: true
+            pin_type: "object".into(),
             default_value: None,
             is_array: true,
         }],

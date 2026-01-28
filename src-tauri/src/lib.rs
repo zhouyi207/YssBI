@@ -3,13 +3,12 @@
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
 pub mod executor;
-pub mod nodes;
 pub mod project;
 pub mod schema;
 pub mod state;
 
 use tauri_plugin_log::log::info;
-use nodes::{GraphData, NodeDefinition};
+use executor::{NodeDefinition};
 use project::{CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData};
 use schema::{
     get_editor_schema, CategoryDefinition, EditorSchema, PinTypeDefinition, UIStyleDefinition,
@@ -20,7 +19,7 @@ use std::collections::HashMap;
 use tauri::{AppHandle, State};
 use chrono::Utc;
 use polars::prelude::*;
-use crate::nodes::processors::ExecutionContextTrait;
+use crate::executor::ExecutionContextTrait;
 
 // ==================== 数据导入命令 ====================
 
@@ -141,7 +140,7 @@ fn get_dataframe_rows(
 /// 获取所有节点定义
 #[tauri::command]
 fn get_node_definitions() -> Vec<NodeDefinition> {
-    let defs = nodes::get_all_node_definitions();
+    let defs = executor::get_all_node_definitions();
     println!("[Backend] Returning {} node definitions", defs.len());
     defs
 }
@@ -798,8 +797,8 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     info!("[execute_project_data] Received project data for execution");
     let _logs = vec!["[System] Received event for execution".to_string()];
 
-    let mut nodes = Vec::new();
-    let mut variables = HashMap::new();
+    let mut nodes: Vec<executor::NodeData> = Vec::new();
+    let mut variables: HashMap<String, executor::VariableData> = HashMap::new();
 
     // 1. 收集全局变量
     for (id, var) in &data.global_variables {
@@ -809,7 +808,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
             .unwrap_or(serde_json::Value::Null);
         variables.insert(
             id.clone(),
-            nodes::VariableData {
+            executor::VariableData {
                 name: var.name.clone(),
                 var_type: format!("{:?}", var.data_type).to_lowercase(),
                 value,
@@ -828,11 +827,11 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
         for (sg_id, sub) in subgraphs {
             // 收集子图节点
             for sn in &sub.nodes {
-                let node = nodes::NodeData {
+                let node = executor::NodeData {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| nodes::PinData {
+                    inputs: sn.inputs.iter().map(|p| executor::PinData {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -840,7 +839,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                         default_value: p.default_value.clone(),
                         is_array: p.is_array,
                     }).collect(),
-                    outputs: sn.outputs.iter().map(|p| nodes::PinData {
+                    outputs: sn.outputs.iter().map(|p| executor::PinData {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -861,7 +860,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    nodes::VariableData {
+                    executor::VariableData {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -883,7 +882,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     }
 
     // 3. 构造 GraphData
-    let graph = nodes::GraphData {
+    let graph = executor::GraphData {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),

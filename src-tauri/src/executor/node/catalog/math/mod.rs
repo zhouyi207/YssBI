@@ -1,6 +1,6 @@
 pub mod operators;
 
-use crate::nodes::definition::NodeDefinition;
+use crate::executor::node::definition::NodeDefinition;
 
 pub fn get_nodes() -> Vec<NodeDefinition> {
     let mut nodes = Vec::new();
