@@ -141,6 +141,17 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
             delete nextGlobalVariables[payload.id];
             projectStore.setGlobalVariables(nextGlobalVariables);
             break;
+            
+          // DataFrame 相关事件
+          case 'DataFrameCreated':
+            projectStore.setDataFrames({ ...projectStore.dataframes, [payload.id]: payload.data });
+            break;
+
+          case 'DataFrameDeleted':
+            const nextDataFrames = { ...projectStore.dataframes };
+            delete nextDataFrames[payload.id];
+            projectStore.setDataFrames(nextDataFrames);
+            break;
 
           default:
             console.log('[useProjectSync] Unhandled event type:', type);

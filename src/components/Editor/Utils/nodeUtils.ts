@@ -13,10 +13,22 @@ export function createNodeFromTemplate(
     if (node && overrides) {
         Object.assign(node, overrides);
 
-        // Handle variable specific initialization
-        if ((node.type === 'get_variable' || node.type === 'set_variable') &&
-            node.variableId && node.variableType && node.variableName) {
-            node.setVariable(node.variableId, node.variableName, node.variableType);
+        // Handle variable/data specific initialization
+        if ((node.type === 'get_variable' || node.type === 'set_variable' || node.type === 'get_dataframe') &&
+            node.variableId && node.variableName) {
+            const vType = node.variableType || 'dataframe';
+            node.setVariable(node.variableId, node.variableName, vType);
+        }
+
+        if (node.type === 'get_column' && node.initialData) {
+            const { columnName, columnType } = node.initialData;
+            if (columnName) {
+                node.title = `Get ${columnName}`;
+                const outputPin = node.outputs.find(p => p.name === 'Column');
+                if (outputPin) {
+                    outputPin.type = columnType || 'array';
+                }
+            }
         }
     }
     return node;

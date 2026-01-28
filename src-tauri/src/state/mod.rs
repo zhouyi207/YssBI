@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter};
 use polars::prelude::*;
 
 use crate::project::{
-    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType, DataFrameData,
+    CanvasState, PinDefinition, ProjectData, SerializedNode, SubGraphData, SubGraphType, DataFrameData, DataFrameColumn,
 };
 use crate::schema::VariableDefinition;
 
@@ -171,6 +171,15 @@ pub enum ProjectEvent {
     LocalVariableDeleted {
         subgraph_id: String,
         variable_id: String,
+    },
+
+    // DataFrame 事件
+    DataFrameCreated {
+        id: String,
+        data: DataFrameData,
+    },
+    DataFrameDeleted {
+        id: String,
     },
 }
 
@@ -509,7 +518,14 @@ impl ProjectState {
     pub fn add_dataframe(&self, id: String, df: DataFrame, source_path: Option<String>) -> Result<DataFrameData, String> {
         let row_count = df.height();
         let column_count = df.width();
-        let columns = df.get_column_names().iter().map(|s| s.to_string()).collect();
+        
+        // 获取列信息
+        let columns = df.get_columns().iter().map(|col| {
+            crate::project::DataFrameColumn {
+                name: col.name().to_string(),
+                column_type: format!("{:?}", col.dtype()),
+            }
+        }).collect();
         
         // 生成预览数据 (前 100 行)
         let preview_df = df.head(Some(100));
@@ -569,6 +585,15 @@ impl ProjectState {
         self.df_store.write().unwrap().remove(id);
         self.data.write().unwrap().dataframes.remove(id);
         Ok(())
+    }
+
+    pub fn create_dataframe(&self, id: String, data: DataFrameData) -> Result<DataFrameData, String> {
+        let mut project = self.data.write().unwrap();
+        if project.dataframes.contains_key(&id) {
+            return Err(format!("DataFrame with id '{}' already exists", id));
+        }
+        project.dataframes.insert(id, data.clone());
+        Ok(data)
     }
 }
 

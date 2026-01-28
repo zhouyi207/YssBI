@@ -78,10 +78,15 @@ export interface SubGraphData {
   outputs?: PinDefinition[];
 }
 
+export interface DataFrameColumn {
+  name: string;
+  type: string;
+}
+
 export interface DataFrameData {
   id: string;
   name: string;
-  columns: string[];
+  columns: DataFrameColumn[];
   rows: any[][];
   rowCount: number;
   columnCount: number;

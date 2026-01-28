@@ -4,9 +4,14 @@ import { useCanvas, GroupContext } from "../Context/CanvasContext";
 import {
   VscEye,
   VscEyeClosed,
-  VscAdd
+  VscAdd,
+  VscChevronRight,
+  VscChevronDown,
+  VscDatabase,
+  VscListUnordered
 } from "react-icons/vsc";
 import { useLayoutStore } from "../../../store/layoutStore";
+import { useState } from "react";
 
 const PIN_COLORS: Record<string, string> = {
   exec: "var(--exec-color)",
@@ -18,6 +23,7 @@ const PIN_COLORS: Record<string, string> = {
   array: "#ef4444",
   struct: "#f97316",
   delegate: "#ec4899",
+  dataframe: "#10b981",
 };
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
@@ -42,6 +48,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addDataFrame,
     openSubGraph,
   } = useCanvas();
+
+  const [expandedDataFrames, setExpandedDataFrames] = useState<Record<string, boolean>>({});
+
+  const toggleDataFrame = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedDataFrames(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +145,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               },
               x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
             });
+          } else if (type === 'data') {
+            e.preventDefault();
+            startDrag({
+              type: "node-template",
+              template: {
+                type: "get_dataframe",
+                category: "Data",
+                variableId: id,
+                variableName: name,
+              },
+              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+            });
           }
         }}
         className={`
@@ -138,12 +166,20 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             : 'hover:bg-white/5 text-gray-300 border-transparent'}
         `}
       >
+        {type === 'data' && (
+          <button
+            onClick={(e) => toggleDataFrame(id, e)}
+            className="p-0.5 hover:bg-white/10 rounded text-gray-400 transition-colors"
+          >
+            {expandedDataFrames[id] ? <VscChevronDown size={14} /> : <VscChevronRight size={14} />}
+          </button>
+        )}
         <div
           className="w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af')) }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
-
+        {type === 'data' && <VscDatabase size={12} className="opacity-40" />}
         {type === 'variable' && (
           <>
             {!extra?.isGlobal ? (
@@ -206,26 +242,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           ref={listRef}
           className="flex-1 overflow-y-auto p-1 custom-scrollbar scroll-smooth"
         >
-          <style>{`
-            .custom-scrollbar::-webkit-scrollbar {
-              width: 5px;
-              height: 5px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-              background: transparent;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-              background: rgba(255, 255, 255, 0.05);
-              border-radius: 10px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-              background: rgba(255, 255, 255, 0.1);
-            }
-            .custom-scrollbar {
-              scrollbar-width: thin;
-              scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
-            }
-          `}</style>
           {activeTab === 'events' && (
             <>
               {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
@@ -246,7 +262,46 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
           {activeTab === 'data' && (
             <>
-              {Object.entries(dataframes).map(([id, data]) => renderItem(id, data.name, 'data', data))}
+              {Object.entries(dataframes).map(([id, data]) => (
+                <div key={id}>
+                  {renderItem(id, data.name, 'data', data)}
+                  {expandedDataFrames[id] && data.columns && (
+                    <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
+                      {data.columns.map((col, idx) => (
+                        <div
+                          key={`${id}-col-${idx}`}
+                          className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded cursor-grab text-[11px] text-gray-400 group/col"
+                          onPointerDown={(e) => {
+                            if (e.button !== 0) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            startDrag({
+                              type: "node-template",
+                              template: {
+                                type: "get_column",
+                                category: "Data",
+                                title: `Get ${col.name}`,
+                                initialData: {
+                                  columnName: col.name,
+                                  columnType: col.type,
+                                  dataframeId: id
+                                }
+                              },
+                              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+                            });
+                          }}
+                        >
+                          <VscListUnordered size={10} className="opacity-40" />
+                          <span className="flex-1 truncate">{col.name}</span>
+                          <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
+                            {col.type.replace("Owned", "")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
               {Object.keys(dataframes).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No data</div>}
             </>
           )}

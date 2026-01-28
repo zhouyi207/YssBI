@@ -72,6 +72,8 @@ export class BaseNode {
   variableType?: string;  // 关联的变量数据类型 (int, float, string, etc.)
   variableName?: string;  // 关联的变量名称 (用于显示)
 
+  initialData?: any;      // 初始数据（用于特定节点类型）
+
   isInternal: boolean = false; // 是否为内部节点（不可删除）
   subGraphId?: string; // 关联的子图 ID (针对 Call Function / Call Macro)
 
@@ -154,13 +156,20 @@ export class BaseNode {
     this.variableName = variableName;
     this.variableType = variableType;
 
-    // 更新节点标题显示变量名
+    // 更新节点标题显示变量名/数据帧名
     if (this.type === 'get_variable') {
       this.title = `Get ${variableName}`;
       // 更新输出 pin 的类型
       const valuePin = this.outputs.find(p => p.name === 'Value' || p.name === 'value');
       if (valuePin) {
         valuePin.type = variableType;
+      }
+    } else if (this.type === 'get_dataframe') {
+      this.title = `Get ${variableName}`;
+      // 更新输出 pin 的类型
+      const dfPin = this.outputs.find(p => p.name === 'DataFrame');
+      if (dfPin) {
+        dfPin.type = 'dataframe';
       }
     } else if (this.type === 'set_variable') {
       this.title = `Set ${variableName}`;

@@ -287,6 +287,7 @@ impl ExecutionContextTrait for ExecutionContext {
             .inner_size(800.0, 600.0)
             .min_inner_size(400.0, 300.0)
             .resizable(true)
+            .visible(false)
             .decorations(false)  // 禁用系统窗口装饰，使用自定义标题栏
             .transparent(false)  // 不透明背景
             .center()            // 居中显示

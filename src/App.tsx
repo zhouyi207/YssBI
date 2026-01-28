@@ -16,19 +16,30 @@ import { SettingsService, DEFAULT_WINDOW } from "./services/settingsService";
 import { useProjectSync, initProjectSync } from "./components/Editor/Hooks/useProjectSync";
 import { installGlobalConsoleForwarder } from "./utils/logger";
 import PlotWindow from "./components/Editor/Plot/PlotWindow";
+import DataViewWindow from "./components/Editor/DataView/DataViewWindow";
 
 // 安装全局 console 转发器，将所有前端日志转发到后端
 installGlobalConsoleForwarder();
 
 export default function App() {
-  // 检查是否是 Plot 窗口
+  // 检查窗口类型
   const isPlotWindow = window.location.hash === '#/plot';
+  const isDataViewWindow = window.location.hash === '#/dataview';
   
   // 如果是 Plot 窗口，只渲染 PlotWindow 组件
   if (isPlotWindow) {
     return (
       <ThemeProvider>
         <PlotWindow />
+      </ThemeProvider>
+    );
+  }
+
+  // 如果是 DataView 窗口，只渲染 DataViewWindow 组件
+  if (isDataViewWindow) {
+    return (
+      <ThemeProvider>
+        <DataViewWindow />
       </ThemeProvider>
     );
   }

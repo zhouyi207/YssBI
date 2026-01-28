@@ -359,10 +359,32 @@ export default function Canvas() {
     const x = (screenX - currentCanvas.x) / currentCanvas.scale;
     const y = (screenY - currentCanvas.y) / currentCanvas.scale;
 
-    // 检查是否落在了 pin 上 (需求 3: 拖动变量到赋值框)
+    // 检查是否落在了 pin 上 (需求 3: 拖动变量/数据到赋值框)
     const elements = document.elementsFromPoint(dragState.x, dragState.y);
     const pinEl = elements.find(e => e.closest("[data-pin-id]"))?.closest("[data-pin-id]");
     const targetPinId = pinEl?.getAttribute("data-pin-id");
+
+    // 如果是数据 (DataFrame 或 Column)
+    if (dragState.template.category === "Data") {
+      saveHistory();
+      const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, dragState.template.type, {
+        variableId: dragState.template.variableId,
+        variableName: dragState.template.variableName,
+        initialData: dragState.template.initialData
+      });
+      if (newNode) {
+        setNodes((prev) => [...prev, newNode]);
+        if (targetPinId) {
+          const outputPin = newNode.outputs[0];
+          if (outputPin) {
+            setTimeout(() => {
+              connectPins(outputPin.id, targetPinId);
+            }, 0);
+          }
+        }
+      }
+      return;
+    }
 
     // 如果是变量
     if (dragState.template.category === "Variable") {

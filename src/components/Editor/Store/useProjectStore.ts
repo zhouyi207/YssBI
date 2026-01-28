@@ -267,8 +267,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // DataFrame 操作
     addDataFrame: (id, df) => {
         set((state) => ({ dataframes: { ...state.dataframes, [id]: df } }));
-        // 同步到后端
-        get().syncToBackend().catch(console.error);
+        // 调用专用创建命令以触发全局事件同步
+        ProjectService.createDataFrame(id, df).catch(console.error);
     },
 
     updateDataFrame: (id, data) => {
@@ -288,8 +288,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             delete next[id];
             return { dataframes: next };
         });
-        // 同步到后端
-        get().syncToBackend().catch(console.error);
+        // 调用专门的删除命令以触发全局事件同步
+        ProjectService.deleteDataFrame(id).catch(console.error);
     },
 
     // 项目级操作

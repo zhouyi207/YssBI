@@ -215,6 +215,30 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                       {selectedData.columnCount || selectedData.columns?.length || 0} columns
                     </td>
                   </tr>
+                  {selectedData.columns && selectedData.columns.length > 0 && (
+                    <tr className="border-b border-[#2b2b2b]">
+                      <td colSpan={2} className="p-0">
+                        <div className="max-h-40 overflow-y-auto bg-black/20">
+                          <table className="w-full text-[9px]">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-[#2b2b2b]">
+                                <th className="p-1 text-left font-normal uppercase">Column</th>
+                                <th className="p-1 text-left font-normal uppercase">Type</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedData.columns.map((col: any, idx: number) => (
+                                <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                  <td className="p-1 text-gray-300 font-medium">{col.name}</td>
+                                  <td className="p-1 text-[var(--accent-color)]/70">{col.type}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   <tr className="border-b border-[#2b2b2b]">
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Rows</td>
                     <td className="p-2 text-gray-400">

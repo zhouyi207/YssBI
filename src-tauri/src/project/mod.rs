@@ -120,13 +120,21 @@ pub struct SubGraphData {
 
 // ==================== 数据帧数据 ====================
 
+/// 数据帧列定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataFrameColumn {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub column_type: String,
+}
+
 /// 数据帧数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataFrameData {
     pub id: String,
     pub name: String,
     #[serde(default)]
-    pub columns: Vec<String>,
+    pub columns: Vec<DataFrameColumn>,
     #[serde(default)]
     pub rows: Vec<Vec<serde_json::Value>>,
     #[serde(rename = "rowCount", default)]

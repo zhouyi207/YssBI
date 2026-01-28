@@ -144,6 +144,23 @@ export default function Menubar() {
   const updateNode = useLayoutStore(s => s.updateNode);
   const isDetailVisible = detailNode?.data?.visible !== false;
 
+  const handleDataView = async () => {
+    try {
+      const label = `dataview-${Math.random().toString(36).substring(7)}`;
+      new WebviewWindow(label, {
+        url: "index.html#/dataview",
+        title: "Data Viewer",
+        width: 1000,
+        height: 600,
+        decorations: false,
+        visible: false, // 初始隐藏，待渲染完毕后再显示
+      });
+    } catch (error) {
+      console.error("Failed to open data view:", error);
+      showToast("无法打开数据视图窗口", "error");
+    }
+  };
+
   const toggleDetail = () => {
     updateNode('detail', {
       data: { ...detailNode?.data, visible: !isDetailVisible }
@@ -190,6 +207,7 @@ export default function Menubar() {
   const dataItems: MenuItem[] = [
     { label: "Manage Variables" },
     { label: "Import Data", onClick: handleImportData },
+    { label: "Data Viewer", onClick: handleDataView },
     { label: "-" },
     { label: "Schema Viewer" },
   ];
