@@ -127,6 +127,26 @@ impl ConnectionManager {
         Ok(())
     }
 
+    /// 直接通过 PinId 建立连接（用于从数据恢复连接，跳过类型检查）
+    pub fn connect_by_id(&self, from_pin: PinId, to_pin: PinId) -> ConnectionResult<()> {
+        let mut connections = self.connections.lock().unwrap();
+        
+        // 检查连接是否已存在
+        if let Some(targets) = connections.get(&from_pin) {
+            if targets.contains(&to_pin) {
+                return Ok(()); // 连接已存在，静默返回
+            }
+        }
+
+        // 建立连接
+        connections
+            .entry(from_pin)
+            .or_insert_with(Vec::new)
+            .push(to_pin);
+
+        Ok(())
+    }
+
     /// 断开连接
     pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> ConnectionResult<()> {
         let mut connections = self.connections.lock().unwrap();

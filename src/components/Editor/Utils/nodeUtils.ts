@@ -1,6 +1,6 @@
 import { BaseNode } from "../Types/nodes";
 import { Position } from "../../../types";
-import { NODE_REGISTRY } from "../Nodes/registry";
+import { createNode } from "../Hooks/useNodeRegistry";
 
 export function createNodeFromTemplate(
     position: Position,
@@ -9,7 +9,7 @@ export function createNodeFromTemplate(
     overrides?: Partial<BaseNode>
 ): BaseNode | null {
     const id = `node_${Date.now()}`;
-    const node = NODE_REGISTRY.createNode(type, id, position);
+    const node = createNode(type, id, position);
     if (node && overrides) {
         Object.assign(node, overrides);
 

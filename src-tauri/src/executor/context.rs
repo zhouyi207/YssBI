@@ -29,6 +29,9 @@ pub struct ExecutionContext {
     /// Pin ID 到运行时节点 ID 的映射
     pin_to_node: HashMap<PinId, NodeId>,
 
+    /// 前端 Pin ID (字符串) 到运行时 PinId 的映射
+    data_pin_id_to_runtime_pin_id: HashMap<String, PinId>,
+
     /// 变量存储
     pub variables: HashMap<String, Value>,
 
@@ -54,6 +57,7 @@ impl ExecutionContext {
             data_id_to_runtime_id: HashMap::new(),
             runtime_id_to_data_id: HashMap::new(),
             pin_to_node: HashMap::new(),
+            data_pin_id_to_runtime_pin_id: HashMap::new(),
             variables: HashMap::new(),
             logs: Vec::new(),
             call_stack: Vec::new(),
@@ -100,12 +104,14 @@ impl ExecutionContext {
                 let pin_id = exec_pin.id();
                 node.add_in_exec_pin(exec_pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
+                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericInDataPin;
                 let pin = GenericInDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
                 let pin_id = pin.id();
                 node.add_input(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
+                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
             }
         }
 
@@ -117,12 +123,14 @@ impl ExecutionContext {
                 let pin_id = exec_pin.id();
                 node.add_out_exec_pin(exec_pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
+                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericOutDataPin;
                 let pin = GenericOutDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
                 let pin_id = pin.id();
                 node.add_output(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
+                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
             }
         }
 
@@ -145,8 +153,36 @@ impl ExecutionContext {
 
     /// 从 NodeData 创建连接
     fn create_connections_from_data(&mut self, node_data: &NodeData) -> Result<(), String> {
-        // TODO: 实现连接创建逻辑
-        // 这需要建立 pin 之间的实际连接
+        // 遍历所有输出 Pin，建立连接
+        for pin_data in &node_data.outputs {
+            // 获取源 Pin 的运行时 ID
+            let from_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(&pin_data.id) {
+                Some(&id) => id,
+                None => {
+                    self.log(format!("[WARN] Source pin '{}' not found in runtime", pin_data.id));
+                    continue;
+                }
+            };
+
+            // 遍历 links，建立连接
+            for target_pin_id in &pin_data.links {
+                // 获取目标 Pin 的运行时 ID
+                let to_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(target_pin_id) {
+                    Some(&id) => id,
+                    None => {
+                        self.log(format!("[WARN] Target pin '{}' not found in runtime", target_pin_id));
+                        continue;
+                    }
+                };
+
+                // 建立连接
+                if let Err(e) = self.connection_manager.connect_by_id(from_runtime_pin_id, to_runtime_pin_id) {
+                    self.log(format!("[ERROR] Failed to connect pins: {:?}", e));
+                } else {
+                    self.log(format!("[Connection] {} -> {}", pin_data.id, target_pin_id));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -215,13 +251,44 @@ impl ExecutionContext {
         // 从注册中心获取原型并执行
         let proto = crate::executor::node::registry::get_registry().get_prototype(&node_type);
 
-        // TODO: 实际执行节点逻辑
-        // 这需要实现 process_flow 的调用
+        // 构造临时 NodeData 供处理器使用
+        let node_data = {
+            let node_guard = node.lock().unwrap();
+            NodeData {
+                id: self.runtime_id_to_data_id.get(&node_id).cloned().unwrap_or_default(),
+                node_type: node_guard.node_type().to_string(),
+                title: node_guard.name().to_string(),
+                inputs: vec![],
+                outputs: vec![],
+                variable_id: None,
+                sub_graph_id: None,
+            }
+        };
 
-        let next_exec_name = if let Some(_p) = proto {
-            // p.process_flow(self, &node_data)?
-            output_exec_name.to_string()
+        // 实际执行节点逻辑
+        let next_exec_name = if let Some(p) = proto {
+            match p.process_flow(self, &node_data) {
+                Ok(next) => {
+                    let log_msg = format!("  -> Node returned next exec: '{}'", next);
+                    info!("{}", log_msg);
+                    self.logs.push(log_msg);
+                    if next.is_empty() {
+                        output_exec_name.to_string()
+                    } else {
+                        next
+                    }
+                }
+                Err(e) => {
+                    let err_msg = format!("[ERROR] Node execution failed: {}", e);
+                    info!("{}", err_msg);
+                    self.logs.push(err_msg);
+                    return Err(e);
+                }
+            }
         } else {
+            let log_msg = format!("  -> No prototype found for '{}', using default flow", node_type);
+            info!("{}", log_msg);
+            self.logs.push(log_msg);
             output_exec_name.to_string()
         };
 
@@ -404,7 +471,11 @@ impl ExecutionContextTrait for ExecutionContext {
             .center()
             .build()
             {
-                Ok(_) => {
+                Ok(window) => {
+                    // 确保窗口显示
+                    if let Err(e) = window.show() {
+                        info!("[WARN] Failed to show window '{}': {}", label_clone, e);
+                    }
                     info!(
                         "Window '{}' created and displayed successfully",
                         label_clone

@@ -1,6 +1,6 @@
 import { BaseNode } from "../Types/nodes";
 import { CanvasState, SubGraphData } from "../Types/canvas";
-import { NODE_REGISTRY } from "../Nodes/registry";
+import { getNodeDefinition } from "../Hooks/useNodeRegistry";
 import { VariableDefinition } from "../Types/variables";
 
 /**
@@ -70,7 +70,7 @@ export function deserializeSubGraph(data: SubGraphData): {
 
 
   const nodes = (data.nodes || []).map((n: any) => {
-    const def = NODE_REGISTRY.getDefinition(n.type);
+    const def = getNodeDefinition(n.type);
 
     let node: BaseNode;
     if (def) {

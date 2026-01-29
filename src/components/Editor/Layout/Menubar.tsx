@@ -1,13 +1,14 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCanvas } from "../Context/CanvasContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLayoutStore } from "../../../store/layoutStore";
 import { useUI } from "../Context/UIProvider";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ProjectService } from "../../../services/projectService";
 import { useProjectStore } from "../Store/useProjectStore";
+import { SettingsService, DEFAULT_WINDOW } from "../../../services/settingsService";
 
 interface MenuItem {
   label: string;
@@ -94,6 +95,46 @@ export default function Menubar() {
   const openSettings = useLayoutStore(s => s.openSettings);
   const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
   const splitNode = useLayoutStore(s => s.splitNode);
+
+  // 监听窗口关闭并保存状态
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let unlistenClose: (() => void) | null = null;
+
+    const setupCloseListener = async () => {
+      unlistenClose = await appWindow.onCloseRequested(async () => {
+        try {
+          const isMaximized = await appWindow.isMaximized();
+
+          if (isMaximized) {
+            await SettingsService.updateWindow({
+              isMaximized: true,
+              width: DEFAULT_WINDOW.width,
+              height: DEFAULT_WINDOW.height,
+            });
+          } else {
+            const size = await appWindow.innerSize();
+            const position = await appWindow.outerPosition();
+            await SettingsService.updateWindow({
+              width: size.width,
+              height: size.height,
+              x: position.x,
+              y: position.y,
+              isMaximized: false,
+            });
+          }
+        } catch (e) {
+          console.error("Failed to save window state on close:", e);
+        }
+      });
+    };
+
+    setupCloseListener();
+
+    return () => {
+      unlistenClose?.();
+    };
+  }, []);
 
   const handleImportData = () => {
     showImportDialog({

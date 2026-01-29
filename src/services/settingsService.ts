@@ -1,4 +1,4 @@
-import { writeTextFile, readTextFile, exists, mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 
 // ==================== 类型定义 ====================
 
@@ -69,24 +69,23 @@ export interface PartialAppSettings {
 // ==================== 默认值定义 ====================
 
 export const DEFAULT_THEME: ThemeSettings = {
-    workbenchBackground: "#121212", // 更深的背景
-    sidebarBackground: "#181818",   // 侧边栏稍亮，区分层次
-    accentColor: "#0078d4",         // 标准的 Azure/VSCode 蓝色
-    gridLines: "#252525",           // 网格线
-    nodeBase: "#2d2d2d",            // 节点底色
-    connectionLines: "#6b6b6b",     // 连接线
+    workbenchBackground: "#121212",
+    sidebarBackground: "#181818",
+    accentColor: "#0078d4",
+    gridLines: "#252525",
+    nodeBase: "#2d2d2d",
+    connectionLines: "#6b6b6b",
     selectionRegion: "#0078d433",
-    // Pin & Type Colors - 采用更符合专业分析工具的饱和度
     execColor: "#ffffff",
-    intColor: "#35b2b2",            // 蓝绿色 (Integer)
-    floatColor: "#9ecd4d",          // 嫩绿色 (Float)
-    boolColor: "#e06c75",           // 柔和红色 (Boolean)
-    stringColor: "#e5c07b",         // 柔和琥珀色 (String)
-    dateColor: "#c678dd",           // 紫色 (Date/Time)
+    intColor: "#35b2b2",
+    floatColor: "#9ecd4d",
+    boolColor: "#e06c75",
+    stringColor: "#e5c07b",
+    dateColor: "#c678dd",
     datetimeColor: "#c678dd",
-    dataframeColor: "#61afef",      // 天蓝色 (DataFrame)
-    objectColor: "#abb2bf",         // 灰色 (Object)
-    arrayColor: "#d19a66",          // 橙色 (Array)
+    dataframeColor: "#61afef",
+    objectColor: "#abb2bf",
+    arrayColor: "#d19a66",
 };
 
 export const DEFAULT_EDITOR: EditorSettings = {
@@ -125,83 +124,35 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 // ==================== 设置服务 ====================
 
-const SETTINGS_FILE = "settings.json";
-const SETTINGS_DIR = ""; // 在 AppConfig 目录根下
-
 export class SettingsService {
     private static settingsCache: AppSettings | null = null;
-
-    /**
-     * 确保配置目录存在
-     */
-    private static async ensureConfigDir(): Promise<void> {
-        try {
-            const dirExists = await exists("", { baseDir: BaseDirectory.AppConfig });
-            if (!dirExists) {
-                await mkdir("", { baseDir: BaseDirectory.AppConfig, recursive: true });
-            }
-        } catch (error) {
-            console.warn("Could not create config directory:", error);
-        }
-    }
-
-    /**
-     * 获取设置文件路径（用于调试）
-     */
-    static getSettingsPath(): string {
-        return `${BaseDirectory.AppConfig}/${SETTINGS_FILE}`;
-    }
 
     /**
      * 加载设置，如果文件不存在则返回默认设置
      */
     static async loadSettings(): Promise<AppSettings> {
         try {
-            await this.ensureConfigDir();
-            
-            const fileExists = await exists(SETTINGS_FILE, { baseDir: BaseDirectory.AppConfig });
-            if (!fileExists) {
-                console.log("Settings file not found, using defaults");
-                // 第一次运行时保存默认设置
-                await this.saveSettings(DEFAULT_SETTINGS);
-                this.settingsCache = { ...DEFAULT_SETTINGS };
-                return this.settingsCache;
-            }
-
-            const content = await readTextFile(SETTINGS_FILE, { baseDir: BaseDirectory.AppConfig });
-            const loadedSettings = JSON.parse(content) as Partial<AppSettings>;
-            
-            // 合并加载的设置与默认设置，确保所有字段都存在
-            const mergedSettings: AppSettings = {
-                theme: { ...DEFAULT_THEME, ...loadedSettings.theme },
-                editor: { ...DEFAULT_EDITOR, ...loadedSettings.editor },
-                appearance: { ...DEFAULT_APPEARANCE, ...loadedSettings.appearance },
-                project: { ...DEFAULT_PROJECT, ...loadedSettings.project },
-                window: { ...DEFAULT_WINDOW, ...loadedSettings.window },
-            };
-
-            this.settingsCache = mergedSettings;
-            console.log("Settings loaded successfully");
-            return mergedSettings;
+            const settings = await invoke<AppSettings>("load_settings");
+            this.settingsCache = settings;
+            console.info("Settings loaded successfully via backend");
+            return settings;
         } catch (error) {
-            console.error("Error loading settings:", error);
+            console.error("Error loading settings via backend:", error);
             this.settingsCache = { ...DEFAULT_SETTINGS };
             return this.settingsCache;
         }
     }
 
     /**
-     * 保存设置到文件
+     * 保存设置到后端
      */
     static async saveSettings(settings: AppSettings): Promise<void> {
         try {
-            await this.ensureConfigDir();
-            const content = JSON.stringify(settings, null, 2);
-            await writeTextFile(SETTINGS_FILE, content, { baseDir: BaseDirectory.AppConfig });
+            await invoke("save_settings", { settings });
             this.settingsCache = settings;
-            console.log("Settings saved successfully");
+            console.log("Settings saved successfully via backend");
         } catch (error) {
-            console.error("Error saving settings:", error);
+            console.error("Error saving settings via backend:", error);
             throw error;
         }
     }
@@ -211,7 +162,7 @@ export class SettingsService {
      */
     static async updateSettings(updates: PartialAppSettings): Promise<AppSettings> {
         const currentSettings = this.settingsCache || await this.loadSettings();
-        
+
         const newSettings: AppSettings = {
             theme: updates.theme ? { ...currentSettings.theme, ...updates.theme } : currentSettings.theme,
             editor: updates.editor ? { ...currentSettings.editor, ...updates.editor } : currentSettings.editor,

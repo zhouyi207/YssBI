@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { NODE_REGISTRY } from "./registry";
+import { useNodeDefinitions } from "../Hooks/useNodeRegistry";
 import { Pin, BaseNode } from "../Types/nodes";
 import { VariableDefinition } from "../Types/variables";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
@@ -45,16 +45,16 @@ export default function NodePalette({
   macros?: Record<string, import("../Types/canvas").SubGraphData>;
 }) {
   const [query, setQuery] = useState("");
+  const { definitions } = useNodeDefinitions();
   // 记录哪些文件夹是展开的
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
   // 1. 获取所有项
   const allItems = useMemo(() => {
-    const allDefs = NODE_REGISTRY.getAllDefinitions();
     const items: PaletteItem[] = [];
 
     // 处理注册表中的常规节点 (数学, 逻辑, 调试等)
-    allDefs.forEach((node) => {
+    definitions.forEach((node) => {
       // 排除需要在下方特殊处理的模板节点
       if (['get_variable', 'set_variable', 'call_function', 'call_macro'].includes(node.node_type)) return;
 

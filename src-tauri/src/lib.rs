@@ -5,6 +5,7 @@
 pub mod executor;
 pub mod project;
 pub mod schema;
+pub mod settings;
 pub mod state;
 use crate::executor::ExecutionContextTrait;
 use chrono::Utc;
@@ -18,6 +19,7 @@ use schema::{
 use state::{emit_project_event, ProjectEvent, ProjectState};
 use std::collections::HashMap;
 use std::sync::Arc;
+use settings::{load_settings, save_settings};
 use tauri::{AppHandle, State};
 use tauri_plugin_log::log::info;
 
@@ -1009,10 +1011,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
-                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                ])
+                .level(tauri_plugin_log::log::LevelFilter::Debug)
                 .format(|out, message, record| {
                     use chrono::Local;
                     // 简化日志格式: [时间][来源][级别] 消息
@@ -1057,6 +1059,9 @@ pub fn run() {
             load_project_to_state,
             save_project_from_state,
             set_project_data,
+            // 设置相关
+            load_settings,
+            save_settings,
             // Events CRUD
             get_events,
             get_event,

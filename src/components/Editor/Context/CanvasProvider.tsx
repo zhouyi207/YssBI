@@ -6,7 +6,7 @@ import { VariableDefinition, VariableDataType, createPrimitiveVariable, getDefau
 import { deserializeSubGraph } from "../Utils/io";
 import { ProjectService } from "../../../services/projectService";
 import { useUI } from "./UIProvider";
-import { NODE_REGISTRY } from "../Nodes/registry";
+import { getNodeDefinition } from "../Hooks/useNodeRegistry";
 import { createInternalNode } from "../Utils/internalNodes";
 import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore, useTabVariables } from "../Store/useNodeStore";
@@ -702,7 +702,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const paste = useCallback((pos?: { x: number; y: number }) => {
     if (clipboardRef.current.length === 0) return;
     saveHistory();
-    const clipboard = clipboardRef.current.filter(n => NODE_REGISTRY.getDefinition(n.type));
+    const clipboard = clipboardRef.current.filter(n => getNodeDefinition(n.type));
     let tX = pos ? pos.x : -canvasRef.current.x / canvasRef.current.scale + 100;
     let tY = pos ? pos.y : -canvasRef.current.y / canvasRef.current.scale + 100;
     const minX = Math.min(...clipboard.map(n => n.position.x));
