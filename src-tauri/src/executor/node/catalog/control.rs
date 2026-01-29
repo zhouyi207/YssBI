@@ -4,7 +4,7 @@ use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
 
 pub fn register(registry: &NodeRegistry) {
-    // 1. IfElse Node - 重写为直接执行逻辑
+    // 1. IfElse Node - 修复后的逻辑
     let if_else = GenericNode::new_prototype("if_else", "If Else");
     if_else.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
     if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", "bool"));
@@ -12,10 +12,22 @@ pub fn register(registry: &NodeRegistry) {
     if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "False"));
     
     if_else.set_flow_processor(Box::new(|ctx, node| {
-        let cond = ctx.get_pin_value(&node.inputs[0].id).as_bool().unwrap_or(false);
+        ctx.log("IfElse: Starting execution".to_string());
         
-        // 直接在闭包中写 if 逻辑，不需要返回字符串
-        if cond {
+        // 现在可以安全地访问 inputs，因为 NodeData 已经正确填充
+        let condition_value = if !node.inputs.is_empty() {
+            let condition_pin_id = &node.inputs[0].id;
+            ctx.log(format!("IfElse: Getting condition from pin {}", condition_pin_id));
+            ctx.get_pin_value(condition_pin_id).as_bool().unwrap_or(false)
+        } else {
+            ctx.log("IfElse: No inputs found, using default false".to_string());
+            false
+        };
+        
+        ctx.log(format!("IfElse: Condition value is {}", condition_value));
+        
+        // 直接在闭包中写 if 逻辑
+        if condition_value {
             ctx.log("IfElse: Condition is true, executing True branch".to_string());
             if let Err(e) = ctx.trigger_flow_by_pin(&node.id, "True") {
                 ctx.log(format!("IfElse: Failed to execute True branch: {}", e));
@@ -29,6 +41,7 @@ pub fn register(registry: &NodeRegistry) {
             }
         }
         
+        ctx.log("IfElse: Execution completed".to_string());
         Ok("".into()) // 返回空字符串表示已经手动处理了流程
     }));
     

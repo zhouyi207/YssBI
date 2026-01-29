@@ -269,6 +269,48 @@ impl ExecutionContext {
         // 构造临时 NodeData 供处理器使用
         let node_data = {
             let node_guard = node.lock().unwrap();
+            
+            // 正确构造 inputs 和 outputs
+            let mut inputs = Vec::new();
+            let mut outputs = Vec::new();
+            
+            // 填充输入 pins
+            for input_pin in node_guard.inputs().iter() {
+                // 找到对应的前端 pin ID
+                let frontend_pin_id = self.data_pin_id_to_runtime_pin_id
+                    .iter()
+                    .find(|(_, &runtime_id)| runtime_id == input_pin.id())
+                    .map(|(frontend_id, _)| frontend_id.clone())
+                    .unwrap_or_default();
+                
+                inputs.push(crate::executor::node::data::PinData {
+                    id: frontend_pin_id,
+                    name: input_pin.name().to_string(),
+                    pin_type: input_pin.data_type().to_string(),
+                    links: vec![],
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            
+            // 填充输出 pins
+            for output_pin in node_guard.outputs().iter() {
+                let frontend_pin_id = self.data_pin_id_to_runtime_pin_id
+                    .iter()
+                    .find(|(_, &runtime_id)| runtime_id == output_pin.id())
+                    .map(|(frontend_id, _)| frontend_id.clone())
+                    .unwrap_or_default();
+                
+                outputs.push(crate::executor::node::data::PinData {
+                    id: frontend_pin_id,
+                    name: output_pin.name().to_string(),
+                    pin_type: output_pin.data_type().to_string(),
+                    links: vec![],
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            
             NodeData {
                 id: self
                     .runtime_id_to_data_id
@@ -277,8 +319,8 @@ impl ExecutionContext {
                     .unwrap_or_default(),
                 node_type: node_guard.node_type().to_string(),
                 title: node_guard.name().to_string(),
-                inputs: vec![],
-                outputs: vec![],
+                inputs,
+                outputs,
                 variable_id: node_guard.variable_id(),
                 sub_graph_id: None,
             }

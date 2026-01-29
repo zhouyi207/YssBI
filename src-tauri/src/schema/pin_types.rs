@@ -253,40 +253,4 @@ pub fn can_connect(from_type: &str, to_type: &str) -> bool {
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_same_type() {
-        assert_eq!(check_type_compatibility("int", "int"), TypeConversion::Same);
-    }
-
-    #[test]
-    fn test_implicit_conversion() {
-        assert_eq!(
-            check_type_compatibility("int", "float"),
-            TypeConversion::Implicit
-        );
-        assert_eq!(
-            check_type_compatibility("int", "string"),
-            TypeConversion::Implicit
-        );
-    }
-
-    #[test]
-    fn test_object_accepts_any() {
-        assert_eq!(
-            check_type_compatibility("int", "object"),
-            TypeConversion::Implicit
-        );
-        assert_eq!(
-            check_type_compatibility("string", "object"),
-            TypeConversion::Implicit
-        );
-        assert_eq!(
-            check_type_compatibility("exec", "object"),
-            TypeConversion::Incompatible
-        );
-    }
-}
+// 测试已移动到 tests/schema_pin_types_tests.rs

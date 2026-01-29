@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use super::project_state::ProjectState;
 use crate::project::SubGraphType;
 use crate::schema::VariableDefinition;
-use uuid::Uuid;
 
 impl ProjectState {
     // ==================== Global Variables CRUD ====================

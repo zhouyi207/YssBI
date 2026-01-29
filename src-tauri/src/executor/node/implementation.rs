@@ -39,6 +39,10 @@ pub struct GenericNode {
     out_data_pins: DashMap<PinId, Arc<GenericOutDataPin>>,
     in_exec_pins: DashMap<PinId, Arc<GenericInExecPin>>,
     out_exec_pins: DashMap<PinId, Arc<GenericOutExecPin>>,
+    
+    // Pin 顺序追踪器
+    input_order: RwLock<Vec<PinId>>,
+    output_order: RwLock<Vec<PinId>>,
     flow_processor: Mutex<
         Option<
             Box<
@@ -76,6 +80,8 @@ impl GenericNode {
             out_data_pins: DashMap::new(),
             in_exec_pins: DashMap::new(),
             out_exec_pins: DashMap::new(),
+            input_order: RwLock::new(Vec::new()),
+            output_order: RwLock::new(Vec::new()),
             flow_processor: Mutex::new(None),
             data_processor: Mutex::new(None),
         }
@@ -95,6 +101,8 @@ impl GenericNode {
             out_data_pins: DashMap::new(),
             in_exec_pins: DashMap::new(),
             out_exec_pins: DashMap::new(),
+            input_order: RwLock::new(Vec::new()),
+            output_order: RwLock::new(Vec::new()),
             flow_processor: Mutex::new(None),
             data_processor: Mutex::new(None),
         }
@@ -123,6 +131,8 @@ impl GenericNode {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.in_data_pins.insert(id, pin.clone());
+        // 添加到输入顺序追踪器
+        self.input_order.write().unwrap().push(id);
         pin
     }
 
@@ -130,6 +140,8 @@ impl GenericNode {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.out_data_pins.insert(id, pin.clone());
+        // 添加到输出顺序追踪器
+        self.output_order.write().unwrap().push(id);
         pin
     }
 
@@ -137,6 +149,8 @@ impl GenericNode {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.in_exec_pins.insert(id, pin.clone());
+        // 添加到输入顺序追踪器
+        self.input_order.write().unwrap().push(id);
         pin
     }
 
@@ -144,6 +158,8 @@ impl GenericNode {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.out_exec_pins.insert(id, pin.clone());
+        // 添加到输出顺序追踪器
+        self.output_order.write().unwrap().push(id);
         pin
     }
 
@@ -262,6 +278,114 @@ impl GenericNode {
             .find(|e| e.value().name() == name)
             .map(|e| e.value().clone())
     }
+
+    /// 获取输入 Pin 的顺序
+    pub fn get_input_order(&self) -> Vec<PinId> {
+        self.input_order.read().unwrap().clone()
+    }
+
+    /// 获取输出 Pin 的顺序
+    pub fn get_output_order(&self) -> Vec<PinId> {
+        self.output_order.read().unwrap().clone()
+    }
+
+    /// 重新排序输入 Pin
+    pub fn reorder_inputs(&self, new_order: Vec<PinId>) -> Result<(), String> {
+        let mut input_order = self.input_order.write().unwrap();
+        
+        // 验证新顺序包含所有现有的输入 Pin
+        if new_order.len() != input_order.len() {
+            return Err("New order length doesn't match current input count".to_string());
+        }
+        
+        for &pin_id in &new_order {
+            if !input_order.contains(&pin_id) {
+                return Err(format!("Pin ID {:?} not found in current inputs", pin_id));
+            }
+        }
+        
+        *input_order = new_order;
+        Ok(())
+    }
+
+    /// 重新排序输出 Pin
+    pub fn reorder_outputs(&self, new_order: Vec<PinId>) -> Result<(), String> {
+        let mut output_order = self.output_order.write().unwrap();
+        
+        // 验证新顺序包含所有现有的输出 Pin
+        if new_order.len() != output_order.len() {
+            return Err("New order length doesn't match current output count".to_string());
+        }
+        
+        for &pin_id in &new_order {
+            if !output_order.contains(&pin_id) {
+                return Err(format!("Pin ID {:?} not found in current outputs", pin_id));
+            }
+        }
+        
+        *output_order = new_order;
+        Ok(())
+    }
+
+    /// 移除输入 Pin 并更新顺序
+    pub fn remove_input(&self, pin_id: PinId) -> bool {
+        let removed_data = self.in_data_pins.remove(&pin_id).is_some();
+        let removed_exec = self.in_exec_pins.remove(&pin_id).is_some();
+        
+        if removed_data || removed_exec {
+            let mut input_order = self.input_order.write().unwrap();
+            input_order.retain(|&id| id != pin_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 移除输出 Pin 并更新顺序
+    pub fn remove_output(&self, pin_id: PinId) -> bool {
+        let removed_data = self.out_data_pins.remove(&pin_id).is_some();
+        let removed_exec = self.out_exec_pins.remove(&pin_id).is_some();
+        
+        if removed_data || removed_exec {
+            let mut output_order = self.output_order.write().unwrap();
+            output_order.retain(|&id| id != pin_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 获取按顺序排列的所有输入 Pin 信息（用于调试）
+    pub fn get_ordered_input_info(&self) -> Vec<(PinId, String, String)> {
+        let input_order = self.input_order.read().unwrap();
+        let mut result = Vec::new();
+        
+        for &pin_id in input_order.iter() {
+            if let Some(exec_pin) = self.in_exec_pins.get(&pin_id) {
+                result.push((pin_id, exec_pin.value().name().to_string(), "exec".to_string()));
+            } else if let Some(data_pin) = self.in_data_pins.get(&pin_id) {
+                result.push((pin_id, data_pin.value().name().to_string(), data_pin.value().data_type().to_string()));
+            }
+        }
+        
+        result
+    }
+
+    /// 获取按顺序排列的所有输出 Pin 信息（用于调试）
+    pub fn get_ordered_output_info(&self) -> Vec<(PinId, String, String)> {
+        let output_order = self.output_order.read().unwrap();
+        let mut result = Vec::new();
+        
+        for &pin_id in output_order.iter() {
+            if let Some(exec_pin) = self.out_exec_pins.get(&pin_id) {
+                result.push((pin_id, exec_pin.value().name().to_string(), "exec".to_string()));
+            } else if let Some(data_pin) = self.out_data_pins.get(&pin_id) {
+                result.push((pin_id, data_pin.value().name().to_string(), data_pin.value().data_type().to_string()));
+            }
+        }
+        
+        result
+    }
 }
 
 impl Serialize for GenericNode {
@@ -291,44 +415,50 @@ impl Serialize for GenericNode {
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
 
-        // 1. 收集输入执行 Pin
-        for entry in self.in_exec_pins.iter() {
-            inputs.push(PinDefProxy {
-                name: entry.value().name().to_string(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            });
+        // 按照输入顺序追踪器的顺序收集 Pin
+        let input_order = self.input_order.read().unwrap();
+        for &pin_id in input_order.iter() {
+            // 检查是否是执行 Pin
+            if let Some(exec_pin) = self.in_exec_pins.get(&pin_id) {
+                inputs.push(PinDefProxy {
+                    name: exec_pin.value().name().to_string(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            // 检查是否是数据 Pin
+            else if let Some(data_pin) = self.in_data_pins.get(&pin_id) {
+                inputs.push(PinDefProxy {
+                    name: data_pin.value().name().to_string(),
+                    pin_type: data_pin.value().data_type().to_string(),
+                    default_value: None,
+                    is_array: false,
+                });
+            }
         }
 
-        // 2. 收集输出执行 Pin
-        for entry in self.out_exec_pins.iter() {
-            outputs.push(PinDefProxy {
-                name: entry.value().name().to_string(),
-                pin_type: "exec".into(),
-                default_value: None,
-                is_array: false,
-            });
-        }
-
-        // 3. 收集数据输入 Pin
-        for entry in self.in_data_pins.iter() {
-            inputs.push(PinDefProxy {
-                name: entry.value().name().to_string(),
-                pin_type: entry.value().data_type().to_string(),
-                default_value: None,
-                is_array: false,
-            });
-        }
-
-        // 4. 收集数据输出 Pin
-        for entry in self.out_data_pins.iter() {
-            outputs.push(PinDefProxy {
-                name: entry.value().name().to_string(),
-                pin_type: entry.value().data_type().to_string(),
-                default_value: None,
-                is_array: false,
-            });
+        // 按照输出顺序追踪器的顺序收集 Pin
+        let output_order = self.output_order.read().unwrap();
+        for &pin_id in output_order.iter() {
+            // 检查是否是执行 Pin
+            if let Some(exec_pin) = self.out_exec_pins.get(&pin_id) {
+                outputs.push(PinDefProxy {
+                    name: exec_pin.value().name().to_string(),
+                    pin_type: "exec".into(),
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            // 检查是否是数据 Pin
+            else if let Some(data_pin) = self.out_data_pins.get(&pin_id) {
+                outputs.push(PinDefProxy {
+                    name: data_pin.value().name().to_string(),
+                    pin_type: data_pin.value().data_type().to_string(),
+                    default_value: None,
+                    is_array: false,
+                });
+            }
         }
 
         state.serialize_field("inputs", &inputs)?;
@@ -360,16 +490,29 @@ impl Node for GenericNode {
         Ok(())
     }
     fn inputs(&self) -> Vec<Arc<dyn InDataPin>> {
-        self.in_data_pins
-            .iter()
-            .map(|e| e.value().clone() as Arc<dyn InDataPin>)
-            .collect()
+        let input_order = self.input_order.read().unwrap();
+        let mut result = Vec::new();
+        
+        for &pin_id in input_order.iter() {
+            if let Some(data_pin) = self.in_data_pins.get(&pin_id) {
+                result.push(data_pin.value().clone() as Arc<dyn InDataPin>);
+            }
+        }
+        
+        result
     }
+    
     fn outputs(&self) -> Vec<Arc<dyn OutDataPin>> {
-        self.out_data_pins
-            .iter()
-            .map(|e| e.value().clone() as Arc<dyn OutDataPin>)
-            .collect()
+        let output_order = self.output_order.read().unwrap();
+        let mut result = Vec::new();
+        
+        for &pin_id in output_order.iter() {
+            if let Some(data_pin) = self.out_data_pins.get(&pin_id) {
+                result.push(data_pin.value().clone() as Arc<dyn OutDataPin>);
+            }
+        }
+        
+        result
     }
     fn exec_pins(&self) -> Vec<Arc<dyn ExecPin>> {
         let mut pins: Vec<Arc<dyn ExecPin>> = Vec::new();
