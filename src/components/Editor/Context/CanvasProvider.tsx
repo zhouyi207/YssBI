@@ -1,9 +1,9 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { CanvasContext } from "./CanvasContext";
 import { CanvasState, SubGraphData } from "../Types/canvas";
-import { Pin, BaseNode } from "../Types/nodes";
-import { VariableDefinition, VariableDataType, createPrimitiveVariable, getDefaultValueForType } from "../Types/variables";
-import { deserializeSubGraph } from "../Utils/io";
+import { BaseNode } from "../Types/nodes";
+import { VariableDefinition } from "../Types/variables";
+import { deserializeSubGraph, serializeSubGraph } from "../Utils/io";
 import { ProjectService } from "../../../services/projectService";
 import { useUI } from "./UIProvider";
 import { getNodeDefinition } from "../Hooks/useNodeRegistry";
@@ -14,7 +14,7 @@ import { useProjectStore } from "../Store/useProjectStore";
 import { useCanvasInteraction } from "../Hooks/useCanvasInteraction";
 import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
-import { createNodeInBackend, deleteNodeInBackend } from "../Utils/backendNodeOps";
+import { deleteNodeInBackend } from "../Utils/backendNodeOps";
 
 
 /* ================= Helper Functions ================= */
@@ -247,29 +247,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   // --- Synchronization ---
-  useEffect(() => {
-    let syncTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const unsub = useNodeStore.subscribe((state) => {
-      // 清除之前的 timeout
-      if (syncTimeout) {
-        clearTimeout(syncTimeout);
-      }
-
-      // 延迟同步，避免频繁更新
-      syncTimeout = setTimeout(() => {
-        console.log('[Sync] Syncing tabs to backend...');
-        useProjectStore.getState().syncWithTabs(state.tabs);
-      }, 500);
-    });
-
-    return () => {
-      if (syncTimeout) {
-        clearTimeout(syncTimeout);
-      }
-      unsub();
-    };
-  }, []);
+  // 注意：不再使用自动延迟同步，改为在特定操作完成时手动触发
+  // 例如：拖动结束、创建节点、删除节点等
 
   const syncActiveToCollection = useCallback(() => {
     useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
@@ -537,56 +516,40 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteEvent = useCallback((id: string) => { useProjectStore.getState().deleteEvent(id); closeTab(id); }, [closeTab]);
   const deleteMacro = useCallback((id: string) => { useProjectStore.getState().deleteMacro(id); closeTab(id); }, [closeTab]);
 
-  const addVariable = useCallback((name?: string, type: string = "int", isGlobal: boolean = false) => {
-    const st = useProjectStore.getState();
-    const allVars = { ...st.globalVariables };
-    // Also include local variables of current tab if any
+  const addVariable = useCallback(async (name?: string, type: string = "int", isGlobal: boolean = false) => {
     const tid = activeTabIdRef.current;
-    if (tid) {
-      const tabVars = useNodeStore.getState().tabs[tid]?.variables || {};
-      Object.assign(allVars, tabVars);
+    let scopeId: string | null = null;
+
+    if (!isGlobal && tid) {
+      scopeId = tid;
     }
 
-    const finalName = getUniqueName(name || "New Variable", allVars);
-    const id = `var-${crypto.randomUUID()}`;
-    const dataType = type as VariableDataType;
-    const defaultValue = getDefaultValueForType(dataType);
+    try {
+      const newVar = await ProjectService.createVariable(scopeId, name, type);
 
-    // 创建新的 VariableDefinition
-    const v = createPrimitiveVariable(id, finalName, dataType, defaultValue);
-
-    // 设置作用域
-    if (isGlobal) {
-      v.scope = { type: "global" };
-      st.addGlobalVariable(id, v);
-    } else {
-      if (tid) {
-        // 确定当前 tab 的类型来设置作用域
-        const tabSource = st.events[tid] || st.functions[tid] || st.macros[tid];
-        if (tabSource?.type === "function") {
-          v.scope = { type: "function", function_id: tid };
-        } else if (tabSource?.type === "macro") {
-          v.scope = { type: "macro", macro_id: tid };
-        } else {
-          v.scope = { type: "global" }; // event 中的变量也算全局
-        }
-        useNodeStore.getState().addVariable(tid, id, v);
+      // 更新前端状态
+      if (scopeId) {
+        useNodeStore.getState().addVariable(scopeId, newVar.id, newVar);
+      } else {
+        useProjectStore.getState().addGlobalVariable(newVar.id, newVar);
       }
+
+      switchSidebarTab('variables');
+    } catch (e) {
+      console.error("Failed to create variable:", e);
     }
-    switchSidebarTab('variables');
   }, [switchSidebarTab]);
 
   const updateVariable = useCallback((id: string, data: Partial<VariableDefinition>) => {
     const st = useProjectStore.getState();
     const isGlobal = !!st.globalVariables[id];
 
+    // 1. 更新变量定义
     if (isGlobal) {
       st.updateGlobalVariable(id, data);
     } else {
-      // 尝试从所有标签页中找到该变量并更新
       const nodeStore = useNodeStore.getState();
       let found = false;
-
       for (const [tid, tabState] of Object.entries(nodeStore.tabs)) {
         if (tabState.variables[id]) {
           nodeStore.updateVariable(tid, id, data);
@@ -594,11 +557,49 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
           break;
         }
       }
-
-      if (!found) {
+      if (!found && !isGlobal) {
         console.warn(`[CanvasProvider] Variable ${id} not found in any scope.`);
       }
     }
+
+    // 2. 更新所有引用该变量的节点 (Pin Type & Variable Name)
+    const nodeStore = useNodeStore.getState();
+    Object.keys(nodeStore.tabs).forEach(tid => {
+      const nodes = nodeStore.getNodes(tid);
+      // 检查是否有节点引用此变量
+      const needsUpdate = nodes.some(n => n.variableId === id);
+      if (!needsUpdate) return;
+
+      const newNodes = nodes.map(n => {
+        if (n.variableId !== id) return n;
+
+        // 克隆节点以触发 React 更新
+        const clone = n.clone();
+
+        if (data.name) clone.variableName = data.name;
+        if (data.data_type) {
+          clone.variableType = data.data_type;
+
+          // 更新 Pin 类型 (从而更新颜色)
+          if (clone.type === "get_variable") {
+            clone.outputs.forEach(p => {
+              if (p.type !== "exec") p.type = data.data_type!;
+            });
+          } else if (clone.type === "set_variable") {
+            clone.inputs.forEach(p => {
+              if (p.type !== "exec") p.type = data.data_type!;
+            });
+            clone.outputs.forEach(p => {
+              if (p.type !== "exec") p.type = data.data_type!;
+            });
+          }
+        }
+        return clone;
+      });
+
+      nodeStore.setNodes(tid, newNodes);
+    });
+
   }, []);
 
   const deleteVariable = useCallback((id: string) => {
@@ -699,52 +700,55 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
   const cut = useCallback(() => { copy(); deleteSelected(); }, [copy, deleteSelected]);
 
-  const paste = useCallback((pos?: { x: number; y: number }) => {
+  const paste = useCallback(async (pos?: { x: number; y: number }) => {
     if (clipboardRef.current.length === 0) return;
+    const tid = activeTabIdRef.current;
+    if (!tid) return;
+
     saveHistory();
     const clipboard = clipboardRef.current.filter(n => getNodeDefinition(n.type));
+
+    // 计算位置偏移
     let tX = pos ? pos.x : -canvasRef.current.x / canvasRef.current.scale + 100;
     let tY = pos ? pos.y : -canvasRef.current.y / canvasRef.current.scale + 100;
     const minX = Math.min(...clipboard.map(n => n.position.x));
     const minY = Math.min(...clipboard.map(n => n.position.y));
     const offX = tX - minX, offY = tY - minY;
 
-    const idMap = new Map<string, string>();
-    const newSelectedIds: string[] = [];
-    const newNodes = clipboard.map(n => {
-      const newNode = n.clone();
-      const nid = `node-${crypto.randomUUID()}`;
-      newNode.id = nid;
-      newNode.position = { x: n.position.x + offX, y: n.position.y + offY };
-      newSelectedIds.push(nid);
-      const updatePins = (ps: Pin[]) => ps.forEach(p => {
-        const old = p.id;
-        p.id = `${nid}_${crypto.randomUUID().slice(0, 8)}`;
-        p.nodeId = nid;
-        idMap.set(old, p.id);
-      });
-      updatePins(newNode.inputs);
-      updatePins(newNode.outputs);
-      return newNode;
+    // 准备节点数据
+    const tempNodes = clipboard.map(n => {
+      const clone = n.clone();
+      clone.position = { x: n.position.x + offX, y: n.position.y + offY };
+      return clone;
     });
 
-    newNodes.forEach(n => {
-      [...n.inputs, ...n.outputs].forEach(p => {
-        p.links = p.links.map(l => idMap.get(l)).filter(Boolean) as string[];
-      });
-    });
+    // 序列化为后端格式
+    const serializedData = serializeSubGraph("temp", "temp", "event", tempNodes, { x: 0, y: 0, scale: 1 }, {}, [], []);
 
-    setNodes((prev: BaseNode[]) => [...prev, ...newNodes]);
-    setSelectedNodeIds(newSelectedIds);
+    try {
+      console.log('[CanvasProvider] Pasting nodes via backend...');
+      const newSerializedNodes = await ProjectService.createNodes(tid, serializedData.nodes);
 
-    // 同步粘贴的节点到后端
-    const tid = activeTabIdRef.current;
-    if (tid) {
-      Promise.all(newNodes.map(n => createNodeInBackend(tid, n))).catch(e => {
-        console.error('[CanvasProvider] Failed to sync pasted nodes:', e);
-      });
+      // 反序列化回 BaseNode
+      const tempResData: SubGraphData = {
+        id: tid,
+        name: "temp",
+        type: "event",
+        nodes: newSerializedNodes,
+        canvas: { x: 0, y: 0, scale: 1 },
+        variables: {},
+        inputs: [],
+        outputs: []
+      };
+      const { nodes: newBaseNodes } = deserializeSubGraph(tempResData);
+
+      setNodes((prev) => [...prev, ...newBaseNodes]);
+      setSelectedNodeIds(newBaseNodes.map(n => n.id));
+
+    } catch (e) {
+      console.error('[CanvasProvider] Failed to paste nodes:', e);
     }
-  }, [saveHistory, setNodes, setSelectedNodeIds]);
+  }, [saveHistory, setNodes, setSelectedNodeIds, activeTabIdRef]);
 
 
   const {
@@ -768,52 +772,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // 初始化：检查是否有已有数据，如果有则打开第一个子图
   // 注意：不再自动创建默认事件，用户需要手动创建
-  useEffect(() => {
-    const checkAndInitialize = () => {
-      console.log('[CanvasProvider] checkAndInitialize called');
 
-      const st = useProjectStore.getState();
-      const layoutStore = useLayoutStore.getState();
-      const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
-      const editorNode = layoutStore.nodes[targetGroupId];
-      const currentTabs = editorNode?.data?.tabs || [];
-
-      console.log('[CanvasProvider] State check:', {
-        targetGroupId,
-        currentTabsLength: currentTabs.length,
-        eventsCount: Object.keys(st.events).length,
-        eventIds: Object.keys(st.events),
-      });
-
-      // 如果已经有打开的标签页，不需要初始化
-      if (currentTabs.length > 0) {
-        console.log('[CanvasProvider] Already has tabs, skipping initialization');
-        return;
-      }
-
-      // 检查是否有已有数据
-      const hasEvents = Object.keys(st.events).length > 0;
-      const hasFunctions = Object.keys(st.functions).length > 0;
-      const hasMacros = Object.keys(st.macros).length > 0;
-
-      if (hasEvents || hasFunctions || hasMacros) {
-        // 有已有数据，打开第一个子图
-        const first = Object.values(st.events)[0] || Object.values(st.functions)[0] || Object.values(st.macros)[0];
-        if (first) {
-          console.log('[CanvasProvider] Opening existing subgraph:', first.id, first.name);
-          openSubGraph(first.id, first.name, first.type as any, first);
-        }
-      } else {
-        // 没有数据，不自动创建，等待用户手动创建
-        console.log('[CanvasProvider] No data, waiting for user to create subgraph');
-      }
-    };
-
-    // 立即执行一次（因为 App.tsx 已经等待 initProjectSync 完成）
-    checkAndInitialize();
-
-    return () => { };
-  }, [openSubGraph]);
 
   const handleSetActiveGroupId = useCallback((id: string) => useLayoutStore.getState().setActiveGroup(id), []);
 

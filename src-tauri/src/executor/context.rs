@@ -95,6 +95,7 @@ impl ExecutionContext {
 
         let runtime_id = Uuid::new_v4();
         let node = GenericNode::new(runtime_id, &node_data.title, &node_data.node_type);
+        node.set_variable_id(node_data.variable_id.clone());
 
         // 创建输入 Pin
         for pin_data in &node_data.inputs {
@@ -104,14 +105,16 @@ impl ExecutionContext {
                 let pin_id = exec_pin.id();
                 node.add_in_exec_pin(exec_pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
-                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
+                self.data_pin_id_to_runtime_pin_id
+                    .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericInDataPin;
                 let pin = GenericInDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
                 let pin_id = pin.id();
                 node.add_input(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
-                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
+                self.data_pin_id_to_runtime_pin_id
+                    .insert(pin_data.id.clone(), pin_id);
             }
         }
 
@@ -123,14 +126,16 @@ impl ExecutionContext {
                 let pin_id = exec_pin.id();
                 node.add_out_exec_pin(exec_pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
-                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
+                self.data_pin_id_to_runtime_pin_id
+                    .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericOutDataPin;
                 let pin = GenericOutDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
                 let pin_id = pin.id();
                 node.add_output(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
-                self.data_pin_id_to_runtime_pin_id.insert(pin_data.id.clone(), pin_id);
+                self.data_pin_id_to_runtime_pin_id
+                    .insert(pin_data.id.clone(), pin_id);
             }
         }
 
@@ -159,7 +164,10 @@ impl ExecutionContext {
             let from_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(&pin_data.id) {
                 Some(&id) => id,
                 None => {
-                    self.log(format!("[WARN] Source pin '{}' not found in runtime", pin_data.id));
+                    self.log(format!(
+                        "[WARN] Source pin '{}' not found in runtime",
+                        pin_data.id
+                    ));
                     continue;
                 }
             };
@@ -167,16 +175,23 @@ impl ExecutionContext {
             // 遍历 links，建立连接
             for target_pin_id in &pin_data.links {
                 // 获取目标 Pin 的运行时 ID
-                let to_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(target_pin_id) {
+                let to_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(target_pin_id)
+                {
                     Some(&id) => id,
                     None => {
-                        self.log(format!("[WARN] Target pin '{}' not found in runtime", target_pin_id));
+                        self.log(format!(
+                            "[WARN] Target pin '{}' not found in runtime",
+                            target_pin_id
+                        ));
                         continue;
                     }
                 };
 
                 // 建立连接
-                if let Err(e) = self.connection_manager.connect_by_id(from_runtime_pin_id, to_runtime_pin_id) {
+                if let Err(e) = self
+                    .connection_manager
+                    .connect_by_id(from_runtime_pin_id, to_runtime_pin_id)
+                {
                     self.log(format!("[ERROR] Failed to connect pins: {:?}", e));
                 } else {
                     self.log(format!("[Connection] {} -> {}", pin_data.id, target_pin_id));
@@ -255,12 +270,16 @@ impl ExecutionContext {
         let node_data = {
             let node_guard = node.lock().unwrap();
             NodeData {
-                id: self.runtime_id_to_data_id.get(&node_id).cloned().unwrap_or_default(),
+                id: self
+                    .runtime_id_to_data_id
+                    .get(&node_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 node_type: node_guard.node_type().to_string(),
                 title: node_guard.name().to_string(),
                 inputs: vec![],
                 outputs: vec![],
-                variable_id: None,
+                variable_id: node_guard.variable_id(),
                 sub_graph_id: None,
             }
         };
@@ -286,7 +305,10 @@ impl ExecutionContext {
                 }
             }
         } else {
-            let log_msg = format!("  -> No prototype found for '{}', using default flow", node_type);
+            let log_msg = format!(
+                "  -> No prototype found for '{}', using default flow",
+                node_type
+            );
             info!("{}", log_msg);
             self.logs.push(log_msg);
             output_exec_name.to_string()
@@ -390,8 +412,69 @@ impl ExecutionContext {
 
 // 实现 ExecutionContextTrait (暂时保留接口兼容性)
 impl ExecutionContextTrait for ExecutionContext {
-    fn get_pin_value(&mut self, _pin_id: &str) -> Value {
-        // TODO: 实现基于运行时对象的 pin 值获取
+    fn get_pin_value(&mut self, pin_id_str: &str) -> Value {
+        // 1. 获取运行时 PinId
+        let pin_id = match self.data_pin_id_to_runtime_pin_id.get(pin_id_str) {
+            Some(&id) => id,
+            None => {
+                // self.log(format!("[WARN] Pin '{}' not found in runtime mapping", pin_id_str));
+                return Value::Null;
+            }
+        };
+
+        // 2. 查找上游连接 (Input -> Output)
+        // get_upstream 返回 Option<PinId>
+        let output_pin_id = match self.connection_manager.get_upstream(pin_id) {
+            Some(id) => id,
+            None => return Value::Null,
+        };
+
+        // 3. 找到输出节点
+        let node_id = match self.pin_to_node.get(&output_pin_id) {
+            Some(id) => *id,
+            None => return Value::Null,
+        };
+
+        // 4. 获取节点并执行
+        let node_arc = match self.nodes.get(&node_id) {
+            Some(n) => n.clone(),
+            None => return Value::Null,
+        };
+
+        let node_type = node_arc.lock().unwrap().node_type().to_string();
+
+        // 构造 NodeData
+        let node_data = {
+            let node_guard = node_arc.lock().unwrap();
+            NodeData {
+                id: self
+                    .runtime_id_to_data_id
+                    .get(&node_id)
+                    .cloned()
+                    .unwrap_or_default(),
+                node_type: node_guard.node_type().to_string(),
+                title: node_guard.name().to_string(),
+                inputs: vec![],
+                outputs: vec![],
+                variable_id: node_guard.variable_id(),
+                sub_graph_id: None,
+            }
+        };
+
+        let proto = crate::executor::node::registry::get_registry().get_prototype(&node_type);
+
+        if let Some(p) = proto {
+            // 查找输出 Pin 的字符串 ID
+            let output_pin_id_str = self
+                .data_pin_id_to_runtime_pin_id
+                .iter()
+                .find(|(_, &v)| v == output_pin_id)
+                .map(|(k, _)| k.clone())
+                .unwrap_or_default();
+
+            return p.process_data(self, &node_data, &output_pin_id_str);
+        }
+
         Value::Null
     }
 

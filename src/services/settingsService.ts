@@ -134,10 +134,10 @@ export class SettingsService {
         try {
             const settings = await invoke<AppSettings>("load_settings");
             this.settingsCache = settings;
-            console.info("Settings loaded successfully via backend");
+            console.info("[SettingsService] Settings loaded successfully via backend");
             return settings;
         } catch (error) {
-            console.error("Error loading settings via backend:", error);
+            console.error("[SettingsService] Error loading settings via backend:", error);
             this.settingsCache = { ...DEFAULT_SETTINGS };
             return this.settingsCache;
         }
@@ -150,9 +150,9 @@ export class SettingsService {
         try {
             await invoke("save_settings", { settings });
             this.settingsCache = settings;
-            console.log("Settings saved successfully via backend");
+            console.log("[SettingsService] Settings saved successfully via backend");
         } catch (error) {
-            console.error("Error saving settings via backend:", error);
+            console.error("[SettingsService] Error saving settings via backend:", error);
             throw error;
         }
     }

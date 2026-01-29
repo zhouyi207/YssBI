@@ -3,23 +3,10 @@ import { useNodeStore } from "../Store/useNodeStore";
 import { useGestureStore } from "../Store/useGestureStore";
 import { useViewportStore } from "../Store/useViewportStore";
 import { BaseNode, Pin } from "../Types/nodes";
-import { CanvasState, Gesture, EditorGroup } from "../Types/canvas";
-import { isCompatiblePins, isSingleLinkPin } from "../Utils/pinUtils";
+import { CanvasState, Gesture, EditorGroup, SubGraphData } from "../Types/canvas";
 import { clamp } from "../../../types";
-
-// Helper function moved from CanvasProvider
-const updatePinLink = (node: BaseNode, pId: string, oId: string) => {
-    const p = [...node.inputs, ...node.outputs].find((x) => x.id === pId);
-    if (!p) return false;
-    if (isSingleLinkPin(p)) {
-        if (p.links.length === 1 && p.links[0] === oId) return false;
-        p.links = [oId];
-    } else {
-        if (p.links.includes(oId)) return false;
-        p.links = [...p.links, oId];
-    }
-    return true;
-};
+import { ProjectService } from "../../../services/projectService";
+import { deserializeSubGraph } from "../Utils/io";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;
@@ -46,28 +33,37 @@ export function useCanvasInteraction({
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean } | null>(null);
     const [pendingConnection, setPendingConnection] = useState<Pin | null>(null);
 
-    const connectPins = useCallback((a: string, b: string) => {
+    const connectPins = useCallback(async (a: string, b: string) => {
         const tid = activeTabIdRef.current;
         if (!tid) return;
-        const currentNodes = useNodeStore.getState().getNodes(tid);
 
-        const findPin = (id: string) => {
-            for (const n of currentNodes) { const p = [...n.inputs, ...n.outputs].find(x => x.id === id); if (p) return { pin: p, node: n }; }
-            return null;
-        };
-        const resA = findPin(a); const resB = findPin(b);
-        if (!resA || !resB || !isCompatiblePins(resA.pin, resB.pin)) return;
-        saveHistory();
-        setNodes((prev: BaseNode[]) => prev.map(n => {
-            const newNode = n.clone(); let changed = false;
-            const oldLinksToRemove = new Set<string>();
-            if (isSingleLinkPin(resA.pin) && resA.pin.links.length > 0) resA.pin.links.forEach(l => oldLinksToRemove.add(l));
-            if (isSingleLinkPin(resB.pin) && resB.pin.links.length > 0) resB.pin.links.forEach(l => oldLinksToRemove.add(l));
-            [...newNode.inputs, ...newNode.outputs].forEach(p => { if (oldLinksToRemove.has(p.id)) { p.links = p.links.filter(l => l !== a && l !== b); changed = true; } });
-            if (n.id === resA.node.id) if (updatePinLink(newNode, a, b)) changed = true;
-            if (n.id === resB.node.id) if (updatePinLink(newNode, b, a)) changed = true;
-            return changed ? newNode : n;
-        }));
+        try {
+            console.log(`[useCanvasInteraction] Connecting pins via backend: ${a} -> ${b}`);
+            // 直接调用后端 API 进行连接
+            const updatedSerializedNodes = await ProjectService.connectPins(tid, a, b);
+
+            // 将返回的 SerializedNode[] 转换为 BaseNode[]
+            // 我们构造一个临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
+            const tempSubGraph: SubGraphData = {
+                id: tid,
+                name: "temp",
+                type: "event", // 这里的类型不重要，重要的是节点转换逻辑
+                nodes: updatedSerializedNodes as any[], // 类型断言因为 SerializedNode 和 BaseNode 在某些字段上可能不完全匹配，但在 deserialize 中处理了
+                canvas: { x: 0, y: 0, scale: 1 },
+                variables: {},
+                inputs: [],
+                outputs: []
+            };
+
+            const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
+
+            setNodes(newNodes);
+            saveHistory();
+
+        } catch (error) {
+            console.error('[useCanvasInteraction] Failed to connect pins:', error);
+            // 这里可以添加 toast 提示用户连接失败（例如类型不兼容）
+        }
     }, [activeTabIdRef, saveHistory, setNodes]);
 
     const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
@@ -101,54 +97,38 @@ export function useCanvasInteraction({
         useGestureStore.getState().setGesture({ type: "drag", nodeId, lastX: e.clientX, lastY: e.clientY, moved: false, groupId: gid });
     }, [activeGroupIdRef, groups, setSelectedNodeIds]);
 
-    const onPinPointerDown = useCallback((pinId: string, e: React.PointerEvent, groupId?: string) => {
+
+
+    const onPinPointerDown = useCallback(async (pinId: string, e: React.PointerEvent, groupId?: string) => {
         e.stopPropagation();
 
-        // Alt + Click to Disconnect (Optimized)
+        // Alt + Click to Disconnect (后端优先)
         if (e.altKey && e.button === 0) {
-            saveHistory();
-            setNodes(prev => {
-                // 找出哪些节点包含目标 Pin 或与其连接的 Pin
-                const targetPinId = pinId;
-                const nodeIdsToUpdate = new Set<string>();
-                const linkedPinIds = new Set<string>();
+            const tid = activeTabIdRef.current;
+            if (!tid) return;
 
-                for (const node of prev) {
-                    const allPins = [...node.inputs, ...node.outputs];
-                    const p = allPins.find(x => x.id === targetPinId);
-                    if (p) {
-                        nodeIdsToUpdate.add(node.id);
-                        p.links.forEach(l => linkedPinIds.add(l));
-                    }
-                }
+            try {
+                console.log(`[useCanvasInteraction] Disconnecting pin via backend: ${pinId}`);
+                const updatedSerializedNodes = await ProjectService.disconnectPin(tid, pinId);
 
-                if (linkedPinIds.size > 0) {
-                    for (const node of prev) {
-                        if (nodeIdsToUpdate.has(node.id)) continue;
-                        const allPins = [...node.inputs, ...node.outputs];
-                        if (allPins.some(p => linkedPinIds.has(p.id))) {
-                            nodeIdsToUpdate.add(node.id);
-                        }
-                    }
-                }
+                const tempSubGraph: SubGraphData = {
+                    id: tid,
+                    name: "temp",
+                    type: "event",
+                    nodes: updatedSerializedNodes as any[],
+                    canvas: { x: 0, y: 0, scale: 1 },
+                    variables: {},
+                    inputs: [],
+                    outputs: []
+                };
 
-                if (nodeIdsToUpdate.size === 0) return prev;
+                const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
 
-                return prev.map(n => {
-                    if (!nodeIdsToUpdate.has(n.id)) return n;
-                    const newNode = n.clone();
-                    let changed = false;
-                    [...newNode.inputs, ...newNode.outputs].forEach(p => {
-                        if (p.id === targetPinId) {
-                            if (p.links.length > 0) { p.links = []; changed = true; }
-                        } else if (p.links.includes(targetPinId)) {
-                            p.links = p.links.filter(l => l !== targetPinId);
-                            changed = true;
-                        }
-                    });
-                    return changed ? newNode : n;
-                });
-            });
+                setNodes(newNodes);
+                saveHistory();
+            } catch (error) {
+                console.error('[useCanvasInteraction] Failed to disconnect pin:', error);
+            }
             return;
         }
 
@@ -167,6 +147,7 @@ export function useCanvasInteraction({
 
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, groupId });
     }, [activeTabIdRef, saveHistory, setNodes]);
+
 
     const onCanvasWheel = useCallback((e: React.WheelEvent, targetGroupId?: string) => {
         if (e.ctrlKey) {
@@ -278,6 +259,16 @@ export function useCanvasInteraction({
                 else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
             } else if (g.type === "drag" && g.moved) {
                 saveHistory();
+                // 拖动结束后同步节点位置到后端
+                const tid = activeTabIdRef.current;
+                if (tid) {
+                    console.log(`[useCanvasInteraction] Drag ended, syncing nodes to backend...`);
+                    import('../Store/useNodeStore').then(({ useNodeStore }) => {
+                        import('../Store/useProjectStore').then(({ useProjectStore }) => {
+                            useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
+                        });
+                    });
+                }
             }
 
             useGestureStore.getState().endConnection();

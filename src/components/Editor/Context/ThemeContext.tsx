@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { 
-    SettingsService, 
-    ThemeSettings, 
-    EditorSettings, 
-    AppearanceSettings, 
+import {
+    SettingsService,
+    ThemeSettings,
+    EditorSettings,
+    AppearanceSettings,
     ProjectSettings,
     WindowSettings,
     AppSettings,
@@ -25,19 +25,19 @@ interface SettingsContextValue {
     appearance: AppearanceSettings;
     project: ProjectSettings;
     isLoading: boolean;
-    
+
     // 更新方法
     updateTheme: (updates: Partial<ThemeSettings>) => void;
     updateEditor: (updates: Partial<EditorSettings>) => void;
     updateAppearance: (updates: Partial<AppearanceSettings>) => void;
     updateProject: (updates: Partial<ProjectSettings>) => void;
-    
+
     // 恢复默认方法
     resetAllToDefaults: () => Promise<void>;
     resetThemeToDefaults: () => Promise<void>;
     resetEditorToDefaults: () => Promise<void>;
     resetAppearanceToDefaults: () => Promise<void>;
-    
+
     // 重新加载设置
     reloadSettings: () => Promise<void>;
 }
@@ -60,9 +60,9 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setEditor(settings.editor);
             setAppearance(settings.appearance);
             setProject(settings.project);
-            console.log("Settings loaded into context");
+            console.log("[ThemeProvider] Settings loaded into context");
         } catch (error) {
-            console.error("Failed to load settings:", error);
+            console.error("[ThemeProvider] Failed to load settings:", error);
         } finally {
             setIsLoading(false);
         }

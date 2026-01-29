@@ -339,7 +339,7 @@ export default function Canvas() {
   }, [drag, variables]);
 
   /* ===== Data Drag ===== */
-  function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
+  async function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {
     const el = ref.current;
     if (!el) return;
 
@@ -368,22 +368,19 @@ export default function Canvas() {
 
     // 如果是数据 (DataFrame 或 Column)
     if (dragState.template.category === "Data") {
-      saveHistory();
       const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, dragState.template.type, {
         variableId: dragState.template.variableId,
         variableName: dragState.template.variableName,
         initialData: dragState.template.initialData
       });
       if (newNode) {
-        // 使用后端 API 创建节点
-        createNode(newNode);
+        // 使用后端 API 创建节点（等待后端返回）
+        const createdNode = await createNode(newNode);
 
-        if (targetPinId) {
-          const outputPin = newNode.outputs[0];
+        if (createdNode && targetPinId) {
+          const outputPin = createdNode.outputs[0];
           if (outputPin) {
-            setTimeout(() => {
-              connectPins(outputPin.id, targetPinId);
-            }, 0);
+            connectPins(outputPin.id, targetPinId);
           }
         }
       }
@@ -404,7 +401,6 @@ export default function Canvas() {
       else if (event.ctrlKey) spawnType = "get_variable";
 
       if (spawnType) {
-        saveHistory();
         const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType, {
           variableId: dragState.template.variableId,
           variableName: dragState.template.variableName,
@@ -412,15 +408,13 @@ export default function Canvas() {
           variableIsArray: dragState.template.variableIsArray
         } as any);
         if (newNode) {
-          // 使用后端 API 创建节点
-          createNode(newNode);
+          // 使用后端 API 创建节点（等待后端返回）
+          const createdNode = await createNode(newNode);
 
-          if (targetPinId && spawnType === "get_variable") {
-            const outputPin = newNode.outputs[0];
+          if (createdNode && targetPinId && spawnType === "get_variable") {
+            const outputPin = createdNode.outputs[0];
             if (outputPin) {
-              setTimeout(() => {
-                connectPins(outputPin.id, targetPinId);
-              }, 0);
+              connectPins(outputPin.id, targetPinId);
             }
           }
         }
@@ -435,14 +429,14 @@ export default function Canvas() {
           variableIsArray: dragState.template.variableIsArray
         } as any);
         if (newNode) {
-          // 使用后端 API 创建节点
-          createNode(newNode);
+          // 使用后端 API 创建节点（等待后端返回）
+          const createdNode = await createNode(newNode);
 
-          const outputPin = newNode.outputs[0];
-          if (outputPin) {
-            setTimeout(() => {
+          if (createdNode) {
+            const outputPin = createdNode.outputs[0];
+            if (outputPin) {
               connectPins(outputPin.id, targetPinId);
-            }, 0);
+            }
           }
           return;
         }
@@ -460,7 +454,6 @@ export default function Canvas() {
       });
       return;
     } else if (dragState.template.type === "call_function" || dragState.template.type === "call_macro") {
-      saveHistory();
       const type = dragState.template.type;
       const subId = dragState.template.subGraphId;
       const subName = dragState.template.subName;
@@ -481,8 +474,8 @@ export default function Canvas() {
       );
       node.subGraphId = subId;
 
-      // 使用后端 API 创建节点
-      createNode(node);
+      // 使用后端 API 创建节点（等待后端返回）
+      await createNode(node);
       return;
     }
 
@@ -492,9 +485,8 @@ export default function Canvas() {
       dragState.template.type
     );
     if (newNode) {
-      saveHistory();
-      // 使用后端 API 创建节点
-      createNode(newNode);
+      // 使用后端 API 创建节点（等待后端返回）
+      await createNode(newNode);
     }
   }
 

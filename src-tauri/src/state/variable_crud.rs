@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 
 use super::project_state::ProjectState;
+use crate::project::SubGraphType;
 use crate::schema::VariableDefinition;
+use uuid::Uuid;
 
 impl ProjectState {
     // ==================== Global Variables CRUD ====================
@@ -116,5 +118,92 @@ impl ProjectState {
             ));
         }
         Ok(())
+    }
+
+    // ==================== Unified Create Variable (Backend Generated ID) ====================
+
+    pub fn create_variable(
+        &self,
+        subgraph_id: Option<String>,
+        name_hint: Option<String>,
+        data_type_str: Option<String>,
+    ) -> Result<VariableDefinition, String> {
+        let mut project = self.data.write().unwrap();
+        let new_id = format!("var-{}", uuid::Uuid::new_v4());
+
+        let data_type = match data_type_str.as_deref().unwrap_or("int") {
+            "int" => crate::schema::VariableDataType::Int,
+            "float" => crate::schema::VariableDataType::Float,
+            "string" => crate::schema::VariableDataType::String,
+            "bool" => crate::schema::VariableDataType::Bool,
+            _ => crate::schema::VariableDataType::Any,
+        };
+
+        let default_value = match data_type {
+            crate::schema::VariableDataType::Int => serde_json::json!(0),
+            crate::schema::VariableDataType::Float => serde_json::json!(0.0),
+            crate::schema::VariableDataType::String => serde_json::json!(""),
+            crate::schema::VariableDataType::Bool => serde_json::json!(false),
+            _ => serde_json::json!(null),
+        };
+
+        if let Some(sid) = subgraph_id {
+            // Local Variable
+            let subgraph = crate::get_subgraph_mut!(project, &sid)
+                .ok_or_else(|| format!("Subgraph '{}' not found", sid))?;
+
+            // Generate Name
+            let base_name = name_hint.unwrap_or_else(|| "New Variable".to_string());
+            let mut final_name = base_name.clone();
+            let mut count = 1;
+            let existing_names: Vec<String> = subgraph
+                .variables
+                .values()
+                .map(|v| v.name.clone())
+                .collect();
+            while existing_names.contains(&final_name) {
+                final_name = format!("{}_{}", base_name, count);
+                count += 1;
+            }
+
+            // Determine Scope
+            let scope = match subgraph.sub_type {
+                SubGraphType::Function => crate::schema::VariableScope::Function {
+                    function_id: sid.clone(),
+                },
+                SubGraphType::Macro => crate::schema::VariableScope::Macro {
+                    macro_id: sid.clone(),
+                },
+                _ => crate::schema::VariableScope::Global,
+            };
+
+            let mut def = VariableDefinition::new(new_id.clone(), final_name, data_type);
+            def.default_value = Some(default_value);
+            def.scope = scope;
+
+            subgraph.variables.insert(new_id.clone(), def.clone());
+            Ok(def)
+        } else {
+            // Global Variable
+            let base_name = name_hint.unwrap_or_else(|| "New Global".to_string());
+            let mut final_name = base_name.clone();
+            let mut count = 1;
+            let existing_names: Vec<String> = project
+                .global_variables
+                .values()
+                .map(|v| v.name.clone())
+                .collect();
+            while existing_names.contains(&final_name) {
+                final_name = format!("{}_{}", base_name, count);
+                count += 1;
+            }
+
+            let mut def = VariableDefinition::new(new_id.clone(), final_name, data_type);
+            def.default_value = Some(default_value);
+            def.scope = crate::schema::VariableScope::Global;
+
+            project.global_variables.insert(new_id.clone(), def.clone());
+            Ok(def)
+        }
     }
 }

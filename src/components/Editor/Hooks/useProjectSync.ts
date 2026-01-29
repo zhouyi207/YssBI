@@ -26,6 +26,11 @@ interface UseProjectSyncOptions {
   onProjectSaved?: (path: string) => void;
 }
 
+// 全局单例：确保事件监听器只注册一次
+let globalUnlisten: (() => void) | null = null;
+let listenerSetupPromise: Promise<void> | null = null;
+let listenerCount = 0;
+
 /**
  * 订阅后端项目事件，自动同步数据到前端 Store
  */
@@ -35,14 +40,30 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
   useEffect(() => {
     if (!enabled) return;
 
-    let unlisten: (() => void) | null = null;
+    listenerCount++;
+
+    // 如果已经有监听器，不需要再创建
+    if (globalUnlisten) {
+      console.log('[useProjectSync] Listener already exists, skipping setup');
+      return () => {
+        listenerCount--;
+      };
+    }
+
+    // 如果正在设置监听器，等待完成
+    if (listenerSetupPromise) {
+      console.log('[useProjectSync] Listener setup in progress, waiting...');
+      return () => {
+        listenerCount--;
+      };
+    }
 
     const setupListener = async () => {
       console.log('[useProjectSync] Setting up project event listener...');
-      
-      unlisten = await listen<ProjectEventPayload>('project-event', (event) => {
+
+      globalUnlisten = await listen<ProjectEventPayload>('project-event', (event) => {
         const { type, payload } = event.payload;
-        console.log('[useProjectSync] Received event:', type, payload);
+        console.log(`[useProjectSync] Received event: type=${type}, payload=${JSON.stringify(payload)}`);
 
         const projectStore = useProjectStore.getState();
 
@@ -141,7 +162,7 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
             delete nextGlobalVariables[payload.id];
             projectStore.setGlobalVariables(nextGlobalVariables);
             break;
-            
+
           // DataFrame 相关事件
           case 'DataFrameCreated':
             projectStore.setDataFrames({ ...projectStore.dataframes, [payload.id]: payload.data });
@@ -154,18 +175,23 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
             break;
 
           default:
-            console.log('[useProjectSync] Unhandled event type:', type);
+            console.log(`[useProjectSync] Unhandled event type: ${type}`);
         }
       });
 
       console.log('[useProjectSync] Project event listener set up successfully');
     };
 
-    setupListener();
+    listenerSetupPromise = setupListener().finally(() => {
+      listenerSetupPromise = null;
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
+      listenerCount--;
+      // 只有当没有其他组件使用时才清理监听器
+      if (listenerCount === 0 && globalUnlisten) {
+        globalUnlisten();
+        globalUnlisten = null;
         console.log('[useProjectSync] Project event listener cleaned up');
       }
     };
@@ -180,14 +206,8 @@ export async function initProjectSync(): Promise<ProjectData | null> {
   try {
     console.log('[initProjectSync] Syncing project state from backend...');
     const projectData = await ProjectService.getProjectState();
-    
-    console.log('[initProjectSync] Received project data:', {
-      eventsCount: Object.keys(projectData.events || {}).length,
-      functionsCount: Object.keys(projectData.functions || {}).length,
-      macrosCount: Object.keys(projectData.macros || {}).length,
-      globalVariablesCount: Object.keys(projectData.globalVariables || {}).length,
-      dataframesCount: Object.keys(projectData.dataframes || {}).length,
-    });
+
+    console.log(`[initProjectSync] Received project data: events=${Object.keys(projectData.events || {}).length}, functions=${Object.keys(projectData.functions || {}).length}, macros=${Object.keys(projectData.macros || {}).length}, globalVars=${Object.keys(projectData.globalVariables || {}).length}, dataframes=${Object.keys(projectData.dataframes || {}).length}`);
 
     // 同步到前端 Store
     const projectStore = useProjectStore.getState();

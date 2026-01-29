@@ -1,5 +1,4 @@
 
-import { useState } from "react";
 import "./utils/logger";
 import "./App.css";
 import ActivityBar from "./components/Editor/Layout/ActivityBar";
@@ -13,36 +12,21 @@ import { Workspace } from "./components/Editor/Layout/Workspace";
 import { useLayoutStore } from "./store/layoutStore";
 import { useAppInitialization } from "./components/Editor/Hooks/useAppInitialization";
 import { useProjectSync } from "./components/Editor/Hooks/useProjectSync";
-import PlotWindow from "./components/Editor/Plot/PlotWindow";
-import DataViewWindow from "./components/Editor/DataView/DataViewWindow";
+import PlotWindow from "./components/PlotView/PlotWindow";
+import DataViewWindow from "./components/DataView/DataViewWindow";
 
+// 检查窗口类型（在组件外部检查，避免不必要的 hooks 调用）
+const isPlotWindow = window.location.hash === '#/plot';
+const isDataViewWindow = window.location.hash === '#/dataview';
 
-export default function App() {
-  // 检查窗口类型
-  const isPlotWindow = window.location.hash === '#/plot';
-  const isDataViewWindow = window.location.hash === '#/dataview';
-
-  // 如果是 Plot 窗口，只渲染 PlotWindow 组件
-  if (isPlotWindow) {
-    return (
-      <ThemeProvider>
-        <PlotWindow />
-      </ThemeProvider>
-    );
-  }
-
-  // 如果是 DataView 窗口，只渲染 DataViewWindow 组件
-  if (isDataViewWindow) {
-    return (
-      <ThemeProvider>
-        <DataViewWindow />
-      </ThemeProvider>
-    );
-  }
+/**
+ * 主应用组件（仅用于主窗口）
+ */
+function MainApp() {
   const rootId = useLayoutStore(s => s.rootId);
 
   // 应用初始化
-  const { isInitialized, isLoading, error } = useAppInitialization();
+  const { isInitialized, error } = useAppInitialization();
 
   // 订阅后端项目事件，自动同步数据到前端 Store
   useProjectSync({
@@ -56,9 +40,9 @@ export default function App() {
     onProjectSaved: (path) => {
       console.log('Project saved to:', path);
     }
+
+
   });
-
-
 
   // 等待初始化完成再渲染主界面
   if (!isInitialized) {
@@ -101,4 +85,31 @@ export default function App() {
       </UIProvider>
     </ThemeProvider>
   );
+}
+
+/**
+ * 应用入口组件
+ * 根据窗口类型渲染不同的组件
+ */
+export default function App() {
+  // 如果是 Plot 窗口，只渲染 PlotWindow 组件
+  if (isPlotWindow) {
+    return (
+      <ThemeProvider>
+        <PlotWindow />
+      </ThemeProvider>
+    );
+  }
+
+  // 如果是 DataView 窗口，只渲染 DataViewWindow 组件
+  if (isDataViewWindow) {
+    return (
+      <ThemeProvider>
+        <DataViewWindow />
+      </ThemeProvider>
+    );
+  }
+
+  // 主窗口
+  return <MainApp />;
 }

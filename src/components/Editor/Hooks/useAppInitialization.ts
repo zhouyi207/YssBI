@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNodeRegistry } from './useNodeRegistry';
 import { useSchemaStore } from '../Store/useSchemaStore';
 import { initProjectSync } from './useProjectSync';
@@ -27,55 +27,67 @@ export function useAppInitialization(): InitializationState {
     error: null,
   });
 
+  // 使用 ref 防止重复初始化项目同步
+  const projectSyncedRef = useRef(false);
+
   const isSchemaLoaded = useSchemaStore((s) => s.isLoaded);
   const loadSchema = useSchemaStore((s) => s.loadSchema);
-  const { isInitialized: isRegistryInitialized, isLoading: isRegistryLoading, error: registryError } = useNodeRegistry();
+  const { isInitialized: isRegistryInitialized, error: registryError } = useNodeRegistry();
 
+  // 步骤 1: 加载 Schema
   useEffect(() => {
-    const initialize = async () => {
-      console.log('[useAppInitialization] Starting application initialization...');
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
+    if (!isSchemaLoaded) {
+      console.log('[useAppInitialization] Loading schema...');
+      loadSchema().catch(err => {
+        console.error('[useAppInitialization] Failed to load schema:', err);
+        setState({ isInitialized: false, isLoading: false, error: String(err) });
+      });
+    }
+  }, [isSchemaLoaded, loadSchema]);
 
+  // 步骤 2 & 3: 当 Schema 和 Registry 都准备好后，同步项目状态
+  useEffect(() => {
+    // 如果已经出错，不继续
+    if (state.error) return;
+
+    // 如果 Schema 或 Registry 还未准备好，等待
+    if (!isSchemaLoaded || !isRegistryInitialized) {
+      return;
+    }
+
+    // 如果 Registry 初始化出错
+    if (registryError) {
+      setState({ isInitialized: false, isLoading: false, error: registryError });
+      return;
+    }
+
+    // 如果已经同步过项目，直接标记完成
+    if (projectSyncedRef.current) {
+      setState({ isInitialized: true, isLoading: false, error: null });
+      return;
+    }
+
+    // 同步项目状态
+    const syncProject = async () => {
       try {
-        // 步骤 1: 加载 Schema（如果尚未加载）
-        if (!isSchemaLoaded) {
-          console.log('[useAppInitialization] Loading schema...');
-          await loadSchema();
-          console.log('[useAppInitialization] Schema loaded successfully');
-        }
-
-        // 步骤 2: 等待节点注册表初始化完成（由 useNodeRegistry 处理）
-        if (!isRegistryInitialized && !isRegistryLoading && !registryError) {
-          console.log('[useAppInitialization] Waiting for node registry initialization...');
-          return;
-        }
-
-        if (registryError) {
-          throw new Error(`Node registry initialization failed: ${registryError}`);
-        }
-
-        // 步骤 3: 同步项目状态
         console.log('[useAppInitialization] Syncing project state from backend...');
         const projectData = await initProjectSync();
-        
+
         if (projectData) {
           console.log('[useAppInitialization] Project state restored from backend:', {
-            events: Object.keys(projectData.events),
-            functions: Object.keys(projectData.functions),
-            macros: Object.keys(projectData.macros),
+            events: Object.keys(projectData.events).length,
+            functions: Object.keys(projectData.functions).length,
+            macros: Object.keys(projectData.macros).length,
           });
         } else {
           console.log('[useAppInitialization] No project data in backend');
         }
 
+        projectSyncedRef.current = true;
         console.log('[useAppInitialization] Application initialization complete');
-        setState({
-          isInitialized: true,
-          isLoading: false,
-          error: null,
-        });
+        setState({ isInitialized: true, isLoading: false, error: null });
       } catch (error) {
-        console.error('[useAppInitialization] Failed to initialize application:', error);
+        console.error('[useAppInitialization] Failed to sync project:', error);
         setState({
           isInitialized: false,
           isLoading: false,
@@ -84,8 +96,8 @@ export function useAppInitialization(): InitializationState {
       }
     };
 
-    initialize();
-  }, [isSchemaLoaded, loadSchema, isRegistryInitialized, isRegistryLoading, registryError]);
+    syncProject();
+  }, [isSchemaLoaded, isRegistryInitialized, registryError, state.error]);
 
   return state;
 }

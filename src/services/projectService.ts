@@ -245,6 +245,20 @@ export class ProjectService {
         return await invoke("get_global_variable", { id });
     }
 
+    /**
+     * 统一创建变量（后端生成 ID）
+     * @param subgraphId 子图 ID（可选，null 为全局）
+     * @param name 变量名称建议
+     * @param dataType 数据类型
+     */
+    static async createVariable(
+        subgraphId: string | null,
+        name?: string,
+        dataType?: string
+    ): Promise<VariableDefinition> {
+        return await invoke("create_variable", { subgraphId, name, dataType });
+    }
+
     static async createGlobalVariable(id: string, data: VariableDefinition): Promise<VariableDefinition> {
         return await invoke("create_global_variable", { id, data });
     }
@@ -299,6 +313,19 @@ export class ProjectService {
     }
 
     /**
+     * 批量创建节点（后端生成ID和修复连接）
+     * @param subgraphId 子图ID
+     * @param nodes 节点列表（可包含临时ID）
+     * @returns 创建后的节点列表（新ID）
+     */
+    static async createNodes(subgraphId: string, nodes: any[]): Promise<any[]> {
+        console.log('[ProjectService.createNodes] Creating nodes:', { subgraphId, count: nodes.length });
+        const newNodes: any[] = await invoke("create_nodes", { subgraphId, nodes });
+        console.log('[ProjectService.createNodes] Nodes created successfully:', newNodes);
+        return newNodes;
+    }
+
+    /**
      * 删除单个节点
      * @param subgraphId 子图ID
      * @param nodeId 节点ID
@@ -307,6 +334,33 @@ export class ProjectService {
         console.log('[ProjectService.deleteNode] Deleting node:', { subgraphId, nodeId });
         await invoke("delete_node", { subgraphId, nodeId });
         console.log('[ProjectService.deleteNode] Node deleted successfully');
+    }
+
+    /**
+     * 连接两个 Pin
+     * @param subgraphId 子图ID
+     * @param sourcePinId 源 Pin ID
+     * @param targetPinId 目标 Pin ID
+     * @returns 更新后的节点列表
+     */
+    static async connectPins(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<any[]> {
+        console.log('[ProjectService.connectPins] Connecting:', { subgraphId, sourcePinId, targetPinId });
+        const nodes = await invoke("connect_pins", { subgraphId, sourcePinId, targetPinId });
+        console.log('[ProjectService.connectPins] Connection successful');
+        return nodes as any[];
+    }
+
+    /**
+     * 断开 Pin 的所有连接
+     * @param subgraphId 子图ID
+     * @param pinId Pin ID
+     * @returns 更新后的节点列表
+     */
+    static async disconnectPin(subgraphId: string, pinId: string): Promise<any[]> {
+        console.log('[ProjectService.disconnectPin] Disconnecting:', { subgraphId, pinId });
+        const nodes = await invoke("disconnect_pin", { subgraphId, pinId });
+        console.log('[ProjectService.disconnectPin] Disconnection successful');
+        return nodes as any[];
     }
 
 

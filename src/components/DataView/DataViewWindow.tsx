@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ProjectService } from '../../../services/projectService';
-import { DataFrameData } from '../Types/canvas';
+import { ProjectService } from '../../services/projectService';
 import { VscDatabase, VscRefresh, VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore, VscChevronDown } from 'react-icons/vsc';
-import { useProjectStore } from '../Store/useProjectStore';
-import { useProjectSync, initProjectSync } from '../Hooks/useProjectSync';
-import { Select } from '../Shared/UI/Select';
+import { useProjectStore } from '../Editor/Store/useProjectStore';
+import { useProjectSync, initProjectSync } from '../Editor/Hooks/useProjectSync';
+import { Select } from '../Editor/Shared/UI/Select';
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useProjectStore(s => s.dataframes);
@@ -62,7 +61,7 @@ export const DataViewWindow: React.FC = () => {
     if (!selectedDfId || loadingMore) return;
     const currentCount = loadedRows.length;
     const totalCount = dataframes[selectedDfId]?.rowCount || 0;
-    
+
     if (currentCount >= totalCount) return;
 
     setLoadingMore(true);
@@ -87,7 +86,7 @@ export const DataViewWindow: React.FC = () => {
         // 重新加载当前已加载的所有行，以保持视图一致性
         const rows = await ProjectService.getDataFrameRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
         setLoadedRows(rows);
-        
+
         // 恢复滚动位置
         setTimeout(() => {
           if (scrollRef.current) {
@@ -145,7 +144,7 @@ export const DataViewWindow: React.FC = () => {
   return (
     <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-gray-300 overflow-hidden font-sans">
       {/* Title Bar */}
-      <div 
+      <div
         data-tauri-drag-region
         className="flex items-center justify-between h-10 px-3 bg-[var(--titlebar-bg)] border-b border-gray-800 select-none shrink-0"
       >
@@ -180,7 +179,7 @@ export const DataViewWindow: React.FC = () => {
           />
         </div>
 
-        <button 
+        <button
           onClick={refreshData}
           className="p-2 hover:bg-white/5 rounded transition-colors text-gray-400 hover:text-white flex items-center gap-2 text-xs font-medium"
           title="Refresh Data"
@@ -198,7 +197,7 @@ export const DataViewWindow: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div 
+      <div
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex-1 overflow-auto bg-black/10 custom-scrollbar"

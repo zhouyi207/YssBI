@@ -738,6 +738,89 @@ fn delete_node(
     Ok(())
 }
 
+/// 批量创建节点
+#[tauri::command]
+fn create_nodes(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    nodes: Vec<SerializedNode>,
+) -> Result<Vec<SerializedNode>, String> {
+    info!(
+        "[create_nodes] subgraph_id={}, count={}",
+        subgraph_id,
+        nodes.len()
+    );
+    let new_nodes = state.create_nodes(&subgraph_id, nodes)?;
+
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id,
+            nodes: all_nodes,
+        },
+    );
+
+    Ok(new_nodes)
+}
+
+/// 连接两个 Pin
+#[tauri::command]
+fn connect_pins(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    source_pin_id: String,
+    target_pin_id: String,
+) -> Result<Vec<SerializedNode>, String> {
+    info!(
+        "[connect_pins] subgraph_id={}, source={}, target={}",
+        subgraph_id, source_pin_id, target_pin_id
+    );
+    let nodes = state.connect_pins(&subgraph_id, &source_pin_id, &target_pin_id)?;
+
+    // 发送节点更新事件
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id: subgraph_id.clone(),
+            nodes: nodes.clone(),
+        },
+    );
+
+    info!("[connect_pins] Connection successful");
+    Ok(nodes)
+}
+
+/// 断开 Pin 的所有连接
+#[tauri::command]
+fn disconnect_pin(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    pin_id: String,
+) -> Result<Vec<SerializedNode>, String> {
+    info!(
+        "[disconnect_pin] subgraph_id={}, pin_id={}",
+        subgraph_id, pin_id
+    );
+    let nodes = state.disconnect_pin(&subgraph_id, &pin_id)?;
+
+    // 发送节点更新事件
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id: subgraph_id.clone(),
+            nodes: nodes.clone(),
+        },
+    );
+
+    info!("[disconnect_pin] Disconnection successful");
+    Ok(nodes)
+}
+
 /// 更新子图的画布状态
 #[tauri::command]
 fn update_canvas(
@@ -972,6 +1055,18 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
     context.execute()
 }
 
+// ==================== Unified Create Variable ====================
+
+#[tauri::command]
+fn create_variable(
+    state: State<'_, ProjectState>,
+    subgraph_id: Option<String>,
+    name: Option<String>,
+    data_type: Option<String>,
+) -> Result<VariableDefinition, String> {
+    state.create_variable(subgraph_id, name, data_type)
+}
+
 // ==================== 兼容旧接口的项目文件命令 ====================
 
 /// 保存项目到指定路径（兼容旧接口）
@@ -1089,13 +1184,17 @@ pub fn run() {
             // Local Variables CRUD
             get_local_variables,
             create_local_variable,
+            create_variable, // Added here
             update_local_variable,
             delete_local_variable,
             // Nodes 命令
             get_nodes,
             set_nodes,
             create_node,
+            create_nodes,
             delete_node,
+            connect_pins,
+            disconnect_pin,
             update_canvas,
             update_subgraph_io,
             rename_subgraph,

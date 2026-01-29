@@ -25,8 +25,6 @@ export default function CanvasOverlays({
         contextMenu,
         setContextMenu,
         setPendingConnection,
-        setNodes,
-        saveHistory,
         pendingConnection,
         connectPins,
         variables,
@@ -50,7 +48,7 @@ export default function CanvasOverlays({
     const gesture = useGestureStore(state => state.gesture);
     const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
 
-    const handleNodePaletteSelect = (item: import("../Nodes/NodePalette").PaletteItem) => {
+    const handleNodePaletteSelect = async (item: import("../Nodes/NodePalette").PaletteItem) => {
         if (!contextMenu || !canvasRef.current) return;
 
         // Check if this is an internal node type that should only exist once
@@ -120,24 +118,20 @@ export default function CanvasOverlays({
         }
 
         if (newNode) {
-            saveHistory();
-            // 使用后端 API 创建节点
-            createNode(newNode);
+            // 使用后端 API 创建节点（等待后端返回）
+            const createdNode = await createNode(newNode);
 
             // 如果有待处理的连接，尝试自动连接
-            if (pendingConnection) {
+            if (createdNode && pendingConnection) {
                 const isInput = pendingConnection.direction === "input";
                 const targetDirection = isInput ? "outputs" : "inputs";
 
                 // 寻找新节点中第一个符合类型的引脚
-                const pins = targetDirection === "inputs" ? newNode.inputs : newNode.outputs;
+                const pins = targetDirection === "inputs" ? createdNode.inputs : createdNode.outputs;
                 const compatiblePin = pins.find(p => p.type === pendingConnection.type);
 
                 if (compatiblePin) {
-                    // 延迟一帧调用 connectPins 确保 nodes 已更新
-                    setTimeout(() => {
-                        connectPins(pendingConnection.id, compatiblePin.id);
-                    }, 0);
+                    connectPins(pendingConnection.id, compatiblePin.id);
                 }
             }
         }
@@ -250,13 +244,12 @@ export default function CanvasOverlays({
                 >
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
-                        onClick={() => {
+                        onClick={async () => {
                             if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;
                             }
-                            saveHistory();
                             const newNode = createNodeFromTemplate(
                                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                                 scale,
@@ -270,8 +263,8 @@ export default function CanvasOverlays({
                                 }
                             );
                             if (newNode) {
-                                // 使用后端 API 创建节点
-                                createNode(newNode);
+                                // 使用后端 API 创建节点（等待后端返回）
+                                await createNode(newNode);
                             }
                             setVariableDropMenu(null);
                         }}
@@ -281,13 +274,12 @@ export default function CanvasOverlays({
                     </div>
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
-                        onClick={() => {
+                        onClick={async () => {
                             if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;
                             }
-                            saveHistory();
                             const newNode = createNodeFromTemplate(
                                 { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
                                 scale,
@@ -301,8 +293,8 @@ export default function CanvasOverlays({
                                 }
                             );
                             if (newNode) {
-                                // 使用后端 API 创建节点
-                                createNode(newNode);
+                                // 使用后端 API 创建节点（等待后端返回）
+                                await createNode(newNode);
                             }
                             setVariableDropMenu(null);
                         }}

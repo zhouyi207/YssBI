@@ -31,13 +31,14 @@ pub struct GenericNode {
     ui_style: String,
     description: Option<String>,
 
+    // 变量关联
+    variable_id: RwLock<Option<String>>,
+
     // 使用 DashMap 支持并发访问（使用 PinId 作为键）
     in_data_pins: DashMap<PinId, Arc<GenericInDataPin>>,
     out_data_pins: DashMap<PinId, Arc<GenericOutDataPin>>,
     in_exec_pins: DashMap<PinId, Arc<GenericInExecPin>>,
     out_exec_pins: DashMap<PinId, Arc<GenericOutExecPin>>,
-
-    // 执行器逻辑
     flow_processor: Mutex<
         Option<
             Box<
@@ -70,6 +71,7 @@ impl GenericNode {
             category: Vec::new(),
             ui_style: "default".into(),
             description: None,
+            variable_id: RwLock::new(None),
             in_data_pins: DashMap::new(),
             out_data_pins: DashMap::new(),
             in_exec_pins: DashMap::new(),
@@ -88,6 +90,7 @@ impl GenericNode {
             category: Vec::new(),
             ui_style: "default".into(),
             description: None,
+            variable_id: RwLock::new(None),
             in_data_pins: DashMap::new(),
             out_data_pins: DashMap::new(),
             in_exec_pins: DashMap::new(),
@@ -95,6 +98,14 @@ impl GenericNode {
             flow_processor: Mutex::new(None),
             data_processor: Mutex::new(None),
         }
+    }
+
+    pub fn set_variable_id(&self, id: Option<String>) {
+        *self.variable_id.write().unwrap() = id;
+    }
+
+    pub fn variable_id(&self) -> Option<String> {
+        self.variable_id.read().unwrap().clone()
     }
 
     pub fn set_metadata(
