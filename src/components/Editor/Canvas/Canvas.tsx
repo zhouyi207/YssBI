@@ -59,32 +59,46 @@ export default function Canvas() {
   const updateVisibleNodes = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-    const currentTabId = activeTabId || "";
-    // Fetch directly from store to ensure we have the very latest data during the callback execution
-    const nodes = useNodeStore.getState().getNodes(currentTabId);
 
-    // 计算当前视口在世界坐标系中的范围 (增加 500px 缓冲)
-    const padding = 500 / canvas.scale;
-    const left = -canvas.x / canvas.scale - padding;
-    const top = -canvas.y / canvas.scale - padding;
-    const right = (rect.width - canvas.x) / canvas.scale + padding;
-    const bottom = (rect.height - canvas.y) / canvas.scale + padding;
+    // 1. 获取画布在浏览器窗口中的实际位置和尺寸
+    const rect = el.getBoundingClientRect();
+
+    // 2. 直接从 Store 获取最新状态，避免闭包过时
+    const viewport = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+    const currentTabId = activeTabId || "";
+    const allNodes = useNodeStore.getState().getNodes(currentTabId);
+
+    // 3. 计算视口边界（世界坐标系）
+    // 核心逻辑：(屏幕边界点 - 容器偏移 - 平移量) / 缩放
+    const padding = 200 / viewport.scale; // 适当减少 padding 以提升性能
+
+    const worldViewLeft = -viewport.x / viewport.scale - padding;
+    const worldViewTop = -viewport.y / viewport.scale - padding;
+    const worldViewRight = (rect.width - viewport.x) / viewport.scale + padding;
+    const worldViewBottom = (rect.height - viewport.y) / viewport.scale + padding;
 
     const visible = new Set<string>();
-    nodes.forEach(node => {
-      // const node = allNodes[id];
-      if (!node) return;
-      const id = node.id;
-      // 简单的矩形相交判断 (假设节点最大宽高为 300x300)
-      if (node.position.x + 300 > left && node.position.x < right &&
-        node.position.y + 300 > top && node.position.y < bottom) {
-        visible.add(id);
+
+    allNodes.forEach(node => {
+      // 矩形相交判定
+      // 假设节点尺寸，如果有真实测量值更好
+      const nodeWidth = 300;
+      const nodeHeight = 300;
+
+      const isVisible = (
+        node.position.x + nodeWidth > worldViewLeft &&
+        node.position.x < worldViewRight &&
+        node.position.y + nodeHeight > worldViewTop &&
+        node.position.y < worldViewBottom
+      );
+
+      if (isVisible) {
+        visible.add(node.id);
       }
     });
+
     setVisibleNodes(visible);
-  }, [groupId, activeTabId, nodes]);
+  }, [groupId, activeTabId]); // 移除了 nodes 依赖，仅通过 Store 获取
 
   // 当节点列表变化、缩放变化或平移结束时更新裁剪
 
@@ -490,6 +504,27 @@ export default function Canvas() {
     }
   }
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+
+    // 检查点击来源：如果是 UI 组件，则忽略
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(".menubar-container") ||
+      target.closest(".sidebar-container") ||
+      target.closest(".menu-container") ||
+      target.closest(".hud-container")
+    ) {
+      return;
+    }
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      visible: true,
+    });
+  }, [setContextMenu]);
+
   const activePin = useMemo(() => {
     if (gesture?.type === "connect") return gesture.startPin;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
@@ -509,7 +544,7 @@ export default function Canvas() {
       <div
         className="absolute inset-0"
         onPointerDown={onCanvasPointerDown}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={handleContextMenu}
       >
         {/* GPU 加速的连接线层 */}
         <EdgesLayer

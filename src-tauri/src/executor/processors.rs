@@ -37,6 +37,18 @@ pub trait ExecutionContextTrait {
 
     /// 打开新窗口
     fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String>;
+
+    /// 异步打开新窗口（不阻塞主线程）
+    fn open_window_async(&mut self, label: String, title: String, url: String) -> Result<(), String>;
+
+    /// 触发指定节点的指定输出pin的流程
+    fn trigger_flow(&mut self, node_id: &str, output_pin: &str) -> Result<(), String>;
+
+    /// 执行指定pin的所有下游连接
+    fn execute_pin_downstream(&mut self, node_id: &str, pin_name: &str) -> Result<(), String>;
+
+    /// 根据Pin名字触发下游流程（暴露给节点使用）
+    fn trigger_flow_by_pin(&mut self, node_id: &str, pin_name: &str) -> Result<(), String>;
 }
 
 /// 数据节点处理器 (已弃用，建议使用 NodeProcessor 接口)

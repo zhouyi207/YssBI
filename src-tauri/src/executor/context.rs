@@ -9,7 +9,7 @@ use crate::executor::{
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
 /// 执行上下文
@@ -361,8 +361,9 @@ impl ExecutionContext {
 
             // 获取下游连接
             let downstream_pins = self.connection_manager.get_downstream(pin_id);
-
+            
             if !downstream_pins.is_empty() {
+                // 普通节点只执行第一个下游连接
                 let next_pin_id = downstream_pins[0];
                 let next_node_id = self
                     .pin_to_node
@@ -517,7 +518,7 @@ impl ExecutionContextTrait for ExecutionContext {
         self.call_stack.last()
     }
 
-    fn find_node_by(&self, predicate: &dyn Fn(&NodeData) -> bool) -> Option<String> {
+    fn find_node_by(&self, _predicate: &dyn Fn(&NodeData) -> bool) -> Option<String> {
         // TODO: 需要重新实现，因为我们现在使用 GenericNode 而不是 NodeData
         None
     }
@@ -533,12 +534,124 @@ impl ExecutionContextTrait for ExecutionContext {
         info!("{}", log_msg);
         self.logs.push(log_msg.clone());
 
-        // 在新线程中创建窗口
+        // 同步创建窗口，使用简单配置避免问题
+        match WebviewWindowBuilder::new(
+            &app_handle,
+            label.clone(),
+            WebviewUrl::App(url.into()),
+        )
+        .title(title)
+        .inner_size(800.0, 600.0)
+        .min_inner_size(400.0, 300.0)
+        .resizable(true)
+        .visible(true)  // 直接设置为可见
+        .decorations(false)  // 使用自定义标题栏
+        .center()
+        .build()
+        {
+            Ok(_window) => {
+                let success_msg = format!("Window '{}' created successfully", label);
+                info!("{}", success_msg);
+                self.logs.push(success_msg);
+                Ok(())
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to create window '{}': {}", label, e);
+                info!("[ERROR] {}", error_msg);
+                self.logs.push(format!("[ERROR] {}", error_msg));
+                Err(error_msg)
+            }
+        }
+    }
+
+    fn trigger_flow(&mut self, node_id: &str, output_pin: &str) -> Result<(), String> {
+        // 将 String node_id 转换为 NodeId
+        if let Some(&runtime_id) = self.data_id_to_runtime_id.get(node_id) {
+            self.trigger_next_flow(runtime_id, output_pin)
+        } else {
+            Err(format!("Node not found: {}", node_id))
+        }
+    }
+
+    /// 执行指定pin的所有下游连接（供节点内部使用）
+    fn execute_pin_downstream(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
+        // 将 String node_id 转换为 NodeId
+        let runtime_id = self.data_id_to_runtime_id.get(node_id)
+            .ok_or_else(|| format!("Node not found: {}", node_id))?;
+
+        let node = self
+            .nodes
+            .get(runtime_id)
+            .ok_or_else(|| format!("Node not found: {:?}", runtime_id))?
+            .clone();
+
+        let node_guard = node.lock().unwrap();
+
+        // 查找执行 Pin（通过 name）
+        let pin_id = if let Some(pin) = node_guard.get_out_exec_pin_by_name(pin_name) {
+            Some(pin.id())
+        } else if let Some(pin) = node_guard.get_in_exec_pin_by_name(pin_name) {
+            Some(pin.id())
+        } else {
+            None
+        };
+
+        drop(node_guard);
+
+        if let Some(pin_id) = pin_id {
+            // 获取下游连接
+            let downstream_pins = self.connection_manager.get_downstream(pin_id);
+            
+            info!("[execute_pin_downstream] Executing {} downstream connections for pin '{}'", downstream_pins.len(), pin_name);
+            
+            // 执行所有下游连接
+            for (index, &next_pin_id) in downstream_pins.iter().enumerate() {
+                let next_node_id = self
+                    .pin_to_node
+                    .get(&next_pin_id)
+                    .ok_or("Target node not found")?;
+                
+                info!("[execute_pin_downstream] Executing downstream node #{}: {:?}", index + 1, next_node_id);
+                self.run_flow_internal(*next_node_id, "Out")?;
+            }
+        } else {
+            info!("[execute_pin_downstream] Pin '{}' not found!", pin_name);
+        }
+
+        Ok(())
+    }
+
+    fn open_window_async(&mut self, label: String, title: String, url: String) -> Result<(), String> {
+        let app_handle = self
+            .app_handle
+            .as_ref()
+            .ok_or("AppHandle not available in execution context")?
+            .clone();
+
+        let log_msg = format!("Opening window async: {} ({})", title, url);
+        info!("{}", log_msg);
+        self.logs.push(log_msg.clone());
+
+        // 检查窗口是否已经存在
+        if let Some(existing_window) = app_handle.get_webview_window(&label) {
+            if let Err(e) = existing_window.set_focus() {
+                info!("[WARN] Failed to focus existing window '{}': {}", label, e);
+            }
+            let success_msg = format!("Window '{}' already exists, focusing", label);
+            info!("{}", success_msg);
+            self.logs.push(success_msg);
+            return Ok(());
+        }
+
+        // 在新线程中异步创建窗口，不阻塞主线程
         let label_clone = label.clone();
         let title_clone = title.clone();
         let url_clone = url.clone();
 
         std::thread::spawn(move || {
+            // 添加小延迟确保主线程不被阻塞
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            
             match WebviewWindowBuilder::new(
                 &app_handle,
                 label_clone.clone(),
@@ -548,32 +661,35 @@ impl ExecutionContextTrait for ExecutionContext {
             .inner_size(800.0, 600.0)
             .min_inner_size(400.0, 300.0)
             .resizable(true)
-            .visible(false)
-            .decorations(false)
+            .visible(false)  // 先创建为不可见
+            .decorations(false)  // 使用自定义标题栏
             .transparent(false)
             .center()
             .build()
             {
                 Ok(window) => {
-                    // 确保窗口显示
+                    info!("Window '{}' created successfully (async)", label_clone);
+                    // 创建成功后显示窗口
                     if let Err(e) = window.show() {
-                        info!("[WARN] Failed to show window '{}': {}", label_clone, e);
+                        info!("[ERROR] Failed to show window '{}': {}", label_clone, e);
+                    } else {
+                        info!("Window '{}' shown successfully", label_clone);
                     }
-                    info!(
-                        "Window '{}' created and displayed successfully",
-                        label_clone
-                    );
                 }
                 Err(e) => {
-                    info!("[ERROR] Failed to create window '{}': {}", label_clone, e);
+                    info!("[ERROR] Failed to create window '{}' (async): {}", label_clone, e);
                 }
             }
         });
 
-        let success_msg = format!("Window '{}' creation initiated (URL: {})", label, url);
+        let success_msg = format!("Window '{}' creation initiated (async)", label);
         info!("{}", success_msg);
         self.logs.push(success_msg);
 
         Ok(())
+    }
+
+    fn trigger_flow_by_pin(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
+        self.execute_pin_downstream(node_id, pin_name)
     }
 }

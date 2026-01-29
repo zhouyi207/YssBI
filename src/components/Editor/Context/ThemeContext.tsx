@@ -171,6 +171,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // 应用主题到 CSS 变量
     useEffect(() => {
         const root = document.documentElement;
+        
+        // 主要背景色
         root.style.setProperty("--workbench-bg", theme.workbenchBackground);
         root.style.setProperty("--sidebar-bg", theme.sidebarBackground);
         root.style.setProperty("--accent-color", theme.accentColor);
@@ -179,6 +181,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         root.style.setProperty("--connection-lines", theme.connectionLines);
         root.style.setProperty("--selection-region", theme.selectionRegion);
 
+        // Pin 类型颜色
         root.style.setProperty("--exec-color", theme.execColor);
         root.style.setProperty("--int-color", theme.intColor);
         root.style.setProperty("--float-color", theme.floatColor);
@@ -190,8 +193,17 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         root.style.setProperty("--object-color", theme.objectColor);
         root.style.setProperty("--array-color", theme.arrayColor);
 
-        // Compute some derived colors if needed (like hover states)
+        // 添加Plot窗口需要的CSS变量
+        root.style.setProperty("--titlebar-bg", theme.sidebarBackground);
+        root.style.setProperty("--border-color", theme.gridLines);
+        root.style.setProperty("--text-primary", theme.execColor);
+        root.style.setProperty("--text-secondary", theme.connectionLines);
+        root.style.setProperty("--hover-bg", "rgba(255, 255, 255, 0.05)");
+
+        // 计算派生颜色
         root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");
+        
+        console.log("[ThemeProvider] CSS variables applied");
     }, [theme]);
 
     const contextValue: SettingsContextValue = {
