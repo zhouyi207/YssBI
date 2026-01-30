@@ -2,7 +2,11 @@
 
 // 对于集成测试，我们需要通过 lib crate 名称导入
 // 在 Cargo.toml 中，lib name 是 "yssbi_lib"
-use yssbi_lib::executor::{BasePin, GenericNode, GenericInDataPin, GenericOutDataPin, GenericInExecPin, GenericOutExecPin};
+use yssbi_lib::executor::value::{PinTypeDesc, ValueType};
+use yssbi_lib::executor::pin::{
+    BasePin, GenericInDataPin, GenericInExecPin, GenericOutDataPin, GenericOutExecPin,
+};
+use yssbi_lib::executor::GenericNode;
 
 #[test]
 fn test_pin_ordering() {
@@ -10,12 +14,28 @@ fn test_pin_ordering() {
 
     // 添加一些 Pin（注意添加顺序）
     let exec_in = GenericInExecPin::new(uuid::Uuid::new_v4(), "Execute");
-    let data_in1 = GenericInDataPin::new(uuid::Uuid::new_v4(), "Input1", "string");
-    let data_in2 = GenericInDataPin::new(uuid::Uuid::new_v4(), "Input2", "number");
+    let data_in1 = GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Input1",
+        PinTypeDesc::concrete(ValueType::String),
+    );
+    let data_in2 = GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Input2",
+        PinTypeDesc::concrete(ValueType::Float64),
+    );
 
     let exec_out = GenericOutExecPin::new(uuid::Uuid::new_v4(), "Done");
-    let data_out1 = GenericOutDataPin::new(uuid::Uuid::new_v4(), "Output1", "string");
-    let data_out2 = GenericOutDataPin::new(uuid::Uuid::new_v4(), "Output2", "number");
+    let data_out1 = GenericOutDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Output1",
+        PinTypeDesc::concrete(ValueType::String),
+    );
+    let data_out2 = GenericOutDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Output2",
+        PinTypeDesc::concrete(ValueType::Float64),
+    );
 
     // 按特定顺序添加 Pin
     node.add_in_exec_pin(exec_in);
@@ -57,9 +77,21 @@ fn test_pin_reordering() {
     let node = GenericNode::new_prototype("test_node", "Test Node");
 
     // 添加一些输入 Pin
-    let pin1 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "First", "string"));
-    let pin2 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "Second", "number"));
-    let pin3 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "Third", "bool"));
+    let pin1 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "First",
+        PinTypeDesc::concrete(ValueType::String),
+    ));
+    let pin2 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Second",
+        PinTypeDesc::concrete(ValueType::Float64),
+    ));
+    let pin3 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Third",
+        PinTypeDesc::concrete(ValueType::Boolean),
+    ));
 
     let pin1_id = pin1.id();
     let pin2_id = pin2.id();
@@ -89,9 +121,21 @@ fn test_pin_removal_updates_order() {
     let node = GenericNode::new_prototype("test_node", "Test Node");
 
     // 添加一些输入 Pin
-    let pin1 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "First", "string"));
-    let pin2 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "Second", "number"));
-    let pin3 = node.add_input(GenericInDataPin::new(uuid::Uuid::new_v4(), "Third", "bool"));
+    let pin1 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "First",
+        PinTypeDesc::concrete(ValueType::String),
+    ));
+    let pin2 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Second",
+        PinTypeDesc::concrete(ValueType::Float64),
+    ));
+    let pin3 = node.add_input(GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Third",
+        PinTypeDesc::concrete(ValueType::Boolean),
+    ));
 
     let pin1_id = pin1.id();
     let pin2_id = pin2.id();
@@ -121,9 +165,17 @@ fn test_serialization_order() {
 
     // 添加 Pin 的特定顺序
     let exec_in = GenericInExecPin::new(uuid::Uuid::new_v4(), "Execute");
-    let data_in = GenericInDataPin::new(uuid::Uuid::new_v4(), "Data", "string");
+    let data_in = GenericInDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Data",
+        PinTypeDesc::concrete(ValueType::String),
+    );
     let exec_out = GenericOutExecPin::new(uuid::Uuid::new_v4(), "Done");
-    let data_out = GenericOutDataPin::new(uuid::Uuid::new_v4(), "Result", "string");
+    let data_out = GenericOutDataPin::new(
+        uuid::Uuid::new_v4(),
+        "Result",
+        PinTypeDesc::concrete(ValueType::String),
+    );
 
     node.add_in_exec_pin(exec_in);
     node.add_input(data_in);
@@ -135,22 +187,27 @@ fn test_serialization_order() {
     println!("Serialized node: {}", serialized);
 
     // 解析序列化结果来验证顺序
-    let parsed: serde_json::Value = serde_json::from_str(&serialized).expect("Failed to parse serialized node");
-    
-    let inputs = parsed["inputs"].as_array().expect("inputs should be an array");
-    let outputs = parsed["outputs"].as_array().expect("outputs should be an array");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&serialized).expect("Failed to parse serialized node");
+
+    let inputs = parsed["inputs"]
+        .as_array()
+        .expect("inputs should be an array");
+    let outputs = parsed["outputs"]
+        .as_array()
+        .expect("outputs should be an array");
 
     // 验证输入顺序
     assert_eq!(inputs.len(), 2);
     assert_eq!(inputs[0]["name"].as_str().unwrap(), "Execute");
-    assert_eq!(inputs[0]["type"].as_str().unwrap(), "exec");
+    assert_eq!(inputs[0]["pin_type"].as_str().unwrap(), "exec");
     assert_eq!(inputs[1]["name"].as_str().unwrap(), "Data");
-    assert_eq!(inputs[1]["type"].as_str().unwrap(), "string");
+    assert_eq!(inputs[1]["pin_type"].as_str().unwrap(), "string");
 
     // 验证输出顺序
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0]["name"].as_str().unwrap(), "Done");
-    assert_eq!(outputs[0]["type"].as_str().unwrap(), "exec");
+    assert_eq!(outputs[0]["pin_type"].as_str().unwrap(), "exec");
     assert_eq!(outputs[1]["name"].as_str().unwrap(), "Result");
-    assert_eq!(outputs[1]["type"].as_str().unwrap(), "string");
+    assert_eq!(outputs[1]["pin_type"].as_str().unwrap(), "string");
 }
