@@ -81,8 +81,8 @@ impl ConnectionManager {
 
         // 1. 类型检查
         if from_pin.data_type() != to_pin.data_type()
-            && to_pin.data_type() != "any"
-            && from_pin.data_type() != "any"
+            && to_pin.data_type() != &crate::executor::value::ValueType::Any
+            && from_pin.data_type() != &crate::executor::value::ValueType::Any
         {
             return Err(ConnectionError::TypeMismatch {
                 from_type: from_pin.data_type().to_string(),

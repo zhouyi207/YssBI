@@ -221,6 +221,35 @@ impl GenericNode {
         &self.node_type
     }
 
+    /// 获取节点的执行模型
+    pub fn execution_model(&self) -> crate::executor::types::ExecutionModel {
+        use crate::executor::types::ExecutionModel;
+        
+        let has_in_exec = !self.in_exec_pins.is_empty();
+        let has_out_exec = !self.out_exec_pins.is_empty();
+        let has_data = !self.in_data_pins.is_empty() || !self.out_data_pins.is_empty();
+        
+        match (has_in_exec, has_out_exec, has_data) {
+            // 只有输出 exec，没有输入 exec = Event 节点
+            (false, true, false) => ExecutionModel::Event,
+            
+            // 有输出 exec 和 data = Hybrid 节点（Event 也可能有数据）
+            (false, true, true) => ExecutionModel::Hybrid,
+            
+            // 有输入 exec 和 data = Hybrid 节点
+            (true, _, true) => ExecutionModel::Hybrid,
+            
+            // 只有 exec pin（有输入） = ControlFlow 节点
+            (true, _, false) => ExecutionModel::ControlFlow,
+            
+            // 只有 data pin = DataFlow 节点
+            (false, false, true) => ExecutionModel::DataFlow,
+            
+            // 什么都没有 = 无效节点，默认为 DataFlow
+            (false, false, false) => ExecutionModel::DataFlow,
+        }
+    }
+
     pub fn input_names(&self) -> Vec<String> {
         self.in_data_pins
             .iter()

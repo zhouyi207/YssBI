@@ -2,6 +2,8 @@
 //!
 //! 处理项目文件的序列化、反序列化、保存和加载。
 
+pub mod io;
+
 use crate::schema::VariableDefinition;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -1,6 +1,7 @@
 //! 基本节点功能测试
 
 use yssbi_lib::executor::{BasePin, GenericNode, GenericInDataPin};
+use crate::executor::value::ValueType;
 
 #[test]
 fn test_basic_node_creation() {
@@ -22,7 +23,7 @@ fn test_simple_pin_addition() {
     let node = GenericNode::new_prototype("test_node", "Test Node");
     
     // 添加一个简单的输入 Pin
-    let pin = GenericInDataPin::new(uuid::Uuid::new_v4(), "TestInput", "string");
+    let pin = GenericInDataPin::new(uuid::Uuid::new_v4(), "TestInput", ValueType::String);
     let pin_id = pin.id();
     
     node.add_input(pin);

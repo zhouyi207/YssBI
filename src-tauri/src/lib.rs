@@ -924,6 +924,36 @@ fn rename_subgraph(
     Ok(updated)
 }
 
+// ==================== 执行日志 ====================
+
+/// 保存执行日志到文件
+///
+/// 在每次执行图时自动保存项目 JSON 到 logs 目录，文件名包含时间戳
+fn save_execution_log(data: &ProjectData) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+    
+    // 创建 logs 目录
+    let logs_dir = PathBuf::from("logs");
+    if !logs_dir.exists() {
+        fs::create_dir_all(&logs_dir)
+            .map_err(|e| format!("Failed to create logs directory: {}", e))?;
+    }
+    
+    // 生成带时间戳的文件名
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("execution_{}.json", timestamp);
+    let log_path = logs_dir.join(filename);
+    
+    // 序列化并保存项目数据
+    let json = data.to_json()?;
+    fs::write(&log_path, json)
+        .map_err(|e| format!("Failed to write execution log: {}", e))?;
+    
+    info!("[save_execution_log] Saved execution log to: {:?}", log_path);
+    Ok(())
+}
+
 // ==================== 执行命令 ====================
 
 /// 执行图（从状态管理器获取数据）
@@ -941,6 +971,13 @@ fn execute_project(app: AppHandle, data: ProjectData) -> Result<Vec<String>, Str
 
 fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>, String> {
     info!("[execute_project_data] Received project data for execution");
+    
+    // 保存执行前的项目 JSON 日志
+    if let Err(e) = save_execution_log(&data) {
+        // 日志保存失败不应阻止执行，只记录警告
+        info!("[execute_project_data] Warning: Failed to save execution log: {}", e);
+    }
+    
     let _logs = vec!["[System] Received event for execution".to_string()];
 
     let mut nodes: Vec<executor::NodeData> = Vec::new();

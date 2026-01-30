@@ -43,9 +43,18 @@ pub struct ExecutionContext {
 
     /// 当前执行栈（用于检测循环）
     execution_stack: Vec<NodeId>,
+    
+    /// 当前求值栈（用于检测数据流循环依赖）
+    evaluating_stack: Vec<NodeId>,
 
     /// Tauri 应用句柄（可选）
     app_handle: Option<AppHandle>,
+    
+    /// 数据流缓存（在单次执行周期内有效）
+    /// 
+    /// 缓存纯数据节点的计算结果，避免重复计算
+    /// Key: 输出 PinId, Value: 计算结果
+    data_cache: HashMap<PinId, Value>,
 }
 
 impl ExecutionContext {
@@ -62,7 +71,9 @@ impl ExecutionContext {
             logs: Vec::new(),
             call_stack: Vec::new(),
             execution_stack: Vec::new(),
+            evaluating_stack: Vec::new(),
             app_handle: None,
+            data_cache: HashMap::new(),
         };
 
         // 初始化变量
@@ -109,7 +120,12 @@ impl ExecutionContext {
                     .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericInDataPin;
-                let pin = GenericInDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
+                use crate::executor::value::ValueType;
+                let pin = GenericInDataPin::new(
+                    runtime_id, 
+                    &pin_data.name, 
+                    ValueType::from_string(&pin_data.pin_type)
+                );
                 let pin_id = pin.id();
                 node.add_input(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
@@ -130,7 +146,12 @@ impl ExecutionContext {
                     .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericOutDataPin;
-                let pin = GenericOutDataPin::new(runtime_id, &pin_data.name, &pin_data.pin_type);
+                use crate::executor::value::ValueType;
+                let pin = GenericOutDataPin::new(
+                    runtime_id, 
+                    &pin_data.name, 
+                    ValueType::from_string(&pin_data.pin_type)
+                );
                 let pin_id = pin.id();
                 node.add_output(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
@@ -209,6 +230,9 @@ impl ExecutionContext {
     /// 执行图
     pub fn execute(&mut self) -> Result<Vec<String>, String> {
         self.log_graph_structure();
+        
+        // 清空数据缓存（新的执行周期）
+        self.data_cache.clear();
 
         // 查找起始节点
         let start_runtime_id = self
@@ -229,6 +253,10 @@ impl ExecutionContext {
 
         info!("Execution finished");
         self.logs.push("Execution finished".to_string());
+        
+        // 清空数据缓存（执行结束）
+        self.data_cache.clear();
+        
         Ok(self.logs.clone())
     }
 
@@ -254,10 +282,29 @@ impl ExecutionContext {
             .ok_or_else(|| format!("Node not found: {:?}", node_id))?
             .clone();
 
-        let node_guard = node.lock().unwrap();
-        let node_type = node_guard.node_type().to_string();
-        let node_name = node_guard.name().to_string();
-        drop(node_guard);
+        let (node_type, node_name, execution_model) = {
+            let node_guard = node.lock().unwrap();
+            (
+                node_guard.node_type().to_string(),
+                node_guard.name().to_string(),
+                node_guard.execution_model(),
+            )
+        };
+
+        // 🚨 关键防线：Pure DataFlow 节点不能被直接执行
+        // 它们应该通过 get_pin_value() 按需求值（Lazy Pull）
+        if execution_model == crate::executor::ExecutionModel::DataFlow {
+            let error_msg = format!(
+                "[ERROR] Pure DataFlow node '{}' ({}) cannot be executed directly. \
+                It should be evaluated lazily through data connections. \
+                This usually means there's an exec pin incorrectly connected to a pure data node.",
+                node_name, node_type
+            );
+            info!("{}", error_msg);
+            self.logs.push(error_msg.clone());
+            self.execution_stack.pop();
+            return Err(error_msg);
+        }
 
         let log_msg = format!(">>> Executing Node: {} ({})", node_name, node_type);
         info!("{}", log_msg);
@@ -466,29 +513,105 @@ impl ExecutionContextTrait for ExecutionContext {
         };
 
         // 2. 查找上游连接 (Input -> Output)
-        // get_upstream 返回 Option<PinId>
         let output_pin_id = match self.connection_manager.get_upstream(pin_id) {
             Some(id) => id,
             None => return Value::Null,
         };
 
-        // 3. 找到输出节点
+        // 3. 检查缓存（避免重复计算）
+        if let Some(cached_value) = self.data_cache.get(&output_pin_id) {
+            // self.log(format!("[DataFlow Cache Hit] Pin {:?}", output_pin_id));
+            return cached_value.clone();
+        }
+
+        // 4. 找到输出节点
         let node_id = match self.pin_to_node.get(&output_pin_id) {
             Some(id) => *id,
             None => return Value::Null,
         };
+        
+        // 5. 🚨 检测循环依赖（防止无限递归）
+        if self.evaluating_stack.contains(&node_id) {
+            let cycle_info = format!(
+                "[ERROR] Cyclic data dependency detected in node evaluation. \
+                Evaluation stack: {:?}",
+                self.evaluating_stack
+            );
+            info!("{}", cycle_info);
+            self.log(cycle_info);
+            return Value::Null;
+        }
+        
+        // 6. 将节点加入求值栈
+        self.evaluating_stack.push(node_id);
 
-        // 4. 获取节点并执行
+        // 7. 获取节点并检查执行模型
         let node_arc = match self.nodes.get(&node_id) {
             Some(n) => n.clone(),
-            None => return Value::Null,
+            None => {
+                self.evaluating_stack.pop();
+                return Value::Null;
+            }
         };
 
-        let node_type = node_arc.lock().unwrap().node_type().to_string();
+        let (node_type, node_name, execution_model) = {
+            let node_guard = node_arc.lock().unwrap();
+            (
+                node_guard.node_type().to_string(),
+                node_guard.name().to_string(),
+                node_guard.execution_model(),
+            )
+        };
+        
+        // 8. 记录求值日志（仅对 DataFlow 节点）
+        if execution_model == crate::executor::ExecutionModel::DataFlow {
+            let eval_msg = format!("    [eval] {} ({})", node_name, node_type);
+            info!("{}", eval_msg);
+            // 不添加到 logs，避免过多输出
+        }
 
-        // 构造 NodeData
+        // 9. 构造 NodeData（需要填充 inputs 和 outputs，因为节点的 process_data 需要访问它们）
         let node_data = {
             let node_guard = node_arc.lock().unwrap();
+            
+            // 填充 inputs
+            let mut inputs = Vec::new();
+            for input_pin in node_guard.inputs().iter() {
+                let frontend_pin_id = self.data_pin_id_to_runtime_pin_id
+                    .iter()
+                    .find(|(_, &runtime_id)| runtime_id == input_pin.id())
+                    .map(|(frontend_id, _)| frontend_id.clone())
+                    .unwrap_or_default();
+                
+                inputs.push(crate::executor::node::data::PinData {
+                    id: frontend_pin_id,
+                    name: input_pin.name().to_string(),
+                    pin_type: input_pin.data_type().to_string(),
+                    links: vec![],
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            
+            // 填充 outputs
+            let mut outputs = Vec::new();
+            for output_pin in node_guard.outputs().iter() {
+                let frontend_pin_id = self.data_pin_id_to_runtime_pin_id
+                    .iter()
+                    .find(|(_, &runtime_id)| runtime_id == output_pin.id())
+                    .map(|(frontend_id, _)| frontend_id.clone())
+                    .unwrap_or_default();
+                
+                outputs.push(crate::executor::node::data::PinData {
+                    id: frontend_pin_id,
+                    name: output_pin.name().to_string(),
+                    pin_type: output_pin.data_type().to_string(),
+                    links: vec![],
+                    default_value: None,
+                    is_array: false,
+                });
+            }
+            
             NodeData {
                 id: self
                     .runtime_id_to_data_id
@@ -497,16 +620,17 @@ impl ExecutionContextTrait for ExecutionContext {
                     .unwrap_or_default(),
                 node_type: node_guard.node_type().to_string(),
                 title: node_guard.name().to_string(),
-                inputs: vec![],
-                outputs: vec![],
+                inputs,   // ✅ 正确填充
+                outputs,  // ✅ 正确填充
                 variable_id: node_guard.variable_id(),
                 sub_graph_id: None,
             }
         };
 
+        // 10. 执行数据处理器
         let proto = crate::executor::node::registry::get_registry().get_prototype(&node_type);
 
-        if let Some(p) = proto {
+        let value = if let Some(p) = proto {
             // 查找输出 Pin 的字符串 ID
             let output_pin_id_str = self
                 .data_pin_id_to_runtime_pin_id
@@ -515,10 +639,23 @@ impl ExecutionContextTrait for ExecutionContext {
                 .map(|(k, _)| k.clone())
                 .unwrap_or_default();
 
-            return p.process_data(self, &node_data, &output_pin_id_str);
-        }
-
-        Value::Null
+            let value = p.process_data(self, &node_data, &output_pin_id_str);
+            
+            // 11. 如果是纯数据节点，缓存结果
+            if execution_model.is_cacheable() {
+                self.data_cache.insert(output_pin_id, value.clone());
+                // self.log(format!("[DataFlow Cache Store] Pin {:?}", output_pin_id));
+            }
+            
+            value
+        } else {
+            Value::Null
+        };
+        
+        // 12. 从求值栈移除节点
+        self.evaluating_stack.pop();
+        
+        value
     }
 
     fn get_variable(&self, var_id: &str) -> Option<&Value> {

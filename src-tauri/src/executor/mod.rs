@@ -9,6 +9,7 @@ pub mod node;
 pub mod pin;
 pub mod processors;
 pub mod types;
+pub mod value;
 
 // 重新导出常用类型
 pub use connection::{Connection, ConnectionManager};
@@ -26,4 +27,5 @@ pub use pin::{
     OutExecPin, PinId, PinType,
 };
 pub use processors::{DataProcessor, ExecutionContextTrait, FlowProcessor};
-pub use types::DataValue;
+pub use types::{DataValue, ExecutionModel};
+pub use value::{Value, ValueType};

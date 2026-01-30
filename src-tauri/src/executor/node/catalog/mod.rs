@@ -6,6 +6,8 @@ pub mod math;
 pub mod variable;
 pub mod data;
 pub mod visualization;
+pub mod string_multi_output;
+pub mod data_multi_output;
 
 use super::registry::NodeRegistry;
 
@@ -18,4 +20,6 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     variable::register(registry);
     data::register(registry);
     visualization::register(registry);
+    string_multi_output::register(registry);
+    data_multi_output::register(registry);
 }

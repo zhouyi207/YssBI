@@ -4,6 +4,7 @@ use std::any::Any;
 use std::fmt::Debug;
 use crate::executor::error::{ExecutionResult, NodeResult};
 use crate::executor::types::DataValue;
+use crate::executor::value::ValueType;
 use crate::executor::node::NodeId;
 use super::types::{DataPinEvent, DataPinState, ExecPinState, PinId};
 
@@ -39,8 +40,8 @@ pub trait DataPin: BasePin {
     /// 设置 Pin 状态
     fn set_state(&self, state: DataPinState);
 
-    /// 获取数据类型名称
-    fn data_type(&self) -> &str;
+    /// 获取数据类型
+    fn data_type(&self) -> &ValueType;
 
     /// 注册事件监听器
     fn subscribe(&self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>);

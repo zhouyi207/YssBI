@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::executor::error::{ExecutionResult, NodeResult};
 use crate::executor::types::DataValue;
+use crate::executor::value::ValueType;
 use crate::executor::node::NodeId;
 use super::traits::{BasePin, DataPin, ExecPin, InDataPin, OutDataPin, InExecPin, OutExecPin};
 use super::types::{DataPinEvent, DataPinState, ExecPinState, PinId};
@@ -15,7 +16,7 @@ pub struct GenericInDataPin {
     id: PinId,
     node_id: NodeId,
     name: String,
-    data_type: String,
+    data_type: ValueType,
     state: RwLock<DataPinState>,
     value: RwLock<DataValue>,
     upstream: RwLock<Option<PinId>>,
@@ -23,12 +24,12 @@ pub struct GenericInDataPin {
 }
 
 impl GenericInDataPin {
-    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: impl Into<String>) -> Self {
+    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: ValueType) -> Self {
         Self {
             id: Uuid::new_v4(),
             node_id,
             name: name.into(),
-            data_type: data_type.into(),
+            data_type,
             state: RwLock::new(DataPinState::Uninitialized),
             value: RwLock::new(DataValue::None),
             upstream: RwLock::new(None),
@@ -116,7 +117,7 @@ impl DataPin for GenericInDataPin {
         }
     }
 
-    fn data_type(&self) -> &str {
+    fn data_type(&self) -> &ValueType {
         &self.data_type
     }
 
@@ -166,7 +167,7 @@ pub struct GenericOutDataPin {
     id: PinId,
     node_id: NodeId,
     name: String,
-    data_type: String,
+    data_type: ValueType,
     state: RwLock<DataPinState>,
     value: RwLock<DataValue>,
     downstream: RwLock<Vec<PinId>>,
@@ -175,12 +176,12 @@ pub struct GenericOutDataPin {
 }
 
 impl GenericOutDataPin {
-    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: impl Into<String>) -> Self {
+    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: ValueType) -> Self {
         Self {
             id: Uuid::new_v4(),
             node_id,
             name: name.into(),
-            data_type: data_type.into(),
+            data_type,
             state: RwLock::new(DataPinState::Uninitialized),
             value: RwLock::new(DataValue::None),
             downstream: RwLock::new(Vec::new()),
@@ -270,7 +271,7 @@ impl DataPin for GenericOutDataPin {
         }
     }
 
-    fn data_type(&self) -> &str {
+    fn data_type(&self) -> &ValueType {
         &self.data_type
     }
 

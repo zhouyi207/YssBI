@@ -580,14 +580,8 @@ export class ProjectService {
     /**
      * 加载项目文件 - 兼容旧接口
      */
-    static async loadProject(jsonContent?: string): Promise<{ project: ProjectData, path: string | null } | null> {
+    static async loadProject(): Promise<{ project: ProjectData, path: string | null } | null> {
         try {
-            if (jsonContent) {
-                // 如果提供了 JSON 内容，直接解析
-                const project: ProjectData = await invoke("parse_project", { json: jsonContent });
-                return { project, path: null };
-            }
-
             // 弹出文件选择对话框
             const selected = await open({
                 multiple: false,

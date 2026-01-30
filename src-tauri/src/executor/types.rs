@@ -84,3 +84,45 @@ impl Default for DataValue {
         DataValue::None
     }
 }
+
+/// 节点执行模型
+/// 
+/// 定义节点如何参与执行流程
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionModel {
+    /// 纯控制流节点（如 Sequence, Branch）
+    /// - 只有 ExecPin
+    /// - 决定执行顺序
+    /// - 不产生数据
+    ControlFlow,
+    
+    /// 纯数据流节点（如 Constant, Add, Math）
+    /// - 只有 DataPin
+    /// - 纯函数式计算
+    /// - 可以安全缓存结果
+    /// - 不参与 ExecFlow
+    DataFlow,
+    
+    /// 混合节点（如 IfElse, Print, SetVariable）
+    /// - 同时有 ExecPin 和 DataPin
+    /// - 需要数据来决定控制流
+    /// - 或者在控制流中产生副作用
+    Hybrid,
+    
+    /// 事件节点（如 OnRun, OnClick）
+    /// - 执行的起点
+    /// - 只有输出 ExecPin
+    Event,
+}
+
+impl ExecutionModel {
+    /// 判断节点是否可以缓存数据结果
+    pub fn is_cacheable(&self) -> bool {
+        matches!(self, ExecutionModel::DataFlow)
+    }
+    
+    /// 判断节点是否参与控制流
+    pub fn participates_in_control_flow(&self) -> bool {
+        !matches!(self, ExecutionModel::DataFlow)
+    }
+}
