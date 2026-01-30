@@ -120,11 +120,11 @@ impl ExecutionContext {
                     .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericInDataPin;
-                use crate::executor::value::ValueType;
+                use crate::executor::value::{ValueType, PinTypeDesc};
                 let pin = GenericInDataPin::new(
                     runtime_id, 
                     &pin_data.name, 
-                    ValueType::from_string(&pin_data.pin_type)
+                    PinTypeDesc::concrete(ValueType::from_string(&pin_data.pin_type))
                 );
                 let pin_id = pin.id();
                 node.add_input(pin);
@@ -146,11 +146,11 @@ impl ExecutionContext {
                     .insert(pin_data.id.clone(), pin_id);
             } else {
                 use crate::executor::pin::GenericOutDataPin;
-                use crate::executor::value::ValueType;
+                use crate::executor::value::{ValueType, PinTypeDesc};
                 let pin = GenericOutDataPin::new(
                     runtime_id, 
                     &pin_data.name, 
-                    ValueType::from_string(&pin_data.pin_type)
+                    PinTypeDesc::concrete(ValueType::from_string(&pin_data.pin_type))
                 );
                 let pin_id = pin.id();
                 node.add_output(pin);

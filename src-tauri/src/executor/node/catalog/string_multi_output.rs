@@ -7,7 +7,7 @@ use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericOutDataPin, GenericInDataPin};
 use serde_json::json;
-use crate::executor::value::ValueType;
+use crate::executor::value::{ValueType, PinTypeDesc};
 
 pub fn register(registry: &NodeRegistry) {
     let string_cat = vec!["String".into(), "Multi-Output".into()];
@@ -17,12 +17,12 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("split_string", "Split String");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", ValueType::String));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Delimiter", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "First", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Rest", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Array", ValueType::List(Box::new(ValueType::Any))));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", PinTypeDesc::concrete(ValueType::String)));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Delimiter", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "First", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Rest", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let input = ctx.get_pin_value(&node.inputs[0].id)
@@ -70,12 +70,12 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("parse_url", "Parse URL");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "URL", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Protocol", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Host", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Port", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Path", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Query", ValueType::String));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "URL", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Protocol", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Host", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Port", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Path", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Query", PinTypeDesc::concrete(ValueType::String)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let url_str = ctx.get_pin_value(&node.inputs[0].id)
@@ -144,13 +144,13 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("string_info", "String Info");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Length", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "IsEmpty", ValueType::Boolean));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "WordCount", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LineCount", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "FirstChar", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LastChar", ValueType::String));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Length", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "IsEmpty", PinTypeDesc::concrete(ValueType::Boolean)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "WordCount", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LineCount", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "FirstChar", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LastChar", PinTypeDesc::concrete(ValueType::String)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let input = ctx.get_pin_value(&node.inputs[0].id)
@@ -188,10 +188,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("parse_name", "Parse Name");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "FullName", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "FirstName", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "MiddleName", ValueType::String));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LastName", ValueType::String));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "FullName", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "FirstName", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "MiddleName", PinTypeDesc::concrete(ValueType::String)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "LastName", PinTypeDesc::concrete(ValueType::String)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let full_name = ctx.get_pin_value(&node.inputs[0].id)

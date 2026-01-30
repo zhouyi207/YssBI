@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use crate::executor::error::{ConnectionError, ConnectionResult};
 use crate::executor::node::{GenericNode, Node, NodeId};
 use crate::executor::pin::{InDataPin, OutDataPin, PinId};
+use crate::executor::value::TypeInferenceContext;
 
 /// 连接信息
 #[derive(Debug, Clone)]
@@ -31,6 +32,9 @@ pub struct ConnectionManager {
 
     /// 节点到 Pin 的映射
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
+    
+    /// 类型推断上下文
+    type_inference: Mutex<TypeInferenceContext>,
 }
 
 impl ConnectionManager {
@@ -40,6 +44,7 @@ impl ConnectionManager {
             connections: Mutex::new(HashMap::new()),
             pin_to_node: Mutex::new(HashMap::new()),
             node_to_pins: Mutex::new(HashMap::new()),
+            type_inference: Mutex::new(TypeInferenceContext::new()),
         }
     }
 
@@ -48,6 +53,7 @@ impl ConnectionManager {
         let node_id = node.id();
         let mut pin_to_node = self.pin_to_node.lock().unwrap();
         let mut node_to_pins = self.node_to_pins.lock().unwrap();
+        let mut type_inference = self.type_inference.lock().unwrap();
 
         let mut pins = Vec::new();
 
@@ -56,6 +62,11 @@ impl ConnectionManager {
             let pin_id = pin.id();
             pin_to_node.insert(pin_id, node_id);
             pins.push(pin_id);
+            
+            // 注册类型描述
+            if let Some(concrete_pin) = node.get_input_concrete(&pin_id) {
+                type_inference.register_pin(pin_id, concrete_pin.type_desc().clone());
+            }
         }
 
         // 注册输出 Pin (使用 outputs() 方法直接获取所有输出 pins)
@@ -63,6 +74,11 @@ impl ConnectionManager {
             let pin_id = pin.id();
             pin_to_node.insert(pin_id, node_id);
             pins.push(pin_id);
+            
+            // 注册类型描述
+            if let Some(concrete_pin) = node.get_output_concrete(&pin_id) {
+                type_inference.register_pin(pin_id, concrete_pin.type_desc().clone());
+            }
         }
 
         node_to_pins.insert(node_id, pins);
@@ -79,16 +95,21 @@ impl ConnectionManager {
         let from_id = from_pin.id();
         let to_id = to_pin.id();
 
-        // 1. 类型检查
-        if from_pin.data_type() != to_pin.data_type()
-            && to_pin.data_type() != &crate::executor::value::ValueType::Any
-            && from_pin.data_type() != &crate::executor::value::ValueType::Any
-        {
-            return Err(ConnectionError::TypeMismatch {
-                from_type: from_pin.data_type().to_string(),
-                to_type: to_pin.data_type().to_string(),
-            });
+        // 1. 类型推断（如果支持）
+        let mut type_inference = self.type_inference.lock().unwrap();
+        if let Err(_e) = type_inference.infer_connection(from_id, to_id) {
+            // 类型推断失败，回退到旧的类型检查
+            if from_pin.data_type() != to_pin.data_type()
+                && to_pin.data_type() != &crate::executor::value::ValueType::Any
+                && from_pin.data_type() != &crate::executor::value::ValueType::Any
+            {
+                return Err(ConnectionError::TypeMismatch {
+                    from_type: from_pin.data_type().to_string(),
+                    to_type: to_pin.data_type().to_string(),
+                });
+            }
         }
+        drop(type_inference);
 
         // 2. 获取节点 ID
         let pin_to_node = self.pin_to_node.lock().unwrap();
@@ -301,6 +322,19 @@ impl ConnectionManager {
     /// 清除所有连接
     pub fn clear(&self) {
         self.connections.lock().unwrap().clear();
+    }
+    
+    /// 获取 Pin 的推断类型
+    /// 
+    /// 如果类型推断成功，返回推断后的具体类型
+    pub fn get_inferred_type(&self, pin_id: PinId) -> Option<crate::executor::value::ValueType> {
+        let mut type_inference = self.type_inference.lock().unwrap();
+        type_inference.resolve_pin_type(pin_id).ok()
+    }
+    
+    /// 获取类型推断上下文的引用（用于调试）
+    pub fn type_inference_context(&self) -> &Mutex<TypeInferenceContext> {
+        &self.type_inference
     }
 }
 

@@ -3,12 +3,16 @@ use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericOutDataPin, GenericInDataPin, GenericOutExecPin, GenericInExecPin};
 use serde_json::Value;
-use crate::executor::value::ValueType;
+use crate::executor::value::PinTypeDesc;
 
 pub fn register(registry: &NodeRegistry) {
-    // 1. Get Variable
+    // 1. Get Variable - 使用 Unknown 类型，因为变量可以是任意类型
     let get_var = GenericNode::new_prototype("get_variable", "Get Variable");
-    get_var.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Value", ValueType::Struct(vec![])));
+    get_var.add_output(GenericOutDataPin::new(
+        uuid::Uuid::nil(),
+        "Value",
+        PinTypeDesc::unknown()  // 🔑 变量可以是任意类型
+    ));
     get_var.set_data_processor(Box::new(|ctx, node, _pin_id| {
         if let Some(var_id) = &node.variable_id {
             ctx.get_variable(var_id).cloned().unwrap_or(Value::Null)
@@ -21,12 +25,20 @@ pub fn register(registry: &NodeRegistry) {
     get_var.set_metadata(vec!["Variable".into()], "default".into(), Some("Get variable value".into()));
     registry.register("get_variable".into(), Arc::new(get_var));
 
-    // 2. Set Variable
+    // 2. Set Variable - 使用 Unknown 类型，因为可以设置任意类型的值
     let set_var = GenericNode::new_prototype("set_variable", "Set Variable");
     set_var.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
     set_var.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    set_var.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Value", ValueType::Struct(vec![])));
-    set_var.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Value", ValueType::Struct(vec![])));
+    set_var.add_input(GenericInDataPin::new(
+        uuid::Uuid::nil(),
+        "Value",
+        PinTypeDesc::unknown()  // 🔑 可以接受任意类型
+    ));
+    set_var.add_output(GenericOutDataPin::new(
+        uuid::Uuid::nil(),
+        "Value",
+        PinTypeDesc::unknown()  // 🔑 输出任意类型
+    ));
     
     set_var.set_flow_processor(Box::new(|ctx, node| {
         let val = ctx.get_pin_value(&node.inputs[0].id);

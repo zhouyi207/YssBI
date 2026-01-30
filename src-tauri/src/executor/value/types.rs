@@ -51,7 +51,7 @@ pub enum Value {
 /// 值类型枚举（对应 Polars DataType）
 /// 
 /// 用于 Pin 的 data_type 字段，描述期望的数据类型
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ValueType {
     /// 空类型
     Null,

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::executor::error::{ExecutionResult, NodeResult};
 use crate::executor::types::DataValue;
-use crate::executor::value::ValueType;
+use crate::executor::value::{ValueType, PinTypeDesc, DataType};
 use crate::executor::node::NodeId;
 use super::traits::{BasePin, DataPin, ExecPin, InDataPin, OutDataPin, InExecPin, OutExecPin};
 use super::types::{DataPinEvent, DataPinState, ExecPinState, PinId};
@@ -16,7 +16,7 @@ pub struct GenericInDataPin {
     id: PinId,
     node_id: NodeId,
     name: String,
-    data_type: ValueType,
+    type_desc: PinTypeDesc,
     state: RwLock<DataPinState>,
     value: RwLock<DataValue>,
     upstream: RwLock<Option<PinId>>,
@@ -24,17 +24,28 @@ pub struct GenericInDataPin {
 }
 
 impl GenericInDataPin {
-    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: ValueType) -> Self {
+    /// 创建新的输入数据 Pin
+    pub fn new(node_id: NodeId, name: impl Into<String>, type_desc: PinTypeDesc) -> Self {
         Self {
             id: Uuid::new_v4(),
             node_id,
             name: name.into(),
-            data_type,
+            type_desc,
             state: RwLock::new(DataPinState::Uninitialized),
             value: RwLock::new(DataValue::None),
             upstream: RwLock::new(None),
             listeners: Mutex::new(Vec::new()),
         }
+    }
+    
+    /// 获取类型描述
+    pub fn type_desc(&self) -> &PinTypeDesc {
+        &self.type_desc
+    }
+    
+    /// 设置类型描述
+    pub fn set_type_desc(&mut self, type_desc: PinTypeDesc) {
+        self.type_desc = type_desc;
     }
 
     fn emit_event(&self, event: DataPinEvent) {
@@ -52,7 +63,7 @@ impl std::fmt::Debug for GenericInDataPin {
             .field("id", &self.id)
             .field("node_id", &self.node_id)
             .field("name", &self.name)
-            .field("data_type", &self.data_type)
+            .field("type_desc", &self.type_desc)
             .field("state", &self.state)
             .field("value", &self.value)
             .field("upstream", &self.upstream)
@@ -118,7 +129,11 @@ impl DataPin for GenericInDataPin {
     }
 
     fn data_type(&self) -> &ValueType {
-        &self.data_type
+        // 从 type_desc 获取 ValueType
+        match &self.type_desc.data_type {
+            DataType::Concrete(vtype) => vtype,
+            _ => &ValueType::Any,
+        }
     }
 
     fn subscribe(&self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {
@@ -167,7 +182,7 @@ pub struct GenericOutDataPin {
     id: PinId,
     node_id: NodeId,
     name: String,
-    data_type: ValueType,
+    type_desc: PinTypeDesc,
     state: RwLock<DataPinState>,
     value: RwLock<DataValue>,
     downstream: RwLock<Vec<PinId>>,
@@ -176,18 +191,29 @@ pub struct GenericOutDataPin {
 }
 
 impl GenericOutDataPin {
-    pub fn new(node_id: NodeId, name: impl Into<String>, data_type: ValueType) -> Self {
+    /// 创建新的输出数据 Pin
+    pub fn new(node_id: NodeId, name: impl Into<String>, type_desc: PinTypeDesc) -> Self {
         Self {
             id: Uuid::new_v4(),
             node_id,
             name: name.into(),
-            data_type,
+            type_desc,
             state: RwLock::new(DataPinState::Uninitialized),
             value: RwLock::new(DataValue::None),
             downstream: RwLock::new(Vec::new()),
             listeners: Mutex::new(Vec::new()),
             error_message: RwLock::new(None),
         }
+    }
+    
+    /// 获取类型描述
+    pub fn type_desc(&self) -> &PinTypeDesc {
+        &self.type_desc
+    }
+    
+    /// 设置类型描述
+    pub fn set_type_desc(&mut self, type_desc: PinTypeDesc) {
+        self.type_desc = type_desc;
     }
 
     fn emit_event(&self, event: DataPinEvent) {
@@ -205,7 +231,7 @@ impl std::fmt::Debug for GenericOutDataPin {
             .field("id", &self.id)
             .field("node_id", &self.node_id)
             .field("name", &self.name)
-            .field("data_type", &self.data_type)
+            .field("type_desc", &self.type_desc)
             .field("state", &self.state)
             .field("value", &self.value)
             .field("downstream", &self.downstream)
@@ -272,7 +298,11 @@ impl DataPin for GenericOutDataPin {
     }
 
     fn data_type(&self) -> &ValueType {
-        &self.data_type
+        // 从 type_desc 获取 ValueType
+        match &self.type_desc.data_type {
+            DataType::Concrete(vtype) => vtype,
+            _ => &ValueType::Any,
+        }
     }
 
     fn subscribe(&self, callback: Box<dyn Fn(DataPinEvent) + Send + Sync + 'static>) {

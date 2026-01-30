@@ -2,13 +2,13 @@ use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
-use crate::executor::value::ValueType;
+use crate::executor::value::{ValueType, PinTypeDesc};
 
 pub fn register(registry: &NodeRegistry) {
     // 1. IfElse Node - 修复后的逻辑
     let if_else = GenericNode::new_prototype("if_else", "If Else");
     if_else.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", ValueType::Boolean));
+    if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
     if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "True"));
     if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "False"));
     
@@ -125,8 +125,8 @@ pub fn register(registry: &NodeRegistry) {
     // 4. 新增：While Loop Node - 展示循环逻辑的例子
     let while_loop = GenericNode::new_prototype("while_loop", "While Loop");
     while_loop.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", ValueType::Boolean));
-    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "MaxIterations", ValueType::Float64));
+    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
+    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "MaxIterations", PinTypeDesc::concrete(ValueType::Float64)));
     while_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     while_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
 
@@ -176,9 +176,9 @@ pub fn register(registry: &NodeRegistry) {
     // 5. 新增：For Loop Node - 展示计数循环逻辑的例子
     let for_loop = GenericNode::new_prototype("for_loop", "For Loop");
     for_loop.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Start", ValueType::Float64));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "End", ValueType::Float64));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Step", ValueType::Float64));
+    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Start", PinTypeDesc::concrete(ValueType::Float64)));
+    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "End", PinTypeDesc::concrete(ValueType::Float64)));
+    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
     for_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     for_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
 

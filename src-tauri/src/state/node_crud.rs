@@ -164,6 +164,8 @@ impl ProjectState {
         target_pin_id: &str,
     ) -> Result<Vec<SerializedNode>, String> {
         use crate::schema::pin_types::can_connect;
+        use crate::executor::value::{PinTypeDesc, TypeInferenceContext};
+        use uuid::Uuid;
 
         let mut project = self.data.write().unwrap();
         let subgraph = crate::get_subgraph_mut!(project, subgraph_id)
@@ -208,14 +210,42 @@ impl ProjectState {
             return Err("Cannot connect: pins must have different directions (one input, one output)".to_string());
         };
 
-        // 验证类型兼容性
+        // ✅ 新增：使用类型推断系统进行类型检查
         let output_type = &output_info.3;
         let input_type = &input_info.3;
-        if !can_connect(output_type, input_type) {
-            return Err(format!(
-                "Cannot connect: type '{}' is not compatible with type '{}'",
-                output_type, input_type
-            ));
+        
+        // 创建临时的类型推断上下文
+        let mut type_inference = TypeInferenceContext::new();
+        
+        // 生成临时的 PinId（用于类型推断）
+        let temp_output_pin_id = Uuid::new_v4();
+        let temp_input_pin_id = Uuid::new_v4();
+        
+        // 注册 Pin 类型
+        type_inference.register_pin(
+            temp_output_pin_id,
+            PinTypeDesc::from_string(output_type)
+        );
+        type_inference.register_pin(
+            temp_input_pin_id,
+            PinTypeDesc::from_string(input_type)
+        );
+        
+        // 尝试推断连接
+        match type_inference.infer_connection(temp_output_pin_id, temp_input_pin_id) {
+            Ok(_) => {
+                // 类型推断成功，允许连接
+            }
+            Err(e) => {
+                // 类型推断失败，回退到旧的类型检查
+                if !can_connect(output_type, input_type) {
+                    return Err(format!(
+                        "Cannot connect: type '{}' is not compatible with type '{}' ({})",
+                        output_type, input_type, e
+                    ));
+                }
+                // 旧的类型检查通过，允许连接（向后兼容）
+            }
         }
 
         // 对于输入 pin（单连接），先移除旧连接

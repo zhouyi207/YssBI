@@ -7,7 +7,7 @@ use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericOutDataPin, GenericInDataPin};
 use serde_json::{json, Value};
-use crate::executor::value::ValueType;
+use crate::executor::value::{ValueType, PinTypeDesc};
 
 pub fn register(registry: &NodeRegistry) {
     let data_cat = vec!["Data".into(), "Multi-Output".into()];
@@ -17,10 +17,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("get_object_props", "Get Object Properties");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Object", ValueType::Struct(vec![])));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Keys", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Values", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", ValueType::Float64));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Object", PinTypeDesc::concrete(ValueType::Struct(vec![]))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Keys", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Values", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let obj = ctx.get_pin_value(&node.inputs[0].id);
@@ -62,11 +62,11 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("array_info", "Array Info");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Length", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "First", ValueType::Any));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Last", ValueType::Any));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "IsEmpty", ValueType::Boolean));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Length", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "First", PinTypeDesc::concrete(ValueType::Any)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Last", PinTypeDesc::concrete(ValueType::Any)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "IsEmpty", PinTypeDesc::concrete(ValueType::Boolean)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let array = ctx.get_pin_value(&node.inputs[0].id);
@@ -103,11 +103,11 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("partition_array", "Partition Array");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", ValueType::List(Box::new(ValueType::Any))));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Index", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Before", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "After", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "AtIndex", ValueType::Any));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Index", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Before", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "After", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "AtIndex", PinTypeDesc::concrete(ValueType::Any)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let array = ctx.get_pin_value(&node.inputs[0].id);
@@ -152,11 +152,11 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("filter_array_multi", "Filter Array (Multi)");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", ValueType::List(Box::new(ValueType::Any))));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Threshold", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Above", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Below", ValueType::List(Box::new(ValueType::Any))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Equal", ValueType::List(Box::new(ValueType::Any))));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Threshold", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Above", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Below", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Equal", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let array = ctx.get_pin_value(&node.inputs[0].id);
@@ -217,13 +217,13 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("datetime_parts", "DateTime Parts");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Timestamp", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Year", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Month", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Day", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Hour", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Minute", ValueType::Float64));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", ValueType::Float64));
+        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Timestamp", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Year", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Month", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Day", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Hour", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Minute", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let timestamp = ctx.get_pin_value(&node.inputs[0].id)
