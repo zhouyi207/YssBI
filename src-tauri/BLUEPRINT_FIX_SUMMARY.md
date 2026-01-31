@@ -24,6 +24,8 @@ Event ──exec──▶ Print
           GetVarA  GetVarB
 ```
 
+
+
 ## 核心原则
 
 1. **Exec 只管顺序** - 控制流节点决定执行顺序
