@@ -200,14 +200,14 @@ fn test_serialization_order() {
     // 验证输入顺序
     assert_eq!(inputs.len(), 2);
     assert_eq!(inputs[0]["name"].as_str().unwrap(), "Execute");
-    assert_eq!(inputs[0]["pin_type"].as_str().unwrap(), "exec");
+    assert_eq!(inputs[0]["type"].as_str().unwrap(), "exec");
     assert_eq!(inputs[1]["name"].as_str().unwrap(), "Data");
-    assert_eq!(inputs[1]["pin_type"].as_str().unwrap(), "string");
+    assert_eq!(inputs[1]["type"].as_str().unwrap(), "string");
 
     // 验证输出顺序
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0]["name"].as_str().unwrap(), "Done");
-    assert_eq!(outputs[0]["pin_type"].as_str().unwrap(), "exec");
+    assert_eq!(outputs[0]["type"].as_str().unwrap(), "exec");
     assert_eq!(outputs[1]["name"].as_str().unwrap(), "Result");
-    assert_eq!(outputs[1]["pin_type"].as_str().unwrap(), "string");
+    assert_eq!(outputs[1]["type"].as_str().unwrap(), "string");
 }
