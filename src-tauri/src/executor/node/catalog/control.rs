@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
-use crate::executor::node::implementation::GenericNode;
-use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
+use crate::executor::node::implementation::{GenericNode, DynamicPinConfig, DynamicPinType, PinDirection, NodeDynamicCapability};
+use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin, GenericOutDataPin};
 use crate::executor::value::{ValueType, PinTypeDesc};
 
 pub fn register(registry: &NodeRegistry) {
@@ -534,7 +534,7 @@ pub fn register(registry: &NodeRegistry) {
     branch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "TrueValue", PinTypeDesc::any()));
     branch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "FalseValue", PinTypeDesc::any()));
     branch.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    branch.add_output(GenericInDataPin::new(uuid::Uuid::nil(), "Result", PinTypeDesc::any()));
+    branch.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", PinTypeDesc::any()));
 
     branch.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Branch node: starting execution".to_string());
@@ -566,21 +566,21 @@ pub fn register(registry: &NodeRegistry) {
     // 14. ForEach Node - 遍历数组
     let for_each = GenericNode::new_prototype("for_each", "For Each");
     for_each.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    for_each.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::array(ValueType::Any)));
+    for_each.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::any().array()));
     for_each.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     for_each.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
-    for_each.add_output(GenericInDataPin::new(uuid::Uuid::nil(), "Item", PinTypeDesc::any()));
-    for_each.add_output(GenericInDataPin::new(uuid::Uuid::nil(), "Index", PinTypeDesc::concrete(ValueType::Float64)));
+    for_each.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Item", PinTypeDesc::any()));
+    for_each.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Index", PinTypeDesc::concrete(ValueType::Float64)));
 
     for_each.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("ForEach node: starting execution".to_string());
         
         let array_value = ctx.get_pin_value(&node.inputs[0].id);
         let array = match array_value.as_array() {
-            Some(arr) => arr,
+            Some(arr) => arr.clone(), // Clone the array to avoid borrow issues
             None => {
                 ctx.log("ForEach: Input is not an array, treating as single item".to_string());
-                vec![&array_value]
+                vec![array_value.clone()]
             }
         };
         
@@ -590,7 +590,7 @@ pub fn register(registry: &NodeRegistry) {
             ctx.log(format!("ForEach: Processing item {} (index {})", index, index));
             
             // 设置当前项和索引
-            ctx.set_pin_value(&node.outputs[0].id, (*item).clone());
+            ctx.set_pin_value(&node.outputs[0].id, item.clone());
             ctx.set_pin_value(&node.outputs[1].id, serde_json::Value::Number(serde_json::Number::from(index)));
             
             if let Err(e) = ctx.trigger_flow_by_pin(&node.id, "Loop Body") {
@@ -751,7 +751,7 @@ pub fn register(registry: &NodeRegistry) {
     counter.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
     counter.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "ResetValue", PinTypeDesc::concrete(ValueType::Float64)));
     counter.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    counter.add_output(GenericInDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
+    counter.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
 
     counter.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Counter node: starting execution".to_string());
@@ -814,7 +814,7 @@ pub fn register(registry: &NodeRegistry) {
     timer.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Loop", PinTypeDesc::concrete(ValueType::Boolean)));
     timer.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Tick"));
     timer.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Finished"));
-    timer.add_output(GenericInDataPin::new(uuid::Uuid::nil(), "ElapsedTime", PinTypeDesc::concrete(ValueType::Float64)));
+    timer.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "ElapsedTime", PinTypeDesc::concrete(ValueType::Float64)));
 
     timer.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Timer node: starting execution".to_string());
@@ -892,4 +892,75 @@ pub fn register(registry: &NodeRegistry) {
     let mut timer = timer;
     timer.set_metadata(vec!["Control".into()], "default".into(), Some("Timer with start/stop/reset and optional looping".into()));
     registry.register("timer".into(), Arc::new(timer));
+
+    // ==================== 动态节点示例 ====================
+
+    // 19. Dynamic Sequence Node - 可动态添加输出的序列节点
+    register_dynamic_sequence(registry);
+}
+
+/// 注册动态 Sequence 节点
+fn register_dynamic_sequence(registry: &NodeRegistry) {
+    let sequence = GenericNode::new_prototype("sequence_dynamic", "Dynamic Sequence");
+    
+    // 添加基础 Pin
+    sequence.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
+    sequence.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Then 0"));
+    sequence.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Then 1"));
+    
+    // 设置动态能力
+    let dynamic_config = DynamicPinConfig {
+        pin_type: DynamicPinType::Exec,
+        direction: PinDirection::Output,
+        name_template: "Then {}".to_string(),
+        data_type: PinTypeDesc::unknown(), // 执行 Pin 不需要具体的数据类型
+        min_count: 2,
+        max_count: Some(10),
+        can_reorder: true,
+    };
+    
+    let capability = NodeDynamicCapability {
+        can_add_pins: true,
+        dynamic_configs: vec![dynamic_config],
+        processor_generator: Some(Box::new(generate_dynamic_sequence_processor)),
+    };
+    
+    sequence.set_dynamic_capability(capability);
+    
+    // 设置初始处理器
+    let initial_processor = generate_dynamic_sequence_processor(&sequence);
+    sequence.set_flow_processor(initial_processor);
+    
+    let mut sequence = sequence;
+    sequence.set_metadata(vec!["Control".into()], "default".into(), Some("Dynamic sequence with configurable outputs".into()));
+    registry.register("sequence_dynamic".into(), Arc::new(sequence));
+}
+
+/// 动态序列处理器生成器
+fn generate_dynamic_sequence_processor(node: &GenericNode) -> Box<dyn Fn(&mut dyn crate::executor::ExecutionContextTrait, &crate::executor::NodeData) -> Result<String, String> + Send + Sync + 'static> {
+    // 获取当前所有输出执行 Pin 的名称
+    let output_names = node.get_dynamic_exec_output_names();
+    
+    Box::new(move |ctx, node_data| {
+        ctx.log("Dynamic Sequence: starting execution".to_string());
+        
+        for (index, pin_name) in output_names.iter().enumerate() {
+            ctx.log(format!("Dynamic Sequence: executing {}", pin_name));
+            
+            if let Err(e) = ctx.trigger_flow_by_pin(&node_data.id, pin_name) {
+                ctx.log(format!("Dynamic Sequence: {} execution failed: {}", pin_name, e));
+                return Err(e);
+            }
+            
+            ctx.log(format!("Dynamic Sequence: {} completed", pin_name));
+            
+            // 在输出之间添加延迟（除了最后一个）
+            if index < output_names.len() - 1 {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
+        
+        ctx.log("Dynamic Sequence: execution completed".to_string());
+        Ok("".into())
+    })
 }

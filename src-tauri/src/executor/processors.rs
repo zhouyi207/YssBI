@@ -11,6 +11,9 @@ pub trait ExecutionContextTrait {
     /// 获取针脚的值
     fn get_pin_value(&mut self, pin_id: &str) -> Value;
 
+    /// 设置针脚的值
+    fn set_pin_value(&mut self, pin_id: &str, value: Value) -> bool;
+
     /// 获取变量值
     fn get_variable(&self, var_id: &str) -> Option<&Value>;
 

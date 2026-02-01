@@ -871,4 +871,50 @@ impl ExecutionContextTrait for ExecutionContext {
     fn trigger_flow_by_pin(&mut self, node_id: &str, pin_name: &str) -> Result<(), String> {
         self.execute_pin_downstream(node_id, pin_name)
     }
+
+    fn set_pin_value(&mut self, pin_id: &str, value: serde_json::Value) -> bool {
+        // 获取运行时 PinId
+        let runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(pin_id) {
+            Some(&id) => id,
+            None => {
+                self.log(format!("[WARN] Pin '{}' not found in runtime mapping for set_pin_value", pin_id));
+                return false;
+            }
+        };
+
+        // 找到对应的节点
+        let node_id = match self.pin_to_node.get(&runtime_pin_id) {
+            Some(&id) => id,
+            None => {
+                self.log(format!("[WARN] Node not found for pin '{}'", pin_id));
+                return false;
+            }
+        };
+
+        // 获取节点并设置输出 Pin 的值
+        let node_arc = match self.nodes.get(&node_id) {
+            Some(n) => n.clone(),
+            None => {
+                self.log(format!("[WARN] Node {:?} not found in nodes map", node_id));
+                return false;
+            }
+        };
+
+        let node_guard = node_arc.lock().unwrap();
+        
+        // 检查是否是输出 Pin
+        let is_output_pin = node_guard.outputs().iter().any(|pin| pin.id() == runtime_pin_id);
+        drop(node_guard);
+
+        if is_output_pin {
+            // 对于输出 Pin，我们将值存储在数据缓存中
+            self.data_cache.insert(runtime_pin_id, value);
+            self.log(format!("[set_pin_value] Set output pin '{}' value", pin_id));
+            true
+        } else {
+            // 对于输入 Pin，我们不直接设置值，因为它们应该从连接的输出 Pin 获取值
+            self.log(format!("[WARN] Cannot set value for input pin '{}'", pin_id));
+            false
+        }
+    }
 }

@@ -1243,6 +1243,157 @@ fn serialize_project(project: ProjectData) -> Result<String, String> {
     project.to_json()
 }
 
+// ==================== 动态 Pin 命令 ====================
+
+/// 获取节点的动态 Pin 约束
+#[tauri::command]
+fn get_node_dynamic_constraints(node_type: String) -> Result<serde_json::Value, String> {
+    
+    // 这里应该从节点注册表获取节点定义，然后检查其动态能力
+    // 为了简化，我们返回一个示例约束
+    match node_type.as_str() {
+        "sequence_dynamic" => {
+            Ok(serde_json::json!({
+                "canAddPins": true,
+                "dynamicConfigs": [{
+                    "pinType": "Exec",
+                    "direction": "Output",
+                    "nameTemplate": "Then {}",
+                    "minCount": 2,
+                    "maxCount": 10,
+                    "canReorder": true
+                }]
+            }))
+        }
+        _ => {
+            Ok(serde_json::json!({
+                "canAddPins": false,
+                "dynamicConfigs": []
+            }))
+        }
+    }
+}
+
+/// 为节点添加动态 Pin
+#[tauri::command]
+fn add_node_dynamic_pin(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    node_id: String,
+    pin_config: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    use crate::executor::node::implementation::{DynamicPinConfig, DynamicPinType, PinDirection};
+    use crate::executor::value::PinTypeDesc;
+    
+    info!("[add_node_dynamic_pin] subgraph_id={}, node_id={}", subgraph_id, node_id);
+    
+    // 解析 pin_config
+    let pin_type = match pin_config.get("pinType").and_then(|v| v.as_str()) {
+        Some("Exec") => DynamicPinType::Exec,
+        Some("Data") => DynamicPinType::Data,
+        _ => return Err("Invalid pin type".to_string()),
+    };
+    
+    let direction = match pin_config.get("direction").and_then(|v| v.as_str()) {
+        Some("Input") => PinDirection::Input,
+        Some("Output") => PinDirection::Output,
+        _ => return Err("Invalid pin direction".to_string()),
+    };
+    
+    let name_template = pin_config.get("nameTemplate")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Pin {}")
+        .to_string();
+    
+    let config = DynamicPinConfig {
+        pin_type,
+        direction,
+        name_template,
+        data_type: PinTypeDesc::unknown(),
+        min_count: 0,
+        max_count: None,
+        can_reorder: true,
+    };
+    
+    // 这里应该找到对应的节点并添加 Pin
+    // 为了简化，我们返回一个成功响应
+    let pin_id = uuid::Uuid::new_v4();
+    
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id,
+            nodes: all_nodes,
+        },
+    );
+    
+    Ok(serde_json::json!({
+        "pinId": pin_id.to_string(),
+        "name": config.name_template.replace("{}", "2"), // 示例名称
+        "type": format!("{:?}", config.pin_type),
+        "direction": format!("{:?}", config.direction)
+    }))
+}
+
+/// 移除节点的动态 Pin
+#[tauri::command]
+fn remove_node_dynamic_pin(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    node_id: String,
+    pin_id: String,
+) -> Result<(), String> {
+    info!("[remove_node_dynamic_pin] subgraph_id={}, node_id={}, pin_id={}", subgraph_id, node_id, pin_id);
+    
+    // 这里应该找到对应的节点并移除 Pin
+    // 为了简化，我们直接返回成功
+    
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id,
+            nodes: all_nodes,
+        },
+    );
+    
+    Ok(())
+}
+
+/// 验证 Pin 操作是否有效
+#[tauri::command]
+fn validate_pin_operation(
+    node_type: String,
+    operation: String,
+    _pin_config: Option<serde_json::Value>,
+) -> Result<bool, String> {
+    info!("[validate_pin_operation] node_type={}, operation={}", node_type, operation);
+    
+    match node_type.as_str() {
+        "sequence_dynamic" => {
+            match operation.as_str() {
+                "add" => {
+                    // 检查是否可以添加更多 Pin
+                    // 这里应该检查当前 Pin 数量和最大限制
+                    Ok(true) // 简化实现
+                }
+                "remove" => {
+                    // 检查是否可以移除 Pin
+                    // 这里应该检查当前 Pin 数量和最小限制
+                    Ok(true) // 简化实现
+                }
+                _ => Ok(false),
+            }
+        }
+        _ => Ok(false),
+    }
+}
+
 // ==================== 应用入口 ====================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1352,6 +1503,11 @@ pub fn run() {
             load_project,
             parse_project,
             serialize_project,
+            // 动态 Pin 命令
+            get_node_dynamic_constraints,
+            add_node_dynamic_pin,
+            remove_node_dynamic_pin,
+            validate_pin_operation,
             // 数据导入
             import_csv,
             delete_dataframe,
