@@ -25,7 +25,7 @@
 
 **问题不在架构，而在实现细节**：
 
-### 问题：NodeData.inputs 为空
+### 问题：NodeDto.inputs 为空
 
 **位置**：`src-tauri/src/executor/context.rs` 的 `get_pin_value()` 方法
 
@@ -33,7 +33,7 @@
 ```rust
 let node_data = {
     let node_guard = node_arc.lock().unwrap();
-    NodeData {
+    NodeDto {
         id: ...,
         node_type: ...,
         title: ...,
@@ -57,13 +57,13 @@ node.set_data_processor(Box::new(|ctx, node, _pin_id| {
 
 ## 修复方案
 
-### 修复：正确填充 NodeData.inputs 和 outputs
+### 修复：正确填充 NodeDto.inputs 和 outputs
 
 **文件**：`src-tauri/src/executor/context.rs`
 
 **修改**：
 ```rust
-// 9. 构造 NodeData（需要填充 inputs 和 outputs）
+// 9. 构造 NodeDto（需要填充 inputs 和 outputs）
 let node_data = {
     let node_guard = node_arc.lock().unwrap();
     
@@ -76,7 +76,7 @@ let node_data = {
             .map(|(frontend_id, _)| frontend_id.clone())
             .unwrap_or_default();
         
-        inputs.push(PinData {
+        inputs.push(PinDto {
             id: frontend_pin_id,
             name: input_pin.name().to_string(),
             pin_type: input_pin.data_type().to_string(),
@@ -95,7 +95,7 @@ let node_data = {
             .map(|(frontend_id, _)| frontend_id.clone())
             .unwrap_or_default();
         
-        outputs.push(PinData {
+        outputs.push(PinDto {
             id: frontend_pin_id,
             name: output_pin.name().to_string(),
             pin_type: output_pin.data_type().to_string(),
@@ -105,7 +105,7 @@ let node_data = {
         });
     }
     
-    NodeData {
+    NodeDto {
         id: self.runtime_id_to_data_id.get(&node_id).cloned().unwrap_or_default(),
         node_type: node_guard.node_type().to_string(),
         title: node_guard.name().to_string(),
@@ -130,7 +130,7 @@ let node_data = {
 2. get_pin_value("print_value")
    ├─> 查找上游：Divide.output
    ├─> 检查缓存：未命中
-   ├─> 构造 NodeData（✅ inputs 已填充）
+   ├─> 构造 NodeDto（✅ inputs 已填充）
    └─> Divide.process_data()
        ├─> ctx.get_pin_value(&node.inputs[0].id)  // ✅ 可以访问
        │   └─> get_pin_value("divide_a")  // 🔁 递归
@@ -243,7 +243,7 @@ impl ExecutionContext {
         // 6. 递归求值 ✅
         self.evaluating_stack.push(node_id);
         
-        // 构造 NodeData（✅ 现在 inputs 已填充）
+        // 构造 NodeDto（✅ 现在 inputs 已填充）
         let node_data = construct_node_data_with_pins(...);
         
         // 调用 process_data（内部会递归调用 get_pin_value）
@@ -274,12 +274,12 @@ impl ExecutionContext {
 ### 问题根源
 
 不是架构问题，而是**实现细节**：
-- ❌ `NodeData.inputs` 为空
+- ❌ `NodeDto.inputs` 为空
 - ❌ 导致节点无法访问输入 Pin ID
 
 ### 修复方案
 
-- ✅ 正确填充 `NodeData.inputs` 和 `outputs`
+- ✅ 正确填充 `NodeDto.inputs` 和 `outputs`
 - ✅ 确保节点可以访问 Pin ID 进行递归拉取
 
 ### 架构验证
@@ -307,7 +307,7 @@ impl ExecutionContext {
    - 检测到循环返回 Null
 
 4. **问题在实现细节**
-   - `NodeData` 需要正确填充
+   - `NodeDto` 需要正确填充
    - 节点才能访问 Pin ID
 
 ### 下一步

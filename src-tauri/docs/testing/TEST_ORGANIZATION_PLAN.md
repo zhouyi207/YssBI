@@ -173,15 +173,15 @@ pub mod fixtures;
 pub mod helpers;
 
 // tests/common/helpers.rs
-use yssbi_lib::executor::{NodeData, PinData};
+use yssbi_lib::executor::{NodeDto, PinDto};
 
 /// 创建测试节点
 pub fn create_test_node(
     id: &str,
     node_type: &str,
     title: &str,
-) -> NodeData {
-    NodeData {
+) -> NodeDto {
+    NodeDto {
         id: id.to_string(),
         node_type: node_type.to_string(),
         title: title.to_string(),
@@ -193,8 +193,8 @@ pub fn create_test_node(
 }
 
 /// 创建 Exec Pin
-pub fn create_exec_pin(id: &str, name: &str) -> PinData {
-    PinData {
+pub fn create_exec_pin(id: &str, name: &str) -> PinDto {
+    PinDto {
         id: id.to_string(),
         name: name.to_string(),
         pin_type: "exec".to_string(),
@@ -338,7 +338,7 @@ fn test_feature_name() {
 
 ```rust
 // 在 common/helpers.rs 中定义
-pub fn create_simple_graph() -> GraphData {
+pub fn create_simple_graph() -> GraphDto {
     // ... 创建简单的测试图
 }
 

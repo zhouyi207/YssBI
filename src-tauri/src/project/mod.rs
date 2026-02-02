@@ -2,25 +2,16 @@
 //!
 //! 处理项目文件的序列化、反序列化、保存和加载。
 
+pub mod dto;
 pub mod io;
+
+// 重新导出常用的 DTO
+pub use dto::{GraphDto, NodeDto, PinDefDto, PinDto, VariableDto};
 
 use crate::schema::VariableDefinition;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-
-// ==================== Pin 定义 ====================
-
-/// Pin 定义（用于函数/宏的输入输出）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PinDefinition {
-    pub id: String,
-    pub name: String,
-    #[serde(rename = "type")]
-    pub pin_type: String,
-    #[serde(rename = "isArray", default)]
-    pub is_array: bool,
-}
 
 // ==================== 节点数据 ====================
 
@@ -33,8 +24,15 @@ pub struct SerializedPin {
     pub pin_type: String,
     #[serde(default)]
     pub links: Vec<String>,
+    
+    /// 默认值（来自节点定义，通常不保存）
     #[serde(rename = "defaultValue", skip_serializing_if = "Option::is_none")]
     pub default_value: Option<serde_json::Value>,
+    
+    /// 用户设置的值（需要保存）
+    #[serde(rename = "userValue", skip_serializing_if = "Option::is_none")]
+    pub user_value: Option<serde_json::Value>,
+    
     #[serde(rename = "isArray", default)]
     pub is_array: bool,
 }
@@ -67,6 +65,25 @@ pub struct SerializedNode {
     pub inputs: Vec<SerializedPin>,
     #[serde(default)]
     pub outputs: Vec<SerializedPin>,
+    
+    // 动态 Pin 元数据
+    #[serde(rename = "dynamicPins", skip_serializing_if = "Option::is_none")]
+    pub dynamic_pins: Option<Vec<DynamicPinMetadata>>,
+}
+
+/// 动态 Pin 元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicPinMetadata {
+    #[serde(rename = "pinId")]
+    pub pin_id: String,
+    #[serde(rename = "pinType")]
+    pub pin_type: String,      // "Exec" 或 "Data"
+    pub direction: String,     // "Input" 或 "Output"
+    pub name: String,
+    #[serde(rename = "dataType")]
+    pub data_type: String,
+    #[serde(rename = "isDynamic")]
+    pub is_dynamic: bool,
 }
 
 /// 位置
@@ -118,10 +135,10 @@ pub struct SubGraphData {
     pub variables: HashMap<String, VariableDefinition>,
     /// 函数/宏的输入参数
     #[serde(default)]
-    pub inputs: Vec<PinDefinition>,
+    pub inputs: Vec<PinDefDto>,
     /// 函数/宏的输出参数
     #[serde(default)]
-    pub outputs: Vec<PinDefinition>,
+    pub outputs: Vec<PinDefDto>,
 }
 
 // ==================== 数据帧数据 ====================

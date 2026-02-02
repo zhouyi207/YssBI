@@ -25,6 +25,11 @@ impl NodeRegistry {
     pub fn get_prototype(&self, node_type: &str) -> Option<Arc<GenericNode>> {
         self.prototypes.read().unwrap().get(node_type).cloned()
     }
+    
+    /// 获取节点原型（别名，用于兼容）
+    pub fn get_node(&self, node_type: &str) -> Option<Arc<GenericNode>> {
+        self.get_prototype(node_type)
+    }
 
     /// 获取所有节点的原型（它们现在实现了 Serialize，可直接作为定义发送给前端）
     pub fn get_all_prototypes(&self) -> Vec<Arc<GenericNode>> {

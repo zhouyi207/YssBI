@@ -183,7 +183,7 @@ use yssbi_lib::executor::{GenericNode, ExecutionModel};
 use yssbi_lib::executor::node::registry::get_registry;
 
 // ✅ 执行相关
-use yssbi_lib::executor::{ExecutionContext, GraphData, NodeData, PinData};
+use yssbi_lib::executor::{ExecutionContext, GraphDto, NodeDto, PinDto};
 ```
 
 ## ⚠️ 注意事项

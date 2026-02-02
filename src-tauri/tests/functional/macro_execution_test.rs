@@ -2,8 +2,8 @@
 //!
 //! 测试宏子图的执行流程，包括宏展开、参数替换和代码生成
 
-use yssbi_lib::executor::{GraphData, NodeData, PinData, VariableData, ExecutionContext, ExecutionContextTrait};
-use yssbi_lib::project::{ProjectData, SubGraphData, SubGraphType, SerializedNode, SerializedPin, Position, CanvasState, PinDefinition};
+use yssbi_lib::executor::{GraphDto, NodeDto, PinDto, VariableDto, ExecutionContext, ExecutionContextTrait};
+use yssbi_lib::project::{ProjectData, SubGraphData, SubGraphType, SerializedNode, SerializedPin, Position, CanvasState, PinDefDto};
 use yssbi_lib::schema::{VariableDefinition, VariableDataType};
 use std::collections::HashMap;
 use serde_json::json;
@@ -224,13 +224,13 @@ fn create_test_macro_subgraph() -> SubGraphData {
         canvas: CanvasState::default(),
         variables: local_variables,
         inputs: vec![
-            PinDefinition {
+            PinDefDto {
                 id: "input_count".to_string(),
                 name: "Count".to_string(),
                 pin_type: "number".to_string(),
                 is_array: false,
             },
-            PinDefinition {
+            PinDefDto {
                 id: "input_action".to_string(),
                 name: "Action".to_string(),
                 pin_type: "exec".to_string(),
@@ -238,7 +238,7 @@ fn create_test_macro_subgraph() -> SubGraphData {
             },
         ],
         outputs: vec![
-            PinDefinition {
+            PinDefDto {
                 id: "output_final_index".to_string(),
                 name: "Final Index".to_string(),
                 pin_type: "number".to_string(),
@@ -476,8 +476,8 @@ fn test_macro_execution_data_conversion() {
     project.events.insert("macro_user".to_string(), user);
     
     // 转换为执行数据
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集所有子图的节点和变量
     let collections = vec![(&project.events), (&project.functions), (&project.macros)];
@@ -486,11 +486,11 @@ fn test_macro_execution_data_conversion() {
         for (sg_id, sub) in subgraphs {
             // 收集节点
             for sn in &sub.nodes {
-                let node = NodeData {
+                let node = NodeDto {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| PinData {
+                    inputs: sn.inputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -498,7 +498,7 @@ fn test_macro_execution_data_conversion() {
                         default_value: p.default_value.clone(),
                         is_array: p.is_array,
                     }).collect(),
-                    outputs: sn.outputs.iter().map(|p| PinData {
+                    outputs: sn.outputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -519,7 +519,7 @@ fn test_macro_execution_data_conversion() {
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    VariableData {
+                    VariableDto {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -555,9 +555,9 @@ fn test_macro_graph_data_creation() {
     project.macros.insert("test_macro".to_string(), macro_sg);
     project.events.insert("macro_user".to_string(), user);
     
-    // 创建 GraphData
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    // 创建 GraphDto
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集所有数据
     let collections = vec![(&project.events), (&project.functions), (&project.macros)];
@@ -565,11 +565,11 @@ fn test_macro_graph_data_creation() {
     for subgraphs in collections {
         for (sg_id, sub) in subgraphs {
             for sn in &sub.nodes {
-                let node = NodeData {
+                let node = NodeDto {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| PinData {
+                    inputs: sn.inputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -577,7 +577,7 @@ fn test_macro_graph_data_creation() {
                         default_value: p.default_value.clone(),
                         is_array: p.is_array,
                     }).collect(),
-                    outputs: sn.outputs.iter().map(|p| PinData {
+                    outputs: sn.outputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -597,7 +597,7 @@ fn test_macro_graph_data_creation() {
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    VariableData {
+                    VariableDto {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -607,13 +607,13 @@ fn test_macro_graph_data_creation() {
         }
     }
     
-    let graph = GraphData {
+    let graph = GraphDto {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
     };
     
-    // 验证 GraphData
+    // 验证 GraphDto
     assert_eq!(graph.version, "1.0.0");
     assert_eq!(graph.nodes.len(), 8);
     assert!(graph.variables.is_some());
@@ -749,8 +749,8 @@ fn test_macro_execution_context_with_complex_variables() {
     project.global_variables.insert("macro_config".to_string(), global_var);
     
     // 转换为执行数据
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集全局变量
     for (id, var) in &project.global_variables {
@@ -759,7 +759,7 @@ fn test_macro_execution_context_with_complex_variables() {
             .unwrap_or(serde_json::Value::Null);
         variables.insert(
             id.clone(),
-            VariableData {
+            VariableDto {
                 name: var.name.clone(),
                 var_type: format!("{:?}", var.data_type).to_lowercase(),
                 value,
@@ -770,11 +770,11 @@ fn test_macro_execution_context_with_complex_variables() {
     // 收集宏节点和局部变量
     for (sg_id, sub) in &project.macros {
         for sn in &sub.nodes {
-            let node = NodeData {
+            let node = NodeDto {
                 id: sn.id.clone(),
                 node_type: sn.node_type.clone(),
                 title: sn.title.clone(),
-                inputs: sn.inputs.iter().map(|p| PinData {
+                inputs: sn.inputs.iter().map(|p| PinDto {
                     id: p.id.clone(),
                     name: p.name.clone(),
                     pin_type: p.pin_type.clone(),
@@ -782,7 +782,7 @@ fn test_macro_execution_context_with_complex_variables() {
                     default_value: p.default_value.clone(),
                     is_array: p.is_array,
                 }).collect(),
-                outputs: sn.outputs.iter().map(|p| PinData {
+                outputs: sn.outputs.iter().map(|p| PinDto {
                     id: p.id.clone(),
                     name: p.name.clone(),
                     pin_type: p.pin_type.clone(),
@@ -802,7 +802,7 @@ fn test_macro_execution_context_with_complex_variables() {
                 .unwrap_or(serde_json::Value::Null);
             variables.insert(
                 id.clone(),
-                VariableData {
+                VariableDto {
                     name: var.name.clone(),
                     var_type: format!("{:?}", var.data_type).to_lowercase(),
                     value,
@@ -811,7 +811,7 @@ fn test_macro_execution_context_with_complex_variables() {
         }
     }
     
-    let graph = GraphData {
+    let graph = GraphDto {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables.clone()),

@@ -2,7 +2,7 @@
 //!
 //! 定义节点执行时使用的处理器函数类型。
 
-use crate::executor::node::NodeData;
+use crate::project::NodeDto;
 use serde_json::Value;
 
 /// 执行上下文 trait
@@ -36,7 +36,7 @@ pub trait ExecutionContextTrait {
     fn get_call_stack_top(&self) -> Option<&String>;
 
     /// 根据条件查找节点
-    fn find_node_by(&self, predicate: &dyn Fn(&NodeData) -> bool) -> Option<String>;
+    fn find_node_by(&self, predicate: &dyn Fn(&NodeDto) -> bool) -> Option<String>;
 
     /// 打开新窗口
     fn open_window(&mut self, label: String, title: String, url: String) -> Result<(), String>;
@@ -55,25 +55,25 @@ pub trait ExecutionContextTrait {
 }
 
 /// 数据节点处理器 (已弃用，建议使用 NodeProcessor 接口)
-pub type DataProcessor = fn(&mut dyn ExecutionContextTrait, &NodeData, &str) -> Value;
+pub type DataProcessor = fn(&mut dyn ExecutionContextTrait, &NodeDto, &str) -> Value;
 
 /// 流程节点处理器 (已弃用，建议使用 NodeProcessor 接口)
-pub type FlowProcessor = fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String>;
+pub type FlowProcessor = fn(&mut dyn ExecutionContextTrait, &NodeDto) -> Result<String, String>;
 
 /// 节点处理器接口
 /// 
 /// 替代原有的函数指针方式，支持更复杂的节点逻辑和动态 Pin 处理。
 pub trait NodeProcessor: Send + Sync {
     /// 获取节点的元数据定义（用于前端展示）
-    fn get_definition(&self, node: Option<&NodeData>) -> std::sync::Arc<crate::executor::node::GenericNode>;
+    fn get_definition(&self, node: Option<&NodeDto>) -> std::sync::Arc<crate::executor::node::GenericNode>;
 
     /// 执行流程逻辑
-    fn process_flow(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeData) -> Result<String, String> {
+    fn process_flow(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeDto) -> Result<String, String> {
         Ok("".into())
     }
 
     /// 执行数据逻辑
-    fn process_data(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeData, _pin_id: &str) -> Value {
+    fn process_data(&self, _ctx: &mut dyn ExecutionContextTrait, _node: &NodeDto, _pin_id: &str) -> Value {
         Value::Null
     }
 }

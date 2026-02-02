@@ -1,6 +1,6 @@
 //! 图执行相关命令
 
-use crate::executor::{ExecutionContext, ExecutionContextTrait, GraphData, NodeData, PinData, VariableData};
+use crate::executor::{ExecutionContext, ExecutionContextTrait, GraphDto, NodeDto, PinDto, VariableDto};
 use crate::project::ProjectData;
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
@@ -65,12 +65,12 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
 
     let _logs = vec!["[System] Received event for execution".to_string()];
 
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
 
     // 1. 收集全局变量
     for (id, var) in &data.global_variables {
-        // 将 VariableDefinition 转换为 VariableData
+        // 将 VariableDefinition 转换为 VariableDto
         let value = var
             .static_value
             .clone()
@@ -78,7 +78,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
             .unwrap_or(serde_json::Value::Null);
         variables.insert(
             id.clone(),
-            VariableData {
+            VariableDto {
                 name: var.name.clone(),
                 var_type: format!("{:?}", var.data_type).to_lowercase(),
                 value,
@@ -93,32 +93,38 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
         for (sg_id, sub) in subgraphs {
             // 收集子图节点
             for sn in &sub.nodes {
-                let node = NodeData {
+                let node = NodeDto {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
                     inputs: sn
                         .inputs
                         .iter()
-                        .map(|p| PinData {
+                        .map(|p| PinDto {
                             id: p.id.clone(),
                             name: p.name.clone(),
                             pin_type: p.pin_type.clone(),
                             links: p.links.clone(),
                             default_value: p.default_value.clone(),
+                            user_value: p.user_value.clone(),
                             is_array: p.is_array,
+                            show_widget: true,
+                            widget_type: None,
                         })
                         .collect(),
                     outputs: sn
                         .outputs
                         .iter()
-                        .map(|p| PinData {
+                        .map(|p| PinDto {
                             id: p.id.clone(),
                             name: p.name.clone(),
                             pin_type: p.pin_type.clone(),
                             links: p.links.clone(),
                             default_value: p.default_value.clone(),
+                            user_value: p.user_value.clone(),
                             is_array: p.is_array,
+                            show_widget: true,
+                            widget_type: None,
                         })
                         .collect(),
                     variable_id: sn.variable_id.clone(),
@@ -136,7 +142,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    VariableData {
+                    VariableDto {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -160,8 +166,8 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
         );
     }
 
-    // 3. 构造 GraphData
-    let graph = GraphData {
+    // 3. 构造 GraphDto
+    let graph = GraphDto {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),

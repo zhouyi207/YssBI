@@ -2,8 +2,8 @@
 //!
 //! 测试函数子图的执行流程，包括输入输出参数、局部变量和函数调用
 
-use yssbi_lib::executor::{GraphData, NodeData, PinData, VariableData, ExecutionContext, ExecutionContextTrait};
-use yssbi_lib::project::{ProjectData, SubGraphData, SubGraphType, SerializedNode, SerializedPin, Position, CanvasState, PinDefinition};
+use yssbi_lib::executor::{GraphDto, NodeDto, PinDto, VariableDto, ExecutionContext, ExecutionContextTrait};
+use yssbi_lib::project::{ProjectData, SubGraphData, SubGraphType, SerializedNode, SerializedPin, Position, CanvasState, PinDefDto};
 use yssbi_lib::schema::{VariableDefinition, VariableDataType};
 use std::collections::HashMap;
 use serde_json::json;
@@ -159,13 +159,13 @@ fn create_test_function_subgraph() -> SubGraphData {
         canvas: CanvasState::default(),
         variables: local_variables,
         inputs: vec![
-            PinDefinition {
+            PinDefDto {
                 id: "input_a".to_string(),
                 name: "A".to_string(),
                 pin_type: "number".to_string(),
                 is_array: false,
             },
-            PinDefinition {
+            PinDefDto {
                 id: "input_b".to_string(),
                 name: "B".to_string(),
                 pin_type: "number".to_string(),
@@ -173,7 +173,7 @@ fn create_test_function_subgraph() -> SubGraphData {
             },
         ],
         outputs: vec![
-            PinDefinition {
+            PinDefDto {
                 id: "output_sum".to_string(),
                 name: "Sum".to_string(),
                 pin_type: "number".to_string(),
@@ -393,8 +393,8 @@ fn test_function_execution_data_conversion() {
     project.events.insert("function_caller".to_string(), caller);
     
     // 转换为执行数据
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集所有子图的节点和变量
     let collections = vec![(&project.events), (&project.functions), (&project.macros)];
@@ -403,11 +403,11 @@ fn test_function_execution_data_conversion() {
         for (sg_id, sub) in subgraphs {
             // 收集节点
             for sn in &sub.nodes {
-                let node = NodeData {
+                let node = NodeDto {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| PinData {
+                    inputs: sn.inputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -415,7 +415,7 @@ fn test_function_execution_data_conversion() {
                         default_value: p.default_value.clone(),
                         is_array: p.is_array,
                     }).collect(),
-                    outputs: sn.outputs.iter().map(|p| PinData {
+                    outputs: sn.outputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -436,7 +436,7 @@ fn test_function_execution_data_conversion() {
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    VariableData {
+                    VariableDto {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -472,9 +472,9 @@ fn test_function_graph_data_creation() {
     project.functions.insert("test_function".to_string(), function);
     project.events.insert("function_caller".to_string(), caller);
     
-    // 创建 GraphData
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    // 创建 GraphDto
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集所有数据
     let collections = vec![(&project.events), (&project.functions), (&project.macros)];
@@ -482,11 +482,11 @@ fn test_function_graph_data_creation() {
     for subgraphs in collections {
         for (sg_id, sub) in subgraphs {
             for sn in &sub.nodes {
-                let node = NodeData {
+                let node = NodeDto {
                     id: sn.id.clone(),
                     node_type: sn.node_type.clone(),
                     title: sn.title.clone(),
-                    inputs: sn.inputs.iter().map(|p| PinData {
+                    inputs: sn.inputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -494,7 +494,7 @@ fn test_function_graph_data_creation() {
                         default_value: p.default_value.clone(),
                         is_array: p.is_array,
                     }).collect(),
-                    outputs: sn.outputs.iter().map(|p| PinData {
+                    outputs: sn.outputs.iter().map(|p| PinDto {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: p.pin_type.clone(),
@@ -514,7 +514,7 @@ fn test_function_graph_data_creation() {
                     .unwrap_or(serde_json::Value::Null);
                 variables.insert(
                     id.clone(),
-                    VariableData {
+                    VariableDto {
                         name: var.name.clone(),
                         var_type: format!("{:?}", var.data_type).to_lowercase(),
                         value,
@@ -524,13 +524,13 @@ fn test_function_graph_data_creation() {
         }
     }
     
-    let graph = GraphData {
+    let graph = GraphDto {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
     };
     
-    // 验证 GraphData
+    // 验证 GraphDto
     assert_eq!(graph.version, "1.0.0");
     assert_eq!(graph.nodes.len(), 7);
     assert!(graph.variables.is_some());
@@ -631,8 +631,8 @@ fn test_function_execution_context_with_variables() {
     project.global_variables.insert("global_counter".to_string(), global_var);
     
     // 转换为执行数据
-    let mut nodes: Vec<NodeData> = Vec::new();
-    let mut variables: HashMap<String, VariableData> = HashMap::new();
+    let mut nodes: Vec<NodeDto> = Vec::new();
+    let mut variables: HashMap<String, VariableDto> = HashMap::new();
     
     // 收集全局变量
     for (id, var) in &project.global_variables {
@@ -641,7 +641,7 @@ fn test_function_execution_context_with_variables() {
             .unwrap_or(serde_json::Value::Null);
         variables.insert(
             id.clone(),
-            VariableData {
+            VariableDto {
                 name: var.name.clone(),
                 var_type: format!("{:?}", var.data_type).to_lowercase(),
                 value,
@@ -652,11 +652,11 @@ fn test_function_execution_context_with_variables() {
     // 收集函数节点和局部变量
     for (sg_id, sub) in &project.functions {
         for sn in &sub.nodes {
-            let node = NodeData {
+            let node = NodeDto {
                 id: sn.id.clone(),
                 node_type: sn.node_type.clone(),
                 title: sn.title.clone(),
-                inputs: sn.inputs.iter().map(|p| PinData {
+                inputs: sn.inputs.iter().map(|p| PinDto {
                     id: p.id.clone(),
                     name: p.name.clone(),
                     pin_type: p.pin_type.clone(),
@@ -664,7 +664,7 @@ fn test_function_execution_context_with_variables() {
                     default_value: p.default_value.clone(),
                     is_array: p.is_array,
                 }).collect(),
-                outputs: sn.outputs.iter().map(|p| PinData {
+                outputs: sn.outputs.iter().map(|p| PinDto {
                     id: p.id.clone(),
                     name: p.name.clone(),
                     pin_type: p.pin_type.clone(),
@@ -684,7 +684,7 @@ fn test_function_execution_context_with_variables() {
                 .unwrap_or(serde_json::Value::Null);
             variables.insert(
                 id.clone(),
-                VariableData {
+                VariableDto {
                     name: var.name.clone(),
                     var_type: format!("{:?}", var.data_type).to_lowercase(),
                     value,
@@ -693,7 +693,7 @@ fn test_function_execution_context_with_variables() {
         }
     }
     
-    let graph = GraphData {
+    let graph = GraphDto {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),

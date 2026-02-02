@@ -1,15 +1,14 @@
 //! Node 模块入口
 
-pub mod types;
-pub mod traits;
-pub mod implementation;
-pub mod data;
-pub mod registry;
 pub mod catalog;
+pub mod implementation;
+pub mod registry;
+pub mod traits;
+pub mod types;
 
 // 重新导出常用类型
-pub use types::*;
-pub use traits::*;
 pub use implementation::*;
-pub use data::*;
 pub use registry::*;
+pub use traits::*;
+pub use types::*;
+

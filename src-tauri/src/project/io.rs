@@ -3,7 +3,7 @@
 //! 提供子图和节点的序列化/反序列化功能
 
 use super::{
-    CanvasState, PinDefinition, Position, SerializedNode, SerializedPin, SubGraphData,
+    CanvasState, PinDefDto, Position, SerializedNode, SerializedPin, SubGraphData,
     SubGraphType,
 };
 use crate::executor::node::Node;
@@ -31,8 +31,8 @@ pub fn serialize_subgraph(
     nodes: Vec<SerializedNode>,
     canvas: CanvasState,
     variables: HashMap<String, VariableDefinition>,
-    inputs: Vec<PinDefinition>,
-    outputs: Vec<PinDefinition>,
+    inputs: Vec<PinDefDto>,
+    outputs: Vec<PinDefDto>,
 ) -> SubGraphData {
     SubGraphData {
         id,
@@ -62,6 +62,7 @@ pub fn serialize_node_from_runtime(
             pin_type: pin.data_type().to_string(),
             links: vec![],
             default_value: None,
+            user_value: None,
             is_array: false,
         })
         .collect();
@@ -75,6 +76,7 @@ pub fn serialize_node_from_runtime(
             pin_type: pin.data_type().to_string(),
             links: vec![],
             default_value: None,
+            user_value: None,
             is_array: false,
         })
         .collect();
@@ -91,6 +93,7 @@ pub fn serialize_node_from_runtime(
         sub_graph_id: None,
         inputs,
         outputs,
+        dynamic_pins: None,
     }
 }
 
@@ -122,6 +125,7 @@ pub fn serialize_node_from_frontend(
         sub_graph_id,
         inputs,
         outputs,
+        dynamic_pins: None,
     }
 }
 
@@ -143,8 +147,8 @@ pub fn deserialize_subgraph(
     Vec<SerializedNode>,
     CanvasState,
     HashMap<String, VariableDefinition>,
-    Vec<PinDefinition>,
-    Vec<PinDefinition>,
+    Vec<PinDefDto>,
+    Vec<PinDefDto>,
 ) {
     let nodes = data.nodes.clone();
     let canvas = data.canvas.clone();
@@ -394,6 +398,7 @@ mod tests {
                 pin_type: "number".to_string(),
                 links: vec![],
                 default_value: None,
+                user_value: None,
                 is_array: false,
             }],
             outputs: vec![SerializedPin {
@@ -402,8 +407,10 @@ mod tests {
                 pin_type: "number".to_string(),
                 links: vec![],
                 default_value: None,
+                user_value: None,
                 is_array: false,
             }],
+            dynamic_pins: None,
         };
 
         let pin_ids = extract_all_pin_ids(&vec![node]);

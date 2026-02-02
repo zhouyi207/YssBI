@@ -17,10 +17,7 @@ pub use context::ExecutionContext;
 pub use error::{
     ConnectionError, ConnectionResult, ExecutionError, ExecutionResult, NodeError, NodeResult,
 };
-pub use node::{
-    get_all_node_definitions, GenericNode, GraphData, Node, NodeData, NodeId, NodeState, PinData,
-    PinDefinition, VariableData,
-};
+pub use node::{get_all_node_definitions, GenericNode, Node, NodeId, NodeState};
 pub use pin::{
     BasePin, DataPin, DataPinEvent, DataPinState, ExecPin, ExecPinState, GenericInDataPin,
     GenericInExecPin, GenericOutDataPin, GenericOutExecPin, InDataPin, InExecPin, OutDataPin,
@@ -29,3 +26,7 @@ pub use pin::{
 pub use processors::{DataProcessor, ExecutionContextTrait, FlowProcessor};
 pub use types::{DataValue, ExecutionModel};
 pub use value::{Value, ValueType};
+
+// 重新导出 DTO（从 project 模块）
+pub use crate::project::{GraphDto, NodeDto, PinDefDto, PinDto, VariableDto};
+

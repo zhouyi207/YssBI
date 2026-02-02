@@ -148,13 +148,13 @@ fn execute() {
 }
 ```
 
-### 问题 2: NodeData 的 inputs 字段
+### 问题 2: NodeDto 的 inputs 字段
 
-在 `get_pin_value` 中构造 NodeData 时：
+在 `get_pin_value` 中构造 NodeDto 时：
 ```rust
 let node_data = {
     let node_guard = node_arc.lock().unwrap();
-    NodeData {
+    NodeDto {
         id: ...,
         node_type: ...,
         title: ...,
@@ -170,7 +170,7 @@ let node_data = {
 
 ## 根本问题诊断
 
-### 问题：NodeData.inputs 为空
+### 问题：NodeDto.inputs 为空
 
 **位置**：`src-tauri/src/executor/context.rs` 的 `get_pin_value()` 方法
 
@@ -178,7 +178,7 @@ let node_data = {
 ```rust
 let node_data = {
     let node_guard = node_arc.lock().unwrap();
-    NodeData {
+    NodeDto {
         id: self.runtime_id_to_data_id.get(&node_id).cloned().unwrap_or_default(),
         node_type: node_guard.node_type().to_string(),
         title: node_guard.name().to_string(),
@@ -192,12 +192,12 @@ let node_data = {
 
 **问题分析**：
 1. `divide` 节点的 `process_data` 需要访问 `node.inputs[0].id` 和 `node.inputs[1].id`
-2. 但是传入的 `NodeData` 的 `inputs` 是空的
+2. 但是传入的 `NodeDto` 的 `inputs` 是空的
 3. 导致 `node.inputs[0]` 访问越界或返回错误
 
 ### 解决方案
 
-**方案 1：填充 NodeData 的 inputs/outputs**
+**方案 1：填充 NodeDto 的 inputs/outputs**
 
 ```rust
 let node_data = {
@@ -212,7 +212,7 @@ let node_data = {
             .map(|(frontend_id, _)| frontend_id.clone())
             .unwrap_or_default();
         
-        inputs.push(PinData {
+        inputs.push(PinDto {
             id: frontend_pin_id,
             name: input_pin.name().to_string(),
             pin_type: input_pin.data_type().to_string(),
@@ -231,7 +231,7 @@ let node_data = {
             .map(|(frontend_id, _)| frontend_id.clone())
             .unwrap_or_default();
         
-        outputs.push(PinData {
+        outputs.push(PinDto {
             id: frontend_pin_id,
             name: output_pin.name().to_string(),
             pin_type: output_pin.data_type().to_string(),
@@ -241,7 +241,7 @@ let node_data = {
         });
     }
     
-    NodeData {
+    NodeDto {
         id: self.runtime_id_to_data_id.get(&node_id).cloned().unwrap_or_default(),
         node_type: node_guard.node_type().to_string(),
         title: node_guard.name().to_string(),
@@ -255,7 +255,7 @@ let node_data = {
 
 **方案 2：改变节点 API（更彻底）**
 
-不传递 `NodeData`，而是直接传递 Pin ID：
+不传递 `NodeDto`，而是直接传递 Pin ID：
 
 ```rust
 // 新的 API
@@ -273,7 +273,7 @@ node.set_data_processor(Box::new(|ctx, input_pins, _output_pin| {
 
 ## 推荐的修复方案
 
-### 立即修复：填充 NodeData.inputs
+### 立即修复：填充 NodeDto.inputs
 
 这是最小改动，立即可用的方案。
 
@@ -296,11 +296,11 @@ node.set_data_processor(Box::new(|ctx, input_pins, _output_pin| {
 - ✅ 节点分类已正确实现
 
 **问题**：
-- ⚠️ `NodeData.inputs` 在 `get_pin_value` 中为空
+- ⚠️ `NodeDto.inputs` 在 `get_pin_value` 中为空
 - ⚠️ 导致节点无法访问输入 Pin ID
 
 **修复**：
-- 🔧 填充 `NodeData.inputs` 和 `NodeData.outputs`
+- 🔧 填充 `NodeDto.inputs` 和 `NodeDto.outputs`
 - 🔧 确保节点可以正确访问 Pin ID
 
 **你的三条铁律**：
@@ -308,4 +308,4 @@ node.set_data_processor(Box::new(|ctx, input_pins, _output_pin| {
 2. ✅ eval 是递归拉取 + 缓存
 3. ✅ exec 节点 ≠ data 节点
 
-**架构是正确的，只需要修复 NodeData 的填充问题！**
+**架构是正确的，只需要修复 NodeDto 的填充问题！**

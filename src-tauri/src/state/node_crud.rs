@@ -1,7 +1,7 @@
 //! 节点 CRUD 操作
 
 use super::project_state::ProjectState;
-use crate::project::{CanvasState, PinDefinition, SerializedNode};
+use crate::project::{CanvasState, PinDefDto, SerializedNode};
 
 impl ProjectState {
     // ==================== Nodes CRUD ====================
@@ -131,8 +131,8 @@ impl ProjectState {
     pub fn update_subgraph_io(
         &self,
         subgraph_id: &str,
-        inputs: Option<Vec<PinDefinition>>,
-        outputs: Option<Vec<PinDefinition>>,
+        inputs: Option<Vec<PinDefDto>>,
+        outputs: Option<Vec<PinDefDto>>,
     ) -> Result<(), String> {
         let mut project = self.data.write().unwrap();
         let subgraph = crate::get_subgraph_mut!(project, subgraph_id)

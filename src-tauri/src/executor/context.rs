@@ -3,7 +3,7 @@
 //! 负责图的执行逻辑，使用运行时节点对象（GenericNode）而不是序列化数据。
 
 use crate::executor::{
-    BasePin, ConnectionManager, ExecutionContextTrait, GenericNode, GraphData, Node, NodeData,
+    BasePin, ConnectionManager, ExecutionContextTrait, GenericNode, GraphDto, Node, NodeDto,
     NodeId, PinId,
 };
 use serde_json::Value;
@@ -59,7 +59,7 @@ pub struct ExecutionContext {
 
 impl ExecutionContext {
     /// 创建新的执行上下文
-    pub fn new(graph: GraphData) -> Self {
+    pub fn new(graph: GraphDto) -> Self {
         let mut ctx = Self {
             nodes: HashMap::new(),
             connection_manager: Arc::new(ConnectionManager::new()),
@@ -100,8 +100,8 @@ impl ExecutionContext {
         ctx
     }
 
-    /// 从 NodeData 创建运行时节点
-    fn create_node_from_data(&mut self, node_data: &NodeData) -> Result<NodeId, String> {
+    /// 从 NodeDto 创建运行时节点
+    fn create_node_from_data(&mut self, node_data: &NodeDto) -> Result<NodeId, String> {
         use uuid::Uuid;
 
         let runtime_id = Uuid::new_v4();
@@ -177,8 +177,8 @@ impl ExecutionContext {
         Ok(runtime_id)
     }
 
-    /// 从 NodeData 创建连接
-    fn create_connections_from_data(&mut self, node_data: &NodeData) -> Result<(), String> {
+    /// 从 NodeDto 创建连接
+    fn create_connections_from_data(&mut self, node_data: &NodeDto) -> Result<(), String> {
         // 遍历所有输出 Pin，建立连接
         for pin_data in &node_data.outputs {
             // 获取源 Pin 的运行时 ID
@@ -313,7 +313,7 @@ impl ExecutionContext {
         // 从注册中心获取原型并执行
         let proto = crate::executor::node::registry::get_registry().get_prototype(&node_type);
 
-        // 构造临时 NodeData 供处理器使用
+        // 构造临时 NodeDto 供处理器使用
         let node_data = {
             let node_guard = node.lock().unwrap();
             
@@ -330,13 +330,16 @@ impl ExecutionContext {
                     .map(|(frontend_id, _)| frontend_id.clone())
                     .unwrap_or_default();
                 
-                inputs.push(crate::executor::node::data::PinData {
+                inputs.push(crate::project::PinDto {
                     id: frontend_pin_id,
                     name: input_pin.name().to_string(),
                     pin_type: input_pin.data_type().to_string(),
                     links: vec![],
                     default_value: None,
+                    user_value: None,
                     is_array: false,
+                    show_widget: true,
+                    widget_type: None,
                 });
             }
             
@@ -348,17 +351,20 @@ impl ExecutionContext {
                     .map(|(frontend_id, _)| frontend_id.clone())
                     .unwrap_or_default();
                 
-                outputs.push(crate::executor::node::data::PinData {
+                outputs.push(crate::project::PinDto {
                     id: frontend_pin_id,
                     name: output_pin.name().to_string(),
                     pin_type: output_pin.data_type().to_string(),
                     links: vec![],
                     default_value: None,
+                    user_value: None,
                     is_array: false,
+                    show_widget: true,
+                    widget_type: None,
                 });
             }
             
-            NodeData {
+            NodeDto {
                 id: self
                     .runtime_id_to_data_id
                     .get(&node_id)
@@ -570,7 +576,7 @@ impl ExecutionContextTrait for ExecutionContext {
             // 不添加到 logs，避免过多输出
         }
 
-        // 9. 构造 NodeData（需要填充 inputs 和 outputs，因为节点的 process_data 需要访问它们）
+        // 9. 构造 NodeDto（需要填充 inputs 和 outputs，因为节点的 process_data 需要访问它们）
         let node_data = {
             let node_guard = node_arc.lock().unwrap();
             
@@ -583,13 +589,16 @@ impl ExecutionContextTrait for ExecutionContext {
                     .map(|(frontend_id, _)| frontend_id.clone())
                     .unwrap_or_default();
                 
-                inputs.push(crate::executor::node::data::PinData {
+                inputs.push(crate::project::PinDto {
                     id: frontend_pin_id,
                     name: input_pin.name().to_string(),
                     pin_type: input_pin.data_type().to_string(),
                     links: vec![],
                     default_value: None,
+                    user_value: None,
                     is_array: false,
+                    show_widget: true,
+                    widget_type: None,
                 });
             }
             
@@ -602,17 +611,20 @@ impl ExecutionContextTrait for ExecutionContext {
                     .map(|(frontend_id, _)| frontend_id.clone())
                     .unwrap_or_default();
                 
-                outputs.push(crate::executor::node::data::PinData {
+                outputs.push(crate::project::PinDto {
                     id: frontend_pin_id,
                     name: output_pin.name().to_string(),
                     pin_type: output_pin.data_type().to_string(),
                     links: vec![],
                     default_value: None,
+                    user_value: None,
                     is_array: false,
+                    show_widget: true,
+                    widget_type: None,
                 });
             }
             
-            NodeData {
+            NodeDto {
                 id: self
                     .runtime_id_to_data_id
                     .get(&node_id)
@@ -697,8 +709,8 @@ impl ExecutionContextTrait for ExecutionContext {
         self.call_stack.last()
     }
 
-    fn find_node_by(&self, _predicate: &dyn Fn(&NodeData) -> bool) -> Option<String> {
-        // TODO: 需要重新实现，因为我们现在使用 GenericNode 而不是 NodeData
+    fn find_node_by(&self, _predicate: &dyn Fn(&NodeDto) -> bool) -> Option<String> {
+        // TODO: 需要重新实现，因为我们现在使用 GenericNode 而不是 NodeDto
         None
     }
 

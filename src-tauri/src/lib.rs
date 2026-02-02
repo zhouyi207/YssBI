@@ -112,6 +112,13 @@ pub fn run() {
             update_canvas,
             update_subgraph_io,
             rename_subgraph,
+            // Pin 值管理命令
+            update_pin_user_value,
+            clear_pin_user_value,
+            // 动态 Pin 命令
+            get_node_dynamic_constraints,
+            add_dynamic_pin,
+            remove_dynamic_pin,
             // 执行命令
             execute_graph,
             execute_project,
@@ -120,8 +127,7 @@ pub fn run() {
             load_project,
             parse_project,
             serialize_project,
-            // 动态 Pin 命令
-            get_node_dynamic_constraints,
+            // 动态 Pin 命令（旧接口，保持兼容）
             add_node_dynamic_pin,
             remove_node_dynamic_pin,
             validate_pin_operation,

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use super::traits::Node;
 use super::types::{NodeId, NodeState};
 use crate::executor::error::{ExecutionResult, NodeResult};
-use crate::executor::node::NodeData;
+use crate::project::NodeDto;
 use crate::executor::pin::{
     BasePin, DataPin, ExecPin, GenericInDataPin, GenericInExecPin, GenericOutDataPin,
     GenericOutExecPin, InDataPin, OutDataPin, PinId,
@@ -68,7 +68,7 @@ pub struct DynamicPinInfo {
 
 /// 处理器生成器类型
 pub type ProcessorGenerator = Box<dyn Fn(&GenericNode) -> FlowProcessor + Send + Sync>;
-pub type FlowProcessor = Box<dyn Fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String> + Send + Sync + 'static>;
+pub type FlowProcessor = Box<dyn Fn(&mut dyn ExecutionContextTrait, &NodeDto) -> Result<String, String> + Send + Sync + 'static>;
 pub type PinChangeCallback = Box<dyn Fn(&GenericNode, PinChangeEvent) -> Result<(), String> + Send + Sync>;
 
 /// 节点动态能力描述
@@ -109,7 +109,7 @@ pub struct GenericNode {
     flow_processor: Mutex<
         Option<
             Box<
-                dyn Fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String>
+                dyn Fn(&mut dyn ExecutionContextTrait, &NodeDto) -> Result<String, String>
                     + Send
                     + Sync
                     + 'static,
@@ -119,7 +119,7 @@ pub struct GenericNode {
     data_processor: Mutex<
         Option<
             Box<
-                dyn Fn(&mut dyn ExecutionContextTrait, &NodeData, &str) -> Value
+                dyn Fn(&mut dyn ExecutionContextTrait, &NodeDto, &str) -> Value
                     + Send
                     + Sync
                     + 'static,
@@ -258,7 +258,7 @@ impl GenericNode {
     pub fn set_flow_processor(
         &self,
         processor: Box<
-            dyn Fn(&mut dyn ExecutionContextTrait, &NodeData) -> Result<String, String>
+            dyn Fn(&mut dyn ExecutionContextTrait, &NodeDto) -> Result<String, String>
                 + Send
                 + Sync
                 + 'static,
@@ -270,7 +270,7 @@ impl GenericNode {
     pub fn set_data_processor(
         &self,
         processor: Box<
-            dyn Fn(&mut dyn ExecutionContextTrait, &NodeData, &str) -> Value
+            dyn Fn(&mut dyn ExecutionContextTrait, &NodeDto, &str) -> Value
                 + Send
                 + Sync
                 + 'static,
@@ -282,7 +282,7 @@ impl GenericNode {
     pub fn process_flow(
         &self,
         ctx: &mut dyn ExecutionContextTrait,
-        node: &NodeData,
+        node: &NodeDto,
     ) -> Result<String, String> {
         if let Some(p) = self.flow_processor.lock().unwrap().as_ref() {
             p(ctx, node)
@@ -294,7 +294,7 @@ impl GenericNode {
     pub fn process_data(
         &self,
         ctx: &mut dyn ExecutionContextTrait,
-        node: &NodeData,
+        node: &NodeDto,
         pin_id: &str,
     ) -> Value {
         if let Some(p) = self.data_processor.lock().unwrap().as_ref() {

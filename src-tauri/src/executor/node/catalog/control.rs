@@ -15,7 +15,7 @@ pub fn register(registry: &NodeRegistry) {
     if_else.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("IfElse: Starting execution".to_string());
         
-        // 现在可以安全地访问 inputs，因为 NodeData 已经正确填充
+        // 现在可以安全地访问 inputs，因为 NodeDto 已经正确填充
         let condition_value = if !node.inputs.is_empty() {
             let condition_pin_id = &node.inputs[0].id;
             ctx.log(format!("IfElse: Getting condition from pin {}", condition_pin_id));
@@ -937,7 +937,7 @@ fn register_dynamic_sequence(registry: &NodeRegistry) {
 }
 
 /// 动态序列处理器生成器
-fn generate_dynamic_sequence_processor(node: &GenericNode) -> Box<dyn Fn(&mut dyn crate::executor::ExecutionContextTrait, &crate::executor::NodeData) -> Result<String, String> + Send + Sync + 'static> {
+fn generate_dynamic_sequence_processor(node: &GenericNode) -> Box<dyn Fn(&mut dyn crate::executor::ExecutionContextTrait, &crate::executor::NodeDto) -> Result<String, String> + Send + Sync + 'static> {
     // 获取当前所有输出执行 Pin 的名称
     let output_names = node.get_dynamic_exec_output_names();
     
