@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
 import { Pin as PinModel } from "../Types/nodes";
-import { useSchemaStore } from "../Store/useSchemaStore";
+import { PinInput } from "./PinInput";
 
 export interface PinProps extends PinModel {
+  subgraphId?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
+  onValueChange?: (pinId: string, value: any) => void;
 }
 
 // 提取主题逻辑，避免每次渲染都创建新对象
@@ -27,15 +29,20 @@ const getPinTheme = (type: string, isConnected: boolean, baseColor: string, isAr
 export const Pin: React.FC<PinProps> = (props) => {
   const {
     id,
+    nodeId,
     name,
     type,
     direction,
     links,
     ui,
+    subgraphId,
     onPinClick,
     onPinPointerDown,
     isActive,
     isArray,
+    defaultValue,
+    userValue,  // 🆕 添加 userValue
+    onValueChange,
   } = props;
 
   // 颜色逻辑已完全迁移至前端主题系统
@@ -49,7 +56,14 @@ export const Pin: React.FC<PinProps> = (props) => {
     [type, isConnected, baseColor, isArray]
   );
 
-
+  // 判断是否显示输入控件
+  // 条件：输入 Pin、数据类型（非 exec）、未连接、有 subgraphId
+  const showInput =
+    direction === "input" &&
+    type !== "exec" &&
+    !isConnected &&
+    subgraphId &&
+    nodeId;
 
   return (
     <div
@@ -142,6 +156,20 @@ export const Pin: React.FC<PinProps> = (props) => {
       >
         {name}
       </span>
+
+      {/* 输入控件 - 仅在未连接的输入数据 Pin 上显示 */}
+      {showInput && (
+        <div className="ml-1">
+          <PinInput
+            pinId={id}
+            nodeId={nodeId}
+            subgraphId={subgraphId}
+            pinType={type}
+            value={userValue ?? defaultValue}  // 🆕 优先使用 userValue
+            onValueChange={(value) => onValueChange?.(id, value)}
+          />
+        </div>
+      )}
     </div>
   );
 };

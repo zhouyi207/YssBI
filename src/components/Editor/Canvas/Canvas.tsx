@@ -11,6 +11,7 @@ import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import { ConnectionLine } from "./ConnectionLine";
 import { useBackendNodeCreation } from "../Hooks/useBackendNodeCreation";
+import { useExecutionVisualization } from "../Hooks/useExecutionVisualization";
 
 // Extracted Components
 import { ViewportGrid } from "./ViewportGrid";
@@ -22,6 +23,9 @@ import { DEFAULT_VIEWPORT } from "./constants";
 /* ================= Canvas Components ================= */
 
 export default function Canvas() {
+  // 🆕 启用执行可视化
+  useExecutionVisualization();
+  
   const {
     nodes,
     setCanvas,
@@ -578,10 +582,15 @@ export default function Canvas() {
               scale={scale}
               selected={selectedNodeIdsSet.has(node.id)}
               activePinId={activePin?.id}
+              subgraphId={activeTabId || undefined}
               onPointerDown={(id, e) => onNodePointerDown(id, e)}
               onAddInput={handleNodeAddInput}
               onPinClick={handlePinClick}
               onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
+              onPinValueChange={(pinId, value) => {
+                console.log(`Pin ${pinId} value changed:`, value);
+                // 这里可以添加额外的逻辑，比如更新本地状态
+              }}
             />
           ))}
         </TransformContainer>

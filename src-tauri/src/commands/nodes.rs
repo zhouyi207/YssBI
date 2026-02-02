@@ -435,8 +435,8 @@ pub fn update_pin_user_value(
     value: serde_json::Value,
 ) -> Result<(), String> {
     info!(
-        "[update_pin_user_value] subgraph_id={}, node_id={}, pin_id={}",
-        subgraph_id, node_id, pin_id
+        "[update_pin_user_value] subgraph_id={}, node_id={}, pin_id={}, value={:?}",
+        subgraph_id, node_id, pin_id, value
     );
     
     let mut project = state.data.write().unwrap();
@@ -448,20 +448,35 @@ pub fn update_pin_user_value(
         .find(|n| n.id == node_id)
         .ok_or_else(|| "Node not found".to_string())?;
     
+    info!("[update_pin_user_value] Found node: {}", node.node_type);
+    
     // 找到 Pin 并更新用户值
     let pin_found = if let Some(pin) = node.inputs.iter_mut().find(|p| p.id == pin_id) {
-        pin.user_value = Some(value);
+        info!("[update_pin_user_value] Found input pin: {}, old user_value: {:?}", pin.name, pin.user_value);
+        pin.user_value = Some(value.clone());
+        info!("[update_pin_user_value] Updated input pin user_value to: {:?}", pin.user_value);
         true
     } else if let Some(pin) = node.outputs.iter_mut().find(|p| p.id == pin_id) {
-        pin.user_value = Some(value);
+        info!("[update_pin_user_value] Found output pin: {}, old user_value: {:?}", pin.name, pin.user_value);
+        pin.user_value = Some(value.clone());
+        info!("[update_pin_user_value] Updated output pin user_value to: {:?}", pin.user_value);
         true
     } else {
         false
     };
     
     if !pin_found {
+        info!("[update_pin_user_value] Pin not found! Available pins:");
+        for pin in &node.inputs {
+            info!("  Input: {} (id: {})", pin.name, pin.id);
+        }
+        for pin in &node.outputs {
+            info!("  Output: {} (id: {})", pin.name, pin.id);
+        }
         return Err("Pin not found".to_string());
     }
+    
+    info!("[update_pin_user_value] Successfully updated pin value");
     
     // 发送节点更新事件
     drop(project); // 释放锁

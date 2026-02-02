@@ -198,14 +198,29 @@ export function useCanvasInteraction({
 
                 if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
                     moved = true;
-                    // Fix: Use activeGroupIdRef to find the group and its selected nodes
                     const gid = g.groupId || activeGroupIdRef.current;
                     const group = groups.find(grp => grp.id === gid);
                     const sIds = group?.selectedNodeIds || [];
 
                     const tid = activeTabIdRef.current;
                     if (tid) {
+                        // 🆕 直接操作 DOM 以获得即时反馈
                         sIds.forEach(id => {
+                            const nodeEl = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+                            if (nodeEl) {
+                                // 获取当前 transform
+                                const currentTransform = nodeEl.style.transform;
+                                const match = currentTransform.match(/translate3d\(([-\d.]+)px,\s*([-\d.]+)px,\s*([-\d.]+)px\)/);
+                                if (match) {
+                                    const currentX = parseFloat(match[1]);
+                                    const currentY = parseFloat(match[2]);
+                                    const newX = currentX + dx;
+                                    const newY = currentY + dy;
+                                    // 立即更新 DOM
+                                    nodeEl.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+                                }
+                            }
+                            // 同时更新状态（用于持久化）
                             useNodeStore.getState().updateNodePosition(tid, id, dx, dy);
                         });
                     }

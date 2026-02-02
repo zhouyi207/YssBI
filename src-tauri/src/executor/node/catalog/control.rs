@@ -66,8 +66,7 @@ pub fn register(registry: &NodeRegistry) {
             return Err(e);
         }
         
-        // 添加小延迟
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // 不添加延迟，让执行尽快完成
         
         ctx.log("Sequence node: executing Then 1".to_string());
         if let Err(e) = ctx.trigger_flow_by_pin(&node.id, "Then 1") {
@@ -108,10 +107,7 @@ pub fn register(registry: &NodeRegistry) {
             
             ctx.log(format!("Sequence5 node: {} completed", pin_name));
             
-            // 在pin之间添加延迟（除了最后一个）
-            if index < then_pins.len() - 1 {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
+            // 不添加延迟，让执行尽快完成
         }
         
         ctx.log("Sequence5 node: execution completed".to_string());

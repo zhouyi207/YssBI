@@ -58,7 +58,7 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("min_max", "Min Max Average");
-        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Float64)))));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Min", PinTypeDesc::concrete(ValueType::Float64)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Max", PinTypeDesc::concrete(ValueType::Float64)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Average", PinTypeDesc::concrete(ValueType::Float64)));
@@ -220,7 +220,7 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("statistics", "Statistics");
-        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Float64)))));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Sum", PinTypeDesc::concrete(ValueType::Float64)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Mean", PinTypeDesc::concrete(ValueType::Float64)));

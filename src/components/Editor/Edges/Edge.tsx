@@ -9,6 +9,10 @@ interface EdgeProps {
   thickness?: number;
   /** 起点是否为输入针脚 (默认为 false，即起点为输出) */
   startIsInput?: boolean;
+  /** 🆕 是否正在执行（显示流动动画） */
+  isActive?: boolean;
+  /** 🆕 连接的唯一标识符 */
+  connectionId?: string;
 }
 
 export function drawEdge(
@@ -47,8 +51,9 @@ export const Edge = React.memo<EdgeProps>(({
   color = "#999",
   thickness = 2,
   startIsInput = false,
+  isActive = false,
+  connectionId,
 }) => {
-  // ... (keep the same implementation)
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);
 
@@ -62,13 +67,47 @@ export const Edge = React.memo<EdgeProps>(({
   const pathData = `M ${x1},${y1} C ${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
 
   return (
-    <path
-      d={pathData}
-      fill="none"
-      stroke={color}
-      strokeWidth={thickness}
-      strokeLinecap="round"
-      className="pointer-events-none"
-    />
+    <g>
+      {/* 基础连接线 */}
+      <path
+        d={pathData}
+        fill="none"
+        stroke={isActive ? "#facc15" : color}
+        strokeWidth={isActive ? thickness + 1 : thickness}
+        strokeLinecap="round"
+        className="pointer-events-none transition-all duration-200"
+      />
+      
+      {/* 🆕 流动动画 */}
+      {isActive && (
+        <>
+          <path
+            d={pathData}
+            fill="none"
+            stroke="rgba(250, 204, 21, 0.6)"
+            strokeWidth={thickness + 2}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              strokeDasharray: "10 10",
+              strokeDashoffset: "0",
+              animation: "dash 0.5s linear infinite",
+            }}
+          />
+          {/* 添加发光效果 */}
+          <path
+            d={pathData}
+            fill="none"
+            stroke="rgba(250, 204, 21, 0.3)"
+            strokeWidth={thickness + 6}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              filter: "blur(4px)",
+            }}
+          />
+        </>
+      )}
+    </g>
   );
 });

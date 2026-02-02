@@ -22,7 +22,7 @@ pub fn register(registry: &NodeRegistry) {
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "First", PinTypeDesc::concrete(ValueType::String)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", PinTypeDesc::concrete(ValueType::String)));
         node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Rest", PinTypeDesc::concrete(ValueType::String)));
-        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::String)))));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let input = ctx.get_pin_value(&node.inputs[0].id)

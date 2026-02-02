@@ -21,9 +21,6 @@ pub fn register(registry: &NodeRegistry) {
         
         ctx.log(format!("Plot node executing: Creating window with label: {}", window_label));
         
-        // 添加小延迟避免快速连续创建窗口时的冲突
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        
         // 异步创建窗口，不阻塞主线程
         match ctx.open_window_async(window_label.clone(), "Data Plot".into(), "#/plot".into()) {
             Ok(_) => {

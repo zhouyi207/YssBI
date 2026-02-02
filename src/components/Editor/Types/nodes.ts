@@ -33,6 +33,7 @@ export interface Pin {
   direction: PinDirection;
   links: string[];      // 连接的 pin id
   defaultValue?: any;   // 默认值（如果是数据针脚）
+  userValue?: any;      // 🆕 用户设置的值（覆盖默认值）
   isArray?: boolean;    // 是否为数组/List
   ui?: {
     x?: number;         // 在节点内部的位置

@@ -42,6 +42,7 @@ export function serializeSubGraph(
         type: p.type,
         links: p.links,
         defaultValue: p.defaultValue,
+        userValue: p.userValue,  // 🆕 包含用户设置的值
         isArray: p.isArray,
       })),
       outputs: node.outputs.map((p) => ({
@@ -50,6 +51,7 @@ export function serializeSubGraph(
         type: p.type,
         links: p.links,
         defaultValue: p.defaultValue,
+        userValue: p.userValue,  // 🆕 包含用户设置的值
         isArray: p.isArray,
       })),
     })),

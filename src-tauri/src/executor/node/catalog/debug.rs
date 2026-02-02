@@ -2,18 +2,18 @@ use std::sync::Arc;
 use crate::executor::node::registry::NodeRegistry;
 use crate::executor::node::implementation::GenericNode;
 use crate::executor::pin::{GenericInDataPin, GenericOutExecPin, GenericInExecPin};
-use crate::executor::value::PinTypeDesc;
+use crate::executor::value::{PinTypeDesc, ValueType};
 
 pub fn register(registry: &NodeRegistry) {
     let print_node = GenericNode::new_prototype("print", "Print");
     print_node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
     print_node.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     
-    // 🔑 使用 Unknown 类型，接受任意类型的输入
+    // 🔑 只接受 String 类型，其他类型需要先转换
     print_node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Value",
-        PinTypeDesc::unknown()
+        PinTypeDesc::concrete(ValueType::String)
     ));
     
     print_node.set_flow_processor(Box::new(|ctx, node| {
