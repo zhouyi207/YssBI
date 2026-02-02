@@ -308,6 +308,11 @@ impl GenericNode {
         &self.node_type
     }
 
+    /// 获取节点标题
+    pub fn get_title(&self) -> String {
+        self.title.read().unwrap().clone()
+    }
+
     /// 获取节点的执行模型
     pub fn execution_model(&self) -> crate::executor::types::ExecutionModel {
         use crate::executor::types::ExecutionModel;

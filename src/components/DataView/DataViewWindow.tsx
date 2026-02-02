@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ProjectService } from '../../services/projectService';
-import { VscDatabase, VscRefresh, VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore, VscChevronDown } from 'react-icons/vsc';
+import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectStore } from '../Editor/Store/useProjectStore';
 import { useProjectSync, initProjectSync } from '../Editor/Hooks/useProjectSync';
 import { Select } from '../Editor/Shared/UI/Select';
@@ -83,11 +83,9 @@ export const DataViewWindow: React.FC = () => {
     try {
       await initProjectSync();
       if (selectedDfId) {
-        // 重新加载当前已加载的所有行，以保持视图一致性
         const rows = await ProjectService.getDataFrameRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
         setLoadedRows(rows);
 
-        // 恢复滚动位置
         setTimeout(() => {
           if (scrollRef.current) {
             scrollRef.current.scrollTop = lastScrollTop.current;
@@ -103,17 +101,13 @@ export const DataViewWindow: React.FC = () => {
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    // 距离底部 100px 时加载更多
     if (target.scrollHeight - target.scrollTop - target.clientHeight < 100) {
       loadMoreRows();
     }
   };
 
   useEffect(() => {
-    // 立即显示窗口，避免长时间等待数据刷新导致黑屏或无法显示
     getCurrentWindow().show().catch(console.error);
-
-    // 刷新数据
     refreshData();
 
     const setupListeners = async () => {
@@ -139,35 +133,66 @@ export const DataViewWindow: React.FC = () => {
     };
   }, []);
 
+  const handleMinimize = async () => {
+    await getCurrentWindow().minimize();
+  };
+
+  const handleMaximize = async () => {
+    await getCurrentWindow().toggleMaximize();
+  };
+
+  const handleClose = async () => {
+    await getCurrentWindow().close();
+  };
+
   const selectedDf = selectedDfId ? dataframes[selectedDfId] : null;
 
   return (
     <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-gray-300 overflow-hidden font-sans">
-      {/* Title Bar */}
+      {/* 自定义标题栏 - 与主窗口一致 */}
       <div
         data-tauri-drag-region
-        className="flex items-center justify-between h-10 px-3 bg-[var(--titlebar-bg)] border-b border-gray-800 select-none shrink-0"
+        className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none shrink-0"
       >
-        <div className="flex items-center gap-2 flex-1" data-tauri-drag-region>
+        <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <VscDatabase className="text-[var(--accent-color)]" size={16} />
-          <span className="text-xs font-bold uppercase tracking-wider">Data Viewer</span>
+          <span className="text-white font-bold text-sm tracking-tight">Data Viewer</span>
         </div>
 
-        <div className="flex items-center">
-          <button onClick={() => getCurrentWindow().minimize()} className="w-10 h-10 flex items-center justify-center hover:bg-white/5 transition-colors">
-            <VscChromeMinimize size={14} />
+        {/* 窗口控制按钮 */}
+        <div className="flex items-center h-full">
+          <button
+            onClick={handleMinimize}
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
+            title="最小化"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+            </svg>
           </button>
-          <button onClick={() => getCurrentWindow().toggleMaximize()} className="w-10 h-10 flex items-center justify-center hover:bg-white/5 transition-colors">
-            {isMaximized ? <VscChromeRestore size={14} /> : <VscChromeMaximize size={14} />}
+          <button
+            onClick={handleMaximize}
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
+            title={isMaximized ? '还原' : '最大化'}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
+            </svg>
           </button>
-          <button onClick={() => getCurrentWindow().close()} className="w-10 h-10 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors">
-            <VscChromeClose size={14} />
+          <button
+            onClick={handleClose}
+            className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
+            title="关闭"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="h-12 border-b border-gray-800 flex items-center px-4 gap-4 bg-black/20 shrink-0">
+      <div className="h-12 border-b border-gray-800 flex items-center px-4 gap-4 bg-[var(--sidebar-bg)] shrink-0">
         <div className="w-[240px]">
           <Select
             value={selectedDfId || ''}
@@ -181,7 +206,7 @@ export const DataViewWindow: React.FC = () => {
 
         <button
           onClick={refreshData}
-          className="p-2 hover:bg-white/5 rounded transition-colors text-gray-400 hover:text-white flex items-center gap-2 text-xs font-medium"
+          className="p-2 hover:bg-[var(--sidebar-bg)] rounded transition-colors text-gray-400 hover:text-white flex items-center gap-2 text-xs font-medium"
           title="Refresh Data"
         >
           <VscRefresh className={loading ? 'animate-spin' : ''} size={16} />
@@ -200,7 +225,7 @@ export const DataViewWindow: React.FC = () => {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-auto bg-black/10 custom-scrollbar"
+        className="flex-1 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
       >
         {selectedDf ? (
           <div className="min-w-full inline-block align-middle">

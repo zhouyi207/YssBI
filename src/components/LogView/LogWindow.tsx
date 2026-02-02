@@ -138,48 +138,42 @@ export const LogWindow = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e1e] text-white overflow-hidden">
-      {/* 自定义标题栏 */}
+    <div className="flex flex-col h-screen bg-[var(--workbench-bg)] text-white overflow-hidden">
+      {/* 自定义标题栏 - 与主窗口一致 */}
       <div
         data-tauri-drag-region
-        className="flex items-center justify-between h-10 px-3 bg-[#252526] border-b border-[#3e3e42] select-none shrink-0"
+        className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none shrink-0 rounded-tr-lg overflow-hidden"
       >
-        <div className="flex items-center gap-2 flex-1" data-tauri-drag-region>
-          <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
+          <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-xs font-bold uppercase tracking-wider">Logs</span>
+          <span className="text-white font-bold text-sm tracking-tight">Logs</span>
         </div>
 
         {/* 窗口控制按钮 */}
-        <div className="flex items-center">
+        <div className="flex items-center h-full">
           <button
             onClick={handleMinimize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-white/5 transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
             title="最小化"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
             </svg>
           </button>
           <button
             onClick={handleMaximize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-white/5 transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
             title={isMaximized ? '还原' : '最大化'}
           >
-            {isMaximized ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
-              </svg>
-            )}
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
+            </svg>
           </button>
           <button
             onClick={handleClose}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-red-500 hover:text-white transition-colors"
+            className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
             title="关闭"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,7 +184,7 @@ export const LogWindow = () => {
       </div>
 
       {/* 工具栏 */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-[#252526] border-b border-[#3e3e42] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--sidebar-bg)] border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${loading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 animate-pulse'}`}></div>
@@ -200,7 +194,7 @@ export const LogWindow = () => {
           </div>
           <div className="h-4 w-px bg-gray-700"></div>
           <span className="text-xs text-gray-400">
-            显示 <span className="text-blue-400 font-semibold">{filteredLogs.length}</span> / {total} 条
+            显示 <span className="text-[var(--accent-color)] font-semibold">{filteredLogs.length}</span> / {total} 条
             {hasMore && <span className="text-gray-500 ml-1">(还有更多)</span>}
           </span>
         </div>
@@ -208,7 +202,7 @@ export const LogWindow = () => {
           <button
             onClick={() => refreshLogs()}
             disabled={loading}
-            className="px-2 py-1 rounded text-xs font-medium text-gray-400 hover:bg-[#3e3e42] transition-colors disabled:opacity-50"
+            className="px-2 py-1 rounded text-xs font-medium text-gray-400 hover:bg-[var(--sidebar-bg)] transition-colors disabled:opacity-50"
             title="刷新日志"
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,8 +213,8 @@ export const LogWindow = () => {
             onClick={() => setAutoScroll(!autoScroll)}
             className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
               autoScroll 
-                ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' 
-                : 'text-gray-400 hover:bg-[#3e3e42]'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/30' 
+                : 'text-gray-400 hover:bg-[var(--sidebar-bg)]'
             }`}
             title={autoScroll ? '自动滚动已启用' : '自动滚动已禁用'}
           >
@@ -230,8 +224,8 @@ export const LogWindow = () => {
             onClick={() => setIsFilterOpen(!isFilterOpen)}
             className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
               isFilterOpen 
-                ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' 
-                : 'text-gray-400 hover:bg-[#3e3e42]'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/30' 
+                : 'text-gray-400 hover:bg-[var(--sidebar-bg)]'
             }`}
             title="过滤器"
           >
@@ -249,7 +243,7 @@ export const LogWindow = () => {
 
       {/* 过滤器面板 */}
       {isFilterOpen && (
-        <div className="px-4 py-3 bg-[#1e1e1e] border-b border-[#3e3e42] space-y-3 shrink-0">
+        <div className="px-4 py-3 bg-[var(--workbench-bg)] border-b border-gray-800 space-y-3 shrink-0">
           {/* 搜索框 */}
           <div className="relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
@@ -258,7 +252,7 @@ export const LogWindow = () => {
               placeholder="搜索日志内容..."
               value={filter.searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[#2d2d30] border border-[#3e3e42] rounded-md focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 text-gray-200 placeholder-gray-500 transition-all"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--sidebar-bg)] border border-gray-700 rounded-md focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/50 text-gray-200 placeholder-gray-500 transition-all"
             />
           </div>
 
@@ -273,7 +267,7 @@ export const LogWindow = () => {
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     filter.levels.has(level)
                       ? `${getLevelBgColor(level)} ${getLevelColor(level)} border border-current`
-                      : 'bg-[#2d2d30] text-gray-500 border border-transparent hover:border-gray-600'
+                      : 'bg-[var(--sidebar-bg)] text-gray-500 border border-transparent hover:border-gray-600'
                   }`}
                 >
                   {level.toUpperCase()}
@@ -293,7 +287,7 @@ export const LogWindow = () => {
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     filter.types.has(type)
                       ? `bg-gray-700 ${getTypeColor(type)} border border-current`
-                      : 'bg-[#2d2d30] text-gray-500 border border-transparent hover:border-gray-600'
+                      : 'bg-[var(--sidebar-bg)] text-gray-500 border border-transparent hover:border-gray-600'
                   }`}
                 >
                   {type === 'application' ? '应用' : type === 'execution' ? '执行' : '系统'}
@@ -308,12 +302,12 @@ export const LogWindow = () => {
       <div
         ref={logContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto bg-[#1e1e1e] custom-scrollbar"
+        className="flex-1 overflow-y-auto bg-[var(--workbench-bg)] custom-scrollbar"
         style={{ minHeight: 0 }}
       >
         {isInitialLoad ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin"></div>
             <div className="text-sm">加载日志中...</div>
           </div>
         ) : filteredLogs.length === 0 ? (
@@ -338,8 +332,8 @@ export const LogWindow = () => {
               </div>
             )}
             {loading && (
-              <div className="text-center py-2 text-xs text-blue-400 flex items-center justify-center gap-2">
-                <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-center py-2 text-xs text-[var(--accent-color)] flex items-center justify-center gap-2">
+                <div className="w-3 h-3 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin"></div>
                 加载中...
               </div>
             )}
@@ -347,7 +341,7 @@ export const LogWindow = () => {
               {filteredLogs.map((log, index) => (
                 <div
                   key={index}
-                  className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[#2a2a2a] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${
+                  className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${
                     log.level === 'error' ? 'border-red-500' :
                     log.level === 'warn' ? 'border-yellow-500' :
                     log.level === 'info' ? 'border-blue-500' :

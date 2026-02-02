@@ -3,6 +3,7 @@
 pub mod catalog;
 pub mod implementation;
 pub mod registry;
+pub mod stat;
 pub mod traits;
 pub mod types;
 

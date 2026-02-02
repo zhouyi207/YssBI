@@ -24,4 +24,7 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     string_multi_output::register(registry);
     data_multi_output::register(registry);
     conversion::register(registry);
+    
+    // 注册统计节点
+    crate::executor::node::stat::register_all(registry);
 }

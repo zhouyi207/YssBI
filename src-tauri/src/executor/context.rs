@@ -447,7 +447,7 @@ impl ExecutionContext {
                     .cloned()
                     .unwrap_or_default(),
                 node_type: node_guard.node_type().to_string(),
-                title: node_guard.name().to_string(),
+                title: node_guard.get_title(),
                 inputs,
                 outputs,
                 variable_id: node_guard.variable_id(),
@@ -738,7 +738,7 @@ impl ExecutionContextTrait for ExecutionContext {
                         .cloned()
                         .unwrap_or_default(),
                     node_type: node_guard.node_type().to_string(),
-                    title: node_guard.name().to_string(),
+                    title: node_guard.get_title(),
                     inputs,   // ✅ 正确填充
                     outputs,  // ✅ 正确填充
                     variable_id: node_guard.variable_id(),

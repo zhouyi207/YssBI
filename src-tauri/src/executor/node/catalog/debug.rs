@@ -20,9 +20,25 @@ pub fn register(registry: &NodeRegistry) {
         // Safely get input value
         if !node.inputs.is_empty() {
             let val = ctx.get_pin_value(&node.inputs[0].id);
-            ctx.log(format!("[Print] {}", val));
+            let message = format!("{}", val);
+            
+            // 发送到执行日志
+            ctx.log(format!("[Print] {}", message));
+            
+            // 发送到日志窗口（应用程序日志）
+            crate::log_app!(
+                crate::logging::LogLevel::Info,
+                message,
+                "Print"
+            );
         } else {
             ctx.log("[Print] No input value".to_string());
+            
+            crate::log_app!(
+                crate::logging::LogLevel::Warn,
+                "No input value",
+                "Print"
+            );
         }
         Ok("Out".into())
     }));
