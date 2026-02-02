@@ -53,6 +53,12 @@ pub fn execute_project(app: AppHandle, data: ProjectData) -> Result<Vec<String>,
 
 fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>, String> {
     info!("[execute_project_data] Received project data for execution");
+    
+    // 发送执行开始日志
+    crate::log_exec!(
+        crate::logging::LogLevel::Info,
+        "开始执行图"
+    );
 
     // 保存执行前的项目 JSON 日志
     if let Err(e) = save_execution_log(&data) {
@@ -157,6 +163,12 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
         nodes.len(),
         variables.len()
     );
+    
+    // 发送收集节点日志
+    crate::log_exec!(
+        crate::logging::LogLevel::Info,
+        format!("收集了 {} 个节点和 {} 个变量", nodes.len(), variables.len())
+    );
 
     // 打印变量名，方便调试
     for (id, var) in &variables {
@@ -179,6 +191,30 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
 
     // 添加初始系统日志
     context.log("[System] Received event for execution".to_string());
+    
+    // 发送执行开始日志
+    crate::log_exec!(
+        crate::logging::LogLevel::Info,
+        "开始执行图节点"
+    );
 
-    context.execute()
+    let result = context.execute();
+    
+    // 发送执行完成日志
+    match &result {
+        Ok(logs) => {
+            crate::log_exec!(
+                crate::logging::LogLevel::Info,
+                format!("图执行完成，生成了 {} 条日志", logs.len())
+            );
+        }
+        Err(e) => {
+            crate::log_exec!(
+                crate::logging::LogLevel::Error,
+                format!("图执行失败: {}", e)
+            );
+        }
+    }
+    
+    result
 }

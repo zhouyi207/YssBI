@@ -1,0 +1,261 @@
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+use std::sync::{Arc, Mutex};
+use std::fs::{File, OpenOptions};
+use std::io::{Write, BufRead, BufReader};
+use std::path::PathBuf;
+
+/// 日志级别
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+/// 日志类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogType {
+    Application,  // 应用程序日志
+    Execution,    // 执行日志
+    System,       // 系统日志
+}
+
+/// 日志消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogMessage {
+    pub timestamp: String,
+    pub level: LogLevel,
+    pub log_type: LogType,
+    pub message: String,
+    pub source: Option<String>,  // 日志来源（如节点ID、模块名等）
+}
+
+/// 全局日志管理器
+pub struct LogManager {
+    app_handle: Option<Arc<Mutex<AppHandle>>>,
+    log_file: Arc<Mutex<Option<File>>>,
+    log_file_path: Arc<Mutex<Option<PathBuf>>>,
+}
+
+impl LogManager {
+    pub fn new() -> Self {
+        Self {
+            app_handle: None,
+            log_file: Arc::new(Mutex::new(None)),
+            log_file_path: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// 设置 AppHandle
+    pub fn set_app_handle(&mut self, handle: AppHandle) {
+        self.app_handle = Some(Arc::new(Mutex::new(handle)));
+        
+        // 初始化日志文件
+        self.init_log_file();
+    }
+    
+    /// 初始化日志文件
+    fn init_log_file(&self) {
+        // 创建 logs 目录
+        let logs_dir = PathBuf::from("logs");
+        if !logs_dir.exists() {
+            let _ = std::fs::create_dir_all(&logs_dir);
+        }
+        
+        // 创建当前会话的日志文件
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("app_{}.log", timestamp);
+        let log_path = logs_dir.join(filename);
+        
+        match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            Ok(file) => {
+                *self.log_file.lock().unwrap() = Some(file);
+                *self.log_file_path.lock().unwrap() = Some(log_path);
+            }
+            Err(e) => {
+                eprintln!("Failed to create log file: {}", e);
+            }
+        }
+    }
+    
+    /// 写入日志到文件
+    fn write_to_file(&self, log: &LogMessage) {
+        if let Some(file) = self.log_file.lock().unwrap().as_mut() {
+            let json = serde_json::to_string(log).unwrap_or_default();
+            let _ = writeln!(file, "{}", json);
+            let _ = file.flush();
+        }
+    }
+
+    /// 发送日志到前端
+    pub fn emit_log(&self, log: LogMessage) {
+        // 写入文件
+        self.write_to_file(&log);
+        
+        // 发送到前端
+        if let Some(handle) = &self.app_handle {
+            if let Ok(handle) = handle.lock() {
+                let _ = handle.emit("log-message", &log);
+            }
+        }
+    }
+
+    /// 发送应用程序日志
+    pub fn log_app(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            level,
+            log_type: LogType::Application,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
+    /// 发送执行日志
+    pub fn log_execution(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            level,
+            log_type: LogType::Execution,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
+    /// 发送系统日志
+    pub fn log_system(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            level,
+            log_type: LogType::System,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+    
+    /// 获取当前日志文件路径
+    pub fn get_log_file_path(&self) -> Option<PathBuf> {
+        self.log_file_path.lock().unwrap().clone()
+    }
+}
+
+// 全局日志管理器实例
+static mut LOG_MANAGER: Option<LogManager> = None;
+
+/// 初始化日志管理器
+pub fn init_log_manager(app_handle: AppHandle) {
+    unsafe {
+        let mut manager = LogManager::new();
+        manager.set_app_handle(app_handle);
+        LOG_MANAGER = Some(manager);
+    }
+}
+
+/// 获取日志管理器
+pub fn get_log_manager() -> Option<&'static LogManager> {
+    unsafe { LOG_MANAGER.as_ref() }
+}
+
+/// 读取日志文件（分页，从末尾开始）
+/// offset: 从末尾开始的偏移量（0 表示最新的日志）
+/// limit: 要读取的日志数量
+pub fn read_logs_from_file(file_path: &PathBuf, offset: usize, limit: usize) -> Result<Vec<LogMessage>, String> {
+    let file = File::open(file_path)
+        .map_err(|e| format!("Failed to open log file: {}", e))?;
+    
+    let reader = BufReader::new(file);
+    let all_lines: Vec<String> = reader.lines()
+        .filter_map(|line| line.ok())
+        .collect();
+    
+    let total = all_lines.len();
+    
+    // 如果 offset 超过总数，返回空
+    if offset >= total {
+        return Ok(Vec::new());
+    }
+    
+    // 计算从末尾开始的起始位置
+    let start = if offset + limit > total {
+        0
+    } else {
+        total - offset - limit
+    };
+    
+    let end = total - offset;
+    
+    let mut logs = Vec::new();
+    for line in &all_lines[start..end] {
+        if let Ok(log) = serde_json::from_str::<LogMessage>(line) {
+            logs.push(log);
+        }
+    }
+    
+    Ok(logs)
+}
+
+/// 获取日志文件总行数
+pub fn count_logs_in_file(file_path: &PathBuf) -> Result<usize, String> {
+    let file = File::open(file_path)
+        .map_err(|e| format!("Failed to open log file: {}", e))?;
+    
+    let reader = BufReader::new(file);
+    Ok(reader.lines().count())
+}
+
+/// 便捷宏：发送应用程序日志
+#[macro_export]
+macro_rules! log_app {
+    ($level:expr, $msg:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_app($level, $msg.to_string(), None);
+        }
+    };
+    ($level:expr, $msg:expr, $source:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_app($level, $msg.to_string(), Some($source.to_string()));
+        }
+    };
+}
+
+/// 便捷宏：发送执行日志
+#[macro_export]
+macro_rules! log_exec {
+    ($level:expr, $msg:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_execution($level, $msg.to_string(), None);
+        }
+    };
+    ($level:expr, $msg:expr, $source:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_execution($level, $msg.to_string(), Some($source.to_string()));
+        }
+    };
+}
+
+/// 便捷宏：发送系统日志
+#[macro_export]
+macro_rules! log_sys {
+    ($level:expr, $msg:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_system($level, $msg.to_string(), None);
+        }
+    };
+    ($level:expr, $msg:expr, $source:expr) => {
+        if let Some(manager) = $crate::logging::get_log_manager() {
+            manager.log_system($level, $msg.to_string(), Some($source.to_string()));
+        }
+    };
+}

@@ -274,6 +274,12 @@ impl ExecutionContext {
         // 🆕 发送执行开始事件
         self.emit_execution_event("execution_start", None, None, None);
         
+        // 发送执行开始日志
+        crate::log_exec!(
+            crate::logging::LogLevel::Info,
+            "执行图开始"
+        );
+        
         // 清空数据缓存（新的执行周期）
         self.data_cache.clear();
 
@@ -291,11 +297,21 @@ impl ExecutionContext {
         let log_msg = format!("Starting execution from node: {:?}", start_runtime_id);
         info!("{}", log_msg);
         self.logs.push(log_msg);
+        
+        crate::log_exec!(
+            crate::logging::LogLevel::Debug,
+            format!("从起始节点开始执行: {:?}", start_runtime_id)
+        );
 
         self.run_flow_internal(start_runtime_id, "Exec")?;
 
         info!("Execution finished");
         self.logs.push("Execution finished".to_string());
+        
+        crate::log_exec!(
+            crate::logging::LogLevel::Info,
+            "执行图完成"
+        );
         
         // 🆕 发送执行完成事件
         self.emit_execution_event("execution_complete", None, None, None);
@@ -355,6 +371,13 @@ impl ExecutionContext {
         let log_msg = format!(">>> Executing Node: {} ({})", node_name, node_type);
         info!("{}", log_msg);
         self.logs.push(log_msg);
+        
+        // 发送节点执行日志
+        crate::log_exec!(
+            crate::logging::LogLevel::Debug,
+            format!("执行节点: {} ({})", node_name, node_type),
+            node_name.clone()
+        );
         
         // 🆕 获取前端节点 ID 并发送节点开始执行事件
         let frontend_node_id = self.runtime_id_to_data_id.get(&node_id).cloned();

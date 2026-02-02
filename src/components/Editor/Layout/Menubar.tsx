@@ -202,6 +202,23 @@ export default function Menubar() {
     }
   };
 
+  const handleOpenLogs = async () => {
+    try {
+      const label = `logs-${Math.random().toString(36).substring(7)}`;
+      new WebviewWindow(label, {
+        url: "index.html#/logs",
+        title: "Logs",
+        width: 1000,
+        height: 600,
+        decorations: false,
+        visible: false, // 初始隐藏，待渲染完毕后再显示
+      });
+    } catch (error) {
+      console.error("Failed to open logs window:", error);
+      showToast("无法打开日志窗口", "error");
+    }
+  };
+
   const toggleDetail = () => {
     updateNode('detail', {
       data: { ...detailNode?.data, visible: !isDetailVisible }
@@ -258,6 +275,8 @@ export default function Menubar() {
     { label: "-" },
     { label: "Split Editor Right", onClick: handleSplitRight },
     { label: "Split Editor Down", onClick: handleSplitDown },
+    { label: "-" },
+    { label: "Logs", onClick: handleOpenLogs },
     { label: "-" },
     { label: "Reset Layout" },
     { label: "Zoom In", shortcut: "Ctrl++" },

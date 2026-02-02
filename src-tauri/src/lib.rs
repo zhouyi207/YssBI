@@ -7,6 +7,7 @@ pub mod executor;
 pub mod project;
 pub mod schema;
 pub mod state;
+pub mod logging;
 
 use commands::*;
 use state::ProjectState;
@@ -50,6 +51,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 注册全局状态管理器
         .manage(ProjectState::new())
+        .setup(|app| {
+            // 初始化日志管理器
+            logging::init_log_manager(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Schema 命令
             get_node_definitions,
@@ -136,6 +142,10 @@ pub fn run() {
             delete_dataframe,
             create_dataframe,
             get_dataframe_rows,
+            // 日志命令
+            get_logs,
+            get_log_file_path,
+            get_log_count,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

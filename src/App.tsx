@@ -14,10 +14,12 @@ import { useAppInitialization } from "./components/Editor/Hooks/useAppInitializa
 import { useProjectSync } from "./components/Editor/Hooks/useProjectSync";
 import PlotWindow from "./components/PlotView/PlotWindow";
 import DataViewWindow from "./components/DataView/DataViewWindow";
+import { LogWindow } from "./components/LogView/LogWindow";
 
 // 检查窗口类型（在组件外部检查，避免不必要的 hooks 调用）
 const isPlotWindow = window.location.hash === '#/plot';
 const isDataViewWindow = window.location.hash === '#/dataview';
+const isLogsWindow = window.location.hash === '#/logs';
 
 /**
  * 主应用组件（仅用于主窗口）
@@ -106,6 +108,15 @@ export default function App() {
     return (
       <ThemeProvider>
         <DataViewWindow />
+      </ThemeProvider>
+    );
+  }
+
+  // 如果是 Logs 窗口，只渲染 LogWindow 组件
+  if (isLogsWindow) {
+    return (
+      <ThemeProvider>
+        <LogWindow />
       </ThemeProvider>
     );
   }
