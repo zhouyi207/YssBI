@@ -10,7 +10,7 @@ pub fn register(registry: &NodeRegistry) {
     print_node.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     
     // 🔑 使用 Unknown 类型，接受任意类型的输入
-    print_node.add_input(GenericInDataPin::new(
+    print_node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Value",
         PinTypeDesc::unknown()

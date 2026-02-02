@@ -399,7 +399,7 @@ let value_input = GenericInDataPin::new_with_type_desc(
     PinTypeDesc::unknown()  // 🔑 关键：Unknown 类型
 );
 
-print_node.add_input(value_input);
+print_node.add_in_data_pin(value_input);
 ```
 
 **连接后的推断**：
@@ -444,8 +444,8 @@ let result_output = GenericOutDataPin::new_with_type_desc(
     PinTypeDesc::type_var(type_var)
 );
 
-add_node.add_input(a_input);
-add_node.add_input(b_input);
+add_node.add_in_data_pin(a_input);
+add_node.add_in_data_pin(b_input);
 add_node.add_output(result_output);
 ```
 

@@ -214,7 +214,7 @@ impl GenericNode {
         self.description = description;
     }
 
-    pub fn add_input(&self, pin: GenericInDataPin) -> Arc<GenericInDataPin> {
+    pub fn add_in_data_pin(&self, pin: GenericInDataPin) -> Arc<GenericInDataPin> {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.in_data_pins.insert(id, pin.clone());
@@ -223,7 +223,7 @@ impl GenericNode {
         pin
     }
 
-    pub fn add_output(&self, pin: GenericOutDataPin) -> Arc<GenericOutDataPin> {
+    pub fn add_out_data_pin(&self, pin: GenericOutDataPin) -> Arc<GenericOutDataPin> {
         let id = pin.id();
         let pin = Arc::new(pin);
         self.out_data_pins.insert(id, pin.clone());
@@ -548,11 +548,11 @@ impl GenericNode {
             }
             (DynamicPinType::Data, PinDirection::Output) => {
                 let pin = GenericOutDataPin::new(pin_id, &pin_name, config.data_type.clone());
-                self.add_output(pin);
+                self.add_out_data_pin(pin);
             }
             (DynamicPinType::Data, PinDirection::Input) => {
                 let pin = GenericInDataPin::new(pin_id, &pin_name, config.data_type.clone());
-                self.add_input(pin);
+                self.add_in_data_pin(pin);
             }
         }
         
@@ -772,11 +772,11 @@ impl GenericNode {
                 }
                 (DynamicPinType::Data, PinDirection::Output) => {
                     let pin = GenericOutDataPin::new(pin_id, &pin_info.name, config.data_type.clone());
-                    self.add_output(pin);
+                    self.add_out_data_pin(pin);
                 }
                 (DynamicPinType::Data, PinDirection::Input) => {
                     let pin = GenericInDataPin::new(pin_id, &pin_info.name, config.data_type.clone());
-                    self.add_input(pin);
+                    self.add_in_data_pin(pin);
                 }
             }
             

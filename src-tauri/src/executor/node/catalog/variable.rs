@@ -8,7 +8,7 @@ use crate::executor::value::PinTypeDesc;
 pub fn register(registry: &NodeRegistry) {
     // 1. Get Variable - 使用 Unknown 类型，因为变量可以是任意类型
     let get_var = GenericNode::new_prototype("get_variable", "Get Variable");
-    get_var.add_output(GenericOutDataPin::new(
+    get_var.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Value",
         PinTypeDesc::unknown()  // 🔑 变量可以是任意类型
@@ -29,12 +29,12 @@ pub fn register(registry: &NodeRegistry) {
     let set_var = GenericNode::new_prototype("set_variable", "Set Variable");
     set_var.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
     set_var.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    set_var.add_input(GenericInDataPin::new(
+    set_var.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Value",
         PinTypeDesc::unknown()  // 🔑 可以接受任意类型
     ));
-    set_var.add_output(GenericOutDataPin::new(
+    set_var.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Value",
         PinTypeDesc::unknown()  // 🔑 输出任意类型

@@ -62,7 +62,7 @@ fn test_if_else_pin_structure() {
     // 创建 IfElse 节点原型
     let node = GenericNode::new_prototype("if_else", "If Else");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Condition",
         PinTypeDesc::concrete(ValueType::Boolean),
@@ -93,7 +93,7 @@ fn test_if_else_pin_structure() {
 fn test_if_else_pin_names() {
     let node = GenericNode::new_prototype("if_else", "If Else");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Condition",
         PinTypeDesc::concrete(ValueType::Boolean),
@@ -237,12 +237,12 @@ fn test_while_loop_execution_model() {
 fn test_while_loop_pin_structure() {
     let node = GenericNode::new_prototype("while_loop", "While Loop");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Condition",
         PinTypeDesc::concrete(ValueType::Boolean),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "MaxIterations",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -261,12 +261,12 @@ fn test_while_loop_pin_structure() {
 fn test_while_loop_pin_names() {
     let node = GenericNode::new_prototype("while_loop", "While Loop");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Condition",
         PinTypeDesc::concrete(ValueType::Boolean),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "MaxIterations",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -306,17 +306,17 @@ fn test_for_loop_execution_model() {
 fn test_for_loop_pin_structure() {
     let node = GenericNode::new_prototype("for_loop", "For Loop");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Start",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "End",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Step",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -335,17 +335,17 @@ fn test_for_loop_pin_structure() {
 fn test_for_loop_pin_names() {
     let node = GenericNode::new_prototype("for_loop", "For Loop");
     node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Start",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "End",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Step",
         PinTypeDesc::concrete(ValueType::Float64),

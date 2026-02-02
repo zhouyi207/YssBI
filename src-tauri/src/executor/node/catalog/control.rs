@@ -8,7 +8,7 @@ pub fn register(registry: &NodeRegistry) {
     // 1. IfElse Node - 修复后的逻辑
     let if_else = GenericNode::new_prototype("if_else", "If Else");
     if_else.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    if_else.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
+    if_else.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
     if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "True"));
     if_else.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "False"));
     
@@ -125,8 +125,8 @@ pub fn register(registry: &NodeRegistry) {
     // 4. 新增：While Loop Node - 展示循环逻辑的例子
     let while_loop = GenericNode::new_prototype("while_loop", "While Loop");
     while_loop.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
-    while_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "MaxIterations", PinTypeDesc::concrete(ValueType::Float64)));
+    while_loop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
+    while_loop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "MaxIterations", PinTypeDesc::concrete(ValueType::Float64)));
     while_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     while_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
 
@@ -176,9 +176,9 @@ pub fn register(registry: &NodeRegistry) {
     // 5. 新增：For Loop Node - 展示计数循环逻辑的例子
     let for_loop = GenericNode::new_prototype("for_loop", "For Loop");
     for_loop.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Start", PinTypeDesc::concrete(ValueType::Float64)));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "End", PinTypeDesc::concrete(ValueType::Float64)));
-    for_loop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
+    for_loop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Start", PinTypeDesc::concrete(ValueType::Float64)));
+    for_loop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "End", PinTypeDesc::concrete(ValueType::Float64)));
+    for_loop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
     for_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     for_loop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
 
@@ -239,7 +239,7 @@ pub fn register(registry: &NodeRegistry) {
     // 6. Switch Node - 多分支选择
     let switch = GenericNode::new_prototype("switch", "Switch");
     switch.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    switch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Value", PinTypeDesc::concrete(ValueType::Float64)));
+    switch.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Value", PinTypeDesc::concrete(ValueType::Float64)));
     switch.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Case 0"));
     switch.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Case 1"));
     switch.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Case 2"));
@@ -323,7 +323,7 @@ pub fn register(registry: &NodeRegistry) {
     // 8. Delay Node - 延迟执行
     let delay = GenericNode::new_prototype("delay", "Delay");
     delay.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    delay.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Milliseconds", PinTypeDesc::concrete(ValueType::Float64)));
+    delay.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Milliseconds", PinTypeDesc::concrete(ValueType::Float64)));
     delay.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
 
     delay.set_flow_processor(Box::new(|ctx, node| {
@@ -352,8 +352,8 @@ pub fn register(registry: &NodeRegistry) {
     // 9. Gate Node - 条件门控
     let gate = GenericNode::new_prototype("gate", "Gate");
     gate.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    gate.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
-    gate.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "CloseOnFalse", PinTypeDesc::concrete(ValueType::Boolean)));
+    gate.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
+    gate.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "CloseOnFalse", PinTypeDesc::concrete(ValueType::Boolean)));
     gate.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     gate.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Closed"));
 
@@ -395,8 +395,8 @@ pub fn register(registry: &NodeRegistry) {
     // 10. MultiGate Node - 多路门控（轮流执行）
     let multi_gate = GenericNode::new_prototype("multi_gate", "Multi Gate");
     multi_gate.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    multi_gate.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
-    multi_gate.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "StartIndex", PinTypeDesc::concrete(ValueType::Float64)));
+    multi_gate.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
+    multi_gate.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "StartIndex", PinTypeDesc::concrete(ValueType::Float64)));
     multi_gate.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out 0"));
     multi_gate.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out 1"));
     multi_gate.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out 2"));
@@ -442,7 +442,7 @@ pub fn register(registry: &NodeRegistry) {
     // 11. DoOnce Node - 只执行一次
     let do_once = GenericNode::new_prototype("do_once", "Do Once");
     do_once.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    do_once.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
+    do_once.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
     do_once.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     do_once.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Already Done"));
 
@@ -488,7 +488,7 @@ pub fn register(registry: &NodeRegistry) {
     // 12. FlipFlop Node - 触发器（交替执行）
     let flip_flop = GenericNode::new_prototype("flip_flop", "Flip Flop");
     flip_flop.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    flip_flop.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
+    flip_flop.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
     flip_flop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "A"));
     flip_flop.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "B"));
 
@@ -530,11 +530,11 @@ pub fn register(registry: &NodeRegistry) {
     // 13. Branch Node - 简单的条件分支（类似三元运算符）
     let branch = GenericNode::new_prototype("branch", "Branch");
     branch.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    branch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
-    branch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "TrueValue", PinTypeDesc::any()));
-    branch.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "FalseValue", PinTypeDesc::any()));
+    branch.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Condition", PinTypeDesc::concrete(ValueType::Boolean)));
+    branch.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "TrueValue", PinTypeDesc::any()));
+    branch.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "FalseValue", PinTypeDesc::any()));
     branch.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    branch.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", PinTypeDesc::any()));
+    branch.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", PinTypeDesc::any()));
 
     branch.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Branch node: starting execution".to_string());
@@ -566,11 +566,11 @@ pub fn register(registry: &NodeRegistry) {
     // 14. ForEach Node - 遍历数组
     let for_each = GenericNode::new_prototype("for_each", "For Each");
     for_each.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    for_each.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::any().array()));
+    for_each.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::any().array()));
     for_each.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Loop Body"));
     for_each.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Completed"));
-    for_each.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Item", PinTypeDesc::any()));
-    for_each.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Index", PinTypeDesc::concrete(ValueType::Float64)));
+    for_each.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Item", PinTypeDesc::any()));
+    for_each.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Index", PinTypeDesc::concrete(ValueType::Float64)));
 
     for_each.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("ForEach node: starting execution".to_string());
@@ -620,7 +620,7 @@ pub fn register(registry: &NodeRegistry) {
     // 15. Parallel Node - 并行执行
     let parallel = GenericNode::new_prototype("parallel", "Parallel");
     parallel.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    parallel.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "WaitForAll", PinTypeDesc::concrete(ValueType::Boolean)));
+    parallel.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "WaitForAll", PinTypeDesc::concrete(ValueType::Boolean)));
     parallel.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Branch A"));
     parallel.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Branch B"));
     parallel.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Branch C"));
@@ -689,8 +689,8 @@ pub fn register(registry: &NodeRegistry) {
     // 16. Throttle Node - 限流控制
     let throttle = GenericNode::new_prototype("throttle", "Throttle");
     throttle.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-    throttle.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "IntervalMs", PinTypeDesc::concrete(ValueType::Float64)));
-    throttle.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
+    throttle.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "IntervalMs", PinTypeDesc::concrete(ValueType::Float64)));
+    throttle.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Reset", PinTypeDesc::concrete(ValueType::Boolean)));
     throttle.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
     throttle.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Throttled"));
 
@@ -748,10 +748,10 @@ pub fn register(registry: &NodeRegistry) {
     counter.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Increment"));
     counter.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Decrement"));
     counter.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Reset"));
-    counter.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
-    counter.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "ResetValue", PinTypeDesc::concrete(ValueType::Float64)));
+    counter.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Step", PinTypeDesc::concrete(ValueType::Float64)));
+    counter.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "ResetValue", PinTypeDesc::concrete(ValueType::Float64)));
     counter.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
-    counter.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
+    counter.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
 
     counter.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Counter node: starting execution".to_string());
@@ -810,11 +810,11 @@ pub fn register(registry: &NodeRegistry) {
     timer.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Start"));
     timer.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Stop"));
     timer.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "Reset"));
-    timer.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Duration", PinTypeDesc::concrete(ValueType::Float64)));
-    timer.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Loop", PinTypeDesc::concrete(ValueType::Boolean)));
+    timer.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Duration", PinTypeDesc::concrete(ValueType::Float64)));
+    timer.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Loop", PinTypeDesc::concrete(ValueType::Boolean)));
     timer.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Tick"));
     timer.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Finished"));
-    timer.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "ElapsedTime", PinTypeDesc::concrete(ValueType::Float64)));
+    timer.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "ElapsedTime", PinTypeDesc::concrete(ValueType::Float64)));
 
     timer.set_flow_processor(Box::new(|ctx, node| {
         ctx.log("Timer node: starting execution".to_string());

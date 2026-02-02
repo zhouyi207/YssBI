@@ -13,19 +13,19 @@ pub fn register(registry: &NodeRegistry) {
             // 🔑 创建类型变量，A、B、Result 共享同一个类型变量
             let type_var = TypeVarId::new();
             
-            node.add_input(GenericInDataPin::new(
+            node.add_in_data_pin(GenericInDataPin::new(
                 uuid::Uuid::nil(),
                 $p1,
                 PinTypeDesc::type_var_with_constraints(type_var, $constraints.clone())
             ));
             
-            node.add_input(GenericInDataPin::new(
+            node.add_in_data_pin(GenericInDataPin::new(
                 uuid::Uuid::nil(),
                 $p2,
                 PinTypeDesc::type_var(type_var)
             ));
             
-            node.add_output(GenericOutDataPin::new(
+            node.add_out_data_pin(GenericOutDataPin::new(
                 uuid::Uuid::nil(),
                 "Result",
                 PinTypeDesc::type_var(type_var)
@@ -107,13 +107,13 @@ pub fn register(registry: &NodeRegistry) {
     // Not 节点
     let not_node = GenericNode::new_prototype("not", "Not (!)");
     
-    not_node.add_input(GenericInDataPin::new(
+    not_node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "In",
         PinTypeDesc::concrete(crate::executor::value::ValueType::Boolean)
     ));
     
-    not_node.add_output(GenericOutDataPin::new(
+    not_node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Out",
         PinTypeDesc::concrete(crate::executor::value::ValueType::Boolean)

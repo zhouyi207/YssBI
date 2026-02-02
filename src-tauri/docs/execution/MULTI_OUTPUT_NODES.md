@@ -144,7 +144,7 @@ data_cache["divmod_remainder_pin_id"] = 2
 
 ```rust
 let node = GenericNode::new_prototype("min_max", "Min Max");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", "array"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", "array"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Min", "number"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Max", "number"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Average", "number"));
@@ -171,8 +171,8 @@ node.set_data_processor(Box::new(|ctx, node, pin_id| {
 
 ```rust
 let node = GenericNode::new_prototype("split_string", "Split String");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", "string"));
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Delimiter", "string"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Input", "string"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Delimiter", "string"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "First", "string"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Second", "string"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Rest", "string"));
@@ -201,7 +201,7 @@ node.set_data_processor(Box::new(|ctx, node, pin_id| {
 
 ```rust
 let node = GenericNode::new_prototype("get_object_props", "Get Object Properties");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Object", "object"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Object", "object"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Name", "string"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Age", "number"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Email", "string"));

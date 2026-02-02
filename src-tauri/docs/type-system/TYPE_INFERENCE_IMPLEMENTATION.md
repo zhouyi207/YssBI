@@ -89,7 +89,7 @@ let value_input = GenericInDataPin::new_with_type_desc(
     PinTypeDesc::unknown()  // 🔑 关键：Unknown 类型
 );
 
-print_node.add_input(value_input);
+print_node.add_in_data_pin(value_input);
 ```
 
 **连接后**：
@@ -428,7 +428,7 @@ let value_input = GenericInDataPin::new_with_type_desc(
     "Value",
     PinTypeDesc::unknown()  // Unknown 类型，等待推断
 );
-print_node.add_input(value_input);
+print_node.add_in_data_pin(value_input);
 
 // 2. Add 节点（类型变量 + 约束）
 let add_node = GenericNode::new_prototype("add", "Add");
@@ -455,8 +455,8 @@ let result_output = GenericOutDataPin::new_with_type_desc(
     PinTypeDesc::type_var(type_var)  // 共享类型变量
 );
 
-add_node.add_input(a_input);
-add_node.add_input(b_input);
+add_node.add_in_data_pin(a_input);
+add_node.add_in_data_pin(b_input);
 add_node.add_output(result_output);
 
 // 3. 注册节点并建立连接

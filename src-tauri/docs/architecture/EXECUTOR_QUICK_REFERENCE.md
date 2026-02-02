@@ -15,7 +15,7 @@
 
 ```rust
 let node = GenericNode::new_prototype("node_type", "Display Name");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Input", "type"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Input", "type"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Output", "type"));
 
 node.set_data_processor(Box::new(|ctx, node, _pin_id| {
@@ -44,7 +44,7 @@ node.set_flow_processor(Box::new(|ctx, node| {
 ```rust
 let node = GenericNode::new_prototype("node_type", "Display Name");
 node.add_in_exec_pin(GenericInExecPin::new(uuid::Uuid::nil(), "In"));
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Data", "type"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Data", "type"));
 node.add_out_exec_pin(GenericOutExecPin::new(uuid::Uuid::nil(), "Out"));
 
 node.set_flow_processor(Box::new(|ctx, node| {
@@ -82,7 +82,7 @@ let model = node.execution_model();
 let cacheable = model.is_cacheable();
 
 // 添加 Pin
-node.add_input(pin);
+node.add_in_data_pin(pin);
 node.add_output(pin);
 node.add_in_exec_pin(pin);
 node.add_out_exec_pin(pin);

@@ -39,12 +39,12 @@ fn test_pin_ordering() {
 
     // 按特定顺序添加 Pin
     node.add_in_exec_pin(exec_in);
-    node.add_input(data_in1);
-    node.add_input(data_in2);
+    node.add_in_data_pin(data_in1);
+    node.add_in_data_pin(data_in2);
 
     node.add_out_exec_pin(exec_out);
-    node.add_output(data_out1);
-    node.add_output(data_out2);
+    node.add_out_data_pin(data_out1);
+    node.add_out_data_pin(data_out2);
 
     // 验证顺序
     let input_info = node.get_ordered_input_info();
@@ -77,17 +77,17 @@ fn test_pin_reordering() {
     let node = GenericNode::new_prototype("test_node", "Test Node");
 
     // 添加一些输入 Pin
-    let pin1 = node.add_input(GenericInDataPin::new(
+    let pin1 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "First",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    let pin2 = node.add_input(GenericInDataPin::new(
+    let pin2 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "Second",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let pin3 = node.add_input(GenericInDataPin::new(
+    let pin3 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "Third",
         PinTypeDesc::concrete(ValueType::Boolean),
@@ -121,17 +121,17 @@ fn test_pin_removal_updates_order() {
     let node = GenericNode::new_prototype("test_node", "Test Node");
 
     // 添加一些输入 Pin
-    let pin1 = node.add_input(GenericInDataPin::new(
+    let pin1 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "First",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    let pin2 = node.add_input(GenericInDataPin::new(
+    let pin2 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "Second",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let pin3 = node.add_input(GenericInDataPin::new(
+    let pin3 = node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::new_v4(),
         "Third",
         PinTypeDesc::concrete(ValueType::Boolean),
@@ -178,9 +178,9 @@ fn test_serialization_order() {
     );
 
     node.add_in_exec_pin(exec_in);
-    node.add_input(data_in);
+    node.add_in_data_pin(data_in);
     node.add_out_exec_pin(exec_out);
-    node.add_output(data_out);
+    node.add_out_data_pin(data_out);
 
     // 序列化节点
     let serialized = serde_json::to_string(&node).expect("Failed to serialize node");

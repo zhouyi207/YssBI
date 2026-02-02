@@ -127,7 +127,7 @@ impl ExecutionContext {
                     PinTypeDesc::concrete(ValueType::from_string(&pin_data.pin_type))
                 );
                 let pin_id = pin.id();
-                node.add_input(pin);
+                node.add_in_data_pin(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
                 self.data_pin_id_to_runtime_pin_id
                     .insert(pin_data.id.clone(), pin_id);
@@ -153,7 +153,7 @@ impl ExecutionContext {
                     PinTypeDesc::concrete(ValueType::from_string(&pin_data.pin_type))
                 );
                 let pin_id = pin.id();
-                node.add_output(pin);
+                node.add_out_data_pin(pin);
                 self.pin_to_node.insert(pin_id, runtime_id);
                 self.data_pin_id_to_runtime_pin_id
                     .insert(pin_data.id.clone(), pin_id);

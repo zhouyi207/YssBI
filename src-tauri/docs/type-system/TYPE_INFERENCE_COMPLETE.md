@@ -83,7 +83,7 @@ let value_input = GenericInDataPin::new_with_type_desc(
     PinTypeDesc::unknown()  // 🔑 Unknown 类型
 );
 
-print_node.add_input(value_input);
+print_node.add_in_data_pin(value_input);
 ```
 
 **连接后**：

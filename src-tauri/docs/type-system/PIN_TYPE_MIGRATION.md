@@ -121,8 +121,8 @@ cargo test
 ### 修改前
 ```rust
 let node = GenericNode::new_prototype("add", "Add");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "A", "number"));
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "B", "number"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "A", "number"));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "B", "number"));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", "number"));
 ```
 
@@ -131,7 +131,7 @@ node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", "number"));
 use crate::executor::value::ValueType;
 
 let node = GenericNode::new_prototype("add", "Add");
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "A", ValueType::Float64));
-node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "B", ValueType::Float64));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "A", ValueType::Float64));
+node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "B", ValueType::Float64));
 node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Result", ValueType::Float64));
 ```

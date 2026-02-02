@@ -1,8 +1,12 @@
+//! 设置相关命令
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
+
+// ==================== 数据结构 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -118,12 +122,16 @@ impl Default for AppSettings {
     }
 }
 
+// ==================== 辅助函数 ====================
+
 fn get_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     path.push("settings.json");
     Ok(path)
 }
+
+// ==================== Tauri 命令 ====================
 
 #[tauri::command]
 pub fn load_settings(app: AppHandle) -> AppSettings {

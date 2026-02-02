@@ -12,24 +12,24 @@ fn test_multi_output_node_structure() {
     let node = GenericNode::new_prototype("divmod", "Divide and Modulo");
 
     // 添加输入
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Dividend",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Divisor",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
 
     // 添加多个输出
-    let quotient_pin = node.add_output(GenericOutDataPin::new(
+    let quotient_pin = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Quotient",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let remainder_pin = node.add_output(GenericOutDataPin::new(
+    let remainder_pin = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Remainder",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -58,22 +58,22 @@ fn test_multi_output_node_structure() {
 fn test_multi_output_node_pin_names() {
     let node = GenericNode::new_prototype("divmod", "Divide and Modulo");
 
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Dividend",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Divisor",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Quotient",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Remainder",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -96,22 +96,22 @@ fn test_multi_output_data_processor() {
     // 创建一个 DivMod 节点并设置数据处理器
     let node = GenericNode::new_prototype("divmod", "Divide and Modulo");
 
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Dividend",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Divisor",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Quotient",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Remainder",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -128,12 +128,12 @@ fn test_cache_per_output_pin() {
 
     // 创建节点
     let node = GenericNode::new_prototype("test_multi", "Test Multi Output");
-    let out1 = node.add_output(GenericOutDataPin::new(
+    let out1 = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Out1",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let out2 = node.add_output(GenericOutDataPin::new(
+    let out2 = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Out2",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -157,27 +157,27 @@ fn test_multi_output_node_example_split_string() {
     // 示例：SplitString 节点，将字符串分割为多个部分
     let node = GenericNode::new_prototype("split_string", "Split String");
 
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Input",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Delimiter",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "First",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Second",
         PinTypeDesc::concrete(ValueType::String),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Rest",
         PinTypeDesc::concrete(ValueType::String),
@@ -192,22 +192,22 @@ fn test_multi_output_node_example_min_max() {
     // 示例：MinMax 节点，同时返回最小值和最大值
     let node = GenericNode::new_prototype("min_max", "Min Max");
 
-    node.add_input(GenericInDataPin::new(
+    node.add_in_data_pin(GenericInDataPin::new(
         uuid::Uuid::nil(),
         "Array",
         PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any))),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Min",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Max",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    node.add_output(GenericOutDataPin::new(
+    node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "Average",
         PinTypeDesc::concrete(ValueType::Float64),
@@ -221,17 +221,17 @@ fn test_output_pin_independence() {
     // 验证多个输出 Pin 的独立性
     let node = GenericNode::new_prototype("test", "Test");
 
-    let pin1 = node.add_output(GenericOutDataPin::new(
+    let pin1 = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "A",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let pin2 = node.add_output(GenericOutDataPin::new(
+    let pin2 = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "B",
         PinTypeDesc::concrete(ValueType::Float64),
     ));
-    let pin3 = node.add_output(GenericOutDataPin::new(
+    let pin3 = node.add_out_data_pin(GenericOutDataPin::new(
         uuid::Uuid::nil(),
         "C",
         PinTypeDesc::concrete(ValueType::Float64),

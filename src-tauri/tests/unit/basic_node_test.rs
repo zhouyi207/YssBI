@@ -31,7 +31,7 @@ fn test_simple_pin_addition() {
     );
     let pin_id = pin.id();
 
-    node.add_input(pin);
+    node.add_in_data_pin(pin);
 
     // 验证 Pin 被正确添加
     let input_order = node.get_input_order();

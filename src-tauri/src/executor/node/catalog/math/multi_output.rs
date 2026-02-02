@@ -17,10 +17,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("divmod", "Divide and Modulo");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Dividend", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Divisor", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Quotient", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Remainder", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Dividend", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Divisor", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Quotient", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Remainder", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let dividend = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
@@ -58,10 +58,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("min_max", "Min Max Average");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Min", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Max", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Average", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Min", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Max", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Average", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let array = ctx.get_pin_value(&node.inputs[0].id);
@@ -117,9 +117,9 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("sin_cos", "Sin and Cos");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Sin", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Cos", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Sin", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Cos", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let angle = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
@@ -150,10 +150,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("polar_to_cartesian", "Polar to Cartesian");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Radius", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "X", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Y", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Radius", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "X", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Y", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let radius = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
@@ -185,10 +185,10 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("cartesian_to_polar", "Cartesian to Polar");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "X", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Y", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Radius", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "X", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Y", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Radius", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Angle", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let x = ctx.get_pin_value(&node.inputs[0].id).as_f64().unwrap_or(0.0);
@@ -220,12 +220,12 @@ pub fn register(registry: &NodeRegistry) {
     // ============================================================================
     {
         let node = GenericNode::new_prototype("statistics", "Statistics");
-        node.add_input(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Sum", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Mean", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "Median", PinTypeDesc::concrete(ValueType::Float64)));
-        node.add_output(GenericOutDataPin::new(uuid::Uuid::nil(), "StdDev", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_in_data_pin(GenericInDataPin::new(uuid::Uuid::nil(), "Array", PinTypeDesc::concrete(ValueType::List(Box::new(ValueType::Any)))));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Count", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Sum", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Mean", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "Median", PinTypeDesc::concrete(ValueType::Float64)));
+        node.add_out_data_pin(GenericOutDataPin::new(uuid::Uuid::nil(), "StdDev", PinTypeDesc::concrete(ValueType::Float64)));
         
         node.set_data_processor(Box::new(|ctx, node, pin_id| {
             let array = ctx.get_pin_value(&node.inputs[0].id);
