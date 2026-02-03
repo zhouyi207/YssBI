@@ -1,4 +1,5 @@
 //! 数据类型定义
+use super::DataValue;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -13,15 +14,15 @@ pub enum ValueType {
     Float32,
     Float64,
     String,
-    
+
     // 复合类型
     Array(Box<ValueType>),
     Object,
-    
+
     // 特殊类型
     Any,
     Null,
-    
+
     // 数据框架
     DataFrame,
 }
@@ -44,7 +45,19 @@ impl fmt::Display for ValueType {
     }
 }
 
+/// todo
 impl ValueType {
+    pub fn default_value(&self) -> Option<DataValue> {
+        match self {
+            ValueType::Float64 => Some(DataValue::Float64(0.0)),
+            ValueType::Int64 => Some(DataValue::Int64(0)),
+            ValueType::Boolean => Some(DataValue::Boolean(false)),
+            ValueType::String => Some(DataValue::String(String::new())),
+            ValueType::Null => None,
+            _ => None,
+        }
+    }
+
     /// 检查类型是否为数值类型
     pub fn is_numeric(&self) -> bool {
         matches!(
@@ -77,10 +90,10 @@ impl ValueType {
 pub enum DataType {
     /// 具体类型
     Concrete(ValueType),
-    
+
     /// 类型变量（用于泛型）
     TypeVar(TypeVarId),
-    
+
     /// 未知类型
     Unknown,
 }
@@ -122,16 +135,16 @@ impl Default for TypeVarId {
 pub enum TypeConstraint {
     /// 数值类型约束
     Numeric,
-    
+
     /// 可比较约束
     Comparable,
-    
+
     /// 可迭代约束
     Iterable,
-    
+
     /// 可序列化约束
     Serializable,
-    
+
     /// 指定类型集合
     OneOf(Vec<ValueType>),
 }

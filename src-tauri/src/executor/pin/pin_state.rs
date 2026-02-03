@@ -41,3 +41,10 @@ impl Default for ExecPinState {
         Self::Idle
     }
 }
+
+/// Pin 状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PinState {
+    Data(DataPinState),
+    Exec(ExecPinState),
+}

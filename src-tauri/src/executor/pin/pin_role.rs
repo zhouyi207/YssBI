@@ -5,104 +5,97 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Pin 语义角色
-///
-/// 定义 Pin 在节点逻辑中的语义作用，而不是通过名称或位置。
+/// 控制流角色
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum PinRole {
-    // ===== 通用角色 =====
-    /// 主输入
-    PrimaryInput,
-    /// 主输出
-    PrimaryOutput,
-    
-    // ===== 控制流角色 =====
-    /// 执行输入
+pub enum ExecRole {
+    /// 主执行输入
     ExecIn,
-    /// 执行输出（默认）
+    /// 主执行输出
     ExecOut,
-    /// 条件
-    Condition,
-    /// True 分支
-    TrueBranch,
-    /// False 分支
-    FalseBranch,
-    
-    // ===== 数学运算角色 =====
-    /// 操作数（支持多个，通过 Group 区分）
-    Operand,
-    /// 运算结果
-    Result,
-    
-    // ===== 序列/步骤角色 =====
-    /// 序列步骤（支持多个）
-    Step(u32),
-    
-    // ===== 变量角色 =====
-    /// 变量引用
-    VariableRef,
-    /// 变量值
-    VariableValue,
-    
-    // ===== 动态角色 =====
-    /// 动态 Pin（通过 Group 标识）
-    Dynamic(String),
-    
-    // ===== 自定义角色 =====
-    /// 自定义语义
+    /// 条件分支 - True 路径
+    ExecTrue,
+    /// 条件分支 - False 路径
+    ExecFalse,
+    /// 循环体执行
+    ExecLoopBody,
+    /// 循环完成
+    ExecLoopComplete,
+    /// 序列步骤（如 Sequence 的多个执行输出）
+    Steps(usize),
+    /// 分支情况（如 Switch 的多个分支）
+    Cases,
+    /// 自定义语义角色
     Custom(String),
 }
 
-impl PinRole {
-    /// 创建操作数角色
-    pub fn operand() -> Self {
-        PinRole::Operand
-    }
-
-    /// 创建步骤角色
-    pub fn step(index: u32) -> Self {
-        PinRole::Step(index)
-    }
-
-    /// 创建动态角色
-    pub fn dynamic(group: impl Into<String>) -> Self {
-        PinRole::Dynamic(group.into())
-    }
-
-    /// 创建自定义角色
-    pub fn custom(name: impl Into<String>) -> Self {
-        PinRole::Custom(name.into())
-    }
-}
-
-/// Pin 分组
-///
-/// 用于将多个相同角色的 Pin 组织在一起（如 Add 的多个 Operand）
+/// 数据流角色
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PinGroup(pub String);
-
-impl PinGroup {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    pub fn operands() -> Self {
-        Self("operands".to_string())
-    }
-
-    pub fn steps() -> Self {
-        Self("steps".to_string())
-    }
+pub enum DataRole {
+    /// 条件值
+    Condition,
+    /// 主输入值
+    Input(usize),
+    /// 主输出值
+    Output(usize),
+    /// 结果值
+    Result,
+    /// 错误信息
+    Error,
+    /// 自定义语义角色
+    Custom(String),
 }
 
-impl From<&str> for PinGroup {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
-    }
+/// Pin 语义角色
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PinRole {
+    /// 执行角色
+    Exec(ExecRole),
+    /// 数据角色
+    Data(DataRole),
 }
 
-impl From<String> for PinGroup {
-    fn from(s: String) -> Self {
-        Self(s)
+impl PinRole {
+    /// 是否是 exec pin role
+    pub fn is_exec(&self) -> bool {
+        matches!(self, PinRole::Exec(_))
+    }
+
+    /// 是否是 data pin role
+    pub fn is_data(&self) -> bool {
+        matches!(self, PinRole::Data(_))
+    }
+
+    /// 获取 role 的 family name
+    pub fn family(&self) -> &str {
+        match self {
+            PinRole::Exec(item) => match item {
+                ExecRole::ExecIn => "exec.in",
+                ExecRole::ExecOut => "exec.out",
+                ExecRole::ExecTrue => "exec.true",
+                ExecRole::ExecFalse => "exec.false",
+                ExecRole::ExecLoopBody => "exec.loop.body",
+                ExecRole::ExecLoopComplete => "exec.loop.complete",
+                ExecRole::Steps(_) => "exec.steps",
+                ExecRole::Cases => "exec.cases",
+                ExecRole::Custom(name) => name.as_str(),
+            },
+            PinRole::Data(item) => match item {
+                DataRole::Condition => "data.condition",
+                DataRole::Input(_) => "data.in",
+                DataRole::Output(_) => "data.out",
+                DataRole::Result => "data.result",
+                DataRole::Error => "data.error",
+                DataRole::Custom(name) => name.as_str(),
+            },
+        }
+    }
+
+    /// 获取 role 的 index，仅对带 index 的 role 有效
+    pub fn index(&self) -> Option<usize> {
+        match self {
+            PinRole::Data(DataRole::Input(i) | DataRole::Output(i)) => Some(*i),
+            PinRole::Exec(ExecRole::Steps(i)) => Some(*i),
+            _ => None,
+        }
     }
 }

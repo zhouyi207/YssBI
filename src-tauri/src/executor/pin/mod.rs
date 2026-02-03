@@ -8,6 +8,7 @@ pub mod pin_role;
 pub mod pin_definition;
 pub mod pin_instance;
 pub mod pin_state;
+pub mod pin_payload;
 
 pub use pin_id::*;
 pub use pin_role::*;

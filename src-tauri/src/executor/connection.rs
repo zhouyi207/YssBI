@@ -3,7 +3,8 @@
 //! ConnectionManager 是连接关系的唯一真实来源（Single Source of Truth）。
 //! Pin 不存储连接信息，所有连接查询都通过 ConnectionManager。
 
-use crate::executor::pin::{NodeId, PinId};
+use crate::executor::node::NodeId;
+use crate::executor::pin::PinId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
@@ -24,13 +25,13 @@ impl Connection {
 pub struct ConnectionManager {
     /// 所有连接（from_pin -> [to_pins]）
     connections: Mutex<HashMap<PinId, Vec<PinId>>>,
-    
+
     /// 反向索引（to_pin -> from_pin）
     reverse_connections: Mutex<HashMap<PinId, PinId>>,
-    
+
     /// Pin 到节点的映射
     pin_to_node: Mutex<HashMap<PinId, NodeId>>,
-    
+
     /// 节点到 Pin 的映射
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
 }
