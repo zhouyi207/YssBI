@@ -6,6 +6,21 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+// ==================== Connection DTO ====================
+
+/// Connection 数据传输对象
+///
+/// 表示两个 Pin 之间的连接关系（单向：从 source 到 target）
+/// 这是连接关系的唯一真实来源（Single Source of Truth）
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConnectionDto {
+    pub id: String,
+    #[serde(rename = "sourcePin")]
+    pub source_pin: String,
+    #[serde(rename = "targetPin")]
+    pub target_pin: String,
+}
+
 // ==================== Pin DTO ====================
 
 /// Pin 数据传输对象
@@ -17,6 +32,10 @@ pub struct PinDto {
     pub name: String,
     #[serde(rename = "type")]
     pub pin_type: String,
+    
+    // links 字段不再序列化 - 连接关系由 Connection 对象管理
+    // 运行时可能存在此字段，但不会被序列化到 JSON
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub links: Vec<String>,
     
     /// 默认值（来自节点定义）
@@ -108,4 +127,7 @@ pub struct GraphDto {
     pub version: String,
     pub nodes: Vec<NodeDto>,
     pub variables: Option<std::collections::HashMap<String, VariableDto>>,
+    /// 连接关系数组（新架构）
+    #[serde(default)]
+    pub connections: Vec<ConnectionDto>,
 }

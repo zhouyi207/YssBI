@@ -6,7 +6,7 @@ pub mod dto;
 pub mod io;
 
 // 重新导出常用的 DTO
-pub use dto::{GraphDto, NodeDto, PinDefDto, PinDto, VariableDto};
+pub use dto::{ConnectionDto, GraphDto, NodeDto, PinDefDto, PinDto, VariableDto};
 
 use crate::schema::VariableDefinition;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,9 @@ pub struct SerializedPin {
     pub name: String,
     #[serde(rename = "type")]
     pub pin_type: String,
-    #[serde(default)]
+    
+    // links 字段不再序列化 - 连接关系由 Connection 对象管理
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub links: Vec<String>,
     
     /// 默认值（来自节点定义，通常不保存）
@@ -128,6 +130,9 @@ pub struct SubGraphData {
     pub sub_type: SubGraphType,
     #[serde(default)]
     pub nodes: Vec<SerializedNode>,
+    /// 连接关系（单一真实来源）
+    #[serde(default)]
+    pub connections: Vec<ConnectionDto>,
     #[serde(default)]
     pub canvas: CanvasState,
     /// 局部变量

@@ -39,6 +39,7 @@ pub fn serialize_subgraph(
         name,
         sub_type,
         nodes,
+        connections: Vec::new(),  // 初始化为空的连接数组
         canvas,
         variables,
         inputs,

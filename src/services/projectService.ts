@@ -326,6 +326,28 @@ export class ProjectService {
     }
 
     /**
+     * 批量创建节点并保留连接（用于复制/粘贴）
+     * @param subgraphId 子图ID
+     * @param nodes 节点列表
+     * @param connections 连接列表
+     * @returns 创建后的节点列表（新ID）
+     */
+    static async createNodesWithConnections(subgraphId: string, nodes: any[], connections: any[]): Promise<any[]> {
+        console.log('[ProjectService.createNodesWithConnections] Creating nodes with connections:', { 
+            subgraphId, 
+            nodesCount: nodes.length, 
+            connectionsCount: connections.length 
+        });
+        const newNodes: any[] = await invoke("create_nodes_with_connections", { 
+            subgraphId, 
+            nodes, 
+            connections 
+        });
+        console.log('[ProjectService.createNodesWithConnections] Nodes created successfully with connections:', newNodes);
+        return newNodes;
+    }
+
+    /**
      * 删除单个节点
      * @param subgraphId 子图ID
      * @param nodeId 节点ID
@@ -361,6 +383,71 @@ export class ProjectService {
         const nodes = await invoke("disconnect_pin", { subgraphId, pinId });
         console.log('[ProjectService.disconnectPin] Disconnection successful');
         return nodes as any[];
+    }
+
+    // ==================== Connection 管理 ====================
+
+    /**
+     * 创建连接
+     * @param subgraphId 子图ID
+     * @param sourcePinId 源 Pin ID（输出）
+     * @param targetPinId 目标 Pin ID（输入）
+     * @returns 创建的连接对象
+     */
+    static async createConnection(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<any> {
+        console.log('[ProjectService.createConnection] Creating connection:', { subgraphId, sourcePinId, targetPinId });
+        const connection = await invoke("create_connection", { subgraphId, sourcePinId, targetPinId });
+        console.log('[ProjectService.createConnection] Connection created:', connection);
+        return connection;
+    }
+
+    /**
+     * 删除连接
+     * @param subgraphId 子图ID
+     * @param connectionId 连接ID
+     */
+    static async deleteConnection(subgraphId: string, connectionId: string): Promise<void> {
+        console.log('[ProjectService.deleteConnection] Deleting connection:', { subgraphId, connectionId });
+        await invoke("delete_connection", { subgraphId, connectionId });
+        console.log('[ProjectService.deleteConnection] Connection deleted');
+    }
+
+    /**
+     * 获取所有连接
+     * @param subgraphId 子图ID
+     * @returns 连接列表
+     */
+    static async getConnections(subgraphId: string): Promise<any[]> {
+        console.log('[ProjectService.getConnections] Getting connections:', { subgraphId });
+        const connections = await invoke("get_connections", { subgraphId });
+        console.log('[ProjectService.getConnections] Got connections:', connections.length);
+        return connections as any[];
+    }
+
+    /**
+     * 删除 Pin 的所有连接
+     * @param subgraphId 子图ID
+     * @param pinId Pin ID
+     * @returns 被删除的连接ID列表
+     */
+    static async deleteConnectionsForPin(subgraphId: string, pinId: string): Promise<string[]> {
+        console.log('[ProjectService.deleteConnectionsForPin] Deleting connections for pin:', { subgraphId, pinId });
+        const removedIds = await invoke("delete_connections_for_pin", { subgraphId, pinId });
+        console.log('[ProjectService.deleteConnectionsForPin] Deleted connections:', removedIds);
+        return removedIds as string[];
+    }
+
+    /**
+     * 删除节点的所有连接
+     * @param subgraphId 子图ID
+     * @param nodeId 节点ID
+     * @returns 被删除的连接ID列表
+     */
+    static async deleteConnectionsForNode(subgraphId: string, nodeId: string): Promise<string[]> {
+        console.log('[ProjectService.deleteConnectionsForNode] Deleting connections for node:', { subgraphId, nodeId });
+        const removedIds = await invoke("delete_connections_for_node", { subgraphId, nodeId });
+        console.log('[ProjectService.deleteConnectionsForNode] Deleted connections:', removedIds);
+        return removedIds as string[];
     }
 
 

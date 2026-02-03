@@ -67,11 +67,22 @@ export interface PinDefinition {
   isArray?: boolean;
 }
 
+/**
+ * Connection represents a directed relationship between two pins
+ * This is the single source of truth for all connection relationships
+ */
+export interface Connection {
+  id: string;           // Unique identifier for the connection
+  sourcePin: string;    // ID of the source (output) pin
+  targetPin: string;    // ID of the target (input) pin
+}
+
 export interface SubGraphData {
   id: string;
   name: string;
   type: "event" | "function" | "macro";
   nodes: any[];
+  connections: Connection[];  // NEW: Separate connections array
   canvas: CanvasState;
   /** 局部变量（函数/宏作用域） */
   variables: Record<string, VariableDefinition>;

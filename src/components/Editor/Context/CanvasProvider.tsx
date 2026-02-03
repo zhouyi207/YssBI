@@ -722,19 +722,30 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       return clone;
     });
 
-    // 序列化为后端格式
+    // 序列化为后端格式（会自动提取内部连接）
     const serializedData = serializeSubGraph("temp", "temp", "event", tempNodes, { x: 0, y: 0, scale: 1 }, {}, [], []);
 
     try {
       console.log('[CanvasProvider] Pasting nodes via backend...');
-      const newSerializedNodes = await ProjectService.createNodes(tid, serializedData.nodes);
+      console.log(`[CanvasProvider] Pasting ${serializedData.nodes.length} nodes with ${serializedData.connections.length} connections`);
+      
+      // 使用新的 createNodesWithConnections 方法，一次性创建节点和连接
+      const newSerializedNodes = await ProjectService.createNodesWithConnections(
+        tid, 
+        serializedData.nodes, 
+        serializedData.connections
+      );
 
-      // 反序列化回 BaseNode
+      // 获取更新后的连接列表
+      const updatedConnections = await ProjectService.getConnections(tid);
+
+      // 反序列化回 BaseNode（包含更新后的连接）
       const tempResData: SubGraphData = {
         id: tid,
         name: "temp",
         type: "event",
         nodes: newSerializedNodes,
+        connections: updatedConnections,  // 使用后端返回的连接
         canvas: { x: 0, y: 0, scale: 1 },
         variables: {},
         inputs: [],
@@ -745,10 +756,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       setNodes((prev) => [...prev, ...newBaseNodes]);
       setSelectedNodeIds(newBaseNodes.map(n => n.id));
 
+      console.log('[CanvasProvider] Paste completed successfully with connections preserved');
     } catch (e) {
       console.error('[CanvasProvider] Failed to paste nodes:', e);
+      showToast("粘贴失败", "error", 2000);
     }
-  }, [saveHistory, setNodes, setSelectedNodeIds, activeTabIdRef]);
+  }, [saveHistory, setNodes, setSelectedNodeIds, activeTabIdRef, showToast]);
 
 
   const {

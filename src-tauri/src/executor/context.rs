@@ -98,9 +98,9 @@ impl ExecutionContext {
         };
 
         // 初始化变量
-        if let Some(vars) = graph.variables {
+        if let Some(vars) = &graph.variables {
             for (id, var_data) in vars {
-                ctx.variables.insert(id, var_data.value);
+                ctx.variables.insert(id.clone(), var_data.value.clone());
             }
         }
 
@@ -111,11 +111,9 @@ impl ExecutionContext {
             }
         }
 
-        // 建立连接
-        for node_data in &graph.nodes {
-            if let Err(e) = ctx.create_connections_from_data(node_data) {
-                ctx.log(format!("[ERROR] Failed to create connections: {}", e));
-            }
+        // 建立连接（从 connections 数组）
+        if let Err(e) = ctx.create_connections_from_data(&graph) {
+            ctx.log(format!("[ERROR] Failed to create connections: {}", e));
         }
 
         ctx
@@ -198,46 +196,45 @@ impl ExecutionContext {
         Ok(runtime_id)
     }
 
-    /// 从 NodeDto 创建连接
-    fn create_connections_from_data(&mut self, node_data: &NodeDto) -> Result<(), String> {
-        // 遍历所有输出 Pin，建立连接
-        for pin_data in &node_data.outputs {
+    /// 从 GraphDto 的 connections 数组创建连接
+    fn create_connections_from_data(&mut self, graph: &GraphDto) -> Result<(), String> {
+        // 遍历 connections 数组，建立连接
+        for connection in &graph.connections {
             // 获取源 Pin 的运行时 ID
-            let from_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(&pin_data.id) {
+            let from_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(&connection.source_pin) {
                 Some(&id) => id,
                 None => {
                     self.log(format!(
-                        "[WARN] Source pin '{}' not found in runtime",
-                        pin_data.id
+                        "[WARN] Source pin '{}' not found in runtime (connection: {})",
+                        connection.source_pin, connection.id
                     ));
                     continue;
                 }
             };
 
-            // 遍历 links，建立连接
-            for target_pin_id in &pin_data.links {
-                // 获取目标 Pin 的运行时 ID
-                let to_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(target_pin_id)
-                {
-                    Some(&id) => id,
-                    None => {
-                        self.log(format!(
-                            "[WARN] Target pin '{}' not found in runtime",
-                            target_pin_id
-                        ));
-                        continue;
-                    }
-                };
-
-                // 建立连接
-                if let Err(e) = self
-                    .connection_manager
-                    .connect_by_id(from_runtime_pin_id, to_runtime_pin_id)
-                {
-                    self.log(format!("[ERROR] Failed to connect pins: {:?}", e));
-                } else {
-                    self.log(format!("[Connection] {} -> {}", pin_data.id, target_pin_id));
+            // 获取目标 Pin 的运行时 ID
+            let to_runtime_pin_id = match self.data_pin_id_to_runtime_pin_id.get(&connection.target_pin) {
+                Some(&id) => id,
+                None => {
+                    self.log(format!(
+                        "[WARN] Target pin '{}' not found in runtime (connection: {})",
+                        connection.target_pin, connection.id
+                    ));
+                    continue;
                 }
+            };
+
+            // 建立连接
+            if let Err(e) = self
+                .connection_manager
+                .connect_by_id(from_runtime_pin_id, to_runtime_pin_id)
+            {
+                self.log(format!("[ERROR] Failed to connect pins: {:?}", e));
+            } else {
+                self.log(format!(
+                    "[Connection] {} -> {} (connection: {})",
+                    connection.source_pin, connection.target_pin, connection.id
+                ));
             }
         }
         Ok(())
@@ -269,6 +266,49 @@ impl ExecutionContext {
 
     /// 执行图
     pub fn execute(&mut self) -> Result<Vec<String>, String> {
+        // 🆕 执行前验证图结构
+        let validator = crate::executor::GraphValidator::from_graph_dto(&self.original_graph);
+        if let Err(errors) = validator.validate() {
+            let mut error_messages = vec!["[ERROR] Graph validation failed:".to_string()];
+            
+            for error in errors {
+                match error {
+                    crate::executor::GraphValidationError::CycleDetected { cycle_nodes, cycle_type } => {
+                        let cycle_info = format!(
+                            "  - {} cycle detected: {} → {}",
+                            cycle_type.to_uppercase(),
+                            cycle_nodes.join(" → "),
+                            cycle_nodes.first().unwrap_or(&"?".to_string())
+                        );
+                        error_messages.push(cycle_info.clone());
+                        info!("{}", cycle_info);
+                        
+                        // 发送执行日志
+                        crate::log_exec!(
+                            crate::logging::LogLevel::Error,
+                            format!("检测到{}循环: {}", cycle_type, cycle_nodes.join(" → "))
+                        );
+                    }
+                    crate::executor::GraphValidationError::IsolatedNodes { node_ids } => {
+                        let isolated_info = format!("  - Isolated nodes: {}", node_ids.join(", "));
+                        error_messages.push(isolated_info.clone());
+                        info!("{}", isolated_info);
+                    }
+                    crate::executor::GraphValidationError::InvalidConnection { from_pin, to_pin, reason } => {
+                        let invalid_info = format!(
+                            "  - Invalid connection: {} → {} ({})",
+                            from_pin, to_pin, reason
+                        );
+                        error_messages.push(invalid_info.clone());
+                        info!("{}", invalid_info);
+                    }
+                }
+            }
+            
+            self.logs.extend(error_messages.clone());
+            return Err(error_messages.join("\n"));
+        }
+        
         self.log_graph_structure();
         
         // 🆕 发送执行开始事件

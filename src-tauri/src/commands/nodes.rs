@@ -109,6 +109,48 @@ pub fn create_nodes(
     Ok(new_nodes)
 }
 
+/// 批量创建节点并保留连接（用于复制/粘贴）
+#[tauri::command]
+pub fn create_nodes_with_connections(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    nodes: Vec<SerializedNode>,
+    connections: Vec<crate::project::ConnectionDto>,
+) -> Result<Vec<SerializedNode>, String> {
+    info!(
+        "[create_nodes_with_connections] subgraph_id={}, nodes={}, connections={}",
+        subgraph_id,
+        nodes.len(),
+        connections.len()
+    );
+    
+    let (new_nodes, _id_map) = state.create_nodes_with_connections(&subgraph_id, nodes, connections)?;
+
+    // 发送节点更新事件
+    let all_nodes = state.get_nodes(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::NodesUpdated {
+            subgraph_id: subgraph_id.clone(),
+            nodes: all_nodes,
+        },
+    );
+
+    // 发送连接更新事件
+    let all_connections = state.get_connections(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::ConnectionsUpdated {
+            subgraph_id,
+            connections: all_connections,
+        },
+    );
+
+    info!("[create_nodes_with_connections] Successfully created {} nodes with connections", new_nodes.len());
+    Ok(new_nodes)
+}
+
 /// 连接两个 Pin
 #[tauri::command]
 pub fn connect_pins(
@@ -766,4 +808,133 @@ pub fn remove_dynamic_pin(
     );
     
     Ok(())
+}
+
+
+// ==================== Connection 命令 ====================
+
+/// 创建连接
+#[tauri::command]
+pub fn create_connection(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    source_pin_id: String,
+    target_pin_id: String,
+) -> Result<crate::project::ConnectionDto, String> {
+    info!(
+        "[create_connection] subgraph_id={}, source={}, target={}",
+        subgraph_id, source_pin_id, target_pin_id
+    );
+    
+    let connection = state.create_connection(&subgraph_id, &source_pin_id, &target_pin_id)?;
+    
+    // 发送连接更新事件
+    let all_connections = state.get_connections(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::ConnectionsUpdated {
+            subgraph_id,
+            connections: all_connections,
+        },
+    );
+    
+    info!("[create_connection] Connection created successfully: {}", connection.id);
+    Ok(connection)
+}
+
+/// 删除连接
+#[tauri::command]
+pub fn delete_connection(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    connection_id: String,
+) -> Result<(), String> {
+    info!(
+        "[delete_connection] subgraph_id={}, connection_id={}",
+        subgraph_id, connection_id
+    );
+    
+    state.delete_connection(&subgraph_id, &connection_id)?;
+    
+    // 发送连接更新事件
+    let all_connections = state.get_connections(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::ConnectionsUpdated {
+            subgraph_id,
+            connections: all_connections,
+        },
+    );
+    
+    info!("[delete_connection] Connection deleted successfully");
+    Ok(())
+}
+
+/// 获取所有连接
+#[tauri::command]
+pub fn get_connections(
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+) -> Result<Vec<crate::project::ConnectionDto>, String> {
+    state.get_connections(&subgraph_id)
+}
+
+/// 删除 Pin 的所有连接
+#[tauri::command]
+pub fn delete_connections_for_pin(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    pin_id: String,
+) -> Result<Vec<String>, String> {
+    info!(
+        "[delete_connections_for_pin] subgraph_id={}, pin_id={}",
+        subgraph_id, pin_id
+    );
+    
+    let removed_ids = state.delete_connections_for_pin(&subgraph_id, &pin_id)?;
+    
+    // 发送连接更新事件
+    let all_connections = state.get_connections(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::ConnectionsUpdated {
+            subgraph_id,
+            connections: all_connections,
+        },
+    );
+    
+    info!("[delete_connections_for_pin] Deleted {} connections", removed_ids.len());
+    Ok(removed_ids)
+}
+
+/// 删除节点的所有连接
+#[tauri::command]
+pub fn delete_connections_for_node(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    subgraph_id: String,
+    node_id: String,
+) -> Result<Vec<String>, String> {
+    info!(
+        "[delete_connections_for_node] subgraph_id={}, node_id={}",
+        subgraph_id, node_id
+    );
+    
+    let removed_ids = state.delete_connections_for_node(&subgraph_id, &node_id)?;
+    
+    // 发送连接更新事件
+    let all_connections = state.get_connections(&subgraph_id)?;
+    emit_project_event(
+        &app,
+        ProjectEvent::ConnectionsUpdated {
+            subgraph_id,
+            connections: all_connections,
+        },
+    );
+    
+    info!("[delete_connections_for_node] Deleted {} connections", removed_ids.len());
+    Ok(removed_ids)
 }

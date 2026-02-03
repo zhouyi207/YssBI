@@ -267,6 +267,7 @@ fn test_event_graph_data_creation() {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
+        connections: vec![],  // No connections in this test
     };
     
     // 验证 GraphDto
@@ -348,6 +349,7 @@ fn test_event_execution_context_creation() {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
+        connections: vec![],  // No connections in this test
     };
     
     let mut context = ExecutionContext::new(graph);

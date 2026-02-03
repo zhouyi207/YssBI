@@ -78,6 +78,12 @@ pub enum ProjectEvent {
         nodes: Vec<SerializedNode>,
     },
 
+    // 连接事件
+    ConnectionsUpdated {
+        subgraph_id: String,
+        connections: Vec<crate::project::ConnectionDto>,
+    },
+
     // 局部变量事件
     LocalVariableCreated {
         subgraph_id: String,

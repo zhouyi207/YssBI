@@ -73,6 +73,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
 
     let mut nodes: Vec<NodeDto> = Vec::new();
     let mut variables: HashMap<String, VariableDto> = HashMap::new();
+    let mut connections: Vec<crate::project::ConnectionDto> = Vec::new();
 
     // 1. 收集全局变量
     for (id, var) in &data.global_variables {
@@ -155,19 +156,25 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
                     },
                 );
             }
+            
+            // 收集连接关系
+            for conn in &sub.connections {
+                connections.push(conn.clone());
+            }
         }
     }
 
     info!(
-        "[execute_project_data] Collected {} nodes and {} variables",
+        "[execute_project_data] Collected {} nodes, {} variables, and {} connections",
         nodes.len(),
-        variables.len()
+        variables.len(),
+        connections.len()
     );
     
     // 发送收集节点日志
     crate::log_exec!(
         crate::logging::LogLevel::Info,
-        format!("收集了 {} 个节点和 {} 个变量", nodes.len(), variables.len())
+        format!("收集了 {} 个节点、{} 个变量和 {} 个连接", nodes.len(), variables.len(), connections.len())
     );
 
     // 打印变量名，方便调试
@@ -183,6 +190,7 @@ fn execute_project_data(app: AppHandle, data: ProjectData) -> Result<Vec<String>
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
+        connections,
     };
 
     // 4. 执行

@@ -39,16 +39,23 @@ export function useCanvasInteraction({
 
         try {
             console.log(`[useCanvasInteraction] Connecting pins via backend: ${a} -> ${b}`);
-            // 直接调用后端 API 进行连接
+            
+            // 调用后端 API 进行连接
             const updatedSerializedNodes = await ProjectService.connectPins(tid, a, b);
+            
+            // 获取最新的连接列表
+            const connections = await ProjectService.getConnections(tid);
+            
+            console.log(`[useCanvasInteraction] Connection created, got ${connections.length} connections`);
 
             // 将返回的 SerializedNode[] 转换为 BaseNode[]
-            // 我们构造一个临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
+            // 构造临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
             const tempSubGraph: SubGraphData = {
                 id: tid,
                 name: "temp",
-                type: "event", // 这里的类型不重要，重要的是节点转换逻辑
-                nodes: updatedSerializedNodes as any[], // 类型断言因为 SerializedNode 和 BaseNode 在某些字段上可能不完全匹配，但在 deserialize 中处理了
+                type: "event",
+                nodes: updatedSerializedNodes as any[],
+                connections: connections,  // 包含连接数组
                 canvas: { x: 0, y: 0, scale: 1 },
                 variables: {},
                 inputs: [],
@@ -110,12 +117,16 @@ export function useCanvasInteraction({
             try {
                 console.log(`[useCanvasInteraction] Disconnecting pin via backend: ${pinId}`);
                 const updatedSerializedNodes = await ProjectService.disconnectPin(tid, pinId);
+                
+                // 获取最新的连接列表
+                const connections = await ProjectService.getConnections(tid);
 
                 const tempSubGraph: SubGraphData = {
                     id: tid,
                     name: "temp",
                     type: "event",
                     nodes: updatedSerializedNodes as any[],
+                    connections: connections,  // 包含连接数组
                     canvas: { x: 0, y: 0, scale: 1 },
                     variables: {},
                     inputs: [],

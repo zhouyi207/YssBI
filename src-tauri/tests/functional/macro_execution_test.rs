@@ -611,6 +611,7 @@ fn test_macro_graph_data_creation() {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables),
+        connections: vec![],  // No connections in this test
     };
     
     // 验证 GraphDto
@@ -815,6 +816,7 @@ fn test_macro_execution_context_with_complex_variables() {
         version: "1.0.0".to_string(),
         nodes,
         variables: Some(variables.clone()),
+        connections: vec![],  // No connections in this test
     };
     
     let mut context = ExecutionContext::new(graph);
