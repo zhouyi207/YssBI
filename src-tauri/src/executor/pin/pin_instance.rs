@@ -5,7 +5,7 @@
 
 use super::{
     pin_payload::PinPayload, DataPinState, ExecPinState, PinDefinition, PinDirection, PinId,
-    PinKind, PinState,
+    PinKind, PinState, PinOrder
 };
 use crate::executor::node::NodeId;
 use crate::executor::value::DataValue;
@@ -28,11 +28,14 @@ pub struct PinInstance {
 
     /// 运行时负载
     pub payload: PinPayload,
+
+    /// 顺序
+    pub order: PinOrder,
 }
 
 impl PinInstance {
     /// 从定义创建实例
-    pub fn from_definition(def: &PinDefinition, node_id: NodeId) -> Self {
+    pub fn from_definition(def: &PinDefinition, node_id: NodeId, order: i32) -> Self {
         let id = PinId::new();
 
         let state = match def.kind {
@@ -46,6 +49,7 @@ impl PinInstance {
             definition: def.clone(),
             state,
             payload: PinPayload::new(def),
+            order: PinOrder(order)
         }
     }
 

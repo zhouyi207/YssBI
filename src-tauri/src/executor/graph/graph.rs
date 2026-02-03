@@ -1,10 +1,11 @@
 //! Graph 实现
 
 use crate::executor::connection::ConnectionManager;
-use crate::executor::node::{NodeDefinition, NodeInstance};
-use crate::executor::pin::{NodeId, PinId, PinInstance};
+use crate::executor::node::{NodeDefinition, NodeInstance, NodeId};
+use crate::executor::pin::{PinId, PinInstance};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use crate::executor::register::NodeRegistry;
 
 /// Graph（运行时世界）
 ///
@@ -29,11 +30,11 @@ pub struct Graph {
     connections: Arc<ConnectionManager>,
     
     /// 节点注册中心（用于创建节点）
-    registry: Arc<crate::executor::node::NodeRegistry>,
+    registry: Arc<NodeRegistry>,
 }
 
 impl Graph {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, registry: Arc<crate::executor::node::NodeRegistry>) -> Self {
+    pub fn new(id: impl Into<String>, name: impl Into<String>, registry: Arc<NodeRegistry>) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -58,7 +59,7 @@ impl Graph {
 
         // 为节点创建 Pin 实例
         for pin_def in &definition.pins {
-            let pin = PinInstance::from_definition(pin_def, node_id);
+            let pin = PinInstance::from_definition(pin_def, node_id, 20);
             let pin_id = pin.id;
             
             // 注册 Pin

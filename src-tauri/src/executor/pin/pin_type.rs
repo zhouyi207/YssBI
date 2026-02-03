@@ -1,6 +1,8 @@
 //! Pin 类型描述
 
-use super::{DataType, TypeConstraint, TypeVarId, ValueType};
+use super::TypeConstraint;
+use super::TypeVarId;
+use crate::executor::value::{DataType, ValueType};
 use serde::{Deserialize, Serialize};
 
 /// Pin 类型描述

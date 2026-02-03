@@ -1,5 +1,7 @@
 //! 类型推断系统
-use super::{DataType, PinTypeDesc, TypeVarId, ValueType};
+use super::PinTypeDesc;
+use super::TypeVarId;
+use crate::executor::value::{DataType, ValueType};
 use std::collections::HashMap;
 
 /// 类型推断上下文

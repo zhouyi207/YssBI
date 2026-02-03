@@ -5,7 +5,7 @@
 
 use super::Graph;
 use crate::executor::node::{NodeExecutionContext, NodeProcessor};
-use crate::executor::pin::NodeId;
+use crate::executor::node::NodeId;
 use std::collections::{HashSet, VecDeque};
 
 /// Graph 执行器
@@ -93,7 +93,7 @@ impl GraphExecutor {
                 };
 
                 if let Some(value) = value {
-                    context.add_input(pin.role.clone(), value);
+                    context.add_input(pin.definition.role.clone(), value);
                 }
             }
         }
@@ -118,7 +118,7 @@ impl GraphExecutor {
         // 将输出值写回 Graph
         for (role, value) in context.outputs() {
             // 查找对应的输出 Pin
-            if let Some(pin) = pins.iter().find(|p| p.is_output() && p.is_data() && &p.role == role) {
+            if let Some(pin) = pins.iter().find(|p| p.is_output() && p.is_data() && &p.definition.role == role) {
                 graph.set_pin_value(pin.id, value.clone())?;
             }
         }
@@ -128,7 +128,7 @@ impl GraphExecutor {
 
         if let Some(exec_role) = next_exec_role {
             // 通过执行流确定下一个节点
-            if let Some(exec_pin) = pins.iter().find(|p| p.is_output() && p.is_exec() && p.role == exec_role) {
+            if let Some(exec_pin) = pins.iter().find(|p| p.is_output() && p.is_exec() && p.definition.role == exec_role) {
                 // 获取连接到这个执行 Pin 的下游节点
                 for downstream_pin in graph.connections().get_downstream(exec_pin.id) {
                     if let Some(downstream_node) = graph.connections().get_pin_node(downstream_pin) {

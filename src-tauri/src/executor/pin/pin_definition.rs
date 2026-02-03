@@ -1,7 +1,7 @@
 //! Pin 定义（静态描述）
 
+use super::PinTypeDesc;
 use super::{DataRole, ExecRole, PinRole};
-use crate::executor::value::PinTypeDesc;
 use serde::{Deserialize, Serialize};
 
 /// Pin 方向
@@ -32,6 +32,16 @@ pub struct PinMetaData {
 
     /// 动态添加
     pub is_dynamic: bool,
+}
+
+impl Default for PinMetaData {
+    fn default() -> Self {
+        Self {
+            show_widget: false,
+            widget_type: None,
+            is_dynamic: false,
+        }
+    }
 }
 
 /// Pin 定义（静态描述，用于节点原型）
@@ -65,11 +75,7 @@ impl PinDefinition {
             kind: PinKind::Data,
             role: PinRole::Data(role),
             type_desc: Some(type_desc),
-            meta_data: PinMetaData {
-                show_widget: false,
-                widget_type: None,
-                is_dynamic: false,
-            },
+            meta_data: PinMetaData::default(),
         }
     }
 
@@ -81,11 +87,7 @@ impl PinDefinition {
             kind: PinKind::Data,
             role: PinRole::Data(role),
             type_desc: Some(type_desc),
-            meta_data: PinMetaData {
-                show_widget: false,
-                widget_type: None,
-                is_dynamic: false,
-            },
+            meta_data: PinMetaData::default(),
         }
     }
 
@@ -97,11 +99,7 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             type_desc: None,
-            meta_data: PinMetaData {
-                show_widget: false,
-                widget_type: None,
-                is_dynamic: false,
-            },
+            meta_data: PinMetaData::default(),
         }
     }
 
@@ -113,11 +111,7 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             type_desc: None,
-            meta_data: PinMetaData {
-                show_widget: false,
-                widget_type: None,
-                is_dynamic: false,
-            },
+            meta_data: PinMetaData::default(),
         }
     }
 

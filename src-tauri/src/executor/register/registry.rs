@@ -1,6 +1,6 @@
 //! Node 注册中心
 
-use super::NodeDefinition;
+use crate::executor::node::NodeDefinition;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
