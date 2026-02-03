@@ -1,19 +1,13 @@
-//! Value 模块 - 基于 Polars/Arrow 的类型系统
+//! 值系统模块
 //!
-//! 提供统一的数据类型定义和转换功能，用于 BI 系统的数据处理
+//! 定义数据类型、值表示和类型推断系统
 
-pub mod types;
-pub mod conversions;
-pub mod type_desc;
-pub mod type_var;
-pub mod type_constraint;
+pub mod data_type;
+pub mod data_value;
 pub mod pin_type;
 pub mod type_inference;
 
-pub use types::{Value, ValueType};
-pub use conversions::{from_json, to_json, from_polars, to_polars};
-pub use type_desc::DataType;
-pub use type_var::TypeVarId;
-pub use type_constraint::TypeConstraint;
-pub use pin_type::PinTypeDesc;
-pub use type_inference::TypeInferenceContext;
+pub use data_type::*;
+pub use data_value::*;
+pub use pin_type::*;
+pub use type_inference::*;

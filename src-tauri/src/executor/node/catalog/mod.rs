@@ -1,30 +1,12 @@
-pub mod internal;
-pub mod function;
-pub mod control;
-pub mod debug;
+//! 内置节点目录
+
 pub mod math;
-pub mod variable;
-pub mod data;
-pub mod visualization;
-pub mod string_multi_output;
-pub mod data_multi_output;
-pub mod conversion;
+pub mod control;
 
-use super::registry::NodeRegistry;
+use crate::executor::node::NodeRegistry;
 
+/// 注册所有内置节点
 pub fn register_builtin_nodes(registry: &NodeRegistry) {
-    internal::register(registry);
-    function::register(registry);
-    control::register(registry);
-    debug::register(registry);
     math::register(registry);
-    variable::register(registry);
-    data::register(registry);
-    visualization::register(registry);
-    string_multi_output::register(registry);
-    data_multi_output::register(registry);
-    conversion::register(registry);
-    
-    // 注册统计节点
-    crate::executor::node::stat::register_all(registry);
+    control::register(registry);
 }

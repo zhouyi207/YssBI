@@ -1,21 +1,43 @@
-//! 项目状态管理模块
-//!
-//! 提供全局状态管理，作为数据的 Single Source of Truth。
-//! 前端通过 Tauri 命令进行 CRUD 操作，通过 Tauri Events 接收数据变更通知。
+//! 状态管理模块
 
-// 导出模块
-mod dataframe_crud;
-mod events;
-#[macro_use]
-pub mod macros;
-mod node_crud;
-mod project_state;
-mod subgraph_crud;
-mod variable_crud;
+use crate::project::ProjectDto;
+use std::sync::RwLock;
 
-// 重新导出公共接口
-pub use events::{emit_project_event, ProjectEvent};
-pub use project_state::ProjectState;
+/// 项目状态
+pub struct ProjectState {
+    current_project: RwLock<Option<ProjectDto>>,
+    project_path: RwLock<Option<String>>,
+}
 
-// 导出宏（在 crate 根级别使用 #[macro_export]）
-// 宏已在 macros.rs 中使用 #[macro_export] 导出
+impl ProjectState {
+    pub fn new() -> Self {
+        Self {
+            current_project: RwLock::new(None),
+            project_path: RwLock::new(None),
+        }
+    }
+
+    pub fn set_project(&self, project: ProjectDto, path: Option<String>) {
+        *self.current_project.write().unwrap() = Some(project);
+        *self.project_path.write().unwrap() = path;
+    }
+
+    pub fn get_project(&self) -> Option<ProjectDto> {
+        self.current_project.read().unwrap().clone()
+    }
+
+    pub fn get_path(&self) -> Option<String> {
+        self.project_path.read().unwrap().clone()
+    }
+
+    pub fn clear(&self) {
+        *self.current_project.write().unwrap() = None;
+        *self.project_path.write().unwrap() = None;
+    }
+}
+
+impl Default for ProjectState {
+    fn default() -> Self {
+        Self::new()
+    }
+}

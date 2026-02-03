@@ -1,15 +1,15 @@
-//! Node 模块入口
+//! Node 模块
+//!
+//! Node 仅作为定义/行为模板，不持有运行态状态。
+//! 所有运行态数据由 Graph 管理。
 
+pub mod node_definition;
+pub mod node_instance;
+pub mod node_processor;
+pub mod node_registry;
 pub mod catalog;
-pub mod implementation;
-pub mod registry;
-pub mod stat;
-pub mod traits;
-pub mod types;
 
-// 重新导出常用类型
-pub use implementation::*;
-pub use registry::*;
-pub use traits::*;
-pub use types::*;
-
+pub use node_definition::*;
+pub use node_instance::*;
+pub use node_processor::*;
+pub use node_registry::*;

@@ -1,318 +1,222 @@
-//! 连接管理模块
+//! 连接管理器
 //!
-//! 负责管理节点间的 Pin 连接、类型校验和循环检测
+//! ConnectionManager 是连接关系的唯一真实来源（Single Source of Truth）。
+//! Pin 不存储连接信息，所有连接查询都通过 ConnectionManager。
 
+use crate::executor::pin::{NodeId, PinId};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
-use crate::executor::error::{ConnectionError, ConnectionResult};
-use crate::executor::node::{GenericNode, Node, NodeId};
-use crate::executor::pin::{InDataPin, OutDataPin, PinId};
-use crate::executor::value::TypeInferenceContext;
-
-/// 连接信息
-#[derive(Debug, Clone)]
+/// 连接（边）
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Connection {
-    pub from_node: NodeId,
     pub from_pin: PinId,
-    pub to_node: NodeId,
     pub to_pin: PinId,
 }
 
-/// 连接管理器
-///
-/// 管理图中所有节点间的连接，提供类型校验和循环检测
-#[derive(Debug)]
-pub struct ConnectionManager {
-    /// 所有连接（from_pin -> to_pin）
-    connections: Mutex<HashMap<PinId, Vec<PinId>>>,
+impl Connection {
+    pub fn new(from_pin: PinId, to_pin: PinId) -> Self {
+        Self { from_pin, to_pin }
+    }
+}
 
+/// 连接管理器
+pub struct ConnectionManager {
+    /// 所有连接（from_pin -> [to_pins]）
+    connections: Mutex<HashMap<PinId, Vec<PinId>>>,
+    
+    /// 反向索引（to_pin -> from_pin）
+    reverse_connections: Mutex<HashMap<PinId, PinId>>,
+    
     /// Pin 到节点的映射
     pin_to_node: Mutex<HashMap<PinId, NodeId>>,
-
+    
     /// 节点到 Pin 的映射
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
-    
-    /// 类型推断上下文
-    type_inference: Mutex<TypeInferenceContext>,
 }
 
 impl ConnectionManager {
-    /// 创建新的连接管理器
     pub fn new() -> Self {
         Self {
             connections: Mutex::new(HashMap::new()),
+            reverse_connections: Mutex::new(HashMap::new()),
             pin_to_node: Mutex::new(HashMap::new()),
             node_to_pins: Mutex::new(HashMap::new()),
-            type_inference: Mutex::new(TypeInferenceContext::new()),
         }
     }
 
-    /// 注册节点的所有 Pin
-    pub fn register_node(&self, node: &GenericNode) -> ConnectionResult<()> {
-        let node_id = node.id();
-        let mut pin_to_node = self.pin_to_node.lock().unwrap();
-        let mut node_to_pins = self.node_to_pins.lock().unwrap();
-        let mut type_inference = self.type_inference.lock().unwrap();
-
-        let mut pins = Vec::new();
-
-        // 注册输入 Pin (使用 inputs() 方法直接获取所有输入 pins)
-        for pin in node.inputs() {
-            let pin_id = pin.id();
-            pin_to_node.insert(pin_id, node_id);
-            pins.push(pin_id);
-            
-            // 注册类型描述
-            if let Some(concrete_pin) = node.get_input_concrete(&pin_id) {
-                type_inference.register_pin(pin_id, concrete_pin.type_desc().clone());
-            }
-        }
-
-        // 注册输出 Pin (使用 outputs() 方法直接获取所有输出 pins)
-        for pin in node.outputs() {
-            let pin_id = pin.id();
-            pin_to_node.insert(pin_id, node_id);
-            pins.push(pin_id);
-            
-            // 注册类型描述
-            if let Some(concrete_pin) = node.get_output_concrete(&pin_id) {
-                type_inference.register_pin(pin_id, concrete_pin.type_desc().clone());
-            }
-        }
-
-        node_to_pins.insert(node_id, pins);
-
-        Ok(())
+    /// 注册 Pin（建立 Pin 到 Node 的映射）
+    pub fn register_pin(&self, pin_id: PinId, node_id: NodeId) {
+        self.pin_to_node.lock().unwrap().insert(pin_id, node_id);
+        self.node_to_pins
+            .lock()
+            .unwrap()
+            .entry(node_id)
+            .or_insert_with(Vec::new)
+            .push(pin_id);
     }
 
     /// 连接两个 Pin
-    pub fn connect(
-        &self,
-        from_pin: &Arc<dyn OutDataPin>,
-        to_pin: &Arc<dyn InDataPin>,
-    ) -> ConnectionResult<()> {
-        let from_id = from_pin.id();
-        let to_id = to_pin.id();
-
-        // 1. 类型推断（如果支持）
-        let mut type_inference = self.type_inference.lock().unwrap();
-        if let Err(_e) = type_inference.infer_connection(from_id, to_id) {
-            // 类型推断失败，回退到旧的类型检查
-            if from_pin.data_type() != to_pin.data_type()
-                && to_pin.data_type() != &crate::executor::value::ValueType::Any
-                && from_pin.data_type() != &crate::executor::value::ValueType::Any
-            {
-                return Err(ConnectionError::TypeMismatch {
-                    from_type: from_pin.data_type().to_string(),
-                    to_type: to_pin.data_type().to_string(),
-                });
-            }
-        }
-        drop(type_inference);
-
-        // 2. 获取节点 ID
-        let pin_to_node = self.pin_to_node.lock().unwrap();
-        let from_node = *pin_to_node
-            .get(&from_id)
-            .ok_or(ConnectionError::PinNotFound(from_id))?;
-        let to_node = *pin_to_node
-            .get(&to_id)
-            .ok_or(ConnectionError::PinNotFound(to_id))?;
-
-        // 3. 循环检测
-        if from_node == to_node {
-            // 同一节点内的连接通常是允许的，但需要检查是否会导致无限循环
-            // 这里简化处理，允许同节点连接
-        } else if self.would_create_cycle(from_node, to_node)? {
-            return Err(ConnectionError::CycleDetected { from_node, to_node });
+    ///
+    /// 规则：
+    /// - Data In Pin: 最多 1 条输入边（自动断开旧连接）
+    /// - Exec In Pin: 最多 1 条输入边（自动断开旧连接）
+    /// - Out Pin: 可以有多条输出边
+    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(), String> {
+        // 检查是否会形成循环
+        if self.would_create_cycle(from_pin, to_pin) {
+            return Err("Connection would create a cycle".to_string());
         }
 
-        // 4. 检查连接是否已存在
-        let mut connections = self.connections.lock().unwrap();
-        if let Some(targets) = connections.get(&from_id) {
-            if targets.contains(&to_id) {
-                return Err(ConnectionError::AlreadyConnected {
-                    from_pin: from_id,
-                    to_pin: to_id,
-                });
-            }
-        }
+        // 如果 to_pin 已有连接，先断开（保证最多 1 条输入边）
+        self.disconnect_input(to_pin);
 
-        // 5. 建立连接
-        connections
-            .entry(from_id)
-            .or_insert_with(Vec::new)
-            .push(to_id);
-
-        Ok(())
-    }
-
-    /// 直接通过 PinId 建立连接（用于从数据恢复连接，跳过类型检查）
-    pub fn connect_by_id(&self, from_pin: PinId, to_pin: PinId) -> ConnectionResult<()> {
-        let mut connections = self.connections.lock().unwrap();
-        
-        // 检查连接是否已存在
-        if let Some(targets) = connections.get(&from_pin) {
-            if targets.contains(&to_pin) {
-                return Ok(()); // 连接已存在，静默返回
-            }
-        }
-
-        // 建立连接
-        connections
+        // 建立新连接
+        self.connections
+            .lock()
+            .unwrap()
             .entry(from_pin)
             .or_insert_with(Vec::new)
             .push(to_pin);
+
+        self.reverse_connections
+            .lock()
+            .unwrap()
+            .insert(to_pin, from_pin);
 
         Ok(())
     }
 
     /// 断开连接
-    pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> ConnectionResult<()> {
-        let mut connections = self.connections.lock().unwrap();
-
-        if let Some(targets) = connections.get_mut(&from_pin) {
-            if let Some(pos) = targets.iter().position(|&id| id == to_pin) {
-                targets.remove(pos);
-                return Ok(());
-            }
+    pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) {
+        if let Some(targets) = self.connections.lock().unwrap().get_mut(&from_pin) {
+            targets.retain(|&p| p != to_pin);
         }
-
-        Err(ConnectionError::Generic(format!(
-            "连接不存在：from={}, to={}",
-            from_pin, to_pin
-        )))
+        self.reverse_connections.lock().unwrap().remove(&to_pin);
     }
 
-    /// 获取 Pin 的所有下游连接
-    pub fn get_downstream(&self, pin_id: PinId) -> Vec<PinId> {
+    /// 断开 Pin 的输入连接
+    pub fn disconnect_input(&self, pin: PinId) {
+        if let Some(from_pin) = self.reverse_connections.lock().unwrap().remove(&pin) {
+            if let Some(targets) = self.connections.lock().unwrap().get_mut(&from_pin) {
+                targets.retain(|&p| p != pin);
+            }
+        }
+    }
+
+    /// 断开 Pin 的所有连接（输入和输出）
+    pub fn disconnect_all(&self, pin: PinId) {
+        // 断开输入
+        self.disconnect_input(pin);
+
+        // 断开所有输出
+        if let Some(targets) = self.connections.lock().unwrap().remove(&pin) {
+            let mut reverse = self.reverse_connections.lock().unwrap();
+            for target in targets {
+                reverse.remove(&target);
+            }
+        }
+    }
+
+    /// 获取 Pin 的下游连接
+    pub fn get_downstream(&self, pin: PinId) -> Vec<PinId> {
         self.connections
             .lock()
             .unwrap()
-            .get(&pin_id)
+            .get(&pin)
             .cloned()
             .unwrap_or_default()
     }
 
     /// 获取 Pin 的上游连接
-    pub fn get_upstream(&self, pin_id: PinId) -> Option<PinId> {
-        let connections = self.connections.lock().unwrap();
-        for (from, targets) in connections.iter() {
-            if targets.contains(&pin_id) {
-                return Some(*from);
-            }
-        }
-        None
+    pub fn get_upstream(&self, pin: PinId) -> Option<PinId> {
+        self.reverse_connections.lock().unwrap().get(&pin).copied()
     }
 
-    /// 获取节点的所有直接上游节点
-    pub fn get_upstream_nodes(&self, node_id: NodeId) -> HashSet<NodeId> {
-        let node_to_pins = self.node_to_pins.lock().unwrap();
-        let pin_to_node = self.pin_to_node.lock().unwrap();
-        let connections = self.connections.lock().unwrap();
+    /// 获取节点的所有 Pin
+    pub fn get_node_pins(&self, node_id: NodeId) -> Vec<PinId> {
+        self.node_to_pins
+            .lock()
+            .unwrap()
+            .get(&node_id)
+            .cloned()
+            .unwrap_or_default()
+    }
 
+    /// 获取 Pin 所属的节点
+    pub fn get_pin_node(&self, pin: PinId) -> Option<NodeId> {
+        self.pin_to_node.lock().unwrap().get(&pin).copied()
+    }
+
+    /// 获取节点的直接上游节点
+    pub fn get_upstream_nodes(&self, node_id: NodeId) -> Vec<NodeId> {
+        let pins = self.get_node_pins(node_id);
         let mut upstream_nodes = HashSet::new();
 
-        if let Some(pins) = node_to_pins.get(&node_id) {
-            for &pin_id in pins {
-                // 遍历所有连接，寻找以当前节点 Pin 为目标的连接
-                for (&from_pin, targets) in connections.iter() {
-                    if targets.contains(&pin_id) {
-                        if let Some(&from_node) = pin_to_node.get(&from_pin) {
-                            if from_node != node_id {
-                                upstream_nodes.insert(from_node);
-                            }
-                        }
-                    }
+        for pin in pins {
+            if let Some(upstream_pin) = self.get_upstream(pin) {
+                if let Some(upstream_node) = self.get_pin_node(upstream_pin) {
+                    upstream_nodes.insert(upstream_node);
                 }
             }
         }
-        upstream_nodes
+
+        upstream_nodes.into_iter().collect()
     }
 
-    /// 获取节点的所有直接下游节点
-    pub fn get_downstream_nodes(&self, node_id: NodeId) -> HashSet<NodeId> {
-        let node_to_pins = self.node_to_pins.lock().unwrap();
-        let pin_to_node = self.pin_to_node.lock().unwrap();
-        let connections = self.connections.lock().unwrap();
-
+    /// 获取节点的直接下游节点
+    pub fn get_downstream_nodes(&self, node_id: NodeId) -> Vec<NodeId> {
+        let pins = self.get_node_pins(node_id);
         let mut downstream_nodes = HashSet::new();
 
-        if let Some(pins) = node_to_pins.get(&node_id) {
-            for &pin_id in pins {
-                if let Some(targets) = connections.get(&pin_id) {
-                    for &target_pin in targets {
-                        if let Some(&target_node) = pin_to_node.get(&target_pin) {
-                            if target_node != node_id {
-                                downstream_nodes.insert(target_node);
-                            }
-                        }
-                    }
+        for pin in pins {
+            for downstream_pin in self.get_downstream(pin) {
+                if let Some(downstream_node) = self.get_pin_node(downstream_pin) {
+                    downstream_nodes.insert(downstream_node);
                 }
             }
         }
-        downstream_nodes
+
+        downstream_nodes.into_iter().collect()
     }
 
     /// 检查是否会形成循环
-    fn would_create_cycle(&self, from_node: NodeId, to_node: NodeId) -> ConnectionResult<bool> {
-        let node_to_pins = self.node_to_pins.lock().unwrap();
-        let connections = self.connections.lock().unwrap();
-        let pin_to_node = self.pin_to_node.lock().unwrap();
+    fn would_create_cycle(&self, from_pin: PinId, to_pin: PinId) -> bool {
+        let from_node = match self.get_pin_node(from_pin) {
+            Some(n) => n,
+            None => return false,
+        };
 
-        // 使用 DFS 检测是否存在从 to_node 到 from_node 的路径
+        let to_node = match self.get_pin_node(to_pin) {
+            Some(n) => n,
+            None => return false,
+        };
+
+        // 使用 DFS 检查从 to_node 是否能到达 from_node
         let mut visited = HashSet::new();
         let mut stack = vec![to_node];
 
-        while let Some(current_node) = stack.pop() {
-            if current_node == from_node {
-                return Ok(true); // 找到循环
+        while let Some(node) = stack.pop() {
+            if node == from_node {
+                return true;
             }
 
-            if visited.contains(&current_node) {
-                continue;
-            }
-            visited.insert(current_node);
-
-            // 获取当前节点的所有输出 Pin
-            if let Some(pins) = node_to_pins.get(&current_node) {
-                for pin_id in pins {
-                    // 获取这个 Pin 的所有下游连接
-                    if let Some(targets) = connections.get(pin_id) {
-                        for target_pin in targets {
-                            // 找到目标 Pin 所属的节点
-                            if let Some(&target_node) = pin_to_node.get(target_pin) {
-                                if !visited.contains(&target_node) {
-                                    stack.push(target_node);
-                                }
-                            }
-                        }
-                    }
-                }
+            if visited.insert(node) {
+                stack.extend(self.get_downstream_nodes(node));
             }
         }
 
-        Ok(false) // 没有找到循环
+        false
     }
 
     /// 获取所有连接
-    pub fn get_all_connections(&self) -> Vec<Connection> {
+    pub fn all_connections(&self) -> Vec<Connection> {
         let connections = self.connections.lock().unwrap();
-        let pin_to_node = self.pin_to_node.lock().unwrap();
-
         let mut result = Vec::new();
 
-        for (from_pin, targets) in connections.iter() {
-            let from_node = *pin_to_node.get(from_pin).unwrap();
-            for to_pin in targets {
-                let to_node = *pin_to_node.get(to_pin).unwrap();
-                result.push(Connection {
-                    from_node,
-                    from_pin: *from_pin,
-                    to_node,
-                    to_pin: *to_pin,
-                });
+        for (from_pin, to_pins) in connections.iter() {
+            for to_pin in to_pins {
+                result.push(Connection::new(*from_pin, *to_pin));
             }
         }
 
@@ -322,19 +226,16 @@ impl ConnectionManager {
     /// 清除所有连接
     pub fn clear(&self) {
         self.connections.lock().unwrap().clear();
+        self.reverse_connections.lock().unwrap().clear();
     }
-    
-    /// 获取 Pin 的推断类型
-    /// 
-    /// 如果类型推断成功，返回推断后的具体类型
-    pub fn get_inferred_type(&self, pin_id: PinId) -> Option<crate::executor::value::ValueType> {
-        let mut type_inference = self.type_inference.lock().unwrap();
-        type_inference.resolve_pin_type(pin_id).ok()
-    }
-    
-    /// 获取类型推断上下文的引用（用于调试）
-    pub fn type_inference_context(&self) -> &Mutex<TypeInferenceContext> {
-        &self.type_inference
+
+    /// 移除节点的所有连接
+    pub fn remove_node(&self, node_id: NodeId) {
+        let pins = self.get_node_pins(node_id);
+        for pin in pins {
+            self.disconnect_all(pin);
+        }
+        self.node_to_pins.lock().unwrap().remove(&node_id);
     }
 }
 

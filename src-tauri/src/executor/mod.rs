@@ -1,33 +1,22 @@
 //! 执行器模块
 //!
-//! 负责图的执行逻辑和运行时管理。
+//! 包含节点图的执行引擎，遵循以下架构原则：
+//! - Graph 是运行时的唯一真实来源（Single Source of Truth）
+//! - Node 仅作为定义/行为模板，不持有运行态状态
+//! - Pin 不属于 Node，由 Graph 统一管理
+//! - Executor 以 Graph + NodeId 为中心运行
 
-pub mod connection;
-pub mod context;
-pub mod error;
-pub mod graph_validator;
-pub mod node;
-pub mod pin;
-pub mod processors;
-pub mod types;
 pub mod value;
+pub mod pin;
+pub mod node;
+pub mod graph;
+pub mod connection;
 
-// 重新导出常用类型
-pub use connection::{Connection, ConnectionManager};
-pub use context::ExecutionContext;
-pub use error::{
-    ConnectionError, ConnectionResult, ExecutionError, ExecutionResult, NodeError, NodeResult,
-};
-pub use graph_validator::{GraphValidationError, GraphValidator, ValidationResult};
-pub use node::{get_all_node_definitions, GenericNode, Node, NodeId, NodeState};
-pub use pin::{
-    BasePin, DataPin, DataPinEvent, DataPinState, ExecPin, ExecPinState, GenericInDataPin,
-    GenericInExecPin, GenericOutDataPin, GenericOutExecPin, InDataPin, InExecPin, OutDataPin,
-    OutExecPin, PinId, PinType,
-};
-pub use processors::{DataProcessor, ExecutionContextTrait, FlowProcessor};
-pub use types::{DataValue, ExecutionModel};
-pub use value::{Value, ValueType};
+pub use value::*;
+pub use pin::*;
+pub use node::*;
+pub use graph::*;
+pub use connection::*;
 
-// 重新导出 DTO（从 project 模块）
-pub use crate::project::{GraphDto, NodeDto, PinDefDto, PinDto, VariableDto};
+// 重新导出 GraphExecutor
+pub use graph::GraphExecutor;
