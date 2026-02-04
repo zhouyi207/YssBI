@@ -46,6 +46,17 @@ impl ExecutionStack {
         self.stack.push(frame_id);
     }
 
+    /// 在指定位置插入帧 (0 = 栈底)
+    pub fn insert_at(&mut self, index: usize, frame: ExecutionFrame) {
+        let frame_id = frame.id;
+        self.frames.insert(frame_id, frame);
+        if index >= self.stack.len() {
+            self.stack.push(frame_id);
+        } else {
+            self.stack.insert(index, frame_id);
+        }
+    }
+
     /// 创建并压入新帧
     pub fn push_new(
         &mut self,
@@ -63,6 +74,16 @@ impl ExecutionStack {
     pub fn pop(&mut self) -> Option<ExecutionFrame> {
         let frame_id = self.stack.pop()?;
         self.frames.remove(&frame_id)
+    }
+
+    /// 移除指定帧
+    pub fn remove(&mut self, frame_id: FrameId) -> Option<ExecutionFrame> {
+        if let Some(pos) = self.stack.iter().position(|&id| id == frame_id) {
+            self.stack.remove(pos);
+            self.frames.remove(&frame_id)
+        } else {
+            None
+        }
     }
 
     /// 查看栈顶帧（不弹出）

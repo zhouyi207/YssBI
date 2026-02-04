@@ -126,7 +126,12 @@ impl Executor {
 
             ExecutionEffect::TriggerOutput(role) => {
                 self.log(format!("Triggering output {:?}", role));
-                self.trigger_output(frame, role)?;
+                // 触发输出
+                self.trigger_output_from_node_and_check(frame.node_id, role, Some(frame.id))?;
+
+                // 节点执行完成，处理 completion（如果它是某个 Sequence 的子节点，需要通知 Parent）
+                self.log(format!("Frame {:?} completed (after trigger)", frame.id));
+                self.handle_frame_completion(frame)?;
             }
 
             ExecutionEffect::TriggerAndContinue { current, remaining } => {
@@ -140,7 +145,11 @@ impl Executor {
 
             ExecutionEffect::TriggerSequence(roles) => {
                 self.log(format!("Triggering sequence of {} outputs", roles.len()));
-                self.trigger_sequence(frame, roles)?;
+                self.trigger_sequence(frame.clone(), roles)?;
+
+                // 节点执行完成
+                self.log(format!("Frame {:?} completed (after sequence)", frame.id));
+                self.handle_frame_completion(frame)?;
             }
 
             ExecutionEffect::Suspend {
@@ -177,30 +186,38 @@ impl Executor {
             if !self.stack.has_active_children(parent_id) {
                 self.log(format!("All children of {:?} completed", parent_id));
 
-                // 获取父帧信息
-                let (parent_node, next_role, should_resume) = {
-                    let parent_frame = self.stack.get_frame_mut(parent_id);
-                    if let Some(parent_frame) = parent_frame {
-                        if parent_frame.state == FrameState::WaitingForChild {
-                            parent_frame.state = FrameState::Ready;
+                // 检查父帧状态
+                let is_waiting = self
+                    .stack
+                    .get_frame(parent_id)
+                    .map(|f| f.state == FrameState::WaitingForChild)
+                    .unwrap_or(false);
 
-                            // 如果父帧有剩余的 continuation，获取下一个
-                            let next_role = parent_frame.pop_continuation();
-                            (parent_frame.node_id, next_role, true)
+                if is_waiting {
+                    // 移除此帧以恢复执行（避免在栈中重复）
+                    if let Some(mut parent_frame) = self.stack.remove(parent_id) {
+                        self.log(format!("Resuming parent frame {:?}", parent_id));
+
+                        // 检查是否有剩余的 continuation
+                        if !parent_frame.remaining_continuations.is_empty() {
+                            let current = parent_frame.remaining_continuations.remove(0);
+                            let remaining =
+                                std::mem::take(&mut parent_frame.remaining_continuations);
+
+                            self.log(format!(
+                                "Triggering {:?} with {} remaining",
+                                current,
+                                remaining.len()
+                            ));
+                            self.trigger_and_continue(parent_frame, current, remaining)?;
                         } else {
-                            (parent_frame.node_id, None, false)
+                            // 没有剩余 continuation，父帧完成
+                            self.log(format!(
+                                "Parent frame {:?} finished all continuations",
+                                parent_id
+                            ));
+                            self.handle_frame_completion(parent_frame)?;
                         }
-                    } else {
-                        return Ok(());
-                    }
-                };
-
-                // 如果需要恢复且有下一个 continuation，触发它
-                if should_resume {
-                    self.log(format!("Resuming parent frame {:?}", parent_id));
-                    if let Some(next_role) = next_role {
-                        self.log(format!("Parent has continuation: {:?}", next_role));
-                        self.trigger_output_from_node(parent_node, next_role, Some(parent_id))?;
                     }
                 }
             }
@@ -238,18 +255,24 @@ impl Executor {
         // 循环处理所有没有下游连接的输出
         let mut current_role = current;
         loop {
+            // 记录插入位置（当前栈顶，即子帧应该在的位置的下方）
+            let insert_index = self.stack.len();
+
             // 触发当前输出
             let has_downstream = self.trigger_output_from_node_and_check(
                 node_id,
                 current_role.clone(),
-                Some(frame_id)
+                Some(frame_id),
             )?;
 
             if has_downstream {
                 // 有下游连接：保存剩余的 continuation，将帧压回栈等待子流程完成
                 frame.remaining_continuations = remaining;
                 frame.state = FrameState::WaitingForChild;
-                self.stack.push(frame);
+
+                // 关键修正：必须将父帧插入到新创建的子帧 *下方*
+                // 这样栈顶才是子帧，执行器才会先执行子帧
+                self.stack.insert_at(insert_index, frame);
                 return Ok(());
             }
 
@@ -261,7 +284,10 @@ impl Executor {
 
             if remaining.is_empty() {
                 // 没有剩余的 continuation，帧完成
-                self.log(format!("Frame {:?} completed (no more continuations)", frame_id));
+                self.log(format!(
+                    "Frame {:?} completed (no more continuations)",
+                    frame_id
+                ));
                 self.handle_frame_completion(frame)?;
                 return Ok(());
             }
@@ -306,9 +332,9 @@ impl Executor {
                 downstream_node
             ));
 
-            let frame_id = self
-                .stack
-                .push_new(downstream_node, Some(downstream_pin_id), parent_frame);
+            let frame_id =
+                self.stack
+                    .push_new(downstream_node, Some(downstream_pin_id), parent_frame);
 
             self.log(format!("Created frame {:?}", frame_id));
         }
@@ -317,7 +343,11 @@ impl Executor {
     }
 
     /// 触发序列（逆序压栈）
-    fn trigger_sequence(&mut self, frame: ExecutionFrame, roles: Vec<ExecRole>) -> Result<(), String> {
+    fn trigger_sequence(
+        &mut self,
+        frame: ExecutionFrame,
+        roles: Vec<ExecRole>,
+    ) -> Result<(), String> {
         // 逆序压栈，使得第一个输出最后执行
         for role in roles.into_iter().rev() {
             self.trigger_output(frame.clone(), role)?;
