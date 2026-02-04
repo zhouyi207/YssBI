@@ -1,12 +1,16 @@
 //! 内置节点目录
 
 pub mod math;
-// pub mod control;
+pub mod control;
+pub mod debug;
+pub mod logic;
 
 use super::NodeRegistry;
 
 /// 注册所有内置节点
 pub fn register_builtin_nodes(registry: &NodeRegistry) {
     math::register(registry);
-    // control::register(registry);
+    control::register(registry);
+    debug::register(registry);
+    logic::register(registry);
 }

@@ -237,10 +237,18 @@ impl Graph {
             return Err(format!("Target pin {:?} not found", to_pin));
         }
 
-        self.type_inference
-            .write()
-            .unwrap()
-            .infer_connection(from_pin, to_pin)?;
+        // 只对有类型描述的 Pin（Data Pin）进行类型推断
+        // Exec Pin 没有类型描述，不需要类型推断
+        let from_pin_instance = pins.get(&from_pin).unwrap();
+        let to_pin_instance = pins.get(&to_pin).unwrap();
+        
+        if from_pin_instance.definition.type_desc.is_some() 
+            && to_pin_instance.definition.type_desc.is_some() {
+            self.type_inference
+                .write()
+                .unwrap()
+                .infer_connection(from_pin, to_pin)?;
+        }
 
         self.connections.connect(from_pin, to_pin)
     }

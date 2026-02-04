@@ -8,15 +8,16 @@
 //! 处理器通过 Context API 访问 Pin 数据，不直接访问 PinInstance。
 
 use super::NodeExecutionContext;
-use crate::executor::pin::PinRole;
+use crate::executor::execution::ExecutionEffect;
 use std::sync::Arc;
 
 /// 🧱 第一层：控制流处理器
 ///
 /// 职责：
-/// - 决定执行流向（返回哪个 ExecRole）
+/// - 返回执行效果（ExecutionEffect），而不是"下一跳"
 /// - 适用于：Branch、Sequence、Loop 等控制流节点
 /// - **不处理数据计算**
+/// - **不决定"谁是下一个"，只声明"我想做什么"**
 ///
 /// 示例：
 /// ```rust
@@ -24,14 +25,23 @@ use std::sync::Arc;
 /// |ctx| {
 ///     let condition = ctx.get_input_by_role(&PinRole::Data(DataRole::Condition))?;
 ///     if condition.as_bool()? {
-///         Ok(PinRole::Exec(ExecRole::ExecTrue))
+///         Ok(ExecutionEffect::trigger(ExecRole::ExecTrue))
 ///     } else {
-///         Ok(PinRole::Exec(ExecRole::ExecFalse))
+///         Ok(ExecutionEffect::trigger(ExecRole::ExecFalse))
 ///     }
+/// }
+///
+/// // Sequence 节点
+/// |ctx| {
+///     Ok(ExecutionEffect::sequence(vec![
+///         ExecRole::Steps(0),
+///         ExecRole::Steps(1),
+///         ExecRole::Steps(2),
+///     ]))
 /// }
 /// ```
 pub type FlowProcessor =
-    Arc<dyn Fn(&mut dyn NodeExecutionContext) -> Result<PinRole, String> + Send + Sync>;
+    Arc<dyn Fn(&mut dyn NodeExecutionContext) -> Result<ExecutionEffect, String> + Send + Sync>;
 
 /// 🧱 第二层：数据求值器
 ///

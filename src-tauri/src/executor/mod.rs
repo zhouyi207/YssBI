@@ -13,6 +13,7 @@ pub mod graph;
 pub mod connection;
 pub mod register;
 pub mod infer;
+pub mod execution;
 
 pub use value::*;
 pub use pin::*;
@@ -21,3 +22,4 @@ pub use graph::*;
 pub use connection::*;
 pub use register::*;
 pub use infer::*;
+pub use execution::*;
