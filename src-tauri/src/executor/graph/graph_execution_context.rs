@@ -58,6 +58,32 @@ impl<'a> NodeExecutionContext for GraphExecutionContext<'a> {
         Ok(values)
     }
 
+    fn get_inputs_by_family(&self, pattern: &PinRole) -> Result<Vec<DataValue>, String> {
+        let all_pins = self.graph.get_node_pins(self.node_id);
+
+        let mut values = Vec::new();
+
+        for pin in all_pins {
+            // 只处理输入 Pin
+            if pin.definition.direction != PinDirection::Input {
+                continue;
+            }
+
+            // 检查角色是否匹配家族
+            if pin.definition.role.matches_family(pattern) {
+                if let Some(value) = self.graph.resolve_pin_value(pin.id) {
+                    values.push(value);
+                }
+            }
+        }
+
+        if values.is_empty() {
+            return Err(format!("No input pins matching family {:?} found", pattern));
+        }
+
+        Ok(values)
+    }
+
     fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String> {
         let pin = self
             .graph

@@ -1,7 +1,7 @@
 //! Node 定义（静态描述）
 
 use super::NodeProcessor;
-use crate::executor::pin::PinDefinition;
+use crate::executor::{pin::PinDefinition, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +41,9 @@ pub struct NodeDefinition {
     /// Pin 定义列表
     pub pins: Vec<PinDefinition>,
 
+    // 节点的 pin 类型推断
+    pub type_vars: Vec<TypeVarDefinition>,
+
     /// 处理器（不可序列化，运行时设置）
     #[serde(skip)]
     pub processor: Option<NodeProcessor>,
@@ -67,6 +70,7 @@ impl NodeDefinition {
             title: title.into(),
             category: vec![],
             pins: vec![],
+            type_vars: vec![],
             processor: None,
             metadata: NodeMetaData::default(),
         }
@@ -75,6 +79,12 @@ impl NodeDefinition {
     /// 添加 Pin 定义
     pub fn add_pin(mut self, pin: PinDefinition) -> Self {
         self.pins.push(pin);
+        self
+    }
+
+    /// 添加类型变量定义
+    pub fn add_type_var(mut self, type_var: TypeVarDefinition) -> Self {
+        self.type_vars.push(type_var);
         self
     }
 

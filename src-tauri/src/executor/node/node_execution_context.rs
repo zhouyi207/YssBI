@@ -1,6 +1,6 @@
+use crate::executor::node::NodeId;
 use crate::executor::pin::PinRole;
 use crate::executor::value::DataValue;
-use crate::executor::node::NodeId;
 
 /// Node 执行上下文
 ///
@@ -12,6 +12,10 @@ pub trait NodeExecutionContext {
 
     /// 通过角色获取多个输入值（用于动态组）
     fn get_inputs_by_role(&self, role: &PinRole) -> Result<Vec<DataValue>, String>;
+
+    /// 通过角色家族获取所有输入值（例如获取所有 Operands）
+    /// pattern: 用于匹配的角色模式，例如 PinRole::Data(DataRole::Operands(0))
+    fn get_inputs_by_family(&self, pattern: &PinRole) -> Result<Vec<DataValue>, String>;
 
     /// 通过角色设置单个输出值
     fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String>;

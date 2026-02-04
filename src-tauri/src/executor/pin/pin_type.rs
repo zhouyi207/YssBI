@@ -1,7 +1,7 @@
 //! Pin 类型描述
 
-use crate::executor::infer::{TypeConstraint, TypeVarId};
-use crate::executor::value::{DataType, ValueType, DataValue};
+use crate::executor::infer::TypeVarId;
+use crate::executor::value::{DataType, DataValue, ValueType};
 use serde::{Deserialize, Serialize};
 
 /// Pin 类型描述
@@ -9,9 +9,6 @@ use serde::{Deserialize, Serialize};
 pub struct PinTypeDesc {
     /// 数据类型
     pub data_type: DataType,
-
-    /// 类型约束
-    pub constraints: Vec<TypeConstraint>,
 
     /// 是否可选
     pub is_optional: bool,
@@ -37,7 +34,6 @@ impl PinTypeDesc {
     pub fn concrete(vt: ValueType) -> Self {
         Self {
             data_type: DataType::Concrete(vt),
-            constraints: vec![],
             is_optional: false,
             is_array: false,
         }
@@ -47,17 +43,6 @@ impl PinTypeDesc {
     pub fn type_var(id: TypeVarId) -> Self {
         Self {
             data_type: DataType::TypeVar(id),
-            constraints: vec![],
-            is_optional: false,
-            is_array: false,
-        }
-    }
-
-    /// 创建带约束的类型变量 Pin
-    pub fn type_var_with_constraints(id: TypeVarId, constraints: Vec<TypeConstraint>) -> Self {
-        Self {
-            data_type: DataType::TypeVar(id),
-            constraints,
             is_optional: false,
             is_array: false,
         }
@@ -67,7 +52,6 @@ impl PinTypeDesc {
     pub fn unknown() -> Self {
         Self {
             data_type: DataType::Unknown,
-            constraints: vec![],
             is_optional: false,
             is_array: false,
         }
@@ -83,10 +67,5 @@ impl PinTypeDesc {
     pub fn array(mut self) -> Self {
         self.is_array = true;
         self
-    }
-
-    /// 检查类型是否满足所有约束
-    pub fn satisfies_constraints(&self, vt: &ValueType) -> bool {
-        self.constraints.iter().all(|c| c.satisfies(vt))
     }
 }

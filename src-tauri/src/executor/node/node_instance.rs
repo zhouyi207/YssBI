@@ -4,18 +4,17 @@
 
 use super::{NodeDefinition, NodeState};
 use crate::executor::node::NodeId;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Node 实例（运行时）
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct NodeInstance {
     /// 节点 ID
     pub id: NodeId,
 
     /// 节点类型（用于查找定义）
     pub node_type: String,
-    
+
     /// 子图 ID（用于 Subgraph 节点）
     pub sub_graph_id: Option<String>,
 
@@ -23,8 +22,7 @@ pub struct NodeInstance {
     pub title: String,
 
     /// 节点定义引用
-    #[serde(skip)]
-    pub definition: Option<Arc<NodeDefinition>>,
+    pub definition: Arc<NodeDefinition>,
 
     /// 节点状态
     pub state: NodeState,
@@ -54,7 +52,7 @@ impl NodeInstance {
             id: NodeId::new(),
             node_type: definition.node_type.clone(),
             title: definition.title.clone(),
-            definition: Some(definition),
+            definition: definition,
             state: NodeState::Idle,
             position: (0.0, 0.0),
             variable_id: None,
@@ -81,7 +79,7 @@ impl NodeInstance {
     }
 
     /// 获取定义
-    pub fn definition(&self) -> Option<&NodeDefinition> {
-        self.definition.as_deref()
+    pub fn definition(&self) -> &NodeDefinition {
+        &self.definition
     }
 }

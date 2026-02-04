@@ -1,59 +1,145 @@
 //! 类型推断系统
+
 use super::TypeVarId;
+use crate::executor::infer::TypeVarDefinition;
 use crate::executor::pin::{PinId, PinTypeDesc};
 use crate::executor::value::{DataType, ValueType};
 use std::collections::HashMap;
 
-/// 类型推断上下文
-#[derive(Debug, Default)]
+/// 类型推断上下文（一次推断过程）
+#[derive(Debug)]
 pub struct TypeInferenceContext {
-    /// 类型变量到具体类型的映射
+    /// 类型变量定义（来自 Graph / NodeDefinition）
+    type_vars: HashMap<TypeVarId, TypeVarDefinition>,
+
+    /// 推断过程中的临时绑定
     bindings: HashMap<TypeVarId, ValueType>,
-    
+
     /// Pin 到类型描述的映射
     pin_types: HashMap<PinId, PinTypeDesc>,
 }
 
 impl TypeInferenceContext {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            type_vars: HashMap::new(),
+            bindings: HashMap::new(),
+            pin_types: HashMap::new(),
+        }
     }
-    
+
+    pub fn clear(&mut self) {
+        self.type_vars.clear();
+        self.bindings.clear();
+        self.pin_types.clear();
+    }
+
     /// 注册 Pin 的类型描述
     pub fn register_pin(&mut self, pin_id: PinId, type_desc: PinTypeDesc) {
         self.pin_types.insert(pin_id, type_desc);
     }
-    
-    /// 推断连接的类型（从 from_pin 到 to_pin）
-    pub fn infer_connection(&mut self, from_pin: PinId, to_pin: PinId) -> Result<(), String> {
-        let from_type = self.get_pin_type(from_pin)?.clone();
-        let to_type = self.get_pin_type(to_pin)?.clone();
-        
-        self.unify(&from_type, &to_type)
+
+    /// 推断一条连接
+    pub fn infer_connection(&mut self, from: PinId, to: PinId) -> Result<(), String> {
+        let a = self.get_pin_type(from)?.clone();
+        let b = self.get_pin_type(to)?.clone();
+        self.unify(&a, &b)
     }
-    
-    /// 解析 Pin 的最终类型
-    pub fn resolve_pin_type(&self, pin_id: PinId) -> Result<ValueType, String> {
-        let pin_type = self.get_pin_type(pin_id)?;
-        
-        match &pin_type.data_type {
-            DataType::Concrete(vt) => Ok(vt.clone()),
-            DataType::TypeVar(var_id) => {
-                self.bindings
-                    .get(var_id)
-                    .cloned()
-                    .ok_or_else(|| format!("Type variable {:?} not bound", var_id))
+
+    /// 推断完成后提交结果（写回 TypeVarDefinition.bound）
+    pub fn commit(mut self) -> Result<(), String> {
+        for (var_id, value_type) in self.bindings.drain() {
+            let def = self
+                .type_vars
+                .get_mut(&var_id)
+                .ok_or_else(|| format!("TypeVar {:?} not found", var_id))?;
+
+            // 已有绑定 → 必须一致
+            if let Some(existing) = &def.bound {
+                if existing != &value_type {
+                    return Err(format!(
+                        "TypeVar {:?} already bound to {:?}, cannot rebind to {:?}",
+                        var_id, existing, value_type
+                    ));
+                }
             }
-            DataType::Unknown => Err("Type still unknown".to_string()),
+
+            def.bound = Some(value_type);
+        }
+        Ok(())
+    }
+
+    /// 解析 Pin 的最终类型（供 NodeProcessor 使用）
+    pub fn resolve_pin_type(&self, pin_id: PinId) -> Result<ValueType, String> {
+        let pin = self.get_pin_type(pin_id)?;
+
+        match &pin.data_type {
+            DataType::Concrete(vt) => Ok(vt.clone()),
+            DataType::TypeVar(var) => {
+                if let Some(vt) = self.bindings.get(var) {
+                    Ok(vt.clone())
+                } else if let Some(def) = self.type_vars.get(var) {
+                    def.bound
+                        .clone()
+                        .ok_or_else(|| format!("TypeVar {:?} not bound", var))
+                } else {
+                    Err(format!("Unknown TypeVar {:?}", var))
+                }
+            }
+            DataType::Unknown => Err("Type is still unknown".into()),
         }
     }
 
-    /// 绑定类型变量到具体类型
-    pub fn bind(&mut self, var: TypeVarId, vt: ValueType) -> Result<(), String> {
+    /// 类型统一（核心推断逻辑）
+    fn unify(&mut self, a: &PinTypeDesc, b: &PinTypeDesc) -> Result<(), String> {
+        let ta = self.resolve_data_type(&a.data_type);
+        let tb = self.resolve_data_type(&b.data_type);
+
+        match (ta, tb) {
+            (DataType::Concrete(a), DataType::Concrete(b)) => {
+                if self.is_value_type_compatible(&a, &b) {
+                    Ok(())
+                } else {
+                    Err(format!("Type mismatch: {:?} vs {:?}", a, b))
+                }
+            }
+
+            (DataType::TypeVar(var), DataType::Concrete(vt))
+            | (DataType::Concrete(vt), DataType::TypeVar(var)) => {
+                let def = self
+                    .type_vars
+                    .get(&var)
+                    .ok_or_else(|| format!("TypeVar {:?} not defined", var))?;
+
+                if !def.satisfies_constraints(&vt) {
+                    return Err(format!(
+                        "Type {:?} does not satisfy constraints of {:?}",
+                        vt, var
+                    ));
+                }
+
+                self.bind(var, vt)
+            }
+
+            (DataType::TypeVar(a), DataType::TypeVar(b)) => {
+                if a == b {
+                    Ok(())
+                } else {
+                    // 可选：union / 延迟绑定
+                    Ok(())
+                }
+            }
+
+            (DataType::Unknown, _) | (_, DataType::Unknown) => Ok(()),
+        }
+    }
+
+    /// 绑定类型变量（仅作用于推断上下文）
+    fn bind(&mut self, var: TypeVarId, vt: ValueType) -> Result<(), String> {
         if let Some(existing) = self.bindings.get(&var) {
             if existing != &vt {
                 return Err(format!(
-                    "Type variable {:?} already bound to {:?}, cannot rebind to {:?}",
+                    "TypeVar {:?} already bound to {:?}, cannot rebind to {:?}",
                     var, existing, vt
                 ));
             }
@@ -62,12 +148,17 @@ impl TypeInferenceContext {
         Ok(())
     }
 
-    /// 解析类型（将类型变量替换为具体类型）
-    pub fn resolve(&self, dt: &DataType) -> DataType {
+    /// 解析 DataType（优先使用临时绑定）
+    fn resolve_data_type(&self, dt: &DataType) -> DataType {
         match dt {
             DataType::TypeVar(var) => {
                 if let Some(vt) = self.bindings.get(var) {
                     DataType::Concrete(vt.clone())
+                } else if let Some(def) = self.type_vars.get(var) {
+                    def.bound
+                        .clone()
+                        .map(DataType::Concrete)
+                        .unwrap_or_else(|| dt.clone())
                 } else {
                     dt.clone()
                 }
@@ -76,94 +167,21 @@ impl TypeInferenceContext {
         }
     }
 
-    /// 检查两个类型是否兼容
-    pub fn are_compatible(&self, a: &PinTypeDesc, b: &PinTypeDesc) -> bool {
-        let resolved_a = self.resolve(&a.data_type);
-        let resolved_b = self.resolve(&b.data_type);
-
-        match (&resolved_a, &resolved_b) {
-            (DataType::Concrete(vt_a), DataType::Concrete(vt_b)) => {
-                self.is_value_type_compatible(vt_a, vt_b)
-            }
-            (DataType::Unknown, _) | (_, DataType::Unknown) => true,
-            (DataType::TypeVar(_), _) | (_, DataType::TypeVar(_)) => true,
-        }
-    }
-
-    /// 统一两个类型（尝试推断类型变量）
-    pub fn unify(&mut self, a: &PinTypeDesc, b: &PinTypeDesc) -> Result<(), String> {
-        let resolved_a = self.resolve(&a.data_type);
-        let resolved_b = self.resolve(&b.data_type);
-
-        match (&resolved_a, &resolved_b) {
-            (DataType::Concrete(vt_a), DataType::Concrete(vt_b)) => {
-                if self.is_value_type_compatible(vt_a, vt_b) {
-                    Ok(())
-                } else {
-                    Err(format!("Type mismatch: {:?} vs {:?}", vt_a, vt_b))
-                }
-            }
-            (DataType::TypeVar(var), DataType::Concrete(vt))
-            | (DataType::Concrete(vt), DataType::TypeVar(var)) => {
-                // 检查约束
-                let constraints = if matches!(a.data_type, DataType::TypeVar(_)) {
-                    &a.constraints
-                } else {
-                    &b.constraints
-                };
-
-                if constraints.iter().all(|c| c.satisfies(vt)) {
-                    self.bind(*var, vt.clone())
-                } else {
-                    Err(format!("Type {:?} does not satisfy constraints", vt))
-                }
-            }
-            (DataType::TypeVar(var_a), DataType::TypeVar(var_b)) => {
-                // 两个类型变量，暂时不绑定
-                if var_a == var_b {
-                    Ok(())
-                } else {
-                    // 可以选择将一个绑定到另一个，这里暂时允许
-                    Ok(())
-                }
-            }
-            // Unknown 类型可以接受任何类型，但不会改变自己
-            (DataType::Unknown, _) | (_, DataType::Unknown) => Ok(()),
-        }
-    }
-    
-    /// 检查值类型兼容性
+    /// 值类型兼容性
     fn is_value_type_compatible(&self, from: &ValueType, to: &ValueType) -> bool {
-        // 完全相同
-        if from == to {
-            return true;
-        }
-        
-        // Any 类型兼容所有类型
-        if matches!(to, ValueType::Any) {
-            return true;
-        }
-        
-        // 数字类型之间可以转换
-        if matches!(from, ValueType::Int64 | ValueType::Float64)
-            && matches!(to, ValueType::Int64 | ValueType::Float64)
-        {
-            return true;
-        }
-        
-        false
+        from == to
+            || matches!(to, ValueType::Any)
+            || matches!(
+                (from, to),
+                (ValueType::Int64, ValueType::Float64) | (ValueType::Float64, ValueType::Int64)
+            )
     }
-    
-    /// 获取 Pin 的类型描述
+
     fn get_pin_type(&self, pin_id: PinId) -> Result<&PinTypeDesc, String> {
         self.pin_types
             .get(&pin_id)
-            .ok_or_else(|| format!("Pin {:?} not registered in type inference context", pin_id))
+            .ok_or_else(|| format!("Pin {:?} not registered", pin_id))
     }
 
-    /// 清除所有绑定
-    pub fn clear(&mut self) {
-        self.bindings.clear();
-        self.pin_types.clear();
-    }
+
 }

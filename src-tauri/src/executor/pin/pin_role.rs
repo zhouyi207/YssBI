@@ -96,9 +96,28 @@ impl PinRole {
     /// 获取 role 的 index，仅对带 index 的 role 有效
     pub fn index(&self) -> Option<usize> {
         match self {
-            PinRole::Data(DataRole::Input(i) | DataRole::Output(i)) => Some(*i),
+            PinRole::Data(DataRole::Input(i) | DataRole::Output(i) | DataRole::Operands(i)) => Some(*i),
             PinRole::Exec(ExecRole::Steps(i)) => Some(*i),
             _ => None,
+        }
+    }
+
+    /// 检查两个角色是否属于同一家族
+    pub fn is_same_family(&self, other: &PinRole) -> bool {
+        self.family() == other.family()
+    }
+
+    /// 检查角色是否匹配指定的家族模式
+    /// 例如：Operands(1) 和 Operands(2) 都匹配 Operands(_)
+    pub fn matches_family(&self, pattern: &PinRole) -> bool {
+        match (self, pattern) {
+            // 数据角色家族匹配
+            (PinRole::Data(DataRole::Operands(_)), PinRole::Data(DataRole::Operands(_))) => true,
+            (PinRole::Data(DataRole::Input(_)), PinRole::Data(DataRole::Input(_))) => true,
+            (PinRole::Data(DataRole::Output(_)), PinRole::Data(DataRole::Output(_))) => true,
+            (PinRole::Exec(ExecRole::Steps(_)), PinRole::Exec(ExecRole::Steps(_))) => true,
+            // 精确匹配
+            (a, b) => a == b,
         }
     }
 }
