@@ -1,6 +1,6 @@
 //! Node 定义（静态描述）
 
-use super::NodeProcessor;
+use super::{DataEvaluator, FlowProcessor, NodeExecutionModel};
 use crate::executor::{pin::PinDefinition, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,11 @@ impl Default for NodeMetaData {
 }
 
 /// Node 定义（静态描述，用于注册中心）
+///
+/// 采用三层 Processor 模型：
+/// 1. FlowProcessor - 控制流决策
+/// 2. DataEvaluator - 数据求值
+/// 3. Role → PinId 映射 - 由 Graph 层管理
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NodeDefinition {
     /// 节点类型（唯一标识符）
@@ -41,13 +46,20 @@ pub struct NodeDefinition {
     /// Pin 定义列表
     pub pins: Vec<PinDefinition>,
 
-    // 节点的 pin 类型推断
+    /// 节点的 pin 类型推断
     pub type_vars: Vec<TypeVarDefinition>,
 
-    /// 处理器（不可序列化，运行时设置）
+    /// 🧱 第一层：控制流处理器（可选）
+    /// 决定执行流向，返回下一个要触发的 ExecRole
     #[serde(skip)]
-    pub processor: Option<NodeProcessor>,
+    pub flow_processor: Option<FlowProcessor>,
 
+    /// 🧱 第二层：数据求值器（可选）
+    /// 计算输出数据值，通过 DataRole 访问输入输出
+    #[serde(skip)]
+    pub data_evaluator: Option<DataEvaluator>,
+
+    /// 元数据
     pub metadata: NodeMetaData,
 }
 
@@ -58,6 +70,9 @@ impl std::fmt::Debug for NodeDefinition {
             .field("title", &self.title)
             .field("category", &self.category)
             .field("pins", &self.pins)
+            .field("has_flow_processor", &self.flow_processor.is_some())
+            .field("has_data_evaluator", &self.data_evaluator.is_some())
+            .field("execution_model", &self.execution_model())
             .finish()
     }
 }
@@ -71,7 +86,8 @@ impl NodeDefinition {
             category: vec![],
             pins: vec![],
             type_vars: vec![],
-            processor: None,
+            flow_processor: None,
+            data_evaluator: None,
             metadata: NodeMetaData::default(),
         }
     }
@@ -106,9 +122,15 @@ impl NodeDefinition {
         self
     }
 
-    /// 设置处理器
-    pub fn with_processor(mut self, processor: NodeProcessor) -> Self {
-        self.processor = Some(processor);
+    /// 设置控制流处理器
+    pub fn with_flow_processor(mut self, processor: FlowProcessor) -> Self {
+        self.flow_processor = Some(processor);
+        self
+    }
+
+    /// 设置数据求值器
+    pub fn with_data_evaluator(mut self, evaluator: DataEvaluator) -> Self {
+        self.data_evaluator = Some(evaluator);
         self
     }
 
@@ -116,5 +138,23 @@ impl NodeDefinition {
     pub fn dynamic(mut self) -> Self {
         self.metadata.supports_dynamic_pins = true;
         self
+    }
+
+    /// 获取节点的执行模型
+    pub fn execution_model(&self) -> NodeExecutionModel {
+        NodeExecutionModel::infer(
+            self.flow_processor.is_some(),
+            self.data_evaluator.is_some(),
+        )
+    }
+
+    /// 检查是否有控制流处理器
+    pub fn has_flow_processor(&self) -> bool {
+        self.flow_processor.is_some()
+    }
+
+    /// 检查是否有数据求值器
+    pub fn has_data_evaluator(&self) -> bool {
+        self.data_evaluator.is_some()
     }
 }

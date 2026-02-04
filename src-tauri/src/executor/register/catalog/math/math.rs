@@ -1,10 +1,9 @@
 //! 数学运算节点
 
-use super::NodeRegistry;
+use crate::executor::register::NodeRegistry;
 use crate::executor::infer::{TypeConstraint, TypeVarDefinition, TypeVarId};
 use crate::executor::node::NodeDefinition;
-use crate::executor::pin::{PinDefinition, PinRole, PinTypeDesc};
-use crate::executor::DataRole;
+use crate::executor::pin::{DataRole, PinDefinition, PinRole, PinTypeDesc};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
@@ -29,12 +28,12 @@ fn register_add(registry: &NodeRegistry) {
         // 添加两个默认操作数（不设置默认值，因为类型未知）
         .add_pin(PinDefinition::data_input(
             "A",
-            DataRole::Operands(1),
+            DataRole::Operands(0),
             PinTypeDesc::type_var(type_var),
         ))
         .add_pin(PinDefinition::data_input(
             "B",
-            DataRole::Operands(2),
+            DataRole::Operands(1),
             PinTypeDesc::type_var(type_var),
         ))
         .add_pin(PinDefinition::data_output(
@@ -42,8 +41,8 @@ fn register_add(registry: &NodeRegistry) {
             DataRole::Result,
             PinTypeDesc::type_var(type_var),
         ))
-        // 设置处理器（根据推断类型进行计算）
-        .with_processor(Arc::new(|ctx| {
+        // 🧱 第二层：数据求值器（纯数据节点）
+        .with_data_evaluator(Arc::new(|ctx| {
             // 获取所有 Operands 家族的输入值
             let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
 
@@ -60,8 +59,9 @@ fn register_add(registry: &NodeRegistry) {
             // 输出结果
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
 
-            Ok(PinRole::Data(DataRole::Result))
+            Ok(())
         }));
 
     registry.register(definition);
 }
+

@@ -281,19 +281,43 @@ impl Graph {
     }
 
     // =========================
-    // Role 查询
+    // Role 查询（支持动态 Pin）
     // =========================
 
+    /// 通过 Role 获取 Pin（支持静态和动态 Pin）
+    /// 
+    /// 查询顺序：
+    /// 1. 先查询动态 Pin 映射（NodeInstance.role_to_pin）
+    /// 2. 再查询静态 Pin（PinDefinition.role）
     pub fn get_pin_by_role(&self, node_id: NodeId, role: &PinRole) -> Option<PinInstance> {
+        // 1️⃣ 先查询动态 Pin
+        if let Some(node) = self.get_node(node_id) {
+            if let Some(pin_id) = node.get_dynamic_pin_id(role) {
+                return self.get_pin(pin_id);
+            }
+        }
+
+        // 2️⃣ 再查询静态 Pin
         self.get_node_pins(node_id)
             .into_iter()
             .find(|p| &p.definition.role == role)
     }
 
+    /// 通过 Role 获取多个 Pin（用于动态 Pin 组）
     pub fn get_pins_by_role(&self, node_id: NodeId, role: &PinRole) -> Vec<PinInstance> {
         self.get_node_pins(node_id)
             .into_iter()
             .filter(|p| &p.definition.role == role)
+            .collect()
+    }
+
+    /// 通过 Role 家族获取所有匹配的 Pin
+    /// 
+    /// 例如：获取所有 Operands(n) 的 Pin
+    pub fn get_pins_by_role_family(&self, node_id: NodeId, pattern: &PinRole) -> Vec<PinInstance> {
+        self.get_node_pins(node_id)
+            .into_iter()
+            .filter(|p| p.definition.role.matches_family(pattern))
             .collect()
     }
 

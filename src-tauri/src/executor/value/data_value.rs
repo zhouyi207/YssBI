@@ -6,7 +6,7 @@ use serde_json::Value as JsonValue;
 use std::ops::{Add, Sub, Mul, Div};
 
 /// 运行时数据值
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DataValue {
     Boolean(bool),
     Int32(i32),
