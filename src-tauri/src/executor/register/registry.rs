@@ -34,12 +34,7 @@ impl NodeRegistry {
 
     /// 获取所有节点定义
     pub fn all(&self) -> Vec<Arc<NodeDefinition>> {
-        self.definitions
-            .read()
-            .unwrap()
-            .values()
-            .cloned()
-            .collect()
+        self.definitions.read().unwrap().values().cloned().collect()
     }
 
     /// 获取所有节点类型

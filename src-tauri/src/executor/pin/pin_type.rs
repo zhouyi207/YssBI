@@ -1,8 +1,7 @@
 //! Pin 类型描述
 
-use super::TypeConstraint;
-use super::TypeVarId;
-use crate::executor::value::{DataType, ValueType};
+use crate::executor::infer::{TypeConstraint, TypeVarId};
+use crate::executor::value::{DataType, ValueType, DataValue};
 use serde::{Deserialize, Serialize};
 
 /// Pin 类型描述
@@ -10,18 +9,30 @@ use serde::{Deserialize, Serialize};
 pub struct PinTypeDesc {
     /// 数据类型
     pub data_type: DataType,
-    
+
     /// 类型约束
     pub constraints: Vec<TypeConstraint>,
-    
+
     /// 是否可选
     pub is_optional: bool,
-    
+
     /// 是否数组
     pub is_array: bool,
 }
 
 impl PinTypeDesc {
+    pub fn default_value(&self) -> Option<DataValue> {
+        if self.is_optional {
+            return None;
+        }
+
+        match &self.data_type {
+            DataType::Concrete(vt) => vt.default_value(),
+            DataType::TypeVar(_) => None,
+            DataType::Unknown => None,
+        }
+    }
+
     /// 创建具体类型的 Pin
     pub fn concrete(vt: ValueType) -> Self {
         Self {

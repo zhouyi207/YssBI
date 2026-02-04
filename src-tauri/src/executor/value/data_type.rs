@@ -1,6 +1,6 @@
 //! 数据类型定义
 use super::ValueType;
-use crate::executor::pin::TypeVarId;
+use crate::executor::infer::TypeVarId;
 use serde::{Deserialize, Serialize};
 
 /// 数据类型（支持类型变量）

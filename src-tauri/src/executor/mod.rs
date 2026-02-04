@@ -12,6 +12,7 @@ pub mod node;
 pub mod graph;
 pub mod connection;
 pub mod register;
+pub mod infer;
 
 pub use value::*;
 pub use pin::*;
@@ -19,6 +20,4 @@ pub use node::*;
 pub use graph::*;
 pub use connection::*;
 pub use register::*;
-
-// 重新导出 GraphExecutor
-pub use graph::GraphExecutor;
+pub use infer::*;

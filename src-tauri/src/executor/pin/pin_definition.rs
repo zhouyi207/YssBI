@@ -1,7 +1,11 @@
 //! Pin 定义（静态描述）
+//!
+//!
+//! 在这里 output 也需要有默认值吗？？？？
 
 use super::PinTypeDesc;
 use super::{DataRole, ExecRole, PinRole};
+use crate::executor::DataValue;
 use serde::{Deserialize, Serialize};
 
 /// Pin 方向
@@ -62,6 +66,9 @@ pub struct PinDefinition {
     /// 类型描述（仅 Data Pin）
     pub type_desc: Option<PinTypeDesc>,
 
+    /// 默认值（仅 Data + Input Pin 有意义）
+    pub default_value: Option<DataValue>,
+
     /// UI / 编辑器相关元数据
     pub meta_data: PinMetaData,
 }
@@ -69,24 +76,29 @@ pub struct PinDefinition {
 impl PinDefinition {
     /// 创建数据输入 Pin
     pub fn data_input(name: impl Into<String>, role: DataRole, type_desc: PinTypeDesc) -> Self {
+        let default_value = type_desc.default_value();
+
         Self {
             name: name.into(),
             direction: PinDirection::Input,
             kind: PinKind::Data,
             role: PinRole::Data(role),
             type_desc: Some(type_desc),
+            default_value: default_value,
             meta_data: PinMetaData::default(),
         }
     }
 
     /// 创建数据输出 Pin
     pub fn data_output(name: impl Into<String>, role: DataRole, type_desc: PinTypeDesc) -> Self {
+        let default_value = type_desc.default_value();
         Self {
             name: name.into(),
             direction: PinDirection::Output,
             kind: PinKind::Data,
             role: PinRole::Data(role),
             type_desc: Some(type_desc),
+            default_value: default_value,
             meta_data: PinMetaData::default(),
         }
     }
@@ -99,6 +111,7 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             type_desc: None,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -111,6 +124,7 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             type_desc: None,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -125,6 +139,11 @@ impl PinDefinition {
     /// 动态添加 Pin
     pub fn dynamic(mut self) -> Self {
         self.meta_data.is_dynamic = true;
+        self
+    }
+
+    pub fn with_default(mut self, default_value: Option<DataValue>) -> Self {
+        self.default_value = default_value;
         self
     }
 

@@ -33,6 +33,8 @@ pub enum ExecRole {
 pub enum DataRole {
     /// 条件值
     Condition,
+    // 操作值
+    Operands(usize),
     /// 主输入值
     Input(usize),
     /// 主输出值
@@ -81,6 +83,7 @@ impl PinRole {
             },
             PinRole::Data(item) => match item {
                 DataRole::Condition => "data.condition",
+                DataRole::Operands(_) => "data.operands",
                 DataRole::Input(_) => "data.in",
                 DataRole::Output(_) => "data.out",
                 DataRole::Result => "data.result",
