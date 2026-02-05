@@ -6,13 +6,11 @@ pub mod commands;
 pub mod execution;
 pub mod project;
 pub mod schema;
-pub mod state;
 pub mod log;
 pub mod graph;
 pub mod variable;
 
 use commands::*;
-use state::ProjectState;
 
 // ==================== 应用入口 ====================
 
@@ -52,7 +50,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // 注册全局状态管理器
-        .manage(ProjectState::new())
+        .manage(project::ProjectState::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());

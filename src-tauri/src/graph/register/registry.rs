@@ -1,5 +1,6 @@
 //! Node 注册中心
 
+use serde::{Deserialize, Serialize};
 use crate::graph::node::NodeDefinition;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -7,6 +8,7 @@ use std::sync::{Arc, RwLock};
 /// Node 注册中心
 ///
 /// 管理所有节点定义（原型）
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NodeRegistry {
     definitions: RwLock<HashMap<String, Arc<NodeDefinition>>>,
 }

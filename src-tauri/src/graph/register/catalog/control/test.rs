@@ -2,7 +2,7 @@
 mod tests {
     use crate::execution::ExecutionEffect;
     use crate::graph::{
-        graph::Graph,
+        GraphData,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn test_branch_node_true_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建 Branch 节点
         let branch_node = graph
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_branch_node_false_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         let branch_node = graph
             .create_node("flow.branch")
@@ -143,7 +143,7 @@ mod tests {
     fn test_branch_node_default_value() {
         // 测试不设置值时使用默认值（false）
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         let branch_node = graph
             .create_node("flow.branch")
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn test_sequence_node_basic() {
         let registry = create_test_registry();
-        let graph = Graph::new("test_graph", "Test Graph", registry.clone());
+        let graph = GraphData::new("test_graph", "Test Graph", registry.clone());
 
         // 创建 Sequence 节点
         let seq_node = graph
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_sequence_node_execution() {
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         let seq_node = graph
             .create_node("flow.sequence")
@@ -254,7 +254,7 @@ mod tests {
         use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -351,7 +351,7 @@ mod tests {
         use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -444,7 +444,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建第一个 Branch 节点
         let branch1_node = graph
@@ -562,7 +562,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -664,7 +664,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(Graph::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
 
         // 创建节点
         let branch1_node = graph

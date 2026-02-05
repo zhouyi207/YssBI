@@ -147,7 +147,7 @@ fn create_test_registry() -> Arc<NodeRegistry>
 1. **创建注册表和图**
    ```rust
    let registry = create_test_registry();
-   let graph = Arc::new(Graph::new("test_name", "Description", registry.clone()));
+   let graph = Arc::new(GraphData::new("test_name", "Description", registry.clone()));
    ```
 
 2. **创建节点**

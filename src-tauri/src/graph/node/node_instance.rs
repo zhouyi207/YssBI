@@ -1,20 +1,21 @@
 //! Node 实例（运行时）
 //!
 //! Node 实例仅包含 ID 和对定义的引用，不持有 Pin 或状态。
-//! 
+//!
 //! 🧱 第三层：Role → PinId 映射
-//! 
+//!
 //! 对于动态 Pin，映射关系存储在 NodeInstance 中。
 //! 静态 Pin 的映射通过 Graph 查询 PinDefinition 完成。
 
 use super::{NodeDefinition, NodeState};
 use crate::graph::node::NodeId;
 use crate::graph::pin::{PinId, PinRole};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// Node 实例（运行时）
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct NodeInstance {
     /// 节点 ID
     pub id: NodeId,
@@ -41,10 +42,10 @@ pub struct NodeInstance {
     pub variable_id: Option<String>,
 
     /// 🧱 第三层：动态 Pin 的 Role → PinId 映射
-    /// 
+    ///
     /// 静态 Pin 不需要存储映射（通过 PinDefinition.role 查询）
     /// 动态 Pin 在运行时添加，需要记录其 Role 映射
-    /// 
+    ///
     /// 例如：Sequence 节点动态添加第 3 个输出时：
     /// - PinRole::Exec(ExecRole::Steps(2)) -> pin_id_xxx
     pub role_to_pin: Arc<RwLock<HashMap<PinRole, PinId>>>,

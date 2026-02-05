@@ -1,7 +1,7 @@
 //! Tauri 命令模块
 
 use crate::schema::EditorSchema;
-use crate::state::ProjectState;
+use crate::project::ProjectState;
 use serde_json::Value;
 use tauri::State;
 

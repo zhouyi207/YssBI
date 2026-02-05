@@ -1,5 +1,5 @@
 use yssbi_lib::graph::{
-    core::Graph,
+    core::GraphData,
     pin::{DataRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
@@ -25,7 +25,7 @@ fn test_multiple_type_conversions() {
     // 3. Float64(3.14) -> Convert -> Print (应输出 "3.14")
 
     let registry = create_test_registry();
-    let graph = Arc::new(Graph::new(
+    let graph = Arc::new(GraphData::new(
         "test_multi_convert",
         "Multiple Type Conversion Test",
         registry.clone(),

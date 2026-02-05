@@ -2,13 +2,14 @@
 
 use super::TypeVarId;
 use crate::graph::infer::TypeVarDefinition;
-use crate::graph::pin::{PinId, PinTypeDesc};
-use crate::graph::value::{DataType};
 use crate::graph::pin::PinDataType;
+use crate::graph::pin::{PinId, PinTypeDesc};
+use crate::graph::value::DataType;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// 类型推断上下文（一次推断过程）
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TypeInferenceContext {
     /// 类型变量定义（来自 Graph / NodeDefinition）
     type_vars: HashMap<TypeVarId, TypeVarDefinition>,
@@ -190,19 +191,19 @@ impl TypeInferenceContext {
     }
 
     /// 获取类型变量的绑定类型
-    /// 
+    ///
     /// 返回 None 表示类型变量未绑定
     pub fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<DataType> {
         // 优先从临时绑定中获取
         if let Some(vt) = self.bindings.get(&type_var_id) {
             return Some(vt.clone());
         }
-        
+
         // 然后从类型变量定义中获取
         if let Some(def) = self.type_vars.get(&type_var_id) {
             return def.bound.clone();
         }
-        
+
         None
     }
 }

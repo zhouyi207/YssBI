@@ -197,12 +197,12 @@ pub fn count_logs_in_file(file_path: &PathBuf) -> Result<usize, String> {
 #[macro_export]
 macro_rules! log_app {
     ($level:expr, $msg:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_app($level, $msg.to_string(), None);
         }
     };
     ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_app($level, $msg.to_string(), Some($source.to_string()));
         }
     };
@@ -212,12 +212,12 @@ macro_rules! log_app {
 #[macro_export]
 macro_rules! log_exec {
     ($level:expr, $msg:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_execution($level, $msg.to_string(), None);
         }
     };
     ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_execution($level, $msg.to_string(), Some($source.to_string()));
         }
     };
@@ -227,12 +227,12 @@ macro_rules! log_exec {
 #[macro_export]
 macro_rules! log_sys {
     ($level:expr, $msg:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_system($level, $msg.to_string(), None);
         }
     };
     ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::logging::get_log_manager() {
+        if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_system($level, $msg.to_string(), Some($source.to_string()));
         }
     };
