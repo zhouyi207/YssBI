@@ -7,7 +7,9 @@ pub mod executor;
 pub mod project;
 pub mod schema;
 pub mod state;
-pub mod logging;
+pub mod log;
+pub mod graph;
+pub mod variable;
 
 use commands::*;
 use state::ProjectState;
@@ -53,7 +55,7 @@ pub fn run() {
         .manage(ProjectState::new())
         .setup(|app| {
             // 初始化日志管理器
-            logging::init_log_manager(app.handle().clone());
+            log::init_log_manager(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
