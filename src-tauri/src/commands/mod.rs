@@ -1,7 +1,13 @@
-//! Tauri 命令模块
+pub mod command_project;
 
-use crate::schema::EditorSchema;
-use crate::project::ProjectState;
+
+pub use command_project::*;
+
+
+
+use crate::log::LogLevel;
+use crate::project::{ProjectData, ProjectState};
+use crate::{log_app, schema::EditorSchema};
 use serde_json::Value;
 use tauri::State;
 
@@ -54,36 +60,7 @@ pub fn check_pin_compatibility_detailed(_from: String, _to: String) -> Value {
 
 // ==================== 项目状态命令 ====================
 
-#[tauri::command]
-pub fn get_project_state(state: State<ProjectState>) -> Option<Value> {
-    state.get_project().map(|p| serde_json::to_value(p).unwrap())
-}
 
-#[tauri::command]
-pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
-    state.get_path()
-}
-
-#[tauri::command]
-pub fn new_project(state: State<ProjectState>) -> Result<(), String> {
-    state.clear();
-    Ok(())
-}
-
-#[tauri::command]
-pub fn load_project_to_state(_path: String, _state: State<ProjectState>) -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-pub fn save_project_from_state(_path: String, _state: State<ProjectState>) -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_project_data(_data: Value, _state: State<ProjectState>) -> Result<(), String> {
-    Ok(())
-}
 
 // ==================== 设置命令 ====================
 

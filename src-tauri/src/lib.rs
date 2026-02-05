@@ -9,6 +9,7 @@ pub mod schema;
 pub mod log;
 pub mod graph;
 pub mod variable;
+pub mod event;
 
 use commands::*;
 
@@ -68,7 +69,7 @@ pub fn run() {
             get_pin_type_info,
             check_pin_compatibility_detailed,
             // 项目状态命令
-            get_project_state,
+            get_project_data,
             get_project_path,
             new_project,
             load_project_to_state,

@@ -46,8 +46,8 @@ export class ProjectService {
      * 获取当前项目状态
      */
     static async getProjectState(): Promise<ProjectData> {
-        console.log('[ProjectService.getProjectState] Invoking get_project_state...');
-        const data: any = await invoke("get_project_state");
+        console.log('[ProjectService.getProjectState] Invoking get_project_data...');
+        const data: any = await invoke("get_project_data");
         console.log('[ProjectService.getProjectState] Raw backend data:', data);
         // 后端使用 serde rename，JSON 字段名是 camelCase (globalVariables)
         const result = {

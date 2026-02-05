@@ -1,11 +1,23 @@
+use std::{
+    collections::HashMap,
+};
+
 pub struct ProjectStore {
-    item: String
+    pub df: HashMap<String, String>,
+}
+
+impl Default for ProjectStore {
+    fn default() -> Self {
+        Self {
+            df: HashMap::new(),
+        }
+    }
 }
 
 impl ProjectStore {
     pub fn new() -> Self {
         Self {
-            item: String::new()
+            df: HashMap::new(),
         }
     }
 }
