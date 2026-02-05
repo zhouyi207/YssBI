@@ -1,29 +1,17 @@
-// 无限循环bug
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-// [Node NodeId(f5965646-bf67-4d36-80bd-18d6d32131e1)] Sequence: scheduling all steps
-
-
-
-use yssbi_lib::executor::{
-    execution::Executor,
-    graph::Graph,
+use yssbi_lib::graph::{
+    core::Graph,
     pin::{DataRole, ExecRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
 };
+use yssbi_lib::execution::Executor;
 use std::sync::Arc;
 
 /// 创建测试用的注册表
 fn create_test_registry() -> Arc<NodeRegistry> {
     let registry = Arc::new(NodeRegistry::new());
     // 注册所有内置节点
-    yssbi_lib::executor::register::catalog::register_builtin_nodes(&registry);
+    yssbi_lib::graph::register::catalog::register_builtin_nodes(&registry);
     registry
 }
 

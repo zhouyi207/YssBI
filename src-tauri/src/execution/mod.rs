@@ -1,0 +1,14 @@
+//! 执行器模块
+//!
+//! 包含节点图的执行引擎，遵循以下架构原则：
+//! - Graph 是运行时的唯一真实来源（Single Source of Truth）
+//! - Node 仅作为定义/行为模板，不持有运行态状态
+//! - Pin 不属于 Node，由 Graph 统一管理
+//! - Executor 以 Graph + NodeId 为中心运行
+
+
+pub mod engine;
+pub mod context;
+
+pub use engine::*;
+pub use context::*;

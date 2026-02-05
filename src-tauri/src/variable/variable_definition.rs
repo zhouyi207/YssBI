@@ -1,5 +1,5 @@
 use super::VariableScope;
-use crate::executor::value::{DataValue, ValueType};
+use crate::graph::value::{DataValue, DataType};
 use serde::{Deserialize, Serialize};
 
 /// 变量定义（持久化到项目文件）
@@ -11,7 +11,7 @@ pub struct VariableDefinition {
     /// 变量名称
     pub name: String,
     /// 数据类型
-    pub data_type: ValueType,
+    pub data_type: DataType,
     /// 描述
     #[serde(default)]
     pub description: String,

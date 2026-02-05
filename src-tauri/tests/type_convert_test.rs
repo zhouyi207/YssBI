@@ -1,17 +1,17 @@
-use yssbi_lib::executor::{
-    execution::Executor,
-    graph::Graph,
+use yssbi_lib::graph::{
+    core::Graph,
     pin::{DataRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
 };
+use yssbi_lib::execution::Executor;
 use std::sync::Arc;
 
 /// 创建测试用的注册表
 fn create_test_registry() -> Arc<NodeRegistry> {
     let registry = Arc::new(NodeRegistry::new());
     // 注册所有内置节点
-    yssbi_lib::executor::register::catalog::register_builtin_nodes(&registry);
+    yssbi_lib::graph::register::catalog::register_builtin_nodes(&registry);
     registry
 }
 

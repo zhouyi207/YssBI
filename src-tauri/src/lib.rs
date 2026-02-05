@@ -3,7 +3,7 @@
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
 pub mod commands;
-pub mod executor;
+pub mod execution;
 pub mod project;
 pub mod schema;
 pub mod state;

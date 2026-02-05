@@ -1,10 +1,15 @@
-pub mod graph_id;
-pub mod graph_data;
-pub mod graph_kind;
-pub mod graph_position;
+pub mod connection;
+pub mod core;
+pub mod infer;
+pub mod node;
+pub mod pin;
+pub mod register;
+pub mod value;
 
-
-pub use graph_id::*;
-pub use graph_data::*;
-pub use graph_kind::*;
-pub use graph_position::*;
+pub use connection::*;
+pub use core::*;
+pub use infer::*;
+pub use node::*;
+pub use pin::*;
+pub use register::*;
+pub use value::*;

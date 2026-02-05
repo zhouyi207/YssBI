@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub struct LogManager {
     app_handle: Option<Arc<Mutex<AppHandle>>>,
@@ -31,23 +31,32 @@ impl LogManager {
     /// 初始化日志文件
     fn init_log_file(&self) {
         // 创建 logs 目录
-        let logs_dir = PathBuf::from("logs");
-        if !logs_dir.exists() {
-            let _ = std::fs::create_dir_all(&logs_dir);
-        }
+        if let Some(handle) = &self.app_handle {
+            let handle = handle.lock().unwrap();
 
-        // 创建当前会话的日志文件
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("app_{}.log", timestamp);
-        let log_path = logs_dir.join(filename);
+            let logs_dir = if cfg!(debug_assertions) {
+                PathBuf::from("..").join("logs")
+            } else {
+                handle
+                    .path()
+                    .app_log_dir()
+                    .expect("Failed to get app log dir")
+            };
 
-        match OpenOptions::new().create(true).append(true).open(&log_path) {
-            Ok(file) => {
-                *self.log_file.lock().unwrap() = Some(file);
-                *self.log_file_path.lock().unwrap() = Some(log_path);
-            }
-            Err(e) => {
-                eprintln!("Failed to create log file: {}", e);
+            std::fs::create_dir_all(&logs_dir).ok();
+
+            let filename = format!("app_{}.log", chrono::Local::now().format("%Y%m%d_%H%M%S"));
+
+            let log_path = logs_dir.join(filename);
+
+            match OpenOptions::new().create(true).append(true).open(&log_path) {
+                Ok(file) => {
+                    *self.log_file.lock().unwrap() = Some(file);
+                    *self.log_file_path.lock().unwrap() = Some(log_path);
+                }
+                Err(e) => {
+                    eprintln!("Failed to create log file: {}", e);
+                }
             }
         }
     }
