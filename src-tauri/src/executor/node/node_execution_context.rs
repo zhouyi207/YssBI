@@ -1,6 +1,7 @@
+use crate::executor::infer::TypeVarId;
 use crate::executor::node::NodeId;
 use crate::executor::pin::PinRole;
-use crate::executor::value::DataValue;
+use crate::executor::value::{DataValue, ValueType};
 
 /// Node 执行上下文
 ///
@@ -32,6 +33,17 @@ pub trait NodeExecutionContext {
 
     /// 获取当前节点 ID
     fn node_id(&self) -> NodeId;
+
+    /// 获取类型变量的绑定类型
+    /// 
+    /// 用于在运行时获取类型推断的结果
+    /// 返回 None 表示类型变量未绑定
+    fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<ValueType>;
+
+    /// 通过角色获取 Pin 的推断类型
+    /// 
+    /// 用于在运行时获取 Pin 的实际类型（经过类型推断后）
+    fn get_pin_type_by_role(&self, role: &PinRole) -> Result<ValueType, String>;
 
     /// 记录日志
     fn log(&mut self, message: String);

@@ -34,6 +34,11 @@ impl TypeInferenceContext {
         self.pin_types.clear();
     }
 
+    /// 注册类型变量定义
+    pub fn register_type_var(&mut self, type_var: TypeVarDefinition) {
+        self.type_vars.insert(type_var.id, type_var);
+    }
+
     /// 注册 Pin 的类型描述
     pub fn register_pin(&mut self, pin_id: PinId, type_desc: PinTypeDesc) {
         self.pin_types.insert(pin_id, type_desc);
@@ -183,5 +188,20 @@ impl TypeInferenceContext {
             .ok_or_else(|| format!("Pin {:?} not registered", pin_id))
     }
 
-
+    /// 获取类型变量的绑定类型
+    /// 
+    /// 返回 None 表示类型变量未绑定
+    pub fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<ValueType> {
+        // 优先从临时绑定中获取
+        if let Some(vt) = self.bindings.get(&type_var_id) {
+            return Some(vt.clone());
+        }
+        
+        // 然后从类型变量定义中获取
+        if let Some(def) = self.type_vars.get(&type_var_id) {
+            return def.bound.clone();
+        }
+        
+        None
+    }
 }

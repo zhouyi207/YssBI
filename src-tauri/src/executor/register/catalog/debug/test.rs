@@ -34,7 +34,7 @@ mod tests {
         // 找到 Message 输入 Pin
         let message_pin = pins
             .iter()
-            .find(|p| p.definition.role == PinRole::Data(DataRole::Input(0)))
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Message pin not found");
 
         // 设置消息
@@ -116,7 +116,7 @@ mod tests {
         let print1_pins = graph.get_node_pins(print1_node);
         let print1_message = print1_pins
             .iter()
-            .find(|p| p.definition.role == PinRole::Data(DataRole::Input(0)))
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print1 message pin not found");
 
         graph
@@ -126,7 +126,7 @@ mod tests {
         let print2_pins = graph.get_node_pins(print2_node);
         let print2_message = print2_pins
             .iter()
-            .find(|p| p.definition.role == PinRole::Data(DataRole::Input(0)))
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print2 message pin not found");
 
         graph
@@ -136,7 +136,7 @@ mod tests {
         let print3_pins = graph.get_node_pins(print3_node);
         let print3_message = print3_pins
             .iter()
-            .find(|p| p.definition.role == PinRole::Data(DataRole::Input(0)))
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print3 message pin not found");
 
         graph

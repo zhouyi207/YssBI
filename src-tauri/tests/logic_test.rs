@@ -168,7 +168,7 @@ fn test_complex_node_graph() {
         let pins = graph.get_node_pins(print_node);
         let message_pin = pins
             .iter()
-            .find(|p| p.definition.role == PinRole::Data(DataRole::Input(0)))
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print message pin not found");
 
         graph
@@ -391,4 +391,215 @@ fn test_complex_node_graph() {
     println!("3. Sequence2-Step2");
     println!("4. Branch1-False (condition=false)");
     println!("5. Branch2-True (10+10==20 is true)");
+}
+
+#[test]
+fn test_nested_sequence_tree() {
+    // 测试嵌套的 sequence 树形结构
+    // 
+    // 图结构：
+    // root_sequence (3 个输出)
+    //   ├─ Step 0 -> seq_1_0 (3 个输出)
+    //   │            ├─ Step 0 -> seq_2_0 (3 个输出)
+    //   │            │            ├─ Step 0 -> print("Position: 1-0, 2-0, Step-0")
+    //   │            │            ├─ Step 1 -> print("Position: 1-0, 2-0, Step-1")
+    //   │            │            └─ Step 2 -> print("Position: 1-0, 2-0, Step-2")
+    //   │            ├─ Step 1 -> seq_2_1 (3 个输出)
+    //   │            │            ├─ Step 0 -> print("Position: 1-0, 2-1, Step-0")
+    //   │            │            ├─ Step 1 -> print("Position: 1-0, 2-1, Step-1")
+    //   │            │            └─ Step 2 -> print("Position: 1-0, 2-1, Step-2")
+    //   │            └─ Step 2 -> seq_2_2 (3 个输出)
+    //   │                         ├─ Step 0 -> print("Position: 1-0, 2-2, Step-0")
+    //   │                         ├─ Step 1 -> print("Position: 1-0, 2-2, Step-1")
+    //   │                         └─ Step 2 -> print("Position: 1-0, 2-2, Step-2")
+    //   ├─ Step 1 -> seq_1_1 (3 个输出)
+    //   │            ├─ Step 0 -> seq_2_3 (3 个输出)
+    //   │            │            ├─ Step 0 -> print("Position: 1-1, 2-3, Step-0")
+    //   │            │            ├─ Step 1 -> print("Position: 1-1, 2-3, Step-1")
+    //   │            │            └─ Step 2 -> print("Position: 1-1, 2-3, Step-2")
+    //   │            ├─ Step 1 -> seq_2_4 (3 个输出)
+    //   │            │            ├─ Step 0 -> print("Position: 1-1, 2-4, Step-0")
+    //   │            │            ├─ Step 1 -> print("Position: 1-1, 2-4, Step-1")
+    //   │            │            └─ Step 2 -> print("Position: 1-1, 2-4, Step-2")
+    //   │            └─ Step 2 -> seq_2_5 (3 个输出)
+    //   │                         ├─ Step 0 -> print("Position: 1-1, 2-5, Step-0")
+    //   │                         ├─ Step 1 -> print("Position: 1-1, 2-5, Step-1")
+    //   │                         └─ Step 2 -> print("Position: 1-1, 2-5, Step-2")
+    //   └─ Step 2 -> seq_1_2 (3 个输出)
+    //                ├─ Step 0 -> seq_2_6 (3 个输出)
+    //                │            ├─ Step 0 -> print("Position: 1-2, 2-6, Step-0")
+    //                │            ├─ Step 1 -> print("Position: 1-2, 2-6, Step-1")
+    //                │            └─ Step 2 -> print("Position: 1-2, 2-6, Step-2")
+    //                ├─ Step 1 -> seq_2_7 (3 个输出)
+    //                │            ├─ Step 0 -> print("Position: 1-2, 2-7, Step-0")
+    //                │            ├─ Step 1 -> print("Position: 1-2, 2-7, Step-1")
+    //                │            └─ Step 2 -> print("Position: 1-2, 2-7, Step-2")
+    //                └─ Step 2 -> seq_2_8 (3 个输出)
+    //                             ├─ Step 0 -> print("Position: 1-2, 2-8, Step-0")
+    //                             ├─ Step 1 -> print("Position: 1-2, 2-8, Step-1")
+    //                             └─ Step 2 -> print("Position: 1-2, 2-8, Step-2")
+
+    let registry = create_test_registry();
+    let graph = Arc::new(Graph::new("test_nested_sequence", "Nested Sequence Tree Test", registry.clone()));
+
+    println!("\n=== Creating Root Sequence Node ===");
+    
+    // 创建根 sequence 节点
+    let root_seq = graph
+        .create_node("flow.sequence")
+        .expect("Failed to create root sequence node");
+    println!("Created root sequence node");
+
+    println!("\n=== Creating Level 1 Sequence Nodes (3 nodes) ===");
+    
+    // 创建第一层的 3 个 sequence 节点
+    let mut level1_nodes = Vec::new();
+    for i in 0..3 {
+        let node = graph
+            .create_node("flow.sequence")
+            .expect(&format!("Failed to create level1 sequence node {}", i));
+        level1_nodes.push(node);
+        println!("Created level1 sequence node {}", i);
+    }
+
+    println!("\n=== Creating Level 2 Sequence Nodes (9 nodes) ===");
+    
+    // 创建第二层的 9 个 sequence 节点
+    let mut level2_nodes = Vec::new();
+    for i in 0..9 {
+        let node = graph
+            .create_node("flow.sequence")
+            .expect(&format!("Failed to create level2 sequence node {}", i));
+        level2_nodes.push(node);
+        println!("Created level2 sequence node {}", i);
+    }
+
+    println!("\n=== Creating Print Nodes (27 nodes) ===");
+    
+    // 创建 27 个 print 节点（每个 level2 sequence 有 3 个输出）
+    let mut print_nodes = Vec::new();
+    for i in 0..27 {
+        let node = graph
+            .create_node("debug.print")
+            .expect(&format!("Failed to create print node {}", i));
+        print_nodes.push(node);
+    }
+    println!("Created 27 print nodes");
+
+    println!("\n=== Setting Print Messages ===");
+    
+    // 设置 print 节点的消息
+    for (idx, print_node) in print_nodes.iter().enumerate() {
+        let level1_idx = idx / 9;  // 0, 1, 2
+        let level2_idx = idx / 3;  // 0-8
+        let step_idx = idx % 3;    // 0, 1, 2
+        
+        let message = format!("Position: 1-{}, 2-{}, Step-{}", level1_idx, level2_idx, step_idx);
+        
+        let pins = graph.get_node_pins(*print_node);
+        let message_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+            .expect("Print message pin not found");
+
+        graph
+            .set_pin_user_value(message_pin.id, Some(DataValue::String(message)))
+            .expect("Failed to set print message");
+    }
+    println!("Set all 27 print messages");
+
+    println!("\n=== Connecting Root Sequence to Level 1 Sequences ===");
+    
+    // 连接 root sequence 到 level1 sequences
+    let root_pins = graph.get_node_pins(root_seq);
+    for i in 0..3 {
+        let root_step = root_pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(i)))
+            .expect(&format!("Root step {} not found", i));
+        
+        let level1_pins = graph.get_node_pins(level1_nodes[i]);
+        let level1_exec_in = level1_pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect(&format!("Level1 node {} exec in not found", i));
+        
+        graph
+            .connect(root_step.id, level1_exec_in.id)
+            .expect(&format!("Failed to connect root to level1 node {}", i));
+        println!("Connected: Root.Step{} -> Level1[{}].In", i, i);
+    }
+
+    println!("\n=== Connecting Level 1 Sequences to Level 2 Sequences ===");
+    
+    // 连接 level1 sequences 到 level2 sequences
+    for i in 0..3 {
+        let level1_pins = graph.get_node_pins(level1_nodes[i]);
+        
+        for j in 0..3 {
+            let level1_step = level1_pins
+                .iter()
+                .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(j)))
+                .expect(&format!("Level1[{}] step {} not found", i, j));
+            
+            let level2_idx = i * 3 + j;
+            let level2_pins = graph.get_node_pins(level2_nodes[level2_idx]);
+            let level2_exec_in = level2_pins
+                .iter()
+                .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+                .expect(&format!("Level2 node {} exec in not found", level2_idx));
+            
+            graph
+                .connect(level1_step.id, level2_exec_in.id)
+                .expect(&format!("Failed to connect level1[{}] to level2[{}]", i, level2_idx));
+            println!("Connected: Level1[{}].Step{} -> Level2[{}].In", i, j, level2_idx);
+        }
+    }
+
+    println!("\n=== Connecting Level 2 Sequences to Print Nodes ===");
+    
+    // 连接 level2 sequences 到 print 节点
+    for i in 0..9 {
+        let level2_pins = graph.get_node_pins(level2_nodes[i]);
+        
+        for j in 0..3 {
+            let level2_step = level2_pins
+                .iter()
+                .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(j)))
+                .expect(&format!("Level2[{}] step {} not found", i, j));
+            
+            let print_idx = i * 3 + j;
+            let print_pins = graph.get_node_pins(print_nodes[print_idx]);
+            let print_exec_in = print_pins
+                .iter()
+                .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+                .expect(&format!("Print node {} exec in not found", print_idx));
+            
+            graph
+                .connect(level2_step.id, print_exec_in.id)
+                .expect(&format!("Failed to connect level2[{}] to print[{}]", i, print_idx));
+            println!("Connected: Level2[{}].Step{} -> Print[{}]", i, j, print_idx);
+        }
+    }
+
+    println!("\n=== Executing Graph ===");
+
+    // 使用 Executor 执行整个图
+    let mut executor = Executor::new(graph.clone());
+    let result = executor.start(root_seq);
+
+    assert!(
+        result.is_ok(),
+        "Executor failed: {:?}",
+        result.err()
+    );
+
+    println!("\n=== Execution Logs ===");
+    for log in executor.logs() {
+        println!("{}", log);
+    }
+
+    println!("\n=== Test Completed Successfully ===");
+    println!("Total nodes executed: 1 root + 3 level1 + 9 level2 + 27 prints = 40 nodes");
+    println!("Expected 27 print outputs showing position information");
 }

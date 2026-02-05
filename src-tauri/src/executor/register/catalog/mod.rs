@@ -4,6 +4,7 @@ pub mod math;
 pub mod control;
 pub mod debug;
 pub mod logic;
+pub mod value;
 
 use super::NodeRegistry;
 
@@ -13,4 +14,5 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     control::register(registry);
     debug::register(registry);
     logic::register(registry);
+    value::register(registry);
 }

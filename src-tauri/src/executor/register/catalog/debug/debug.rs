@@ -27,7 +27,7 @@ fn register_print(registry: &NodeRegistry) {
         .add_pin(
             PinDefinition::data_input(
                 "Message",
-                DataRole::Input(0),
+                DataRole::Inputs(0),
                 PinTypeDesc::concrete(ValueType::String),
             )
             .with_default(Some(DataValue::String("Hello, World!".to_string()))),
@@ -39,7 +39,7 @@ fn register_print(registry: &NodeRegistry) {
         .with_flow_processor(Arc::new(|ctx| {
             // 获取输入字符串
             let input_value = ctx
-                .get_input_by_role(&PinRole::Data(DataRole::Input(0)))?;
+                .get_input_by_role(&PinRole::Data(DataRole::Inputs(0)))?;
             
             let message = input_value
                 .as_string()

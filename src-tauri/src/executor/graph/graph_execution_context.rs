@@ -1,7 +1,8 @@
 use super::Graph;
+use crate::executor::infer::TypeVarId;
 use crate::executor::node::{NodeExecutionContext, NodeId};
 use crate::executor::pin::{PinDirection, PinId, PinRole};
-use crate::executor::value::DataValue;
+use crate::executor::value::{DataValue, ValueType};
 
 /// 具体的执行上下文实现
 pub struct GraphExecutionContext<'a> {
@@ -134,6 +135,19 @@ impl<'a> NodeExecutionContext for GraphExecutionContext<'a> {
 
     fn node_id(&self) -> NodeId {
         self.node_id
+    }
+
+    fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<ValueType> {
+        self.graph.get_bound_type(type_var_id)
+    }
+
+    fn get_pin_type_by_role(&self, role: &PinRole) -> Result<ValueType, String> {
+        let pin = self
+            .graph
+            .get_pin_by_role(self.node_id, role)
+            .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
+
+        self.graph.resolve_pin_type(pin.id)
     }
 
     fn log(&mut self, message: String) {

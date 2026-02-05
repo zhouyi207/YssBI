@@ -1,6 +1,7 @@
 //! Graph 实现
 
 use crate::executor::connection::{Connection, ConnectionManager};
+use crate::executor::infer::TypeVarId;
 use crate::executor::node::{NodeDefinition, NodeId, NodeInstance, NodeState};
 use crate::executor::pin::{PinId, PinInstance, PinRole};
 use crate::executor::register::NodeRegistry;
@@ -69,6 +70,24 @@ impl Graph {
         let node = NodeInstance::from_definition(definition.clone());
         let node_id = node.id;
 
+        // 为每个节点实例创建新的类型变量 ID 映射
+        use std::collections::HashMap;
+        use crate::executor::infer::TypeVarId;
+        let mut type_var_map: HashMap<TypeVarId, TypeVarId> = HashMap::new();
+        
+        // 注册类型变量到类型推断系统（为每个实例生成新的 ID）
+        {
+            let mut ti = self.type_inference.write().unwrap();
+            for type_var in &definition.type_vars {
+                let new_id = TypeVarId::new();
+                type_var_map.insert(type_var.id, new_id);
+                
+                let mut new_type_var = type_var.clone();
+                new_type_var.id = new_id;
+                ti.register_type_var(new_type_var);
+            }
+        }
+
         // 创建 Pin 并注册到类型推断系统
         for pin_def in &definition.pins {
             let pin = PinInstance::from_definition(pin_def, node_id, 20);
@@ -79,10 +98,18 @@ impl Graph {
 
             // 只注册有类型描述的 Pin（Data Pin）
             if let Some(type_desc) = &pin.definition.type_desc {
+                // 重新映射类型变量 ID
+                let mut remapped_type_desc = type_desc.clone();
+                if let crate::executor::value::DataType::TypeVar(old_id) = &remapped_type_desc.data_type {
+                    if let Some(new_id) = type_var_map.get(old_id) {
+                        remapped_type_desc.data_type = crate::executor::value::DataType::TypeVar(*new_id);
+                    }
+                }
+                
                 self.type_inference
                     .write()
                     .unwrap()
-                    .register_pin(pin_id, type_desc.clone());
+                    .register_pin(pin_id, remapped_type_desc);
             }
         }
 
@@ -125,6 +152,16 @@ impl Graph {
     fn rebuild_type_inference(&self) {
         let mut ti = self.type_inference.write().unwrap();
         ti.clear();
+        
+        // 重新注册所有节点的类型变量
+        let nodes = self.nodes.read().unwrap();
+        for node in nodes.values() {
+            for type_var in &node.definition.type_vars {
+                ti.register_type_var(type_var.clone());
+            }
+        }
+        drop(nodes);
+        
         let pins = self.pins.read().unwrap();
         
         // 只注册有类型描述的 Pin（Data Pin）
@@ -143,6 +180,11 @@ impl Graph {
     /// ⭐ 查询 Pin 推断后的类型
     pub fn resolve_pin_type(&self, pin_id: PinId) -> Result<ValueType, String> {
         self.type_inference.read().unwrap().resolve_pin_type(pin_id)
+    }
+
+    /// ⭐ 获取类型变量的绑定类型
+    pub fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<ValueType> {
+        self.type_inference.read().unwrap().get_bound_type(type_var_id)
     }
 
     // =========================

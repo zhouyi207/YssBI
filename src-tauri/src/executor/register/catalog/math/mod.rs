@@ -3,4 +3,8 @@ pub mod math;
 #[cfg(test)]
 mod test;
 
-pub use math::*;
+use crate::executor::register::NodeRegistry;
+
+pub fn register(registry: &NodeRegistry) {
+    math::register(registry);
+}

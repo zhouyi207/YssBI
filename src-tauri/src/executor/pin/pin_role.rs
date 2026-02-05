@@ -36,9 +36,11 @@ pub enum DataRole {
     // 操作值
     Operands(usize),
     /// 主输入值
-    Input(usize),
+    Input,
+    Inputs(usize),
     /// 主输出值
-    Output(usize),
+    Output,
+    Outputs(usize),
     /// 结果值
     Result,
     /// 错误信息
@@ -84,8 +86,10 @@ impl PinRole {
             PinRole::Data(item) => match item {
                 DataRole::Condition => "data.condition",
                 DataRole::Operands(_) => "data.operands",
-                DataRole::Input(_) => "data.in",
-                DataRole::Output(_) => "data.out",
+                DataRole::Input => "data.in",
+                DataRole::Inputs(_) => "data.ins",
+                DataRole::Output => "data.out",
+                DataRole::Outputs(_) => "data.outs",
                 DataRole::Result => "data.result",
                 DataRole::Error => "data.error",
                 DataRole::Custom(name) => name.as_str(),
@@ -96,7 +100,7 @@ impl PinRole {
     /// 获取 role 的 index，仅对带 index 的 role 有效
     pub fn index(&self) -> Option<usize> {
         match self {
-            PinRole::Data(DataRole::Input(i) | DataRole::Output(i) | DataRole::Operands(i)) => Some(*i),
+            PinRole::Data(DataRole::Inputs(i) | DataRole::Outputs(i) | DataRole::Operands(i)) => Some(*i),
             PinRole::Exec(ExecRole::Steps(i)) => Some(*i),
             _ => None,
         }
@@ -113,8 +117,8 @@ impl PinRole {
         match (self, pattern) {
             // 数据角色家族匹配
             (PinRole::Data(DataRole::Operands(_)), PinRole::Data(DataRole::Operands(_))) => true,
-            (PinRole::Data(DataRole::Input(_)), PinRole::Data(DataRole::Input(_))) => true,
-            (PinRole::Data(DataRole::Output(_)), PinRole::Data(DataRole::Output(_))) => true,
+            (PinRole::Data(DataRole::Inputs(_)), PinRole::Data(DataRole::Inputs(_))) => true,
+            (PinRole::Data(DataRole::Outputs(_)), PinRole::Data(DataRole::Outputs(_))) => true,
             (PinRole::Exec(ExecRole::Steps(_)), PinRole::Exec(ExecRole::Steps(_))) => true,
             // 精确匹配
             (a, b) => a == b,

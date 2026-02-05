@@ -7,9 +7,10 @@ use super::execution_effect::{ExecutionEffect, ResumeToken};
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
 use crate::executor::graph::Graph;
+use crate::executor::infer::TypeVarId;
 use crate::executor::node::{NodeExecutionContext, NodeId};
 use crate::executor::pin::{ExecRole, PinRole};
-use crate::executor::value::DataValue;
+use crate::executor::value::{DataValue, ValueType};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -95,21 +96,77 @@ impl Executor {
             .get_node_definition(node_id)
             .ok_or_else(|| format!("Node {:?} not found", node_id))?;
 
+        // 在执行节点之前，先执行所有上游的纯数据节点
+        self.execute_upstream_data_nodes(node_id)?;
+
         // 创建执行上下文
         let mut ctx = GraphNodeExecutionContext::new(node_id, self.graph.clone());
 
         // 执行节点的 FlowProcessor（如果有）
-        if let Some(ref processor) = definition.flow_processor {
-            return processor(&mut ctx);
-        }
+        let result = if let Some(ref processor) = definition.flow_processor {
+            processor(&mut ctx)
+        } else {
+            // 执行节点的 DataEvaluator（如果有）
+            if let Some(data_evaluator) = &definition.data_evaluator {
+                data_evaluator(&mut ctx)?;
+            }
+            // 如果没有 FlowProcessor，返回 Done
+            Ok(ExecutionEffect::Done)
+        };
 
-        // 执行节点的 DataEvaluator（如果有）
-        if let Some(data_evaluator) = &definition.data_evaluator {
-            data_evaluator(&mut ctx)?;
-        }
+        // 收集日志
+        self.logs.extend(ctx.take_logs());
 
-        // 如果没有 FlowProcessor，返回 Done
-        Ok(ExecutionEffect::Done)
+        result
+    }
+
+    /// 递归执行所有上游的纯数据节点
+    fn execute_upstream_data_nodes(&mut self, node_id: NodeId) -> Result<(), String> {
+        // 获取节点的所有输入 pins
+        let pins = self.graph.get_node_pins(node_id);
+        
+        for pin in pins {
+            // 只处理输入 data pins
+            if !pin.is_input() || !pin.is_data() {
+                continue;
+            }
+            
+            // 检查是否有上游连接
+            if let Some(upstream_pin_id) = self.graph.connections().get_upstream(pin.id) {
+                // 获取上游 pin
+                if let Some(upstream_pin) = self.graph.get_pin(upstream_pin_id) {
+                    let upstream_node_id = upstream_pin.node_id;
+                    
+                    // 检查上游节点是否是纯数据节点（没有 flow_processor）
+                    if let Some(upstream_node) = self.graph.get_node(upstream_node_id) {
+                        if upstream_node.definition.flow_processor.is_none() 
+                            && upstream_node.definition.data_evaluator.is_some() {
+                            
+                            // 检查上游 pin 是否已经有值
+                            if upstream_pin.current_value().is_none() {
+                                // 递归执行上游节点的上游
+                                self.execute_upstream_data_nodes(upstream_node_id)?;
+                                
+                                // 执行上游节点的 data_evaluator
+                                let mut ctx = GraphNodeExecutionContext::new(
+                                    upstream_node_id,
+                                    self.graph.clone(),
+                                );
+                                
+                                if let Some(evaluator) = &upstream_node.definition.data_evaluator {
+                                    evaluator(&mut ctx)?;
+                                }
+                                
+                                // 收集日志
+                                self.logs.extend(ctx.take_logs());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     /// 解释执行效果并更新栈
@@ -426,6 +483,7 @@ struct GraphNodeExecutionContext {
     node_id: NodeId,
     graph: Arc<Graph>,
     outputs: HashMap<PinRole, DataValue>,
+    logs: Vec<String>,
 }
 
 impl GraphNodeExecutionContext {
@@ -434,7 +492,12 @@ impl GraphNodeExecutionContext {
             node_id,
             graph,
             outputs: HashMap::new(),
+            logs: Vec::new(),
         }
+    }
+    
+    fn take_logs(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.logs)
     }
 }
 
@@ -517,11 +580,28 @@ impl NodeExecutionContext for GraphNodeExecutionContext {
         self.node_id
     }
 
+    fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<ValueType> {
+        self.graph.get_bound_type(type_var_id)
+    }
+
+    fn get_pin_type_by_role(&self, role: &PinRole) -> Result<ValueType, String> {
+        let pin = self
+            .graph
+            .get_pin_by_role(self.node_id, role)
+            .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
+
+        self.graph.resolve_pin_type(pin.id)
+    }
+
     fn log(&mut self, message: String) {
-        println!("[Node {:?}] {}", self.node_id, message);
+        let log_message = format!("[Node {:?}] {}", self.node_id, message);
+        println!("{}", log_message);
+        self.logs.push(log_message);
     }
 
     fn error(&mut self, message: String) {
-        eprintln!("[Node {:?}] ERROR: {}", self.node_id, message);
+        let error_message = format!("[Node {:?}] ERROR: {}", self.node_id, message);
+        eprintln!("{}", error_message);
+        self.logs.push(error_message);
     }
 }
