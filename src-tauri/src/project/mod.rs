@@ -3,14 +3,17 @@
 pub mod project_data;
 pub mod project_error;
 pub mod project_metadata;
-pub mod project_state;
 pub mod project_store;
+pub mod project_state;
+pub mod project_state_database;
 
 pub use project_data::*;
 pub use project_error::*;
 pub use project_metadata::*;
-pub use project_state::*;
 pub use project_store::*;
+pub use project_state::*;
+pub use project_state_database::*;
+
 use std::path::PathBuf;
 
 // ==================== 文件操作 ====================

@@ -17,6 +17,7 @@ cargo test
 cd src-tauri
 cargo test test_complex_node_graph
 cargo test test_nested_sequence_tree
+cargo test --test database_test
 ```
 
 ### 显示测试输出（推荐）
@@ -195,3 +196,149 @@ fn create_test_registry() -> Arc<NodeRegistry>
 
 ### 调试节点
 - `debug.print` - 打印输出
+
+## 数据库测试用例
+
+### 3. test_read_iris_csv
+
+**测试目标：** 测试使用 DatabaseEngine::Csv 读取 iris.csv 文件
+
+**测试内容：**
+- 创建 CSV 数据库引擎配置
+- 构建 LazyFrame（延迟加载）
+- 获取预览数据（前 10 行）
+- 使用 Preview 访问模式
+- 加载完整数据到内存
+- 使用 Execution 访问模式
+
+**数据集信息：**
+- 文件路径: `tests/data/iris.csv`
+- 行数: 150
+- 列数: 5
+- 列名: sepal_length, sepal_width, petal_length, petal_width, species
+
+**运行命令：**
+```cmd
+cargo test test_read_iris_csv -- --nocapture
+```
+
+---
+
+### 4. test_iris_data_analysis
+
+**测试目标：** 测试读取 CSV 文件并进行基本数据分析
+
+**测试内容：**
+- 使用 LazyFrame 读取 CSV 文件
+- 收集完整数据到 DataFrame
+- 显示数据集基本信息（形状、列名、数据类型）
+- 显示前 5 行数据
+- 验证数据结构和列名
+
+**预期输出：**
+- 数据集形状: 150 行 x 5 列
+- 数据类型: Float64 (4列) + String (1列)
+- 前 5 行数据的表格展示
+
+**运行命令：**
+```cmd
+cargo test test_iris_data_analysis -- --nocapture
+```
+
+---
+
+### 5. test_iris_lazy_filtering
+
+**测试目标：** 测试使用 LazyFrame 进行数据过滤
+
+**测试内容：**
+- 构建 LazyFrame
+- 使用 Lazy API 进行过滤（sepal_length > 6.0）
+- 选择特定列（sepal_length, sepal_width, species）
+- 收集过滤结果
+- 验证过滤条件是否正确应用
+
+**过滤条件：**
+- 条件: `sepal_length > 6.0`
+- 选择列: sepal_length, sepal_width, species
+- 预期结果: 61 行 x 3 列
+
+**运行命令：**
+```cmd
+cargo test test_iris_lazy_filtering -- --nocapture
+```
+
+---
+
+## 数据库模块使用示例
+
+### 基本用法
+
+```rust
+use yssbi_lib::database::{
+    DatabaseAccess, DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState,
+};
+
+// 1. 创建 CSV 引擎
+let engine = DatabaseEngine::Csv {
+    path: "tests/data/iris.csv".to_string(),
+    delimiter: ',',
+    has_header: true,
+    infer_schema_length: Some(100),
+};
+
+// 2. 构建 LazyFrame
+let lazy_frame = engine.build_lazy().expect("Failed to build lazy frame");
+
+// 3. 创建数据库实例
+let mut db_instance = DatabaseInstance {
+    decl: DatabaseDecl {
+        id: "iris_dataset".to_string(),
+        engine,
+        schema_version: 1,
+        required: true,
+    },
+    state: DatabaseState::Lazy { lazy_frame },
+};
+
+// 4. 获取预览数据
+let preview_df = db_instance.get_preview(10).expect("Failed to get preview");
+
+// 5. 加载完整数据
+let full_df = db_instance.ensure_loaded().expect("Failed to load data");
+```
+
+### 访问模式
+
+数据库实例支持两种访问模式：
+
+1. **Preview 模式** - 用于 UI 预览，限制返回行数（最多 100 行）
+   ```rust
+   let preview_view = db_instance.access(DatabaseAccess::Preview)?;
+   ```
+
+2. **Execution 模式** - 用于图执行，返回完整数据
+   ```rust
+   let exec_view = db_instance.access(DatabaseAccess::Execution)?;
+   ```
+
+### LazyFrame 操作
+
+使用 Polars LazyFrame API 进行数据操作：
+
+```rust
+use polars::prelude::*;
+
+// 过滤
+let filtered = lazy_frame.filter(col("sepal_length").gt(6.0));
+
+// 选择列
+let selected = lazy_frame.select(&[col("sepal_length"), col("species")]);
+
+// 聚合
+let aggregated = lazy_frame.group_by(&[col("species")])
+    .agg(&[col("sepal_length").mean()]);
+
+// 收集结果
+let result = filtered.collect()?;
+```
