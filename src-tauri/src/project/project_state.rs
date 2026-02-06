@@ -6,11 +6,13 @@ use crate::project::{ProjectData, ProjectStore};
 use std::sync::{Arc, RwLock};
 
 /// 项目状态
+/// 
+/// 是不需要 序列化的
 #[derive(Default)]
 pub struct ProjectState {
     project_data: Arc<RwLock<ProjectData>>,
     project_path: Arc<RwLock<Option<String>>>,
-    // 在这里可以存储数据库数据
+    // 在这里可以存储 数据库 数据
     project_store: Arc<RwLock<ProjectStore>>,
 }
 

@@ -1,9 +1,9 @@
 use crate::event::EventProject;
 use crate::event::{emit_project_event, Event};
+use crate::frontend::FrontendError;
 use crate::log::LogLevel;
 use crate::log_app;
-use crate::project::{ProjectData, ProjectState};
-use serde_json::Value;
+use crate::project::{load_project_from_file, save_project_to_file, ProjectData, ProjectState};
 use tauri::{AppHandle, State};
 
 /// 获取当前项目数据
@@ -20,6 +20,45 @@ pub fn get_project_data(state: State<ProjectState>) -> ProjectData {
     data
 }
 
+#[tauri::command]
+pub fn set_project_data(
+    app: AppHandle,
+    state: State<ProjectState>,
+    data: ProjectData,
+    path: Option<String>,
+    emit_event: Option<bool>,
+) -> Result<(), String> {
+    log_app!(
+        LogLevel::Info,
+        "[command.set_project_data] ProjectData: {}",
+        data.info()
+    );
+
+    state.set_data(data.clone());
+
+    if let Some(p) = path.clone() {
+        log_app!(
+            LogLevel::Info,
+            "[command.set_project_data] Set path to: {}",
+            p
+        );
+        state.set_path(Some(p));
+    }
+
+    if emit_event.unwrap_or(false) {
+        log_app!(
+            LogLevel::Info,
+            "[command.set_project_data] Emitting ProjectLoaded event"
+        );
+        emit_project_event(
+            &app,
+            Event::Project(EventProject::ProjectLoaded { data, path }),
+        );
+    }
+
+    Ok(())
+}
+
 /// 获取当前项目路径
 #[tauri::command]
 pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
@@ -28,10 +67,65 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
     log_app!(
         LogLevel::Info,
         "[command.get_project_path] Path: {:?}",
-        path
+        path.clone().unwrap()
     );
 
     path
+}
+
+/// 加载项目（从状态管理层）
+#[tauri::command]
+pub fn load_project_to_state(
+    app: AppHandle,
+    state: State<ProjectState>,
+    path: String,
+) -> Result<(), FrontendError> {
+    log_app!(
+        LogLevel::Info,
+        "[command.load_project] Loading project from: {}",
+        path
+    );
+
+    let project_data = load_project_from_file(&path)?;
+
+    log_app!(
+        LogLevel::Info,
+        "[command.load_project] Project loaded: {}",
+        project_data.info()
+    );
+
+    state.set_data(project_data.clone());
+    state.set_path(Some(path.clone()));
+    emit_project_event(
+        &app,
+        Event::Project(EventProject::ProjectLoaded {
+            data: project_data.clone(),
+            path: Some(path),
+        }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub fn save_project_from_state(
+    app: AppHandle,
+    state: State<ProjectState>,
+    path: String,
+) -> Result<(), FrontendError> {
+    log_app!(
+        LogLevel::Info,
+        "[command.save_project] Saving project to: {}",
+        path
+    );
+
+    let mut project_data = state.get_data();
+    project_data.update_metadata();
+
+    save_project_to_file(&project_data, &path)?;
+    state.set_path(Some(path.clone()));
+
+    emit_project_event(&app, Event::Project(EventProject::ProjectSaved { path }));
+    Ok(())
 }
 
 /// 新建项目（清空当前状态）
@@ -41,21 +135,5 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 
     state.clear();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
-    Ok(())
-}
-
-/// 加载项目（从状态管理层）
-#[tauri::command]
-pub fn load_project_to_state(_path: String, _state: State<ProjectState>) -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-pub fn save_project_from_state(_path: String, _state: State<ProjectState>) -> Result<(), String> {
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_project_data(_data: Value, _state: State<ProjectState>) -> Result<(), String> {
     Ok(())
 }

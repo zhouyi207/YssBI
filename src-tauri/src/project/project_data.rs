@@ -1,4 +1,6 @@
+use super::ProjectError;
 use super::ProjectMetadata;
+use crate::database::DatabaseDecl;
 use crate::graph::{GraphData, GraphId};
 use crate::variable::VariableDefinition;
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,7 @@ use std::collections::HashMap;
 pub struct ProjectData {
     pub variables: HashMap<String, VariableDefinition>,
     pub graphs: HashMap<GraphId, GraphData>,
+    pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }
 
@@ -17,6 +20,7 @@ impl ProjectData {
         Self {
             variables: HashMap::new(),
             graphs: HashMap::new(),
+            databases: HashMap::new(),
             metadata: ProjectMetadata::default(),
         }
     }
@@ -24,9 +28,22 @@ impl ProjectData {
     /// 获取项目信息摘要
     pub fn info(&self) -> String {
         format!(
-            "variables={}, graphs={}",
+            "variables={}, databases={}, graphs={}",
             self.variables.len(),
+            self.databases.len(),
             self.graphs.len()
         )
+    }
+
+    pub fn to_json(&self) -> Result<String, ProjectError> {
+        serde_json::to_string_pretty(self).map_err(ProjectError::Serialize)
+    }
+
+    pub fn from_json(json: &str) -> Result<Self, ProjectError> {
+        serde_json::from_str(json).map_err(ProjectError::Deserialize)
+    }
+
+    pub fn update_metadata(&mut self) {
+        self.metadata.export_time = chrono::Utc::now().to_rfc3339();
     }
 }

@@ -1,23 +1,20 @@
-use std::{
-    collections::HashMap,
-};
+use crate::database::DatabaseInstance;
+use std::collections::HashMap;
 
 pub struct ProjectStore {
-    pub df: HashMap<String, String>,
+    pub databases: HashMap<String, DatabaseInstance>,
 }
 
 impl Default for ProjectStore {
     fn default() -> Self {
         Self {
-            df: HashMap::new(),
+            databases: HashMap::new(),
         }
     }
 }
 
 impl ProjectStore {
     pub fn new() -> Self {
-        Self {
-            df: HashMap::new(),
-        }
+        Self::default()
     }
 }

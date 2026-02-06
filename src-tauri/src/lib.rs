@@ -10,6 +10,8 @@ pub mod log;
 pub mod graph;
 pub mod variable;
 pub mod event;
+pub mod database;
+pub mod frontend;
 
 use commands::*;
 
