@@ -2,7 +2,7 @@ import { useContext } from 'react';
 import Canvas from './Canvas';
 import { useCanvas, GroupContext } from '../Context/CanvasContext';
 import { WatermarkView } from './WatermarkView';
-import { useLayoutStore } from '../../../store/layoutStore';
+import { useLayoutStore } from '../../../stores/layoutStore';
 
 /**
  * 图形编辑器主组件

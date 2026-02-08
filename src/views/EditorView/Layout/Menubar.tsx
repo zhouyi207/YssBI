@@ -2,13 +2,14 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCanvas } from "../Context/CanvasContext";
 import { useState, useEffect } from "react";
-import { useLayoutStore } from "../../../store/layoutStore";
+import { useLayoutStore } from "../../../stores/layoutStore";
 import { useUI } from "../Context/UIProvider";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ProjectService } from "../../../services/projectService";
+import { ProjectService } from "../../../services/project/projectService";
 import { useProjectStore } from "../Store/useProjectStore";
-import { SettingsService, DEFAULT_WINDOW } from "../../../services/settingsService";
+import { SettingsService } from "../../../services/settings/settingsService";
+import { DEFAULT_WINDOW } from "@/app/appConfig/default";
 
 interface MenuItem {
   label: string;

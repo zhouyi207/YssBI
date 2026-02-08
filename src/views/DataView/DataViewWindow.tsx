@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ProjectService } from '../../services/projectService';
+import { ProjectService } from '../../services/project/projectService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectStore } from '@/views/EditorView/Store/useProjectStore';
 import { useProjectSync, initProjectSync } from '@/views/EditorView/Hooks/useProjectSync';

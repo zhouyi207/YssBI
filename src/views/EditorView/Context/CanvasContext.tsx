@@ -3,7 +3,7 @@ import { Pin, BaseNode } from "../Types/nodes";
 import { CanvasState } from "../Types/canvas";
 import { VariableDefinition } from "../Types/variables";
 import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
-import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
+import { useLayoutStore, LayoutState } from "../../../stores/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 
 

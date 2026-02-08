@@ -2,7 +2,7 @@ import { forwardRef, useMemo } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
 import { Select } from "../Shared/UI/Select";
-import { useLayoutStore } from "../../../store/layoutStore";
+import { useLayoutStore } from "../../../stores/layoutStore";
 import { useSchemaStore } from "../Store/useSchemaStore";
 import { getDataTypeDisplayName, VariableDataType, isPrimitiveType } from "../Types/variables";
 import { useNodeStore } from "../Store/useNodeStore";

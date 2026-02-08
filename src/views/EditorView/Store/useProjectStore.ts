@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { SubGraphData, ProjectData, DataFrameData } from "../Types/canvas";
 import { VariableDefinition } from "../Types/variables";
-import { ProjectService } from "../../../services/projectService";
+import { ProjectService } from "../../../services/project/projectService";
 import { TabState, useNodeStore } from "./useNodeStore";
 import { syncInternalNodePins, syncSubGraphInstanceNodes } from "../Utils/internalNodes";
 

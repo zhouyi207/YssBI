@@ -1,5 +1,5 @@
 import { BaseNode } from "../Types/nodes";
-import { ProjectService } from "../../../services/projectService";
+import { ProjectService } from "../../../services/project/projectService";
 
 /**
  * 使用后端 API 创建节点

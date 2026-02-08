@@ -4,7 +4,7 @@ import { CanvasState, SubGraphData } from "../Types/canvas";
 import { BaseNode } from "../Types/nodes";
 import { VariableDefinition } from "../Types/variables";
 import { deserializeSubGraph, serializeSubGraph } from "../Utils/io";
-import { ProjectService } from "../../../services/projectService";
+import { ProjectService } from "../../../services/project/projectService";
 import { useUI } from "./UIProvider";
 import { getNodeDefinition } from "../Hooks/useNodeRegistry";
 import { createInternalNode } from "../Utils/internalNodes";
@@ -12,7 +12,7 @@ import { useViewportStore } from "../Store/useViewportStore";
 import { useNodeStore, useTabVariables } from "../Store/useNodeStore";
 import { useProjectStore } from "../Store/useProjectStore";
 import { useCanvasInteraction } from "../Hooks/useCanvasInteraction";
-import { useLayoutStore, LayoutState } from "../../../store/layoutStore";
+import { useLayoutStore, LayoutState } from "../../../stores/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 import { deleteNodeInBackend } from "../Utils/backendNodeOps";
 

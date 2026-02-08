@@ -5,7 +5,7 @@ import { useViewportStore } from "../Store/useViewportStore";
 import { BaseNode, Pin } from "../Types/nodes";
 import { CanvasState, Gesture, EditorGroup, SubGraphData } from "../Types/canvas";
 import { clamp } from "../../../shared/types";
-import { ProjectService } from "../../../services/projectService";
+import { ProjectService } from "../../../services/project/projectService";
 import { deserializeSubGraph } from "../Utils/io";
 
 interface UseCanvasInteractionProps {

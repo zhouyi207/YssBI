@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { BaseNode } from '../Types/nodes';
 import { deleteNodeInBackend } from '../Utils/backendNodeOps';
 import { useCanvas } from '../Context/CanvasContext';
-import { ProjectService } from '../../../services/projectService';
+import { ProjectService } from '../../../services/project/projectService';
 import { SubGraphData } from '../Types/canvas';
 import { serializeSubGraph, deserializeSubGraph } from '../Utils/io';
 

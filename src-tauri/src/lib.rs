@@ -12,6 +12,7 @@ pub mod variable;
 pub mod event;
 pub mod database;
 pub mod frontend;
+pub mod editor;
 
 use commands::*;
 

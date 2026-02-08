@@ -1,5 +1,5 @@
 import { useRef, Fragment, useMemo } from 'react';
-import { useLayoutStore } from '../../../store/layoutStore';
+import { useLayoutStore } from '../../../stores/layoutStore';
 import { Sash } from './Sash';
 import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '../../../shared/types/layout';

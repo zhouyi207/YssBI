@@ -3,7 +3,7 @@ import { PiGraph, PiFunction } from "react-icons/pi";
 import { TiFlowSwitch } from "react-icons/ti";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase } from "react-icons/vsc";
-import { useLayoutStore } from "../../../store/layoutStore";
+import { useLayoutStore } from "../../../stores/layoutStore";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean, onClick: () => void, children: React.ReactNode, title: string, id: string }) => (
     <button

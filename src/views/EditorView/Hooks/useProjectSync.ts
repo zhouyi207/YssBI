@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { ProjectService } from '../../../services/projectService';
+import { ProjectService } from '../../../services/project/projectService';
 import { useProjectStore } from '../Store/useProjectStore';
 import { ProjectData } from '../Types/canvas';
 

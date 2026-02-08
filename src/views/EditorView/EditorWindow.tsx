@@ -1,6 +1,6 @@
 // editor/EditorApp.tsx
 
-import { useLayoutStore } from "@/store/layoutStore";
+import { useLayoutStore } from "@/stores/layoutStore";
 
 import ActivityBar from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";

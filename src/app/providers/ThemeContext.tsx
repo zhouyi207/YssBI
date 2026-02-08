@@ -1,22 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import {
     SettingsService,
+} from "@/services/settings";
+import {
+    AppSettings,
     ThemeSettings,
     EditorSettings,
     AppearanceSettings,
     ProjectSettings,
     WindowSettings,
-    AppSettings,
-    DEFAULT_THEME,
-    DEFAULT_EDITOR,
+} from "@/shared/types/settings";
+import {
     DEFAULT_APPEARANCE,
+    DEFAULT_EDITOR,
+    DEFAULT_THEME,
     DEFAULT_PROJECT,
     DEFAULT_WINDOW,
-} from "@/services/settingsService";
-
-// 重新导出类型供其他组件使用
-export type { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, WindowSettings, AppSettings };
-export { DEFAULT_THEME, DEFAULT_EDITOR, DEFAULT_APPEARANCE, DEFAULT_PROJECT, DEFAULT_WINDOW };
+} from "@/app/appConfig/default";
 
 interface SettingsContextValue {
     // 状态
