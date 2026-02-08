@@ -6,6 +6,9 @@ use crate::log_app;
 use crate::project::{load_project_from_file, save_project_to_file, ProjectData, ProjectState};
 use tauri::{AppHandle, State};
 
+use serde_json::Value;
+
+
 /// 获取当前项目数据
 #[tauri::command]
 pub fn get_project_data(state: State<ProjectState>) -> ProjectData {
@@ -136,4 +139,30 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
     state.clear();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
+}
+
+
+#[tauri::command]
+pub fn save_project(_path: String, _data: Value) -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+pub fn load_project(_path: String) -> Result<Value, String> {
+    Ok(Value::Null)
+}
+
+#[tauri::command]
+pub fn parse_project(_data: Value) -> Result<Value, String> {
+    Ok(Value::Null)
+}
+
+#[tauri::command]
+pub fn serialize_project(_data: Value) -> Result<Value, String> {
+    Ok(Value::Null)
+}
+
+#[tauri::command]
+pub fn execute_project() -> Result<Value, String> {
+    Ok(Value::Null)
 }

@@ -1,9 +1,9 @@
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { TabState } from "../components/Editor/Store/useNodeStore";
-import { SubGraphData, ProjectData, CanvasState, PinDefinition } from "../components/Editor/Types/canvas";
-import { VariableDefinition } from "../components/Editor/Types/variables";
-import { serializeSubGraph } from "../components/Editor/Utils/io";
+import { TabState } from "@/views/EditorView/Store/useNodeStore";
+import { SubGraphData, ProjectData, CanvasState, PinDefinition } from "@/views/EditorView/Types/canvas";
+import { VariableDefinition } from "@/views/EditorView/Types/variables";
+import { serializeSubGraph } from "@/views/EditorView/Utils/io";
 
 // ==================== 后端数据结构转换 ====================
 

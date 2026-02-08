@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '../types/layout';
+import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/layout';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).slice(2, 11);

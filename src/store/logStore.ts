@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { LogMessage, LogFilter, LogLevel, LogType } from '../types/logging';
+import { LogMessage, LogFilter, LogLevel, LogType } from '../shared/types/logging';
 import { invoke } from '@tauri-apps/api/core';
 
 interface LogStore {
