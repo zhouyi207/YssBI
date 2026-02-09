@@ -1,6 +1,6 @@
 import { BaseNode } from "../Types/nodes";
 import { Position } from "../../../shared/types";
-import { createNode } from "../Hooks/useNodeRegistry";
+import { createNode } from "@/features/node-registry";
 
 export function createNodeFromTemplate(
     position: Position,

@@ -1,15 +1,15 @@
 import React, { useState } from "react";
 import { useCanvas } from "../Context/CanvasContext";
-import { useGestureStore } from "../Store/useGestureStore";
-import { useViewportStore } from "../Store/useViewportStore";
-import { useNodeStore } from "../Store/useNodeStore";
+import { useGestureStore } from "@/features/canvas/stores";
+import { useViewportStore } from "@/features/canvas/stores";
+import { useNodeStore } from "@/features/node-registry/stores";
 import { BaseNode } from "../Types/nodes";
 import HUD from "./HUD";
 import NodePalette from "../Nodes/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 import { DEFAULT_VIEWPORT } from "./constants";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
-import { useBackendNodeCreation } from "../Hooks/useBackendNodeCreation";
+import { useBackendNodeCreation } from "@/features/node-registry/hooks";
 
 
 export default function CanvasOverlays({

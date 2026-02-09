@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { LayoutDirection } from '../../../shared/types/layout';
-import { useLayoutStore } from '../../../stores/layoutStore';
+import { useLayoutStore } from '../../../features/layoutStore/layoutStore';
 
 
 interface SashProps {

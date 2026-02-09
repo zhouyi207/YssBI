@@ -39,7 +39,7 @@ impl Default for ThemeSettings {
             grid_lines: "#252525".to_string(),
             node_base: "#2d2d2d".to_string(),
             connection_lines: "#6b6b6b".to_string(),
-            selection_region: "#0078d433".to_string(),
+            selection_region: "#0078d4".to_string(),
             exec_color: "#ffffff".to_string(),
             int_color: "#35b2b2".to_string(),
             float_color: "#9ecd4d".to_string(),

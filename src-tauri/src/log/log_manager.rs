@@ -196,14 +196,9 @@ pub fn count_logs_in_file(file_path: &PathBuf) -> Result<usize, String> {
 /// 便捷宏：发送应用程序日志
 #[macro_export]
 macro_rules! log_app {
-    ($level:expr, $msg:expr) => {
+    ($level:expr, $($arg:tt)*) => {
         if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_app($level, $msg.to_string(), None);
-        }
-    };
-    ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_app($level, $msg.to_string(), Some($source.to_string()));
+            manager.log_app($level, format!($($arg)*), None);
         }
     };
 }
@@ -211,14 +206,9 @@ macro_rules! log_app {
 /// 便捷宏：发送执行日志
 #[macro_export]
 macro_rules! log_exec {
-    ($level:expr, $msg:expr) => {
+    ($level:expr, $($arg:tt)*) => {
         if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_execution($level, $msg.to_string(), None);
-        }
-    };
-    ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_execution($level, $msg.to_string(), Some($source.to_string()));
+            manager.log_execution($level, format!($($arg)*), None);
         }
     };
 }
@@ -226,14 +216,9 @@ macro_rules! log_exec {
 /// 便捷宏：发送系统日志
 #[macro_export]
 macro_rules! log_sys {
-    ($level:expr, $msg:expr) => {
+    ($level:expr, $($arg:tt)*) => {
         if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_system($level, $msg.to_string(), None);
-        }
-    };
-    ($level:expr, $msg:expr, $source:expr) => {
-        if let Some(manager) = $crate::log::get_log_manager() {
-            manager.log_system($level, $msg.to_string(), Some($source.to_string()));
+            manager.log_system($level, format!($($arg)*), None);
         }
     };
 }

@@ -1,11 +1,10 @@
 import { forwardRef, useMemo } from "react";
 import { useCanvas } from "../Context/CanvasContext";
 import { useUI } from "../Context/UIProvider";
-import { Select } from "../Shared/UI/Select";
-import { useLayoutStore } from "../../../stores/layoutStore";
-import { useSchemaStore } from "../Store/useSchemaStore";
+import { Select } from "../../../shared/ui/Select";
+import { useSchemaStore } from "@/features/shema";
 import { getDataTypeDisplayName, VariableDataType, isPrimitiveType } from "../Types/variables";
-import { useNodeStore } from "../Store/useNodeStore";
+import { useNodeStore } from "@/features/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {

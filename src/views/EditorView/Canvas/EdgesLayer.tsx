@@ -1,8 +1,9 @@
 import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { useViewportStore } from "../Store/useViewportStore";
-import { useNodeStore } from "../Store/useNodeStore";
-import { useGestureStore } from "../Store/useGestureStore";
-import { useExecutionStore } from "../Store/useExecutionStore";
+import { useViewportStore } from "@/features/canvas/stores";
+import { useNodeStore } from "@/features/node-registry/stores";
+import { useGestureStore } from "@/features/canvas/stores";
+import { useExecutionStore } from "@/features/execution/stores";
+import { useTheme } from "@/hooks/useTheme";
 import { drawEdge } from "../Edges/Edge";
 import { DEFAULT_VIEWPORT } from "./constants";
 
@@ -25,11 +26,13 @@ export const EdgesLayer = ({
     pendingConnection,
     contextMenu,
     activeTabId,
-    theme
 }: any) => {
     const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef<number | null>(null);
     const isAnimatingRef = useRef(false);
+    
+    // 使用 useTheme hook 获取 theme
+    const { theme } = useTheme();
     
     // 🆕 粒子系统
     const particlesRef = useRef<Particle[]>([]);

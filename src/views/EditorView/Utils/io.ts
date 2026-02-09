@@ -1,6 +1,6 @@
 import { BaseNode } from "../Types/nodes";
 import { CanvasState, SubGraphData, Connection } from "../Types/canvas";
-import { getNodeDefinition } from "../Hooks/useNodeRegistry";
+import { getNodeDefinition } from "@/features/node-registry";
 import { VariableDefinition } from "../Types/variables";
 
 /**

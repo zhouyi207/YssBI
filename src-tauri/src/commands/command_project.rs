@@ -70,7 +70,7 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
     log_app!(
         LogLevel::Info,
         "[command.get_project_path] Path: {:?}",
-        path.clone().unwrap()
+        path
     );
 
     path

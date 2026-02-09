@@ -1,50 +1,49 @@
 /// hooks —— 生命周期 + 组合逻辑（重点）
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNodeRegistryStore } from "./nodeRegistry.store";
 import { NodeRegistryState } from "./nodeRegistry.types";
+import { LoadStatus } from "@/shared/types/loadStatus";
 
 /**
  * NodeRegistry 初始化 Hook
+ *
+ * 语义：
+ * - 首次使用时自动触发初始化
+ * - 返回标准的 NodeRegistryState（status + error）
  */
 export function useNodeRegistry(): NodeRegistryState {
-  const isInitialized = useNodeRegistryStore((s) => s.isInitialized);
-  const isLoading = useNodeRegistryStore((s) => s.isLoading);
+  const status = useNodeRegistryStore((s) => s.status);
   const error = useNodeRegistryStore((s) => s.error);
   const syncFromBackend = useNodeRegistryStore((s) => s.syncFromBackend);
 
-  const [hasInitialized, setHasInitialized] = useState(isInitialized);
-
   useEffect(() => {
-    if (isInitialized) {
-      setHasInitialized(true);
-      return;
+    if (status === LoadStatus.Idle) {
+      syncFromBackend().catch((err) => {
+        console.error("[useNodeRegistry] Initialization failed:", err);
+      });
     }
-
-    syncFromBackend().then(
-      () => setHasInitialized(true),
-      (err) => console.error("[useNodeRegistry]", err),
-    );
-  }, [isInitialized, syncFromBackend]);
+  }, [status, syncFromBackend]);
 
   return {
-    isInitialized: hasInitialized,
-    isLoading,
+    status,
     error,
   };
 }
 
 /**
  * 获取所有节点定义（安全）
+ *
+ * - 未 Ready 时返回空数组
+ * - 调用方无需关心初始化时序
  */
 export function useNodeDefinitions() {
-  const { isInitialized, isLoading, error } = useNodeRegistry();
+  const { status, error } = useNodeRegistry();
   const definitions = useNodeRegistryStore((s) => s.getAllDefinitions());
 
   return {
-    definitions: isInitialized ? definitions : [],
-    isInitialized,
-    isLoading,
+    definitions: status === LoadStatus.Ready ? definitions : [],
+    status,
     error,
   };
 }

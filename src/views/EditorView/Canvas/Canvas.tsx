@@ -3,15 +3,14 @@ import { Node } from "../Nodes/Node";
 import { Pin } from "../Types/nodes";
 import { useDrag } from "../Context/DragContext";
 import { useCanvas } from "../Context/CanvasContext";
-import { useTheme } from "../../../app/providers/ThemeContext";
-import { useViewportStore } from "../Store/useViewportStore";
-import { useNodeStore } from "../Store/useNodeStore";
-import { useGestureStore } from "../Store/useGestureStore";
+import { useViewportStore } from "@/features/canvas/stores";
+import { useNodeStore } from "@/features/node-registry/stores";
+import { useGestureStore } from "@/features/canvas/stores";
 import { createNodeFromTemplate } from "../Utils/nodeUtils";
 import { createInternalNode } from "../Utils/internalNodes";
 import { ConnectionLine } from "./ConnectionLine";
-import { useBackendNodeCreation } from "../Hooks/useBackendNodeCreation";
-import { useExecutionVisualization } from "../Hooks/useExecutionVisualization";
+import { useBackendNodeCreation } from "@/features/node-registry/hooks";
+import { useExecutionVisualization } from "@/features/execution/hooks";
 
 // Extracted Components
 import { ViewportGrid } from "./ViewportGrid";
@@ -48,7 +47,6 @@ export default function Canvas() {
     groupId,
     selectedNodeIds
   } = useCanvas();
-  const { theme } = useTheme();
   const { drag } = useDrag();
   const gesture = useGestureStore(state => state.gesture);
   const { createNode } = useBackendNodeCreation();
@@ -560,8 +558,7 @@ export default function Canvas() {
           gesture={gesture}
           pendingConnection={pendingConnection}
           contextMenu={contextMenu}
-          activeTabId={activeTabId} // Pass activeTabId
-          theme={theme}
+          activeTabId={activeTabId}
         />
 
         {/* Optimized Connection Line */}

@@ -1,4 +1,3 @@
-// src/app/providers/SettingsEffectsProvider.tsx
 import { useEffect } from "react";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -44,7 +43,6 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         // 计算派生颜色
         root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");
 
-        console.log("[ThemeProvider] CSS variables applied");
     }, [theme]);
 
     return <>{children}</>;

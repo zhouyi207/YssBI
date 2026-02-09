@@ -68,9 +68,9 @@ pub fn run() {
             get_categories,
             get_ui_styles,
             get_variable_types,
-            check_type_connection,
-            get_pin_type_info,
-            check_pin_compatibility_detailed,
+            // check_type_connection,
+            // get_pin_type_info,
+            // check_pin_compatibility_detailed,
             // 项目状态命令
             get_project_data,
             get_project_path,

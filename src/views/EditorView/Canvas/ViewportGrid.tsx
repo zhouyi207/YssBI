@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { useViewportStore } from "../Store/useViewportStore";
+import { useViewportStore } from "@/features/canvas/stores";
 import { GRID, DEFAULT_VIEWPORT } from "./constants";
 
 export const ViewportGrid = ({ groupId }: { groupId: string }) => {

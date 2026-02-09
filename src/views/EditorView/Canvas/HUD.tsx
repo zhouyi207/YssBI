@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useCanvas } from "../Context/CanvasContext";
-import { useViewportStore } from "../Store/useViewportStore";
+import { useViewportStore } from "@/features/canvas/stores";
 
 
 

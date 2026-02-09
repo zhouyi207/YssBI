@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useNodeStore } from "../Store/useNodeStore";
+import { useNodeStore } from "@/features/node-registry/stores";
 
 export interface PinInputProps {
   pinId: string;

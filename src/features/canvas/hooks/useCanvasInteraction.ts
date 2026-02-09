@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { useNodeStore } from "../Store/useNodeStore";
-import { useGestureStore } from "../Store/useGestureStore";
-import { useViewportStore } from "../Store/useViewportStore";
-import { BaseNode, Pin } from "../Types/nodes";
-import { CanvasState, Gesture, EditorGroup, SubGraphData } from "../Types/canvas";
+import { useNodeStore } from "@/features/node-registry/stores";
+import { useProjectStore } from "@/features/project";
+import { useGestureStore } from "../stores";
+import { useViewportStore } from "../stores";
+import { BaseNode, Pin } from "@/views/EditorView/Types/nodes";
+import { CanvasState, Gesture, EditorGroup, SubGraphData } from "@/views/EditorView/Types/canvas";
+
 import { clamp } from "../../../shared/types";
 import { ProjectService } from "../../../services/project/projectService";
-import { deserializeSubGraph } from "../Utils/io";
+import { deserializeSubGraph } from "@/views/EditorView/Utils/io";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;
@@ -289,11 +291,7 @@ export function useCanvasInteraction({
                 const tid = activeTabIdRef.current;
                 if (tid) {
                     console.log(`[useCanvasInteraction] Drag ended, syncing nodes to backend...`);
-                    import('../Store/useNodeStore').then(({ useNodeStore }) => {
-                        import('../Store/useProjectStore').then(({ useProjectStore }) => {
-                            useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
-                        });
-                    });
+                    useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
                 }
             }
 

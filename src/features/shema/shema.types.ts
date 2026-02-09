@@ -5,6 +5,18 @@
  * 前端启动时从后端获取这些定义并缓存。
  */
 
+import { LoadStatus } from "@/shared/types/loadStatus";
+
+// ==================== Schema 状态 ====================
+
+/**
+ * Schema 初始化状态
+ */
+export interface SchemaState {
+    status: LoadStatus;
+    error: string | null;
+}
+
 // ==================== Pin 类型 ====================
 
 /** Pin 类型定义 */
@@ -161,40 +173,3 @@ export interface EditorSchema {
   node_validation_rules: NodeValidationRule[];
   graph_validation_rules: GraphValidationRule[];
 }
-
-// ==================== 重新导出变量定义类型 ====================
-
-export type {
-  VariableDataType,
-  VariableScope,
-  GlobalScope,
-  FunctionScope,
-  MacroScope,
-  DataSourceConfig,
-  CsvSource,
-  JsonSource,
-  ExcelSource,
-  SqlSource,
-  ApiSource,
-  TransformSource,
-  InlineSource,
-  TransformOperation,
-  Aggregation,
-  AggregateFunction,
-  VariableDefinition,
-  VariableRuntimeState,
-  VariablePreview,
-  VariablePreviewType,
-  DataFrameStats,
-  ColumnInfo,
-} from "./variables";
-
-export {
-  isPrimitiveType,
-  isComplexType,
-  getDataTypeDisplayName,
-  getDefaultValueForType,
-  createVariableDefinition,
-  createPrimitiveVariable,
-  createComplexVariable,
-} from "./variables";

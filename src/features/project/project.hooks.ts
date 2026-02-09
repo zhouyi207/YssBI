@@ -1,30 +1,9 @@
+/// hooks —— 生命周期 + 组合逻辑（重点）
+
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { ProjectService } from '../../../services/project/projectService';
-import { useProjectStore } from '../Store/useProjectStore';
-import { ProjectData } from '../Types/canvas';
-
-/**
- * 项目事件类型（与后端 ProjectEvent 对应）
- */
-interface ProjectEventPayload {
-  type: string;
-  payload: any;
-}
-
-/**
- * useProjectSync 配置
- */
-interface UseProjectSyncOptions {
-  /** 是否启用同步 */
-  enabled?: boolean;
-  /** 项目加载回调 */
-  onProjectLoaded?: (data: ProjectData, path: string | null) => void;
-  /** 项目清除回调 */
-  onProjectCleared?: () => void;
-  /** 项目保存回调 */
-  onProjectSaved?: (path: string) => void;
-}
+import { useProjectStore } from './project.store';
+import { ProjectState, UseProjectSyncOptions, ProjectEventPayload } from './project.types';
 
 // 全局单例：确保事件监听器只注册一次
 let globalUnlisten: (() => void) | null = null;
@@ -32,7 +11,29 @@ let listenerSetupPromise: Promise<void> | null = null;
 let listenerCount = 0;
 
 /**
+ * Project 初始化 Hook
+ *
+ * 语义：
+ * - 首次使用时自动触发初始化
+ * - 返回标准的 ProjectState（status + error）
+ * - 不自动同步，需要手动调用 syncFromBackend
+ */
+export function useProject(): ProjectState {
+  const status = useProjectStore((s) => s.status);
+  const error = useProjectStore((s) => s.error);
+
+  return {
+    status,
+    error,
+  };
+}
+
+/**
  * 订阅后端项目事件，自动同步数据到前端 Store
+ *
+ * 语义：
+ * - 全局单例模式，确保事件监听器只注册一次
+ * - 自动处理后端推送的项目变更事件
  */
 export function useProjectSync(options: UseProjectSyncOptions = {}) {
   const { enabled = true, onProjectLoaded, onProjectCleared, onProjectSaved } = options;
@@ -44,7 +45,7 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
 
     // 如果已经有监听器，不需要再创建
     if (globalUnlisten) {
-      console.log('[useProjectSync] Listener already exists, skipping setup');
+      console.log('[ProjectSync] Listener already exists, reusing...');
       return () => {
         listenerCount--;
       };
@@ -52,30 +53,28 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
 
     // 如果正在设置监听器，等待完成
     if (listenerSetupPromise) {
-      console.log('[useProjectSync] Listener setup in progress, waiting...');
+      console.log('[ProjectSync] Listener setup in progress, waiting...');
       return () => {
         listenerCount--;
       };
     }
 
     const setupListener = async () => {
-      console.log('[useProjectSync] Setting up project event listener...');
+      console.log('[ProjectSync] Setting up project event listener...');
 
       globalUnlisten = await listen<ProjectEventPayload>('project-event', (event) => {
         const { type, payload } = event.payload;
-        console.log(`[useProjectSync] Received event: type=${type}, payload=${JSON.stringify(payload)}`);
+        console.log(`[ProjectSync] Received event: ${type}`);
 
         const projectStore = useProjectStore.getState();
 
         switch (type) {
           case 'ProjectLoaded':
-            // 同步到前端 Store
             projectStore.loadProject(payload.data, payload.path);
             onProjectLoaded?.(payload.data, payload.path);
             break;
 
           case 'ProjectCleared':
-            // 清空前端 Store
             projectStore.loadProject(
               {
                 globalVariables: {},
@@ -175,11 +174,11 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
             break;
 
           default:
-            console.log(`[useProjectSync] Unhandled event type: ${type}`);
+            console.log(`[ProjectSync] Unhandled event type: ${type}`);
         }
       });
 
-      console.log('[useProjectSync] Project event listener set up successfully');
+      console.log('[ProjectSync] ✓ Project event listener set up successfully');
     };
 
     listenerSetupPromise = setupListener().finally(() => {
@@ -192,32 +191,8 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
       if (listenerCount === 0 && globalUnlisten) {
         globalUnlisten();
         globalUnlisten = null;
-        console.log('[useProjectSync] Project event listener cleaned up');
+        console.log('[ProjectSync] Project event listener cleaned up');
       }
     };
   }, [enabled, onProjectLoaded, onProjectCleared, onProjectSaved]);
-}
-
-/**
- * 初始化时从后端同步项目状态
- * 应该在应用启动时调用一次
- */
-export async function initProjectSync(): Promise<ProjectData | null> {
-  try {
-    console.log('[initProjectSync] Syncing project state from backend...');
-    const projectData = await ProjectService.getProjectState();
-
-    console.log(`[initProjectSync] Received project data: events=${Object.keys(projectData.events || {}).length}, functions=${Object.keys(projectData.functions || {}).length}, macros=${Object.keys(projectData.macros || {}).length}, globalVars=${Object.keys(projectData.globalVariables || {}).length}, dataframes=${Object.keys(projectData.dataframes || {}).length}`);
-
-    // 同步到前端 Store
-    const projectStore = useProjectStore.getState();
-    const path = await ProjectService.getProjectPath();
-    projectStore.loadProject(projectData, path);
-
-    console.log('[initProjectSync] Project state synced successfully');
-    return projectData;
-  } catch (error) {
-    console.error('[initProjectSync] Failed to sync project state:', error);
-    return null;
-  }
 }

@@ -1,7 +1,7 @@
 import { useRef, useEffect } from "react";
-import { useGestureStore } from "../Store/useGestureStore";
-import { useViewportStore } from "../Store/useViewportStore";
-import { useTheme } from "../../../app/providers/ThemeContext";
+import { useGestureStore } from "@/features/canvas/stores";
+import { useViewportStore } from "@/features/canvas/stores";
+import { useTheme } from "@/hooks/useTheme";
 import { drawEdge } from "../Edges/Edge";
 
 import { Pin } from "../Types/nodes";

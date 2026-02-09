@@ -1,27 +1,23 @@
-// editor/EditorApp.tsx
-
-import { useLayoutStore } from "@/stores/layoutStore";
-
-import ActivityBar from "./Layout/ActivityBar";
+import { useLayoutStore } from "@/features/layoutStore/layoutStore";
+import { ActivityBar } from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";
 import { DragLayer } from "./Layout/DragLayer";
 import { CanvasProvider } from "./Context/CanvasProvider";
-import Menubar from "./Layout/Menubar";
+import { Menubar } from "./Layout/Menubar";
 import { UIProvider } from "./Context/UIProvider";
 import { Workspace } from "./Layout/Workspace";
-import { useAppInitialization } from "./Hooks/useAppInitialization";
-import { useProjectSync } from "./Hooks/useProjectSync";
+import { useAppInitialization } from "@/features/editor/app-initialization";
+import { LoadStatus } from "@/shared/types/loadStatus";
 
 export const EditorWindow = () => {
     const rootId = useLayoutStore((s) => s.rootId);
-    const { isInitialized, error } = useAppInitialization();
+    const { status, error } = useAppInitialization();
 
-    useProjectSync({ enabled: true });
 
-    if (!isInitialized) {
+    if (status !== LoadStatus.Ready) {
         return (
             <div className="flex items-center justify-center w-full h-screen">
-                {error ? "初始化失败" : "加载中..."}
+                {error ? `初始化失败:${error}` : "加载中..."}
             </div>
         );
     }

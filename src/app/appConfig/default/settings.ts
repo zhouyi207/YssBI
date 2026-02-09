@@ -7,7 +7,7 @@ export const DEFAULT_THEME: ThemeSettings = {
     gridLines: "#252525",
     nodeBase: "#2d2d2d",
     connectionLines: "#6b6b6b",
-    selectionRegion: "#0078d433",
+    selectionRegion: "#0078d4",
     execColor: "#ffffff",
     intColor: "#35b2b2",
     floatColor: "#9ecd4d",

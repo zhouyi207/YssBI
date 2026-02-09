@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
-import { BaseNode } from '../Types/nodes';
-import { deleteNodeInBackend } from '../Utils/backendNodeOps';
-import { useCanvas } from '../Context/CanvasContext';
+import { BaseNode } from '@/views/EditorView/Types/nodes';
+import { deleteNodeInBackend } from '@/views/EditorView/Utils/backendNodeOps';
+import { useCanvas } from '@/views/EditorView/Context/CanvasContext';
 import { ProjectService } from '../../../services/project/projectService';
-import { SubGraphData } from '../Types/canvas';
-import { serializeSubGraph, deserializeSubGraph } from '../Utils/io';
+import { SubGraphData } from '@/views/EditorView/Types/canvas';
+import { serializeSubGraph, deserializeSubGraph } from '@/views/EditorView/Utils/io';
 
 /**
  * 使用后端创建节点的 Hook

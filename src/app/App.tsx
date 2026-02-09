@@ -5,7 +5,7 @@ import { PlotWindow } from "@/views/PlotView/PlotWindow";
 import { DataViewWindow } from "@/views/DataView/DataViewWindow";
 import { LogWindow } from "@/views/LogView/LogWindow";
 import { EditorWindow } from "@/views/EditorView/EditorWindow";
-import { ThemeProvider } from "@/app/providers/ThemeContext";
+import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
 
 const isPlotWindow = window.location.hash === "#/plot";
 const isDataViewWindow = window.location.hash === "#/dataview";
@@ -21,8 +21,8 @@ function AppRouter() {
 
 export default function App() {
   return (
-    <ThemeProvider>
+    <SettingsEffectsProvider>
       <AppRouter />
-    </ThemeProvider>
+    </SettingsEffectsProvider>
   );
 }

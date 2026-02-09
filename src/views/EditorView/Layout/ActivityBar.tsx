@@ -3,7 +3,7 @@ import { PiGraph, PiFunction } from "react-icons/pi";
 import { TiFlowSwitch } from "react-icons/ti";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase } from "react-icons/vsc";
-import { useLayoutStore } from "../../../stores/layoutStore";
+import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean, onClick: () => void, children: React.ReactNode, title: string, id: string }) => (
     <button
@@ -16,7 +16,7 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
     </button>
 );
 
-export default function ActivityBar() {
+export  function ActivityBar() {
     const sidebarNode = useLayoutStore(s => s.nodes['sidebar']);
     const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
     

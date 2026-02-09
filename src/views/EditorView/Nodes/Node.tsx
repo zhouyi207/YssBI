@@ -1,8 +1,8 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, BaseNode } from "../Types/nodes";
-import { useSchemaStore } from "../Store/useSchemaStore";
-import { useExecutionStore } from "../Store/useExecutionStore";
+import { useSchemaStore } from "@/features/shema";
+import { useExecutionStore } from "@/features/execution/stores";
 
 
 export interface NodeProps {
@@ -53,12 +53,12 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
           <div className="flex gap-2 px-2 pt-2 whitespace-nowrap items-start">
             <div className="flex flex-col gap-1 flex-1">
               {inputsExec.map((pin) => (
-                <Pin 
-                  key={pin.id} 
-                  {...pin} 
+                <Pin
+                  key={pin.id}
+                  {...pin}
                   subgraphId={subgraphId}
-                  isActive={activePinId === pin.id} 
-                  onPinClick={onPinClick} 
+                  isActive={activePinId === pin.id}
+                  onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
                 />
@@ -67,12 +67,12 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
             <div className="flex-1" />
             <div className="flex flex-col gap-1 flex-1 items-end">
               {outputsExec.map((pin) => (
-                <Pin 
-                  key={pin.id} 
-                  {...pin} 
+                <Pin
+                  key={pin.id}
+                  {...pin}
                   subgraphId={subgraphId}
-                  isActive={activePinId === pin.id} 
-                  onPinClick={onPinClick} 
+                  isActive={activePinId === pin.id}
+                  onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
                 />
@@ -85,12 +85,12 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
         <div className="flex-1 flex gap-2 px-2 py-2 whitespace-nowrap items-center">
           <div className="flex flex-col gap-1 flex-1">
             {inputsData.map((pin) => (
-              <Pin 
-                key={pin.id} 
-                {...pin} 
+              <Pin
+                key={pin.id}
+                {...pin}
                 subgraphId={subgraphId}
-                isActive={activePinId === pin.id} 
-                onPinClick={onPinClick} 
+                isActive={activePinId === pin.id}
+                onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
               />
@@ -99,12 +99,12 @@ const DefaultNodeUI: React.FC<NodeProps> = ({
           <div className="flex-1" />
           <div className="flex flex-col gap-1 flex-1 items-end">
             {outputsData.map((pin) => (
-              <Pin 
-                key={pin.id} 
-                {...pin} 
+              <Pin
+                key={pin.id}
+                {...pin}
                 subgraphId={subgraphId}
-                isActive={activePinId === pin.id} 
-                onPinClick={onPinClick} 
+                isActive={activePinId === pin.id}
+                onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
               />
@@ -151,12 +151,12 @@ const MathNodeUI: React.FC<NodeProps> = ({
         <div className="flex gap-4 px-2 pt-2 z-10 items-start">
           <div className="flex flex-col gap-1 items-start flex-1">
             {inputsExec.map((pin) => (
-              <Pin 
-                key={pin.id} 
-                {...pin} 
+              <Pin
+                key={pin.id}
+                {...pin}
                 subgraphId={subgraphId}
-                isActive={activePinId === pin.id} 
-                onPinClick={onPinClick} 
+                isActive={activePinId === pin.id}
+                onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
               />
@@ -165,12 +165,12 @@ const MathNodeUI: React.FC<NodeProps> = ({
           <div className="flex-1" />
           <div className="flex flex-col gap-1 items-end flex-1">
             {outputsExec.map((pin) => (
-              <Pin 
-                key={pin.id} 
-                {...pin} 
+              <Pin
+                key={pin.id}
+                {...pin}
                 subgraphId={subgraphId}
-                isActive={activePinId === pin.id} 
-                onPinClick={onPinClick} 
+                isActive={activePinId === pin.id}
+                onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
               />
@@ -183,12 +183,12 @@ const MathNodeUI: React.FC<NodeProps> = ({
       <div className="flex-1 flex gap-4 px-2 py-2 items-center z-10">
         <div className="flex flex-col gap-1 items-start flex-1">
           {inputsData.map((pin) => (
-            <Pin 
-              key={pin.id} 
-              {...pin} 
+            <Pin
+              key={pin.id}
+              {...pin}
               subgraphId={subgraphId}
-              isActive={activePinId === pin.id} 
-              onPinClick={onPinClick} 
+              isActive={activePinId === pin.id}
+              onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
             />
@@ -209,12 +209,12 @@ const MathNodeUI: React.FC<NodeProps> = ({
         <div className="flex-1" />
         <div className="flex flex-col gap-1 items-end flex-1">
           {outputsData.map((pin) => (
-            <Pin 
-              key={pin.id} 
-              {...pin} 
+            <Pin
+              key={pin.id}
+              {...pin}
               subgraphId={subgraphId}
-              isActive={activePinId === pin.id} 
-              onPinClick={onPinClick} 
+              isActive={activePinId === pin.id}
+              onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
             />
@@ -229,12 +229,12 @@ const MathNodeUI: React.FC<NodeProps> = ({
 
 export const Node = React.memo<NodeProps>((props) => {
   const { node, onPointerDown, selected } = props;
-  
+
   // 🆕 获取执行状态
   const currentNodeId = useExecutionStore((state) => state.currentNodeId);
   const nodeStates = useExecutionStore((state) => state.nodeStates);
   const executedNodes = useExecutionStore((state) => state.executedNodes);
-  
+
   const nodeState = nodeStates.get(node.id);
   const isExecuting = currentNodeId === node.id;
   const isCompleted = executedNodes.has(node.id);
@@ -246,28 +246,27 @@ export const Node = React.memo<NodeProps>((props) => {
     <div
       id={node.id}
       data-node-id={node.id}
-      className={`absolute select-none rounded shadow-2xl border cursor-move ${
-        selected
+      className={`absolute select-none rounded shadow-2xl border cursor-move ${selected
           ? "border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30"
           : isExecuting
-          ? "border-yellow-400 ring-2 ring-yellow-400/50 z-30 animate-pulse"
-          : hasError
-          ? "border-red-500 ring-2 ring-red-500/50 z-30"
-          : isCompleted
-          ? "border-green-500/50 z-20"
-          : "border-[#2b2b2b] z-10"
-      }`}
+            ? "border-yellow-400 ring-2 ring-yellow-400/50 z-30 animate-pulse"
+            : hasError
+              ? "border-red-500 ring-2 ring-red-500/50 z-30"
+              : isCompleted
+                ? "border-green-500/50 z-20"
+                : "border-[#2b2b2b] z-10"
+        }`}
       style={{
         minWidth: node.noHeader ? 120 : 160,
         minHeight: node.noHeader ? 60 : undefined,
         transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
-        background: isExecuting 
+        background: isExecuting
           ? "linear-gradient(135deg, var(--node-base) 0%, rgba(250, 204, 21, 0.1) 100%)"
           : hasError
-          ? "linear-gradient(135deg, var(--node-base) 0%, rgba(239, 68, 68, 0.1) 100%)"
-          : isCompleted
-          ? "linear-gradient(135deg, var(--node-base) 0%, rgba(34, 197, 94, 0.05) 100%)"
-          : "var(--node-base)",
+            ? "linear-gradient(135deg, var(--node-base) 0%, rgba(239, 68, 68, 0.1) 100%)"
+            : isCompleted
+              ? "linear-gradient(135deg, var(--node-base) 0%, rgba(34, 197, 94, 0.05) 100%)"
+              : "var(--node-base)",
         // 🆕 只对特定属性应用过渡，排除 transform 以避免拖动延迟
         transition: "border-color 200ms, box-shadow 200ms, background 200ms",
         // 强制开启硬件加速的抗锯齿，并保持文本清晰
@@ -281,7 +280,7 @@ export const Node = React.memo<NodeProps>((props) => {
       ) : (
         <DefaultNodeUI {...props} node={node} />
       )}
-      
+
       {/* 🆕 执行状态指示器 */}
       {isExecuting && (
         <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-ping" />

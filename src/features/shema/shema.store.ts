@@ -1,28 +1,20 @@
-/**
- * Schema Store
- *
- * 管理从后端获取的所有 schema 定义。
- * 这是前端的 schema 缓存，作为类型元数据的单一数据源。
- */
+/// store —— 只负责「状态 + backend 同步」
 
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  EditorSchema,
+import { LoadStatus } from "@/shared/types/loadStatus";
+import {
+  SchemaState,
   PinTypeDefinition,
   CategoryDefinition,
   UIStyleDefinition,
   VariableTypeDefinition,
   NodeValidationRule,
   GraphValidationRule,
-} from "../Types/schema";
+  EditorSchema,
+} from "./shema.types";
 
-interface SchemaStore {
-  // 状态
-  isLoaded: boolean;
-  isLoading: boolean;
-  error: string | null;
-
+interface SchemaStore extends SchemaState {
   // Schema 数据
   pinTypes: Map<string, PinTypeDefinition>;
   categories: Map<string, CategoryDefinition>;
@@ -32,7 +24,8 @@ interface SchemaStore {
   graphValidationRules: GraphValidationRule[];
 
   // 操作
-  loadSchema: () => Promise<void>;
+  syncFromBackend: () => Promise<void>;
+  clear: () => void;
 
   // 查询方法
   getPinType: (name: string) => PinTypeDefinition | undefined;
@@ -41,22 +34,16 @@ interface SchemaStore {
   getVariableType: (name: string) => VariableTypeDefinition | undefined;
   getNodeValidationRule: (nodeType: string) => NodeValidationRule | undefined;
 
-  // 类型兼容性
-  canConnect: (fromType: string, toType: string) => boolean;
-  getCenterSymbol: (styleName: string, nodeType: string) => string | undefined;
-
   // 列表获取
-  getVisibleCategories: () => CategoryDefinition[];
   getAllPinTypes: () => PinTypeDefinition[];
+  getAllCategories: () => CategoryDefinition[];
+  getAllUIStyles: () => UIStyleDefinition[];
   getAllVariableTypes: () => VariableTypeDefinition[];
+  getVisibleCategories: () => CategoryDefinition[];
 }
 
 export const useSchemaStore = create<SchemaStore>((set, get) => ({
-  // 初始状态
-  isLoaded: false,
-  isLoading: false,
-  error: null,
-
+  // data
   pinTypes: new Map(),
   categories: new Map(),
   uiStyles: new Map(),
@@ -64,11 +51,23 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
   nodeValidationRules: new Map(),
   graphValidationRules: [],
 
-  // 加载 schema
-  loadSchema: async () => {
-    if (get().isLoaded || get().isLoading) return;
+  // state (来自 SchemaState)
+  status: LoadStatus.Idle,
+  error: null,
 
-    set({ isLoading: true, error: null });
+  syncFromBackend: async () => {
+    const { status } = get();
+
+    // 幂等保护
+    if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
+      console.log('[Schema] Already loading or loaded, skipping...');
+      return;
+    }
+
+    const startTime = performance.now();
+    console.log('[Schema] Loading schema from backend...');
+
+    set({ status: LoadStatus.Loading, error: null });
 
     try {
       const schema: EditorSchema = await invoke("get_editor_schema_command");
@@ -92,30 +91,48 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
       );
 
       set({
-        isLoaded: true,
-        isLoading: false,
         pinTypes,
         categories,
         uiStyles,
         variableTypes,
         nodeValidationRules,
         graphValidationRules: schema.graph_validation_rules,
+        status: LoadStatus.Ready,
       });
 
-      console.log("[SchemaStore] Schema loaded successfully", {
+      const duration = performance.now() - startTime;
+      console.log('[Schema] ✓ Schema loaded successfully', {
         pinTypes: pinTypes.size,
         categories: categories.size,
         uiStyles: uiStyles.size,
         variableTypes: variableTypes.size,
+        validationRules: nodeValidationRules.size,
+        duration: `${duration.toFixed(0)}ms`,
       });
     } catch (err) {
-      console.error("[SchemaStore] Failed to load schema:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('[Schema] ✗ Failed to load schema:', errorMessage);
+      
       set({
-        isLoading: false,
-        error: err instanceof Error ? err.message : String(err),
+        status: LoadStatus.Error,
+        error: errorMessage,
       });
+      
+      throw err;
     }
   },
+
+  clear: () =>
+    set({
+      pinTypes: new Map(),
+      categories: new Map(),
+      uiStyles: new Map(),
+      variableTypes: new Map(),
+      nodeValidationRules: new Map(),
+      graphValidationRules: [],
+      status: LoadStatus.Idle,
+      error: null,
+    }),
 
   // 查询方法
   getPinType: (name) => get().pinTypes.get(name),
@@ -124,45 +141,14 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
   getVariableType: (name) => get().variableTypes.get(name),
   getNodeValidationRule: (nodeType) => get().nodeValidationRules.get(nodeType),
 
-  // 类型兼容性检查
-  canConnect: (fromType, toType) => {
-    // 相同类型
-    if (fromType === toType) return true;
-
-    // object 可以接受任何非 exec 类型
-    if (toType === "object" && fromType !== "exec") return true;
-
-    // 检查隐式转换
-    const fromDef = get().pinTypes.get(fromType);
-    if (fromDef && fromDef.implicit_convert_to.includes(toType)) {
-      return true;
-    }
-
-    return false;
-  },
-
-  // 获取中心符号
-  getCenterSymbol: (styleName, nodeType) => {
-    const style = get().uiStyles.get(styleName);
-    return style?.center_symbols[nodeType];
-  },
-
-  // 获取可见分类（按 sort_order 排序）
-  getVisibleCategories: () => {
-    return Array.from(get().categories.values())
-      .filter((cat) => cat.visible_in_palette)
-      .sort((a, b) => a.sort_order - b.sort_order);
-  },
-
-  // 获取所有 Pin 类型
+  // 列表获取
   getAllPinTypes: () => Array.from(get().pinTypes.values()),
-
-  // 获取所有变量类型
+  getAllCategories: () => Array.from(get().categories.values()),
+  getAllUIStyles: () => Array.from(get().uiStyles.values()),
   getAllVariableTypes: () => Array.from(get().variableTypes.values()),
+  
+  getVisibleCategories: () =>
+    Array.from(get().categories.values())
+      .filter((cat) => cat.visible_in_palette)
+      .sort((a, b) => a.sort_order - b.sort_order),
 }));
-
-// 选择器 hooks
-export const useSchemaLoaded = () => useSchemaStore((s) => s.isLoaded);
-export const useSchemaLoading = () => useSchemaStore((s) => s.isLoading);
-export const useSchemaError = () => useSchemaStore((s) => s.error);
-export const useCanConnect = () => useSchemaStore((s) => s.canConnect);

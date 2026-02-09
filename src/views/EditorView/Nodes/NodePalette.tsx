@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useNodeDefinitions } from "../Hooks/useNodeRegistry";
+import { useNodeDefinitions } from "@/features/node-registry";
 import { Pin, BaseNode } from "../Types/nodes";
 import { VariableDefinition } from "../Types/variables";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";

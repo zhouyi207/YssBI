@@ -33,7 +33,7 @@ impl ProjectState {
     /// 设置 项目数据 并清空 项目存储
     pub fn set_data(&self, project_data: ProjectData) {
         log_sys!(
-            LogLevel::Info,
+            LogLevel::Info, "{}",
             format!(
                 "[ProjectState.set_data] ProjectData: {}",
                 project_data.info()

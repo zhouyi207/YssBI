@@ -3,13 +3,11 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { NodeDefinition } from "@/views/EditorView/Types/nodes";
-import { NodeDefinitionMap } from "./nodeRegistry.types";
+import { NodeDefinitionMap, NodeRegistryState } from "./nodeRegistry.types";
+import { LoadStatus } from "@/shared/types/loadStatus";
 
-interface NodeRegistryStore {
+interface NodeRegistryStore extends NodeRegistryState {
     definitions: NodeDefinitionMap;
-    isInitialized: boolean;
-    isLoading: boolean;
-    error: string | null;
 
     syncFromBackend: () => Promise<void>;
     clear: () => void;
@@ -20,13 +18,26 @@ interface NodeRegistryStore {
 }
 
 export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
+    // data
     definitions: new Map(),
-    isInitialized: false,
-    isLoading: false,
+
+    // state (来自 NodeRegistryState)
+    status: LoadStatus.Idle,
     error: null,
 
     syncFromBackend: async () => {
-        set({ isLoading: true, error: null });
+        const { status } = get();
+
+        // 幂等保护
+        if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
+            console.log('[NodeRegistry] Already loading or loaded, skipping...');
+            return;
+        }
+
+        const startTime = performance.now();
+        console.log('[NodeRegistry] Loading node definitions from backend...');
+
+        set({ status: LoadStatus.Loading, error: null });
 
         try {
             const defs = await invoke<NodeDefinition[]>("get_node_definitions");
@@ -36,14 +47,23 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
 
             set({
                 definitions,
-                isInitialized: true,
-                isLoading: false,
+                status: LoadStatus.Ready,
+            });
+
+            const duration = performance.now() - startTime;
+            console.log('[NodeRegistry] ✓ Node definitions loaded successfully', {
+                nodeTypes: definitions.size,
+                duration: `${duration.toFixed(0)}ms`,
             });
         } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error('[NodeRegistry] ✗ Failed to load node definitions:', errorMessage);
+            
             set({
-                isLoading: false,
-                error: err instanceof Error ? err.message : String(err),
+                status: LoadStatus.Error,
+                error: errorMessage,
             });
+            
             throw err;
         }
     },
@@ -51,7 +71,7 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
     clear: () =>
         set({
             definitions: new Map(),
-            isInitialized: false,
+            status: LoadStatus.Idle,
             error: null,
         }),
 

@@ -1,24 +1,24 @@
 import React, { useState } from "react";
-import { useSettings } from "../../../app/providers/ThemeContext";
-import { Select } from "../Shared/UI/Select";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { Select } from "../../../shared/ui/Select";
 
 export const SettingsView: React.FC = () => {
-    const { 
-        theme, 
-        editor, 
-        appearance, 
+    const {
+        theme,
+        editor,
+        appearance,
         project,
         isLoading,
-        updateTheme, 
-        updateEditor, 
-        updateAppearance, 
+        updateTheme,
+        updateEditor,
+        updateAppearance,
         updateProject,
         resetAllToDefaults,
         resetThemeToDefaults,
         resetEditorToDefaults,
         resetAppearanceToDefaults,
-    } = useSettings();
-    
+    } = useSettingsStore();
+
     const [activeSection, setActiveSection] = useState("editor");
     const [isResetting, setIsResetting] = useState(false);
 
@@ -46,7 +46,7 @@ export const SettingsView: React.FC = () => {
             appearance: "外观",
             color: "颜色/主题",
         };
-        
+
         if (window.confirm(`确定要恢复${sectionNames[section] || section}的默认设置吗？`)) {
             setIsResetting(true);
             try {
@@ -407,17 +407,17 @@ interface SettingItemProps {
     options?: string[];
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({ 
-    label, 
-    description, 
-    type, 
-    defaultValue, 
-    value, 
+const SettingItem: React.FC<SettingItemProps> = ({
+    label,
+    description,
+    type,
+    defaultValue,
+    value,
     checked,
-    onChange, 
-    placeholder, 
-    disabled, 
-    options 
+    onChange,
+    placeholder,
+    disabled,
+    options
 }) => {
     return (
         <div className="group border-l-2 border-transparent hover:border-[#007acc] pl-4 transition-colors">

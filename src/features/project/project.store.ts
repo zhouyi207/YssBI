@@ -1,18 +1,27 @@
-import { create } from 'zustand';
-import { SubGraphData, ProjectData, DataFrameData } from "../Types/canvas";
-import { VariableDefinition } from "../Types/variables";
-import { ProjectService } from "../../../services/project/projectService";
-import { TabState, useNodeStore } from "./useNodeStore";
-import { syncInternalNodePins, syncSubGraphInstanceNodes } from "../Utils/internalNodes";
+/// store —— 只负责「状态 + backend 同步」
 
-interface ProjectStore {
-    // State (作为后端数据的缓存)
+import { create } from 'zustand';
+import { LoadStatus } from '@/shared/types/loadStatus';
+import { ProjectState } from './project.types';
+import { SubGraphData, ProjectData, DataFrameData } from '@/views/EditorView/Types/canvas';
+import { VariableDefinition } from '@/views/EditorView/Types/variables';
+import { ProjectService } from '@/services/project/projectService';
+import { TabState, useNodeStore } from '@/features/node-registry/stores/useNodeStore';
+import { syncInternalNodePins, syncSubGraphInstanceNodes } from '@/views/EditorView/Utils/internalNodes';
+
+interface ProjectStore extends ProjectState {
+    // Project Data (作为后端数据的缓存)
     events: Record<string, SubGraphData>;
     functions: Record<string, SubGraphData>;
     macros: Record<string, SubGraphData>;
     globalVariables: Record<string, VariableDefinition>;
     dataframes: Record<string, DataFrameData>;
     currentPath: string | null;
+
+    // Backend Sync
+    syncFromBackend: () => Promise<ProjectData | null>;
+    syncToBackend: () => Promise<void>;
+    clear: () => void;
 
     // 内部 Setters (供事件订阅使用)
     setEvents: (events: Record<string, SubGraphData>) => void;
@@ -51,18 +60,116 @@ interface ProjectStore {
     loadProject: (project: ProjectData, path: string | null) => void;
     syncWithTabs: (tabs: Record<string, TabState>) => void;
     syncTab: (tabId: string, tabState: TabState) => void;
-
-    // 同步到后端
-    syncToBackend: () => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
+    // data
     events: {},
     functions: {},
     macros: {},
     globalVariables: {},
     dataframes: {},
     currentPath: null,
+
+    // state (来自 ProjectState)
+    status: LoadStatus.Idle,
+    error: null,
+
+    syncFromBackend: async () => {
+        const { status } = get();
+
+        // 幂等保护
+        if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
+            console.log('[Project] Already loading or loaded, skipping...');
+            return null;
+        }
+
+        const startTime = performance.now();
+        console.log('[Project] Syncing project state from backend...');
+
+        set({ status: LoadStatus.Loading, error: null });
+
+        try {
+            const projectData = await ProjectService.getProjectState();
+            const path = await ProjectService.getProjectPath();
+
+            set({
+                events: projectData.events || {},
+                functions: projectData.functions || {},
+                macros: projectData.macros || {},
+                globalVariables: projectData.globalVariables || {},
+                dataframes: projectData.dataframes || {},
+                currentPath: path,
+                status: LoadStatus.Ready,
+            });
+
+            const duration = performance.now() - startTime;
+            console.log('[Project] ✓ Project state synced successfully', {
+                events: Object.keys(projectData.events || {}).length,
+                functions: Object.keys(projectData.functions || {}).length,
+                macros: Object.keys(projectData.macros || {}).length,
+                globalVariables: Object.keys(projectData.globalVariables || {}).length,
+                dataframes: Object.keys(projectData.dataframes || {}).length,
+                duration: `${duration.toFixed(0)}ms`,
+            });
+
+            return projectData;
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error('[Project] ✗ Failed to sync project state:', errorMessage);
+
+            set({
+                status: LoadStatus.Error,
+                error: errorMessage,
+            });
+
+            return null;
+        }
+    },
+
+    syncToBackend: async () => {
+        const { events, functions, macros, globalVariables, dataframes, currentPath } = get();
+        const projectData: ProjectData = {
+            events,
+            functions,
+            macros,
+            globalVariables,
+            dataframes,
+            metadata: {
+                exportTime: new Date().toISOString(),
+                appVersion: "0.1.0"
+            }
+        };
+
+        console.log('[Project] Syncing to backend:', {
+            events: Object.keys(events).length,
+            functions: Object.keys(functions).length,
+            macros: Object.keys(macros).length,
+            globalVariables: Object.keys(globalVariables).length,
+            dataframes: Object.keys(dataframes || {}).length,
+        });
+
+        try {
+            // 自动同步时不触发事件（避免循环）
+            await ProjectService.setProjectData(projectData, currentPath || undefined, false);
+            console.log('[Project] ✓ Successfully synced to backend');
+        } catch (e) {
+            console.error('[Project] ✗ Failed to sync to backend:', e);
+            throw e;
+        }
+    },
+
+    clear: () =>
+        set({
+            events: {},
+            functions: {},
+            macros: {},
+            globalVariables: {},
+            dataframes: {},
+            currentPath: null,
+            status: LoadStatus.Idle,
+            error: null,
+        }),
 
     // 内部 Setters
     setEvents: (events) => set({ events }),
@@ -74,15 +181,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // Event 操作
     addEvent: (id, data) => {
-        // 先更新本地状态以获得即时反馈
         set((state) => ({ events: { ...state.events, [id]: data } }));
-        // 异步同步到后端
         ProjectService.createEvent(id, data).catch(console.error);
     },
 
     updateEvent: (id, data) => {
         set((state) => ({ events: { ...state.events, [id]: { ...state.events[id], ...data } } }));
-        // 获取完整数据并同步到后端
         const fullData = get().events[id];
         if (fullData) {
             ProjectService.updateEvent(id, fullData).catch(console.error);
@@ -108,7 +212,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         set((state) => {
             const nextFunctions = { ...state.functions, [id]: { ...state.functions[id], ...data } };
 
-            // Cascade update to instances in all collections
             const cascade = (collection: Record<string, SubGraphData>) => {
                 const nextCollection = { ...collection };
                 let changed = false;
@@ -126,7 +229,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             const nextMacros = cascade(state.macros);
             const nextFunctionsRecursive = cascade(nextFunctions);
 
-            // Update live tabs
             const nodeStore = useNodeStore.getState();
             Object.keys(nodeStore.tabs).forEach(tid => {
                 const currentNodes = nodeStore.getNodes(tid);
@@ -154,7 +256,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             };
         });
 
-        // 同步到后端
         const fullData = get().functions[id];
         if (fullData) {
             ProjectService.updateFunction(id, fullData).catch(console.error);
@@ -197,7 +298,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             const nextFunctions = cascade(state.functions);
             const nextMacrosRecursive = cascade(nextMacros);
 
-            // Update live tabs
             const nodeStore = useNodeStore.getState();
             Object.keys(nodeStore.tabs).forEach(tid => {
                 const currentNodes = nodeStore.getNodes(tid);
@@ -225,7 +325,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             };
         });
 
-        // 同步到后端
         const fullData = get().macros[id];
         if (fullData) {
             ProjectService.updateMacro(id, fullData).catch(console.error);
@@ -267,7 +366,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // DataFrame 操作
     addDataFrame: (id, df) => {
         set((state) => ({ dataframes: { ...state.dataframes, [id]: df } }));
-        // 调用专用创建命令以触发全局事件同步
         ProjectService.createDataFrame(id, df).catch(console.error);
     },
 
@@ -278,7 +376,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 [id]: { ...state.dataframes[id], ...data }
             }
         }));
-        // 同步到后端
         get().syncToBackend().catch(console.error);
     },
 
@@ -288,7 +385,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             delete next[id];
             return { dataframes: next };
         });
-        // 调用专门的删除命令以触发全局事件同步
         ProjectService.deleteDataFrame(id).catch(console.error);
     },
 
@@ -318,7 +414,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 macros: nextMacros
             });
 
-            // 同步到后端
             get().syncToBackend().catch(console.error);
         }
     },
@@ -343,7 +438,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 macros: m
             });
 
-            // 同步单个子图到后端
             const updatedSubGraph = e[tabId] || f[tabId] || m[tabId];
             if (updatedSubGraph) {
                 if (e[tabId]) {
@@ -356,35 +450,4 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             }
         }
     },
-
-    // 批量同步到后端
-    syncToBackend: async () => {
-        const { events, functions, macros, globalVariables, dataframes, currentPath } = get();
-        const projectData: ProjectData = {
-            events,
-            functions,
-            macros,
-            globalVariables,
-            dataframes,
-            metadata: {
-                exportTime: new Date().toISOString(),
-                appVersion: "0.1.0"
-            }
-        };
-        console.log('[SyncToBackend] Syncing project data to backend:', {
-            eventsCount: Object.keys(events).length,
-            functionsCount: Object.keys(functions).length,
-            macrosCount: Object.keys(macros).length,
-            globalVariablesCount: Object.keys(globalVariables).length,
-            dataframesCount: Object.keys(dataframes || {}).length,
-        });
-        try {
-            // 自动同步时不触发事件（避免循环）
-            await ProjectService.setProjectData(projectData, currentPath || undefined, false);
-            console.log('[SyncToBackend] Successfully synced to backend');
-        } catch (e) {
-            console.error('[SyncToBackend] Failed to sync to backend:', e);
-            throw e;
-        }
-    }
 }));

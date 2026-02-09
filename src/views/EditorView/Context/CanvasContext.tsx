@@ -2,8 +2,9 @@ import { createContext, useContext, useCallback } from "react";
 import { Pin, BaseNode } from "../Types/nodes";
 import { CanvasState } from "../Types/canvas";
 import { VariableDefinition } from "../Types/variables";
-import { useTabNodes, useTabVariables } from "../Store/useNodeStore";
-import { useLayoutStore, LayoutState } from "../../../stores/layoutStore";
+import { useTabNodes } from "@/features/node-registry/stores/useNodeStore";
+import { useTabVariables } from "@/features/node-registry/stores/useNodeStore";
+import { useLayoutStore, LayoutState } from "../../../features/layoutStore/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 
 
