@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { Node } from "../Nodes/Node";
 import { Pin } from "../Types/nodes";
-import { useDrag } from "../Context/DragContext";
+import { useDragContext } from "../Context/DragProvider";
 import { useCanvas } from "../Context/CanvasContext";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
@@ -47,7 +47,7 @@ export default function Canvas() {
     groupId,
     selectedNodeIds
   } = useCanvas();
-  const { drag } = useDrag();
+  const { activeDrag } = useDragContext();
   const gesture = useGestureStore(state => state.gesture);
   const { createNode } = useBackendNodeCreation();
 
@@ -185,9 +185,10 @@ export default function Canvas() {
     variableId: string;
     variableName: string;
     variableType: string;
+    variableIsArray?: boolean;
   } | null>(null);
 
-  const prevDragRef = useRef(drag);
+  const prevDragRef = useRef(activeDrag);
 
   const pinIndex = useMemo(() => {
     const map = new Map<string, Pin>();
@@ -340,7 +341,7 @@ export default function Canvas() {
 
   useEffect(() => {
     // 从「有拖拽」→「无拖拽」 = drop
-    if (prevDragRef.current && !drag) {
+    if (prevDragRef.current && !activeDrag) {
       const last = prevDragRef.current;
 
       if (last.type === "node-template") {
@@ -351,8 +352,8 @@ export default function Canvas() {
       }
     }
 
-    prevDragRef.current = drag;
-  }, [drag, variables]);
+    prevDragRef.current = activeDrag;
+  }, [activeDrag, variables]);
 
   /* ===== Data Drag ===== */
   async function handleDropTemplate(dragState: any, event: MouseEvent | PointerEvent) {

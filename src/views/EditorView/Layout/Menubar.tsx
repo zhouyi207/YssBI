@@ -3,9 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCanvas } from "../Context/CanvasContext";
 import { useState, useEffect } from "react";
 import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
-import { useUI } from "../Context/UIProvider";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { open } from "@tauri-apps/plugin-dialog";
+import { uiStore } from "@/features/ui/UIStore";
 import { ProjectService } from "../../../services/project/projectService";
 import { useProjectStore } from "@/features/project";
 import { SettingsService } from "../../../services/settings/settingsService";
@@ -92,7 +92,6 @@ export function Menubar() {
     addDataFrame,
   } = useCanvas();
 
-  const { showImportDialog, showToast } = useUI();
   const openSettings = useLayoutStore(s => s.openSettings);
   const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
   const splitNode = useLayoutStore(s => s.splitNode);
@@ -138,7 +137,7 @@ export function Menubar() {
   }, []);
 
   const handleImportData = () => {
-    showImportDialog({
+    uiStore.showImportDialog({
       onSelect: async (type) => {
         if (type === 'csv') {
           try {
@@ -148,19 +147,19 @@ export function Menubar() {
             });
 
             if (selected && !Array.isArray(selected)) {
-              showToast(`正在从 CSV 导入数据...`, "info");
+              uiStore.showToast(`正在从 CSV 导入数据...`, "info");
               const dfData = await ProjectService.importCSV(selected);
 
               // 更新前端 store
               useProjectStore.getState().addDataFrame(dfData.id, dfData);
-              showToast(`CSV 数据导入成功: ${dfData.row_count} 行`, "success");
+              uiStore.showToast(`CSV 数据导入成功: ${dfData.row_count} 行`, "success");
             }
           } catch (error) {
             console.error("Failed to import CSV:", error);
-            showToast(`CSV 导入失败: ${error}`, "error");
+            uiStore.showToast(`CSV 导入失败: ${error}`, "error");
           }
         } else {
-          showToast(`${type.toUpperCase()} 导入功能开发中...`, "warning");
+          uiStore.showToast(`${type.toUpperCase()} 导入功能开发中...`, "warning");
         }
       }
     });
@@ -199,7 +198,7 @@ export function Menubar() {
       });
     } catch (error) {
       console.error("Failed to open data view:", error);
-      showToast("无法打开数据视图窗口", "error");
+      uiStore.showToast("无法打开数据视图窗口", "error");
     }
   };
 
@@ -216,7 +215,7 @@ export function Menubar() {
       });
     } catch (error) {
       console.error("Failed to open logs window:", error);
-      showToast("无法打开日志窗口", "error");
+      uiStore.showToast("无法打开日志窗口", "error");
     }
   };
 

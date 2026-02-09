@@ -1,5 +1,6 @@
 import { forwardRef, useContext, useEffect, useRef } from "react";
-import { useDrag } from "../Context/DragContext";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useCanvas, GroupContext } from "../Context/CanvasContext";
 import {
   VscEye,
@@ -37,7 +38,6 @@ const PIN_COLORS: Record<string, string> = {
 };
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
-  const { startDrag } = useDrag();
   const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
   const {
     variables,
@@ -111,63 +111,86 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, macrosCount, variablesCount, dataframesCount]);
 
-  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
-    const isSelected = selectedItemId === id && selectedItemType === type;
+  // Helper component for draggable items
+  const DraggableItemWrapper: React.FC<{
+    id: string;
+    dragData: any;
+    children: React.ReactNode;
+    className?: string;
+    onClick?: (e: React.MouseEvent) => void;
+    onDoubleClick?: (e: React.MouseEvent) => void;
+  }> = ({ id, dragData, children, className, onClick, onDoubleClick }) => {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+      id: `sidebar-item-${id}`,
+      data: dragData,
+    });
 
     return (
       <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        className={className}
+        style={{ opacity: isDragging ? 0.5 : 1 }}
+      >
+        {children}
+      </div>
+    );
+  };
+
+  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
+    const isSelected = selectedItemId === id && selectedItemType === type;
+
+    let dragData = null;
+    if (type === 'variable') {
+      dragData = {
+        type: "node-template",
+        template: {
+          type: "get_variable",
+          category: "Variable",
+          variableId: id,
+          variableName: name,
+          variableType: extra?.data_type,
+          variableIsArray: extra?.is_array
+        },
+      };
+    } else if (type === 'function' || type === 'macro') {
+      dragData = {
+        type: "node-template",
+        template: {
+          type: `call_${type}`,
+          category: type === 'function' ? "Functions" : "Macros",
+          subGraphId: id,
+          subName: name,
+        },
+      };
+    } else if (type === 'data') {
+      dragData = {
+        type: "node-template",
+        template: {
+          type: "get_dataframe",
+          category: "Data",
+          variableId: id,
+          variableName: name,
+        },
+      };
+    }
+
+    return (
+      <DraggableItemWrapper
         key={id}
+        id={id}
+        dragData={dragData}
         onClick={(e) => {
-          e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
+          e.stopPropagation();
           setSelectedInfo(id, type);
         }}
         onDoubleClick={(e) => {
           if (type !== 'variable' && type !== 'data') {
-            e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
+            e.stopPropagation();
             openSubGraph(id, name, type);
-          }
-        }}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return;
-          if ((e.target as HTMLElement).closest('button')) return;
-          if (type === 'variable') {
-            e.preventDefault();
-            startDrag({
-              type: "node-template",
-              template: {
-                type: "get_variable",
-                category: "Variable",
-                variableId: id,
-                variableName: name,
-                variableType: extra?.data_type,
-                variableIsArray: extra?.is_array
-              },
-              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
-            });
-          } else if (type === 'function' || type === 'macro') {
-            e.preventDefault();
-            startDrag({
-              type: "node-template",
-              template: {
-                type: `call_${type}`,
-                category: type === 'function' ? "Functions" : "Macros",
-                subGraphId: id,
-                subName: name,
-              },
-              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
-            });
-          } else if (type === 'data') {
-            e.preventDefault();
-            startDrag({
-              type: "node-template",
-              template: {
-                type: "get_dataframe",
-                category: "Data",
-                variableId: id,
-                variableName: name,
-              },
-              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
-            });
           }
         }}
         className={`
@@ -216,7 +239,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             </span>
           </>
         )}
-      </div>
+      </DraggableItemWrapper>
     );
   };
 
@@ -279,37 +302,36 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   {renderItem(id, data.name, 'data', data)}
                   {expandedDataFrames[id] && data.columns && (
                     <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
-                      {data.columns.map((col, idx) => (
-                        <div
-                          key={`${id}-col-${idx}`}
-                          className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded cursor-grab text-[11px] text-gray-400 group/col"
-                          onPointerDown={(e) => {
-                            if (e.button !== 0) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            startDrag({
-                              type: "node-template",
-                              template: {
-                                type: "get_column",
-                                category: "Data",
-                                title: `Get ${col.name}`,
-                                initialData: {
-                                  columnName: col.name,
-                                  columnType: col.type,
-                                  dataframeId: id
-                                }
-                              },
-                              x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
-                            });
-                          }}
-                        >
-                          <VscListUnordered size={10} className="opacity-40" />
-                          <span className="flex-1 truncate">{col.name}</span>
-                          <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
-                            {col.type.replace("Owned", "")}
-                          </span>
-                        </div>
-                      ))}
+                      {data.columns.map((col, idx) => {
+                        const columnDragData = {
+                          type: "node-template",
+                          template: {
+                            type: "get_column",
+                            category: "Data",
+                            title: `Get ${col.name}`,
+                            initialData: {
+                              columnName: col.name,
+                              columnType: col.type,
+                              dataframeId: id
+                            }
+                          },
+                        };
+
+                        return (
+                          <DraggableItemWrapper
+                            key={`${id}-col-${idx}`}
+                            id={`${id}-col-${idx}`}
+                            dragData={columnDragData}
+                            className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded cursor-grab text-[11px] text-gray-400 group/col"
+                          >
+                            <VscListUnordered size={10} className="opacity-40" />
+                            <span className="flex-1 truncate">{col.name}</span>
+                            <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
+                              {col.type.replace("Owned", "")}
+                            </span>
+                          </DraggableItemWrapper>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

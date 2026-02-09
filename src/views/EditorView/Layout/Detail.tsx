@@ -1,11 +1,11 @@
 import { forwardRef, useMemo } from "react";
 import { useCanvas } from "../Context/CanvasContext";
-import { useUI } from "../Context/UIProvider";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
-import { getDataTypeDisplayName, VariableDataType, isPrimitiveType } from "../Types/variables";
+import { VariableDataType, isPrimitiveType } from "../Types/variables";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
+import { uiStore } from "@/features/ui/UIStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {
@@ -28,7 +28,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     updateDataFrame,
     deleteDataFrame
   } = useCanvas();
-  const { showDialog } = useUI();
 
   // 使用 useShallow 确保只有当变量内容真正变化时才重新渲染
   const allTabsVariables = useNodeStore(useShallow(s => {
@@ -69,7 +68,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
 
   const handleDelete = () => {
     if (!selectedItemId || !selectedItemType) return;
-    showDialog({
+    uiStore.showDialog({
       title: `Delete ${selectedItemType}`,
       message: `Are you sure you want to delete ${selectedItemType} '${selectedData.name}'?`,
       type: "danger",

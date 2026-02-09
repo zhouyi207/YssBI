@@ -5,7 +5,6 @@ import { BaseNode } from "../Types/nodes";
 import { VariableDefinition } from "../Types/variables";
 import { deserializeSubGraph, serializeSubGraph } from "../Utils/io";
 import { ProjectService } from "../../../services/project/projectService";
-import { useUI } from "./UIProvider";
 import { getNodeDefinition } from "@/features/node-registry";
 import { createInternalNode } from "../Utils/internalNodes";
 import { useViewportStore } from "@/features/canvas/stores";
@@ -16,6 +15,7 @@ import { useCanvasInteraction } from "@/features/canvas/hooks";
 import { useLayoutStore, LayoutState } from "../../../features/layoutStore/layoutStore";
 import { useShallow } from 'zustand/react/shallow';
 import { deleteNodeInBackend } from "../Utils/backendNodeOps";
+import { uiStore } from "@/features/ui/UIStore";
 
 
 /* ================= Helper Functions ================= */
@@ -36,8 +36,6 @@ const getUniqueName = (baseName: string, items: Record<string, { name: string }>
 export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { showToast } = useUI();
-
   // --- Project Metadata ---
   const currentPath = useProjectStore(useCallback(s => s.currentPath, []));
   const setCurrentPath = useProjectStore(useCallback(s => s.setCurrentPath, []));
@@ -267,10 +265,10 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       );
       if (path) {
         setCurrentPath(path);
-        showToast("项目已保存", "success", 2000);
+        uiStore.showToast("项目已保存", "success", 2000);
       }
     } catch (e) { console.error(e); }
-  }, [syncActiveToCollection, showToast, setCurrentPath]);
+  }, [syncActiveToCollection, uiStore.showToast, setCurrentPath]);
 
   const saveGraph = useCallback(async () => {
     if (!currentPath) return saveGraphAs();
@@ -284,12 +282,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
         st.functions,
         st.macros
       );
-      showToast("项目已保存", "success", 2000);
+      uiStore.showToast("项目已保存", "success", 2000);
     } catch (e) {
       console.error(e);
-      showToast("保存失败", "error", 2000);
+      uiStore.showToast("保存失败", "error", 2000);
     }
-  }, [currentPath, saveGraphAs, syncActiveToCollection, showToast]);
+  }, [currentPath, saveGraphAs, syncActiveToCollection, uiStore.showToast]);
 
   const importGraph = useCallback(async (json?: string) => {
     try {
@@ -333,12 +331,12 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const first = Object.values(p.events)[0] || Object.values(p.functions)[0];
       if (first) openSubGraph(first.id, first.name, first.type as any, first);
 
-      showToast("项目已加载", "success", 2000);
+      uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {
       console.error(e);
-      showToast("加载项目失败", "error", 3000);
+      uiStore.showToast("加载项目失败", "error", 3000);
     }
-  }, [openSubGraph, showToast]);
+  }, [openSubGraph, uiStore.showToast]);
 
   const executeGraph = useCallback(async () => {
     try {
@@ -347,7 +345,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       // 获取当前活跃的 tab
       const currentTabId = activeTabIdRef.current;
       if (!currentTabId) {
-        showToast("请先打开一个 Event 才能执行", "warning", 3000);
+        uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
         return;
       }
 
@@ -356,7 +354,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       // 检查当前 tab 是否是 event
       const currentEvent = st.events[currentTabId];
       if (!currentEvent) {
-        showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
+        uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
         return;
       }
 
@@ -377,23 +375,23 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const logs = res.split('\n').filter(l => l.trim());
       logs.forEach(log => {
         if (log.includes("[Error]")) {
-          showToast(log, "error", 5000);
+          uiStore.showToast(log, "error", 5000);
         } else if (log.includes("[NODE PRINT]")) {
           // 提取打印内容并显示
           const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
-          showToast(`输出: ${printContent}`, "info", 3000);
+          uiStore.showToast(`输出: ${printContent}`, "info", 3000);
           console.log(printContent); // 同时输出到控制台
         } else if (log.includes("[System] Received event")) {
-          showToast(log, "info", 2000);
+          uiStore.showToast(log, "info", 2000);
         }
       });
 
-      showToast(`执行完成: ${currentEvent.name}`, "success", 2000);
+      uiStore.showToast(`执行完成: ${currentEvent.name}`, "success", 2000);
     } catch (e) {
       console.error("执行失败:", e);
-      showToast(`执行失败: ${e}`, "error", 5000);
+      uiStore.showToast(`执行失败: ${e}`, "error", 5000);
     }
-  }, [syncActiveToCollection, showToast]);
+  }, [syncActiveToCollection, uiStore.showToast]);
 
   const executeAllEvents = useCallback(async () => {
     try {
@@ -402,7 +400,7 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const eventCount = Object.keys(st.events).length;
       if (eventCount === 0) {
-        showToast("没有可执行的 Event", "warning", 3000);
+        uiStore.showToast("没有可执行的 Event", "warning", 3000);
         return;
       }
 
@@ -420,23 +418,23 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       const logs = res.split('\n').filter(l => l.trim());
       logs.forEach(log => {
         if (log.includes("[Error]")) {
-          showToast(log, "error", 5000);
+          uiStore.showToast(log, "error", 5000);
         } else if (log.includes("[NODE PRINT]")) {
           // 提取打印内容并显示
           const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
-          showToast(`输出: ${printContent}`, "info", 3000);
+          uiStore.showToast(`输出: ${printContent}`, "info", 3000);
           console.log(printContent); // 同时输出到控制台
         } else if (log.includes("[System] Received event")) {
-          showToast(log, "info", 2000);
+          uiStore.showToast(log, "info", 2000);
         }
       });
 
-      showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
+      uiStore.showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
     } catch (e) {
       console.error("执行失败:", e);
-      showToast(`执行失败: ${e}`, "error", 5000);
+      uiStore.showToast(`执行失败: ${e}`, "error", 5000);
     }
-  }, [syncActiveToCollection, showToast]);
+  }, [syncActiveToCollection, uiStore.showToast]);
 
   const updateFunction = useCallback((id: string, data: Partial<SubGraphData>) => {
     useProjectStore.getState().updateFunction(id, data);
@@ -760,9 +758,9 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log('[CanvasProvider] Paste completed successfully with connections preserved');
     } catch (e) {
       console.error('[CanvasProvider] Failed to paste nodes:', e);
-      showToast("粘贴失败", "error", 2000);
+      uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [saveHistory, setNodes, setSelectedNodeIds, activeTabIdRef, showToast]);
+  }, [saveHistory, setNodes, setSelectedNodeIds, activeTabIdRef, uiStore.showToast]);
 
 
   const {

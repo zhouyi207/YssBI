@@ -1,13 +1,13 @@
 import { useLayoutStore } from "@/features/layoutStore/layoutStore";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";
-import { DragLayer } from "./Layout/DragLayer";
+import { DragLayer } from "./Layout/DragOverlay";
 import { CanvasProvider } from "./Context/CanvasProvider";
 import { Menubar } from "./Layout/Menubar";
-import { UIProvider } from "./Context/UIProvider";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/editor/app-initialization";
 import { LoadStatus } from "@/shared/types/loadStatus";
+import { UIHost } from "@/shared/ui/uiHost";
 
 export const EditorWindow = () => {
     const rootId = useLayoutStore((s) => s.rootId);
@@ -23,7 +23,7 @@ export const EditorWindow = () => {
     }
 
     return (
-        <UIProvider>
+        <>
             <DragProvider>
                 <CanvasProvider>
                     <div className="flex flex-col w-full h-screen">
@@ -36,6 +36,7 @@ export const EditorWindow = () => {
                     </div>
                 </CanvasProvider>
             </DragProvider>
-        </UIProvider>
+            <UIHost />
+        </>
     );
 }
