@@ -7,7 +7,7 @@ use crate::graph::node::{NodeDefinition, NodeId, NodeInstance, NodeState};
 use crate::graph::pin::{PinId, PinInstance, PinRole};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
-use crate::graph::TypeInferenceContext;
+use crate::graph::{GraphId, TypeInferenceContext};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -20,9 +20,10 @@ use std::sync::{Arc, RwLock};
 /// - 所有连接关系
 /// - 类型推断上下文
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct GraphData {
     // 图 id
-    pub id: String,
+    pub id: GraphId,
 
     // 图 name
     pub name: String,
@@ -51,15 +52,16 @@ pub struct GraphData {
 
 impl GraphData {
     pub fn new(
-        id: impl Into<String>,
+        id: GraphId,
         name: impl Into<String>,
+        kind: GraphKind,
         registry: Arc<NodeRegistry>,
     ) -> Self {
         Self {
-            id: id.into(),
+            id,
             name: name.into(),
             position: GraphPosition::default(),
-            kind: GraphKind::Event,
+            kind,
             nodes: Arc::new(RwLock::new(HashMap::new())),
             pins: Arc::new(RwLock::new(HashMap::new())),
             connections: Arc::new(ConnectionManager::new()),

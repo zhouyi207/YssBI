@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -9,7 +9,9 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         load();
     }, [load]);
 
-    useEffect(() => {
+    // 使用 useLayoutEffect 确保 CSS 变量在 DOM 更新前同步应用
+    // 这样可以避免 TabBar 等组件渲染时读取到旧的 CSS 变量值
+    useLayoutEffect(() => {
         const root = document.documentElement;
 
         // 主要背景色

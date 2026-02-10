@@ -32,7 +32,7 @@ pub enum Event {
     // Function 子图事件
     Function(EventFunction),
     // Macro 子图事件
-    Macro(EventMacros),
+    Macro(EventMacro),
     // 全局变量事件
     Variable(EventVariable),
     // 节点事件

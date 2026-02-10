@@ -2,15 +2,16 @@ use crate::database::DatabaseInstance;
 use crate::graph::register::catalog::register_builtin_nodes;
 use crate::graph::register::NodeRegistry;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct ProjectStore {
     pub databases: HashMap<String, DatabaseInstance>,
-    pub node_register: NodeRegistry,
+    pub node_register: Arc<NodeRegistry>,
 }
 
 impl Default for ProjectStore {
     fn default() -> Self {
-        let mut node_register = NodeRegistry::new();
+        let mut node_register = Arc::new(NodeRegistry::new());
         register_builtin_nodes(&mut node_register);
         Self {
             databases: HashMap::new(),

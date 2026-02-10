@@ -3,6 +3,7 @@ import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icon
 import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
 import { LayoutTab } from "../../../shared/types/layout";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useShallow } from "zustand/react/shallow";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -11,13 +12,24 @@ interface TabBarProps {
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeTabId }) => {
-  const updateNode = useLayoutStore(s => s.updateNode);
-  const splitNode = useLayoutStore(s => s.splitNode);
-  const removeNode = useLayoutStore(s => s.removeNode);
-  const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
-  const isActiveGroup = useLayoutStore(s => s.activeGroupId === layoutNodeId);
-  const isAltPressed = useLayoutStore(s => s.isAltPressed);
-  const isDragging = useLayoutStore(s => s.isDragging);
+  // 使用 useShallow 和单个选择器订阅所有需要的状态，避免多次重渲染
+  const { 
+    updateNode, 
+    splitNode, 
+    removeNode, 
+    setActiveGroup, 
+    isActiveGroup, 
+    isAltPressed, 
+    isDragging 
+  } = useLayoutStore(useShallow(s => ({
+    updateNode: s.updateNode,
+    splitNode: s.splitNode,
+    removeNode: s.removeNode,
+    setActiveGroup: s.setActiveGroup,
+    isActiveGroup: s.activeGroupId === layoutNodeId,
+    isAltPressed: s.isAltPressed,
+    isDragging: s.isDragging,
+  })));
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null);
@@ -113,7 +125,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   return (
     <div 
       ref={setDropRef}
-      className={`flex items-center border-b h-9 w-full shrink-0 select-none overflow-hidden transition-colors ${isActiveGroup ? 'bg-[var(--workbench-bg)] border-[#3e3e3e]' : 'bg-[#252526] border-transparent'}`}
+      className={`flex items-center border-b h-9 w-full shrink-0 select-none overflow-hidden ${isActiveGroup ? 'bg-[var(--workbench-bg)] border-[#3e3e3e]' : 'bg-[#252526] border-transparent'}`}
     >
       <div 
         ref={containerRef} 
@@ -158,7 +170,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
       </div>
 
       {/* Group Action Buttons */}
-      <div className={`flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full transition-colors ${isActiveGroup ? 'bg-[var(--workbench-bg)]' : 'bg-[#252526]'}`}>
+      <div className={`flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full ${isActiveGroup ? 'bg-[var(--workbench-bg)]' : 'bg-[#252526]'}`}>
         <button
           onPointerDown={(e) => {
             // 使用 PointerDown 代替 Click，消除点击抬起的延迟感
@@ -258,7 +270,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             data-tab-id={tab.id}
             onClick={onClick}
             className={`
-                relative flex items-center gap-2 px-3 h-9 border-r border-[#2b2b2b] cursor-pointer transition-colors shrink-0
+                relative flex items-center gap-2 px-3 h-9 border-r border-[#2b2b2b] cursor-pointer shrink-0
                 ${isActive 
                     ? (isActiveGroup ? "bg-[var(--sidebar-bg)] text-white" : "bg-[var(--sidebar-bg)]/60 text-gray-300") 
                     : "text-gray-500 hover:bg-white/5"}
@@ -267,10 +279,10 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
         >
             {/* Active Top Border */}
             {isActive && (
-                <div className={`absolute top-0 left-0 right-0 h-[2px] transition-colors ${isActiveGroup ? 'bg-[var(--accent-color)]' : 'bg-gray-500'}`} />
+                <div className={`absolute top-0 left-0 right-0 h-[2px] ${isActiveGroup ? 'bg-[var(--accent-color)]' : 'bg-gray-500'}`} />
             )}
             
-            <span className={`text-xs truncate max-w-[120px] transition-colors duration-200`}>
+            <span className={`text-xs truncate max-w-[120px]`}>
                 {tab.title}
             </span>
             <button

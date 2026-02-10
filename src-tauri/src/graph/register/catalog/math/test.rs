@@ -19,7 +19,7 @@ mod tests {
     fn test_add_node_int32() {
         // 创建注册表和图
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Add 节点
         let add_node = graph.create_node("math.add").expect("Failed to create add node");
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_add_node_float64() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let add_node = graph.create_node("math.add").expect("Failed to create add node");
         let pins = graph.get_node_pins(add_node);
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn test_add_node_mixed_types() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let add_node = graph.create_node("math.add").expect("Failed to create add node");
         let pins = graph.get_node_pins(add_node);
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn test_add_node_with_connections() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建两个常量节点和一个 Add 节点
         // 注意：这里假设有常量节点，如果没有，这个测试需要调整
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn test_add_node_zero_values() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let add_node = graph.create_node("math.add").expect("Failed to create add node");
         let pins = graph.get_node_pins(add_node);
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn test_add_node_negative_values() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let add_node = graph.create_node("math.add").expect("Failed to create add node");
         let pins = graph.get_node_pins(add_node);
@@ -320,7 +320,7 @@ mod tests {
         // add3: add1.result + add2.result = 30 + 20 = 50
         
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建三个 Add 节点
         let add1_node = graph.create_node("math.add").expect("Failed to create add1 node");

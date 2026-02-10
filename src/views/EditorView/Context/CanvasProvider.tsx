@@ -460,8 +460,8 @@ export const CanvasProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     st.addDataFrame(id, df);
     setSelectedInfo(id, 'data');
-    switchSidebarTab('data');
-  }, [setSelectedInfo, switchSidebarTab]);
+    uiStore.switchSidebarTab('data');
+  }, [setSelectedInfo]);
 
   const updateDataFrame = useCallback((id: string, data: Partial<import("../Types/canvas").DataFrameData>) => {
     useProjectStore.getState().updateDataFrame(id, data);

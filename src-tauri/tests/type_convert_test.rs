@@ -1,11 +1,11 @@
+use std::sync::Arc;
+use yssbi_lib::execution::Executor;
 use yssbi_lib::graph::{
     core::GraphData,
     pin::{DataRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
 };
-use yssbi_lib::execution::Executor;
-use std::sync::Arc;
 
 /// 创建测试用的注册表
 fn create_test_registry() -> Arc<NodeRegistry> {
@@ -18,7 +18,7 @@ fn create_test_registry() -> Arc<NodeRegistry> {
 #[test]
 fn test_multiple_type_conversions() {
     // 测试多种类型转换
-    // 
+    //
     // 图结构：
     // 1. Boolean(true) -> Convert -> Print (应输出 "true")
     // 2. Int64(100) -> Convert -> Print (应输出 "100")
@@ -26,8 +26,9 @@ fn test_multiple_type_conversions() {
 
     let registry = create_test_registry();
     let graph = Arc::new(GraphData::new(
-        "test_multi_convert",
+        yssbi_lib::graph::GraphId::new(),
         "Multiple Type Conversion Test",
+        yssbi_lib::graph::GraphKind::Event,
         registry.clone(),
     ));
 
@@ -116,7 +117,9 @@ fn test_multiple_type_conversions() {
         .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
         .unwrap();
 
-    graph.connect(bool_output.id, convert_bool_input.id).unwrap();
+    graph
+        .connect(bool_output.id, convert_bool_input.id)
+        .unwrap();
 
     let print_bool_pins = graph.get_node_pins(print_bool);
     let print_bool_message = print_bool_pins
@@ -140,7 +143,9 @@ fn test_multiple_type_conversions() {
         .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
         .unwrap();
 
-    graph.connect(int64_output.id, convert_int64_input.id).unwrap();
+    graph
+        .connect(int64_output.id, convert_int64_input.id)
+        .unwrap();
 
     let print_int64_pins = graph.get_node_pins(print_int64);
     let print_int64_message = print_int64_pins
@@ -204,7 +209,7 @@ fn test_multiple_type_conversions() {
 
     // 验证输出
     println!("\n=== Verifying Outputs ===");
-    
+
     assert!(
         logs.iter().any(|log| log.contains("Print: true")),
         "Expected 'true' output not found"

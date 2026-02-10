@@ -20,7 +20,7 @@ mod tests {
     fn test_equal_node_int32() {
         // 测试 Equal 节点比较 Int32 类型
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Equal 节点
         let equal_node = graph
@@ -81,7 +81,7 @@ mod tests {
     fn test_equal_node_not_equal() {
         // 测试 Equal 节点比较不相等的值
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let equal_node = graph
             .create_node("logic.equal")
@@ -139,7 +139,7 @@ mod tests {
     fn test_equal_node_string() {
         // 测试 Equal 节点比较字符串
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let equal_node = graph
             .create_node("logic.equal")
@@ -201,7 +201,7 @@ mod tests {
     fn test_equal_node_float64() {
         // 测试 Equal 节点比较 Float64 类型
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let equal_node = graph
             .create_node("logic.equal")
@@ -263,7 +263,7 @@ mod tests {
     fn test_equal_node_boolean() {
         // 测试 Equal 节点比较 Boolean 类型
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new("test_graph", "Test Graph", registry.clone()));
+        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let equal_node = graph
             .create_node("logic.equal")

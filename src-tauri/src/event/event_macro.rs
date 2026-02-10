@@ -1,10 +1,11 @@
-use crate::graph::GraphData;
+use crate::graph::{GraphId};
 use serde::{Deserialize, Serialize};
+use crate::schema::GraphDTO;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
-pub enum EventMacros {
-    MacroCreated { id: String, data: GraphData },
-    MacroUpdated { id: String, data: GraphData },
-    MacroDeleted { id: String },
+pub enum EventMacro {
+    MacroCreated { id: GraphId, data: GraphDTO },
+    MacroUpdated { id: GraphId, data: GraphDTO },
+    MacroDeleted { id: GraphId },
 }

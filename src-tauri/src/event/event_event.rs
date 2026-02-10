@@ -1,19 +1,11 @@
-use crate::graph::GraphData;
+use crate::graph::{GraphId};
 use serde::{Deserialize, Serialize};
+use crate::schema::GraphDTO;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum EventEvent {
-        EventCreated {
-        id: String,
-        data: GraphData,
-    },
-    EventUpdated {
-        id: String,
-        data: GraphData,
-    },
-    EventDeleted {
-        id: String,
-    },
-
+    EventCreated { id: GraphId, data: GraphDTO },
+    EventUpdated { id: GraphId, data: GraphDTO },
+    EventDeleted { id: GraphId },
 }

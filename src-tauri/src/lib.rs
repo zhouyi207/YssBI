@@ -3,16 +3,16 @@
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
 pub mod commands;
+pub mod database;
+pub mod editor;
+pub mod event;
 pub mod execution;
+pub mod frontend;
+pub mod graph;
+pub mod log;
 pub mod project;
 pub mod schema;
-pub mod log;
-pub mod graph;
 pub mod variable;
-pub mod event;
-pub mod database;
-pub mod frontend;
-pub mod editor;
 
 use commands::*;
 
@@ -23,9 +23,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
-                .targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                ])
+                .targets([tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                )])
                 .level(tauri_plugin_log::log::LevelFilter::Debug)
                 .format(|out, message, record| {
                     use chrono::Local;
@@ -81,24 +81,15 @@ pub fn run() {
             // 设置相关
             load_settings,
             save_settings,
-            // Events CRUD
-            get_events,
-            get_event,
+            // Graph CRUD
+            get_graph,
+            remove_graph,
             create_event,
             update_event,
-            delete_event,
-            // Functions CRUD
-            get_functions,
-            get_function,
             create_function,
             update_function,
-            delete_function,
-            // Macros CRUD
-            get_macros,
-            get_macro,
             create_macro,
             update_macro,
-            delete_macro,
             // Global Variables CRUD
             get_global_variables,
             get_global_variable,
@@ -137,7 +128,7 @@ pub fn run() {
             add_dynamic_pin,
             remove_dynamic_pin,
             // 执行命令
-            execute_graph,
+            // execute_graph,
             execute_project,
             // 兼容旧接口
             save_project,

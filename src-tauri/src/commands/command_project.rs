@@ -8,7 +8,6 @@ use tauri::{AppHandle, State};
 
 use serde_json::Value;
 
-
 /// 获取当前项目数据
 #[tauri::command]
 pub fn get_project_data(state: State<ProjectState>) -> ProjectData {
@@ -140,7 +139,6 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
 }
-
 
 #[tauri::command]
 pub fn save_project(_path: String, _data: Value) -> Result<(), String> {

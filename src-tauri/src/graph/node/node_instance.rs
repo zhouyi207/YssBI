@@ -24,6 +24,7 @@ pub struct NodeInstance {
     pub node_type: String,
 
     /// 子图 ID（用于 Subgraph 节点）
+    /// 在这里好像可以删掉，这个字段没啥用
     pub sub_graph_id: Option<String>,
 
     /// 节点标题（可自定义）
