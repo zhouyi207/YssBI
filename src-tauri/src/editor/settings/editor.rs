@@ -1,8 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use tauri::AppHandle;
-use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

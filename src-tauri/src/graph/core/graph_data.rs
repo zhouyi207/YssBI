@@ -41,7 +41,7 @@ pub struct GraphData {
     pins: Arc<RwLock<HashMap<PinId, PinInstance>>>,
 
     // 图 pins 的连接状态
-    connections: Arc<ConnectionManager>,
+    pub connections: Arc<ConnectionManager>,
 
     // 节点类型注册表
     registry: Arc<NodeRegistry>,
@@ -204,6 +204,23 @@ impl GraphData {
             .read()
             .unwrap()
             .get_bound_type(type_var_id)
+    }
+
+    /// ⭐ 注册 Pin 的 Schema（用于 DataFrame 等复杂类型）
+    pub fn register_pin_schema(&self, pin_id: PinId, schema: crate::graph::pin::PinSchema) {
+        self.type_inference
+            .write()
+            .unwrap()
+            .register_pin_schema(pin_id, schema);
+    }
+
+    /// ⭐ 获取 Pin 的 Schema
+    pub fn get_pin_schema(&self, pin_id: PinId) -> Option<crate::graph::pin::PinSchema> {
+        self.type_inference
+            .read()
+            .unwrap()
+            .get_pin_schema(pin_id)
+            .cloned()
     }
 
     // =========================
@@ -401,3 +418,12 @@ impl GraphData {
         self.connections.clear();
     }
 }
+
+
+// graph.rebuild_node_layout(node_id) {
+//     let specs = resolver.resolve(self, node);
+
+//     diff(specs, existing_pins)
+//         .apply(|add| create_pin(add))
+//         .apply(|remove| remove_pin(remove));
+// }

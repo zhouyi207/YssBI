@@ -1,6 +1,6 @@
 use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction, EventMacro};
-use crate::graph::{self, GraphData, GraphId, GraphKind};
+use crate::graph::{GraphId, GraphKind};
 use crate::schema::GraphDTO;
 use crate::{event::Event, project::ProjectState};
 use serde_json::Value;

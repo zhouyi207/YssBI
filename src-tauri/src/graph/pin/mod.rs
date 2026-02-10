@@ -19,6 +19,8 @@ pub mod pin_runtime;
 pub mod pin_type;
 pub mod pin_data_type;
 pub mod pin_order;
+pub mod pin_dynamic_spec;
+pub mod pin_shema;
 
 pub use pin_id::*;
 pub use pin_role::*;
@@ -29,3 +31,5 @@ pub use pin_type::*;
 pub use pin_order::*;
 pub use pin_data_type::*;
 pub use pin_runtime::*;
+pub use pin_dynamic_spec::*;
+pub use pin_shema::*;

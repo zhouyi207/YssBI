@@ -3,7 +3,7 @@
 use super::TypeVarId;
 use crate::graph::infer::TypeVarDefinition;
 use crate::graph::pin::PinDataType;
-use crate::graph::pin::{PinId, PinTypeDesc};
+use crate::graph::pin::{PinId, PinTypeDesc, PinSchema};
 use crate::graph::value::DataType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,6 +19,9 @@ pub struct TypeInferenceContext {
 
     /// Pin 到类型描述的映射
     pin_types: HashMap<PinId, PinTypeDesc>,
+
+    /// Pin 到 Schema 的映射（用于 DataFrame 等复杂类型）
+    pin_schemas: HashMap<PinId, PinSchema>,
 }
 
 impl TypeInferenceContext {
@@ -27,6 +30,7 @@ impl TypeInferenceContext {
             type_vars: HashMap::new(),
             bindings: HashMap::new(),
             pin_types: HashMap::new(),
+            pin_schemas: HashMap::new(),
         }
     }
 
@@ -34,6 +38,7 @@ impl TypeInferenceContext {
         self.type_vars.clear();
         self.bindings.clear();
         self.pin_types.clear();
+        self.pin_schemas.clear();
     }
 
     /// 注册类型变量定义
@@ -46,11 +51,28 @@ impl TypeInferenceContext {
         self.pin_types.insert(pin_id, type_desc);
     }
 
+    /// 注册 Pin 的 Schema（用于 DataFrame 等复杂类型）
+    pub fn register_pin_schema(&mut self, pin_id: PinId, schema: PinSchema) {
+        self.pin_schemas.insert(pin_id, schema);
+    }
+
+    /// 获取 Pin 的 Schema
+    pub fn get_pin_schema(&self, pin_id: PinId) -> Option<&PinSchema> {
+        self.pin_schemas.get(&pin_id)
+    }
+
     /// 推断一条连接
     pub fn infer_connection(&mut self, from: PinId, to: PinId) -> Result<(), String> {
         let a = self.get_pin_type(from)?.clone();
         let b = self.get_pin_type(to)?.clone();
-        self.unify(&a, &b)
+        self.unify(&a, &b)?;
+
+        // 如果是 DataFrame 类型，传播 Schema
+        if let Some(schema) = self.pin_schemas.get(&from).cloned() {
+            self.pin_schemas.insert(to, schema);
+        }
+
+        Ok(())
     }
 
     /// 推断完成后提交结果（写回 TypeVarDefinition.bound）

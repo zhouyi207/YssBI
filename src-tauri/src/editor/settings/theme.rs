@@ -1,10 +1,6 @@
 //! 设置相关命令
 
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use tauri::AppHandle;
-use tauri::Manager;
 
 // ==================== 数据结构 ====================
 

@@ -12,9 +12,13 @@ pub mod node_definition;
 pub mod node_instance;
 pub mod node_processor;
 pub mod node_state;
+pub mod node_layout_context;
+pub mod node_layout_resolver;
 
 pub use node_definition::*;
 pub use node_instance::*;
 pub use node_processor::*;
 pub use node_id::*;
 pub use node_state::*;
+pub use node_layout_context::*;
+pub use node_layout_resolver::*;
