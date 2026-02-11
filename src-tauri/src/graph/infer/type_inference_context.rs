@@ -1,10 +1,11 @@
 //! 类型推断系统
 
-use super::TypeVarId;
-use crate::graph::infer::TypeVarDefinition;
-use crate::graph::pin::PinDataType;
+use crate::graph::infer::TypeVarInference;
+use crate::graph::pin::PinDataTypeInference;
 use crate::graph::pin::PinId;
 use crate::graph::value::DataType;
+use crate::graph::PinInstance;
+use crate::graph::TypeVarId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -12,10 +13,10 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TypeInferenceContext {
     /// 类型变量定义（来自 Graph / NodeDefinition）
-    type_vars: HashMap<TypeVarId, TypeVarDefinition>,
+    type_vars: HashMap<TypeVarId, TypeVarInference>,
 
     /// Pin 到类型描述的映射
-    pin_types: HashMap<PinId, PinDataType>,
+    pin_types: HashMap<PinId, PinDataTypeInference>,
 
     /// 推断过程中的临时绑定（root → concrete）
     bindings: HashMap<TypeVarId, DataType>,
@@ -65,13 +66,16 @@ impl TypeInferenceContext {
     }
 
     /// 注册类型变量定义
-    pub fn register_type_var(&mut self, type_var: TypeVarDefinition) {
+    pub fn register_type_var(&mut self, type_var: TypeVarInference) {
         self.type_vars.insert(type_var.id, type_var);
     }
 
     /// 注册 Pin 的类型描述
-    pub fn register_pin_type(&mut self, pin_id: PinId, data_type: PinDataType) {
-        self.pin_types.insert(pin_id, data_type);
+    pub fn register_pin_type(&mut self, pin_instance: PinInstance) {
+        if let Some(data_type) = pin_instance.definition.data_type {
+            let data_type_inference = data_type.to_inference(pin_instance.type_var_id.unwrap());
+            self.pin_types.insert(pin_instance.id, data_type_inference);
+        }
     }
 
     /// 推断一条连接
@@ -83,7 +87,7 @@ impl TypeInferenceContext {
         Ok(())
     }
 
-    /// 推断完成后提交结果（写回 TypeVarDefinition.bound）
+    /// 推断完成后提交结果（写回 TypeVarInference.bound）
     pub fn commit(mut self) -> Result<(), String> {
         for (var_id, value_type) in self.bindings.drain() {
             let def = self
@@ -111,8 +115,8 @@ impl TypeInferenceContext {
         let pin = self.get_pin_type(pin_id)?;
 
         match &pin {
-            PinDataType::Concrete(vt) => Ok(vt.clone()),
-            PinDataType::TypeVar(var) => {
+            PinDataTypeInference::Concrete(vt) => Ok(vt.clone()),
+            PinDataTypeInference::TypeVar(var) => {
                 if let Some(vt) = self.bindings.get(var) {
                     Ok(vt.clone())
                 } else if let Some(def) = self.type_vars.get(var) {
@@ -123,18 +127,18 @@ impl TypeInferenceContext {
                     Err(format!("Unknown TypeVar {:?}", var))
                 }
             }
-            PinDataType::Unknown => Err("Type is still unknown".into()),
+            PinDataTypeInference::Unknown => Err("Type is still unknown".into()),
         }
     }
 
     /// 类型统一（核心推断逻辑）
-    fn unify(&mut self, a: &PinDataType, b: &PinDataType) -> Result<(), String> {
+    fn unify(&mut self, a: &PinDataTypeInference, b: &PinDataTypeInference) -> Result<(), String> {
         let ta = self.resolve_data_type(a);
         let tb = self.resolve_data_type(b);
 
         match (ta, tb) {
             // concrete ↔ concrete
-            (PinDataType::Concrete(a), PinDataType::Concrete(b)) => {
+            (PinDataTypeInference::Concrete(a), PinDataTypeInference::Concrete(b)) => {
                 if self.is_value_type_compatible(&a, &b) {
                     Ok(())
                 } else {
@@ -143,8 +147,8 @@ impl TypeInferenceContext {
             }
 
             // typevar ↔ concrete
-            (PinDataType::TypeVar(var), PinDataType::Concrete(vt))
-            | (PinDataType::Concrete(vt), PinDataType::TypeVar(var)) => {
+            (PinDataTypeInference::TypeVar(var), PinDataTypeInference::Concrete(vt))
+            | (PinDataTypeInference::Concrete(vt), PinDataTypeInference::TypeVar(var)) => {
                 let root = self.find_root(var);
 
                 let def = self
@@ -163,7 +167,7 @@ impl TypeInferenceContext {
             }
 
             // TypeVar ↔ TypeVar
-            (PinDataType::TypeVar(a), PinDataType::TypeVar(b)) => {
+            (PinDataTypeInference::TypeVar(a), PinDataTypeInference::TypeVar(b)) => {
                 let ra = self.find_root(a);
                 let rb = self.find_root(b);
 
@@ -204,7 +208,7 @@ impl TypeInferenceContext {
                 }
             }
 
-            (PinDataType::Unknown, _) | (_, PinDataType::Unknown) => Ok(()),
+            (PinDataTypeInference::Unknown, _) | (_, PinDataTypeInference::Unknown) => Ok(()),
         }
     }
 
@@ -225,20 +229,20 @@ impl TypeInferenceContext {
         Ok(())
     }
     /// 解析 DataType（优先使用临时绑定）
-    fn resolve_data_type(&mut self, dt: &PinDataType) -> PinDataType {
+    fn resolve_data_type(&mut self, dt: &PinDataTypeInference) -> PinDataTypeInference {
         match dt {
-            PinDataType::TypeVar(var) => {
+            PinDataTypeInference::TypeVar(var) => {
                 let root = self.find_root(*var);
 
                 if let Some(vt) = self.bindings.get(&root) {
-                    PinDataType::Concrete(vt.clone())
+                    PinDataTypeInference::Concrete(vt.clone())
                 } else if let Some(def) = self.type_vars.get(&root) {
                     def.bound
                         .clone()
-                        .map(PinDataType::Concrete)
-                        .unwrap_or_else(|| PinDataType::TypeVar(root))
+                        .map(PinDataTypeInference::Concrete)
+                        .unwrap_or_else(|| dt.clone())
                 } else {
-                    PinDataType::TypeVar(root)
+                    dt.clone()
                 }
             }
             _ => dt.clone(),
@@ -255,7 +259,7 @@ impl TypeInferenceContext {
             )
     }
 
-    fn get_pin_type(&self, pin_id: PinId) -> Result<&PinDataType, String> {
+    fn get_pin_type(&self, pin_id: PinId) -> Result<&PinDataTypeInference, String> {
         self.pin_types
             .get(&pin_id)
             .ok_or_else(|| format!("Pin {:?} not registered", pin_id))

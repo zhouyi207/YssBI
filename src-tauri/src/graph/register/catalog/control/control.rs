@@ -2,7 +2,7 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataType};
+use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataTypeDefinition};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ fn register_if_else(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "Condition",
                     DataRole::Condition,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::exec_output("True", ExecRole::ExecTrue),
                 PinDefinition::exec_output("False", ExecRole::ExecFalse),

@@ -1,5 +1,5 @@
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDefinition, PinDataType};
+use crate::graph::pin::{DataRole, PinDefinition, PinDataTypeDefinition};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ fn register_boolean_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::Boolean),
+                PinDataTypeDefinition::concrete(DataType::Boolean),
             )])
         }));
 
@@ -40,7 +40,7 @@ fn register_int32_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::Int32),
+                PinDataTypeDefinition::concrete(DataType::Int32),
             )])
         }));
 
@@ -57,7 +57,7 @@ fn register_int64_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::Int64),
+                PinDataTypeDefinition::concrete(DataType::Int64),
             )])
         }));
 
@@ -74,7 +74,7 @@ fn register_float32_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::Float32),
+                PinDataTypeDefinition::concrete(DataType::Float32),
             )])
         }));
 
@@ -91,7 +91,7 @@ fn register_float64_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::Float64),
+                PinDataTypeDefinition::concrete(DataType::Float64),
             )])
         }));
 
@@ -108,7 +108,7 @@ fn register_string_constant(registry: &NodeRegistry) {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
-                PinDataType::concrete(DataType::String),
+                PinDataTypeDefinition::concrete(DataType::String),
             )])
         }));
 

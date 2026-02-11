@@ -1,7 +1,7 @@
 //! Node 定义（静态描述）
 
 use crate::execution::{ExecutionEffect, NodeExecutionContext};
-use crate::graph::PinDefinition;
+use crate::graph::{PinDefinition, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -50,17 +50,17 @@ pub struct NodeDefinition {
     /// 分类路径
     pub category: Vec<String>,
 
-    /// 🧱 第一层：控制流处理器（可选）
+    /// 节点的 pin 类型推断
+    pub type_vars: Vec<TypeVarDefinition>,
+
     /// 决定执行流向，返回下一个要触发的 ExecRole
     #[serde(skip)]
     pub flow_processor: Option<FlowProcessor>,
 
-    /// 🧱 第二层：数据求值器（可选）
     /// 计算输出数据值，通过 DataRole 访问输入输出
     #[serde(skip)]
     pub data_evaluator: Option<DataEvaluator>,
 
-    /// 🧱 第三层：Pin 生成器（可选）
     /// 动态生成输入输出 Pin
     #[serde(skip)]
     pub pin_generator: Option<PinGenerator>,
@@ -75,11 +75,23 @@ impl NodeDefinition {
         Self {
             name: name.into(),
             category: vec![],
+            type_vars: vec![],
             flow_processor: None,
             data_evaluator: None,
             pin_generator: None,
             metadata: NodeMetaData::default(),
         }
+    }
+
+    // 在定义时这样使用
+    //     .add_type_var(TypeVarDefinition {
+    //     id: TypeVarId::placeholder("T"),
+    //     constraints: vec![TypeConstraint::Numeric],
+    //     bound: None,
+    // })
+    pub fn with_type_vars(mut self, type_vars: Vec<TypeVarDefinition>) -> Self {
+        self.type_vars = type_vars;
+        self
     }
 
     /// 设置分类

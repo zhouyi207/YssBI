@@ -3,7 +3,7 @@
 //!
 //! 因此不能将实例或者运行时的状态如 value 带入
 
-use super::{DataRole, ExecRole, PinDataType, PinRole};
+use super::{DataRole, ExecRole, PinDataTypeDefinition, PinRole};
 use serde::{Deserialize, Serialize};
 
 /// Pin 方向
@@ -62,7 +62,7 @@ pub struct PinDefinition {
     pub role: PinRole,
 
     /// 类型描述（仅 Data Pin）
-    pub data_type: Option<PinDataType>,
+    pub data_type: Option<PinDataTypeDefinition>,
 
     /// UI / 编辑器相关元数据
     pub meta_data: PinMetaData,
@@ -70,7 +70,7 @@ pub struct PinDefinition {
 
 impl PinDefinition {
     /// 创建数据输入 Pin
-    pub fn data_input(name: impl Into<String>, role: DataRole, data_type: PinDataType) -> Self {
+    pub fn data_input(name: impl Into<String>, role: DataRole, data_type: PinDataTypeDefinition) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Input,
@@ -82,7 +82,7 @@ impl PinDefinition {
     }
 
     /// 创建数据输出 Pin
-    pub fn data_output(name: impl Into<String>, role: DataRole, data_type: PinDataType) -> Self {
+    pub fn data_output(name: impl Into<String>, role: DataRole, data_type: PinDataTypeDefinition) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Output,

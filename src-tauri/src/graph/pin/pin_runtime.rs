@@ -1,5 +1,6 @@
 //! pin 运行时的数据
-use super::{DataPinState, PinKind, PinRuntimeValue, PinState};
+use super::{DataPinState, PinKind, PinState};
+use crate::graph::DataValue;
 use crate::graph::ExecPinState;
 use crate::graph::PinId;
 use crate::graph::PinInstance;
@@ -10,7 +11,7 @@ pub struct PinRuntime {
     pub id: PinId,
     pub state: PinState,
     pub instance: PinInstance,
-    pub value: Option<PinRuntimeValue>,
+    pub current_value: Option<DataValue>,
 }
 
 impl PinRuntime {
@@ -23,7 +24,7 @@ impl PinRuntime {
             id: PinId::new(),
             state,
             instance,
-            value: None,
+            current_value: None,
         }
     }
 }

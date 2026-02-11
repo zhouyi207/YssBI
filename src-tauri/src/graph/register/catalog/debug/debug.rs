@@ -3,7 +3,7 @@
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::register::NodeRegistry;
-use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataType};
+use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataTypeDefinition};
 use crate::graph::value::DataType;
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ fn register_print(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "Message",
                     DataRole::Inputs(0),
-                    PinDataType::concrete(DataType::String),
+                    PinDataTypeDefinition::concrete(DataType::String),
                 ),
                 PinDefinition::exec_output("Out", ExecRole::ExecOut),
             ])

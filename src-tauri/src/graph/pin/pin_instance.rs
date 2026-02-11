@@ -2,8 +2,8 @@
 ///
 /// Pin 实例由 Graph 管理，不属于 Node。
 /// Pin 不存储连接信息，所有连接由 ConnectionManager 管理。
-use super::{PinDefinition, PinDirection, PinId, PinKind, PinOrder, PinState};
-use crate::graph::node::NodeId;
+use super::{PinDefinition, PinDirection, PinId, PinKind, PinOrder};
+use crate::graph::{DataValue, NodeId, TypeVarId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +12,8 @@ pub struct PinInstance {
     pub node_id: NodeId,
     pub definition: PinDefinition,
     pub order: PinOrder,
+    pub type_var_id: Option<TypeVarId>,
+    pub user_value: Option<DataValue>,
 }
 
 impl PinInstance {
@@ -22,7 +24,13 @@ impl PinInstance {
             node_id,
             definition: def.clone(),
             order: PinOrder(order),
+            type_var_id: None,
+            user_value: None,
         }
+    }
+
+    pub fn with_type_var_id(&mut self, type_var_id: Option<TypeVarId>) {
+        self.type_var_id = type_var_id;
     }
 
     pub fn is_data(&self) -> bool {

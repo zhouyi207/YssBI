@@ -1,7 +1,7 @@
 //! 数学运算节点
 
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataType};
+use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataTypeDefinition};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use std::sync::Arc;
@@ -24,17 +24,17 @@ fn register_add(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
             ])
         }))
@@ -62,17 +62,17 @@ fn register_subtract(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
             ])
         }))
@@ -100,17 +100,17 @@ fn register_multiply(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
             ])
         }))
@@ -138,17 +138,17 @@ fn register_divide(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
             ])
         }))

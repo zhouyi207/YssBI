@@ -2,7 +2,7 @@
 
 use crate::graph::node::NodeDefinition;
 use crate::graph::register::NodeRegistry;
-use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataType};
+use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataTypeDefinition};
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 
@@ -25,17 +25,17 @@ fn register_equal(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
             ])
         }))
@@ -67,17 +67,17 @@ fn register_not_equal(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Float64),
+                    PinDataTypeDefinition::concrete(DataType::Float64),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
             ])
         }))
@@ -109,17 +109,17 @@ fn register_and(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
             ])
         }))
@@ -153,17 +153,17 @@ fn register_or(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "A",
                     DataRole::Operands(0),
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::data_input(
                     "B",
                     DataRole::Operands(1),
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
             ])
         }))
@@ -197,12 +197,12 @@ fn register_not(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "Input",
                     DataRole::Input,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
                 PinDefinition::data_output(
                     "Result",
                     DataRole::Result,
-                    PinDataType::concrete(DataType::Boolean),
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
                 ),
             ])
         }))

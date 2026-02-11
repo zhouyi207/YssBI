@@ -1,6 +1,6 @@
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDataType, PinDefinition, PinRole};
+use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
@@ -28,12 +28,12 @@ fn register_convert(registry: &NodeRegistry) {
                 PinDefinition::data_input(
                     "Input",
                     DataRole::Input,
-                    PinDataType::type_var(input_type_var),
+                    PinDataTypeDefinition::type_var(input_type_var),
                 ),
                 PinDefinition::data_output(
                     "Output",
                     DataRole::Output,
-                    PinDataType::type_var(output_type_var),
+                    PinDataTypeDefinition::type_var(output_type_var),
                 ),
             ])
         }))
