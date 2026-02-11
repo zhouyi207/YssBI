@@ -1,10 +1,10 @@
 use super::PinKind;
 use super::PinRole;
-use super::PinTypeDesc;
+use super::PinDataType;
 
 pub struct PinDynamicSpec {
     pub role: PinRole,
     pub kind: PinKind,
-    pub type_desc: PinTypeDesc,
+    pub data_type: PinDataType,
     pub name: String,
 }

@@ -13,7 +13,7 @@ impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
         Self {
             id: value.id,
-            name: value.definition.title.clone(),
+            name: value.definition.name.clone(),
             category: value.definition.category.clone(),
         }
     }

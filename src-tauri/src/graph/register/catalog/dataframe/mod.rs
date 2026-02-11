@@ -15,7 +15,7 @@ impl NodeLayoutResolver for BreakDataFrameNode {
             DynamicPinSpec {
                 role: PinRole::Data(DataRole::Outputs(i)),
                 kind: PinKind::Data,
-                type_desc: PinTypeDesc::Concrete(DataType::Series(col.ty)),
+                data_type: PinDataType::Concrete(DataType::Series(col.ty)),
                 name: col.name.clone(),
             }
         }).collect()

@@ -19,7 +19,7 @@ pub trait NodeLayoutResolver {
 //         DynamicPinSpec {
 //             role: PinRole::Data(DataRole::Outputs(i)),
 //             kind: PinKind::Data,
-//             type_desc: PinTypeDesc::concrete(DataType::Series(col.ty)),
+//             type_desc: PinDataType::concrete(DataType::Series(col.ty)),
 //             name: col.name.clone(),
 //         }
 //     }).collect()

@@ -1,62 +1,162 @@
 //! 数学运算节点
 
-use crate::graph::infer::{TypeConstraint, TypeVarDefinition, TypeVarId};
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinTypeDesc};
+use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataType};
 use crate::graph::register::NodeRegistry;
+use crate::graph::value::DataType;
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
     register_add(registry);
+    register_subtract(registry);
+    register_multiply(registry);
+    register_divide(registry);
 }
 
-/// Add 节点 - 支持任意数量的操作数
+/// Add 节点 - 加法运算
 fn register_add(registry: &NodeRegistry) {
-    // 创建类型变量（所有操作数和结果共享同一类型）
-    let type_var = TypeVarId::new();
-
-    let definition = NodeDefinition::new("math.add", "Add (+)")
+    let definition = NodeDefinition::new("Add (+)")
         .with_category(vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
-        .with_description("Add numbers together")
-        // 注册类型变量及其约束
-        .add_type_var(TypeVarDefinition {
-            id: type_var,
-            constraints: vec![TypeConstraint::Numeric],
-            bound: None,
-        })
-        // 添加两个默认操作数（不设置默认值，因为类型未知）
-        .add_pin(PinDefinition::data_input(
-            "A",
-            DataRole::Operands(0),
-            PinTypeDesc::type_var(type_var),
-        ))
-        .add_pin(PinDefinition::data_input(
-            "B",
-            DataRole::Operands(1),
-            PinTypeDesc::type_var(type_var),
-        ))
-        .add_pin(PinDefinition::data_output(
-            "Result",
-            DataRole::Result,
-            PinTypeDesc::type_var(type_var),
-        ))
-        // 🧱 第二层：数据求值器（纯数据节点）
+        .with_description("Add two numbers together")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Float64),
+                ),
+            ])
+        }))
         .with_data_evaluator(Arc::new(|ctx| {
-            // 获取所有 Operands 家族的输入值
-            let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
 
-            if operands.is_empty() {
-                return Err("No operands found".to_string());
-            }
+            let result = (a + b)?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
 
-            // 对所有操作数进行累加
-            let mut result = operands[0].clone();
-            for operand in operands.iter().skip(1) {
-                result = (result + operand.clone())?;
-            }
+            Ok(())
+        }));
 
-            // 输出结果
+    registry.register(definition);
+}
+
+/// Subtract 节点 - 减法运算
+fn register_subtract(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Subtract (-)")
+        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+        .with_ui_style("math")
+        .with_description("Subtract B from A")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Float64),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+
+            let result = (a - b)?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// Multiply 节点 - 乘法运算
+fn register_multiply(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Multiply (*)")
+        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+        .with_ui_style("math")
+        .with_description("Multiply two numbers")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Float64),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+
+            let result = (a * b)?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// Divide 节点 - 除法运算
+fn register_divide(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Divide (/)")
+        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+        .with_ui_style("math")
+        .with_description("Divide A by B")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Float64),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+
+            let result = (a / b)?;
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
 
             Ok(())

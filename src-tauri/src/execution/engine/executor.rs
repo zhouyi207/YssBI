@@ -7,7 +7,7 @@ use super::super::NodeExecutionContext;
 use super::execution_effect::{ExecutionEffect, ResumeToken};
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
-use crate::graph::core::GraphData;
+use crate::graph::core::GraphInstance;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
@@ -30,7 +30,7 @@ pub struct Executor {
     suspended_frames: HashMap<ResumeToken, FrameId>,
 
     /// Graph 引用
-    graph: Arc<GraphData>,
+    graph: Arc<GraphInstance>,
 
     /// 执行日志
     logs: Vec<String>,
@@ -38,7 +38,7 @@ pub struct Executor {
 
 impl Executor {
     /// 创建新的执行器
-    pub fn new(graph: Arc<GraphData>) -> Self {
+    pub fn new(graph: Arc<GraphInstance>) -> Self {
         Self {
             stack: ExecutionStack::new(),
             suspended_frames: HashMap::new(),
@@ -482,13 +482,13 @@ impl Executor {
 /// Graph 节点执行上下文实现
 struct GraphNodeExecutionContext {
     node_id: NodeId,
-    graph: Arc<GraphData>,
+    graph: Arc<GraphInstance>,
     outputs: HashMap<PinRole, DataValue>,
     logs: Vec<String>,
 }
 
 impl GraphNodeExecutionContext {
-    fn new(node_id: NodeId, graph: Arc<GraphData>) -> Self {
+    fn new(node_id: NodeId, graph: Arc<GraphInstance>) -> Self {
         Self {
             node_id,
             graph,

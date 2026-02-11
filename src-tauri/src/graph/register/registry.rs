@@ -1,14 +1,14 @@
 //! Node 注册中心
 
-use serde::{Deserialize, Serialize};
 use crate::graph::node::NodeDefinition;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// Node 注册中心
 ///
 /// 管理所有节点定义（原型）
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NodeRegistry {
     definitions: RwLock<HashMap<String, Arc<NodeDefinition>>>,
 }
@@ -22,7 +22,9 @@ impl NodeRegistry {
 
     /// 注册节点定义
     pub fn register(&self, definition: NodeDefinition) {
-        let node_type = definition.node_type.clone();
+        let mut category = definition.category.clone();
+        category.push(definition.name.clone());
+        let node_type = category.join(":");
         self.definitions
             .write()
             .unwrap()

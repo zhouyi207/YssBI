@@ -1,5 +1,5 @@
 use yssbi_lib::graph::{
-    core::GraphData,
+    core::GraphInstance,
     pin::{DataRole, ExecRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
@@ -33,7 +33,7 @@ fn test_complex_node_graph() {
     //                └─ False -> print("Branch2-False")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphData::new(yssbi_lib::graph::GraphId::new(), "Complex Test Graph", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new(yssbi_lib::graph::GraphId::new(), "Complex Test Graph", yssbi_lib::graph::GraphKind::Event, registry.clone()));
 
     println!("\n=== Creating Nodes ===");
 
@@ -428,7 +428,7 @@ fn test_nested_sequence_tree() {
     //                             └─ Step 2 -> print("Position: 1-2, 2-8, Step-2")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphData::new(yssbi_lib::graph::GraphId::new(), "Nested Sequence Tree Test", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new(yssbi_lib::graph::GraphId::new(), "Nested Sequence Tree Test", yssbi_lib::graph::GraphKind::Event, registry.clone()));
 
     println!("\n=== Creating Root Sequence Node ===");
     

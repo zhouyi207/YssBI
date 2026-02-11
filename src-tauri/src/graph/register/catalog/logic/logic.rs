@@ -1,66 +1,219 @@
 //! Logic 节点
 
-use crate::graph::infer::{TypeVarDefinition, TypeVarId};
 use crate::graph::node::NodeDefinition;
 use crate::graph::register::NodeRegistry;
-use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinTypeDesc};
-use crate::graph::value::DataType;
+use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinDataType};
+use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
     register_equal(registry);
+    register_not_equal(registry);
+    register_and(registry);
+    register_or(registry);
+    register_not(registry);
 }
 
 /// Equal 节点 - 比较两个值是否相等
-/// 
-/// 这是一个纯数据节点：
-/// - 有两个 data input（类型相同，需要类型推断）
-/// - 有一个 data output（Boolean 类型）
-/// - 功能：比较两个输入值是否相等
 fn register_equal(registry: &NodeRegistry) {
-    // 创建类型变量（两个输入共享同一类型）
-    let type_var = TypeVarId::new();
-
-    let definition = NodeDefinition::new("logic.equal", "Equal (==)")
+    let definition = NodeDefinition::new("Equal (==)")
         .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
         .with_ui_style("logic")
         .with_description("Check if two values are equal")
-        // 注册类型变量（可以是任意类型）
-        .add_type_var(TypeVarDefinition {
-            id: type_var,
-            constraints: vec![],  // 无约束，可以比较任意类型
-            bound: None,
-        })
-        // 添加两个输入（类型相同）
-        .add_pin(PinDefinition::data_input(
-            "A",
-            DataRole::Operands(0),
-            PinTypeDesc::type_var(type_var),
-        ))
-        .add_pin(PinDefinition::data_input(
-            "B",
-            DataRole::Operands(1),
-            PinTypeDesc::type_var(type_var),
-        ))
-        // 添加输出（Boolean 类型）
-        .add_pin(PinDefinition::data_output(
-            "Result",
-            DataRole::Result,
-            PinTypeDesc::concrete(DataType::Boolean),
-        ))
-        // 🧱 第二层：数据求值器（纯数据节点）
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+            ])
+        }))
         .with_data_evaluator(Arc::new(|ctx| {
-            // 获取两个输入值
             let value_a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
             let value_b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
 
-            // 比较两个值是否相等
             let result = value_a == value_b;
 
-            // 输出结果
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Result),
-                crate::graph::value::DataValue::Boolean(result),
+                DataValue::Boolean(result),
+            )?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// Not Equal 节点 - 比较两个值是否不相等
+fn register_not_equal(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Not Equal (!=)")
+        .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
+        .with_ui_style("logic")
+        .with_description("Check if two values are not equal")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Float64),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let value_a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+            let value_b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+
+            let result = value_a != value_b;
+
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Result),
+                DataValue::Boolean(result),
+            )?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// And 节点 - 逻辑与
+fn register_and(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("And (&&)")
+        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+        .with_ui_style("logic")
+        .with_description("Logical AND operation")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?
+                .as_bool()
+                .ok_or("A must be a boolean")?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?
+                .as_bool()
+                .ok_or("B must be a boolean")?;
+
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Result),
+                DataValue::Boolean(a && b),
+            )?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// Or 节点 - 逻辑或
+fn register_or(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Or (||)")
+        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+        .with_ui_style("logic")
+        .with_description("Logical OR operation")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "A",
+                    DataRole::Operands(0),
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+                PinDefinition::data_input(
+                    "B",
+                    DataRole::Operands(1),
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?
+                .as_bool()
+                .ok_or("A must be a boolean")?;
+            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?
+                .as_bool()
+                .ok_or("B must be a boolean")?;
+
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Result),
+                DataValue::Boolean(a || b),
+            )?;
+
+            Ok(())
+        }));
+
+    registry.register(definition);
+}
+
+/// Not 节点 - 逻辑非
+fn register_not(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Not (!)")
+        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+        .with_ui_style("logic")
+        .with_description("Logical NOT operation")
+        .with_pin_generator(Arc::new(|_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "Input",
+                    DataRole::Input,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+                PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataType::concrete(DataType::Boolean),
+                ),
+            ])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?
+                .as_bool()
+                .ok_or("Input must be a boolean")?;
+
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Result),
+                DataValue::Boolean(!input),
             )?;
 
             Ok(())

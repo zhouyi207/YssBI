@@ -1,7 +1,7 @@
 use super::ProjectError;
 use super::ProjectMetadata;
 use crate::database::DatabaseDecl;
-use crate::graph::{GraphData, GraphId};
+use crate::graph::{GraphInstance, GraphId};
 use crate::variable::VariableDefinition;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ProjectData {
     pub variables: HashMap<String, VariableDefinition>,
-    pub graphs: HashMap<GraphId, GraphData>,
+    pub graphs: HashMap<GraphId, GraphInstance>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }

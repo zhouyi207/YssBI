@@ -1,6 +1,12 @@
 //! Graph 实现
+//!
+//! ❌ 不负责「定义」
+//! ❌ 不负责「编译策略」
+//! ❌ 不负责「执行调度」
+//! ✅ 持有状态
+//! ✅ 提供受控 mutation API
 
-use super::{GraphKind, GraphPosition};
+use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::{Connection, ConnectionManager};
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeDefinition, NodeId, NodeInstance, NodeState};
@@ -9,19 +15,16 @@ use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use crate::graph::{GraphId, TypeInferenceContext};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// Graph（运行时世界）
 ///
 /// Graph 是唯一的运行时真实来源，管理：
-/// - 所有 Node 实例
-/// - 所有 Pin 实例
-/// - 所有连接关系
+/// - 所有 Node, Pin 实例 和连接关系
 /// - 类型推断上下文
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct GraphData {
+pub struct GraphInstance {
     // 图 id
     pub id: GraphId,
 
@@ -34,14 +37,8 @@ pub struct GraphData {
     // 类型
     pub kind: GraphKind,
 
-    // 图节点
-    nodes: Arc<RwLock<HashMap<NodeId, NodeInstance>>>,
-
-    // 图 pins
-    pins: Arc<RwLock<HashMap<PinId, PinInstance>>>,
-
-    // 图 pins 的连接状态
-    pub connections: Arc<ConnectionManager>,
+    // 数据状态 (node, pin, connection)
+    pub data_state: Arc<RwLock<GraphDataState>>,
 
     // 节点类型注册表
     registry: Arc<NodeRegistry>,
@@ -50,128 +47,37 @@ pub struct GraphData {
     type_inference: Arc<RwLock<TypeInferenceContext>>,
 }
 
-impl GraphData {
-    pub fn new(
-        id: GraphId,
-        name: impl Into<String>,
-        kind: GraphKind,
-        registry: Arc<NodeRegistry>,
-    ) -> Self {
+/// 创建和清理
+impl GraphInstance {
+    pub fn new(name: impl Into<String>, kind: GraphKind, registry: Arc<NodeRegistry>) -> Self {
         Self {
-            id,
+            id: GraphId::new(),
             name: name.into(),
             position: GraphPosition::default(),
             kind,
-            nodes: Arc::new(RwLock::new(HashMap::new())),
-            pins: Arc::new(RwLock::new(HashMap::new())),
-            connections: Arc::new(ConnectionManager::new()),
+            data_state: Default::default(),
             registry,
             type_inference: Arc::new(RwLock::new(TypeInferenceContext::new())),
         }
     }
 
-    // =========================
-    // Node 管理
-    // =========================
-
-    pub fn create_node(&self, node_type: &str) -> Result<NodeId, String> {
-        let definition = self
-            .registry
-            .get(node_type)
-            .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
-
-        let node = NodeInstance::from_definition(definition.clone());
-        let node_id = node.id;
-
-        // 为每个节点实例创建新的类型变量 ID 映射
-        use crate::graph::infer::TypeVarId;
-        use std::collections::HashMap;
-        let mut type_var_map: HashMap<TypeVarId, TypeVarId> = HashMap::new();
-
-        // 注册类型变量到类型推断系统（为每个实例生成新的 ID）
-        {
-            let mut ti = self.type_inference.write().unwrap();
-            for type_var in &definition.type_vars {
-                let new_id = TypeVarId::new();
-                type_var_map.insert(type_var.id, new_id);
-
-                let mut new_type_var = type_var.clone();
-                new_type_var.id = new_id;
-                ti.register_type_var(new_type_var);
-            }
-        }
-
-        // 创建 Pin 并注册到类型推断系统
-        for pin_def in &definition.pins {
-            let pin = PinInstance::from_definition(pin_def, node_id, 20);
-            let pin_id = pin.id;
-
-            self.pins.write().unwrap().insert(pin_id, pin.clone());
-            self.connections.register_pin(pin_id, node_id);
-
-            // 只注册有类型描述的 Pin（Data Pin）
-            if let Some(type_desc) = &pin.definition.type_desc {
-                // 重新映射类型变量 ID
-                let mut remapped_type_desc = type_desc.clone();
-                if let crate::graph::pin::PinDataType::TypeVar(old_id) =
-                    &remapped_type_desc.data_type
-                {
-                    if let Some(new_id) = type_var_map.get(old_id) {
-                        remapped_type_desc.data_type =
-                            crate::graph::pin::PinDataType::TypeVar(*new_id);
-                    }
-                }
-
-                self.type_inference
-                    .write()
-                    .unwrap()
-                    .register_pin(pin_id, remapped_type_desc);
-            }
-        }
-
-        self.nodes.write().unwrap().insert(node_id, node);
-        Ok(node_id)
+    pub fn clear(&self) {
+        *self.data_state.write().unwrap() = GraphDataState::default();
     }
+}
 
-    pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {
-        let pin_ids = self.connections.get_node_pins(node_id);
-        self.connections.remove_node(node_id);
-
-        let mut pins = self.pins.write().unwrap();
-        for pin_id in pin_ids {
-            pins.remove(&pin_id);
-        }
-
-        self.nodes
-            .write()
-            .unwrap()
-            .remove(&node_id)
-            .ok_or_else(|| format!("Node {:?} not found", node_id))?;
-
-        self.rebuild_type_inference();
-
-        Ok(())
-    }
-
-    pub fn get_node(&self, node_id: NodeId) -> Option<NodeInstance> {
-        self.nodes.read().unwrap().get(&node_id).cloned()
-    }
-
-    pub fn nodes(&self) -> Vec<NodeInstance> {
-        self.nodes.read().unwrap().values().cloned().collect()
-    }
-
-    // =========================
-    // ⭐ 类型推断
-    // =========================
-
+// =========================
+// ⭐ 类型推断
+// =========================
+impl GraphInstance {
     fn rebuild_type_inference(&self) {
         let mut ti = self.type_inference.write().unwrap();
         ti.clear();
 
         // 重新注册所有节点的类型变量
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.data_state.read().unwrap().nodes;
         for node in nodes.values() {
+            let a = node.pins;
             for type_var in &node.definition.type_vars {
                 ti.register_type_var(type_var.clone());
             }
@@ -182,8 +88,8 @@ impl GraphData {
 
         // 只注册有类型描述的 Pin（Data Pin）
         for pin in pins.values() {
-            if let Some(type_desc) = &pin.definition.type_desc {
-                ti.register_pin(pin.id, type_desc.clone());
+            if let Some(data_type) = &pin.definition.data_type {
+                ti.register_pin_type(pin.id, data_type.clone());
             }
         }
 
@@ -222,11 +128,102 @@ impl GraphData {
             .get_pin_schema(pin_id)
             .cloned()
     }
+}
 
-    // =========================
-    // Pin 管理
-    // =========================
+/// 节点创建
+impl GraphInstance {
+    pub fn create_node(&self, node_type: &str) -> Result<NodeId, String> {
+        let definition = self
+            .registry
+            .get(node_type)
+            .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
 
+        let node = NodeInstance::from_definition(definition.clone());
+        let node_id = node.id;
+
+        // 为每个节点实例创建新的类型变量 ID 映射
+        use crate::graph::infer::TypeVarId;
+        use std::collections::HashMap;
+        let mut type_var_map: HashMap<TypeVarId, TypeVarId> = HashMap::new();
+
+        // 注册类型变量到类型推断系统（为每个实例生成新的 ID）
+        {
+            let mut ti = self.type_inference.write().unwrap();
+            for type_var in &definition.type_vars {
+                let new_id = TypeVarId::new();
+                type_var_map.insert(type_var.id, new_id);
+
+                let mut new_type_var = type_var.clone();
+                new_type_var.id = new_id;
+                ti.register_type_var(new_type_var);
+            }
+        }
+
+        // 创建 Pin 并注册到类型推断系统
+        for pin_def in &definition.pins {
+            let pin = PinInstance::from_definition(pin_def, node_id, 20);
+            let pin_id = pin.id;
+
+            self.pins.write().unwrap().insert(pin_id, pin.clone());
+            self.connections.register_pin(pin_id, node_id);
+
+            // 只注册有类型描述的 Pin（Data Pin）
+            if let Some(data_type) = &pin.definition.data_type {
+                // 重新映射类型变量 ID
+                let mut remapped_data_type = data_type.clone();
+                if let crate::graph::pin::PinDataType::TypeVar(old_id) = &remapped_data_type {
+                    if let Some(new_id) = type_var_map.get(old_id) {
+                        remapped_data_type = crate::graph::pin::PinDataType::TypeVar(*new_id);
+                    }
+                }
+
+                self.type_inference
+                    .write()
+                    .unwrap()
+                    .register_pin_type(pin_id, remapped_data_type);
+            }
+        }
+
+        self.nodes.write().unwrap().insert(node_id, node);
+        Ok(node_id)
+    }
+
+    pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {
+        let pin_ids = self.connections.get_node_pins(node_id);
+        self.connections.remove_node(node_id);
+
+        let mut pins = self.pins.write().unwrap();
+        for pin_id in pin_ids {
+            pins.remove(&pin_id);
+        }
+
+        self.nodes
+            .write()
+            .unwrap()
+            .remove(&node_id)
+            .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+
+        self.rebuild_type_inference();
+
+        Ok(())
+    }
+
+    pub fn get_node(&self, node_id: NodeId) -> Option<NodeInstance> {
+        self.nodes.read().unwrap().get(&node_id).cloned()
+    }
+
+    pub fn nodes(&self) -> Vec<NodeInstance> {
+        self.nodes.read().unwrap().values().cloned().collect()
+    }
+}
+
+
+
+// =========================
+// Pin 管理
+// =========================
+
+impl GraphInstance {
     pub fn get_node_pins(&self, node_id: NodeId) -> Vec<PinInstance> {
         let pin_ids = self.connections.get_node_pins(node_id);
         let pins = self.pins.read().unwrap();
@@ -298,7 +295,7 @@ impl GraphData {
         }
 
         // 4️⃣ 默认值
-        pin.definition.default_value.clone()
+        self.resolve_pin_type(pin_id).unwrap().default_value()
     }
 
     // =========================
@@ -320,8 +317,8 @@ impl GraphData {
         let from_pin_instance = pins.get(&from_pin).unwrap();
         let to_pin_instance = pins.get(&to_pin).unwrap();
 
-        if from_pin_instance.definition.type_desc.is_some()
-            && to_pin_instance.definition.type_desc.is_some()
+        if from_pin_instance.definition.data_type.is_some()
+            && to_pin_instance.definition.data_type.is_some()
         {
             self.type_inference
                 .write()
@@ -411,19 +408,4 @@ impl GraphData {
     // =========================
     // 清理
     // =========================
-
-    pub fn clear(&self) {
-        self.nodes.write().unwrap().clear();
-        self.pins.write().unwrap().clear();
-        self.connections.clear();
-    }
 }
-
-
-// graph.rebuild_node_layout(node_id) {
-//     let specs = resolver.resolve(self, node);
-
-//     diff(specs, existing_pins)
-//         .apply(|add| create_pin(add))
-//         .apply(|remove| remove_pin(remove));
-// }

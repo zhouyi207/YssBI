@@ -2,7 +2,7 @@
 mod tests {
     use crate::execution::Executor;
     use crate::graph::{
-        GraphData,
+        GraphInstance,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
@@ -21,11 +21,11 @@ mod tests {
     fn test_print_node_basic() {
         // 测试 Print 节点的基本功能
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Print 节点
         let print_node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect("Failed to create print node");
 
         // 获取所有 Pin
@@ -66,11 +66,11 @@ mod tests {
     fn test_print_node_default_message() {
         // 测试 Print 节点使用默认消息
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Print 节点（不设置消息，使用默认值）
         let print_node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect("Failed to create print node");
 
         // 使用 Executor 执行
@@ -97,19 +97,19 @@ mod tests {
     fn test_print_node_chain() {
         // 测试多个 Print 节点的链式执行
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建三个 Print 节点
         let print1_node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect("Failed to create print1 node");
 
         let print2_node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect("Failed to create print2 node");
 
         let print3_node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect("Failed to create print3 node");
 
         // 设置消息

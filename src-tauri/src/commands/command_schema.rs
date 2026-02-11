@@ -45,7 +45,7 @@ pub fn get_variable_types() -> Vec<VariableTypeDefinition> {
 // 检查两个类型是否可以连接（使用类型推断系统）
 // #[tauri::command]
 // pub fn check_type_connection(from_type: String, to_type: String) -> bool {
-//     use crate::executor::value::{PinTypeDesc, TypeInferenceContext};
+//     use crate::executor::value::{PinDataType, TypeInferenceContext};
 //     use uuid::Uuid;
 
 //     // 创建临时的类型推断上下文
@@ -56,8 +56,8 @@ pub fn get_variable_types() -> Vec<VariableTypeDefinition> {
 //     let temp_input_pin_id = Uuid::new_v4();
 
 //     // 注册 Pin 类型
-//     type_inference.register_pin(temp_output_pin_id, PinTypeDesc::from_string(&from_type));
-//     type_inference.register_pin(temp_input_pin_id, PinTypeDesc::from_string(&to_type));
+//     type_inference.register_pin(temp_output_pin_id, PinDataType::from_string(&from_type));
+//     type_inference.register_pin(temp_input_pin_id, PinDataType::from_string(&to_type));
 
 //     // 尝试推断连接
 //     match type_inference.infer_connection(temp_output_pin_id, temp_input_pin_id) {
@@ -72,9 +72,9 @@ pub fn get_variable_types() -> Vec<VariableTypeDefinition> {
 // 获取 Pin 的详细类型信息
 // #[tauri::command]
 // pub fn get_pin_type_info(type_str: String) -> serde_json::Value {
-//     use crate::executor::value::PinTypeDesc;
+//     use crate::executor::value::PinDataType;
 
-//     let pin_desc = PinTypeDesc::from_string(&type_str);
+//     let pin_desc = PinDataType::from_string(&type_str);
 
 //     serde_json::json!({
 //         "originalType": type_str,

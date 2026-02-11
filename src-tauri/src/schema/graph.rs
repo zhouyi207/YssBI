@@ -1,4 +1,4 @@
-use crate::graph::{GraphId, GraphKind, GraphPosition, GraphData};
+use crate::graph::{GraphId, GraphKind, GraphPosition, GraphInstance};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -11,8 +11,8 @@ pub struct GraphDTO {
 }
 
 
-impl From<&GraphData> for GraphDTO {
-    fn from(value: &GraphData) -> Self {
+impl From<&GraphInstance> for GraphDTO {
+    fn from(value: &GraphInstance) -> Self {
         Self {
             id: value.id,
             name: value.name.clone(),

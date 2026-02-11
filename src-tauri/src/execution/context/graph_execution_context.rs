@@ -1,4 +1,4 @@
-use crate::graph::core::GraphData;
+use crate::graph::core::GraphInstance;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId};
 use super::NodeExecutionContext;
@@ -8,13 +8,13 @@ use std::sync::Arc;
 
 /// 具体的执行上下文实现
 pub struct GraphExecutionContext {
-    pub graph: Arc<GraphData>,
+    pub graph: Arc<GraphInstance>,
     pub node_id: NodeId,
     pub logs: Vec<String>,
 }
 
 impl GraphExecutionContext {
-    pub fn new(graph: Arc<GraphData>, node_id: NodeId) -> Self {
+    pub fn new(graph: Arc<GraphInstance>, node_id: NodeId) -> Self {
         Self {
             graph,
             node_id,

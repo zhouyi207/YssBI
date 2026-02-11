@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use yssbi_lib::execution::Executor;
 use yssbi_lib::graph::{
-    core::GraphData,
+    core::GraphInstance,
     pin::{DataRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
@@ -25,7 +25,7 @@ fn test_multiple_type_conversions() {
     // 3. Float64(3.14) -> Convert -> Print (应输出 "3.14")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphData::new(
+    let graph = Arc::new(GraphInstance::new(
         yssbi_lib::graph::GraphId::new(),
         "Multiple Type Conversion Test",
         yssbi_lib::graph::GraphKind::Event,

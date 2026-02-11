@@ -2,7 +2,7 @@
 mod tests {
     use crate::execution::ExecutionEffect;
     use crate::graph::{
-        GraphData,
+        GraphInstance,
         
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
@@ -59,11 +59,11 @@ mod tests {
     #[test]
     fn test_branch_node_true_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Branch 节点
         let branch_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
         // 获取所有 Pin
@@ -103,10 +103,10 @@ mod tests {
     #[test]
     fn test_branch_node_false_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let branch_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
         let pins = graph.get_node_pins(branch_node);
@@ -144,10 +144,10 @@ mod tests {
     fn test_branch_node_default_value() {
         // 测试不设置值时使用默认值（false）
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let branch_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
         let definition = graph
@@ -174,11 +174,11 @@ mod tests {
     #[test]
     fn test_sequence_node_basic() {
         let registry = create_test_registry();
-        let graph = GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone());
+        let graph = GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone());
 
         // 创建 Sequence 节点
         let seq_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // 验证有 3 个默认步骤
@@ -214,10 +214,10 @@ mod tests {
     #[test]
     fn test_sequence_node_execution() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let seq_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // 执行节点
@@ -255,19 +255,19 @@ mod tests {
         use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch1 node");
 
         let branch2_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch2 node");
 
         let seq_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
@@ -352,19 +352,19 @@ mod tests {
         use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch1 node");
 
         let seq1_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence1 node");
 
         let branch2_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch2 node");
 
         // === 设置 branch1 的 condition 为 true ===
@@ -445,21 +445,21 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建第一个 Branch 节点
         let branch1_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch1 node");
 
         // 创建第二个 Branch 节点
         let branch2_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch2 node");
 
         // 创建 Sequence 节点
         let seq_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
@@ -563,19 +563,19 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch1 node");
 
         let branch2_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch2 node");
 
         let seq_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
@@ -665,23 +665,23 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphData::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch1 node");
 
         let branch2_node = graph
-            .create_node("flow.branch")
+            .create_node("Control Flow:Branch")
             .expect("Failed to create branch2 node");
 
         let seq1_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence1 node");
 
         let seq2_node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence2 node");
 
         // === 设置 branch1 的 condition 为 true ===

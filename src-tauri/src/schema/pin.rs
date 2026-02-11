@@ -14,15 +14,15 @@ pub struct PinInstanceDTO {
     pub value: Option<DataValue>,
 }
 
-impl From<&PinInstance> for PinInstanceDTO {
-    fn from(value: &PinInstance) -> Self {
-        Self {
-            id: value.id,
-            node_id: value.node_id,
-            name: value.definition.name.clone(),
-            direction: value.definition.direction,
-            kind: value.definition.kind,
-            value: value.current_value().cloned(),
-        }
-    }
-}
+// impl From<&PinInstance> for PinInstanceDTO {
+//     fn from(value: &PinInstance) -> Self {
+//         Self {
+//             id: value.id,
+//             node_id: value.node_id,
+//             name: value.definition.name.clone(),
+//             direction: value.definition.direction,
+//             kind: value.definition.kind,
+//             value: value.().cloned(),
+//         }
+//     }
+// }

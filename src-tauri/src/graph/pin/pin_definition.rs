@@ -1,11 +1,9 @@
 //! Pin 定义（静态描述）
+//! PinDefinition = 规则声明（Schema / Contract）
 //!
-//!
-//! 在这里 output 也需要有默认值吗？？？？
+//! 因此不能将实例或者运行时的状态如 value 带入
 
-use super::PinTypeDesc;
-use super::{DataRole, ExecRole, PinRole};
-use crate::graph::DataValue;
+use super::{DataRole, ExecRole, PinDataType, PinRole};
 use serde::{Deserialize, Serialize};
 
 /// Pin 方向
@@ -51,7 +49,7 @@ impl Default for PinMetaData {
 /// Pin 定义（静态描述，用于节点原型）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PinDefinition {
-    /// Pin 名称（仅用于 UI/Debug）
+    /// Pin 名称
     pub name: String,
 
     /// Pin 方向
@@ -64,10 +62,7 @@ pub struct PinDefinition {
     pub role: PinRole,
 
     /// 类型描述（仅 Data Pin）
-    pub type_desc: Option<PinTypeDesc>,
-
-    /// 默认值（仅 Data + Input Pin 有意义）
-    pub default_value: Option<DataValue>,
+    pub data_type: Option<PinDataType>,
 
     /// UI / 编辑器相关元数据
     pub meta_data: PinMetaData,
@@ -75,30 +70,25 @@ pub struct PinDefinition {
 
 impl PinDefinition {
     /// 创建数据输入 Pin
-    pub fn data_input(name: impl Into<String>, role: DataRole, type_desc: PinTypeDesc) -> Self {
-        let default_value = type_desc.default_value();
-
+    pub fn data_input(name: impl Into<String>, role: DataRole, data_type: PinDataType) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Input,
             kind: PinKind::Data,
             role: PinRole::Data(role),
-            type_desc: Some(type_desc),
-            default_value: default_value,
+            data_type: Some(data_type),
             meta_data: PinMetaData::default(),
         }
     }
 
     /// 创建数据输出 Pin
-    pub fn data_output(name: impl Into<String>, role: DataRole, type_desc: PinTypeDesc) -> Self {
-        let default_value = type_desc.default_value();
+    pub fn data_output(name: impl Into<String>, role: DataRole, data_type: PinDataType) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Output,
             kind: PinKind::Data,
             role: PinRole::Data(role),
-            type_desc: Some(type_desc),
-            default_value: default_value,
+            data_type: Some(data_type),
             meta_data: PinMetaData::default(),
         }
     }
@@ -110,8 +100,7 @@ impl PinDefinition {
             direction: PinDirection::Input,
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
-            type_desc: None,
-            default_value: None,
+            data_type: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -123,36 +112,21 @@ impl PinDefinition {
             direction: PinDirection::Output,
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
-            type_desc: None,
-            default_value: None,
+            data_type: None,
             meta_data: PinMetaData::default(),
         }
     }
 
     /// 设置 Widget
-    pub fn with_metadata(mut self, widget_type: impl Into<String>) -> Self {
-        self.meta_data.show_widget = true;
+    pub fn with_metadata(mut self, show_widget: bool, widget_type: impl Into<String>) -> Self {
+        self.meta_data.show_widget = show_widget;
         self.meta_data.widget_type = Some(widget_type.into());
         self
     }
 
     /// 动态添加 Pin
-    pub fn dynamic(mut self) -> Self {
-        self.meta_data.is_dynamic = true;
+    pub fn with_dynamic(mut self, is_dynamic: bool) -> Self {
+        self.meta_data.is_dynamic = is_dynamic;
         self
-    }
-
-    pub fn with_default(mut self, default_value: Option<DataValue>) -> Self {
-        self.default_value = default_value;
-        self
-    }
-
-    /// role 兜底校验
-    pub fn validate(&self) {
-        match (&self.kind, &self.role) {
-            (PinKind::Exec, PinRole::Data(_)) => panic!("Exec pin cannot have Data role"),
-            (PinKind::Data, PinRole::Exec(_)) => panic!("Data pin cannot have Exec role"),
-            _ => {}
-        }
     }
 }

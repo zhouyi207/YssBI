@@ -1,8 +1,8 @@
-use crate::graph::infer::{TypeVarDefinition, TypeVarId};
+use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDefinition, PinRole, PinTypeDesc};
+use crate::graph::pin::{DataRole, PinDataType, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataValue, DataType};
+use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
@@ -10,7 +10,7 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 /// Convert 节点 - 类型转换
-/// 
+///
 /// 输入和输出类型都是类型变量，根据连接推断
 /// 在运行时根据输入和输出的实际类型执行转换
 fn register_convert(registry: &NodeRegistry) {
@@ -18,52 +18,43 @@ fn register_convert(registry: &NodeRegistry) {
     let input_type_var = TypeVarId::new();
     let output_type_var = TypeVarId::new();
 
-    let definition = NodeDefinition::new("value.convert", "Convert")
+    let definition = NodeDefinition::new("Convert")
         .with_category(vec!["Value".to_string(), "Conversion".to_string()])
         .with_ui_style("value")
         .with_description("Convert value from one type to another")
         // 注册输入类型变量（无约束，接受任何类型）
-        .add_type_var(TypeVarDefinition {
-            id: input_type_var,
-            constraints: vec![],
-            bound: None,
-        })
-        // 注册输出类型变量（无约束，可转换为任何类型）
-        .add_type_var(TypeVarDefinition {
-            id: output_type_var,
-            constraints: vec![],
-            bound: None,
-        })
-        // 输入 pin
-        .add_pin(PinDefinition::data_input(
-            "Input",
-            DataRole::Input,
-            PinTypeDesc::type_var(input_type_var),
-        ))
-        // 输出 pin
-        .add_pin(PinDefinition::data_output(
-            "Output",
-            DataRole::Output,
-            PinTypeDesc::type_var(output_type_var),
-        ))
+        .with_pin_generator(Arc::new(move |_ctx| {
+            Ok(vec![
+                PinDefinition::data_input(
+                    "Input",
+                    DataRole::Input,
+                    PinDataType::type_var(input_type_var),
+                ),
+                PinDefinition::data_output(
+                    "Output",
+                    DataRole::Output,
+                    PinDataType::type_var(output_type_var),
+                ),
+            ])
+        }))
         // 数据求值器
         .with_data_evaluator(Arc::new(move |ctx| {
             // 获取输入值
             let input_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            
+
             // 获取输出 pin 的推断类型
             let output_type = ctx.get_pin_type_by_role(&PinRole::Data(DataRole::Output))?;
-            
+
             // 记录转换信息
             ctx.log(format!(
                 "Convert: {} -> {}",
                 input_value.value_type(),
                 output_type
             ));
-            
+
             // 执行类型转换
             let converted_value = convert_to_type(input_value, &output_type)?;
-            
+
             // 输出转换后的值
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), converted_value)?;
             Ok(())
@@ -101,7 +92,10 @@ fn convert_to_boolean(value: DataValue) -> Result<DataValue, String> {
             .map(DataValue::Boolean)
             .ok_or_else(|| format!("Cannot convert string '{}' to Boolean", s)),
         DataValue::Null => Ok(DataValue::Boolean(false)),
-        _ => Err(format!("Cannot convert {:?} to Boolean", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Boolean",
+            value.value_type()
+        )),
     }
 }
 
@@ -158,7 +152,10 @@ fn convert_to_float32(value: DataValue) -> Result<DataValue, String> {
             .map(DataValue::Float32)
             .map_err(|_| format!("Cannot parse string '{}' as Float32", s)),
         DataValue::Null => Ok(DataValue::Float32(0.0)),
-        _ => Err(format!("Cannot convert {:?} to Float32", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Float32",
+            value.value_type()
+        )),
     }
 }
 
@@ -175,7 +172,10 @@ fn convert_to_float64(value: DataValue) -> Result<DataValue, String> {
             .map(DataValue::Float64)
             .map_err(|_| format!("Cannot parse string '{}' as Float64", s)),
         DataValue::Null => Ok(DataValue::Float64(0.0)),
-        _ => Err(format!("Cannot convert {:?} to Float64", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Float64",
+            value.value_type()
+        )),
     }
 }
 

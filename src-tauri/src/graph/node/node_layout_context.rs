@@ -1,6 +1,6 @@
 use crate::graph::GraphData;
 use crate::graph::GraphId;
-use crate::graph::{NodeId, PinId, PinRole, PinSchema, PinTypeDesc};
+use crate::graph::{NodeId, PinId, PinRole, PinSchema, PinDataType};
 
 pub trait NodeLayoutContext {
     // ---------- 基础查询 ----------
@@ -19,7 +19,7 @@ pub trait NodeLayoutContext {
     /// 查询某个输入 pin 的「推断类型」
     /// - 已连接 → 来自上游输出
     /// - 未连接 → NodeDefinition 默认类型
-    fn infer_input_type(&self, node: NodeId, role: &PinRole) -> Option<PinTypeDesc>;
+    fn infer_input_type(&self, node: NodeId, role: &PinRole) -> Option<PinDataType>;
 
     /// 查询某个 pin 的 schema（比如 DataFrame 的 column 信息）
     fn input_schema(&self, node: NodeId, role: &PinRole) -> Option<PinSchema>;
@@ -61,13 +61,13 @@ impl NodeLayoutContext for GraphData {
         self.connections.get_upstream(pin.id)
     }
 
-    fn infer_input_type(&self, node: NodeId, role: &PinRole) -> Option<PinTypeDesc> {
+    fn infer_input_type(&self, node: NodeId, role: &PinRole) -> Option<PinDataType> {
         let pin = self.get_pin_by_role(node, role)?;
 
         // 如果有连接，从上游获取类型
         if let Some(src_pin_id) = self.connections.get_upstream(pin.id) {
             if let Some(src_pin) = self.get_pin(src_pin_id) {
-                return src_pin.definition.type_desc.clone();
+                return src_pin.definition.data_type.clone();
             }
         }
 
@@ -77,7 +77,7 @@ impl NodeLayoutContext for GraphData {
         // 从 definition 的 pins 中查找对应 role 的默认类型
         for pin_def in &definition.pins {
             if &pin_def.role == role {
-                return pin_def.type_desc.clone();
+                return pin_def.data_type.clone();
             }
         }
 
