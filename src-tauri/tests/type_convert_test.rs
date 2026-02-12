@@ -26,7 +26,6 @@ fn test_multiple_type_conversions() {
 
     let registry = create_test_registry();
     let graph = Arc::new(GraphInstance::new(
-        yssbi_lib::graph::GraphId::new(),
         "Multiple Type Conversion Test",
         yssbi_lib::graph::GraphKind::Event,
         registry.clone(),
@@ -36,35 +35,35 @@ fn test_multiple_type_conversions() {
 
     // 创建常量节点
     let bool_const = graph
-        .create_node("value.const.boolean")
+        .create_node("Value:Constants:Boolean")
         .expect("Failed to create boolean constant");
     let int64_const = graph
-        .create_node("value.const.int64")
+        .create_node("Value:Constants:Int64")
         .expect("Failed to create int64 constant");
     let float64_const = graph
-        .create_node("value.const.float64")
+        .create_node("Value:Constants:Float64")
         .expect("Failed to create float64 constant");
 
     // 创建 Convert 节点
     let convert_bool = graph
-        .create_node("value.convert")
+        .create_node("Value:Conversion:Convert")
         .expect("Failed to create convert node");
     let convert_int64 = graph
-        .create_node("value.convert")
+        .create_node("Value:Conversion:Convert")
         .expect("Failed to create convert node");
     let convert_float64 = graph
-        .create_node("value.convert")
+        .create_node("Value:Conversion:Convert")
         .expect("Failed to create convert node");
 
     // 创建 Print 节点
     let print_bool = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_int64 = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_float64 = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
 
     println!("Created all nodes");
@@ -72,42 +71,42 @@ fn test_multiple_type_conversions() {
     println!("\n=== Setting Values ===");
 
     // 设置 Boolean 常量
-    let bool_pins = graph.get_node_pins(bool_const);
+    let bool_pins = graph.get_pin_instances_by_node_id(bool_const);
     let bool_output = bool_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
         .expect("Bool output not found");
     graph
-        .set_pin_user_value(bool_output.id, Some(DataValue::Boolean(true)))
+        .set_pin_user_value_by_pin_id(bool_output.id, DataValue::Boolean(true))
         .expect("Failed to set bool value");
     println!("Set boolean value: true");
 
     // 设置 Int64 常量
-    let int64_pins = graph.get_node_pins(int64_const);
+    let int64_pins = graph.get_pin_instances_by_node_id(int64_const);
     let int64_output = int64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
         .expect("Int64 output not found");
     graph
-        .set_pin_user_value(int64_output.id, Some(DataValue::Int64(100)))
+        .set_pin_user_value_by_pin_id(int64_output.id, DataValue::Int64(100))
         .expect("Failed to set int64 value");
     println!("Set int64 value: 100");
 
     // 设置 Float64 常量
-    let float64_pins = graph.get_node_pins(float64_const);
+    let float64_pins = graph.get_pin_instances_by_node_id(float64_const);
     let float64_output = float64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
         .expect("Float64 output not found");
     graph
-        .set_pin_user_value(float64_output.id, Some(DataValue::Float64(3.14)))
+        .set_pin_user_value_by_pin_id(float64_output.id, DataValue::Float64(3.14))
         .expect("Failed to set float64 value");
     println!("Set float64 value: 3.14");
 
     println!("\n=== Connecting Nodes ===");
 
     // 连接 Boolean 路径
-    let convert_bool_pins = graph.get_node_pins(convert_bool);
+    let convert_bool_pins = graph.get_pin_instances_by_node_id(convert_bool);
     let convert_bool_input = convert_bool_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
@@ -121,7 +120,7 @@ fn test_multiple_type_conversions() {
         .connect(bool_output.id, convert_bool_input.id)
         .unwrap();
 
-    let print_bool_pins = graph.get_node_pins(print_bool);
+    let print_bool_pins = graph.get_pin_instances_by_node_id(print_bool);
     let print_bool_message = print_bool_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
@@ -133,7 +132,7 @@ fn test_multiple_type_conversions() {
     println!("Connected Boolean path");
 
     // 连接 Int64 路径
-    let convert_int64_pins = graph.get_node_pins(convert_int64);
+    let convert_int64_pins = graph.get_pin_instances_by_node_id(convert_int64);
     let convert_int64_input = convert_int64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
@@ -147,7 +146,7 @@ fn test_multiple_type_conversions() {
         .connect(int64_output.id, convert_int64_input.id)
         .unwrap();
 
-    let print_int64_pins = graph.get_node_pins(print_int64);
+    let print_int64_pins = graph.get_pin_instances_by_node_id(print_int64);
     let print_int64_message = print_int64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
@@ -159,7 +158,7 @@ fn test_multiple_type_conversions() {
     println!("Connected Int64 path");
 
     // 连接 Float64 路径
-    let convert_float64_pins = graph.get_node_pins(convert_float64);
+    let convert_float64_pins = graph.get_pin_instances_by_node_id(convert_float64);
     let convert_float64_input = convert_float64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
@@ -173,7 +172,7 @@ fn test_multiple_type_conversions() {
         .connect(float64_output.id, convert_float64_input.id)
         .unwrap();
 
-    let print_float64_pins = graph.get_node_pins(print_float64);
+    let print_float64_pins = graph.get_pin_instances_by_node_id(print_float64);
     let print_float64_message = print_float64_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
@@ -187,7 +186,9 @@ fn test_multiple_type_conversions() {
     println!("\n=== Executing Graph ===");
 
     // 执行所有 print 节点
-    let mut executor = Executor::new(graph.clone());
+    use yssbi_lib::graph::core::GraphRuntime;
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let mut executor = Executor::new(runtime);
 
     println!("\n--- Executing Boolean conversion ---");
     let result = executor.start(print_bool);

@@ -38,6 +38,18 @@ pub struct ConnectionManager {
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
 }
 
+// 手动实现 Clone，因为 Mutex 不支持 Clone
+impl Clone for ConnectionManager {
+    fn clone(&self) -> Self {
+        Self {
+            connections: Mutex::new(self.connections.lock().unwrap().clone()),
+            reverse_connections: Mutex::new(self.reverse_connections.lock().unwrap().clone()),
+            pin_to_node: Mutex::new(self.pin_to_node.lock().unwrap().clone()),
+            node_to_pins: Mutex::new(self.node_to_pins.lock().unwrap().clone()),
+        }
+    }
+}
+
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {

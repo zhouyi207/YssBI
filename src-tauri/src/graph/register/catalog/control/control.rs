@@ -18,7 +18,7 @@ fn register_if_else(registry: &NodeRegistry) {
         .with_category(vec!["Control Flow".to_string()])
         .with_ui_style("control")
         .with_description("Branch execution based on condition")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::exec_input("In", ExecRole::ExecIn),
                 PinDefinition::data_input(
@@ -52,7 +52,7 @@ fn register_sequence(registry: &NodeRegistry) {
         .with_category(vec!["Control Flow".to_string()])
         .with_ui_style("control")
         .with_description("Execute steps in sequence")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             let mut pins = vec![PinDefinition::exec_input("In", ExecRole::ExecIn)];
             
             // 添加默认的 3 个步骤

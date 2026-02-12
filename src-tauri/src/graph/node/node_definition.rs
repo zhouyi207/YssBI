@@ -1,18 +1,18 @@
 //! Node 定义（静态描述）
 
-use crate::execution::{ExecutionEffect, NodeExecutionContext};
+use crate::execution::{ExecutionEffect, NodeExecutionContextTrait};
 use crate::graph::{PinDefinition, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub type FlowProcessor =
-    Arc<dyn Fn(&mut dyn NodeExecutionContext) -> Result<ExecutionEffect, String> + Send + Sync>;
+    Arc<dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> + Send + Sync>;
 
 pub type DataEvaluator =
-    Arc<dyn Fn(&mut dyn NodeExecutionContext) -> Result<(), String> + Send + Sync>;
+    Arc<dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<(), String> + Send + Sync>;
 
 pub type PinGenerator =
-    Arc<dyn Fn(&mut dyn NodeExecutionContext) -> Result<Vec<PinDefinition>, String> + Send + Sync>;
+    Arc<dyn Fn() -> Result<Vec<PinDefinition>, String> + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMetaData {
@@ -67,6 +67,21 @@ pub struct NodeDefinition {
 
     /// 元数据
     pub metadata: NodeMetaData,
+}
+
+// 手动实现 Debug，因为函数指针不支持 Debug
+impl std::fmt::Debug for NodeDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NodeDefinition")
+            .field("name", &self.name)
+            .field("category", &self.category)
+            .field("type_vars", &self.type_vars)
+            .field("flow_processor", &self.flow_processor.as_ref().map(|_| "<function>"))
+            .field("data_evaluator", &self.data_evaluator.as_ref().map(|_| "<function>"))
+            .field("pin_generator", &self.pin_generator.as_ref().map(|_| "<function>"))
+            .field("metadata", &self.metadata)
+            .finish()
+    }
 }
 
 impl NodeDefinition {

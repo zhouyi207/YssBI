@@ -4,7 +4,8 @@ mod tests {
         GraphInstance,
         pin::{DataRole, PinRole},
         register::NodeRegistry,
-        value::{DataType, DataValue},
+        value::DataValue,
+        GraphKind,
     };
     use std::sync::Arc;
 
@@ -20,9 +21,8 @@ mod tests {
     fn test_boolean_constant() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
-            crate::graph::GraphId::new(),
             "Test Graph",
-            crate::graph::GraphKind::Event,
+            GraphKind::Event,
             registry.clone(),
         ));
 
@@ -32,7 +32,7 @@ mod tests {
             .expect("Failed to create boolean constant node");
 
         // 获取输出 Pin
-        let pins = graph.get_node_pins(const_node);
+        let pins = graph.get_pin_instances_by_node_id(const_node);
         let result_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
@@ -40,13 +40,13 @@ mod tests {
 
         // 设置值
         graph
-            .set_pin_user_value(result_pin.id, Some(DataValue::Boolean(true)))
+            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::Boolean(true))
             .expect("Failed to set value");
 
         // 验证值
         let value = graph
-            .resolve_pin_value(result_pin.id)
-            .expect("Failed to resolve value");
+            .get_pin_user_value_by_pin_id(result_pin.id)
+            .expect("Failed to get value");
 
         assert_eq!(value, DataValue::Boolean(true));
     }
@@ -55,9 +55,8 @@ mod tests {
     fn test_int32_constant() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
-            crate::graph::GraphId::new(),
             "Test Graph",
-            crate::graph::GraphKind::Event,
+            GraphKind::Event,
             registry.clone(),
         ));
 
@@ -65,19 +64,19 @@ mod tests {
             .create_node("Value:Constants:Int32")
             .expect("Failed to create int32 constant node");
 
-        let pins = graph.get_node_pins(const_node);
+        let pins = graph.get_pin_instances_by_node_id(const_node);
         let result_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
         graph
-            .set_pin_user_value(result_pin.id, Some(DataValue::Int32(42)))
+            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::Int32(42))
             .expect("Failed to set value");
 
         let value = graph
-            .resolve_pin_value(result_pin.id)
-            .expect("Failed to resolve value");
+            .get_pin_user_value_by_pin_id(result_pin.id)
+            .expect("Failed to get value");
 
         assert_eq!(value, DataValue::Int32(42));
     }
@@ -86,9 +85,8 @@ mod tests {
     fn test_float64_constant() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
-            crate::graph::GraphId::new(),
             "Test Graph",
-            crate::graph::GraphKind::Event,
+            GraphKind::Event,
             registry.clone(),
         ));
 
@@ -96,19 +94,19 @@ mod tests {
             .create_node("Value:Constants:Float64")
             .expect("Failed to create float64 constant node");
 
-        let pins = graph.get_node_pins(const_node);
+        let pins = graph.get_pin_instances_by_node_id(const_node);
         let result_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
         graph
-            .set_pin_user_value(result_pin.id, Some(DataValue::Float64(3.14)))
+            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::Float64(3.14))
             .expect("Failed to set value");
 
         let value = graph
-            .resolve_pin_value(result_pin.id)
-            .expect("Failed to resolve value");
+            .get_pin_user_value_by_pin_id(result_pin.id)
+            .expect("Failed to get value");
 
         if let DataValue::Float64(val) = value {
             assert!((val - 3.14).abs() < 0.0001);
@@ -121,9 +119,8 @@ mod tests {
     fn test_string_constant() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
-            crate::graph::GraphId::new(),
             "Test Graph",
-            crate::graph::GraphKind::Event,
+            GraphKind::Event,
             registry.clone(),
         ));
 
@@ -131,19 +128,19 @@ mod tests {
             .create_node("Value:Constants:String")
             .expect("Failed to create string constant node");
 
-        let pins = graph.get_node_pins(const_node);
+        let pins = graph.get_pin_instances_by_node_id(const_node);
         let result_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
         graph
-            .set_pin_user_value(result_pin.id, Some(DataValue::String("Hello".to_string())))
+            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::String("Hello".to_string()))
             .expect("Failed to set value");
 
         let value = graph
-            .resolve_pin_value(result_pin.id)
-            .expect("Failed to resolve value");
+            .get_pin_user_value_by_pin_id(result_pin.id)
+            .expect("Failed to get value");
 
         assert_eq!(value, DataValue::String("Hello".to_string()));
     }
@@ -152,9 +149,8 @@ mod tests {
     fn test_convert_node() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
-            crate::graph::GraphId::new(),
             "Test Graph",
-            crate::graph::GraphKind::Event,
+            GraphKind::Event,
             registry.clone(),
         ));
 
@@ -164,20 +160,20 @@ mod tests {
             .expect("Failed to create convert node");
 
         // 获取 Pin
-        let pins = graph.get_node_pins(convert_node);
+        let pins = graph.get_pin_instances_by_node_id(convert_node);
         let input_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
             .expect("Input pin not found");
 
-        let output_pin = pins
+        let _output_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
             .expect("Output pin not found");
 
         // 设置输入值（Int32）
         graph
-            .set_pin_user_value(input_pin.id, Some(DataValue::Int32(42)))
+            .set_pin_user_value_by_pin_id(input_pin.id, DataValue::Int32(42))
             .expect("Failed to set input value");
 
         // 执行转换（需要设置输出类型）

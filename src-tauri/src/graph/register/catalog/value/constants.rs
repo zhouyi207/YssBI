@@ -19,7 +19,7 @@ fn register_boolean_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("Boolean constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -36,7 +36,7 @@ fn register_int32_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("32-bit integer constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -53,7 +53,7 @@ fn register_int64_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("64-bit integer constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -70,7 +70,7 @@ fn register_float32_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("32-bit floating point constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -87,7 +87,7 @@ fn register_float64_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("64-bit floating point constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -104,7 +104,7 @@ fn register_string_constant(registry: &NodeRegistry) {
         .with_category(vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("String constant value")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -114,3 +114,4 @@ fn register_string_constant(registry: &NodeRegistry) {
 
     registry.register(definition);
 }
+

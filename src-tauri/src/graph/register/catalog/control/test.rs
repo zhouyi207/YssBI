@@ -2,8 +2,7 @@
 mod tests {
     use crate::execution::ExecutionEffect;
     use crate::graph::{
-        GraphInstance,
-        
+        GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
@@ -59,7 +58,7 @@ mod tests {
     #[test]
     fn test_branch_node_true_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Branch 节点
         let branch_node = graph
@@ -67,7 +66,7 @@ mod tests {
             .expect("Failed to create branch node");
 
         // 获取所有 Pin
-        let pins = graph.get_node_pins(branch_node);
+        let pins = graph.get_pin_instances_by_node_id(branch_node);
 
         // 找到 Condition 输入 Pin
         let condition_pin = pins
@@ -77,20 +76,21 @@ mod tests {
 
         // 设置 condition 为 true
         graph
-            .set_pin_user_value(condition_pin.id, Some(DataValue::Boolean(true)))
+            .set_pin_user_value_by_pin_id(condition_pin.id, DataValue::Boolean(true))
             .expect("Failed to set condition value");
 
+        // 创建 GraphRuntime
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+
         // 执行节点（使用 flow_processor）
-        let definition = graph
-            .get_node_definition(branch_node)
-            .expect("Node definition not found");
+        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
         let mut ctx =
-            crate::execution::GraphExecutionContext::new(graph.clone(), branch_node);
+            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -103,13 +103,13 @@ mod tests {
     #[test]
     fn test_branch_node_false_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let branch_node = graph
             .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
-        let pins = graph.get_node_pins(branch_node);
+        let pins = graph.get_pin_instances_by_node_id(branch_node);
 
         let condition_pin = pins
             .iter()
@@ -118,19 +118,20 @@ mod tests {
 
         // 设置 condition 为 false
         graph
-            .set_pin_user_value(condition_pin.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(condition_pin.id, DataValue::Boolean(false))
             .expect("Failed to set condition value");
 
-        let definition = graph
-            .get_node_definition(branch_node)
-            .expect("Node definition not found");
+        // 创建 GraphRuntime
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+
+        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
         let mut ctx =
-            crate::execution::GraphExecutionContext::new(graph.clone(), branch_node);
+            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -144,22 +145,23 @@ mod tests {
     fn test_branch_node_default_value() {
         // 测试不设置值时使用默认值（false）
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let branch_node = graph
             .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
-        let definition = graph
-            .get_node_definition(branch_node)
-            .expect("Node definition not found");
+        // 创建 GraphRuntime
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+
+        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
         let mut ctx =
-            crate::execution::GraphExecutionContext::new(graph.clone(), branch_node);
+            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -174,7 +176,7 @@ mod tests {
     #[test]
     fn test_sequence_node_basic() {
         let registry = create_test_registry();
-        let graph = GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone());
+        let graph = GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone());
 
         // 创建 Sequence 节点
         let seq_node = graph
@@ -182,7 +184,7 @@ mod tests {
             .expect("Failed to create sequence node");
 
         // 验证有 3 个默认步骤
-        let pins = graph.get_node_pins(seq_node);
+        let pins = graph.get_pin_instances_by_node_id(seq_node);
         let step_pins: Vec<_> = pins
             .iter()
             .filter(|p| matches!(p.definition.role, PinRole::Exec(ExecRole::Steps(_))))
@@ -214,22 +216,23 @@ mod tests {
     #[test]
     fn test_sequence_node_execution() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         let seq_node = graph
             .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
+        // 创建 GraphRuntime
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+
         // 执行节点
-        let definition = graph
-            .get_node_definition(seq_node)
-            .expect("Node definition not found");
+        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(seq_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
-        let mut ctx = crate::execution::GraphExecutionContext::new(graph.clone(), seq_node);
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), seq_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -252,10 +255,9 @@ mod tests {
         // 验证：Executor 自动执行整个链路，最终触发 sequence
 
         use crate::execution::Executor;
-        use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -271,25 +273,25 @@ mod tests {
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
-        let branch1_pins = graph.get_node_pins(branch1_node);
+        let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
         let branch1_condition = branch1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch1 condition pin not found");
 
         graph
-            .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch1 condition");
 
         // === 设置 branch2 的 condition 为 false ===
-        let branch2_pins = graph.get_node_pins(branch2_node);
+        let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
         let branch2_condition = branch2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch2 condition pin not found");
 
         graph
-            .set_pin_user_value(branch2_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch2_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch2 condition");
 
         // === 连接：branch1.false -> branch2.exec_in ===
@@ -313,7 +315,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecFalse))
             .expect("Branch2 false output not found");
 
-        let seq_pins = graph.get_node_pins(seq_node);
+        let seq_pins = graph.get_pin_instances_by_node_id(seq_node);
         let seq_exec_in = seq_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -324,7 +326,8 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let mut executor = Executor::new(graph.clone());
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -349,10 +352,9 @@ mod tests {
         // 验证：只有 sequence1 会被执行
 
         use crate::execution::Executor;
-        use std::sync::Arc;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -368,14 +370,14 @@ mod tests {
             .expect("Failed to create branch2 node");
 
         // === 设置 branch1 的 condition 为 true ===
-        let branch1_pins = graph.get_node_pins(branch1_node);
+        let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
         let branch1_condition = branch1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch1 condition pin not found");
 
         graph
-            .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(true)))
+            .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(true))
             .expect("Failed to set branch1 condition");
 
         // === 连接：branch1.true -> sequence1.exec_in ===
@@ -384,7 +386,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecTrue))
             .expect("Branch1 true output not found");
 
-        let seq1_pins = graph.get_node_pins(seq1_node);
+        let seq1_pins = graph.get_pin_instances_by_node_id(seq1_node);
         let seq1_exec_in = seq1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -400,7 +402,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecFalse))
             .expect("Branch1 false output not found");
 
-        let branch2_pins = graph.get_node_pins(branch2_node);
+        let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
         let branch2_exec_in = branch2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -411,7 +413,8 @@ mod tests {
             .expect("Failed to connect branch1 false to branch2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let mut executor = Executor::new(graph.clone());
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -445,7 +448,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建第一个 Branch 节点
         let branch1_node = graph
@@ -463,25 +466,25 @@ mod tests {
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
-        let branch1_pins = graph.get_node_pins(branch1_node);
+        let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
         let branch1_condition = branch1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch1 condition pin not found");
 
         graph
-            .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch1 condition");
 
         // === 设置 branch2 的 condition 为 true ===
-        let branch2_pins = graph.get_node_pins(branch2_node);
+        let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
         let branch2_condition = branch2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch2 condition pin not found");
 
         graph
-            .set_pin_user_value(branch2_condition.id, Some(DataValue::Boolean(true)))
+            .set_pin_user_value_by_pin_id(branch2_condition.id, DataValue::Boolean(true))
             .expect("Failed to set branch2 condition");
 
         // === 连接：branch1.false -> branch2.exec_in ===
@@ -505,7 +508,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecFalse))
             .expect("Branch2 false output not found");
 
-        let seq_pins = graph.get_node_pins(seq_node);
+        let seq_pins = graph.get_pin_instances_by_node_id(seq_node);
         let seq_exec_in = seq_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -516,7 +519,8 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let mut executor = Executor::new(graph.clone());
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -563,7 +567,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -579,25 +583,25 @@ mod tests {
             .expect("Failed to create sequence node");
 
         // === 设置 branch1 的 condition 为 false ===
-        let branch1_pins = graph.get_node_pins(branch1_node);
+        let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
         let branch1_condition = branch1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch1 condition pin not found");
 
         graph
-            .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch1 condition");
 
         // === 设置 branch2 的 condition 为 false ===
-        let branch2_pins = graph.get_node_pins(branch2_node);
+        let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
         let branch2_condition = branch2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch2 condition pin not found");
 
         graph
-            .set_pin_user_value(branch2_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch2_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch2 condition");
 
         // === 连接：branch1.false -> branch2.exec_in ===
@@ -621,7 +625,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecFalse))
             .expect("Branch2 false output not found");
 
-        let seq_pins = graph.get_node_pins(seq_node);
+        let seq_pins = graph.get_pin_instances_by_node_id(seq_node);
         let seq_exec_in = seq_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -632,7 +636,8 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let mut executor = Executor::new(graph.clone());
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -665,7 +670,7 @@ mod tests {
         use crate::execution::Executor;
 
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建节点
         let branch1_node = graph
@@ -685,25 +690,25 @@ mod tests {
             .expect("Failed to create sequence2 node");
 
         // === 设置 branch1 的 condition 为 true ===
-        let branch1_pins = graph.get_node_pins(branch1_node);
+        let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
         let branch1_condition = branch1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch1 condition pin not found");
 
         graph
-            .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(true)))
+            .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(true))
             .expect("Failed to set branch1 condition");
 
         // === 设置 branch2 的 condition 为 false ===
-        let branch2_pins = graph.get_node_pins(branch2_node);
+        let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
         let branch2_condition = branch2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
             .expect("Branch2 condition pin not found");
 
         graph
-            .set_pin_user_value(branch2_condition.id, Some(DataValue::Boolean(false)))
+            .set_pin_user_value_by_pin_id(branch2_condition.id, DataValue::Boolean(false))
             .expect("Failed to set branch2 condition");
 
         // === 连接：branch1.true -> sequence1.exec_in ===
@@ -712,7 +717,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecTrue))
             .expect("Branch1 true output not found");
 
-        let seq1_pins = graph.get_node_pins(seq1_node);
+        let seq1_pins = graph.get_pin_instances_by_node_id(seq1_node);
         let seq1_exec_in = seq1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -743,7 +748,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecFalse))
             .expect("Branch2 false output not found");
 
-        let seq2_pins = graph.get_node_pins(seq2_node);
+        let seq2_pins = graph.get_pin_instances_by_node_id(seq2_node);
         let seq2_exec_in = seq2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -754,7 +759,8 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let mut executor = Executor::new(graph.clone());
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());

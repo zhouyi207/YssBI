@@ -13,16 +13,16 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TypeInferenceContext {
     /// 类型变量定义（来自 Graph / NodeDefinition）
-    type_vars: HashMap<TypeVarId, TypeVarInference>,
+    pub type_vars: HashMap<TypeVarId, TypeVarInference>,
 
     /// Pin 到类型描述的映射
-    pin_types: HashMap<PinId, PinDataTypeInference>,
+    pub pin_types: HashMap<PinId, PinDataTypeInference>,
 
     /// 推断过程中的临时绑定（root → concrete）
-    bindings: HashMap<TypeVarId, DataType>,
+    pub bindings: HashMap<TypeVarId, DataType>,
 
     /// TypeVar 等价类（Union-Find parent）
-    var_alias: HashMap<TypeVarId, TypeVarId>,
+    pub var_alias: HashMap<TypeVarId, TypeVarId>,
 }
 
 impl TypeInferenceContext {
@@ -88,7 +88,7 @@ impl TypeInferenceContext {
     }
 
     /// 推断完成后提交结果（写回 TypeVarInference.bound）
-    pub fn commit(mut self) -> Result<(), String> {
+    pub fn commit(&mut self) -> Result<(), String> {
         for (var_id, value_type) in self.bindings.drain() {
             let def = self
                 .type_vars

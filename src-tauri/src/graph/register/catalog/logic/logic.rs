@@ -20,7 +20,7 @@ fn register_equal(registry: &NodeRegistry) {
         .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
         .with_ui_style("logic")
         .with_description("Check if two values are equal")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -62,7 +62,7 @@ fn register_not_equal(registry: &NodeRegistry) {
         .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
         .with_ui_style("logic")
         .with_description("Check if two values are not equal")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -104,7 +104,7 @@ fn register_and(registry: &NodeRegistry) {
         .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical AND operation")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -148,7 +148,7 @@ fn register_or(registry: &NodeRegistry) {
         .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical OR operation")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -192,7 +192,7 @@ fn register_not(registry: &NodeRegistry) {
         .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical NOT operation")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "Input",
@@ -221,3 +221,4 @@ fn register_not(registry: &NodeRegistry) {
 
     registry.register(definition);
 }
+

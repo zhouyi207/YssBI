@@ -2,12 +2,12 @@
 mod tests {
     use crate::execution::Executor;
     use crate::graph::{
-        GraphInstance,
+        GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
     };
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     /// 创建测试用的注册表
     fn create_test_registry() -> Arc<NodeRegistry> {
@@ -21,7 +21,7 @@ mod tests {
     fn test_print_node_basic() {
         // 测试 Print 节点的基本功能
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Print 节点
         let print_node = graph
@@ -29,7 +29,7 @@ mod tests {
             .expect("Failed to create print node");
 
         // 获取所有 Pin
-        let pins = graph.get_node_pins(print_node);
+        let pins = graph.get_pin_instances_by_node_id(print_node);
 
         // 找到 Message 输入 Pin
         let message_pin = pins
@@ -39,11 +39,12 @@ mod tests {
 
         // 设置消息
         graph
-            .set_pin_user_value(message_pin.id, Some(DataValue::String("Hello from test!".to_string())))
+            .set_pin_user_value_by_pin_id(message_pin.id, DataValue::String("Hello from test!".to_string()))
             .expect("Failed to set message value");
 
-        // 使用 Executor 执行
-        let mut executor = Executor::new(graph.clone());
+        // 创建 GraphRuntime 并使用 Executor 执行
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print_node);
 
         assert!(
@@ -66,15 +67,16 @@ mod tests {
     fn test_print_node_default_message() {
         // 测试 Print 节点使用默认消息
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建 Print 节点（不设置消息，使用默认值）
         let print_node = graph
             .create_node("Debug:Print")
             .expect("Failed to create print node");
 
-        // 使用 Executor 执行
-        let mut executor = Executor::new(graph.clone());
+        // 创建 GraphRuntime 并使用 Executor 执行
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print_node);
 
         assert!(
@@ -97,7 +99,7 @@ mod tests {
     fn test_print_node_chain() {
         // 测试多个 Print 节点的链式执行
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new(crate::graph::GraphId::new(), "Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
 
         // 创建三个 Print 节点
         let print1_node = graph
@@ -113,34 +115,34 @@ mod tests {
             .expect("Failed to create print3 node");
 
         // 设置消息
-        let print1_pins = graph.get_node_pins(print1_node);
+        let print1_pins = graph.get_pin_instances_by_node_id(print1_node);
         let print1_message = print1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print1 message pin not found");
 
         graph
-            .set_pin_user_value(print1_message.id, Some(DataValue::String("First".to_string())))
+            .set_pin_user_value_by_pin_id(print1_message.id, DataValue::String("First".to_string()))
             .expect("Failed to set print1 message");
 
-        let print2_pins = graph.get_node_pins(print2_node);
+        let print2_pins = graph.get_pin_instances_by_node_id(print2_node);
         let print2_message = print2_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print2 message pin not found");
 
         graph
-            .set_pin_user_value(print2_message.id, Some(DataValue::String("Second".to_string())))
+            .set_pin_user_value_by_pin_id(print2_message.id, DataValue::String("Second".to_string()))
             .expect("Failed to set print2 message");
 
-        let print3_pins = graph.get_node_pins(print3_node);
+        let print3_pins = graph.get_pin_instances_by_node_id(print3_node);
         let print3_message = print3_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print3 message pin not found");
 
         graph
-            .set_pin_user_value(print3_message.id, Some(DataValue::String("Third".to_string())))
+            .set_pin_user_value_by_pin_id(print3_message.id, DataValue::String("Third".to_string()))
             .expect("Failed to set print3 message");
 
         // 连接：print1.out -> print2.in -> print3.in
@@ -172,8 +174,9 @@ mod tests {
             .connect(print2_out.id, print3_in.id)
             .expect("Failed to connect print2 to print3");
 
-        // 使用 Executor 执行
-        let mut executor = Executor::new(graph.clone());
+        // 创建 GraphRuntime 并使用 Executor 执行
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print1_node);
 
         assert!(

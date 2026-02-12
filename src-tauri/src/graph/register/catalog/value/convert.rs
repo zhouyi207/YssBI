@@ -1,4 +1,4 @@
-use crate::graph::infer::TypeVarId;
+use crate::graph::infer::{TypeVarDefinition, TypeVarKey};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
@@ -14,26 +14,39 @@ pub fn register(registry: &NodeRegistry) {
 /// 输入和输出类型都是类型变量，根据连接推断
 /// 在运行时根据输入和输出的实际类型执行转换
 fn register_convert(registry: &NodeRegistry) {
-    // 创建两个独立的类型变量
-    let input_type_var = TypeVarId::new();
-    let output_type_var = TypeVarId::new();
+    // 创建两个独立的类型变量定义
+    let input_type_var = TypeVarDefinition {
+        id: TypeVarKey("T_Input".to_string()),
+        constraints: vec![],
+        bound: None,
+    };
+    
+    let output_type_var = TypeVarDefinition {
+        id: TypeVarKey("T_Output".to_string()),
+        constraints: vec![],
+        bound: None,
+    };
+
+    // 克隆 key 用于闭包
+    let input_key = input_type_var.id.clone();
+    let output_key = output_type_var.id.clone();
 
     let definition = NodeDefinition::new("Convert")
         .with_category(vec!["Value".to_string(), "Conversion".to_string()])
         .with_ui_style("value")
         .with_description("Convert value from one type to another")
-        // 注册输入类型变量（无约束，接受任何类型）
-        .with_pin_generator(Arc::new(move |_ctx| {
+        .with_type_vars(vec![input_type_var, output_type_var])
+        .with_pin_generator(Arc::new(move || {
             Ok(vec![
                 PinDefinition::data_input(
                     "Input",
                     DataRole::Input,
-                    PinDataTypeDefinition::type_var(input_type_var),
+                    PinDataTypeDefinition::type_var(input_key.clone()),
                 ),
                 PinDefinition::data_output(
                     "Output",
                     DataRole::Output,
-                    PinDataTypeDefinition::type_var(output_type_var),
+                    PinDataTypeDefinition::type_var(output_key.clone()),
                 ),
             ])
         }))
@@ -203,3 +216,4 @@ fn parse_boolean(s: &str) -> Option<bool> {
         _ => None,
     }
 }
+

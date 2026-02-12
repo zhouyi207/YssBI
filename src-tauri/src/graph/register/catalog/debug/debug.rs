@@ -17,7 +17,7 @@ fn register_print(registry: &NodeRegistry) {
         .with_category(vec!["Debug".to_string()])
         .with_ui_style("debug")
         .with_description("Print a string to the console")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::exec_input("In", ExecRole::ExecIn),
                 PinDefinition::data_input(

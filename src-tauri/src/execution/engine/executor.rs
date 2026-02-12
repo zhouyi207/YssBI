@@ -3,17 +3,15 @@
 //! 执行器是唯一负责调度执行顺序的组件
 //! 它解释节点返回的 ExecutionEffect 并管理 continuation 栈
 
-use super::super::NodeExecutionContext;
 use super::execution_effect::{ExecutionEffect, ResumeToken};
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
-use crate::graph::core::GraphInstance;
-use crate::graph::infer::TypeVarId;
+use crate::execution::NodeExecutionContext;
+use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
-use crate::graph::value::{DataValue, DataType};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// 执行器
 ///
@@ -30,7 +28,7 @@ pub struct Executor {
     suspended_frames: HashMap<ResumeToken, FrameId>,
 
     /// Graph 引用
-    graph: Arc<GraphInstance>,
+    graph: Arc<Mutex<GraphRuntime>>,
 
     /// 执行日志
     logs: Vec<String>,
@@ -38,7 +36,7 @@ pub struct Executor {
 
 impl Executor {
     /// 创建新的执行器
-    pub fn new(graph: Arc<GraphInstance>) -> Self {
+    pub fn new(graph: Arc<Mutex<GraphRuntime>>) -> Self {
         Self {
             stack: ExecutionStack::new(),
             suspended_frames: HashMap::new(),
@@ -92,16 +90,16 @@ impl Executor {
         let node_id = frame.node_id;
 
         // 获取节点定义
-        let definition = self
-            .graph
-            .get_node_definition(node_id)
-            .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+        let definition = {
+            let graph = self.graph.lock().unwrap();
+            graph.get_node_definition_by_node_id(node_id)
+        };
 
         // 在执行节点之前，先执行所有上游的纯数据节点
         self.execute_upstream_data_nodes(node_id)?;
 
         // 创建执行上下文
-        let mut ctx = GraphNodeExecutionContext::new(node_id, self.graph.clone());
+        let mut ctx = NodeExecutionContext::new(self.graph.clone(), node_id);
 
         // 执行节点的 FlowProcessor（如果有）
         let result = if let Some(ref processor) = definition.flow_processor {
@@ -116,7 +114,7 @@ impl Executor {
         };
 
         // 收集日志
-        self.logs.extend(ctx.take_logs());
+        self.logs.extend(ctx.logs);
 
         result
     }
@@ -124,7 +122,10 @@ impl Executor {
     /// 递归执行所有上游的纯数据节点
     fn execute_upstream_data_nodes(&mut self, node_id: NodeId) -> Result<(), String> {
         // 获取节点的所有输入 pins
-        let pins = self.graph.get_node_pins(node_id);
+        let pins = {
+            let graph = self.graph.lock().unwrap();
+            graph.get_node_pins(node_id)
+        };
 
         for pin in pins {
             // 只处理输入 data pins
@@ -133,36 +134,35 @@ impl Executor {
             }
 
             // 检查是否有上游连接
-            if let Some(upstream_pin_id) = self.graph.connections().get_upstream(pin.id) {
-                // 获取上游 pin
-                if let Some(upstream_pin) = self.graph.get_pin(upstream_pin_id) {
-                    let upstream_node_id = upstream_pin.node_id;
+            let upstream_info = {
+                let graph = self.graph.lock().unwrap();
+                graph.get_upstream_by_pin_id(pin.id).and_then(|upstream_pin_id| {
+                    let upstream_node_id = graph.get_node_id_by_pin_id(upstream_pin_id);
+                    let upstream_definition = graph.get_node_definition_by_node_id(upstream_node_id);
+                    Some((upstream_node_id, upstream_definition))
+                })
+            };
 
-                    // 检查上游节点是否是纯数据节点（没有 flow_processor）
-                    if let Some(upstream_node) = self.graph.get_node(upstream_node_id) {
-                        if upstream_node.definition.flow_processor.is_none()
-                            && upstream_node.definition.data_evaluator.is_some()
-                        {
-                            // 检查上游 pin 是否已经有值
-                            if upstream_pin.current_value().is_none() {
-                                // 递归执行上游节点的上游
-                                self.execute_upstream_data_nodes(upstream_node_id)?;
+            if let Some((upstream_node_id, upstream_definition)) = upstream_info {
+                // 检查上游节点是否是纯数据节点（没有 flow_processor）
+                if upstream_definition.flow_processor.is_none()
+                    && upstream_definition.data_evaluator.is_some()
+                {
+                    // 递归执行上游节点的上游
+                    self.execute_upstream_data_nodes(upstream_node_id)?;
 
-                                // 执行上游节点的 data_evaluator
-                                let mut ctx = GraphNodeExecutionContext::new(
-                                    upstream_node_id,
-                                    self.graph.clone(),
-                                );
+                    // 执行上游节点的 data_evaluator
+                    let mut ctx = NodeExecutionContext::new(
+                        self.graph.clone(),
+                        upstream_node_id,
+                    );
 
-                                if let Some(evaluator) = &upstream_node.definition.data_evaluator {
-                                    evaluator(&mut ctx)?;
-                                }
-
-                                // 收集日志
-                                self.logs.extend(ctx.take_logs());
-                            }
-                        }
+                    if let Some(evaluator) = &upstream_definition.data_evaluator {
+                        evaluator(&mut ctx)?;
                     }
+
+                    // 收集日志
+                    self.logs.extend(ctx.logs);
                 }
             }
         }
@@ -364,13 +364,28 @@ impl Executor {
     ) -> Result<bool, String> {
         // 查找输出 Pin
         let pin_role = PinRole::Exec(role);
-        let output_pin = self
-            .graph
-            .get_pin_by_role(node_id, &pin_role)
-            .ok_or_else(|| format!("Output pin {:?} not found on node {:?}", pin_role, node_id))?;
+        
+        let (downstream_pins, downstream_nodes) = {
+            let graph = self.graph.lock().unwrap();
+            let output_pin = graph
+                .get_pin_instance_by_pin_role(node_id, &pin_role)
+                .ok_or_else(|| format!("Output pin {:?} not found on node {:?}", pin_role, node_id))?;
 
-        // 查找下游连接
-        let downstream_pins = self.graph.connections().get_downstream(output_pin.id);
+            // 查找下游连接
+            let downstream_pins = graph.get_downstream_by_pin_id(output_pin.id);
+            
+            if downstream_pins.is_empty() {
+                return Ok(false);
+            }
+
+            // 收集下游节点信息
+            let downstream_nodes: Vec<_> = downstream_pins
+                .iter()
+                .map(|&pin_id| (pin_id, graph.get_node_id_by_pin_id(pin_id)))
+                .collect();
+            
+            (downstream_pins, downstream_nodes)
+        };
 
         if downstream_pins.is_empty() {
             self.log(format!("No downstream connections for {:?}", pin_role));
@@ -378,13 +393,7 @@ impl Executor {
         }
 
         // 为每个下游节点创建新帧
-        for &downstream_pin_id in downstream_pins.iter() {
-            let downstream_node = self
-                .graph
-                .connections()
-                .get_pin_node(downstream_pin_id)
-                .ok_or_else(|| format!("Node for pin {:?} not found", downstream_pin_id))?;
-
+        for (downstream_pin_id, downstream_node) in downstream_nodes {
             self.log(format!(
                 "Creating frame for downstream node {:?}",
                 downstream_node
@@ -476,133 +485,5 @@ impl Executor {
     /// 获取栈的调试信息
     pub fn debug_stack(&self) -> String {
         self.stack.debug_info()
-    }
-}
-
-/// Graph 节点执行上下文实现
-struct GraphNodeExecutionContext {
-    node_id: NodeId,
-    graph: Arc<GraphInstance>,
-    outputs: HashMap<PinRole, DataValue>,
-    logs: Vec<String>,
-}
-
-impl GraphNodeExecutionContext {
-    fn new(node_id: NodeId, graph: Arc<GraphInstance>) -> Self {
-        Self {
-            node_id,
-            graph,
-            outputs: HashMap::new(),
-            logs: Vec::new(),
-        }
-    }
-
-    fn take_logs(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.logs)
-    }
-}
-
-impl NodeExecutionContext for GraphNodeExecutionContext {
-    fn get_input_by_role(&self, role: &PinRole) -> Result<DataValue, String> {
-        let pin = self
-            .graph
-            .get_pin_by_role(self.node_id, role)
-            .ok_or_else(|| format!("Pin {:?} not found", role))?;
-
-        self.graph
-            .resolve_pin_value(pin.id)
-            .ok_or_else(|| format!("No value for pin {:?}", role))
-    }
-
-    fn get_inputs_by_role(&self, role: &PinRole) -> Result<Vec<DataValue>, String> {
-        let pins = self.graph.get_pins_by_role(self.node_id, role);
-        pins.into_iter()
-            .map(|pin| {
-                self.graph
-                    .resolve_pin_value(pin.id)
-                    .ok_or_else(|| format!("No value for pin {:?}", pin.id))
-            })
-            .collect()
-    }
-
-    fn get_inputs_by_family(&self, pattern: &PinRole) -> Result<Vec<DataValue>, String> {
-        let pins = self.graph.get_pins_by_role_family(self.node_id, pattern);
-        pins.into_iter()
-            .map(|pin| {
-                self.graph
-                    .resolve_pin_value(pin.id)
-                    .ok_or_else(|| format!("No value for pin {:?}", pin.id))
-            })
-            .collect()
-    }
-
-    fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String> {
-        self.outputs.insert(role.clone(), value.clone());
-
-        let pin = self
-            .graph
-            .get_pin_by_role(self.node_id, role)
-            .ok_or_else(|| format!("Pin {:?} not found", role))?;
-
-        self.graph.set_pin_current_value(pin.id, value)
-    }
-
-    fn emit_outputs_by_role(
-        &mut self,
-        role: &PinRole,
-        values: Vec<DataValue>,
-    ) -> Result<(), String> {
-        let pins = self.graph.get_pins_by_role(self.node_id, role);
-
-        if pins.len() != values.len() {
-            return Err(format!(
-                "Pin count mismatch: {} pins, {} values",
-                pins.len(),
-                values.len()
-            ));
-        }
-
-        for (pin, value) in pins.iter().zip(values.iter()) {
-            self.graph.set_pin_current_value(pin.id, value.clone())?;
-        }
-
-        Ok(())
-    }
-
-    fn is_input_connected(&self, role: &PinRole) -> bool {
-        if let Some(pin) = self.graph.get_pin_by_role(self.node_id, role) {
-            self.graph.connections().get_upstream(pin.id).is_some()
-        } else {
-            false
-        }
-    }
-
-    fn node_id(&self) -> NodeId {
-        self.node_id
-    }
-
-    fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<DataType> {
-        self.graph.get_bound_type(type_var_id)
-    }
-
-    fn get_pin_type_by_role(&self, role: &PinRole) -> Result<DataType, String> {
-        let pin = self
-            .graph
-            .get_pin_by_role(self.node_id, role)
-            .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
-
-        self.graph.resolve_pin_type(pin.id)
-    }
-
-    fn log(&mut self, message: String) {
-        let log_message = format!("[Node {:?}] {}", self.node_id, message);
-        println!("{}", log_message);
-        self.logs.push(log_message);
-    }
-
-    fn error(&mut self, message: String) {
-        let error_message = format!("[Node {:?}] ERROR: {}", self.node_id, message);
-        eprintln!("{}", error_message);
-        self.logs.push(error_message);
     }
 }

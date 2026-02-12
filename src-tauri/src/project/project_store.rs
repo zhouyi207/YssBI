@@ -11,11 +11,11 @@ pub struct ProjectStore {
 
 impl Default for ProjectStore {
     fn default() -> Self {
-        let mut node_register = Arc::new(NodeRegistry::new());
-        register_builtin_nodes(&mut node_register);
+        let node_register = Arc::new(NodeRegistry::new());
+        register_builtin_nodes(&node_register);
         Self {
             databases: HashMap::new(),
-            node_register: node_register,
+            node_register,
         }
     }
 }

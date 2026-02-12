@@ -42,6 +42,22 @@ impl ProjectState {
 
         *self.project_data.write().unwrap() = project_data;
         *self.project_store.write().unwrap() = ProjectStore::default();
+        
+        // 恢复所有图的 registry
+        self.restore_graph_registries();
+    }
+
+    /// 恢复所有图的 registry（在加载项目后调用）
+    fn restore_graph_registries(&self) {
+        let registry = {
+            let store = self.project_store.read().unwrap();
+            Arc::clone(&store.node_register)
+        };
+
+        let mut project_data = self.project_data.write().unwrap();
+        for graph in project_data.graphs.values_mut() {
+            graph.set_registry(Arc::clone(&registry));
+        }
     }
 
     /// 获取当前路径

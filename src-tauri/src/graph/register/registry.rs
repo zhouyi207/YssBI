@@ -13,6 +13,26 @@ pub struct NodeRegistry {
     definitions: RwLock<HashMap<String, Arc<NodeDefinition>>>,
 }
 
+// 手动实现 Clone，因为 RwLock 不支持 Clone
+impl Clone for NodeRegistry {
+    fn clone(&self) -> Self {
+        let definitions = self.definitions.read().unwrap();
+        Self {
+            definitions: RwLock::new(definitions.clone()),
+        }
+    }
+}
+
+// 手动实现 Debug
+impl std::fmt::Debug for NodeRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let definitions = self.definitions.read().unwrap();
+        f.debug_struct("NodeRegistry")
+            .field("definitions_count", &definitions.len())
+            .finish()
+    }
+}
+
 impl NodeRegistry {
     pub fn new() -> Self {
         Self {

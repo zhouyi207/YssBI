@@ -4,13 +4,12 @@ use std::sync::Arc;
 
 impl ProjectState {
     fn add_graph(&self, graph_name: &str, graph_kind: GraphKind) -> GraphInstance {
-        let graph_id = GraphId::new();
         let graph_register = {
             let store = self.project_store.read().unwrap();
             Arc::clone(&store.node_register)
         };
-        let graph_data =
-            GraphInstance::new(graph_id, graph_name.to_string(), graph_kind, graph_register);
+        let graph_data = GraphInstance::new(graph_name, graph_kind, graph_register);
+        let graph_id = graph_data.id;
         self.project_data
             .write()
             .unwrap()

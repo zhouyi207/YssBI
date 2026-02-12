@@ -3,6 +3,8 @@
 //!
 //! 因此不能将实例或者运行时的状态如 value 带入
 
+use crate::graph::TypeVarKey;
+
 use super::{DataRole, ExecRole, PinDataTypeDefinition, PinRole};
 use serde::{Deserialize, Serialize};
 
@@ -70,7 +72,11 @@ pub struct PinDefinition {
 
 impl PinDefinition {
     /// 创建数据输入 Pin
-    pub fn data_input(name: impl Into<String>, role: DataRole, data_type: PinDataTypeDefinition) -> Self {
+    pub fn data_input(
+        name: impl Into<String>,
+        role: DataRole,
+        data_type: PinDataTypeDefinition,
+    ) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Input,
@@ -82,7 +88,11 @@ impl PinDefinition {
     }
 
     /// 创建数据输出 Pin
-    pub fn data_output(name: impl Into<String>, role: DataRole, data_type: PinDataTypeDefinition) -> Self {
+    pub fn data_output(
+        name: impl Into<String>,
+        role: DataRole,
+        data_type: PinDataTypeDefinition,
+    ) -> Self {
         Self {
             name: name.into(),
             direction: PinDirection::Output,
@@ -128,5 +138,31 @@ impl PinDefinition {
     pub fn with_dynamic(mut self, is_dynamic: bool) -> Self {
         self.meta_data.is_dynamic = is_dynamic;
         self
+    }
+    
+    pub fn get_type_var_key(&self) -> Option<TypeVarKey> {
+        // Extract TypeVarKey from PinDataTypeDefinition if it's a TypeVar
+        if let Some(data_type) = &self.data_type {
+            if let crate::graph::pin::PinDataTypeDefinition::TypeVar(key) = data_type {
+                return Some(key.clone());
+            }
+        }
+        None
+    }
+
+    pub fn is_data(&self) -> bool {
+        matches!(self.kind, PinKind::Data)
+    }
+
+    pub fn is_exec(&self) -> bool {
+        matches!(self.kind, PinKind::Exec)
+    }
+
+    pub fn is_input(&self) -> bool {
+        matches!(self.direction, PinDirection::Input)
+    }
+
+    pub fn is_output(&self) -> bool {
+        matches!(self.direction, PinDirection::Output)
     }
 }

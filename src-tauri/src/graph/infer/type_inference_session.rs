@@ -68,8 +68,33 @@ impl<'g> TypeInferenceSession<'g> {
     // }
 
     /// 提交结果：把临时绑定写回 TypeVarDefinition.bound
-    pub fn commit(self) -> Result<(), String> {
+    pub fn commit(&mut self) -> Result<(), String> {
         self.ctx.commit()
+    }
+
+    pub fn commit_to_graph(&mut self) -> Result<(), String> {
+        let mut data_state = self.graph.data_state.write().unwrap();
+
+        // 写回 Pin 类型
+        for (&pin_id, pin_data) in self.ctx.pin_types.iter() {
+            if let Ok(concrete_type) = self.ctx.resolve_pin_type(pin_id) {
+                data_state.pin_types.insert(pin_id, concrete_type);
+            }
+        }
+
+        // 写回 TypeVar 绑定
+        for (&var_id, var_def) in self.ctx.type_vars.iter() {
+            if let Some(bound_type) = &var_def.bound {
+                data_state
+                    .type_var_bindings
+                    .insert(var_id, bound_type.clone());
+            }
+        }
+
+        // 仍然保留原来的 commit 功能
+        self.ctx.commit()?;
+
+        Ok(())
     }
 
     /// 查询某个 pin 的最终类型

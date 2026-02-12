@@ -33,73 +33,73 @@ fn test_complex_node_graph() {
     //                └─ False -> print("Branch2-False")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphInstance::new(yssbi_lib::graph::GraphId::new(), "Complex Test Graph", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new("Complex Test Graph", yssbi_lib::graph::GraphKind::Event, registry.clone()));
 
     println!("\n=== Creating Nodes ===");
 
     // 创建第一个 Sequence 节点
     let seq1_node = graph
-        .create_node("flow.sequence")
+        .create_node("Control Flow:Sequence")
         .expect("Failed to create sequence1 node");
     println!("Created sequence1 node");
 
     // 创建第二个 Sequence 节点
     let seq2_node = graph
-        .create_node("flow.sequence")
+        .create_node("Control Flow:Sequence")
         .expect("Failed to create sequence2 node");
     println!("Created sequence2 node");
 
     // 创建两个 Branch 节点
     let branch1_node = graph
-        .create_node("flow.branch")
+        .create_node("Control Flow:Branch")
         .expect("Failed to create branch1 node");
     println!("Created branch1 node");
 
     let branch2_node = graph
-        .create_node("flow.branch")
+        .create_node("Control Flow:Branch")
         .expect("Failed to create branch2 node");
     println!("Created branch2 node");
 
     // 创建 Add 节点
     let add_node = graph
-        .create_node("math.add")
+        .create_node("Math:Operators:Add (+)")
         .expect("Failed to create add node");
     println!("Created add node");
 
     // 创建 Equal 节点
     let equal_node = graph
-        .create_node("logic.equal")
+        .create_node("Logic:Comparison:Equal (==)")
         .expect("Failed to create equal node");
     println!("Created equal node");
 
     // 创建 6 个 Print 节点
     let print_seq2_step0 = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_seq2_step1 = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_seq2_step2 = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_branch1_true = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_branch1_false = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_branch2_true = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     let print_branch2_false = graph
-        .create_node("debug.print")
+        .create_node("Debug:Print")
         .expect("Failed to create print node");
     println!("Created 7 print nodes");
 
     println!("\n=== Setting Values ===");
 
     // 设置 Add 节点的输入值：10 + 10
-    let add_pins = graph.get_node_pins(add_node);
+    let add_pins = graph.get_pin_instances_by_node_id(add_node);
     let add_pin_a = add_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(0)))
@@ -110,34 +110,34 @@ fn test_complex_node_graph() {
         .expect("Add pin B not found");
 
     graph
-        .set_pin_user_value(add_pin_a.id, Some(DataValue::Int32(10)))
+        .set_pin_user_value_by_pin_id(add_pin_a.id, DataValue::Int32(10))
         .expect("Failed to set add pin A");
     graph
-        .set_pin_user_value(add_pin_b.id, Some(DataValue::Int32(10)))
+        .set_pin_user_value_by_pin_id(add_pin_b.id, DataValue::Int32(10))
         .expect("Failed to set add pin B");
     println!("Set add node: 10 + 10");
 
     // 设置 Equal 节点的第二个输入值：20
-    let equal_pins = graph.get_node_pins(equal_node);
+    let equal_pins = graph.get_pin_instances_by_node_id(equal_node);
     let equal_pin_b = equal_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(1)))
         .expect("Equal pin B not found");
 
     graph
-        .set_pin_user_value(equal_pin_b.id, Some(DataValue::Int32(20)))
+        .set_pin_user_value_by_pin_id(equal_pin_b.id, DataValue::Int32(20))
         .expect("Failed to set equal pin B");
     println!("Set equal node: ? == 20");
 
     // 设置 Branch1 的 condition 为 false
-    let branch1_pins = graph.get_node_pins(branch1_node);
+    let branch1_pins = graph.get_pin_instances_by_node_id(branch1_node);
     let branch1_condition = branch1_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
         .expect("Branch1 condition not found");
 
     graph
-        .set_pin_user_value(branch1_condition.id, Some(DataValue::Boolean(false)))
+        .set_pin_user_value_by_pin_id(branch1_condition.id, DataValue::Boolean(false))
         .expect("Failed to set branch1 condition");
     println!("Set branch1 condition: false");
 
@@ -153,14 +153,14 @@ fn test_complex_node_graph() {
     ];
 
     for (print_node, message) in print_messages {
-        let pins = graph.get_node_pins(print_node);
+        let pins = graph.get_pin_instances_by_node_id(print_node);
         let message_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print message pin not found");
 
         graph
-            .set_pin_user_value(message_pin.id, Some(DataValue::String(message.to_string())))
+            .set_pin_user_value_by_pin_id(message_pin.id, DataValue::String(message.to_string()))
             .expect("Failed to set print message");
     }
     println!("Set all print messages");
@@ -187,7 +187,7 @@ fn test_complex_node_graph() {
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
         .expect("Equal result not found");
-    let branch2_pins = graph.get_node_pins(branch2_node);
+    let branch2_pins = graph.get_pin_instances_by_node_id(branch2_node);
     let branch2_condition = branch2_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
@@ -201,7 +201,7 @@ fn test_complex_node_graph() {
     println!("\n=== Connecting Exec Pins ===");
 
     // 获取 Sequence1 的输出 pins
-    let seq1_pins = graph.get_node_pins(seq1_node);
+    let seq1_pins = graph.get_pin_instances_by_node_id(seq1_node);
     let seq1_step0 = seq1_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(0)))
@@ -216,7 +216,7 @@ fn test_complex_node_graph() {
         .expect("Seq1 step2 not found");
 
     // 连接 Sequence1.Step0 -> Sequence2.In
-    let seq2_pins = graph.get_node_pins(seq2_node);
+    let seq2_pins = graph.get_pin_instances_by_node_id(seq2_node);
     let seq2_exec_in = seq2_pins
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -242,19 +242,19 @@ fn test_complex_node_graph() {
         .expect("Seq2 step2 not found");
 
     let print_seq2_step0_in = graph
-        .get_node_pins(print_seq2_step0)
+        .get_pin_instances_by_node_id(print_seq2_step0)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
         .id;
     let print_seq2_step1_in = graph
-        .get_node_pins(print_seq2_step1)
+        .get_pin_instances_by_node_id(print_seq2_step1)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
         .id;
     let print_seq2_step2_in = graph
-        .get_node_pins(print_seq2_step2)
+        .get_pin_instances_by_node_id(print_seq2_step2)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
@@ -293,13 +293,13 @@ fn test_complex_node_graph() {
         .expect("Branch1 false out not found");
 
     let print_branch1_true_in = graph
-        .get_node_pins(print_branch1_true)
+        .get_pin_instances_by_node_id(print_branch1_true)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
         .id;
     let print_branch1_false_in = graph
-        .get_node_pins(print_branch1_false)
+        .get_pin_instances_by_node_id(print_branch1_false)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
@@ -335,13 +335,13 @@ fn test_complex_node_graph() {
         .expect("Branch2 false out not found");
 
     let print_branch2_true_in = graph
-        .get_node_pins(print_branch2_true)
+        .get_pin_instances_by_node_id(print_branch2_true)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
         .id;
     let print_branch2_false_in = graph
-        .get_node_pins(print_branch2_false)
+        .get_pin_instances_by_node_id(print_branch2_false)
         .iter()
         .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
         .expect("Print exec in not found")
@@ -358,7 +358,9 @@ fn test_complex_node_graph() {
     println!("\n=== Executing Graph ===");
 
     // 使用 Executor 执行整个图
-    let mut executor = Executor::new(graph.clone());
+    use yssbi_lib::graph::core::GraphRuntime;
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let mut executor = Executor::new(runtime);
     let result = executor.start(seq1_node);
 
     assert!(
@@ -428,13 +430,13 @@ fn test_nested_sequence_tree() {
     //                             └─ Step 2 -> print("Position: 1-2, 2-8, Step-2")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphInstance::new(yssbi_lib::graph::GraphId::new(), "Nested Sequence Tree Test", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new("Nested Sequence Tree Test", yssbi_lib::graph::GraphKind::Event, registry.clone()));
 
     println!("\n=== Creating Root Sequence Node ===");
     
     // 创建根 sequence 节点
     let root_seq = graph
-        .create_node("flow.sequence")
+        .create_node("Control Flow:Sequence")
         .expect("Failed to create root sequence node");
     println!("Created root sequence node");
 
@@ -444,7 +446,7 @@ fn test_nested_sequence_tree() {
     let mut level1_nodes = Vec::new();
     for i in 0..3 {
         let node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect(&format!("Failed to create level1 sequence node {}", i));
         level1_nodes.push(node);
         println!("Created level1 sequence node {}", i);
@@ -456,7 +458,7 @@ fn test_nested_sequence_tree() {
     let mut level2_nodes = Vec::new();
     for i in 0..9 {
         let node = graph
-            .create_node("flow.sequence")
+            .create_node("Control Flow:Sequence")
             .expect(&format!("Failed to create level2 sequence node {}", i));
         level2_nodes.push(node);
         println!("Created level2 sequence node {}", i);
@@ -468,7 +470,7 @@ fn test_nested_sequence_tree() {
     let mut print_nodes = Vec::new();
     for i in 0..27 {
         let node = graph
-            .create_node("debug.print")
+            .create_node("Debug:Print")
             .expect(&format!("Failed to create print node {}", i));
         print_nodes.push(node);
     }
@@ -484,14 +486,14 @@ fn test_nested_sequence_tree() {
         
         let message = format!("Position: 1-{}, 2-{}, Step-{}", level1_idx, level2_idx, step_idx);
         
-        let pins = graph.get_node_pins(*print_node);
+        let pins = graph.get_pin_instances_by_node_id(*print_node);
         let message_pin = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
             .expect("Print message pin not found");
 
         graph
-            .set_pin_user_value(message_pin.id, Some(DataValue::String(message)))
+            .set_pin_user_value_by_pin_id(message_pin.id, DataValue::String(message))
             .expect("Failed to set print message");
     }
     println!("Set all 27 print messages");
@@ -499,14 +501,14 @@ fn test_nested_sequence_tree() {
     println!("\n=== Connecting Root Sequence to Level 1 Sequences ===");
     
     // 连接 root sequence 到 level1 sequences
-    let root_pins = graph.get_node_pins(root_seq);
+    let root_pins = graph.get_pin_instances_by_node_id(root_seq);
     for i in 0..3 {
         let root_step = root_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(i)))
             .expect(&format!("Root step {} not found", i));
         
-        let level1_pins = graph.get_node_pins(level1_nodes[i]);
+        let level1_pins = graph.get_pin_instances_by_node_id(level1_nodes[i]);
         let level1_exec_in = level1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -522,7 +524,7 @@ fn test_nested_sequence_tree() {
     
     // 连接 level1 sequences 到 level2 sequences
     for i in 0..3 {
-        let level1_pins = graph.get_node_pins(level1_nodes[i]);
+        let level1_pins = graph.get_pin_instances_by_node_id(level1_nodes[i]);
         
         for j in 0..3 {
             let level1_step = level1_pins
@@ -531,7 +533,7 @@ fn test_nested_sequence_tree() {
                 .expect(&format!("Level1[{}] step {} not found", i, j));
             
             let level2_idx = i * 3 + j;
-            let level2_pins = graph.get_node_pins(level2_nodes[level2_idx]);
+            let level2_pins = graph.get_pin_instances_by_node_id(level2_nodes[level2_idx]);
             let level2_exec_in = level2_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -548,7 +550,7 @@ fn test_nested_sequence_tree() {
     
     // 连接 level2 sequences 到 print 节点
     for i in 0..9 {
-        let level2_pins = graph.get_node_pins(level2_nodes[i]);
+        let level2_pins = graph.get_pin_instances_by_node_id(level2_nodes[i]);
         
         for j in 0..3 {
             let level2_step = level2_pins
@@ -557,7 +559,7 @@ fn test_nested_sequence_tree() {
                 .expect(&format!("Level2[{}] step {} not found", i, j));
             
             let print_idx = i * 3 + j;
-            let print_pins = graph.get_node_pins(print_nodes[print_idx]);
+            let print_pins = graph.get_pin_instances_by_node_id(print_nodes[print_idx]);
             let print_exec_in = print_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
@@ -573,7 +575,9 @@ fn test_nested_sequence_tree() {
     println!("\n=== Executing Graph ===");
 
     // 使用 Executor 执行整个图
-    let mut executor = Executor::new(graph.clone());
+    use yssbi_lib::graph::core::GraphRuntime;
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let mut executor = Executor::new(runtime);
     let result = executor.start(root_seq);
 
     assert!(

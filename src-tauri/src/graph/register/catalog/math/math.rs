@@ -19,7 +19,7 @@ fn register_add(registry: &NodeRegistry) {
         .with_category(vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Add two numbers together")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -57,7 +57,7 @@ fn register_subtract(registry: &NodeRegistry) {
         .with_category(vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Subtract B from A")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -95,7 +95,7 @@ fn register_multiply(registry: &NodeRegistry) {
         .with_category(vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Multiply two numbers")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",
@@ -133,7 +133,7 @@ fn register_divide(registry: &NodeRegistry) {
         .with_category(vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Divide A by B")
-        .with_pin_generator(Arc::new(|_ctx| {
+        .with_pin_generator(Arc::new(|| {
             Ok(vec![
                 PinDefinition::data_input(
                     "A",

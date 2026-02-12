@@ -29,8 +29,9 @@ impl PinInstance {
         }
     }
 
-    pub fn with_type_var_id(&mut self, type_var_id: Option<TypeVarId>) {
+    pub fn with_type_var_id(mut self, type_var_id: Option<TypeVarId>) -> Self {
         self.type_var_id = type_var_id;
+        self
     }
 
     pub fn is_data(&self) -> bool {
