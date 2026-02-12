@@ -69,49 +69,15 @@ impl GraphRuntime {
             .unwrap();
         assert_eq!(pin_instance.is_data(), true);
 
-        let id = pin_instance.id;
-        if let Some(pin_runtime_state) = self.pins_runtime_state.get(&id) {
-            return pin_runtime_state.current_value.clone().unwrap();
-        }
-
-        // Try user_value first, then fall back to default value
-        if let Some(user_value) = pin_instance.user_value {
-            return user_value;
-        }
-
-        // Use default value from data type definition
-        if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
-            if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
-                if let Some(default_value) = data_type.default_value() {
-                    return default_value;
-                }
-            }
-        }
-
-        panic!("No value available for pin {:?}", pin_instance.id);
+        // 使用 resolve_pin_value 按优先级获取值
+        self.resolve_pin_value(pin_instance.id)
+            .unwrap_or_else(|| panic!("No value available for pin {:?}", pin_instance.id))
     }
 
     pub fn get_pin_data_value_by_pin_id(&self, pin_id: PinId) -> DataValue {
-        let pin_instance = self.get_pin_instance_by_pin_id(pin_id).unwrap();
-        if let Some(pin_runtime_state) = self.pins_runtime_state.get(&pin_id) {
-            return pin_runtime_state.current_value.clone().unwrap();
-        }
-
-        // Try user_value first, then fall back to default value
-        if let Some(user_value) = pin_instance.user_value {
-            return user_value;
-        }
-
-        // Use default value from data type definition
-        if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
-            if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
-                if let Some(default_value) = data_type.default_value() {
-                    return default_value;
-                }
-            }
-        }
-
-        panic!("No value available for pin {:?}", pin_id);
+        // 使用 resolve_pin_value 按优先级获取值
+        self.resolve_pin_value(pin_id)
+            .unwrap_or_else(|| panic!("No value available for pin {:?}", pin_id))
     }
 
     pub fn get_pin_datas_value_by_pin_role(
@@ -163,6 +129,46 @@ impl GraphRuntime {
 
     pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> NodeId {
         self.graph_instance.get_node_id_by_pin_id(pin_id)
+    }
+
+    /// 按优先级解析 pin 的值：
+    /// 1. 上游连接值（如果有连接且上游有值）
+    /// 2. 运行时值（current_value）
+    /// 3. 用户值（user_value）
+    /// 4. 默认值（default_value）
+    pub fn resolve_pin_value(&self, pin_id: PinId) -> Option<DataValue> {
+        let pin_instance = self.get_pin_instance_by_pin_id(pin_id)?;
+        
+        // 1. 检查上游连接值（最高优先级）
+        if let Some(upstream_pin_id) = self.get_upstream_by_pin_id(pin_id) {
+            // 递归解析上游 pin 的值（这样可以处理多层连接和常量节点）
+            if let Some(upstream_value) = self.resolve_pin_value(upstream_pin_id) {
+                return Some(upstream_value);
+            }
+        }
+        
+        // 2. 检查运行时值
+        if let Some(pin_runtime_state) = self.pins_runtime_state.get(&pin_id) {
+            if let Some(current_value) = &pin_runtime_state.current_value {
+                return Some(current_value.clone());
+            }
+        }
+        
+        // 3. 检查用户值
+        if let Some(user_value) = &pin_instance.user_value {
+            return Some(user_value.clone());
+        }
+        
+        // 4. 检查默认值
+        if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
+            if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
+                if let Some(default_value) = data_type.default_value() {
+                    return Some(default_value);
+                }
+            }
+        }
+        
+        None
     }
 
     pub fn get_pin() {}

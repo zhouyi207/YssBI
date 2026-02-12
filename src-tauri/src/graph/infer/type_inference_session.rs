@@ -19,11 +19,22 @@ impl<'g> TypeInferenceSession<'g> {
     /// 注册图中所有节点/Pin/类型变量
     /// 可以根据需要改成增量注册
     pub fn register_all(&mut self) {
-        // 遍历节点
-        let pins = self.graph.data_state.read().unwrap().pins.clone();
-
-        // 只注册有类型描述的 Pin 即 Data Pin
-        for pin_instance in pins.values() {
+        let data_state = self.graph.data_state.read().unwrap();
+        
+        // 1. 先注册所有节点的类型变量
+        for node_instance in data_state.nodes.values() {
+            for (&type_var_id, type_var_def) in &node_instance.type_var_map {
+                let type_var_inference = super::TypeVarInference {
+                    id: type_var_id,
+                    constraints: type_var_def.constraints.clone(),
+                    bound: type_var_def.bound.clone(),
+                };
+                self.ctx.register_type_var(type_var_inference);
+            }
+        }
+        
+        // 2. 然后注册所有 Pin（只注册有类型描述的 Data Pin）
+        for pin_instance in data_state.pins.values() {
             self.ctx.register_pin_type(pin_instance.clone());
         }
     }

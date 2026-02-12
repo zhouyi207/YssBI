@@ -73,8 +73,36 @@ impl TypeInferenceContext {
     /// 注册 Pin 的类型描述
     pub fn register_pin_type(&mut self, pin_instance: PinInstance) {
         if let Some(data_type) = pin_instance.definition.data_type {
-            let data_type_inference = data_type.to_inference(pin_instance.type_var_id.unwrap());
-            self.pin_types.insert(pin_instance.id, data_type_inference);
+            if let Some(type_var_id) = pin_instance.type_var_id {
+                // 使用类型变量的 pin
+                let data_type_inference = data_type.to_inference(type_var_id);
+                self.pin_types.insert(pin_instance.id, data_type_inference);
+            } else {
+                // 具体类型的 pin，直接使用具体类型（不需要类型变量）
+                // 这种情况下，pin 的类型已经确定，不需要推断
+                match data_type {
+                    crate::graph::pin::PinDataTypeDefinition::Concrete(concrete_type) => {
+                        // 为具体类型创建一个临时的 TypeVarId 和 TypeVarInference
+                        let temp_type_var_id = TypeVarId::new();
+                        let type_var_inference = TypeVarInference {
+                            id: temp_type_var_id,
+                            constraints: vec![],
+                            bound: Some(concrete_type.clone()),
+                        };
+                        self.type_vars.insert(temp_type_var_id, type_var_inference);
+                        
+                        let data_type_inference = PinDataTypeInference::Concrete(concrete_type);
+                        self.pin_types.insert(pin_instance.id, data_type_inference);
+                    }
+                    crate::graph::pin::PinDataTypeDefinition::TypeVar(_) => {
+                        // 这种情况不应该发生：TypeVar 类型但没有 type_var_id
+                        // 跳过这个 pin
+                    }
+                    crate::graph::pin::PinDataTypeDefinition::Unknown => {
+                        // Unknown 类型，跳过
+                    }
+                }
+            }
         }
     }
 

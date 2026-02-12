@@ -83,22 +83,33 @@ impl GraphInstance {
         let (node, pins) = NodeInstance::from_definition(definition.clone());
         let node_id = node.id;
 
-        let mut data_state = self.data_state.write().unwrap();
-        data_state.add_node(node);
-        data_state.add_pins(pins);
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            data_state.add_node(node);
+            data_state.add_pins(pins);
+        }
+        
+        // 自动运行类型推断
+        let _ = self.infer_types();
+        
         Ok(node_id)
     }
 
     pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {
         let pins = self.get_pin_instances_by_node_id(node_id);
 
-        let mut data_state = self.data_state.write().unwrap();
-        data_state.connections.remove_node(node_id);
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            data_state.connections.remove_node(node_id);
 
-        for pin in pins {
-            data_state.pins.remove(&pin.id);
+            for pin in pins {
+                data_state.pins.remove(&pin.id);
+            }
+            data_state.nodes.remove(&node_id);
         }
-        data_state.nodes.remove(&node_id);
+        
+        // 自动运行类型推断
+        let _ = self.infer_types();
 
         Ok(())
     }
@@ -160,13 +171,20 @@ impl GraphInstance {
         pin_id: PinId,
         value: DataValue,
     ) -> Result<(), String> {
-        let mut data_state = self.data_state.write().unwrap();
+        {
+            let mut data_state = self.data_state.write().unwrap();
 
-        if let Some(pin) = data_state.pins.get_mut(&pin_id) {
-            pin.user_value = Some(value);
-        } else {
-            return Err(format!("Pin {:?} not found", pin_id));
+            if let Some(pin) = data_state.pins.get_mut(&pin_id) {
+                pin.user_value = Some(value);
+            } else {
+                return Err(format!("Pin {:?} not found", pin_id));
+            }
         }
+        
+        // 注意：设置用户值通常不会改变类型，但为了保持一致性
+        // 我们仍然运行类型推断（性能影响很小，因为类型推断是幂等的）
+        let _ = self.infer_types();
+        
         Ok(())
     }
 
@@ -207,25 +225,32 @@ impl GraphInstance {
 /// 连接管理
 impl GraphInstance {
     pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(), String> {
-        let data_state = self.data_state.write().unwrap();
-        let pins = data_state.pins.clone();
-        if !pins.contains_key(&from_pin) {
-            return Err(format!("Source pin {:?} not found", from_pin));
+        {
+            let data_state = self.data_state.write().unwrap();
+            let pins = data_state.pins.clone();
+            if !pins.contains_key(&from_pin) {
+                return Err(format!("Source pin {:?} not found", from_pin));
+            }
+            if !pins.contains_key(&to_pin) {
+                return Err(format!("Target pin {:?} not found", to_pin));
+            }
+
+            // 只对有类型描述的 Pin（Data Pin）进行类型推断
+            // Exec Pin 没有类型描述，不需要类型推断
+            let from_pin_instance = pins.get(&from_pin).unwrap();
+            let to_pin_instance = pins.get(&to_pin).unwrap();
+
+            if from_pin_instance.definition.data_type.is_some()
+                && to_pin_instance.definition.data_type.is_some()
+            {}
+
+            data_state.connections.connect(from_pin, to_pin)?;
         }
-        if !pins.contains_key(&to_pin) {
-            return Err(format!("Target pin {:?} not found", to_pin));
-        }
-
-        // 只对有类型描述的 Pin（Data Pin）进行类型推断
-        // Exec Pin 没有类型描述，不需要类型推断
-        let from_pin_instance = pins.get(&from_pin).unwrap();
-        let to_pin_instance = pins.get(&to_pin).unwrap();
-
-        if from_pin_instance.definition.data_type.is_some()
-            && to_pin_instance.definition.data_type.is_some()
-        {}
-
-        data_state.connections.connect(from_pin, to_pin)
+        
+        // 自动运行类型推断
+        let _ = self.infer_types();
+        
+        Ok(())
     }
 
     pub fn get_downstream_by_pin_id(&self, pin_id: PinId) -> Vec<PinId> {
@@ -239,12 +264,31 @@ impl GraphInstance {
     }
 
     pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) {
-        let data_state = self.data_state.write().unwrap();
-        data_state.connections.disconnect(from_pin, to_pin);
+        {
+            let data_state = self.data_state.write().unwrap();
+            data_state.connections.disconnect(from_pin, to_pin);
+        }
+        
+        // 自动运行类型推断
+        let _ = self.infer_types();
     }
 
     pub fn all_connections(&self) -> Vec<Connection> {
         let data_state = self.data_state.write().unwrap();
         data_state.connections.all_connections()
+    }
+}
+
+/// 类型推断
+impl GraphInstance {
+    /// 运行类型推断
+    /// 
+    /// 这个方法会：
+    /// 1. 注册所有节点的类型变量
+    /// 2. 注册所有 Pin 的类型
+    /// 3. 根据连接关系推断类型
+    /// 4. 将推断结果写回 GraphDataState
+    pub fn infer_types(&self) -> Result<(), String> {
+        crate::graph::infer::infer_graph(self)
     }
 }
