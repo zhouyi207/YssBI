@@ -1,5 +1,5 @@
 import { forwardRef, useMemo } from "react";
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
 import { VariableDataType, isPrimitiveType } from "@/shared/types/editor";
@@ -27,7 +27,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     deleteMacro,
     updateDataFrame,
     deleteDataFrame
-  } = useCanvas();
+  } = useEditorGroup();
 
   // 使用 useShallow 确保只有当变量内容真正变化时才重新渲染
   const allTabsVariables = useNodeStore(useShallow(s => {

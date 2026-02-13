@@ -18,15 +18,13 @@ interface Particle {
 
 export const EdgesLayer = ({
     groupId,
-    visibleNodeIds,
-    pinNodeIdIndex,
     getPinWorldPos,
-    getCanvasLocalPoint,
-    gesture,
-    pendingConnection,
-    contextMenu,
     activeTabId,
-}: any) => {
+}: {
+    groupId: string;
+    getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
+    activeTabId: string | null;
+}) => {
     const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef<number | null>(null);
     const isAnimatingRef = useRef(false);
@@ -39,7 +37,7 @@ export const EdgesLayer = ({
     const lastTimeRef = useRef<number>(0);
     
     // 🆕 是否启用数据流动画（可以通过设置控制）
-    const [enableDataFlow, setEnableDataFlow] = useState(true);
+    const [enableDataFlow, _setEnableDataFlow] = useState(true);
     
     // 🆕 获取已完成的连接（显示数据流动画）
     const completedConnections = useExecutionStore((state) => state.completedConnections);

@@ -32,7 +32,7 @@ export const DragProvider: React.FC<{ children: React.ReactNode }> = ({
     setActiveDrag(event.active.data.current); // 我们可以在 Draggable 元素里设置 data.current
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (_event: DragEndEvent) => {
     setActiveDrag(null);
   };
 

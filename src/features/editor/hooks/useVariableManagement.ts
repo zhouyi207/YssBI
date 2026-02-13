@@ -10,7 +10,7 @@ import { ProjectService } from '@/services/project/projectService';
  * Handles creation, update, deletion, and promotion/demotion of variables
  */
 export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functions' | 'macros' | 'variables') => void) {
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
   const activeEditorNode = useLayoutStore((s: LayoutState) => 
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );

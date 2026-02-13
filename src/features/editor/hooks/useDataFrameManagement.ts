@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { DataFrameData } from '@/shared/types/editor';
 import { useProjectStore } from '@/features/project';
 import { useEditorStore } from '../stores';
-import { uiStore } from '@/features/ui/UIStore';
 
 const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
   const names = Object.values(items).map(i => i.name);
@@ -19,7 +18,7 @@ const getUniqueName = (baseName: string, items: Record<string, { name: string }>
  * DataFrame Management Hook
  * Handles creation, update, and deletion of dataframes
  */
-export function useDataFrameManagement() {
+export function useDataFrameManagement(switchSidebarTab: (tab: 'events' | 'functions' | 'macros' | 'variables' | 'data') => void) {
   const { selectedItemId, setSelectedInfo } = useEditorStore();
 
   const addDataFrame = useCallback((name?: string) => {
@@ -30,12 +29,14 @@ export function useDataFrameManagement() {
       id,
       name: finalName,
       columns: [],
-      rows: []
+      rows: [],
+      rowCount: 0,
+      columnCount: 0
     };
     st.addDataFrame(id, df);
     setSelectedInfo(id, 'data');
-    uiStore.switchSidebarTab('data');
-  }, [setSelectedInfo]);
+    switchSidebarTab('data');
+  }, [setSelectedInfo, switchSidebarTab]);
 
   const updateDataFrame = useCallback((id: string, data: Partial<DataFrameData>) => {
     useProjectStore.getState().updateDataFrame(id, data);

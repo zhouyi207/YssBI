@@ -10,3 +10,6 @@ export * from './canvas';
 export * from './variables';
 export * from './execution';
 export * from './drag';
+
+// Re-export PinDefinition from canvas to resolve ambiguity
+export type { PinDefinition } from './canvas';

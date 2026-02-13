@@ -78,7 +78,7 @@ export function useEditor() {
   }, []);
 
   // Helper to switch sidebar tab
-  const switchSidebarTab = useCallback((tab: 'events' | 'functions' | 'macros' | 'variables') => {
+  const switchSidebarTab = useCallback((tab: 'events' | 'functions' | 'macros' | 'variables' | 'data') => {
     const layoutStore = useLayoutStore.getState();
     const sidebarNode = layoutStore.nodes['sidebar'];
     if (sidebarNode) {
@@ -150,7 +150,7 @@ export function useEditor() {
   const projectOps = useProjectOperations(tabMgmt.openSubGraph);
   const subGraphMgmt = useSubGraphManagement(tabMgmt.openSubGraph, tabMgmt.closeTab, switchSidebarTab);
   const variableMgmt = useVariableManagement(switchSidebarTab);
-  const dataFrameMgmt = useDataFrameManagement();
+  const dataFrameMgmt = useDataFrameManagement(switchSidebarTab);
 
   // Canvas interaction
   const canvasInteraction = useCanvasInteraction({

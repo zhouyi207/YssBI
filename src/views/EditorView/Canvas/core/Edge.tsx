@@ -52,7 +52,6 @@ export const Edge = React.memo<EdgeProps>(({
   thickness = 2,
   startIsInput = false,
   isActive = false,
-  connectionId,
 }) => {
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);

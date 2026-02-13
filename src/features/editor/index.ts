@@ -12,4 +12,4 @@ export { useVariableManagement } from './hooks/useVariableManagement';
 export { useDataFrameManagement } from './hooks/useDataFrameManagement';
 export { useEditorKeyboard } from './hooks/useEditorKeyboard';
 export { useEditorInit } from './hooks/useEditorInit';
-export { useCanvas, useCanvasCompat, GroupContext } from './hooks/useCanvasCompat';
+export { useEditorGroup, GroupContext } from './hooks/useEditorGroup';

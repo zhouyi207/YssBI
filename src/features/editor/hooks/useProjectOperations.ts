@@ -61,13 +61,12 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
       let path: string | null = null;
 
       if (json) {
-        const result = await ProjectService.loadProject(json);
-        if (!result) return;
-        p = result.project;
-        path = result.path;
+        // 如果提供了 json，直接使用
+        p = json;
+        path = null;
         await ProjectService.setProjectData(p, path || undefined, true);
       } else {
-        const result = await ProjectService.loadProjectToState();
+        const result = await ProjectService.loadProject();
         if (!result) return;
         p = result.project;
         path = result.path;
@@ -86,7 +85,7 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
 
       useProjectStore.getState().loadProject(p, path);
 
-      const first = Object.values(p.events)[0] || Object.values(p.functions)[0];
+      const first = (Object.values(p.events)[0] || Object.values(p.functions)[0]) as any;
       if (first) openSubGraph(first.id, first.name, first.type as any, first);
 
       uiStore.showToast("项目已加载", "success", 2000);

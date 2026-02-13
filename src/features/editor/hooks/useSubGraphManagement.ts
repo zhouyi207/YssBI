@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { SubGraphData } from '@/shared/types/editor';
 import { useProjectStore } from '@/features/project';
 import { createInternalNode } from '@/shared/utils/editor';
-import { uiStore } from '@/features/ui/UIStore';
 
 const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
   const names = Object.values(items).map(i => i.name);
@@ -48,7 +47,8 @@ export function useSubGraphManagement(
       canvas: { x: 0, y: 0, scale: 1 },
       variables: {},
       inputs: [],
-      outputs: []
+      outputs: [],
+      connections: []
     };
     st.addEvent(id, sub);
     openSubGraph(id, finalName, "event", sub);
@@ -97,7 +97,8 @@ export function useSubGraphManagement(
       canvas: { x: 0, y: 0, scale: 1 },
       variables: {},
       inputs: [],
-      outputs: []
+      outputs: [],
+      connections: []
     };
     st.addFunction(id, sub);
     openSubGraph(id, finalName, "function", sub);
@@ -146,7 +147,8 @@ export function useSubGraphManagement(
       canvas: { x: 0, y: 0, scale: 1 },
       variables: {},
       inputs: [],
-      outputs: []
+      outputs: [],
+      connections: []
     };
     st.addMacro(id, sub);
     openSubGraph(id, finalName, "macro", sub);

@@ -140,7 +140,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
     // DND 拖拽支持 - 只有非固定节点可以拖动
     const isFixed = !!node.data?.isFixed;
 
-    const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
+    const { attributes: _attributes, listeners: _listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
         id: node.id,
         data: { type: 'leaf', node },
         disabled: isFixed // 禁用固定节点的拖拽功能

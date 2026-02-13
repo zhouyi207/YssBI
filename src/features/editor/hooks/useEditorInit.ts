@@ -42,8 +42,8 @@ export function useEditorInit(): EditorInitState {
     nodeDefinitions: [],
   });
 
-  const loadSchema = useSchemaStore((s) => s.loadSchema);
-  const schemaLoaded = useSchemaStore((s) => s.isLoaded);
+  const loadSchema = useSchemaStore((s) => s.syncFromBackend);
+  const schemaLoaded = useSchemaStore((s) => s.status === LoadStatus.Ready);
   const schemaError = useSchemaStore((s) => s.error);
 
   useEffect(() => {
@@ -106,12 +106,14 @@ export function useEditorInit(): EditorInitState {
   return state;
 }
 
+import { LoadStatus } from '@/shared/types/loadStatus';
+
 /**
  * 确保编辑器已初始化
  * 如果未初始化，会抛出错误
  */
 export function useRequireEditorInit() {
-  const schemaLoaded = useSchemaStore((s) => s.isLoaded);
+  const schemaLoaded = useSchemaStore((s) => s.status === LoadStatus.Ready);
 
   if (!schemaLoaded) {
     throw new Error(

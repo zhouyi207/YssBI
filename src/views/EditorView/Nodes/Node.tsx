@@ -133,7 +133,10 @@ const MathNodeUI: React.FC<NodeProps> = ({
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
 
   // 优先从 schema 获取 centerSymbol，回退到节点属性
-  const schemaCenterSymbol = useSchemaStore((s) => s.getCenterSymbol(node.uiStyle, node.type));
+  const schemaCenterSymbol = useSchemaStore((s) => {
+    const style = s.getUIStyle(node.uiStyle);
+    return style?.center_symbols[node.type];
+  });
   const centerSymbol = schemaCenterSymbol ?? node.centerSymbol;
 
   return (

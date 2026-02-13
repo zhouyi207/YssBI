@@ -112,7 +112,7 @@ export function deserializeSubGraph(data: SubGraphData): {
       // Create a shell node if definition is missing (common for internal entry/return nodes)
       node = new BaseNode(n.id, {
         node_type: n.type,
-        category: "Internal",
+        category: ["Internal"],
         title: n.title,
         inputs: [],
         outputs: [],

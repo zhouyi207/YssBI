@@ -21,16 +21,43 @@ editor/
 │   ├── useVariableManagement.ts     # Variable CRUD and promotion/demotion
 │   ├── useDataFrameManagement.ts    # DataFrame CRUD
 │   ├── useEditorKeyboard.ts         # Keyboard shortcuts
-│   ├── useCanvasCompat.ts           # Compatibility layer (provides useCanvas)
+│   ├── useEditorGroup.ts            # Context-aware editor hook
 │   └── index.ts
 └── index.ts
 ```
 
 ## Usage
 
-### Recommended: Use useEditor
+### Recommended: Use useEditorGroup for Context-Aware Components
 
-For new code, use `useEditor` directly:
+For components that need context-aware editor operations (like components within a GroupContext):
+
+```tsx
+import { useEditorGroup, GroupContext } from '@/features/editor';
+
+function MyComponent() {
+  const editor = useEditorGroup();
+  
+  // Automatically scopes to the current group context
+  // Provides groupId, tabs, activeTabId, nodes, variables, etc.
+  editor.addEvent();
+  editor.saveGraph();
+  console.log(editor.groupId); // Current group ID
+}
+
+// Use with GroupContext for scoped operations
+function ParentComponent() {
+  return (
+    <GroupContext.Provider value="my-group-id">
+      <MyComponent />
+    </GroupContext.Provider>
+  );
+}
+```
+
+### Use useEditor for Global Operations
+
+For components that work with the globally active editor:
 
 ```tsx
 import { useEditor } from '@/features/editor';
@@ -43,19 +70,6 @@ function MyComponent() {
   editor.saveGraph();
   editor.copy();
   // etc.
-}
-```
-
-### Compatibility: Use useCanvas
-
-For existing code, `useCanvas` provides backward compatibility:
-
-```tsx
-import { useCanvas } from '@/features/editor';
-
-function MyComponent() {
-  const { addEvent, saveGraph, copy } = useCanvas();
-  // Works exactly like the old useCanvas
 }
 ```
 

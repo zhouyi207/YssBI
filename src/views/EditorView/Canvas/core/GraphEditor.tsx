@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import Canvas from './Canvas';
-import { useCanvas, GroupContext } from '@/features/editor';
+import { useEditorGroup, GroupContext } from '@/features/editor';
 import { WatermarkView } from '../overlays/WatermarkView';
 import { useLayoutStore } from '@/features/layoutStore/layoutStore';
 
@@ -11,7 +11,7 @@ import { useLayoutStore } from '@/features/layoutStore/layoutStore';
 export const GraphEditor = () => {
     const nodeId = useContext(GroupContext);
     const node = useLayoutStore(s => nodeId ? s.nodes[nodeId] : null);
-    const { activeTabId: contextActiveTabId } = useCanvas();
+    const { activeTabId: contextActiveTabId } = useEditorGroup();
 
     // 确定当前组是否有标签
     const hasTabs = (node?.data?.tabs?.length ?? 0) > 0;

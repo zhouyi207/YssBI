@@ -6,7 +6,7 @@ import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/editor/app-initialization";
 import { LoadStatus } from "@/shared/types/loadStatus";
-import { UIHost } from "@/shared/ui/uiHost";
+import { UIHost } from "@/shared/ui/UIHost";
 import { useEditorKeyboard } from "@/features/editor/hooks/useEditorKeyboard";
 import { useEditor } from "@/features/editor";
 import { useCallback } from "react";

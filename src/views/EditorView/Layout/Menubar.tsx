@@ -1,6 +1,6 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 import { useState, useEffect } from "react";
 import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
@@ -89,8 +89,8 @@ export function Menubar() {
     addEvent,
     addFunction,
     addMacro,
-    addDataFrame,
-  } = useCanvas();
+    // addDataFrame,
+  } = useEditorGroup();
 
   const openSettings = useLayoutStore(s => s.openSettings);
   const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
@@ -107,20 +107,30 @@ export function Menubar() {
           const isMaximized = await appWindow.isMaximized();
 
           if (isMaximized) {
-            await SettingsService.updateWindow({
-              isMaximized: true,
-              width: DEFAULT_WINDOW.width,
-              height: DEFAULT_WINDOW.height,
+            const settings = await SettingsService.loadSettings();
+            await SettingsService.saveSettings({
+              ...settings,
+              window: {
+                ...settings.window,
+                isMaximized: true,
+                width: DEFAULT_WINDOW.width,
+                height: DEFAULT_WINDOW.height,
+              }
             });
           } else {
             const size = await appWindow.innerSize();
             const position = await appWindow.outerPosition();
-            await SettingsService.updateWindow({
-              width: size.width,
-              height: size.height,
-              x: position.x,
-              y: position.y,
-              isMaximized: false,
+            const settings = await SettingsService.loadSettings();
+            await SettingsService.saveSettings({
+              ...settings,
+              window: {
+                ...settings.window,
+                width: size.width,
+                height: size.height,
+                x: position.x,
+                y: position.y,
+                isMaximized: false,
+              }
             });
           }
         } catch (e) {

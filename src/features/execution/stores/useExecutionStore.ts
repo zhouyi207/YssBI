@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ExecutionStatus, NodeExecutionState, ExecutionState } from '@/shared/types/editor';
+import { ExecutionState } from '@/shared/types/editor';
 
 interface ExecutionStore extends ExecutionState {
   // Actions
@@ -36,7 +36,7 @@ export const useExecutionStore = create<ExecutionStore>((set) => ({
     completedConnections: new Set(),
   }),
 
-  completeExecution: () => set((state) => ({
+  completeExecution: () => set((_state) => ({
     status: "completed",
     currentNodeId: null,
     activeConnections: new Set(),
@@ -72,7 +72,7 @@ export const useExecutionStore = create<ExecutionStore>((set) => ({
     };
   }),
 
-  markNodeError: (nodeId, error) => set((state) => {
+  markNodeError: (nodeId, _error) => set((state) => {
     const newNodeStates = new Map(state.nodeStates);
     newNodeStates.set(nodeId, {
       nodeId,

@@ -2,22 +2,50 @@ import { BaseNode, PinDefinition, NodeDefinition } from "@/shared/types/editor";
 import { PinDefinition as SubGraphPinDef } from "@/shared/types/editor";
 import { Position } from "@/shared/types";
 
+// 简化的 Pin 定义（用于创建内部节点时）
+type SimplePinDef = {
+    name: string;
+    type: string;
+    isArray?: boolean;
+};
+
 export function createInternalNode(
     id: string,
     type: string,
     title: string,
     category: string[],
     position: Position,
-    inputs: PinDefinition[],
-    outputs: PinDefinition[],
+    inputs: SimplePinDef[],
+    outputs: SimplePinDef[],
     isInternal: boolean = true
 ): BaseNode {
+    // 将简化的 pin 定义转换为完整的 PinDefinition
+    const fullInputs: PinDefinition[] = inputs.map((p, idx) => ({
+        id: `${id}_in_${idx}`,
+        nodeId: id,
+        name: p.name,
+        type: p.type as any,
+        direction: 'input' as const,
+        links: [],
+        isArray: p.isArray
+    }));
+    
+    const fullOutputs: PinDefinition[] = outputs.map((p, idx) => ({
+        id: `${id}_out_${idx}`,
+        nodeId: id,
+        name: p.name,
+        type: p.type as any,
+        direction: 'output' as const,
+        links: [],
+        isArray: p.isArray
+    }));
+    
     const def: NodeDefinition = {
         node_type: type,
         category,
         title,
-        inputs,
-        outputs,
+        inputs: fullInputs,
+        outputs: fullOutputs,
         ui_style: "default"
     };
     const node = new BaseNode(id, def, position);

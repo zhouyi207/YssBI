@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } fr
 import { Node } from "../../Nodes/Node";
 import { Pin } from "@/shared/types/editor";
 import { useDragContext } from "../../Context/DragProvider";
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useGestureStore } from "@/features/canvas/stores";
@@ -45,7 +45,7 @@ export default function Canvas() {
     connectPins,
     groupId,
     selectedNodeIds
-  } = useCanvas();
+  } = useEditorGroup();
   const { activeDrag } = useDragContext();
   const gesture = useGestureStore(state => state.gesture);
   const { createNode } = useBackendNodeCreation();
@@ -482,10 +482,10 @@ export default function Canvas() {
         subName,
         type === 'call_function' ? ["Functions"] : ["Macros"],
         { x, y },
-        [{ id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
-        ...(subData.inputs || []).map(p => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[], isArray: p.isArray }))],
-        [{ id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
-        ...(subData.outputs || []).map(p => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[], isArray: p.isArray }))],
+        [{ name: "In", type: "exec" },
+        ...(subData.inputs || []).map(p => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+        [{ name: "Out", type: "exec" },
+        ...(subData.outputs || []).map(p => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
         false
       );
       node.subGraphId = subId;
@@ -551,13 +551,7 @@ export default function Canvas() {
         {/* GPU 加速的连接线层 */}
         <EdgesLayer
           groupId={groupId}
-          visibleNodeIds={visibleNodeIds}
-          pinNodeIdIndex={pinNodeIdIndex}
           getPinWorldPos={getPinWorldPos}
-          getCanvasLocalPoint={getCanvasLocalPoint}
-          gesture={gesture}
-          pendingConnection={pendingConnection}
-          contextMenu={contextMenu}
           activeTabId={activeTabId}
         />
 

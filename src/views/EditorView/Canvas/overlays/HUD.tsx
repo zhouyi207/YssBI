@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 import { useViewportStore } from "@/features/canvas/stores";
 
 
 
 export default function HUD() {
-  const { groupId } = useCanvas();
+  const { groupId } = useEditorGroup();
 
   // Use individual selectors to avoid new object reference on every store update
   const x = useViewportStore(state => state.viewports[groupId]?.x || 0);

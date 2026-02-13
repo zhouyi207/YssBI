@@ -1,9 +1,8 @@
-export { default as ActivityBar } from './ActivityBar';
+export { ActivityBar } from './ActivityBar';
 export { default as Sidebar } from './Sidebar';
-export { default as Detail } from './Detail';
-export { default as Menubar } from './Menubar';
-export { default as Workspace } from './Workspace';
-export { default as DragOverlay } from './DragOverlay';
-export { default as TabBar } from './TabBar';
+export { Detail } from './Detail';
+export { Menubar } from './Menubar';
+export { Workspace } from './Workspace';
 export { default as NodePalette } from './NodePalette';
-export { default as SettingsView } from './SettingsView';
+export { SettingsView } from './SettingsView';
+export { TabBar } from './TabBar';

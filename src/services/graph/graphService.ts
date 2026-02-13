@@ -7,10 +7,10 @@ export class GraphService {
     /**
      * 创建 Event
      */
-    static async createEvent(graphName: string): Promise<void> {
+    static async createEvent(graph_name: string): Promise<void> {
         try {
-            await invoke("create_event", { graphName });
-            console.log(`[GraphService.createEvent] Event '${graphName}' created successfully`);
+            await invoke("create_event", { graph_name });
+            console.log(`[GraphService.createEvent] Event '${graph_name}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createEvent] Error creating event:", error);
             throw error;
@@ -20,10 +20,10 @@ export class GraphService {
     /**
      * 创建 Function
      */
-    static async createFunction(graphName: string): Promise<void> {
+    static async createFunction(graph_name: string): Promise<void> {
         try {
-            await invoke("create_function", { graphName });
-            console.log(`[GraphService.createFunction] Function '${graphName}' created successfully`);
+            await invoke("create_function", { graph_name });
+            console.log(`[GraphService.createFunction] Function '${graph_name}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createFunction] Error creating function:", error);
             throw error;
@@ -33,10 +33,10 @@ export class GraphService {
     /**
      * 创建 Macro
      */
-    static async createMacro(graphName: string): Promise<void> {
+    static async createMacro(graph_name: string): Promise<void> {
         try {
-            await invoke("create_macro", { graphName });
-            console.log(`[GraphService.createMacro] Macro '${graphName}' created successfully`);
+            await invoke("create_macro", { graph_name });
+            console.log(`[GraphService.createMacro] Macro '${graph_name}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createMacro] Error creating macro:", error);
             throw error;

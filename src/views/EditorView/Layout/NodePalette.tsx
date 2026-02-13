@@ -41,8 +41,8 @@ export default function NodePalette({
   filterPin?: Pin | null;
   variables?: Record<string, VariableDefinition>;
   globalVariables?: Record<string, VariableDefinition>;
-  functions?: Record<string, import("../Types/canvas").SubGraphData>;
-  macros?: Record<string, import("../Types/canvas").SubGraphData>;
+  functions?: Record<string, import("@/shared/types/editor").SubGraphData>;
+  macros?: Record<string, import("@/shared/types/editor").SubGraphData>;
 }) {
   const [query, setQuery] = useState("");
   const { definitions } = useNodeDefinitions();

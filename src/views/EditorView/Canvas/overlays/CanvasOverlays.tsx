@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 import { useGestureStore } from "@/features/canvas/stores";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
@@ -8,7 +8,7 @@ import HUD from "./HUD";
 import NodePalette from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 import { DEFAULT_VIEWPORT } from "../constants";
-import { createNodeFromTemplate } from "@/shared/utils/editor";
+import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
 import { useBackendNodeCreation } from "@/features/node-registry/hooks";
 
 
@@ -38,7 +38,7 @@ export default function CanvasOverlays({
         executeGraph,
         executeAllEvents,
         setCanvas // Needed for internal node centering
-    } = useCanvas();
+    } = useEditorGroup();
 
     const { createNode } = useBackendNodeCreation();
 
@@ -91,26 +91,19 @@ export default function CanvasOverlays({
                     const subName = subData.name;
                     const type = item.type;
 
-                    newNode = new BaseNode(
+                    newNode = createInternalNode(
                         `node_${Date.now()}`,
-                        {
-                            node_type: type,
-                            category: type === 'call_function' ? "Functions" : "Macros",
-                            title: subName,
-                            inputs: [
-                                { id: `exec-in-${Date.now()}`, nodeId: "", name: "In", type: "exec", direction: "input", links: [] },
-                                ...(subData.inputs || []).map((p: any) => ({ id: `in-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "input", links: [] as string[], isArray: p.isArray }))
-                            ],
-                            outputs: [
-                                { id: `exec-out-${Date.now()}`, nodeId: "", name: "Out", type: "exec", direction: "output", links: [] },
-                                ...(subData.outputs || []).map((p: any) => ({ id: `out-${p.id}-${Date.now()}`, nodeId: "", name: p.name, type: p.type as any, direction: "output", links: [] as string[], isArray: p.isArray }))
-                            ],
-                            ui_style: "default"
-                        },
-                        { x, y }
+                        type,
+                        subName,
+                        type === 'call_function' ? ["Functions"] : ["Macros"],
+                        { x, y },
+                        [{ name: "In", type: "exec" },
+                        ...(subData.inputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+                        [{ name: "Out", type: "exec" },
+                        ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+                        false
                     );
                     newNode.subGraphId = subId;
-                    newNode.isInternal = false;
                 }
             }
         } else {
@@ -260,7 +253,7 @@ export default function CanvasOverlays({
                                     variableType: variableDropMenu.variableType,
                                     variableName: variableDropMenu.variableName,
                                     variableIsArray: variableDropMenu.variableIsArray
-                                }
+                                } as any
                             );
                             if (newNode) {
                                 // 使用后端 API 创建节点（等待后端返回）
@@ -290,7 +283,7 @@ export default function CanvasOverlays({
                                     variableType: variableDropMenu.variableType,
                                     variableName: variableDropMenu.variableName,
                                     variableIsArray: variableDropMenu.variableIsArray
-                                }
+                                } as any
                             );
                             if (newNode) {
                                 // 使用后端 API 创建节点（等待后端返回）

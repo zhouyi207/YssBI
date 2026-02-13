@@ -1,7 +1,7 @@
-import { useCanvas } from "@/features/editor";
+import { useEditorGroup } from "@/features/editor";
 
 export const WatermarkView = () => {
-  const { addEvent, addFunction, addMacro, importGraph } = useCanvas();
+  const { addEvent, addFunction, addMacro, importGraph } = useEditorGroup();
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-[var(--workbench-bg)] select-none overflow-hidden">

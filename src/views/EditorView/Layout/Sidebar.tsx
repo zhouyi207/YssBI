@@ -1,7 +1,6 @@
 import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
-import { useCanvas, GroupContext } from "@/features/editor";
+import { useEditorGroup, GroupContext } from "@/features/editor";
 import {
   VscEye,
   VscEyeClosed,
@@ -57,7 +56,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     dataframes,
     addDataFrame,
     openSubGraph,
-  } = useCanvas();
+  } = useEditorGroup();
 
   const [expandedDataFrames, setExpandedDataFrames] = useState<Record<string, boolean>>({});
 

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { BaseNode } from '@/shared/types/editor';
 import { deleteNodeInBackend, serializeSubGraph, deserializeSubGraph } from '@/shared/utils/editor';
-import { useCanvas } from '@/features/editor';
+import { useEditorGroup } from '@/features/editor';
 import { ProjectService } from '../../../services/project/projectService';
 import { SubGraphData } from '@/shared/types/editor';
 
@@ -14,7 +14,7 @@ import { SubGraphData } from '@/shared/types/editor';
  * 3. 前端接收新节点并渲染
  */
 export function useBackendNodeCreation() {
-    const { activeTabId, setNodes, saveHistory } = useCanvas();
+    const { activeTabId, setNodes, saveHistory } = useEditorGroup();
 
     /**
      * 批量创建节点（后端优先模式，后端生成 ID）
@@ -46,7 +46,8 @@ export function useBackendNodeCreation() {
                     canvas: { x: 0, y: 0, scale: 1 },
                     variables: {},
                     inputs: [],
-                    outputs: []
+                    outputs: [],
+                    connections: []
                 };
                 const { nodes: newBaseNodes } = deserializeSubGraph(tempResData);
 

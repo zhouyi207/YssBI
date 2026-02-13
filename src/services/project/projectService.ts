@@ -420,7 +420,7 @@ export class ProjectService {
     static async getConnections(subgraphId: string): Promise<any[]> {
         console.log('[ProjectService.getConnections] Getting connections:', { subgraphId });
         const connections = await invoke("get_connections", { subgraphId });
-        console.log('[ProjectService.getConnections] Got connections:', connections.length);
+        console.log('[ProjectService.getConnections] Got connections:', (connections as any[]).length);
         return connections as any[];
     }
 

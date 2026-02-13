@@ -13,7 +13,7 @@ import { deserializeSubGraph } from '@/shared/utils/editor';
 export function useTabManagement() {
   const { setSelectedInfo } = useEditorStore();
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
 
   const setActiveTabId = useCallback((id: string | null, targetGroupId?: string) => {
     const groupId = targetGroupId || activeGroupId;
