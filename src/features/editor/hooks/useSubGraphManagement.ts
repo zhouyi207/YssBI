@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { SubGraphData } from '@/shared/types/editor';
+import { Graph } from '@/shared/types/editor';
 import { useProjectStore } from '@/features/project';
 import { createInternalNode } from '@/shared/utils/editor';
 
@@ -39,7 +39,7 @@ export function useSubGraphManagement(
         [{ name: "Exec", type: "exec" }]
       )
     ];
-    const sub: SubGraphData = {
+    const sub: Graph = {
       id,
       name: finalName,
       type: "event",
@@ -55,7 +55,7 @@ export function useSubGraphManagement(
     switchSidebarTab('events');
   }, [openSubGraph, switchSidebarTab]);
 
-  const updateEvent = useCallback((id: string, data: Partial<SubGraphData>) => {
+  const updateEvent = useCallback((id: string, data: Partial<Graph>) => {
     useProjectStore.getState().updateEvent(id, data);
   }, []);
 
@@ -89,7 +89,7 @@ export function useSubGraphManagement(
         []
       )
     ];
-    const sub: SubGraphData = {
+    const sub: Graph = {
       id,
       name: finalName,
       type: "function",
@@ -105,7 +105,7 @@ export function useSubGraphManagement(
     switchSidebarTab('functions');
   }, [openSubGraph, switchSidebarTab]);
 
-  const updateFunction = useCallback((id: string, data: Partial<SubGraphData>) => {
+  const updateFunction = useCallback((id: string, data: Partial<Graph>) => {
     useProjectStore.getState().updateFunction(id, data);
   }, []);
 
@@ -139,7 +139,7 @@ export function useSubGraphManagement(
         []
       )
     ];
-    const sub: SubGraphData = {
+    const sub: Graph = {
       id,
       name: finalName,
       type: "macro",
@@ -155,7 +155,7 @@ export function useSubGraphManagement(
     switchSidebarTab('macros');
   }, [openSubGraph, switchSidebarTab]);
 
-  const updateMacro = useCallback((id: string, data: Partial<SubGraphData>) => {
+  const updateMacro = useCallback((id: string, data: Partial<Graph>) => {
     useProjectStore.getState().updateMacro(id, data);
   }, []);
 

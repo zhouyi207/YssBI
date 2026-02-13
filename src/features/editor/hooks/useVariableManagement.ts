@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { VariableDefinition } from '@/shared/types/editor';
+import { Variable } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
@@ -38,7 +38,7 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
     }
   }, [activeTabId, switchSidebarTab]);
 
-  const updateVariable = useCallback((id: string, data: Partial<VariableDefinition>) => {
+  const updateVariable = useCallback((id: string, data: Partial<Variable>) => {
     const st = useProjectStore.getState();
     const isGlobal = !!st.globalVariables[id];
 

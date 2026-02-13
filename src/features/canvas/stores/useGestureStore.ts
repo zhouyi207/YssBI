@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import { Pin } from "@/shared/types/editor";
-import { Gesture } from "@/shared/types/editor";
+import { EditorGesture } from "@/shared/types/editor";
 
 interface GestureState {
-    gesture: Gesture;
-    setGesture: (gesture: Gesture) => void;
+    gesture: EditorGesture;
+    setGesture: (gesture: EditorGesture) => void;
 
     // Helper for connection setup (optional, but keeps API similar)
     startConnection: (pin: Pin, startX: number, startY: number) => void;

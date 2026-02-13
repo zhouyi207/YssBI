@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ProjectService } from '../../services/project/projectService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
-import { useProjectStore, useProjectSync, initProjectSync } from '@/features/project';
+import { useProjectSync } from '@/features/sync/projectSync';
+import { useProjectStore, initProjectSync } from '@/features/project';
 import { Select } from '@/shared/ui/Select';
 
 export const DataViewWindow: React.FC = () => {

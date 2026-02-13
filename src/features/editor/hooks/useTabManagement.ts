@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { SubGraphData } from '@/shared/types/editor';
+import { Graph } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
@@ -30,7 +30,7 @@ export function useTabManagement() {
   const handleSetActiveTabId = useCallback((
     newId: string | null,
     forceType?: 'event' | 'function' | 'macro' | 'setting',
-    initialData?: SubGraphData,
+    initialData?: Graph,
     targetGroupId?: string
   ) => {
     setActiveTabId(newId, targetGroupId);
@@ -60,7 +60,7 @@ export function useTabManagement() {
     id: string,
     name: string,
     type: "event" | "function" | "macro",
-    initialData?: SubGraphData
+    initialData?: Graph
   ) => {
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';

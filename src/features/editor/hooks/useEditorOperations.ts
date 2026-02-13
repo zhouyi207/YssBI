@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { BaseNode } from '@/shared/types/editor';
-import { SubGraphData } from '@/shared/types/editor';
+import { Graph } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
 import { useClipboardStore } from '../stores';
@@ -132,7 +132,7 @@ export function useEditorOperations() {
 
       const updatedConnections = await ProjectService.getConnections(tid);
 
-      const tempResData: SubGraphData = {
+      const tempResData: Graph = {
         id: tid,
         name: "temp",
         type: "event",

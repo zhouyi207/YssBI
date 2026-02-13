@@ -1,16 +1,16 @@
 import { useCallback } from 'react';
 import { create } from 'zustand';
 import { BaseNode } from '@/shared/types/editor';
-import { VariableDefinition } from '@/shared/types/editor';
+import { Variable } from '@/shared/types/editor';
 
 interface TabSnapshot {
   nodes: BaseNode[];
-  variables: Record<string, VariableDefinition>;
+  variables: Record<string, Variable>;
 }
 
 export interface TabState {
   nodes: BaseNode[];
-  variables: Record<string, VariableDefinition>;
+  variables: Record<string, Variable>;
   history: {
     past: TabSnapshot[];
     future: TabSnapshot[];
@@ -21,7 +21,7 @@ interface NodeStore {
   tabs: Record<string, TabState>;
 
   // Lifecycle
-  initTab: (tabId: string, nodes: BaseNode[], variables: Record<string, VariableDefinition>) => void;
+  initTab: (tabId: string, nodes: BaseNode[], variables: Record<string, Variable>) => void;
   clearTabs: () => void;
 
   // Nodes
@@ -30,9 +30,9 @@ interface NodeStore {
   updateNodePosition: (tabId: string, nodeId: string, dx: number, dy: number) => void;
 
   // Variables
-  setVariables: (tabId: string, variables: Record<string, VariableDefinition>) => void;
-  updateVariable: (tabId: string, varId: string, data: Partial<VariableDefinition>) => void;
-  addVariable: (tabId: string, varId: string, variable: VariableDefinition) => void;
+  setVariables: (tabId: string, variables: Record<string, Variable>) => void;
+  updateVariable: (tabId: string, varId: string, data: Partial<Variable>) => void;
+  addVariable: (tabId: string, varId: string, variable: Variable) => void;
   removeVariable: (tabId: string, varId: string) => void;
 
   // History
@@ -44,7 +44,7 @@ interface NodeStore {
   getNodes: (tabId: string) => BaseNode[];
 }
 
-const createTabState = (nodes: BaseNode[] = [], variables: Record<string, VariableDefinition> = {}): TabState => ({
+const createTabState = (nodes: BaseNode[] = [], variables: Record<string, Variable> = {}): TabState => ({
   nodes,
   variables,
   history: { past: [], future: [] }
@@ -181,7 +181,7 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
 }));
 
 const EMPTY_NODES: BaseNode[] = [];
-const EMPTY_VARS: Record<string, VariableDefinition> = {};
+const EMPTY_VARS: Record<string, Variable> = {};
 
 export const useTabNodes = (tabId: string | null) => {
   const selector = useCallback((state: NodeStore) => {

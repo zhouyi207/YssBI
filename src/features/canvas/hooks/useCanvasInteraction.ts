@@ -5,7 +5,7 @@ import { useGestureStore } from "../stores";
 import { useViewportStore } from "../stores";
 import { useEditorStore } from "@/features/editor/stores";
 import { BaseNode, Pin } from "@/shared/types/editor";
-import { CanvasState, Gesture, EditorGroup, SubGraphData } from "@/shared/types/editor";
+import { CanvasState, EditorGesture, EditorGroup, Graph } from "@/shared/types/editor";
 
 import { clamp } from "../../../shared/types";
 import { ProjectService } from "../../../services/project/projectService";
@@ -56,7 +56,7 @@ export function useCanvasInteraction({
 
             // 将返回的 SerializedNode[] 转换为 BaseNode[]
             // 构造临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
-            const tempSubGraph: SubGraphData = {
+            const tempSubGraph: Graph = {
                 id: tid,
                 name: "temp",
                 type: "event",
@@ -127,7 +127,7 @@ export function useCanvasInteraction({
                 // 获取最新的连接列表
                 const connections = await ProjectService.getConnections(tid);
 
-                const tempSubGraph: SubGraphData = {
+                const tempSubGraph: Graph = {
                     id: tid,
                     name: "temp",
                     type: "event",
@@ -186,7 +186,7 @@ export function useCanvasInteraction({
 
             const g = useGestureStore.getState().gesture; if (!g) return;
 
-            let nextGesture: Gesture = null;
+            let nextGesture: EditorGesture = null;
 
             if (g.type === "pan") {
                 const dx = e.clientX - g.lastX, dy = e.clientY - g.lastY;

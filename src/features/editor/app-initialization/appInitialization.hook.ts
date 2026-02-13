@@ -4,7 +4,8 @@ import { LoadStatus } from '@/shared/types/loadStatus';
 
 import { useSchema } from '@/features/shema';
 import { useNodeRegistry } from '@/features/node-registry';
-import { initProjectSync, useProjectSync } from '@/features/project';
+import { initProjectSync } from '@/features/project';
+import { useProjectSync } from '@/features/sync/projectSync';
 
 
 export function useAppInitialization(): InitializationState {

@@ -3,18 +3,18 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/loadStatus';
 import { ProjectState } from './project.types';
-import { SubGraphData, ProjectData, DataFrameData } from '@/shared/types/editor';
-import { VariableDefinition } from '@/shared/types/editor';
+import { Graph, ProjectData, DataFrameData } from '@/shared/types/editor';
+import { Variable } from '@/shared/types/editor';
 import { ProjectService } from '@/services/project/projectService';
 import { TabState, useNodeStore } from '@/features/node-registry/stores/useNodeStore';
 import { syncInternalNodePins, syncSubGraphInstanceNodes } from '@/shared/utils/editor';
 
 interface ProjectStore extends ProjectState {
     // Project Data (作为后端数据的缓存)
-    events: Record<string, SubGraphData>;
-    functions: Record<string, SubGraphData>;
-    macros: Record<string, SubGraphData>;
-    globalVariables: Record<string, VariableDefinition>;
+    events: Record<string, Graph>;
+    functions: Record<string, Graph>;
+    macros: Record<string, Graph>;
+    globalVariables: Record<string, Variable>;
     dataframes: Record<string, DataFrameData>;
     currentPath: string | null;
 
@@ -24,31 +24,31 @@ interface ProjectStore extends ProjectState {
     clear: () => void;
 
     // 内部 Setters (供事件订阅使用)
-    setEvents: (events: Record<string, SubGraphData>) => void;
-    setFunctions: (functions: Record<string, SubGraphData>) => void;
-    setMacros: (macros: Record<string, SubGraphData>) => void;
-    setGlobalVariables: (vars: Record<string, VariableDefinition>) => void;
+    setEvents: (events: Record<string, Graph>) => void;
+    setFunctions: (functions: Record<string, Graph>) => void;
+    setMacros: (macros: Record<string, Graph>) => void;
+    setGlobalVariables: (vars: Record<string, Variable>) => void;
     setDataFrames: (dfs: Record<string, DataFrameData>) => void;
     setCurrentPath: (path: string | null) => void;
 
     // Event 操作 (调用后端 API)
-    addEvent: (id: string, data: SubGraphData) => void;
-    updateEvent: (id: string, data: Partial<SubGraphData>) => void;
+    addEvent: (id: string, data: Graph) => void;
+    updateEvent: (id: string, data: Partial<Graph>) => void;
     deleteEvent: (id: string) => void;
 
     // Function 操作 (调用后端 API)
-    addFunction: (id: string, data: SubGraphData) => void;
-    updateFunction: (id: string, data: Partial<SubGraphData>) => void;
+    addFunction: (id: string, data: Graph) => void;
+    updateFunction: (id: string, data: Partial<Graph>) => void;
     deleteFunction: (id: string) => void;
 
     // Macro 操作 (调用后端 API)
-    addMacro: (id: string, data: SubGraphData) => void;
-    updateMacro: (id: string, data: Partial<SubGraphData>) => void;
+    addMacro: (id: string, data: Graph) => void;
+    updateMacro: (id: string, data: Partial<Graph>) => void;
     deleteMacro: (id: string) => void;
 
     // Global Variable 操作 (调用后端 API)
-    addGlobalVariable: (id: string, v: VariableDefinition) => void;
-    updateGlobalVariable: (id: string, data: Partial<VariableDefinition>) => void;
+    addGlobalVariable: (id: string, v: Variable) => void;
+    updateGlobalVariable: (id: string, data: Partial<Variable>) => void;
     deleteGlobalVariable: (id: string) => void;
 
     // DataFrame 操作
@@ -212,7 +212,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         set((state) => {
             const nextFunctions = { ...state.functions, [id]: { ...state.functions[id], ...data } };
 
-            const cascade = (collection: Record<string, SubGraphData>) => {
+            const cascade = (collection: Record<string, Graph>) => {
                 const nextCollection = { ...collection };
                 let changed = false;
                 Object.values(nextCollection).forEach(sub => {
@@ -281,7 +281,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         set((state) => {
             const nextMacros = { ...state.macros, [id]: { ...state.macros[id], ...data } };
 
-            const cascade = (collection: Record<string, SubGraphData>) => {
+            const cascade = (collection: Record<string, Graph>) => {
                 const nextCollection = { ...collection };
                 let changed = false;
                 Object.values(nextCollection).forEach(sub => {

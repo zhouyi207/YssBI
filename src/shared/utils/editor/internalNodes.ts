@@ -1,5 +1,5 @@
-import { BaseNode, PinDefinition, NodeDefinition } from "@/shared/types/editor";
-import { PinDefinition as SubGraphPinDef } from "@/shared/types/editor";
+import { BaseNode, Pin, NodeDefinition } from "@/shared/types/editor";
+import { Pin as SubGraphPinDef } from "@/shared/types/editor";
 import { Position } from "@/shared/types";
 
 // 简化的 Pin 定义（用于创建内部节点时）
@@ -20,7 +20,7 @@ export function createInternalNode(
     isInternal: boolean = true
 ): BaseNode {
     // 将简化的 pin 定义转换为完整的 PinDefinition
-    const fullInputs: PinDefinition[] = inputs.map((p, idx) => ({
+    const fullInputs: Pin[] = inputs.map((p, idx) => ({
         id: `${id}_in_${idx}`,
         nodeId: id,
         name: p.name,
@@ -30,7 +30,7 @@ export function createInternalNode(
         isArray: p.isArray
     }));
     
-    const fullOutputs: PinDefinition[] = outputs.map((p, idx) => ({
+    const fullOutputs: Pin[] = outputs.map((p, idx) => ({
         id: `${id}_out_${idx}`,
         nodeId: id,
         name: p.name,

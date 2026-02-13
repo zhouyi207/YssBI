@@ -5,11 +5,10 @@
  * These types are used across multiple features and components.
  */
 
-export * from './nodes';
-export * from './canvas';
+export * from './datatype';
+export * from './graph';
 export * from './variables';
+export * from './database';
+export * from './editor';
 export * from './execution';
 export * from './drag';
-
-// Re-export PinDefinition from canvas to resolve ambiguity
-export type { PinDefinition } from './canvas';

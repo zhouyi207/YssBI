@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNodeDefinitions } from "@/features/node-registry";
 import { Pin, BaseNode } from "@/shared/types/editor";
-import { VariableDefinition } from "@/shared/types/editor";
+import { Variable } from "@/shared/types/editor";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
@@ -39,10 +39,10 @@ export default function NodePalette({
   y: number;
   onSelect: (item: PaletteItem) => void;
   filterPin?: Pin | null;
-  variables?: Record<string, VariableDefinition>;
-  globalVariables?: Record<string, VariableDefinition>;
-  functions?: Record<string, import("@/shared/types/editor").SubGraphData>;
-  macros?: Record<string, import("@/shared/types/editor").SubGraphData>;
+  variables?: Record<string, Variable>;
+  globalVariables?: Record<string, Variable>;
+  functions?: Record<string, import("@/shared/types/editor").Graph>;
+  macros?: Record<string, import("@/shared/types/editor").Graph>;
 }) {
   const [query, setQuery] = useState("");
   const { definitions } = useNodeDefinitions();

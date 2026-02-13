@@ -3,7 +3,7 @@ import { BaseNode } from '@/shared/types/editor';
 import { deleteNodeInBackend, serializeSubGraph, deserializeSubGraph } from '@/shared/utils/editor';
 import { useEditorGroup } from '@/features/editor';
 import { ProjectService } from '../../../services/project/projectService';
-import { SubGraphData } from '@/shared/types/editor';
+import { Graph } from '@/shared/types/editor';
 
 /**
  * 使用后端创建节点的 Hook
@@ -38,7 +38,7 @@ export function useBackendNodeCreation() {
                 const newSerializedNodes = await ProjectService.createNodes(activeTabId, serializedData.nodes);
 
                 // 3. 反序列化
-                const tempResData: SubGraphData = {
+                const tempResData: Graph = {
                     id: activeTabId,
                     name: "temp",
                     type: "event", // 这里的类型不重要

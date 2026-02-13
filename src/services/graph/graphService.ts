@@ -109,3 +109,82 @@ export class GraphService {
         }
     }
 }
+
+
+// // ==================== Events CRUD ====================
+
+//     static async getEvents(): Promise<Record<string, SubGraphData>> {
+//         const data: Record<string, any> = await invoke("get_events");
+//         return convertSubGraphMap(data);
+//     }
+
+//     static async getEvent(id: string): Promise<SubGraphData | null> {
+//         const data: any = await invoke("get_event", { id });
+//         return data ? toFrontendSubGraphData(data) : null;
+//     }
+
+//     static async createEvent(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("create_event", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async updateEvent(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("update_event", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async deleteEvent(id: string): Promise<void> {
+//         await invoke("delete_event", { id });
+//     }
+
+//     // ==================== Functions CRUD ====================
+
+//     static async getFunctions(): Promise<Record<string, SubGraphData>> {
+//         const data: Record<string, any> = await invoke("get_functions");
+//         return convertSubGraphMap(data);
+//     }
+
+//     static async getFunction(id: string): Promise<SubGraphData | null> {
+//         const data: any = await invoke("get_function", { id });
+//         return data ? toFrontendSubGraphData(data) : null;
+//     }
+
+//     static async createFunction(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("create_function", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async updateFunction(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("update_function", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async deleteFunction(id: string): Promise<void> {
+//         await invoke("delete_function", { id });
+//     }
+
+//     // ==================== Macros CRUD ====================
+
+//     static async getMacros(): Promise<Record<string, SubGraphData>> {
+//         const data: Record<string, any> = await invoke("get_macros");
+//         return convertSubGraphMap(data);
+//     }
+
+//     static async getMacro(id: string): Promise<SubGraphData | null> {
+//         const data: any = await invoke("get_macro", { id });
+//         return data ? toFrontendSubGraphData(data) : null;
+//     }
+
+//     static async createMacro(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("create_macro", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async updateMacro(id: string, data: SubGraphData): Promise<SubGraphData> {
+//         const result: any = await invoke("update_macro", { id, data: toBackendSubGraphData(data) });
+//         return toFrontendSubGraphData(result);
+//     }
+
+//     static async deleteMacro(id: string): Promise<void> {
+//         await invoke("delete_macro", { id });
+//     }
