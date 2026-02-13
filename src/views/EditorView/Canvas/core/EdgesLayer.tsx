@@ -4,8 +4,8 @@ import { useNodeStore } from "@/features/node-registry/stores";
 import { useGestureStore } from "@/features/canvas/stores";
 import { useExecutionStore } from "@/features/execution/stores";
 import { useTheme } from "@/hooks/useTheme";
-import { drawEdge } from "../Edges/Edge";
-import { DEFAULT_VIEWPORT } from "./constants";
+import { drawEdge } from "./Edge";
+import { DEFAULT_VIEWPORT } from "../constants";
 
 // 🆕 粒子类型定义
 interface Particle {

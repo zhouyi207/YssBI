@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { CanvasState } from '@/views/EditorView/Types/canvas';
+import { CanvasState } from '@/shared/types/editor';
 
 interface ViewportStore {
   viewports: Record<string, CanvasState>;

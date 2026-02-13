@@ -5,7 +5,7 @@ import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '../../../shared/types/layout';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { GroupContext } from '@/features/editor';
-import { TabBar } from '../Canvas/TabBar';
+import { TabBar } from '../Layout/TabBar';
 
 /**
  * 布局引擎核心渲染器

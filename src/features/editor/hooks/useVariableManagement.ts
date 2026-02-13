@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { VariableDefinition } from '@/views/EditorView/Types/variables';
+import { VariableDefinition } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';

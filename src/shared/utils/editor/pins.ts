@@ -1,4 +1,4 @@
-import { Pin } from "../Types/nodes";
+import { Pin } from "@/shared/types/editor";
 import { useSchemaStore } from "@/features/shema";
 
 export const isSingleLinkPin = (p: Pin) => p.type === "exec" || p.direction === "input";

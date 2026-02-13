@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { Pin } from "../Types/nodes";
-import { Gesture } from "../Types/canvas";
+import { Pin } from "@/shared/types/editor";
+import { Gesture } from "@/shared/types/editor";
 
 interface GestureState {
     gesture: Gesture;

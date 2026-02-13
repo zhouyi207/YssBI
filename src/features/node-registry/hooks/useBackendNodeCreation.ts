@@ -1,10 +1,9 @@
 import { useCallback } from 'react';
-import { BaseNode } from '@/views/EditorView/Types/nodes';
-import { deleteNodeInBackend } from '@/views/EditorView/Utils/backendNodeOps';
+import { BaseNode } from '@/shared/types/editor';
+import { deleteNodeInBackend, serializeSubGraph, deserializeSubGraph } from '@/shared/utils/editor';
 import { useCanvas } from '@/features/editor';
 import { ProjectService } from '../../../services/project/projectService';
-import { SubGraphData } from '@/views/EditorView/Types/canvas';
-import { serializeSubGraph, deserializeSubGraph } from '@/views/EditorView/Utils/io';
+import { SubGraphData } from '@/shared/types/editor';
 
 /**
  * 使用后端创建节点的 Hook

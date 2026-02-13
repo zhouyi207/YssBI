@@ -4,12 +4,12 @@ import { useProjectStore } from "@/features/project";
 import { useGestureStore } from "../stores";
 import { useViewportStore } from "../stores";
 import { useEditorStore } from "@/features/editor/stores";
-import { BaseNode, Pin } from "@/views/EditorView/Types/nodes";
-import { CanvasState, Gesture, EditorGroup, SubGraphData } from "@/views/EditorView/Types/canvas";
+import { BaseNode, Pin } from "@/shared/types/editor";
+import { CanvasState, Gesture, EditorGroup, SubGraphData } from "@/shared/types/editor";
 
 import { clamp } from "../../../shared/types";
 import { ProjectService } from "../../../services/project/projectService";
-import { deserializeSubGraph } from "@/views/EditorView/Utils/io";
+import { deserializeSubGraph } from "@/shared/utils/editor";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;

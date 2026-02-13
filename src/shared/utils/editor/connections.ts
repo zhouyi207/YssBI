@@ -5,8 +5,8 @@
  * They work with the connections array (single source of truth) rather than Pin.links.
  */
 
-import { Connection } from '../Types/canvas';
-import { BaseNode } from '../Types/nodes';
+import { Connection } from '@/shared/types/editor';
+import { BaseNode } from '@/shared/types/editor';
 
 /**
  * Find all connections that involve a specific pin

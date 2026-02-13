@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSchemaStore } from "@/features/shema";
-import type { NodeDefinition } from "../Types/nodes";
+import type { NodeDefinition } from "@/shared/types/editor";
 
 interface EditorInitState {
   isInitialized: boolean;

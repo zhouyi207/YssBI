@@ -1,6 +1,6 @@
 import React from 'react';
-import { GraphEditor } from "../Canvas/GraphEditor";
-import { SettingsView } from "../Settings/SettingsView";
+import { GraphEditor } from "../Canvas/core/GraphEditor";
+import { SettingsView } from "../Layout/SettingsView";
 import Sidebar from "../Layout/Sidebar";
 import { Detail } from "../Layout/Detail";
 

@@ -1,6 +1,6 @@
 /// types —— 只放“结构定义”
 
-import { NodeDefinition } from "@/views/EditorView/Types/nodes";
+import { NodeDefinition } from "@/shared/types/editor";
 import { LoadStatus } from "@/shared/types/loadStatus";
 
 /**

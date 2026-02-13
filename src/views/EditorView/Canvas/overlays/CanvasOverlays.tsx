@@ -3,12 +3,12 @@ import { useCanvas } from "@/features/editor";
 import { useGestureStore } from "@/features/canvas/stores";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
-import { BaseNode } from "../Types/nodes";
+import { BaseNode } from "@/shared/types/editor";
 import HUD from "./HUD";
-import NodePalette from "../Nodes/NodePalette";
+import NodePalette from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
-import { DEFAULT_VIEWPORT } from "./constants";
-import { createNodeFromTemplate } from "../Utils/nodeUtils";
+import { DEFAULT_VIEWPORT } from "../constants";
+import { createNodeFromTemplate } from "@/shared/utils/editor";
 import { useBackendNodeCreation } from "@/features/node-registry/hooks";
 
 
@@ -48,7 +48,7 @@ export default function CanvasOverlays({
     const gesture = useGestureStore(state => state.gesture);
     const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
 
-    const handleNodePaletteSelect = async (item: import("../Nodes/NodePalette").PaletteItem) => {
+    const handleNodePaletteSelect = async (item: import("../../Layout/NodePalette").PaletteItem) => {
         if (!contextMenu || !canvasRef.current) return;
 
         // Check if this is an internal node type that should only exist once

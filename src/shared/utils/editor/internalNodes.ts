@@ -1,6 +1,7 @@
-import { BaseNode, PinDefinition, NodeDefinition } from "../Types/nodes";
-import { PinDefinition as SubGraphPinDef } from "../Types/canvas";
-import { Position } from "../../../shared/types";
+import { BaseNode, PinDefinition, NodeDefinition } from "@/shared/types/editor";
+import { PinDefinition as SubGraphPinDef } from "@/shared/types/editor";
+import { Position } from "@/shared/types";
+
 export function createInternalNode(
     id: string,
     type: string,
@@ -23,6 +24,7 @@ export function createInternalNode(
     node.isInternal = isInternal;
     return node;
 }
+
 export function syncInternalNodePins(node: BaseNode, subGraphPins: SubGraphPinDef[], isInputNode: boolean) {
     // For an input node (like Function Entry or Macro Inputs), the subgraph's inputs become the node's OUTPUT pins
     // For an output node (like Function Return or Macro Outputs), the subgraph's outputs become the node's INPUT pins

@@ -1,7 +1,7 @@
-import { BaseNode } from "../Types/nodes";
-import { CanvasState, SubGraphData, Connection } from "../Types/canvas";
+import { BaseNode } from "@/shared/types/editor";
+import { CanvasState, SubGraphData, Connection } from "@/shared/types/editor";
 import { getNodeDefinition } from "@/features/node-registry";
-import { VariableDefinition } from "../Types/variables";
+import { VariableDefinition } from "@/shared/types/editor";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -15,8 +15,8 @@ export function serializeSubGraph(
   nodes: BaseNode[],
   canvas: CanvasState,
   variables: Record<string, VariableDefinition>,
-  inputs: import("../Types/canvas").PinDefinition[] = [],
-  outputs: import("../Types/canvas").PinDefinition[] = []
+  inputs: import("@/shared/types/editor").PinDefinition[] = [],
+  outputs: import("@/shared/types/editor").PinDefinition[] = []
 ): SubGraphData {
 
   // 1. 提取所有连接关系
@@ -96,8 +96,8 @@ export function deserializeSubGraph(data: SubGraphData): {
   nodes: BaseNode[];
   canvas: CanvasState;
   variables: Record<string, VariableDefinition>;
-  inputs: import("../Types/canvas").PinDefinition[];
-  outputs: import("../Types/canvas").PinDefinition[];
+  inputs: import("@/shared/types/editor").PinDefinition[];
+  outputs: import("@/shared/types/editor").PinDefinition[];
 } {
   const variables: Record<string, VariableDefinition> = data.variables || {};
   const connections: Connection[] = data.connections || [];

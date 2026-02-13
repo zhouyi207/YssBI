@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { NodeDefinition } from "@/views/EditorView/Types/nodes";
+import { NodeDefinition } from "@/shared/types/editor";
 import { NodeDefinitionMap, NodeRegistryState } from "./nodeRegistry.types";
 import { LoadStatus } from "@/shared/types/loadStatus";
 

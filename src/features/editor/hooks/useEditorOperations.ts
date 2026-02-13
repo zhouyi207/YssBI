@@ -1,14 +1,13 @@
 import { useCallback, useRef } from 'react';
-import { BaseNode } from '@/views/EditorView/Types/nodes';
-import { SubGraphData } from '@/views/EditorView/Types/canvas';
-import { VariableDefinition } from '@/views/EditorView/Types/variables';
+import { BaseNode } from '@/shared/types/editor';
+import { SubGraphData } from '@/shared/types/editor';
+import { VariableDefinition } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
 import { useEditorStore, useClipboardStore } from '../stores';
-import { serializeSubGraph, deserializeSubGraph } from '@/views/EditorView/Utils/io';
+import { serializeSubGraph, deserializeSubGraph, deleteNodeInBackend } from '@/shared/utils/editor';
 import { ProjectService } from '@/services/project/projectService';
-import { deleteNodeInBackend } from '@/views/EditorView/Utils/backendNodeOps';
 import { uiStore } from '@/features/ui/UIStore';
 import { useViewportStore } from '@/features/canvas/stores';
 

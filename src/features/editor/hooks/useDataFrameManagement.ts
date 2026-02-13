@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { DataFrameData } from '@/views/EditorView/Types/canvas';
+import { DataFrameData } from '@/shared/types/editor';
 import { useProjectStore } from '@/features/project';
 import { useEditorStore } from '../stores';
 import { uiStore } from '@/features/ui/UIStore';

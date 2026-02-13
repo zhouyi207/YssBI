@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNodeDefinitions } from "@/features/node-registry";
-import { Pin, BaseNode } from "../Types/nodes";
-import { VariableDefinition } from "../Types/variables";
+import { Pin, BaseNode } from "@/shared/types/editor";
+import { VariableDefinition } from "@/shared/types/editor";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {

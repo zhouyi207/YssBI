@@ -1,13 +1,12 @@
 import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
-import { Node } from "../Nodes/Node";
-import { Pin } from "../Types/nodes";
-import { useDragContext } from "../Context/DragProvider";
+import { Node } from "../../Nodes/Node";
+import { Pin } from "@/shared/types/editor";
+import { useDragContext } from "../../Context/DragProvider";
 import { useCanvas } from "@/features/editor";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useGestureStore } from "@/features/canvas/stores";
-import { createNodeFromTemplate } from "../Utils/nodeUtils";
-import { createInternalNode } from "../Utils/internalNodes";
+import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
 import { ConnectionLine } from "./ConnectionLine";
 import { useBackendNodeCreation } from "@/features/node-registry/hooks";
 import { useExecutionVisualization } from "@/features/execution/hooks";
@@ -16,8 +15,8 @@ import { useExecutionVisualization } from "@/features/execution/hooks";
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
 import { EdgesLayer } from "./EdgesLayer";
-import CanvasOverlays from "./CanvasOverlays";
-import { DEFAULT_VIEWPORT } from "./constants";
+import CanvasOverlays from "../overlays/CanvasOverlays";
+import { DEFAULT_VIEWPORT } from "../constants";
 
 /* ================= Canvas Components ================= */
 

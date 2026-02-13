@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { create } from 'zustand';
-import { BaseNode } from '../Types/nodes';
-import { VariableDefinition } from '../Types/variables';
+import { BaseNode } from '@/shared/types/editor';
+import { VariableDefinition } from '@/shared/types/editor';
 
 interface TabSnapshot {
   nodes: BaseNode[];

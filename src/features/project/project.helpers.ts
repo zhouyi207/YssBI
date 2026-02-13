@@ -2,7 +2,7 @@
 
 import { useProjectStore } from './project.store';
 import { LoadStatus } from '@/shared/types/loadStatus';
-import { ProjectData } from '@/views/EditorView/Types/canvas';
+import { ProjectData } from '@/shared/types/editor';
 
 /**
  * 初始化时从后端同步项目状态

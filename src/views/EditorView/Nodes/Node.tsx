@@ -1,6 +1,6 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
-import { Pin as PinModel, BaseNode } from "../Types/nodes";
+import { Pin as PinModel, BaseNode } from "@/shared/types/editor";
 import { useSchemaStore } from "@/features/shema";
 import { useExecutionStore } from "@/features/execution/stores";
 

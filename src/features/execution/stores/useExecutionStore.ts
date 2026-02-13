@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ExecutionStatus, NodeExecutionState, ExecutionState } from '../Types/execution';
+import { ExecutionStatus, NodeExecutionState, ExecutionState } from '@/shared/types/editor';
 
 interface ExecutionStore extends ExecutionState {
   // Actions

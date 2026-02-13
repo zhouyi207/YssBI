@@ -1,8 +1,8 @@
 import { useContext } from 'react';
 import Canvas from './Canvas';
 import { useCanvas, GroupContext } from '@/features/editor';
-import { WatermarkView } from './WatermarkView';
-import { useLayoutStore } from '../../../features/layoutStore/layoutStore';
+import { WatermarkView } from '../overlays/WatermarkView';
+import { useLayoutStore } from '@/features/layoutStore/layoutStore';
 
 /**
  * 图形编辑器主组件

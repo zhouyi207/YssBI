@@ -2,7 +2,7 @@ import { forwardRef, useMemo } from "react";
 import { useCanvas } from "@/features/editor";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
-import { VariableDataType, isPrimitiveType } from "../Types/variables";
+import { VariableDataType, isPrimitiveType } from "@/shared/types/editor";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
 import { uiStore } from "@/features/ui/UIStore";

@@ -12,8 +12,8 @@ import { useSubGraphManagement } from './useSubGraphManagement';
 import { useVariableManagement } from './useVariableManagement';
 import { useDataFrameManagement } from './useDataFrameManagement';
 import { useTabNodes, useTabVariables } from '@/features/node-registry/stores/useNodeStore';
-import { CanvasState } from '@/views/EditorView/Types/canvas';
-import { BaseNode } from '@/views/EditorView/Types/nodes';
+import { CanvasState } from '@/shared/types/editor';
+import { BaseNode } from '@/shared/types/editor';
 import { useShallow } from 'zustand/react/shallow';
 
 const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };

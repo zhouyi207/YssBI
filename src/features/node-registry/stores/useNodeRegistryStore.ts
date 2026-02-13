@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { NodeDefinition } from "../Types/nodes";
+import { NodeDefinition } from "@/shared/types/editor";
 
 interface NodeRegistryStore {
   // 状态

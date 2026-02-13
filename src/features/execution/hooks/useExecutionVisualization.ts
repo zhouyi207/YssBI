@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useExecutionStore } from "../stores";
-import { ExecutionEvent } from "@/views/EditorView/Types/execution";
+import { ExecutionEvent } from "@/shared/types/editor";
 
 /**
  * 监听后端执行事件并更新执行状态

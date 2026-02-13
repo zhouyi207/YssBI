@@ -3,11 +3,11 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/loadStatus';
 import { ProjectState } from './project.types';
-import { SubGraphData, ProjectData, DataFrameData } from '@/views/EditorView/Types/canvas';
-import { VariableDefinition } from '@/views/EditorView/Types/variables';
+import { SubGraphData, ProjectData, DataFrameData } from '@/shared/types/editor';
+import { VariableDefinition } from '@/shared/types/editor';
 import { ProjectService } from '@/services/project/projectService';
 import { TabState, useNodeStore } from '@/features/node-registry/stores/useNodeStore';
-import { syncInternalNodePins, syncSubGraphInstanceNodes } from '@/views/EditorView/Utils/internalNodes';
+import { syncInternalNodePins, syncSubGraphInstanceNodes } from '@/shared/utils/editor';
 
 interface ProjectStore extends ProjectState {
     // Project Data (作为后端数据的缓存)

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
-import { SubGraphData } from '@/views/EditorView/Types/canvas';
+import { SubGraphData } from '@/shared/types/editor';
 import { useProjectStore } from '@/features/project';
-import { createInternalNode } from '@/views/EditorView/Utils/internalNodes';
+import { createInternalNode } from '@/shared/utils/editor';
 import { uiStore } from '@/features/ui/UIStore';
 
 const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {

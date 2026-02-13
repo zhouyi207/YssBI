@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { BaseNode } from '@/views/EditorView/Types/nodes';
+import { BaseNode } from '@/shared/types/editor';
 
 interface ClipboardStore {
   clipboard: BaseNode[];

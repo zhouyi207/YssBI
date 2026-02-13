@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
-import { SubGraphData } from '@/views/EditorView/Types/canvas';
+import { SubGraphData } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
 import { useEditorStore } from '../stores';
-import { deserializeSubGraph } from '@/views/EditorView/Utils/io';
+import { deserializeSubGraph } from '@/shared/utils/editor';
 
 /**
  * Tab Management Hook
