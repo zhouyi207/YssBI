@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas } from "@/features/editor";
 import { useViewportStore } from "@/features/canvas/stores";
 
 

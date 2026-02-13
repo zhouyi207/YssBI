@@ -1,5 +1,5 @@
 import { forwardRef, useMemo } from "react";
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas } from "@/features/editor";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
 import { VariableDataType, isPrimitiveType } from "../Types/variables";

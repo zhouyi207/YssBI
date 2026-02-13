@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import Canvas from './Canvas';
-import { useCanvas, GroupContext } from '../Context/CanvasContext';
+import { useCanvas, GroupContext } from '@/features/editor';
 import { WatermarkView } from './WatermarkView';
 import { useLayoutStore } from '../../../features/layoutStore/layoutStore';
 

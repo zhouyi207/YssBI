@@ -1,4 +1,4 @@
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas } from "@/features/editor";
 
 export const WatermarkView = () => {
   const { addEvent, addFunction, addMacro, importGraph } = useCanvas();

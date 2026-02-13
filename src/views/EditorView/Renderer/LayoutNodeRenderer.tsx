@@ -4,7 +4,7 @@ import { Sash } from './Sash';
 import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '../../../shared/types/layout';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { GroupContext } from '../Context/CanvasContext';
+import { GroupContext } from '@/features/editor';
 import { TabBar } from '../Canvas/TabBar';
 
 /**

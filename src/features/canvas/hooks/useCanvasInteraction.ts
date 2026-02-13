@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useProjectStore } from "@/features/project";
 import { useGestureStore } from "../stores";
 import { useViewportStore } from "../stores";
+import { useEditorStore } from "@/features/editor/stores";
 import { BaseNode, Pin } from "@/views/EditorView/Types/nodes";
 import { CanvasState, Gesture, EditorGroup, SubGraphData } from "@/views/EditorView/Types/canvas";
 
@@ -32,8 +33,11 @@ export function useCanvasInteraction({
     saveHistory
 }: UseCanvasInteractionProps) {
 
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean } | null>(null);
-    const [pendingConnection, setPendingConnection] = useState<Pin | null>(null);
+    // Use store instead of local state
+    const contextMenu = useEditorStore((s) => s.contextMenu);
+    const setContextMenu = useEditorStore((s) => s.setContextMenu);
+    const pendingConnection = useEditorStore((s) => s.pendingConnection);
+    const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
 
     const connectPins = useCallback(async (a: string, b: string) => {
         const tid = activeTabIdRef.current;

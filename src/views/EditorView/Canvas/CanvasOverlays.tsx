@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas } from "@/features/editor";
 import { useGestureStore } from "@/features/canvas/stores";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";

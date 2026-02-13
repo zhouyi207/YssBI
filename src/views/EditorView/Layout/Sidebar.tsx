@@ -1,7 +1,7 @@
 import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useCanvas, GroupContext } from "../Context/CanvasContext";
+import { useCanvas, GroupContext } from "@/features/editor";
 import {
   VscEye,
   VscEyeClosed,

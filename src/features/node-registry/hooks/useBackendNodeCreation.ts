@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { BaseNode } from '@/views/EditorView/Types/nodes';
 import { deleteNodeInBackend } from '@/views/EditorView/Utils/backendNodeOps';
-import { useCanvas } from '@/views/EditorView/Context/CanvasContext';
+import { useCanvas } from '@/features/editor';
 import { ProjectService } from '../../../services/project/projectService';
 import { SubGraphData } from '@/views/EditorView/Types/canvas';
 import { serializeSubGraph, deserializeSubGraph } from '@/views/EditorView/Utils/io';

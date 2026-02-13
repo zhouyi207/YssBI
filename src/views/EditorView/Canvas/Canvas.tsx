@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } fr
 import { Node } from "../Nodes/Node";
 import { Pin } from "../Types/nodes";
 import { useDragContext } from "../Context/DragProvider";
-import { useCanvas } from "../Context/CanvasContext";
+import { useCanvas } from "@/features/editor";
 import { useViewportStore } from "@/features/canvas/stores";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useGestureStore } from "@/features/canvas/stores";

@@ -15,23 +15,3 @@ pub use database_error::*;
 pub use database_instance::*;
 pub use database_state::*;
 pub use database_view::*;
-
-use polars::prelude::*;
-
-pub struct PreviewRow {
-    pub cells: Vec<String>,
-}
-
-pub fn dataframe_to_preview_rows(df: &DataFrame) -> Vec<PreviewRow> {
-    let height = df.height();
-    let columns = df.get_columns();
-
-    (0..height)
-        .map(|row_idx| PreviewRow {
-            cells: columns
-                .iter()
-                .map(|col| col.get(row_idx).map(|v| v.to_string()).unwrap_or_default())
-                .collect(),
-        })
-        .collect()
-}
