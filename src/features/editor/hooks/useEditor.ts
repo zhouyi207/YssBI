@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo } from 'react';
-import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
+import { useLayoutStore, LayoutState } from '@/features/editor/stores/layoutStore';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useViewportStore } from '@/features/canvas/stores';
@@ -8,13 +8,13 @@ import { useEditorStore } from '../stores';
 import { useEditorOperations } from './useEditorOperations';
 import { useTabManagement } from './useTabManagement';
 import { useProjectOperations } from './useProjectOperations';
-import { useSubGraphManagement } from './useSubGraphManagement';
+import { useGraphManagement } from './useGraphManagement';
 import { useVariableManagement } from './useVariableManagement';
 import { useDataFrameManagement } from './useDataFrameManagement';
 import { useTabNodes, useTabVariables } from '@/features/node-registry/stores/useNodeStore';
-import { CanvasState } from '@/shared/types/editor';
-import { BaseNode } from '@/shared/types/editor';
+import { GraphPosition, Node } from '@/shared/types/editor';
 import { useShallow } from 'zustand/react/shallow';
+
 
 const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
@@ -39,12 +39,35 @@ export function useEditor() {
   const nodes = useTabNodes(activeTabId);
   const variables = useTabVariables(activeTabId);
   
-  // Get collections
-  const events = useProjectStore((s) => s.events);
-  const functions = useProjectStore((s) => s.functions);
-  const macros = useProjectStore((s) => s.macros);
-  const globalVariables = useProjectStore((s) => s.globalVariables);
-  const dataframes = useProjectStore((s) => s.dataframes);
+  // Get the graphs object reference - only re-render when graphs object changes
+  const graphs = useProjectStore((s) => s.graphs);
+  const globalVariables = useProjectStore((s) => s.variables);
+  const dataframes = useProjectStore((s) => s.databases);
+  
+  // Memoize the filtered collections - only recalculate when graphs changes
+  const events = useMemo(() => {
+    const result: Record<string, any> = {};
+    for (const [id, graph] of Object.entries(graphs)) {
+      if (graph.type === 'event') result[id] = graph;
+    }
+    return result;
+  }, [graphs]);
+  
+  const functions = useMemo(() => {
+    const result: Record<string, any> = {};
+    for (const [id, graph] of Object.entries(graphs)) {
+      if (graph.type === 'function') result[id] = graph;
+    }
+    return result;
+  }, [graphs]);
+  
+  const macros = useMemo(() => {
+    const result: Record<string, any> = {};
+    for (const [id, graph] of Object.entries(graphs)) {
+      if (graph.type === 'macro') result[id] = graph;
+    }
+    return result;
+  }, [graphs]);
 
   // Get editor state (use selectors to avoid unnecessary re-renders)
   const contextMenu = useEditorStore((s) => s.contextMenu);
@@ -109,7 +132,7 @@ export function useEditor() {
   }, [groupNodes]);
 
   // Setters
-  const setNodes = useCallback((updater: BaseNode[] | ((prev: BaseNode[]) => BaseNode[])) => {
+  const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
     const currentNodes = useNodeStore.getState().getNodes(tId);
@@ -117,7 +140,7 @@ export function useEditor() {
     useNodeStore.getState().setNodes(tId, nextNodes);
   }, []);
 
-  const setCanvas = useCallback((updater: CanvasState | ((prev: CanvasState) => CanvasState), targetGroupId?: string) => {
+  const setCanvas = useCallback((updater: GraphPosition | ((prev: GraphPosition) => GraphPosition), targetGroupId?: string) => {
     const gid = targetGroupId || activeGroupId;
     if (gid) useViewportStore.getState().setViewport(gid, updater);
   }, [activeGroupId]);
@@ -148,7 +171,7 @@ export function useEditor() {
   const editorOps = useEditorOperations();
   const tabMgmt = useTabManagement();
   const projectOps = useProjectOperations(tabMgmt.openSubGraph);
-  const subGraphMgmt = useSubGraphManagement(tabMgmt.openSubGraph, tabMgmt.closeTab, switchSidebarTab);
+  const subGraphMgmt = useGraphManagement(tabMgmt.openSubGraph, tabMgmt.closeTab, switchSidebarTab);
   const variableMgmt = useVariableManagement(switchSidebarTab);
   const dataFrameMgmt = useDataFrameManagement(switchSidebarTab);
 

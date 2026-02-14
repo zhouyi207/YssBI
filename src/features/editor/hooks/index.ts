@@ -3,7 +3,7 @@ export { useEditor } from './useEditor';
 export { useEditorOperations } from './useEditorOperations';
 export { useTabManagement } from './useTabManagement';
 export { useProjectOperations } from './useProjectOperations';
-export { useSubGraphManagement } from './useSubGraphManagement';
+export { useGraphManagement as useSubGraphManagement } from './useGraphManagement';
 export { useVariableManagement } from './useVariableManagement';
 export { useDataFrameManagement } from './useDataFrameManagement';
 export { useEditorGroup, GroupContext } from './useEditorGroup';

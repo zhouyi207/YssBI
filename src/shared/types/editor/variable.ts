@@ -51,3 +51,17 @@ export interface Variable {
   /** 标签 */
   tags?: string[];
 }
+
+// DTO 类型与 Variable 一致
+export type VariableDTO = Variable;
+
+// 前后端转换辅助函数
+export const VariableConverter = {
+  fromDTO(dto: VariableDTO): Variable {
+    return dto;
+  },
+
+  toDTO(variable: Variable): VariableDTO {
+    return variable;
+  },
+};

@@ -1,6 +1,10 @@
-import { Variable } from "./variables";
+import { Variable } from "./variable";
+import { GraphPosition } from "./graph";
+import { Node } from "./node";
 
-
+// Type aliases for backward compatibility
+export type CanvasState = GraphPosition;
+export type BaseNode = Node;
 
 export type EditorGesture =
   | {

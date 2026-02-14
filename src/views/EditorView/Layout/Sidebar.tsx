@@ -10,7 +10,7 @@ import {
   VscDatabase,
   VscListUnordered
 } from "react-icons/vsc";
-import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
+import { useLayoutStore } from "../../../features/editor/stores/layoutStore";
 import { useState } from "react";
 
 const PIN_COLORS: Record<string, string> = {

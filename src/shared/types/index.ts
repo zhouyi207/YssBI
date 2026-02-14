@@ -5,7 +5,6 @@ export function clamp(v: number, min: number, max: number) {
 }
 
 // Re-export all type modules
-export * from './graph';
 export * from './settings';
 export * from './editor';
 export * from './layout';

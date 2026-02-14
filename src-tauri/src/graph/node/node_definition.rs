@@ -20,6 +20,7 @@ pub struct NodeMetaData {
     pub ui_style: String,
 
     /// 描述
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
     /// 是否支持动态 Pin

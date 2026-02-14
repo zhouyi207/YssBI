@@ -35,3 +35,19 @@ export {
 
 // Pin utilities
 export { isSingleLinkPin, isCompatiblePins } from './pins';
+
+// DTO converters
+export {
+  convertGraphFromDTO,
+  convertGraphToDTO,
+  convertGraphsFromDTO,
+  convertGraphsToDTO,
+  convertProjectDataFromDTO,
+  convertProjectDataToDTO,
+  applyConnectionsToPins,
+  extractConnectionsFromPins,
+  validateGraphDTO,
+  cloneDTO,
+  mergeProjectData,
+} from './dtoConverters';
+

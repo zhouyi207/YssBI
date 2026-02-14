@@ -30,4 +30,10 @@ export interface UseProjectSyncOptions {
     onProjectCleared?: () => void;
     /** 项目保存回调 */
     onProjectSaved?: (path: string) => void;
+    /** Event 创建回调 */
+    onEventCreated?: (id: string, data: any) => void;
+    /** Function 创建回调 */
+    onFunctionCreated?: (id: string, data: any) => void;
+    /** Macro 创建回调 */
+    onMacroCreated?: (id: string, data: any) => void;
 }

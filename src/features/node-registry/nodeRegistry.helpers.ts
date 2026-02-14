@@ -1,7 +1,7 @@
 /// helpers —— 非 React 的纯函数
 
 import { Position } from "@/shared/types";
-import { BaseNode } from "@/shared/types/editor";
+// import { any } from "@/shared/types/editor";
 import { useNodeRegistryStore } from "./nodeRegistry.store";
 import { LoadStatus } from "@/shared/types/loadStatus";
 
@@ -16,7 +16,7 @@ export function createNode(
   type: string,
   id: string,
   position: Position,
-): BaseNode | null {
+): any | null {
   const { status, getDefinition } = useNodeRegistryStore.getState();
 
   if (status !== LoadStatus.Ready) {
@@ -32,7 +32,8 @@ export function createNode(
     return null;
   }
 
-  return new BaseNode(id, def, position);
+  // return new any(id, def, position);
+  return {};
 }
 
 /**

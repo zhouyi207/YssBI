@@ -19,7 +19,15 @@ let listenerCount = 0;
  * - 自动处理后端推送的项目变更事件
  */
 export function useProjectSync(options: UseProjectSyncOptions = {}) {
-  const { enabled = true, onProjectLoaded, onProjectCleared, onProjectSaved } = options;
+  const { 
+    enabled = true, 
+    onProjectLoaded, 
+    onProjectCleared, 
+    onProjectSaved,
+    onEventCreated,
+    onFunctionCreated,
+    onMacroCreated,
+  } = options;
 
   useEffect(() => {
     if (!enabled) return;
@@ -46,10 +54,32 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
       console.log('[ProjectSync] Setting up project event listener...');
 
       globalUnlisten = await listen<ProjectEventPayload>('project-event', (event) => {
-        const { type, payload } = event.payload;
-        console.log(`[ProjectSync] Received event: ${type}`);
+        const eventData = event.payload;
+        console.log(`[ProjectSync] Received event:`, eventData);
 
         const projectStore = useProjectStore.getState();
+
+        // 处理嵌套的事件结构
+        // 后端发送: Event::Event(EventEvent::EventCreated {...})
+        // 序列化为: { type: "Event", payload: { type: "EventCreated", payload: {...} } }
+        const eventType = eventData.type;
+        const eventPayload = eventData.payload;
+
+        // 如果是嵌套事件，提取内部类型
+        let type: string;
+        let payload: any;
+
+        if (eventPayload && typeof eventPayload === 'object' && 'type' in eventPayload) {
+          // 嵌套事件：Event/Function/Macro/Variable/Node/Connection/DataFrame
+          type = eventPayload.type;
+          payload = eventPayload.payload;
+        } else {
+          // 直接事件：Project
+          type = eventType;
+          payload = eventPayload;
+        }
+
+        console.log(`[ProjectSync] Processing event type: ${type}`);
 
         switch (type) {
           case 'ProjectLoaded':
@@ -60,11 +90,9 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
           case 'ProjectCleared':
             projectStore.loadProject(
               {
-                globalVariables: {},
-                events: {},
-                functions: {},
-                macros: {},
-                dataframes: {},
+                variables: {},
+                graphs: {},
+                databases: {},
                 metadata: { exportTime: '', appVersion: '' },
               },
               null
@@ -79,81 +107,76 @@ export function useProjectSync(options: UseProjectSyncOptions = {}) {
 
           // Event 相关事件
           case 'EventCreated':
-            projectStore.setEvents({ ...projectStore.events, [payload.id]: payload.data });
+            console.log('[ProjectSync] EventCreated payload:', payload);
+            console.log('[ProjectSync] payload.id:', payload.id);
+            console.log('[ProjectSync] payload.data:', payload.data);
+            // 使用新的 addGraph 方法
+            projectStore.addGraph(payload.id, payload.data);
+            console.log('[ProjectSync] Graphs after update:', projectStore.graphs);
+            // 触发回调
+            onEventCreated?.(payload.id, payload.data);
             break;
 
           case 'EventUpdated':
-            if (projectStore.events[payload.id]) {
-              projectStore.setEvents({ ...projectStore.events, [payload.id]: payload.data });
-            }
+            // 使用新的 updateGraph 方法
+            projectStore.updateGraph(payload.id, payload.data);
             break;
 
           case 'EventDeleted':
-            const nextEvents = { ...projectStore.events };
-            delete nextEvents[payload.id];
-            projectStore.setEvents(nextEvents);
+            // 使用新的 deleteGraph 方法
+            projectStore.deleteGraph(payload.id);
             break;
 
           // Function 相关事件
           case 'FunctionCreated':
-            projectStore.setFunctions({ ...projectStore.functions, [payload.id]: payload.data });
+            projectStore.addGraph(payload.id, payload.data);
+            // 触发回调
+            onFunctionCreated?.(payload.id, payload.data);
             break;
 
           case 'FunctionUpdated':
-            if (projectStore.functions[payload.id]) {
-              projectStore.setFunctions({ ...projectStore.functions, [payload.id]: payload.data });
-            }
+            projectStore.updateGraph(payload.id, payload.data);
             break;
 
           case 'FunctionDeleted':
-            const nextFunctions = { ...projectStore.functions };
-            delete nextFunctions[payload.id];
-            projectStore.setFunctions(nextFunctions);
+            projectStore.deleteGraph(payload.id);
             break;
 
           // Macro 相关事件
           case 'MacroCreated':
-            projectStore.setMacros({ ...projectStore.macros, [payload.id]: payload.data });
+            projectStore.addGraph(payload.id, payload.data);
+            // 触发回调
+            onMacroCreated?.(payload.id, payload.data);
             break;
 
           case 'MacroUpdated':
-            if (projectStore.macros[payload.id]) {
-              projectStore.setMacros({ ...projectStore.macros, [payload.id]: payload.data });
-            }
+            projectStore.updateGraph(payload.id, payload.data);
             break;
 
           case 'MacroDeleted':
-            const nextMacros = { ...projectStore.macros };
-            delete nextMacros[payload.id];
-            projectStore.setMacros(nextMacros);
+            projectStore.deleteGraph(payload.id);
             break;
 
           // GlobalVariable 相关事件
           case 'GlobalVariableCreated':
-            projectStore.setGlobalVariables({ ...projectStore.globalVariables, [payload.id]: payload.data });
+            projectStore.addVariable(payload.id, payload.data);
             break;
 
           case 'GlobalVariableUpdated':
-            if (projectStore.globalVariables[payload.id]) {
-              projectStore.setGlobalVariables({ ...projectStore.globalVariables, [payload.id]: payload.data });
-            }
+            projectStore.updateVariable(payload.id, payload.data);
             break;
 
           case 'GlobalVariableDeleted':
-            const nextGlobalVariables = { ...projectStore.globalVariables };
-            delete nextGlobalVariables[payload.id];
-            projectStore.setGlobalVariables(nextGlobalVariables);
+            projectStore.deleteVariable(payload.id);
             break;
 
           // DataFrame 相关事件
           case 'DataFrameCreated':
-            projectStore.setDataFrames({ ...projectStore.dataframes, [payload.id]: payload.data });
+            projectStore.addDatabase(payload.id, payload.data);
             break;
 
           case 'DataFrameDeleted':
-            const nextDataFrames = { ...projectStore.dataframes };
-            delete nextDataFrames[payload.id];
-            projectStore.setDataFrames(nextDataFrames);
+            projectStore.deleteDatabase(payload.id);
             break;
 
           default:

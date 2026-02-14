@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Variable } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
-import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
+import { useLayoutStore, LayoutState } from '@/features/editor/stores/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 
 /**

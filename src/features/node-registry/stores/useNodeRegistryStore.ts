@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { SchemaService } from "@/services/schema";
 import { NodeDefinition } from "@/shared/types/editor";
 
 interface NodeRegistryStore {
@@ -31,7 +31,8 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const defs = await invoke<NodeDefinition[]>("get_node_definitions");
+      const defs = await SchemaService.getNodeDefinition();
+
 
       const definitions = new Map<string, NodeDefinition>();
       defs.forEach(def => {

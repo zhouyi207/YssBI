@@ -57,7 +57,8 @@ export function useEditorInit(): EditorInitState {
         }
 
         // 2. 加载节点定义
-        const nodeDefs: NodeDefinition[] = await invoke("get_node_definitions");
+        const nodeDefs = await SchemaService.getNodeDefinition();
+        
 
         if (cancelled) return;
 
@@ -107,6 +108,7 @@ export function useEditorInit(): EditorInitState {
 }
 
 import { LoadStatus } from '@/shared/types/loadStatus';
+import { SchemaService } from "@/services/schema";
 
 /**
  * 确保编辑器已初始化

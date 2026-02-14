@@ -1,7 +1,7 @@
 use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction, EventMacro};
 use crate::graph::{GraphId, GraphKind};
-use crate::schema::GraphDTO;
+use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
 use serde_json::Value;
 use tauri::{AppHandle, State};
@@ -98,7 +98,7 @@ pub fn get_graph(
     _app: AppHandle,
     state: State<ProjectState>,
     graph_id: GraphId,
-) -> Result<GraphDTO, String> {
+) -> Result<GraphInstanceDTO, String> {
     let graph = state.get_graph(&graph_id).unwrap();
     Ok((&graph).into())
 }

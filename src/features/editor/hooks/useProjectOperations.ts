@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useProjectStore } from '@/features/project';
 import { useNodeStore } from '@/features/node-registry/stores';
-import { useLayoutStore } from '@/features/layoutStore/layoutStore';
+import { useLayoutStore } from '@/features/editor/stores/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/ui/UIStore';
 

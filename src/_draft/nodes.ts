@@ -6,7 +6,7 @@
  */
 
 import { Position } from "../shared/types";
-import { Pin } from "../shared/types/editor/graph";
+import { Pin } from "../shared/types/editor";
 
 
 

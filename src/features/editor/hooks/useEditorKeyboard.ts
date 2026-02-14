@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useLayoutStore } from '@/features/layoutStore/layoutStore';
+import { useLayoutStore } from '@/features/editor/stores/layoutStore';
 
 interface UseEditorKeyboardProps {
   deleteSelected: () => void;

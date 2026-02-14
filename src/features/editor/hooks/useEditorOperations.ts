@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { BaseNode } from '@/shared/types/editor';
 import { Graph } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
-import { useLayoutStore, LayoutState } from '@/features/layoutStore/layoutStore';
+import { useLayoutStore, LayoutState } from '@/features/editor/stores/layoutStore';
 import { useClipboardStore } from '../stores';
 import { serializeSubGraph, deserializeSubGraph, deleteNodeInBackend } from '@/shared/utils/editor';
 import { ProjectService } from '@/services/project/projectService';

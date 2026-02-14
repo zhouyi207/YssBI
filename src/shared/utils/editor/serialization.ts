@@ -1,5 +1,5 @@
-import { BaseNode } from "@/shared/types/editor";
-import { CanvasState, Graph, Connection } from "@/shared/types/editor";
+// import { BaseNode } from "@/shared/types/editor";
+import { GraphPosition, Graph, Connection } from "@/shared/types/editor";
 import { getNodeDefinition } from "@/features/node-registry";
 import { Variable } from "@/shared/types/editor";
 

@@ -2,7 +2,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEditorGroup } from "@/features/editor";
 import { useState, useEffect } from "react";
-import { useLayoutStore } from "../../../features/layoutStore/layoutStore";
+import { useLayoutStore } from "../../../features/editor/stores/layoutStore";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { uiStore } from "@/features/ui/UIStore";

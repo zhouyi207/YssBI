@@ -1,7 +1,6 @@
 //! 状态管理模块
 
-use crate::log::LogLevel;
-use crate::log_sys;
+use crate::log::log_sys;
 use crate::project::{ProjectData, ProjectStore};
 use std::sync::{Arc, RwLock};
 
@@ -32,13 +31,7 @@ impl ProjectState {
 
     /// 设置 项目数据 并清空 项目存储
     pub fn set_data(&self, project_data: ProjectData) {
-        log_sys!(
-            LogLevel::Info, "{}",
-            format!(
-                "[ProjectState.set_data] ProjectData: {}",
-                project_data.info()
-            )
-        );
+        log_sys::info!("[ProjectState.set_data] ProjectData: {}", project_data.info());
 
         *self.project_data.write().unwrap() = project_data;
         *self.project_store.write().unwrap() = ProjectStore::default();

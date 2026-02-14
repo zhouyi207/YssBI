@@ -2,7 +2,7 @@ import { forwardRef, useMemo } from "react";
 import { useEditorGroup } from "@/features/editor";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
-import { VariableDataType, isPrimitiveType } from "@/shared/types/editor";
+// import { VariableDataType, isPrimitiveType } from "@/shared/types/editor";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
 import { uiStore } from "@/features/ui/UIStore";

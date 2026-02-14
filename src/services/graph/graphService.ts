@@ -1,16 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
+import { Graph } from "@/shared/types/editor";
 
 /**
  * Graph Service - 管理 Event、Function、Macro 的创建、删除、更新和查询
+ * 
+ * 注意：创建方法只需要传递 graph_name，后端会自动创建完整的 Graph 结构
  */
 export class GraphService {
     /**
      * 创建 Event
+     * @param graphName - Event 的名称
      */
-    static async createEvent(graph_name: string): Promise<void> {
+    static async createEvent(graphName: string): Promise<void> {
         try {
-            await invoke("create_event", { graph_name });
-            console.log(`[GraphService.createEvent] Event '${graph_name}' created successfully`);
+            await invoke("create_event", { graphName });
+            console.log(`[GraphService.createEvent] Event '${graphName}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createEvent] Error creating event:", error);
             throw error;
@@ -19,11 +23,12 @@ export class GraphService {
 
     /**
      * 创建 Function
+     * @param graphName - Function 的名称
      */
-    static async createFunction(graph_name: string): Promise<void> {
+    static async createFunction(graphName: string): Promise<void> {
         try {
-            await invoke("create_function", { graph_name });
-            console.log(`[GraphService.createFunction] Function '${graph_name}' created successfully`);
+            await invoke("create_function", { graphName });
+            console.log(`[GraphService.createFunction] Function '${graphName}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createFunction] Error creating function:", error);
             throw error;
@@ -32,11 +37,12 @@ export class GraphService {
 
     /**
      * 创建 Macro
+     * @param graphName - Macro 的名称
      */
-    static async createMacro(graph_name: string): Promise<void> {
+    static async createMacro(graphName: string): Promise<void> {
         try {
-            await invoke("create_macro", { graph_name });
-            console.log(`[GraphService.createMacro] Macro '${graph_name}' created successfully`);
+            await invoke("create_macro", { graphName });
+            console.log(`[GraphService.createMacro] Macro '${graphName}' created successfully`);
         } catch (error) {
             console.error("[GraphService.createMacro] Error creating macro:", error);
             throw error;
@@ -45,6 +51,7 @@ export class GraphService {
 
     /**
      * 删除 Graph (Event/Function/Macro)
+     * @param graphId - Graph 的 ID
      */
     static async removeGraph(graphId: string): Promise<void> {
         try {
@@ -58,8 +65,10 @@ export class GraphService {
 
     /**
      * 更新 Event
+     * @param id - Event 的 ID
+     * @param event - 更新的 Event 数据
      */
-    static async updateEvent(id: string, event: any): Promise<void> {
+    static async updateEvent(id: string, event: Graph): Promise<void> {
         try {
             await invoke("update_event", { id, event });
             console.log(`[GraphService.updateEvent] Event '${id}' updated successfully`);
@@ -71,8 +80,10 @@ export class GraphService {
 
     /**
      * 更新 Function
+     * @param id - Function 的 ID
+     * @param functionData - 更新的 Function 数据
      */
-    static async updateFunction(id: string, functionData: any): Promise<void> {
+    static async updateFunction(id: string, functionData: Graph): Promise<void> {
         try {
             await invoke("update_function", { id, function: functionData });
             console.log(`[GraphService.updateFunction] Function '${id}' updated successfully`);
@@ -84,8 +95,10 @@ export class GraphService {
 
     /**
      * 更新 Macro
+     * @param id - Macro 的 ID
+     * @param macroData - 更新的 Macro 数据
      */
-    static async updateMacro(id: string, macroData: any): Promise<void> {
+    static async updateMacro(id: string, macroData: Graph): Promise<void> {
         try {
             await invoke("update_macro", { id, macroData });
             console.log(`[GraphService.updateMacro] Macro '${id}' updated successfully`);
@@ -97,10 +110,12 @@ export class GraphService {
 
     /**
      * 获取 Graph 详情
+     * @param graphId - Graph 的 ID
+     * @returns Graph 对象
      */
-    static async getGraph(graphId: string): Promise<any> {
+    static async getGraph(graphId: string): Promise<Graph> {
         try {
-            const graph = await invoke("get_graph", { graphId });
+            const graph = await invoke<Graph>("get_graph", { graphId });
             console.log(`[GraphService.getGraph] Graph '${graphId}' retrieved successfully`);
             return graph;
         } catch (error) {
@@ -109,82 +124,3 @@ export class GraphService {
         }
     }
 }
-
-
-// // ==================== Events CRUD ====================
-
-//     static async getEvents(): Promise<Record<string, SubGraphData>> {
-//         const data: Record<string, any> = await invoke("get_events");
-//         return convertSubGraphMap(data);
-//     }
-
-//     static async getEvent(id: string): Promise<SubGraphData | null> {
-//         const data: any = await invoke("get_event", { id });
-//         return data ? toFrontendSubGraphData(data) : null;
-//     }
-
-//     static async createEvent(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("create_event", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async updateEvent(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("update_event", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async deleteEvent(id: string): Promise<void> {
-//         await invoke("delete_event", { id });
-//     }
-
-//     // ==================== Functions CRUD ====================
-
-//     static async getFunctions(): Promise<Record<string, SubGraphData>> {
-//         const data: Record<string, any> = await invoke("get_functions");
-//         return convertSubGraphMap(data);
-//     }
-
-//     static async getFunction(id: string): Promise<SubGraphData | null> {
-//         const data: any = await invoke("get_function", { id });
-//         return data ? toFrontendSubGraphData(data) : null;
-//     }
-
-//     static async createFunction(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("create_function", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async updateFunction(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("update_function", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async deleteFunction(id: string): Promise<void> {
-//         await invoke("delete_function", { id });
-//     }
-
-//     // ==================== Macros CRUD ====================
-
-//     static async getMacros(): Promise<Record<string, SubGraphData>> {
-//         const data: Record<string, any> = await invoke("get_macros");
-//         return convertSubGraphMap(data);
-//     }
-
-//     static async getMacro(id: string): Promise<SubGraphData | null> {
-//         const data: any = await invoke("get_macro", { id });
-//         return data ? toFrontendSubGraphData(data) : null;
-//     }
-
-//     static async createMacro(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("create_macro", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async updateMacro(id: string, data: SubGraphData): Promise<SubGraphData> {
-//         const result: any = await invoke("update_macro", { id, data: toBackendSubGraphData(data) });
-//         return toFrontendSubGraphData(result);
-//     }
-
-//     static async deleteMacro(id: string): Promise<void> {
-//         await invoke("delete_macro", { id });
-//     }

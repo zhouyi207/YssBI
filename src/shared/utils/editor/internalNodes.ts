@@ -1,4 +1,4 @@
-import { BaseNode, Pin, NodeDefinition } from "@/shared/types/editor";
+// import { BaseNode, Pin, NodeDefinition } from "@/shared/types/editor";
 import { Pin as SubGraphPinDef } from "@/shared/types/editor";
 import { Position } from "@/shared/types";
 

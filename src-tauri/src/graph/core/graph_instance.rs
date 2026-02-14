@@ -30,11 +30,12 @@ pub struct GraphInstance {
     // 图 name
     pub name: String,
 
+    // 类型
+    pub kind: GraphKind,
+
     // 位置
     pub position: GraphPosition,
 
-    // 类型
-    pub kind: GraphKind,
 
     // 数据状态 (node, pin, connection)
     pub data_state: Arc<RwLock<GraphDataState>>,

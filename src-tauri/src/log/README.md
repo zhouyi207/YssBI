@@ -1,290 +1,179 @@
-# Log 模块使用指南
+# 日志系统使用指南
 
-日志系统提供了统一的日志记录和管理功能，支持多种日志级别、类型，并能将日志同时写入文件和发送到前端。
+## 概述
 
-## 目录结构
+本项目提供了三种类型的日志系统：
+- **Application Log** (`log_app`): 应用程序日志
+- **Execution Log** (`log_exec`): 执行日志
+- **System Log** (`log_sys`): 系统日志
 
-```
-log/
-├── mod.rs              # 模块导出
-├── log_level.rs        # 日志级别定义
-├── log_type.rs         # 日志类型定义
-├── log_message.rs      # 日志消息结构
-├── log_manager.rs      # 日志管理器
-└── README.md           # 本文档
-```
-
-## 核心组件
-
-### 1. LogLevel（日志级别）
-
-支持五个标准日志级别：
-
-- `Trace` - 追踪级别，最详细的调试信息
-- `Debug` - 调试级别，开发时的调试信息
-- `Info` - 信息级别，一般性信息
-- `Warn` - 警告级别，潜在问题
-- `Error` - 错误级别，错误信息
-
-### 2. LogType（日志类型）
-
-三种日志类型用于区分不同来源：
-
-- `Application` - 应用程序日志（UI、用户操作等）
-- `Execution` - 执行日志（节点执行、图执行等）
-- `System` - 系统日志（文件操作、配置加载等）
-
-### 3. LogMessage（日志消息）
-
-日志消息结构包含：
-
-```rust
-pub struct LogMessage {
-    pub timestamp: String,      // 时间戳（格式：YYYY-MM-DD HH:MM:SS.mmm）
-    pub level: LogLevel,        // 日志级别
-    pub log_type: LogType,      // 日志类型
-    pub message: String,        // 消息内容
-    pub source: Option<String>, // 来源（如节点ID、模块名）
-}
-```
-
-## 初始化
-
-在应用启动时初始化日志管理器：
-
-```rust
-use crate::log::init_log_manager;
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .setup(|app| {
-            // 初始化日志管理器
-            init_log_manager(app.handle().clone());
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-```
+每种日志类型都支持 5 个级别：`trace`、`debug`、`info`、`warn`、`error`
 
 ## 使用方法
 
-### 方法 1：使用便捷宏（推荐）
-
-最简单的使用方式是通过提供的宏：
+### 方式一：使用新的宏接口（推荐）
 
 ```rust
+use crate::log::{log_app, log_exec, log_sys};
+
+// 应用程序日志
+log_app::trace!("This is a trace message");
+log_app::debug!("Debug value: {}", value);
+log_app::info!("Application started");
+log_app::warn!("Warning: {}", warning_msg);
+log_app::error!("Error occurred: {}", error);
+
+// 执行日志
+log_exec::info!("Executing node: {}", node_id);
+log_exec::warn!("Execution warning: {}", msg);
+log_exec::error!("Execution failed: {}", error);
+
+// 系统日志
+log_sys::info!("System initialized");
+log_sys::warn!("Low memory warning");
+log_sys::error!("System error: {}", error);
+```
+
+### 方式二：使用旧的宏接口（兼容）
+
+```rust
+use crate::{log_app, log_exec, log_sys};
 use crate::log::LogLevel;
 
 // 应用程序日志
-log_app!(LogLevel::Info, "用户打开了设置面板");
-log_app!(LogLevel::Error, "保存配置失败", "SettingsService");
+log_app!(LogLevel::Info, "Application started");
+log_app!(LogLevel::Warn, "Warning: {}", warning_msg);
 
 // 执行日志
-log_exec!(LogLevel::Debug, "开始执行节点", "node_123");
-log_exec!(LogLevel::Info, "图执行完成");
+log_exec!(LogLevel::Info, "Executing node: {}", node_id);
 
 // 系统日志
-log_sys!(LogLevel::Warn, "配置文件不存在，使用默认配置");
-log_sys!(LogLevel::Error, "文件读取失败", "ProjectService");
+log_sys!(LogLevel::Error, "System error: {}", error);
 ```
 
-### 方法 2：直接使用 LogManager
+### 方式三：使用 Tauri 标准日志（用于早期初始化）
+
+在日志管理器初始化之前（如 `ProjectStore::default()`），使用 Tauri 的标准日志：
 
 ```rust
-use crate::log::{get_log_manager, LogLevel};
-
-if let Some(manager) = get_log_manager() {
-    // 应用程序日志
-    manager.log_app(
-        LogLevel::Info,
-        "用户操作".to_string(),
-        Some("UI".to_string())
-    );
-    
-    // 执行日志
-    manager.log_execution(
-        LogLevel::Debug,
-        "节点执行中".to_string(),
-        Some("node_456".to_string())
-    );
-    
-    // 系统日志
-    manager.log_system(
-        LogLevel::Error,
-        "系统错误".to_string(),
-        None
-    );
-}
+log::info!("Early initialization message");
+log::warn!("Warning before log manager ready");
 ```
 
-## 日志文件
+## 日志类型说明
 
-### 文件位置
+### Application Log (`log_app`)
+用于记录应用程序级别的事件，如：
+- 应用启动/关闭
+- 配置加载
+- 用户操作
+- 一般性错误
 
-- **开发模式**：`../logs/app_YYYYMMDD_HHMMSS.log`
-- **生产模式**：应用日志目录（由 Tauri 管理）
+### Execution Log (`log_exec`)
+用于记录图执行相关的事件，如：
+- 节点执行开始/结束
+- 数据流转
+- 执行错误
+- 性能指标
 
-### 文件格式
+### System Log (`log_sys`)
+用于记录系统级别的事件，如：
+- 资源管理
+- 数据库操作
+- 文件 I/O
+- 系统错误
 
-每行一条 JSON 格式的日志：
+## 日志级别说明
 
+- **Trace**: 最详细的日志，用于追踪程序执行流程
+- **Debug**: 调试信息，开发时使用
+- **Info**: 一般信息，记录重要的业务流程
+- **Warn**: 警告信息，不影响程序运行但需要注意
+- **Error**: 错误信息，程序出现错误但可以继续运行
+
+## 日志输出
+
+日志会同时输出到：
+1. **终端**: 通过 Tauri 日志插件输出到控制台（格式：`[类型] 消息`）
+2. **文件**: 保存到 `logs/app_YYYYMMDD_HHMMSS.log`（JSON 格式）
+3. **前端**: 通过事件发送到前端显示
+
+### 终端输出格式示例
+```
+[02:21:53.863][BE][INFO] [APP] get_node_definitions command called
+[02:21:53.864][BE][DEBUG] [APP] Node registry has 19 nodes
+[02:21:53.865][BE][WARN] [EXEC] Node execution slow: 5000ms
+[02:21:53.866][BE][ERROR] [SYS] Database connection failed
+```
+
+说明：
+- `[02:21:53.863]` - 时间戳（由 Tauri 日志插件添加）
+- `[BE]` - 后端标识（由 Tauri 日志插件添加）
+- `[INFO]` - 日志级别（由 Tauri 日志插件根据宏自动添加）
+- `[APP]` - 日志类型（APP/EXEC/SYS）
+- `消息内容` - 实际的日志消息
+
+### 文件输出格式示例
 ```json
-{"timestamp":"2024-01-15 10:30:45.123","level":"info","log_type":"execution","message":"节点执行完成","source":"node_123"}
-```
-
-### 读取日志文件
-
-```rust
-use crate::log::{get_log_manager, read_logs_from_file};
-
-// 获取日志文件路径
-if let Some(manager) = get_log_manager() {
-    if let Some(path) = manager.get_log_file_path() {
-        // 读取最新的 100 条日志
-        match read_logs_from_file(&path, 0, 100) {
-            Ok(logs) => {
-                for log in logs {
-                    println!("{:?}", log);
-                }
-            }
-            Err(e) => eprintln!("读取日志失败: {}", e),
-        }
-    }
+{
+  "timestamp": "2024-02-14 12:34:56.789",
+  "level": "info",
+  "log_type": "application",
+  "message": "Application started",
+  "source": null
 }
 ```
 
-## 前端集成
-
-日志会自动通过 Tauri 事件系统发送到前端：
-
-```typescript
-import { listen } from '@tauri-apps/api/event';
-
-// 监听日志消息
-listen('log-message', (event) => {
-  const log = event.payload;
-  console.log(`[${log.level}] ${log.message}`);
-});
-```
-
-## 最佳实践
-
-### 1. 选择合适的日志级别
-
-- `Trace/Debug` - 仅在开发时使用，生产环境应禁用
-- `Info` - 记录重要的业务流程和状态变化
-- `Warn` - 记录可恢复的异常情况
-- `Error` - 记录错误和异常
-
-### 2. 选择合适的日志类型
-
-- `Application` - UI 交互、用户操作、应用状态
-- `Execution` - 节点执行、图运行、计算过程
-- `System` - 文件 I/O、配置管理、系统资源
-
-### 3. 提供有意义的 source
+## 示例
 
 ```rust
-// 好的做法
-log_exec!(LogLevel::Info, "节点执行完成", "AddNode_123");
-log_app!(LogLevel::Error, "保存失败", "ProjectService::save");
+use crate::log::{log_app, log_exec, log_sys};
 
-// 不好的做法
-log_exec!(LogLevel::Info, "完成");  // 缺少上下文
-```
-
-### 4. 日志消息应清晰简洁
-
-```rust
-// 好的做法
-log_app!(LogLevel::Info, format!("加载项目: {}", project_name));
-log_exec!(LogLevel::Error, format!("节点 {} 执行失败: {}", node_id, error));
-
-// 不好的做法
-log_app!(LogLevel::Info, "操作");  // 太模糊
-log_exec!(LogLevel::Error, format!("错误错误错误: {:?}", huge_object));  // 太冗长
-```
-
-## 示例场景
-
-### 场景 1：节点执行
-
-```rust
-use crate::log::LogLevel;
-
-pub fn execute_node(node_id: &str) -> Result<(), String> {
-    log_exec!(LogLevel::Debug, format!("开始执行节点: {}", node_id), node_id);
+fn example_function() {
+    // 记录函数开始
+    log_app::debug!("example_function called");
     
-    match perform_execution() {
-        Ok(_) => {
-            log_exec!(LogLevel::Info, format!("节点执行成功: {}", node_id), node_id);
-            Ok(())
+    // 记录重要信息
+    log_app::info!("Processing {} items", count);
+    
+    // 记录警告
+    if items.is_empty() {
+        log_app::warn!("No items to process");
+    }
+    
+    // 记录错误
+    if let Err(e) = process_items() {
+        log_app::error!("Failed to process items: {}", e);
+    }
+}
+
+fn execute_node(node_id: &str) {
+    log_exec::info!("Starting execution of node: {}", node_id);
+    
+    match run_node(node_id) {
+        Ok(result) => {
+            log_exec::info!("Node {} executed successfully", node_id);
         }
         Err(e) => {
-            log_exec!(LogLevel::Error, format!("节点执行失败: {}", e), node_id);
-            Err(e)
+            log_exec::error!("Node {} execution failed: {}", node_id, e);
         }
     }
 }
-```
 
-### 场景 2：项目加载
-
-```rust
-use crate::log::LogLevel;
-
-pub fn load_project(path: &str) -> Result<Project, String> {
-    log_sys!(LogLevel::Info, format!("加载项目: {}", path), "ProjectService");
+fn initialize_database() {
+    log_sys::info!("Initializing database connection");
     
-    if !std::path::Path::new(path).exists() {
-        log_sys!(LogLevel::Error, format!("项目文件不存在: {}", path), "ProjectService");
-        return Err("文件不存在".to_string());
-    }
-    
-    log_sys!(LogLevel::Debug, "解析项目文件", "ProjectService");
-    // ... 加载逻辑
-    
-    log_sys!(LogLevel::Info, "项目加载成功", "ProjectService");
-    Ok(project)
-}
-```
-
-### 场景 3：用户操作
-
-```rust
-use crate::log::LogLevel;
-
-#[tauri::command]
-pub fn save_settings(settings: Settings) -> Result<(), String> {
-    log_app!(LogLevel::Info, "用户保存设置", "SettingsView");
-    
-    match write_settings(&settings) {
-        Ok(_) => {
-            log_app!(LogLevel::Info, "设置保存成功");
-            Ok(())
-        }
-        Err(e) => {
-            log_app!(LogLevel::Error, format!("设置保存失败: {}", e), "SettingsView");
-            Err(e)
-        }
+    match connect_db() {
+        Ok(_) => log_sys::info!("Database connected successfully"),
+        Err(e) => log_sys::error!("Database connection failed: {}", e),
     }
 }
 ```
 
 ## 注意事项
 
-1. **性能考虑**：避免在高频循环中使用 `Trace` 或 `Debug` 级别日志
-2. **敏感信息**：不要在日志中记录密码、密钥等敏感信息
-3. **文件大小**：日志文件会持续增长，考虑实现日志轮转机制
-4. **线程安全**：LogManager 使用 `Arc<Mutex<>>` 保证线程安全
-5. **初始化顺序**：确保在使用日志前已调用 `init_log_manager`
-
-## 未来改进
-
-- [ ] 日志文件轮转（按大小或时间）
-- [ ] 日志过滤和搜索功能
-- [ ] 可配置的日志级别
-- [ ] 日志导出功能
-- [ ] 性能统计和分析
+1. 在日志管理器初始化之前（`init_log_manager` 调用之前），自定义日志宏不会输出任何内容
+2. 对于早期初始化阶段的日志，使用 Tauri 标准日志 `log::info!` 等
+3. 日志消息会自动添加时间戳和日志类型
+4. 避免在日志中输出敏感信息（如密码、密钥等）
+5. 生产环境建议使用 `info` 及以上级别，开发环境可以使用 `debug` 或 `trace`

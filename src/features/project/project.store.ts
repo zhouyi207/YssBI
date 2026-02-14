@@ -3,19 +3,15 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/loadStatus';
 import { ProjectState } from './project.types';
-import { Graph, ProjectData, DataFrameData } from '@/shared/types/editor';
+import { Graph, ProjectData } from '@/shared/types/editor';
 import { Variable } from '@/shared/types/editor';
 import { ProjectService } from '@/services/project/projectService';
-import { TabState, useNodeStore } from '@/features/node-registry/stores/useNodeStore';
-import { syncInternalNodePins, syncSubGraphInstanceNodes } from '@/shared/utils/editor';
 
 interface ProjectStore extends ProjectState {
-    // Project Data (作为后端数据的缓存)
-    events: Record<string, Graph>;
-    functions: Record<string, Graph>;
-    macros: Record<string, Graph>;
-    globalVariables: Record<string, Variable>;
-    dataframes: Record<string, DataFrameData>;
+    // Project Data (完全匹配 ProjectData 类型定义)
+    variables: Record<string, Variable>;
+    graphs: Record<string, Graph>;
+    databases: Record<string, any>;
     currentPath: string | null;
 
     // Backend Sync
@@ -23,64 +19,48 @@ interface ProjectStore extends ProjectState {
     syncToBackend: () => Promise<void>;
     clear: () => void;
 
-    // 内部 Setters (供事件订阅使用)
-    setEvents: (events: Record<string, Graph>) => void;
-    setFunctions: (functions: Record<string, Graph>) => void;
-    setMacros: (macros: Record<string, Graph>) => void;
-    setGlobalVariables: (vars: Record<string, Variable>) => void;
-    setDataFrames: (dfs: Record<string, DataFrameData>) => void;
+    // Setters
+    setVariables: (vars: Record<string, Variable>) => void;
+    setGraphs: (graphs: Record<string, Graph>) => void;
+    setDatabases: (dbs: Record<string, any>) => void;
     setCurrentPath: (path: string | null) => void;
 
-    // Event 操作 (调用后端 API)
-    addEvent: (id: string, data: Graph) => void;
-    updateEvent: (id: string, data: Partial<Graph>) => void;
-    deleteEvent: (id: string) => void;
+    // Graph 操作
+    addGraph: (id: string, graph: Graph) => void;
+    updateGraph: (id: string, data: Partial<Graph>) => void;
+    deleteGraph: (id: string) => void;
 
-    // Function 操作 (调用后端 API)
-    addFunction: (id: string, data: Graph) => void;
-    updateFunction: (id: string, data: Partial<Graph>) => void;
-    deleteFunction: (id: string) => void;
+    // Variable 操作
+    addVariable: (id: string, variable: Variable) => void;
+    updateVariable: (id: string, data: Partial<Variable>) => void;
+    deleteVariable: (id: string) => void;
 
-    // Macro 操作 (调用后端 API)
-    addMacro: (id: string, data: Graph) => void;
-    updateMacro: (id: string, data: Partial<Graph>) => void;
-    deleteMacro: (id: string) => void;
-
-    // Global Variable 操作 (调用后端 API)
-    addGlobalVariable: (id: string, v: Variable) => void;
-    updateGlobalVariable: (id: string, data: Partial<Variable>) => void;
-    deleteGlobalVariable: (id: string) => void;
-
-    // DataFrame 操作
-    addDataFrame: (id: string, df: DataFrameData) => void;
-    updateDataFrame: (id: string, data: Partial<DataFrameData>) => void;
-    deleteDataFrame: (id: string) => void;
+    // Database 操作
+    addDatabase: (id: string, db: any) => void;
+    updateDatabase: (id: string, data: Partial<any>) => void;
+    deleteDatabase: (id: string) => void;
 
     // 项目级操作
     loadProject: (project: ProjectData, path: string | null) => void;
-    syncWithTabs: (tabs: Record<string, TabState>) => void;
-    syncTab: (tabId: string, tabState: TabState) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
-    // data
-    events: {},
-    functions: {},
-    macros: {},
-    globalVariables: {},
-    dataframes: {},
+    // 核心数据 (完全匹配 ProjectData 类型)
+    variables: {},
+    graphs: {},
+    databases: {},
     currentPath: null,
 
-    // state (来自 ProjectState)
+    // state
     status: LoadStatus.Idle,
     error: null,
 
     syncFromBackend: async () => {
         const { status } = get();
 
-        // 幂等保护
-        if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
-            console.log('[Project] Already loading or loaded, skipping...');
+        // 只在正在加载时跳过，允许在 Ready 状态下重新同步
+        if (status === LoadStatus.Loading) {
+            console.log('[Project] Already loading, skipping...');
             return null;
         }
 
@@ -93,23 +73,44 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             const projectData = await ProjectService.getProjectState();
             const path = await ProjectService.getProjectPath();
 
+            // 调试：打印后端返回的原始数据
+            console.log('[Project] Backend returned data:', {
+                variablesCount: Object.keys(projectData.variables || {}).length,
+                graphsCount: Object.keys(projectData.graphs || {}).length,
+                databasesCount: Object.keys(projectData.databases || {}).length,
+                graphsKeys: Object.keys(projectData.graphs || {}),
+                firstGraph: Object.values(projectData.graphs || {})[0]
+            });
+
+            // 强制创建新对象引用以触发 React 更新
+            const newVariables = { ...(projectData.variables || {}) };
+            const newGraphs = { ...(projectData.graphs || {}) };
+            const newDatabases = { ...(projectData.databases || {}) };
+
             set({
-                events: projectData.events || {},
-                functions: projectData.functions || {},
-                macros: projectData.macros || {},
-                globalVariables: projectData.globalVariables || {},
-                dataframes: projectData.dataframes || {},
+                variables: newVariables,
+                graphs: newGraphs,
+                databases: newDatabases,
                 currentPath: path,
                 status: LoadStatus.Ready,
             });
 
             const duration = performance.now() - startTime;
+            
+            // 计算分组数量用于日志
+            let eventsCount = 0, functionsCount = 0, macrosCount = 0;
+            for (const graph of Object.values(newGraphs)) {
+                if (graph.type === 'event') eventsCount++;
+                else if (graph.type === 'function') functionsCount++;
+                else if (graph.type === 'macro') macrosCount++;
+            }
+
             console.log('[Project] ✓ Project state synced successfully', {
-                events: Object.keys(projectData.events || {}).length,
-                functions: Object.keys(projectData.functions || {}).length,
-                macros: Object.keys(projectData.macros || {}).length,
-                globalVariables: Object.keys(projectData.globalVariables || {}).length,
-                dataframes: Object.keys(projectData.dataframes || {}).length,
+                events: eventsCount,
+                functions: functionsCount,
+                macros: macrosCount,
+                globalVariables: Object.keys(newVariables).length,
+                dataframes: Object.keys(newDatabases).length,
                 duration: `${duration.toFixed(0)}ms`,
             });
 
@@ -128,13 +129,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     },
 
     syncToBackend: async () => {
-        const { events, functions, macros, globalVariables, dataframes, currentPath } = get();
+        const { variables, graphs, databases, currentPath } = get();
         const projectData: ProjectData = {
-            events,
-            functions,
-            macros,
-            globalVariables,
-            dataframes,
+            variables,
+            graphs,
+            databases,
             metadata: {
                 exportTime: new Date().toISOString(),
                 appVersion: "0.1.0"
@@ -142,15 +141,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         };
 
         console.log('[Project] Syncing to backend:', {
-            events: Object.keys(events).length,
-            functions: Object.keys(functions).length,
-            macros: Object.keys(macros).length,
-            globalVariables: Object.keys(globalVariables).length,
-            dataframes: Object.keys(dataframes || {}).length,
+            variables: Object.keys(variables).length,
+            graphs: Object.keys(graphs).length,
+            databases: Object.keys(databases).length,
         });
 
         try {
-            // 自动同步时不触发事件（避免循环）
             await ProjectService.setProjectData(projectData, currentPath || undefined, false);
             console.log('[Project] ✓ Successfully synced to backend');
         } catch (e) {
@@ -161,293 +157,161 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     clear: () =>
         set({
-            events: {},
-            functions: {},
-            macros: {},
-            globalVariables: {},
-            dataframes: {},
+            variables: {},
+            graphs: {},
+            databases: {},
             currentPath: null,
             status: LoadStatus.Idle,
             error: null,
         }),
 
-    // 内部 Setters
-    setEvents: (events) => set({ events }),
-    setFunctions: (functions) => set({ functions }),
-    setMacros: (macros) => set({ macros }),
-    setGlobalVariables: (globalVariables) => set({ globalVariables }),
-    setDataFrames: (dataframes) => set({ dataframes }),
+    // Setters
+    setVariables: (variables) => set({ variables }),
+    setGraphs: (graphs) => set({ graphs }),
+    setDatabases: (databases) => set({ databases }),
     setCurrentPath: (currentPath) => set({ currentPath }),
 
-    // Event 操作
-    addEvent: (id, data) => {
-        set((state) => ({ events: { ...state.events, [id]: data } }));
-        ProjectService.createEvent(id, data).catch(console.error);
-    },
-
-    updateEvent: (id, data) => {
-        set((state) => ({ events: { ...state.events, [id]: { ...state.events[id], ...data } } }));
-        const fullData = get().events[id];
-        if (fullData) {
-            ProjectService.updateEvent(id, fullData).catch(console.error);
-        }
-    },
-
-    deleteEvent: (id) => {
-        set((state) => {
-            const next = { ...state.events };
-            delete next[id];
-            return { events: next };
-        });
-        ProjectService.deleteEvent(id).catch(console.error);
-    },
-
-    // Function 操作
-    addFunction: (id, data) => {
-        set((state) => ({ functions: { ...state.functions, [id]: data } }));
-        ProjectService.createFunction(id, data).catch(console.error);
-    },
-
-    updateFunction: (id, data) => {
-        set((state) => {
-            const nextFunctions = { ...state.functions, [id]: { ...state.functions[id], ...data } };
-
-            const cascade = (collection: Record<string, Graph>) => {
-                const nextCollection = { ...collection };
-                let changed = false;
-                Object.values(nextCollection).forEach(sub => {
-                    const newNodes = syncSubGraphInstanceNodes(sub.nodes, id, data.inputs, data.outputs, data.name);
-                    if (newNodes !== sub.nodes) {
-                        nextCollection[sub.id] = { ...sub, nodes: newNodes };
-                        changed = true;
-                    }
-                });
-                return changed ? nextCollection : collection;
-            };
-
-            const nextEvents = cascade(state.events);
-            const nextMacros = cascade(state.macros);
-            const nextFunctionsRecursive = cascade(nextFunctions);
-
-            const nodeStore = useNodeStore.getState();
-            Object.keys(nodeStore.tabs).forEach(tid => {
-                const currentNodes = nodeStore.getNodes(tid);
-                const newNodes = syncSubGraphInstanceNodes(currentNodes, id, data.inputs, data.outputs, data.name);
-
-                if (tid === id) {
-                    const updatedSelf = newNodes.map(n => {
-                        if (!n.isInternal) return n;
-                        const clone = n.clone();
-                        if (data.name && (n.type === 'function_entry' || n.type === 'macro_inputs')) clone.title = data.name;
-                        if (n.type === "function_entry" && data.inputs) syncInternalNodePins(clone, data.inputs, true);
-                        if (n.type === "function_return" && data.outputs) syncInternalNodePins(clone, data.outputs, false);
-                        return clone;
-                    });
-                    nodeStore.setNodes(tid, updatedSelf);
-                } else if (newNodes !== currentNodes) {
-                    nodeStore.setNodes(tid, newNodes);
-                }
-            });
-
-            return {
-                functions: nextFunctionsRecursive,
-                events: nextEvents,
-                macros: nextMacros
-            };
-        });
-
-        const fullData = get().functions[id];
-        if (fullData) {
-            ProjectService.updateFunction(id, fullData).catch(console.error);
-        }
-    },
-
-    deleteFunction: (id) => {
-        set((state) => {
-            const next = { ...state.functions };
-            delete next[id];
-            return { functions: next };
-        });
-        ProjectService.deleteFunction(id).catch(console.error);
-    },
-
-    // Macro 操作
-    addMacro: (id, data) => {
-        set((state) => ({ macros: { ...state.macros, [id]: data } }));
-        ProjectService.createMacro(id, data).catch(console.error);
-    },
-
-    updateMacro: (id, data) => {
-        set((state) => {
-            const nextMacros = { ...state.macros, [id]: { ...state.macros[id], ...data } };
-
-            const cascade = (collection: Record<string, Graph>) => {
-                const nextCollection = { ...collection };
-                let changed = false;
-                Object.values(nextCollection).forEach(sub => {
-                    const newNodes = syncSubGraphInstanceNodes(sub.nodes, id, data.inputs, data.outputs, data.name);
-                    if (newNodes !== sub.nodes) {
-                        nextCollection[sub.id] = { ...sub, nodes: newNodes };
-                        changed = true;
-                    }
-                });
-                return changed ? nextCollection : collection;
-            };
-
-            const nextEvents = cascade(state.events);
-            const nextFunctions = cascade(state.functions);
-            const nextMacrosRecursive = cascade(nextMacros);
-
-            const nodeStore = useNodeStore.getState();
-            Object.keys(nodeStore.tabs).forEach(tid => {
-                const currentNodes = nodeStore.getNodes(tid);
-                const newNodes = syncSubGraphInstanceNodes(currentNodes, id, data.inputs, data.outputs, data.name);
-
-                if (tid === id) {
-                    const updatedSelf = newNodes.map(n => {
-                        if (!n.isInternal) return n;
-                        const clone = n.clone();
-                        if (data.name && (n.type === 'macro_inputs')) clone.title = data.name;
-                        if (n.type === "macro_inputs" && data.inputs) syncInternalNodePins(clone, data.inputs, true);
-                        if (n.type === "macro_outputs" && data.outputs) syncInternalNodePins(clone, data.outputs, false);
-                        return clone;
-                    });
-                    nodeStore.setNodes(tid, updatedSelf);
-                } else if (newNodes !== currentNodes) {
-                    nodeStore.setNodes(tid, newNodes);
-                }
-            });
-
-            return {
-                macros: nextMacrosRecursive,
-                events: nextEvents,
-                functions: nextFunctions
-            };
-        });
-
-        const fullData = get().macros[id];
-        if (fullData) {
-            ProjectService.updateMacro(id, fullData).catch(console.error);
-        }
-    },
-
-    deleteMacro: (id) => {
-        set((state) => {
-            const next = { ...state.macros };
-            delete next[id];
-            return { macros: next };
-        });
-        ProjectService.deleteMacro(id).catch(console.error);
-    },
-
-    // Global Variable 操作
-    addGlobalVariable: (id, v) => {
-        set((state) => ({ globalVariables: { ...state.globalVariables, [id]: v } }));
-        ProjectService.createGlobalVariable(id, v).catch(console.error);
-    },
-
-    updateGlobalVariable: (id, data) => {
-        set((state) => ({ globalVariables: { ...state.globalVariables, [id]: { ...state.globalVariables[id], ...data } } }));
-        const fullData = get().globalVariables[id];
-        if (fullData) {
-            ProjectService.updateGlobalVariable(id, fullData).catch(console.error);
-        }
-    },
-
-    deleteGlobalVariable: (id) => {
-        set((state) => {
-            const next = { ...state.globalVariables };
-            delete next[id];
-            return { globalVariables: next };
-        });
-        ProjectService.deleteGlobalVariable(id).catch(console.error);
-    },
-
-    // DataFrame 操作
-    addDataFrame: (id, df) => {
-        set((state) => ({ dataframes: { ...state.dataframes, [id]: df } }));
-        ProjectService.createDataFrame(id, df).catch(console.error);
-    },
-
-    updateDataFrame: (id, data) => {
+    // Graph 操作
+    addGraph: (id, graph) => {
         set((state) => ({
-            dataframes: {
-                ...state.dataframes,
-                [id]: { ...state.dataframes[id], ...data }
+            graphs: { ...state.graphs, [id]: graph }
+        }));
+    },
+
+    updateGraph: (id, data) => {
+        set((state) => ({
+            graphs: {
+                ...state.graphs,
+                [id]: { ...state.graphs[id], ...data }
             }
         }));
-        get().syncToBackend().catch(console.error);
     },
 
-    deleteDataFrame: (id) => {
+    deleteGraph: (id) => {
         set((state) => {
-            const next = { ...state.dataframes };
-            delete next[id];
-            return { dataframes: next };
+            const newGraphs = { ...state.graphs };
+            delete newGraphs[id];
+            return { graphs: newGraphs };
         });
-        ProjectService.deleteDataFrame(id).catch(console.error);
+    },
+
+    // Variable 操作
+    addVariable: (id, variable) => {
+        set((state) => ({
+            variables: { ...state.variables, [id]: variable }
+        }));
+    },
+
+    updateVariable: (id, data) => {
+        set((state) => ({
+            variables: {
+                ...state.variables,
+                [id]: { ...state.variables[id], ...data }
+            }
+        }));
+    },
+
+    deleteVariable: (id) => {
+        set((state) => {
+            const newVariables = { ...state.variables };
+            delete newVariables[id];
+            return { variables: newVariables };
+        });
+    },
+
+    // Database 操作
+    addDatabase: (id, db) => {
+        set((state) => ({
+            databases: { ...state.databases, [id]: db }
+        }));
+    },
+
+    updateDatabase: (id, data) => {
+        set((state) => ({
+            databases: {
+                ...state.databases,
+                [id]: { ...state.databases[id], ...data }
+            }
+        }));
+    },
+
+    deleteDatabase: (id) => {
+        set((state) => {
+            const newDatabases = { ...state.databases };
+            delete newDatabases[id];
+            return { databases: newDatabases };
+        });
     },
 
     // 项目级操作
-    loadProject: (project, path) => set({
-        events: project.events || {},
-        functions: project.functions || {},
-        macros: project.macros || {},
-        globalVariables: project.globalVariables || {},
-        dataframes: project.dataframes || {},
-        currentPath: path
-    }),
-
-    syncWithTabs: (tabs) => {
-        const { events, functions, macros } = get();
-        const { nextEvents, nextFunctions, nextMacros, changed } = ProjectService.syncStoreToCollections(
-            tabs,
-            events,
-            functions,
-            macros
-        );
-
-        if (changed) {
-            set({
-                events: nextEvents,
-                functions: nextFunctions,
-                macros: nextMacros
-            });
-
-            get().syncToBackend().catch(console.error);
-        }
-    },
-
-    syncTab: (tabId, tabState) => {
-        const { events, functions, macros } = get();
-        const nextEvents = { ...events };
-        const nextFunctions = { ...functions };
-        const nextMacros = { ...macros };
-
-        const { nextEvents: e, nextFunctions: f, nextMacros: m, changed } = ProjectService.syncStoreToCollections(
-            { [tabId]: tabState },
-            nextEvents,
-            nextFunctions,
-            nextMacros
-        );
-
-        if (changed) {
-            set({
-                events: e,
-                functions: f,
-                macros: m
-            });
-
-            const updatedSubGraph = e[tabId] || f[tabId] || m[tabId];
-            if (updatedSubGraph) {
-                if (e[tabId]) {
-                    ProjectService.updateEvent(tabId, updatedSubGraph).catch(console.error);
-                } else if (f[tabId]) {
-                    ProjectService.updateFunction(tabId, updatedSubGraph).catch(console.error);
-                } else if (m[tabId]) {
-                    ProjectService.updateMacro(tabId, updatedSubGraph).catch(console.error);
-                }
-            }
-        }
+    loadProject: (project, path) => {
+        set({
+            variables: project.variables || {},
+            graphs: project.graphs || {},
+            databases: project.databases || {},
+            currentPath: path,
+        });
     },
 }));
+
+// 选择器函数 - 用于从 graphs 中按类型筛选
+// 使用缓存来避免每次都创建新对象导致无限循环
+const graphsCache = new WeakMap<Record<string, Graph>, {
+    events: Record<string, Graph>;
+    functions: Record<string, Graph>;
+    macros: Record<string, Graph>;
+}>();
+
+export const selectEvents = (state: ProjectStore): Record<string, Graph> => {
+    const graphs = state.graphs;
+    
+    // 检查缓存
+    let cached = graphsCache.get(graphs);
+    if (!cached) {
+        // 创建新的分类对象
+        const events: Record<string, Graph> = {};
+        const functions: Record<string, Graph> = {};
+        const macros: Record<string, Graph> = {};
+        
+        for (const [id, graph] of Object.entries(graphs)) {
+            if (graph.type === 'event') {
+                events[id] = graph;
+            } else if (graph.type === 'function') {
+                functions[id] = graph;
+            } else if (graph.type === 'macro') {
+                macros[id] = graph;
+            }
+        }
+        
+        cached = { events, functions, macros };
+        graphsCache.set(graphs, cached);
+    }
+    
+    return cached.events;
+};
+
+export const selectFunctions = (state: ProjectStore): Record<string, Graph> => {
+    const graphs = state.graphs;
+    let cached = graphsCache.get(graphs);
+    if (!cached) {
+        // 如果没有缓存，调用 selectEvents 会创建缓存
+        selectEvents(state);
+        cached = graphsCache.get(graphs)!;
+    }
+    return cached.functions;
+};
+
+export const selectMacros = (state: ProjectStore): Record<string, Graph> => {
+    const graphs = state.graphs;
+    let cached = graphsCache.get(graphs);
+    if (!cached) {
+        // 如果没有缓存，调用 selectEvents 会创建缓存
+        selectEvents(state);
+        cached = graphsCache.get(graphs)!;
+    }
+    return cached.macros;
+};
+
+// 别名选择器 - 直接返回引用，不创建新对象
+export const selectGlobalVariables = (state: ProjectStore): Record<string, Variable> => state.variables;
+export const selectDataframes = (state: ProjectStore): Record<string, any> => state.databases;

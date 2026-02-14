@@ -1,24 +1,32 @@
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { Graph, ProjectData, CanvasState, Pin } from "@/shared/types/editor";
+import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/editor";
 
-
+type CanvasState = GraphPosition;
 
 /**
- * 将后端 SubGraphData 转换为前端格式
- * 目前前后端使用相同的 JSON 字段名，直接返回
+ * 将后端 Graph 数据转换为前端格式
  */
-function toFrontendSubGraphData(data: any): Graph {
-    return data as Graph;
+function toFrontendGraph(data: any): Graph {
+    // 后端返回的结构需要转换
+    return {
+        id: data.id,
+        name: data.name,
+        type: data.kind.toLowerCase() as "event" | "function" | "macro", // 后端是 "Event"/"Function"/"Macro"
+        nodes: [], // TODO: 从 data_state.nodes 转换
+        pins: [], // TODO: 从 data_state.pins 转换
+        connections: data.data_state?.connections || { connections: {}, reverse_connections: {}, pin_to_node: {}, node_to_pins: {} },
+        canvas: data.position || { x: 0, y: 0, scale: 1 }
+    };
 }
 
 /**
- * 将后端 HashMap 转换为前端 Record
+ * 将后端 Graph Map 转换为前端 Record
  */
-function convertSubGraphMap(map: Record<string, any>): Record<string, Graph> {
+function convertGraphMap(map: Record<string, any>): Record<string, Graph> {
     const result: Record<string, Graph> = {};
     for (const [id, data] of Object.entries(map)) {
-        result[id] = toFrontendSubGraphData(data);
+        result[id] = toFrontendGraph(data);
     }
     return result;
 }
@@ -29,22 +37,28 @@ export class ProjectService {
     // ==================== 项目级操作 ====================
 
     /**
-     * 获取当前项目状态
+     * 获取当前项目状态 - 使用新的 ProjectData 结构
      */
     static async getProjectState(): Promise<ProjectData> {
         console.log('[ProjectService.getProjectState] Invoking get_project_data...');
         const data: any = await invoke("get_project_data");
-        console.log('[ProjectService.getProjectState] Raw backend data:', data);
-        // 后端使用 serde rename，JSON 字段名是 camelCase (globalVariables)
-        const result = {
-            globalVariables: data.globalVariables || {},
-            events: convertSubGraphMap(data.events || {}),
-            functions: convertSubGraphMap(data.functions || {}),
-            macros: convertSubGraphMap(data.macros || {}),
-            dataframes: data.dataframes || {},
+        console.log('[ProjectService.getProjectState] Raw backend data:', JSON.stringify(data));
+        
+        // 新格式：直接使用 variables, graphs, databases
+        const result: ProjectData = {
+            variables: data.variables || {},
+            graphs: convertGraphMap(data.graphs || {}),
+            databases: data.databases || {},
             metadata: data.metadata || { exportTime: "", appVersion: "" },
         };
-        console.log('[ProjectService.getProjectState] Converted data:', result);
+        
+        console.log('[ProjectService.getProjectState] Converted data:', {
+            variablesCount: Object.keys(result.variables).length,
+            graphsCount: Object.keys(result.graphs).length,
+            databasesCount: Object.keys(result.databases).length,
+            graphs: result.graphs
+        });
+        
         return result;
     }
 
@@ -63,7 +77,7 @@ export class ProjectService {
     }
 
     /**
-     * 从文件加载项目到状态管理器
+     * 从文件加载项目到状态管理器 - 使用新的 ProjectData 结构
      */
     static async loadProjectToState(path?: string): Promise<{ project: ProjectData; path: string | null } | null> {
         try {
@@ -81,11 +95,9 @@ export class ProjectService {
             const data: any = await invoke("load_project_to_state", { path: filePath });
             return {
                 project: {
-                    globalVariables: data.globalVariables || {},
-                    events: convertSubGraphMap(data.events || {}),
-                    functions: convertSubGraphMap(data.functions || {}),
-                    macros: convertSubGraphMap(data.macros || {}),
-                    dataframes: data.dataframes || {},
+                    variables: data.variables || {},
+                    graphs: convertGraphMap(data.graphs || {}),
+                    databases: data.databases || {},
                     metadata: data.metadata || { exportTime: "", appVersion: "" },
                 },
                 path: filePath,
@@ -118,25 +130,20 @@ export class ProjectService {
     }
 
     /**
-     * 设置完整的项目数据（用于批量同步）
-     * 注意：后端使用 serde rename，JSON 字段名使用 camelCase
+     * 设置完整的项目数据（用于批量同步）- 使用新的 ProjectData 结构
      */
     static async setProjectData(data: ProjectData, path?: string, emitEvent: boolean = false): Promise<void> {
-        // 直接发送，字段名已经匹配（前端和后端都使用 camelCase 的 JSON 字段名）
+        // 直接发送新格式数据
         const backendData = {
-            globalVariables: data.globalVariables,
-            events: data.events,
-            functions: data.functions,
-            macros: data.macros,
-            dataframes: data.dataframes,
+            variables: data.variables,
+            graphs: data.graphs,
+            databases: data.databases,
             metadata: data.metadata,
         };
         console.log('[ProjectService.setProjectData] Sending to backend:', {
-            eventsCount: Object.keys(backendData.events).length,
-            functionsCount: Object.keys(backendData.functions).length,
-            macrosCount: Object.keys(backendData.macros).length,
-            globalVariablesCount: Object.keys(backendData.globalVariables).length,
-            dataframesCount: Object.keys(backendData.dataframes || {}).length,
+            variablesCount: Object.keys(backendData.variables).length,
+            graphsCount: Object.keys(backendData.graphs).length,
+            databasesCount: Object.keys(backendData.databases || {}).length,
             emitEvent,
         });
         await invoke("set_project_data", { data: backendData, path: path || null, emitEvent });
@@ -159,12 +166,12 @@ export class ProjectService {
             inputs: inputs || null,
             outputs: outputs || null,
         });
-        return toFrontendSubGraphData(result);
+        return toFrontendGraph(result);
     }
 
     static async renameSubgraph(subgraphId: string, newName: string): Promise<Graph> {
         const result: any = await invoke("rename_subgraph", { subgraphId, newName });
-        return toFrontendSubGraphData(result);
+        return toFrontendGraph(result);
     }
 
 }

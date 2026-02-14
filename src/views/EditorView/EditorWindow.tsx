@@ -1,4 +1,4 @@
-import { useLayoutStore } from "@/features/layoutStore/layoutStore";
+import { useLayoutStore } from "@/features/editor/stores/layoutStore";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";
 import { DragLayer } from "./Layout/DragOverlay";
@@ -11,7 +11,8 @@ import { useEditorKeyboard } from "@/features/editor/hooks/useEditorKeyboard";
 import { useEditor } from "@/features/editor";
 import { useCallback } from "react";
 import { useViewportStore } from "@/features/canvas/stores";
-import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/layoutStore/layoutStore";
+import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/editor/stores/layoutStore";
+import { useProjectSync } from "@/features/sync/projectSync";
 
 const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
@@ -19,6 +20,14 @@ export const EditorWindow = () => {
     const rootId = useLayoutStore((s) => s.rootId);
     const { status, error } = useAppInitialization();
     const editor = useEditor();
+
+    // 设置 projectSync 回调，连接后端事件到前端操作
+    useProjectSync({
+        enabled: true,
+        onEventCreated: editor.handleEventCreated,
+        onFunctionCreated: editor.handleFunctionCreated,
+        onMacroCreated: editor.handleMacroCreated,
+    });
 
     // Helper to get active canvas local point for keyboard shortcuts
     const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
