@@ -1,0 +1,56 @@
+// src/features/core/sync/utils/eventParser.ts
+
+import { BaseEvent, NestedEvent } from '../types';
+
+export interface ParsedEvent {
+    type: string;
+    payload: any;
+}
+
+/**
+ * 解析后端事件结构
+ * 处理嵌套事件：{ type: "Event", payload: { type: "EventCreated", payload: {...} } }
+ */
+export function parseEvent(event: BaseEvent | NestedEvent): ParsedEvent {
+    const eventType = event.type;
+    const eventPayload = event.payload;
+
+    // 检查是否为嵌套事件
+    if (eventPayload && typeof eventPayload === 'object' && 'type' in eventPayload) {
+        // 嵌套事件：Event/Function/Macro/Variable/Node/Connection/DataFrame
+        return {
+            type: eventPayload.type,
+            payload: eventPayload.payload
+        };
+    }
+
+    // 直接事件：Project
+    return {
+        type: eventType,
+        payload: eventPayload
+    };
+}
+
+/**
+ * 验证事件类型
+ */
+export function isValidEventType(type: string): boolean {
+    const validTypes = [
+        // Project
+        'ProjectLoaded', 'ProjectCleared', 'ProjectSaved',
+        // Graph
+        'EventCreated', 'EventUpdated', 'EventDeleted', 'EventCreatedFailed',
+        'FunctionCreated', 'FunctionUpdated', 'FunctionDeleted', 'FunctionCreatedFailed',
+        'MacroCreated', 'MacroUpdated', 'MacroDeleted', 'MacroCreatedFailed',
+        // Variable
+        'GlobalVariableCreated', 'GlobalVariableUpdated', 'GlobalVariableDeleted',
+        // DataFrame
+        'DataFrameCreated', 'DataFrameDeleted',
+        // Node
+        'NodeCreated', 'NodeUpdated', 'NodeDeleted',
+        // Connection (可选)
+        'ConnectionCreated', 'ConnectionDeleted',
+    ];
+    
+    return validTypes.includes(type);
+}

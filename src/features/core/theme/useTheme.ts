@@ -1,5 +1,5 @@
 // src/hooks/useTheme.ts
-import { useSettingsStore } from "@/features/core/settings/stores/settingsStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { useShallow } from 'zustand/react/shallow';
 
 export const useTheme = () => {

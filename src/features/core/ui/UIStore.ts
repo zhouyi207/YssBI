@@ -1,4 +1,4 @@
-import { Message, MessageType, DialogOptions, ImportDialogOptions } from "./types";
+import { Message, MessageType, DialogOptions, ImportDialogOptions } from "../../../shared/types/ui/types";
 
 type UIModal =
   | { id: string; type: "confirm"; options: DialogOptions }

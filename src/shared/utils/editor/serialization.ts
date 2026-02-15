@@ -135,10 +135,14 @@ export function deserializeGraph(data: any): {
       node = {
         id: n.id,
         type: n.type,
+        node_type: n.node_type || n.type,
+        category: n.category || def.category || [],
         title: n.title || def.name,
         position: n.position,
         inputs: [],
         outputs: [],
+        ui_style: n.ui_style || def.node_metadata?.ui_style || 'default',
+        description: n.description || def.node_metadata?.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
         variableId: n.variableId,
@@ -147,13 +151,18 @@ export function deserializeGraph(data: any): {
       };
     } else {
       // Create a shell node if definition is missing
+      console.warn('[deserializeGraph] Node definition not found for type:', n.type);
       node = {
         id: n.id,
         type: n.type,
-        title: n.title,
+        node_type: n.node_type || n.type,
+        category: n.category || [],
+        title: n.title || n.type,
         position: n.position,
         inputs: [],
         outputs: [],
+        ui_style: n.ui_style || 'default',
+        description: n.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
         variableId: n.variableId,

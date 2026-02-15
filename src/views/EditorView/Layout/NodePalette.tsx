@@ -26,7 +26,7 @@ interface TreeLeaf {
 
 type TreeNode = TreeCategory | TreeLeaf;
 
-export default function NodePalette({
+export function NodePalette({
   x,
   y,
   onSelect,

@@ -8,41 +8,189 @@ type CanvasState = GraphPosition;
  * 将后端 Graph 数据转换为前端格式
  */
 function toFrontendGraph(data: any): Graph {
-    // 后端返回的结构需要转换
-    // connections 是一个对象：{ connections: {}, reverse_connections: {}, ... }
-    // 需要将 connections 对象转换为数组格式
-    const backendConnections = data.data_state?.connections?.connections || {};
-    const connectionsArray: any[] = [];
+    console.log('[toFrontendGraph] Input data:', data);
     
-    // 将对象转换为数组
-    // 假设格式是 { "pin1->pin2": { from_pin: "pin1", to_pin: "pin2" }, ... }
-    // 或者是 { "key": [from_pin, to_pin], ... }
-    for (const [_key, value] of Object.entries(backendConnections)) {
-        if (Array.isArray(value) && value.length === 2) {
-            // 格式：{ "key": [from_pin, to_pin] }
-            connectionsArray.push({
-                from_pin: value[0],
-                to_pin: value[1]
+    // 后端返回的结构：
+    // - 新格式（GraphInstanceDTO）：{ id, name, graph_type, nodes: [], pins: [], connections: {...}, canvas }
+    // - 旧格式（GraphInstance）：{ id, name, kind, data_state: { nodes: {}, pins: {}, connections: {} }, position }
+    
+    let nodes: any[] = [];
+    let pins: any[] = [];
+    let connectionsArray: any[] = [];
+    
+    // 检查是否是新格式（GraphInstanceDTO）
+    if (data.nodes && Array.isArray(data.nodes)) {
+        // 新格式：nodes 是数组
+        
+        // 先处理 pins 数组，创建 Pin ID 到 Pin 对象的映射
+        const pinMap = new Map<string, any>();
+        if (data.pins && Array.isArray(data.pins)) {
+            data.pins.forEach((pin: any) => {
+                pinMap.set(pin.id, {
+                    id: pin.id,
+                    nodeId: pin.node_id,
+                    name: pin.name,
+                    type: pin.data_type || 'any',
+                    node_type: pin.data_type || 'any',
+                    direction: pin.direction,
+                    links: [],
+                    isArray: pin.is_array || false,
+                    defaultValue: pin.default_value,
+                    userValue: pin.user_value,
+                });
             });
-        } else if (typeof value === 'object' && value !== null) {
-            // 格式：{ "key": { from_pin: "...", to_pin: "..." } }
-            connectionsArray.push(value);
+        }
+        
+        // 转换节点，并从 pinMap 中获取对应的 Pin
+        nodes = data.nodes.map((node: any) => {
+            const nodeInputs: any[] = [];
+            const nodeOutputs: any[] = [];
+            
+            // 从 node.inputs (Pin IDs) 中获取完整的 Pin 对象
+            if (node.inputs && Array.isArray(node.inputs)) {
+                node.inputs.forEach((pinId: string) => {
+                    const pin = pinMap.get(pinId);
+                    if (pin) {
+                        nodeInputs.push(pin);
+                    }
+                });
+            }
+            
+            // 从 node.outputs (Pin IDs) 中获取完整的 Pin 对象
+            if (node.outputs && Array.isArray(node.outputs)) {
+                node.outputs.forEach((pinId: string) => {
+                    const pin = pinMap.get(pinId);
+                    if (pin) {
+                        nodeOutputs.push(pin);
+                    }
+                });
+            }
+            
+            return {
+                id: node.id,
+                type: node.node_type,        // deserializeGraph 需要这个字段
+                node_type: node.node_type,   // 保持一致性
+                category: node.category || [],
+                title: node.title,
+                inputs: nodeInputs,
+                outputs: nodeOutputs,
+                ui_style: node.ui_style || 'default',
+                description: node.description,
+                position: node.position || { x: 0, y: 0 },
+            };
+        });
+        
+        pins = Array.from(pinMap.values());
+        
+        // connections 可能是对象或数组
+        if (data.connections) {
+            if (Array.isArray(data.connections)) {
+                connectionsArray = data.connections;
+            } else if (data.connections.connections && Array.isArray(data.connections.connections)) {
+                connectionsArray = data.connections.connections;
+            } else if (typeof data.connections === 'object') {
+                // 将对象转换为数组
+                for (const [_key, value] of Object.entries(data.connections)) {
+                    if (Array.isArray(value) && value.length === 2) {
+                        connectionsArray.push({
+                            from_pin: value[0],
+                            to_pin: value[1]
+                        });
+                    } else if (typeof value === 'object' && value !== null) {
+                        connectionsArray.push(value);
+                    }
+                }
+            }
+        }
+    } else if (data.data_state) {
+        // 旧格式：data_state 包含 nodes, pins, connections
+        const dataState = data.data_state;
+        
+        // 先处理 pins
+        const pinMap = new Map<string, any>();
+        if (dataState.pins) {
+            Object.values(dataState.pins).forEach((pin: any) => {
+                pinMap.set(pin.id, {
+                    id: pin.id,
+                    nodeId: pin.node_id,
+                    name: pin.name,
+                    type: pin.data_type || 'any',
+                    node_type: pin.data_type || 'any',
+                    direction: pin.direction,
+                    links: [],
+                    isArray: pin.is_array || false,
+                    defaultValue: pin.default_value,
+                    userValue: pin.user_value,
+                });
+            });
+        }
+        
+        // 转换 nodes（从 HashMap 到数组）
+        if (dataState.nodes) {
+            nodes = Object.values(dataState.nodes).map((node: any) => {
+                const nodeInputs: any[] = [];
+                const nodeOutputs: any[] = [];
+                
+                if (node.inputs && Array.isArray(node.inputs)) {
+                    node.inputs.forEach((pinId: string) => {
+                        const pin = pinMap.get(pinId);
+                        if (pin) nodeInputs.push(pin);
+                    });
+                }
+                
+                if (node.outputs && Array.isArray(node.outputs)) {
+                    node.outputs.forEach((pinId: string) => {
+                        const pin = pinMap.get(pinId);
+                        if (pin) nodeOutputs.push(pin);
+                    });
+                }
+                
+                return {
+                    id: node.id,
+                    type: node.node_type,        // deserializeGraph 需要这个字段
+                    node_type: node.node_type,   // 保持一致性
+                    category: node.category || [],
+                    title: node.title,
+                    inputs: nodeInputs,
+                    outputs: nodeOutputs,
+                    ui_style: node.ui_style || 'default',
+                    description: node.description,
+                    position: node.position || { x: 0, y: 0 },
+                };
+            });
+        }
+        
+        pins = Array.from(pinMap.values());
+        
+        // 转换 connections
+        const backendConnections = dataState.connections?.connections || {};
+        for (const [_key, value] of Object.entries(backendConnections)) {
+            if (Array.isArray(value) && value.length === 2) {
+                connectionsArray.push({
+                    from_pin: value[0],
+                    to_pin: value[1]
+                });
+            } else if (typeof value === 'object' && value !== null) {
+                connectionsArray.push(value);
+            }
         }
     }
     
-    console.log('[toFrontendGraph] Converted connections:', {
-        backend: backendConnections,
-        frontend: connectionsArray
+    console.log('[toFrontendGraph] Converted:', {
+        nodesCount: nodes.length,
+        pinsCount: pins.length,
+        connectionsCount: connectionsArray.length,
+        sampleNode: nodes[0]
     });
     
     return {
         id: data.id,
         name: data.name,
-        type: data.kind.toLowerCase() as "event" | "function" | "macro", // 后端是 "Event"/"Function"/"Macro"
-        nodes: [], // TODO: 从 data_state.nodes 转换
-        pins: [], // TODO: 从 data_state.pins 转换
+        type: (data.graph_type || data.kind || 'event').toLowerCase() as "event" | "function" | "macro",
+        nodes,
+        pins,
         connections: { connections: connectionsArray },
-        canvas: data.position || { x: 0, y: 0, scale: 1 }
+        canvas: data.canvas || data.position || { x: 0, y: 0, scale: 1 }
     };
 }
 

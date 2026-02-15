@@ -10,7 +10,7 @@ use serde_json::Value;
 
 /// 获取当前项目数据
 #[tauri::command]
-pub fn get_project_data(state: State<ProjectState>) -> ProjectData {
+pub fn get_project_data(state: State<ProjectState>) -> crate::schema::ProjectDataDTO {
     let data = state.get_data();
 
     log_app!(
@@ -19,7 +19,7 @@ pub fn get_project_data(state: State<ProjectState>) -> ProjectData {
         data.info()
     );
 
-    data
+    crate::schema::ProjectDataDTO::from(&data)
 }
 
 #[tauri::command]

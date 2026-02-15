@@ -4,7 +4,7 @@ import { useViewportStore } from "@/features/core/viewport";
 
 
 
-export default function HUD() {
+export  function HUD() {
   const { groupId } = useEditorGroup();
 
   // Use individual selectors to avoid new object reference on every store update

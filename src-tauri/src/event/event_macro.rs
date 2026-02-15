@@ -8,4 +8,5 @@ pub enum EventMacro {
     MacroCreated { id: GraphId, data: GraphInstanceDTO },
     MacroUpdated { id: GraphId, data: GraphInstanceDTO },
     MacroDeleted { id: GraphId },
+    MacroCreatedFailed { name: String, error: String },
 }

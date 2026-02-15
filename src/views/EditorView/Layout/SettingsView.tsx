@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useSettingsStore } from "@/features/core/settings/stores/settingsStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { Select } from "../../../shared/ui/Select";
 
 export const SettingsView: React.FC = () => {

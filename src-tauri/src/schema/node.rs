@@ -1,10 +1,9 @@
-use crate::graph::{NodeDefinition, NodeMetaData};
+use crate::graph::{NodeDefinition, NodeMetaData, NodePosition};
 use crate::graph::{NodeId, NodeInstance};
 use serde::{Deserialize, Serialize};
 
 /// Node instance DTO - 对应前端 Node 类型
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct NodeInstanceDTO {
     pub id: NodeId,
     #[serde(rename = "node_type")]
@@ -16,6 +15,7 @@ pub struct NodeInstanceDTO {
     pub ui_style: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    pub position: NodePosition,  // 添加位置信息
 }
 
 impl From<&NodeInstance> for NodeInstanceDTO {
@@ -29,6 +29,7 @@ impl From<&NodeInstance> for NodeInstanceDTO {
             outputs: Vec::new(), // 需要从 GraphDataState 中获取
             ui_style: value.definition.metadata.ui_style.clone(),
             description: value.definition.metadata.description.clone(),
+            position: value.position.clone(),
         }
     }
 }

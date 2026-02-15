@@ -43,6 +43,10 @@ interface ProjectStore extends ProjectState {
 
     // 项目级操作
     loadProject: (project: ProjectData, path: string | null) => void;
+    
+    // Graph 内部的 Node 操作
+    addNodeToGraph: (graphId: string, node: any) => void;
+    removeNodeFromGraph: (graphId: string, nodeId: string) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -256,6 +260,47 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             graphs: project.graphs || {},
             databases: project.databases || {},
             currentPath: path,
+        });
+    },
+    
+    // Graph 内部的 Node 操作
+    addNodeToGraph: (graphId: string, node: any) => {
+        set((state) => {
+            const graph = state.graphs[graphId];
+            if (!graph) {
+                console.warn(`[ProjectStore] Graph ${graphId} not found, cannot add node`);
+                return state;
+            }
+            
+            return {
+                graphs: {
+                    ...state.graphs,
+                    [graphId]: {
+                        ...graph,
+                        nodes: [...graph.nodes, node]
+                    }
+                }
+            };
+        });
+    },
+    
+    removeNodeFromGraph: (graphId: string, nodeId: string) => {
+        set((state) => {
+            const graph = state.graphs[graphId];
+            if (!graph) {
+                console.warn(`[ProjectStore] Graph ${graphId} not found, cannot remove node`);
+                return state;
+            }
+            
+            return {
+                graphs: {
+                    ...state.graphs,
+                    [graphId]: {
+                        ...graph,
+                        nodes: graph.nodes.filter((n: any) => n.id !== nodeId)
+                    }
+                }
+            };
         });
     },
 }));

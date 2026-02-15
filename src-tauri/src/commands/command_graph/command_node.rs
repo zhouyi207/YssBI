@@ -1,27 +1,78 @@
 use crate::graph::{GraphId, NodeId};
 use crate::project::ProjectState;
-use tauri::State;
+use crate::event::{emit_project_event, Event, EventNode};
+use crate::schema::NodeInstanceDTO;
+use crate::log::log_app;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub fn create_node(
+    app: AppHandle,
     state: State<ProjectState>,
     graph_id: GraphId,
     node_type: &str,
-) -> Result<(), String> {
+    x: Option<f32>,
+    y: Option<f32>,
+) -> Result<String, String> {
+    log_app::info!("create_node called: graph_id={}, node_type={}, x={:?}, y={:?}", graph_id, node_type, x, y);
+    
     let bounding = state.project_data.write().unwrap();
-    let graph = bounding.graphs.get(&graph_id);
-    let _ = graph.unwrap().create_node(node_type);
-    Ok(())
+    let graph = bounding.graphs.get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    
+    // 创建节点并设置位置
+    let node_id = graph.create_node_with_position(node_type, x.unwrap_or(0.0), y.unwrap_or(0.0))?;
+    
+    // 获取创建的节点实例并转换为 DTO
+    let node_instance = graph.get_node_instance(node_id)
+        .ok_or_else(|| format!("Node '{}' not found after creation", node_id))?;
+    
+    let mut node_dto: NodeInstanceDTO = (&node_instance).into();
+    
+    // 填充 inputs 和 outputs
+    let pin_instances = graph.get_pin_instances_by_node_id(node_id);
+    for pin in pin_instances {
+        match pin.definition.direction {
+            crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
+            crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
+        }
+    }
+    
+    // 发送节点创建事件
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodeCreated {
+            graph_id,
+            node_id,
+            data: node_dto,
+        }),
+    );
+    
+    // 返回节点 ID
+    Ok(node_id.to_string())
 }
 
 #[tauri::command]
 pub fn delete_node(
+    app: AppHandle,
     state: State<ProjectState>,
     graph_id: GraphId,
     node_id: NodeId,
 ) -> Result<(), String> {
     let bounding = state.project_data.write().unwrap();
-    let graph = bounding.graphs.get(&graph_id);
-    let _ = graph.unwrap().remove_node(node_id);
+    let graph = bounding.graphs.get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    
+    graph.remove_node(node_id)?;
+    
+    // 发送节点删除事件
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodeDeleted {
+            graph_id,
+            node_id,
+        }),
+    );
+    
     Ok(())
 }

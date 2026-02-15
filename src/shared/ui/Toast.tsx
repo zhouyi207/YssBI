@@ -1,4 +1,4 @@
-﻿import { Message } from "@/features/core/ui/types";
+﻿import { Message } from "@/shared/types/ui/types";
 import React from "react";
 
 export const Toast = ({ message, onClose }: { message: Message; onClose: (id: string) => void }) => {

@@ -16,8 +16,9 @@ pub fn create_event(
     app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let graph = state.add_event(graph_name);
+    let graph_id = graph.id.to_string();
     emit_project_event(
         &app,
         Event::Event(EventEvent::EventCreated {
@@ -25,7 +26,7 @@ pub fn create_event(
             data: (&graph).into(),
         }),
     );
-    Ok(())
+    Ok(graph_id)
 }
 
 #[tauri::command]
@@ -33,8 +34,9 @@ pub fn create_function(
     app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let graph = state.add_function(graph_name);
+    let graph_id = graph.id.to_string();
     emit_project_event(
         &app,
         Event::Function(EventFunction::FunctionCreated {
@@ -42,7 +44,7 @@ pub fn create_function(
             data: (&graph).into(),
         }),
     );
-    Ok(())
+    Ok(graph_id)
 }
 
 #[tauri::command]
@@ -50,8 +52,9 @@ pub fn create_macro(
     app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let graph = state.add_macro(graph_name);
+    let graph_id = graph.id.to_string();
     emit_project_event(
         &app,
         Event::Macro(EventMacro::MacroCreated {
@@ -59,7 +62,7 @@ pub fn create_macro(
             data: (&graph).into(),
         }),
     );
-    Ok(())
+    Ok(graph_id)
 }
 
 #[tauri::command]

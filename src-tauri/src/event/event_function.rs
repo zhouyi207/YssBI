@@ -8,4 +8,5 @@ pub enum EventFunction {
     FunctionCreated { id: GraphId, data: GraphInstanceDTO },
     FunctionUpdated { id: GraphId, data: GraphInstanceDTO },
     FunctionDeleted { id: GraphId },
+    FunctionCreatedFailed { name: String, error: String },
 }

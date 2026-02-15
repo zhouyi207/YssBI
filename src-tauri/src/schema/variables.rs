@@ -401,3 +401,53 @@ pub struct VariableDefinitionDTO {
     #[serde(default)]
     pub tags: Vec<String>,
 }
+
+impl From<&crate::variable::VariableDefinition> for VariableDefinitionDTO {
+    fn from(value: &crate::variable::VariableDefinition) -> Self {
+        use crate::graph::value::DataType;
+        
+        // Convert DataType to VariableDataType
+        let data_type = match value.data_type {
+            DataType::Boolean => VariableDataType::Bool,
+            DataType::Int32 => VariableDataType::Int32,
+            DataType::Int64 => VariableDataType::Int64,
+            DataType::Float32 => VariableDataType::Float32,
+            DataType::Float64 => VariableDataType::Float64,
+            DataType::String => VariableDataType::String,
+            DataType::Array(_) => VariableDataType::Array,
+            DataType::Object => VariableDataType::Object,
+            DataType::DataFrame => VariableDataType::Dataframe,
+            DataType::Any => VariableDataType::Any,
+            DataType::Null => VariableDataType::Any,
+        };
+        
+        // Convert DataValue to JSON
+        let static_value = value.value.as_ref().map(|v| v.to_json());
+        
+        // Convert VariableScope
+        let scope = match &value.scope {
+            crate::variable::VariableScope::Global => VariableScope::Global,
+            crate::variable::VariableScope::Function { id } => VariableScope::Function {
+                function_id: id.clone(),
+            },
+            crate::variable::VariableScope::Macro { id } => VariableScope::Macro {
+                macro_id: id.clone(),
+            },
+        };
+        
+        Self {
+            id: value.id.clone(),
+            name: value.name.clone(),
+            data_type,
+            description: value.description.clone(),
+            scope,
+            static_value,
+            source_config: None,
+            is_array: value.is_array,
+            is_constant: value.is_constant,
+            default_value: None,
+            is_exposed: value.is_exposed,
+            tags: value.tags.clone(),
+        }
+    }
+}

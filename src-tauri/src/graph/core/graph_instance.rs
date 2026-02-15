@@ -76,6 +76,10 @@ impl GraphInstance {
 /// Node 管理
 impl GraphInstance {
     pub fn create_node(&self, node_type: &str) -> Result<NodeId, String> {
+        self.create_node_with_position(node_type, 0.0, 0.0)
+    }
+
+    pub fn create_node_with_position(&self, node_type: &str, x: f32, y: f32) -> Result<NodeId, String> {
         let definition = self
             .registry
             .get(node_type)
@@ -83,10 +87,13 @@ impl GraphInstance {
 
         let (node, pins) = NodeInstance::from_definition(definition.clone());
         let node_id = node.id;
+        
+        // 设置位置
+        let node_with_position = node.with_position(x, y);
 
         {
             let mut data_state = self.data_state.write().unwrap();
-            data_state.add_node(node);
+            data_state.add_node(node_with_position);
             data_state.add_pins(pins);
         }
         
@@ -94,6 +101,11 @@ impl GraphInstance {
         let _ = self.infer_types();
         
         Ok(node_id)
+    }
+
+    pub fn get_node_instance(&self, node_id: NodeId) -> Option<NodeInstance> {
+        let data_state = self.data_state.read().unwrap();
+        data_state.nodes.get(&node_id).cloned()
     }
 
     pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {

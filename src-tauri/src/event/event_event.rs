@@ -8,4 +8,5 @@ pub enum EventEvent {
     EventCreated { id: GraphId, data: GraphInstanceDTO },
     EventUpdated { id: GraphId, data: GraphInstanceDTO },
     EventDeleted { id: GraphId },
+    EventCreatedFailed { name: String, error: String },
 }

@@ -1,4 +1,4 @@
-import { useSettingsStore } from "@/features/core/settings/stores/settingsStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 
 export const useEditorSettings = () =>
     useSettingsStore((s) => ({

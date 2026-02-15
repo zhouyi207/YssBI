@@ -1,4 +1,4 @@
-﻿import { DialogOptions } from "@/features/core/ui/types";
+﻿import { DialogOptions } from "@/shared/types/ui/types";
 
 export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: () => void }) => {
   return (

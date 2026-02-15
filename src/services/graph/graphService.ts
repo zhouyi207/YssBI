@@ -10,11 +10,13 @@ export class GraphService {
     /**
      * 创建 Event
      * @param graphName - Event 的名称
+     * @returns 后端生成的 Graph ID
      */
-    static async createEvent(graphName: string): Promise<void> {
+    static async createEvent(graphName: string): Promise<string> {
         try {
-            await invoke("create_event", { graphName });
-            console.log(`[GraphService.createEvent] Event '${graphName}' created successfully`);
+            const id = await invoke<string>("create_event", { graphName });
+            console.log(`[GraphService.createEvent] Event '${graphName}' created with ID: ${id}`);
+            return id;
         } catch (error) {
             console.error("[GraphService.createEvent] Error creating event:", error);
             throw error;
@@ -24,11 +26,13 @@ export class GraphService {
     /**
      * 创建 Function
      * @param graphName - Function 的名称
+     * @returns 后端生成的 Graph ID
      */
-    static async createFunction(graphName: string): Promise<void> {
+    static async createFunction(graphName: string): Promise<string> {
         try {
-            await invoke("create_function", { graphName });
-            console.log(`[GraphService.createFunction] Function '${graphName}' created successfully`);
+            const id = await invoke<string>("create_function", { graphName });
+            console.log(`[GraphService.createFunction] Function '${graphName}' created with ID: ${id}`);
+            return id;
         } catch (error) {
             console.error("[GraphService.createFunction] Error creating function:", error);
             throw error;
@@ -38,11 +42,13 @@ export class GraphService {
     /**
      * 创建 Macro
      * @param graphName - Macro 的名称
+     * @returns 后端生成的 Graph ID
      */
-    static async createMacro(graphName: string): Promise<void> {
+    static async createMacro(graphName: string): Promise<string> {
         try {
-            await invoke("create_macro", { graphName });
-            console.log(`[GraphService.createMacro] Macro '${graphName}' created successfully`);
+            const id = await invoke<string>("create_macro", { graphName });
+            console.log(`[GraphService.createMacro] Macro '${graphName}' created with ID: ${id}`);
+            return id;
         } catch (error) {
             console.error("[GraphService.createMacro] Error creating macro:", error);
             throw error;

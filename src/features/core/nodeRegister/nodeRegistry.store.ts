@@ -45,7 +45,15 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
             const defs = await SchemaService.getNodeDefinition();
 
             const definitions = new Map<string, NodeDefinition>();
-            defs.forEach((def) => definitions.set(def.name, def));
+            defs.forEach((def) => {
+                // 使用完整路径 (category:name) 作为主键
+                const fullName = [...def.category, def.name].join(':');
+                definitions.set(fullName, def);
+                
+                // 同时使用简单名称作为别名，方便查找
+                // 注意：如果有重名，后面的会覆盖前面的
+                definitions.set(def.name, def);
+            });
 
             // 缓存数组，避免每次 getAllDefinitions 都创建新引用
             const definitionsArray = Array.from(definitions.values());

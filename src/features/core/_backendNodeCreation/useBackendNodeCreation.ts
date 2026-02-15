@@ -28,10 +28,15 @@ export function useBackendNodeCreation() {
             }
 
             try {
-                console.log(`[useBackendNodeCreation] Creating node via backend: type=${node.node_type || node.type}`);
+                console.log(`[useBackendNodeCreation] Creating node via backend: type=${node.node_type || node.type}, position=${JSON.stringify(node.position)}`);
 
-                // 1. 调用后端创建节点（仅传递类型用于验证）
-                await NodeService.createNode(activeTabId, node.node_type || node.type);
+                // 1. 调用后端创建节点（传递类型和位置）
+                await NodeService.createNode(
+                    activeTabId, 
+                    node.node_type || node.type,
+                    node.position?.x,
+                    node.position?.y
+                );
 
                 console.log(`[useBackendNodeCreation] Backend validated node successfully`);
 
@@ -75,9 +80,10 @@ export function useBackendNodeCreation() {
             try {
                 console.log(`[useBackendNodeCreation] Creating ${nodes.length} nodes via backend...`);
 
-                // 1. 批量调用后端验证
+                // 1. 批量调用后端验证（传递类型和位置）
                 const nodeTypes = nodes.map(n => n.node_type || n.type);
-                await NodeService.createNodes(activeTabId, nodeTypes);
+                const positions = nodes.map(n => ({ x: n.position?.x || 0, y: n.position?.y || 0 }));
+                await NodeService.createNodes(activeTabId, nodeTypes, positions);
 
                 console.log(`[useBackendNodeCreation] Backend validated all nodes successfully`);
 

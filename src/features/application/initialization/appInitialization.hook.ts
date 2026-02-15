@@ -4,7 +4,6 @@ import { LoadStatus } from '@/shared/types/ui';
 import { useSchema } from '@/features/core/schema';
 import { useNodeRegistry } from '@/features/core/nodeRegister';
 import { initProjectSync } from '@/features/core/project';
-import { useProjectSync } from '../../core/project/projectSync';
 
 
 export function useAppInitialization(): InitializationState {
@@ -70,8 +69,6 @@ export function useAppInitialization(): InitializationState {
 
         syncProject();
     }, [schemaStatus, registryStatus]);
-
-    useProjectSync({ enabled: true });
 
     return state;
 }

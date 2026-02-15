@@ -42,10 +42,27 @@ impl From<&GraphInstance> for GraphInstanceDTO {
     fn from(value: &GraphInstance) -> Self {
         let data_state = value.data_state.read().unwrap();
 
+        // 构建 node_id -> (inputs, outputs) 的映射
+        let mut node_pins: HashMap<NodeId, (Vec<String>, Vec<String>)> = HashMap::new();
+        for (pin_id, pin) in &data_state.pins {
+            let entry = node_pins.entry(pin.node_id).or_insert((Vec::new(), Vec::new()));
+            match pin.definition.direction {
+                crate::graph::PinDirection::Input => entry.0.push(pin_id.to_string()),
+                crate::graph::PinDirection::Output => entry.1.push(pin_id.to_string()),
+            }
+        }
+
         let nodes: Vec<NodeInstanceDTO> = data_state
             .nodes
             .values()
-            .map(NodeInstanceDTO::from)
+            .map(|node| {
+                let mut dto = NodeInstanceDTO::from(node);
+                if let Some((inputs, outputs)) = node_pins.get(&node.id) {
+                    dto.inputs = inputs.clone();
+                    dto.outputs = outputs.clone();
+                }
+                dto
+            })
             .collect();
 
         let pins: Vec<PinInstanceDTO> = data_state

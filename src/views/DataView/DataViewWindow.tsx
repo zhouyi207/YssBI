@@ -2,7 +2,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
-import { useProjectSync } from '@/features/core/project/projectSync';
+import { useProjectSync } from '@/features/core/sync';
 import { useProjectStore, initProjectSync } from '@/features/core/project';
 import { Select } from '@/shared/ui/Select';
 
@@ -18,10 +18,8 @@ export const DataViewWindow: React.FC = () => {
 
   const CHUNK_SIZE = 100;
 
-  // 启用自动同步，监听后端 DataFrame 更改
-  useProjectSync({
-    enabled: true,
-  });
+  // 启用项目同步（如果主窗口已启动，会复用同一个监听器）
+  useProjectSync();
 
   // 自动管理选中状态
   useEffect(() => {

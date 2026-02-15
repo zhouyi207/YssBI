@@ -9,10 +9,10 @@ import { LoadStatus } from "@/shared/types/ui";
 import { UIHost } from "@/shared/ui/UIHost";
 import { useEditorKeyboard } from "@/features/application/editor";
 import { useEditor } from "@/features/application/editor";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useViewportStore } from "@/features/core/viewport";
 import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/core/layout/layoutStore";
-import { useProjectSync } from "@/features/core/project/projectSync";
+import { useProjectSync } from "@/features/core/sync";
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 
@@ -21,13 +21,30 @@ export const EditorWindow = () => {
     const { status, error } = useAppInitialization();
     const editor = useEditor();
 
-    // 设置 projectSync 回调，连接后端事件到前端操作
-    useProjectSync({
-        enabled: true,
+    // 使用 useMemo 稳定回调引用，避免重复创建监听器
+    const projectSyncCallbacks = useMemo(() => ({
         onEventCreated: editor.handleEventCreated,
+        onEventCreatedFailed: editor.handleEventCreatedFailed,
         onFunctionCreated: editor.handleFunctionCreated,
+        onFunctionCreatedFailed: editor.handleFunctionCreatedFailed,
         onMacroCreated: editor.handleMacroCreated,
-    });
+        onMacroCreatedFailed: editor.handleMacroCreatedFailed,
+        onNodeCreated: editor.handleNodeCreated,
+        onNodeDeleted: editor.handleNodeDeleted,
+    }), [
+        editor.handleEventCreated,
+        editor.handleEventCreatedFailed,
+        editor.handleFunctionCreated,
+        editor.handleFunctionCreatedFailed,
+        editor.handleMacroCreated,
+        editor.handleMacroCreatedFailed,
+        editor.handleNodeCreated,
+        editor.handleNodeDeleted,
+    ]);
+
+    // 启用项目同步（全局单例）并设置回调
+    // 注意：这是应用中唯一调用 useProjectSync 的地方
+    useProjectSync(projectSyncCallbacks);
 
     // Helper to get active canvas local point for keyboard shortcuts
     const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {

@@ -4,12 +4,12 @@ import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
 import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { Node } from "@/shared/types/domain";
-import HUD from "./HUD";
-import NodePalette from "../../Layout/NodePalette";
-import { VscRunAll, VscChevronDown } from "react-icons/vsc";
+import { HUD } from "./HUD";
+import { NodePalette } from "../../Layout/NodePalette";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
 import { useBackendNodeCreation } from "@/features/core/_backendNodeCreation";
+import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 
 
 export default function CanvasOverlays({

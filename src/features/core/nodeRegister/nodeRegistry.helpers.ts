@@ -10,6 +10,7 @@ import { LoadStatus } from "@/shared/types/ui";
  * 约定：
  * - 仅在 NodeRegistry 处于 Ready 状态时才会成功
  * - 若定义不存在或 Registry 未准备好，返回 null
+ * - type 参数可以是简单名称（如 "Branch"）或完整名称（如 "Control Flow:Branch"）
  */
 export function createNode(
   type: string,
@@ -31,11 +32,14 @@ export function createNode(
     return null;
   }
 
+  // 构建完整的节点类型名称（category:name 格式）
+  const fullNodeType = [...def.category, def.name].join(':');
+
   // 创建节点对象
   const node: any = {
     id,
-    type,
-    node_type: type,
+    type: fullNodeType,  // 使用完整名称
+    node_type: fullNodeType,  // 使用完整名称，后端需要这个格式
     category: def.category || [],
     title: def.name || type,
     position,
