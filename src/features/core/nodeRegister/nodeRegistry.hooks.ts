@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useNodeRegistryStore } from "./nodeRegistry.store";
-import { NodeRegistryState } from "./nodeRegistry.types";
+import { NodeRegistryState } from "@/shared/types/domain/nodeRegister";
 import { LoadStatus } from "@/shared/types/ui";
 
 /**

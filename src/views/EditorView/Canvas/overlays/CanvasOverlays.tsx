@@ -2,14 +2,14 @@
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { Node } from "@/shared/types/domain";
 import HUD from "./HUD";
 import NodePalette from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
-import { DEFAULT_VIEWPORT } from "../constants";
+import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
-import { useBackendNodeCreation } from "@/features/core/node-registry/hooks";
+import { useBackendNodeCreation } from "@/features/core/_backendNodeCreation";
 
 
 export default function CanvasOverlays({
@@ -28,7 +28,7 @@ export default function CanvasOverlays({
         pendingConnection,
         connectPins,
         variables,
-        globalVariables,
+        Variables,
         functions,
         macros,
         tabs,
@@ -53,10 +53,10 @@ export default function CanvasOverlays({
 
         // Check if this is an internal node type that should only exist once
         const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
-        if (internalNodeTypes.includes(item.node_type)) {
+        if (internalNodeTypes.includes(item.type)) {
             // Check if this internal node already exists
             const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
-            const existingNode = currentNodes.find(n => n.node_type === item.node_type && n.isInternal);
+            const existingNode = currentNodes.find(n => n.node_type === item.type && n.isInternal);
             if (existingNode) {
                 // Move canvas to center on the existing node
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -83,13 +83,13 @@ export default function CanvasOverlays({
 
         let newNode: Node | null = null;
 
-        if (item.node_type === 'call_function' || item.node_type === 'call_macro') {
+        if (item.type === 'call_function' || item.type === 'call_macro') {
             const subId = item.overrides?.subGraphId;
             if (subId) {
-                const subData = item.node_type === 'call_function' ? functions[subId] : macros[subId];
+                const subData = item.type === 'call_function' ? functions[subId] : macros[subId];
                 if (subData) {
                     const subName = subData.name;
-                    const type = item.node_type;
+                    const type = item.type;
 
                     newNode = createInternalNode(
                         `node_${Date.now()}`,
@@ -107,7 +107,7 @@ export default function CanvasOverlays({
                 }
             }
         } else {
-            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.node_type, item.overrides);
+            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.type, item.overrides);
         }
 
         if (newNode) {
@@ -221,7 +221,7 @@ export default function CanvasOverlays({
                         onSelect={handleNodePaletteSelect}
                         filterPin={pendingConnection}
                         variables={variables}
-                        globalVariables={globalVariables}
+                        Variables={Variables}
                         functions={functions}
                         macros={macros}
                     />
@@ -238,7 +238,7 @@ export default function CanvasOverlays({
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
                         onClick={async () => {
-                            if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
+                            if (!variables[variableDropMenu.variableId] && !Variables[variableDropMenu.variableId]) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;
@@ -268,7 +268,7 @@ export default function CanvasOverlays({
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
                         onClick={async () => {
-                            if (!variables[variableDropMenu.variableId] && !globalVariables[variableDropMenu.variableId]) {
+                            if (!variables[variableDropMenu.variableId] && !Variables[variableDropMenu.variableId]) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;

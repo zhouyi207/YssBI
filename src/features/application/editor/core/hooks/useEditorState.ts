@@ -1,7 +1,7 @@
 ﻿import { useMemo } from 'react';
-import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
+import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useProjectStore } from '@/features/core/project';
-import { useTabNodes, useTabVariables } from '@/features/core/node-registry/stores/useNodeStore';
+import { useTabNodes, useTabVariables } from '@/features/core/_node/useNodeStore';
 import { useEditorStore } from '../stores';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -33,7 +33,7 @@ export function useEditorState() {
   
   // Get the graphs object reference - only re-render when graphs object changes
   const graphs = useProjectStore((s) => s.graphs);
-  const globalVariables = useProjectStore((s) => s.variables);
+  const Variables = useProjectStore((s) => s.variables);
   const dataframes = useProjectStore((s) => s.databases);
   
   // Memoize the filtered collections - only recalculate when graphs changes
@@ -97,7 +97,7 @@ export function useEditorState() {
     selectedNodeIds,
     
     // Global data
-    globalVariables,
+    Variables,
     
     // Collections
     events,
@@ -121,7 +121,7 @@ export function useEditorState() {
     nodes,
     variables,
     selectedNodeIds,
-    globalVariables,
+    Variables,
     events,
     functions,
     macros,

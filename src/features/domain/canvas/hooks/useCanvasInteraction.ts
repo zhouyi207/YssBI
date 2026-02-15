@@ -1,8 +1,8 @@
 ﻿import React, { useCallback, useEffect } from "react";
-import { useNodeStore } from '@/features/core/node-registry/stores';
+import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useProjectStore } from "@/features/core/project";
-import { useGestureStore } from "../stores";
-import { useViewportStore } from "../stores";
+import { useGestureStore } from "@/features/core/gesture";
+import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/application/editor/core/stores";
 import { Node } from '@/shared/types/ui';
 import { Pin, Graph, GraphPosition } from "@/shared/types/domain";
@@ -10,7 +10,7 @@ import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "../../../../shared/types";
 import { ConnectionService } from "@/services";
-import { deserializeSubGraph } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/shared/utils/editor";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;
@@ -56,8 +56,8 @@ export function useCanvasInteraction({
             console.log(`[useCanvasInteraction] Connection created, got ${connections.length} connections`);
 
             // 将返回的 SerializedNode[] 转换为 Node[]
-            // 构造临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
-            const tempSubGraph: Graph = {
+            // 构造临时的 GraphData 来复用 deserializeGraph 的逻辑
+            const tempGraph: Graph = {
                 id: tid,
                 name: "temp",
                 type: "event",
@@ -67,7 +67,7 @@ export function useCanvasInteraction({
                 canvas: { x: 0, y: 0, scale: 1 }
             };
 
-            const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
+            const { nodes: newNodes } = deserializeGraph(tempGraph);
 
             setNodes(newNodes);
             saveHistory();
@@ -126,7 +126,7 @@ export function useCanvasInteraction({
                 // 获取最新的连接列表
                 const connections = await ConnectionService.getConnections(tid);
 
-                const tempSubGraph: Graph = {
+                const tempGraph: Graph = {
                     id: tid,
                     name: "temp",
                     type: "event",
@@ -136,7 +136,7 @@ export function useCanvasInteraction({
                     canvas: { x: 0, y: 0, scale: 1 }
                 };
 
-                const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
+                const { nodes: newNodes } = deserializeGraph(tempGraph);
 
                 setNodes(newNodes);
                 saveHistory();
@@ -218,23 +218,8 @@ export function useCanvasInteraction({
 
                     const tid = activeTabIdRef.current;
                     if (tid) {
-                        // 🆕 直接操作 DOM 以获得即时反馈
+                        // 只更新状态，让 React 处理渲染
                         sIds.forEach((id: string) => {
-                            const nodeEl = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
-                            if (nodeEl) {
-                                // 获取当前 transform
-                                const currentTransform = nodeEl.style.transform;
-                                const match = currentTransform.match(/translate3d\(([-\d.]+)px,\s*([-\d.]+)px,\s*([-\d.]+)px\)/);
-                                if (match) {
-                                    const currentX = parseFloat(match[1]);
-                                    const currentY = parseFloat(match[2]);
-                                    const newX = currentX + dx;
-                                    const newY = currentY + dy;
-                                    // 立即更新 DOM
-                                    nodeEl.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
-                                }
-                            }
-                            // 同时更新状态（用于持久化）
                             useNodeStore.getState().updateNodePosition(tid, id, dx, dy);
                         });
                     }

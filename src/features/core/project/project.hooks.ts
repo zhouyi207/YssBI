@@ -1,7 +1,8 @@
 /// hooks —— 生命周期 + 组合逻辑（重点）
 
 import { useProjectStore } from './project.store';
-import { ProjectState, } from './project.types';
+import { ProjectState } from '@/shared/types';
+
 
 
 /**

@@ -1,4 +1,4 @@
-import { useExecutionStore } from '@/features/core/execution/stores';
+import { useExecutionStore } from '@/features/core/execution';
 
 /**
  * Node Execution Hook

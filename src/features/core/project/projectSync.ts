@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '@/features/core/project';
-import { UseProjectSyncOptions, ProjectEventPayload } from '@/features/core/project';
+import { UseProjectSyncOptions, ProjectEventPayload } from '@/shared/types';
 
 // 全局单例：确保事件监听器只注册一次
 let globalUnlisten: (() => void) | null = null;

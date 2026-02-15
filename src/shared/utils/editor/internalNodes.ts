@@ -1,6 +1,6 @@
 ﻿import { Node } from '@/shared/types/ui';
 import { Pin } from "@/shared/types/domain";
-import { Pin as SubGraphPinDef } from "@/shared/types/domain";
+import { Pin as GraphPinDef } from "@/shared/types/domain";
 import { Position } from "@/shared/types";
 
 // 简化的 Pin 定义（用于创建内部节点时）
@@ -58,7 +58,7 @@ export function createInternalNode(
     return node;
 }
 
-export function syncInternalNodePins(node: Node, subGraphPins: SubGraphPinDef[], isInputNode: boolean) {
+export function syncInternalNodePins(node: Node, subGraphPins: GraphPinDef[], isInputNode: boolean) {
     // For an input node (like Function Entry or Macro Inputs), the subgraph's inputs become the node's OUTPUT pins
     // For an output node (like Function Return or Macro Outputs), the subgraph's outputs become the node's INPUT pins
 
@@ -103,13 +103,13 @@ export function syncInternalNodePins(node: Node, subGraphPins: SubGraphPinDef[],
     }
 }
 
-export function syncSubGraphInstanceNodes(nodes: any[], subGraphId: string, inputs?: SubGraphPinDef[], outputs?: SubGraphPinDef[], name?: string) {
+export function syncGraphInstanceNodes(nodes: any[], subGraphId: string, inputs?: GraphPinDef[], outputs?: GraphPinDef[], name?: string) {
     return nodes.map((n: any) => {
         if (n.subGraphId !== subGraphId) return n;
         // 深拷贝节点对象
         const newNode = JSON.parse(JSON.stringify(n));
         if (name) newNode.title = name;
-        const synchronizePins = (newPinDefs: SubGraphPinDef[], existingPins: any[], direction: 'input' | 'output') => {
+        const synchronizePins = (newPinDefs: GraphPinDef[], existingPins: any[], direction: 'input' | 'output') => {
             const execPins = existingPins.filter((p: any) => p.type === 'exec');
             const dataPins = existingPins.filter((p: any) => p.type !== 'exec');
             const newDataPins = newPinDefs.map(newDef => {

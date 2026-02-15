@@ -10,7 +10,7 @@ import {
   VscDatabase,
   VscListUnordered
 } from "react-icons/vsc";
-import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useState } from "react";
 
 const PIN_COLORS: Record<string, string> = {
@@ -46,14 +46,13 @@ const PIN_COLORS: Record<string, string> = {
   dataframe: "var(--dataframe-color)",
   struct: "#0055FF",
   delegate: "#FF3333",
-  dataframe: "var(--dataframe-color)",
 };
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
   const {
     variables,
-    globalVariables,
+    Variables,
     selectedItemId,
     selectedItemType,
     setSelectedInfo,
@@ -68,7 +67,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addEvent,
     dataframes,
     addDataFrame,
-    openSubGraph,
+    openGraph,
   } = useEditorGroup();
 
   const [expandedDataFrames, setExpandedDataFrames] = useState<Record<string, boolean>>({});
@@ -91,7 +90,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
   const macrosCount = Object.keys(macros).length;
-  const variablesCount = Object.keys(variables).length + Object.keys(globalVariables).length;
+  const variablesCount = Object.keys(variables).length + Object.keys(Variables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
   // 记录上一次的数量，用于判断是否是“增加”
@@ -204,10 +203,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           console.log('[Sidebar.renderItem] Double click on:', id, type);
           if (type !== 'variable' && type !== 'data') {
             e.stopPropagation();
-            console.log('[Sidebar.renderItem] Calling openSubGraph:', id, name, type);
-            openSubGraph(id, name, type);
+            console.log('[Sidebar.renderItem] Calling openGraph:', id, name, type);
+            openGraph(id, name, type);
           } else {
-            console.log('[Sidebar.renderItem] Skipping openSubGraph for type:', type);
+            console.log('[Sidebar.renderItem] Skipping openGraph for type:', type);
           }
         }}
         className={`
@@ -236,7 +235,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             onClick={(e) => {
               e.stopPropagation();
               console.log('[Sidebar] Open button clicked for:', id, name, type);
-              openSubGraph(id, name, type);
+              openGraph(id, name, type);
             }}
             className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
             title="Open"
@@ -373,18 +372,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           {activeTab === 'variables' && (
             <>
               {/* Global */}
-              {Object.keys(globalVariables).length > 0 && (
+              {Object.keys(Variables).length > 0 && (
                 <div className="mb-2">
                   <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
                     Global
                     <div className="h-px flex-1 bg-white/5" />
                   </div>
-                  {Object.entries(globalVariables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                  {Object.entries(Variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
                 </div>
               )}
               {/* Local */}
               <div className="mb-2">
-                {Object.keys(globalVariables).length > 0 && (
+                {Object.keys(Variables).length > 0 && (
                   <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
                     Local
                     <div className="h-px flex-1 bg-white/5" />
@@ -392,7 +391,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 )}
                 {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
               </div>
-              {Object.keys(variables).length === 0 && Object.keys(globalVariables).length === 0 && (
+              {Object.keys(variables).length === 0 && Object.keys(Variables).length === 0 && (
                 <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
               )}
             </>

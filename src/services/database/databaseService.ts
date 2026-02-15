@@ -22,8 +22,8 @@ export class DatabaseService {
     /**
      * 创建数据帧（手动）
      */
-    static async createDataFrame(id: string, data: any): Promise<any> {
-        return await invoke("create_dataframe", { id, data });
+    static async createDataFrame(id: string): Promise<any> {
+        return await invoke("create_dataframe", { id });
     }
 
     /**

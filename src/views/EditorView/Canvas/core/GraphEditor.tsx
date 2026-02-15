@@ -2,7 +2,7 @@
 import Canvas from './Canvas';
 import { useEditorGroup, GroupContext } from '@/features/application/editor';
 import { WatermarkView } from '../overlays/WatermarkView';
-import { useLayoutStore } from '@/features/application/editor/core/stores/layoutStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
 /**
  * 图形编辑器主组件

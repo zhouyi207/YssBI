@@ -18,14 +18,14 @@ export class ExecutorService {
      * 执行指定的项目数据
      */
     static async executeProject(
-        globalVariables: Record<string, any>,
+        Variables: Record<string, any>,
         events: Record<string, any>,
         functions: Record<string, any>,
         macros: Record<string, any>,
         dataframes: Record<string, any> = {}
     ): Promise<string> {
         const backendData = {
-            globalVariables,
+            Variables,
             events,
             functions,
             macros,

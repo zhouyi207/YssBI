@@ -1,4 +1,4 @@
-import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";
 import { DragLayer } from "./Layout/DragOverlay";
@@ -11,10 +11,10 @@ import { useEditorKeyboard } from "@/features/application/editor";
 import { useEditor } from "@/features/application/editor";
 import { useCallback } from "react";
 import { useViewportStore } from "@/features/core/viewport";
-import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/application/editor/core/stores/layoutStore";
-import { useProjectSync } from "@/features/application/sync/projectSync";
+import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/core/layout/layoutStore";
+import { useProjectSync } from "@/features/core/project/projectSync";
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
-const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
 export const EditorWindow = () => {
     const rootId = useLayoutStore((s) => s.rootId);

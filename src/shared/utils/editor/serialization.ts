@@ -1,6 +1,6 @@
 ﻿import { Node } from '@/shared/types/ui';
 import { GraphPosition } from "@/shared/types/domain";
-import { getNodeDefinition } from "@/features/core/node-registry";
+import { getNodeDefinition } from "@/features/core/nodeRegister";
 import { Variable } from "@/shared/types/domain";
 
 /**
@@ -8,7 +8,7 @@ import { Variable } from "@/shared/types/domain";
  * 
  * 从节点的 Pin.links 中提取连接关系，生成独立的 connections 数组
  */
-export function serializeSubGraph(
+export function serializeGraph(
   id: string,
   name: string,
   type: "event" | "function" | "macro",
@@ -91,23 +91,23 @@ export function serializeSubGraph(
  * 
  * 从 connections 对象重建 Pin.links 字段（仅用于运行时查询）
  */
-export function deserializeSubGraph(data: any): {
+export function deserializeGraph(data: any): {
   nodes: any[];
   canvas: GraphPosition;
   variables: Record<string, Variable>;
   inputs: any[];
   outputs: any[];
 } {
-  console.log('[deserializeSubGraph] Input data:', data);
+  console.log('[deserializeGraph] Input data:', data);
   
   // Graph 类型中没有 variables，使用空对象
   const variables: Record<string, Variable> = {};
   
   // 处理新的 connections 格式：Connection 对象包含 connections 数组
   const connectionsData = data.connections as any;
-  console.log('[deserializeSubGraph] connectionsData:', connectionsData);
-  console.log('[deserializeSubGraph] connectionsData type:', typeof connectionsData);
-  console.log('[deserializeSubGraph] connectionsData.connections:', connectionsData?.connections);
+  console.log('[deserializeGraph] connectionsData:', connectionsData);
+  console.log('[deserializeGraph] connectionsData type:', typeof connectionsData);
+  console.log('[deserializeGraph] connectionsData.connections:', connectionsData?.connections);
   
   // 确保 connectionsList 是数组
   let connectionsList: any[] = [];
@@ -120,12 +120,12 @@ export function deserializeSubGraph(data: any): {
       connectionsList = connectionsData.connections;
     } else if (typeof connectionsData === 'object') {
       // 如果是对象但没有 connections 数组，转换为空数组
-      console.warn('[deserializeSubGraph] connections is an object but not in expected format:', connectionsData);
+      console.warn('[deserializeGraph] connections is an object but not in expected format:', connectionsData);
       connectionsList = [];
     }
   }
   
-  console.log('[deserializeSubGraph] connectionsList:', connectionsList);
+  console.log('[deserializeGraph] connectionsList:', connectionsList);
 
   const nodes = (data.nodes || []).map((n: any) => {
     const def = getNodeDefinition(n.type);
@@ -186,7 +186,7 @@ export function deserializeSubGraph(data: any): {
     const targetPin = connection.to_pin;
     
     if (!sourcePin || !targetPin) {
-      console.warn('[deserializeSubGraph] Invalid connection:', connection);
+      console.warn('[deserializeGraph] Invalid connection:', connection);
       continue;
     }
     
@@ -211,7 +211,7 @@ export function deserializeSubGraph(data: any): {
     }
   }
 
-  console.log('[deserializeSubGraph] Result nodes:', nodes);
+  console.log('[deserializeGraph] Result nodes:', nodes);
 
   return {
     nodes,

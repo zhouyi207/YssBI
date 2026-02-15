@@ -1,15 +1,14 @@
 ﻿import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
-import { Graph } from '@/shared/types/domain';
-import { useNodeStore } from '@/features/core/node-registry/stores';
-import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
+import { useNodeStore } from '@/features/core/_node/useNodeStore';
+import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '../stores';
-import { serializeSubGraph, deserializeSubGraph, deleteNodeInBackend } from '@/shared/utils/editor';
-import { NodeService, ConnectionService } from '@/services';
+import { deleteNodeInBackend } from '@/shared/utils/editor';
+import { NodeService } from '@/services';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useViewportStore } from '@/features/domain/canvas/stores';
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
-const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
 /**
  * Editor Operations Hook
@@ -111,40 +110,25 @@ export function useEditorOperations() {
     const minY = Math.min(...clipboard.map(n => n.position.y));
     const offX = tX - minX, offY = tY - minY;
 
-    // Prepare nodes
+    // Prepare nodes with new positions
     const tempNodes = clipboard.map(n => {
       const clone = n.clone();
       clone.position = { x: n.position.x + offX, y: n.position.y + offY };
       return clone;
     });
 
-    // Serialize for backend
-    const serializedData = serializeSubGraph("temp", "temp", "event", tempNodes, { x: 0, y: 0, scale: 1 }, {}, [], []);
-
     try {
       console.log('[useEditorOperations] Pasting nodes via backend...');
       
-      const newSerializedNodes = await NodeService.createNodesWithConnections(
-        tid, 
-        serializedData.nodes, 
-        serializedData.connections
-      );
+      // Extract node types for backend validation
+      const nodeTypes = tempNodes.map(n => n.node_type || n.type);
+      
+      // Call backend to validate node types
+      await NodeService.createNodes(tid, nodeTypes);
 
-      const updatedConnections = await ConnectionService.getConnections(tid);
-
-      const tempResData: Graph = {
-        id: tid,
-        name: "temp",
-        type: "event",
-        nodes: newSerializedNodes,
-        pins: [],
-        connections: { connections: updatedConnections },
-        canvas: { x: 0, y: 0, scale: 1 }
-      };
-      const { nodes: newBaseNodes } = deserializeSubGraph(tempResData);
-
-      setNodes((prev) => [...prev, ...newBaseNodes]);
-      setSelectedNodeIds(newBaseNodes.map(n => n.id));
+      // If backend validation succeeds, add nodes to frontend
+      setNodes((prev) => [...prev, ...tempNodes]);
+      setSelectedNodeIds(tempNodes.map(n => n.id));
 
       console.log('[useEditorOperations] Paste completed successfully');
     } catch (e) {

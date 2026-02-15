@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/core/project';

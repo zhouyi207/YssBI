@@ -7,7 +7,7 @@ import { useTabManagement } from './useTabManagement';
 import { useProjectOperations } from './useProjectOperations';
 import { useGraphManagement } from './useGraphManagement';
 import { useVariableManagement } from './useVariableManagement';
-import { useDataFrameManagement } from './useDataFrameManagement';
+import { useDatabaseManagement } from './useDatabaseManagement';
 
 /**
  * Main Editor Hook (Refactored)
@@ -41,10 +41,11 @@ export function useEditor() {
   // Get sub-hooks
   const editorOps = useEditorOperations();
   const tabMgmt = useTabManagement();
-  const projectOps = useProjectOperations(tabMgmt.openSubGraph);
-  const subGraphMgmt = useGraphManagement(tabMgmt.openSubGraph, tabMgmt.closeTab, actions.switchSidebarTab);
-  const variableMgmt = useVariableManagement(actions.switchSidebarTab);
-  const dataFrameMgmt = useDataFrameManagement(actions.switchSidebarTab);
+  const projectOps = useProjectOperations(tabMgmt.openGraph);
+  
+  const graphMgmt = useGraphManagement(tabMgmt.openGraph, tabMgmt.closeTab);
+  const variableMgmt = useVariableManagement();
+  const dataFrameMgmt = useDatabaseManagement();
 
   // Canvas interaction
   const canvasInteraction = useCanvasInteraction({
@@ -87,8 +88,8 @@ export function useEditor() {
     // Project operations
     ...projectOps,
 
-    // SubGraph management
-    ...subGraphMgmt,
+    // Graph management
+    ...graphMgmt,
 
     // Variable management
     ...variableMgmt,
@@ -102,7 +103,7 @@ export function useEditor() {
     editorOps,
     tabMgmt,
     projectOps,
-    subGraphMgmt,
+    graphMgmt,
     variableMgmt,
     dataFrameMgmt,
   ]);

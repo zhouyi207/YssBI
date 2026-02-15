@@ -12,7 +12,7 @@ import {
   NodeValidationRule,
   GraphValidationRule,
   EditorSchema,
-} from "./shema.types";
+} from "../../../shared/types/domain/shema";
 
 interface SchemaStore extends SchemaState {
   // Schema 数据

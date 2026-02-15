@@ -2,7 +2,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
-import { useProjectSync } from '@/features/application/sync/projectSync';
+import { useProjectSync } from '@/features/core/project/projectSync';
 import { useProjectStore, initProjectSync } from '@/features/core/project';
 import { Select } from '@/shared/ui/Select';
 

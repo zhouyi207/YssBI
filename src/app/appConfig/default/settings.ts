@@ -53,3 +53,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     project: DEFAULT_PROJECT,
     window: DEFAULT_WINDOW,
 };
+
+export const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
+
+export const GRID = 40;

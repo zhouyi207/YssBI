@@ -1,28 +1,18 @@
 ﻿import { useCallback } from 'react';
 import { useProjectStore } from '@/features/core/project';
 import { useEditorStore } from '../stores';
+import { getUniqueName } from '@/shared/utils/getUniqueName';
+import { useSidebarTab } from './useSidebarTab';
 
-const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
-  const names = Object.values(items).map(i => i.name);
-  let name = baseName;
-  let counter = 1;
-  while (names.includes(name)) {
-    name = `${baseName}_${counter}`;
-    counter++;
-  }
-  return name;
-};
 
-/**
- * DataFrame Management Hook
- * Handles creation, update, and deletion of dataframes
- */
-export function useDataFrameManagement(switchSidebarTab: (tab: 'events' | 'functions' | 'macros' | 'variables' | 'data') => void) {
+// database
+export function useDatabaseManagement() {
+  const switchSidebarTab = useSidebarTab();
   const { selectedItemId, setSelectedInfo } = useEditorStore();
 
   const addDataFrame = useCallback((name?: string) => {
     const st = useProjectStore.getState();
-    const finalName = getUniqueName(name || "New DataFrame", st.databases);
+    const finalName = getUniqueName(name || "New DataFrame", Object.values(st.databases));
     const id = `df-${crypto.randomUUID()}`;
     const df: any = {
       id,

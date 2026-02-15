@@ -1,6 +1,6 @@
 ﻿import { useRef, useEffect } from "react";
 import { useViewportStore } from "@/features/core/viewport";
-import { GRID, DEFAULT_VIEWPORT } from "../constants";
+import { DEFAULT_VIEWPORT, GRID } from "@/app/appConfig/default";
 
 export const ViewportGrid = ({ groupId }: { groupId: string }) => {
     const gridRef = useRef<HTMLDivElement>(null);

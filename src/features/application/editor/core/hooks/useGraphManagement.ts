@@ -1,19 +1,11 @@
-﻿import { useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { useProjectStore } from '@/features/core/project';
 import { GraphService } from '@/services/graph/graphService';
+import { getUniqueName } from '@/shared/utils/getUniqueName';
+import { useSidebarTab } from './useSidebarTab';
 
-// 辅助函数：生成唯一名称
-const getUniqueName = (baseName: string, items: Record<string, { name: string }>) => {
-  const names = Object.values(items).map(i => i.name);
-  let name = baseName;
-  let counter = 1;
-  while (names.includes(name)) {
-    name = `${baseName}_${counter}`;
-    counter++;
-  }
-  return name;
-};
+
 
 /**
  * Graph Management Hook
@@ -26,9 +18,9 @@ const getUniqueName = (baseName: string, items: Record<string, { name: string }>
  */
 export function useGraphManagement(
   openGraph: (id: string, name: string, type: any, data?: any) => void,
-  closeTab: (id: string) => void,
-  switchSidebarTab: (tab: 'events' | 'functions' | 'macros' | 'variables') => void
+  closeTab: (id: string) => void
 ) {
+  const switchSidebarTab = useSidebarTab();
   // 使用 ref 存储待处理的操作（创建后需要打开的 graph）
   const pendingActionsRef = useRef<{
     events: Map<string, () => void>;
@@ -51,7 +43,7 @@ export function useGraphManagement(
       if (graph.type === 'event') events[id] = graph;
     }
     
-    const finalName = getUniqueName(name || "New Event", events);
+    const finalName = getUniqueName(name || "New Event", Object.values(events));
     
     console.log("[useGraphManagement] Creating event:", { name: finalName });
     
@@ -134,7 +126,7 @@ export function useGraphManagement(
       if (graph.type === 'function') functions[id] = graph;
     }
     
-    const finalName = getUniqueName(name || "New Function", functions);
+    const finalName = getUniqueName(name || "New Function", Object.values(functions));
     
     console.log("[useGraphManagement] Creating function:", { name: finalName });
     
@@ -216,7 +208,7 @@ export function useGraphManagement(
       if (graph.type === 'macro') macros[id] = graph;
     }
     
-    const finalName = getUniqueName(name || "New Macro", macros);
+    const finalName = getUniqueName(name || "New Macro", Object.values(macros));
     
     console.log("[useGraphManagement] Creating macro:", { name: finalName });
     

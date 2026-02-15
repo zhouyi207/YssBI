@@ -1,12 +1,12 @@
 ﻿import { create } from 'zustand';
 import { GraphPosition } from '@/shared/types/domain';
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 interface ViewportStore {
   viewports: Record<string, GraphPosition>;
   setViewport: (groupId: string, updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition)) => void;
 }
 
-const DEFAULT_VIEWPORT: GraphPosition = { x: 0, y: 0, scale: 1 };
 
 export const useViewportStore = create<ViewportStore>((set) => ({
   viewports: {

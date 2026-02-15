@@ -2,7 +2,7 @@
 
 import { useSchemaStore } from "./shema.store";
 import { LoadStatus } from "@/shared/types/ui";
-import { PinTypeDefinition, CategoryDefinition, VariableTypeDefinition, UIStyleDefinition } from "./shema.types";
+import { PinTypeDefinition, CategoryDefinition, VariableTypeDefinition, UIStyleDefinition } from "../../../shared/types/domain/shema";
 
 /**
  * 获取 Pin 类型定义（只读）

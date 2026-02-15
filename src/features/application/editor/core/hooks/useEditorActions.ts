@@ -1,12 +1,12 @@
 ﻿import { useCallback, useRef, useEffect } from 'react';
-import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
-import { useNodeStore } from '@/features/core/node-registry/stores';
+import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useViewportStore } from '@/features/domain/canvas/stores';
 import { useEditorStore } from '../stores';
 import { GraphPosition} from '@/shared/types/domain';
 import { Node } from '@/shared/types/ui';
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
-const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 
 /**
  * Editor Actions Hook

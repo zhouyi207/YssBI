@@ -7,9 +7,13 @@ export { useEditor } from './hooks/useEditor';
 export { useEditorOperations } from './hooks/useEditorOperations';
 export { useTabManagement } from './hooks/useTabManagement';
 export { useProjectOperations } from './hooks/useProjectOperations';
-export { useGraphManagement as useSubGraphManagement } from './hooks/useGraphManagement';
-export { useVariableManagement } from './hooks/useVariableManagement';
-export { useDataFrameManagement } from './hooks/useDataFrameManagement';
 export { useEditorKeyboard } from './hooks/useEditorKeyboard';
 export { useEditorInit } from './hooks/useEditorInit';
 export { useEditorGroup, GroupContext } from './hooks/useEditorGroup';
+export { useSidebarTab } from './hooks/useSidebarTab';
+
+
+// graph, variable, database
+export { useGraphManagement } from './hooks/useGraphManagement';
+export { useDatabaseManagement } from './hooks/useDatabaseManagement';
+export { useVariableManagement } from './hooks/useVariableManagement';

@@ -5,13 +5,13 @@
      */
     static syncStoreToCollections(
         tabs: Record<string, TabState>,
-        currentEvents: Record<string, SubGraphData>,
-        currentFunctions: Record<string, SubGraphData>,
-        currentMacros: Record<string, SubGraphData>
+        currentEvents: Record<string, GraphData>,
+        currentFunctions: Record<string, GraphData>,
+        currentMacros: Record<string, GraphData>
     ): {
-        nextEvents: Record<string, SubGraphData>;
-        nextFunctions: Record<string, SubGraphData>;
-        nextMacros: Record<string, SubGraphData>;
+        nextEvents: Record<string, GraphData>;
+        nextFunctions: Record<string, GraphData>;
+        nextMacros: Record<string, GraphData>;
         changed: boolean;
     } {
         const nextEvents = { ...currentEvents };
@@ -23,7 +23,7 @@
             const { nodes: liveNodes, variables: liveVars } = tabs[id];
 
             // Identify which collection the tab belongs to
-            let targetCollection: Record<string, SubGraphData> | null = null;
+            let targetCollection: Record<string, GraphData> | null = null;
             if (nextEvents[id]) targetCollection = nextEvents;
             else if (nextFunctions[id]) targetCollection = nextFunctions;
             else if (nextMacros[id]) targetCollection = nextMacros;
@@ -36,7 +36,7 @@
             // 调试：打印 existing 的 type 字段
             console.log(`[syncStoreToCollections] id=${id}, existing.type=${existing.type}`);
 
-            const subGraph = serializeSubGraph(
+            const subGraph = serializeGraph(
                 id,
                 existing.name,
                 existing.type as any,
@@ -60,14 +60,14 @@
      * 构建项目数据对象（内存中）
      */
     static buildProjectData(
-        globalVariables: Record<string, any>,
-        events: Record<string, SubGraphData>,
-        functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>,
+        Variables: Record<string, any>,
+        events: Record<string, GraphData>,
+        functions: Record<string, GraphData>,
+        macros: Record<string, GraphData>,
         dataframes: Record<string, any> = {}
     ): ProjectData {
         return {
-            globalVariables,
+            Variables,
             events,
             functions,
             macros,
@@ -83,16 +83,16 @@
      * 另存为项目文件（弹出文件选择对话框）- 兼容旧接口
      */
     static async saveProjectAs(
-        globalVariables: Record<string, any>,
-        events: Record<string, SubGraphData>,
-        functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>,
+        Variables: Record<string, any>,
+        events: Record<string, GraphData>,
+        functions: Record<string, GraphData>,
+        macros: Record<string, GraphData>,
         dataframes: Record<string, any> = {}
     ): Promise<string | null> {
         try {
             const path = await save({ filters: [{ name: "YssBI Project", extensions: ["json"] }] });
             if (path) {
-                const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
+                const project = this.buildProjectData(Variables, events, functions, macros, dataframes);
                 // 调用后端保存项目
                 await invoke("save_project", {
                     path,
@@ -112,13 +112,13 @@
      */
     static async saveProject(
         path: string,
-        globalVariables: Record<string, any>,
-        events: Record<string, SubGraphData>,
-        functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>,
+        Variables: Record<string, any>,
+        events: Record<string, GraphData>,
+        functions: Record<string, GraphData>,
+        macros: Record<string, GraphData>,
         dataframes: Record<string, any> = {}
     ): Promise<void> {
-        const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
+        const project = this.buildProjectData(Variables, events, functions, macros, dataframes);
         // 调用后端保存项目
         await invoke("save_project", {
             path,

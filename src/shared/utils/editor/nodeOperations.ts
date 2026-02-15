@@ -1,7 +1,7 @@
 ﻿import { Node } from '@/shared/types/ui';
 import { Position } from "@/shared/types";
 import { NodeService } from "@/services";
-import { createNode } from "@/features/core/node-registry";
+import { createNode } from "@/features/core/nodeRegister";
 
 /**
  * 使用后端 API 创建节点

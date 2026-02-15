@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect } from "react";
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
 import { useEditorStore } from "@/features/application/editor/core/stores";
@@ -9,7 +9,7 @@ import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "../../../shared/types";
 import { ConnectionService } from "@/services";
-import { deserializeSubGraph } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/shared/utils/editor";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;
@@ -55,8 +55,8 @@ export function useCanvasInteraction({
             console.log(`[useCanvasInteraction] Connection created, got ${connections.length} connections`);
 
             // 将返回的 SerializedNode[] 转换为 Node[]
-            // 构造临时的 SubGraphData 来复用 deserializeSubGraph 的逻辑
-            const tempSubGraph: Graph = {
+            // 构造临时的 GraphData 来复用 deserializeGraph 的逻辑
+            const tempGraph: Graph = {
                 id: tid,
                 name: "temp",
                 type: "event",
@@ -66,7 +66,7 @@ export function useCanvasInteraction({
                 canvas: { x: 0, y: 0, scale: 1 }
             };
 
-            const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
+            const { nodes: newNodes } = deserializeGraph(tempGraph);
 
             setNodes(newNodes);
             saveHistory();
@@ -125,7 +125,7 @@ export function useCanvasInteraction({
                 // 获取最新的连接列表
                 const connections = await ConnectionService.getConnections(tid);
 
-                const tempSubGraph: Graph = {
+                const tempGraph: Graph = {
                     id: tid,
                     name: "temp",
                     type: "event",
@@ -135,7 +135,7 @@ export function useCanvasInteraction({
                     canvas: { x: 0, y: 0, scale: 1 }
                 };
 
-                const { nodes: newNodes } = deserializeSubGraph(tempSubGraph);
+                const { nodes: newNodes } = deserializeGraph(tempGraph);
 
                 setNodes(newNodes);
                 saveHistory();

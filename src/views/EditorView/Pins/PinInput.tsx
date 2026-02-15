@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import { PinService } from "@/services";
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 
 export interface PinInputProps {
   pinId: string;

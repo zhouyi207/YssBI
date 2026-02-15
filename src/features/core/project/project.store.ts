@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui';
-import { ProjectState } from './project.types';
+import { ProjectState } from '@/shared/types/domain';
 import { Graph, ProjectData } from '@/shared/types/domain';
 import { Variable } from '@/shared/types/domain';
 import { ProjectService } from '@/services/project/projectService';
@@ -25,15 +25,16 @@ interface ProjectStore extends ProjectState {
     setDatabases: (dbs: Record<string, any>) => void;
     setCurrentPath: (path: string | null) => void;
 
-    // Graph 操作
-    addGraph: (id: string, graph: Graph) => void;
-    updateGraph: (id: string, data: Partial<Graph>) => void;
-    deleteGraph: (id: string) => void;
 
     // Variable 操作
     addVariable: (id: string, variable: Variable) => void;
     updateVariable: (id: string, data: Partial<Variable>) => void;
     deleteVariable: (id: string) => void;
+
+    // Graph 操作 (Event/Function/Macro)
+    addGraph: (id: string, graph: Graph) => void;
+    updateGraph: (id: string, data: Partial<Graph>) => void;
+    deleteGraph: (id: string) => void;
 
     // Database 操作
     addDatabase: (id: string, db: any) => void;
@@ -109,7 +110,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 events: eventsCount,
                 functions: functionsCount,
                 macros: macrosCount,
-                globalVariables: Object.keys(newVariables).length,
+                Variables: Object.keys(newVariables).length,
                 dataframes: Object.keys(newDatabases).length,
                 duration: `${duration.toFixed(0)}ms`,
             });
@@ -171,29 +172,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     setDatabases: (databases) => set({ databases }),
     setCurrentPath: (currentPath) => set({ currentPath }),
 
-    // Graph 操作
-    addGraph: (id, graph) => {
-        set((state) => ({
-            graphs: { ...state.graphs, [id]: graph }
-        }));
-    },
 
-    updateGraph: (id, data) => {
-        set((state) => ({
-            graphs: {
-                ...state.graphs,
-                [id]: { ...state.graphs[id], ...data }
-            }
-        }));
-    },
-
-    deleteGraph: (id) => {
-        set((state) => {
-            const newGraphs = { ...state.graphs };
-            delete newGraphs[id];
-            return { graphs: newGraphs };
-        });
-    },
 
     // Variable 操作
     addVariable: (id, variable) => {
@@ -216,6 +195,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             const newVariables = { ...state.variables };
             delete newVariables[id];
             return { variables: newVariables };
+        });
+    },
+
+    // Graph 操作 (Event/Function/Macro)
+    addGraph: (id, graph) => {
+        console.log('[ProjectStore] addGraph:', id, graph);
+        set((state) => {
+            const newGraphs = { ...state.graphs, [id]: graph };
+            console.log('[ProjectStore] New graphs:', newGraphs);
+            return { graphs: newGraphs };
+        });
+    },
+
+    updateGraph: (id, data) => {
+        set((state) => ({
+            graphs: {
+                ...state.graphs,
+                [id]: { ...state.graphs[id], ...data }
+            }
+        }));
+    },
+
+    deleteGraph: (id) => {
+        set((state) => {
+            const newGraphs = { ...state.graphs };
+            delete newGraphs[id];
+            return { graphs: newGraphs };
         });
     },
 

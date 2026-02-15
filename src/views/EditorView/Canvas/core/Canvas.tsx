@@ -3,12 +3,12 @@ import { Node } from "../../Nodes/Node";
 import { Pin } from "@/shared/types/domain";
 import { useDragContext } from "../../Context/DragProvider";
 import { useEditorGroup } from "@/features/application/editor";
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
 import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
 import { ConnectionLine } from "./ConnectionLine";
-import { useBackendNodeCreation } from "@/features/core/node-registry/hooks";
+import { useBackendNodeCreation } from "@/features/core/_backendNodeCreation";
 import { useExecutionVisualization } from "@/features/domain/execution/hooks";
 
 // Extracted Components
@@ -16,7 +16,8 @@ import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
 import { EdgesLayer } from "./EdgesLayer";
 import CanvasOverlays from "../overlays/CanvasOverlays";
-import { DEFAULT_VIEWPORT } from "../constants";
+import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
+
 
 /* ================= Canvas Components ================= */
 
@@ -35,7 +36,7 @@ export default function Canvas() {
     contextMenu,
     setContextMenu,
     variables,
-    globalVariables,
+    Variables,
     saveHistory,
     activeTabId,
     pendingConnection,
@@ -405,7 +406,7 @@ export default function Canvas() {
     // 如果是变量
     if (dragState.template.category === "Variable") {
       // 安全检查：确保变量依然存在（检查局部和全局）
-      if (!variables[dragState.template.variableId] && !globalVariables[dragState.template.variableId]) {
+      if (!variables[dragState.template.variableId] && !Variables[dragState.template.variableId]) {
         console.warn("Variable no longer exists. Aborting drop.");
         return;
       }

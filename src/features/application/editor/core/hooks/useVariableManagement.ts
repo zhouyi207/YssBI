@@ -1,15 +1,17 @@
 ﻿import { useCallback } from 'react';
 import { Variable } from '@/shared/types/domain';
-import { useNodeStore } from '@/features/core/node-registry/stores';
+import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useProjectStore } from '@/features/core/project';
-import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
+import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
+import { useSidebarTab } from './useSidebarTab';
 
 /**
  * Variable Management Hook
  * Handles creation, update, deletion, and promotion/demotion of variables
  */
-export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functions' | 'macros' | 'variables') => void) {
+export function useVariableManagement() {
+  const switchSidebarTab = useSidebarTab();
   // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
   const activeEditorNode = useLayoutStore((s: LayoutState) => 
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null

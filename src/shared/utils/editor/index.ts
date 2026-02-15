@@ -1,5 +1,5 @@
 // Serialization utilities
-export { serializeSubGraph, deserializeSubGraph } from './serialization';
+export { serializeGraph, deserializeGraph } from './serialization';
 
 // Node operations
 export { 
@@ -12,7 +12,7 @@ export {
 export { 
   createInternalNode, 
   syncInternalNodePins, 
-  syncSubGraphInstanceNodes 
+  syncGraphInstanceNodes 
 } from './internalNodes';
 
 // Connection helpers

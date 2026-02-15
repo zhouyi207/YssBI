@@ -1,6 +1,6 @@
 ﻿import React, { useRef, useEffect } from "react";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
-import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";

@@ -1,6 +1,6 @@
 import { useCallback, useContext, createContext } from 'react';
-import { useLayoutStore, LayoutState } from '@/features/application/editor/core/stores/layoutStore';
-import { useTabNodes, useTabVariables } from '@/features/core/node-registry/stores/useNodeStore';
+import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useTabNodes, useTabVariables } from '@/features/core/_node/useNodeStore';
 import { useEditor } from './useEditor';
 
 /**

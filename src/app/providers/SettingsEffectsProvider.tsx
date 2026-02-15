@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect } from "react";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { useSettingsStore } from "@/features/core/settings/stores/settingsStore";
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const theme = useSettingsStore((s) => s.theme);

@@ -1,7 +1,7 @@
 ﻿import { useCallback } from 'react';
 import { useProjectStore } from '@/features/core/project';
-import { useNodeStore } from '@/features/core/node-registry/stores';
-import { useLayoutStore } from '@/features/application/editor/core/stores/layoutStore';
+import { useNodeStore } from '@/features/core/_node/useNodeStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
 
@@ -9,7 +9,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
  * Project Operations Hook
  * Handles save, load, and execute operations
  */
-export function useProjectOperations(openSubGraph: (id: string, name: string, type: any, data?: any) => void) {
+export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void) {
   const currentPath = useProjectStore((s) => s.currentPath);
   const setCurrentPath = useProjectStore((s) => s.setCurrentPath);
 
@@ -76,14 +76,14 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
 
       // 从 graphs 中获取第一个 graph
       const first = Object.values(p.graphs)[0] as any;
-      if (first) openSubGraph(first.id, first.name, first.type as any, first);
+      if (first) openGraph(first.id, first.name, first.type as any, first);
 
       uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {
       console.error(e);
       uiStore.showToast("加载项目失败", "error", 3000);
     }
-  }, [openSubGraph]);
+  }, [openGraph]);
 
   const executeGraph = useCallback(async () => {
     try {

@@ -1,25 +1,70 @@
 ﻿import { useCallback } from 'react';
 import { Node } from '@/shared/types/ui';
-import { deleteNodeInBackend, serializeSubGraph, deserializeSubGraph } from '@/shared/utils/editor';
+import { deleteNodeInBackend } from '@/shared/utils/editor';
 import { useEditorGroup } from '@/features/application/editor/core';
 import { NodeService } from '@/services';
-import { Graph } from '@/shared/types/domain';
 
 /**
  * 使用后端创建节点的 Hook
  * 
- * 采用"后端优先"模式：
- * 1. 前端发送创建请求到后端 (createNodes)
- * 2. 后端生成 ID 并修复连接关系
- * 3. 前端接收新节点并渲染
+ * 简化模式：
+ * 1. 前端创建节点对象（包含完整信息）
+ * 2. 调用后端 create_node 仅用于验证和注册
+ * 3. 前端直接添加节点到状态
  */
 export function useBackendNodeCreation() {
     const { activeTabId, setNodes, saveHistory } = useEditorGroup();
 
     /**
-     * 批量创建节点（后端优先模式，后端生成 ID）
+     * 创建单个节点
+     * @param node 要创建的节点（前端已生成完整信息）
+     * @returns Promise<Node | null> 创建成功的节点，失败返回 null
+     */
+    const createNode = useCallback(
+        async (node: Node): Promise<Node | null> => {
+            if (!activeTabId) {
+                console.warn('[useBackendNodeCreation] No active tab ID, cannot create node');
+                return null;
+            }
+
+            try {
+                console.log(`[useBackendNodeCreation] Creating node via backend: type=${node.node_type || node.type}`);
+
+                // 1. 调用后端创建节点（仅传递类型用于验证）
+                await NodeService.createNode(activeTabId, node.node_type || node.type);
+
+                console.log(`[useBackendNodeCreation] Backend validated node successfully`);
+
+                // 2. 添加到前端状态
+                setNodes((prev) => [...prev, node]);
+                console.log(`[useBackendNodeCreation] Node added to frontend state`);
+
+                // 3. 保存历史记录（在状态更新后）
+                if (saveHistory && typeof saveHistory === 'function') {
+                    try {
+                        saveHistory();
+                        console.log(`[useBackendNodeCreation] History saved successfully`);
+                    } catch (historyError) {
+                        console.error('[useBackendNodeCreation] Failed to save history:', historyError);
+                        // 继续执行，不因为历史记录失败而中断
+                    }
+                } else {
+                    console.warn('[useBackendNodeCreation] saveHistory is not available');
+                }
+
+                return node;
+            } catch (error) {
+                console.error('[useBackendNodeCreation] Failed to create node in backend:', error);
+                return null;
+            }
+        },
+        [activeTabId, setNodes, saveHistory]
+    );
+
+    /**
+     * 批量创建节点
      * @param nodes 要创建的节点数组
-     * @returns Promise<Node[]> 成功创建的节点数组（新 ID）
+     * @returns Promise<Node[]> 成功创建的节点数组
      */
     const createNodes = useCallback(
         async (nodes: Node[]): Promise<Node[]> => {
@@ -30,52 +75,31 @@ export function useBackendNodeCreation() {
             try {
                 console.log(`[useBackendNodeCreation] Creating ${nodes.length} nodes via backend...`);
 
-                // 1. 序列化
-                // 构造临时 SubGraphData 用于序列化 (不包含变量，因为我们只关注节点创建)
-                const serializedData = serializeSubGraph(activeTabId, "temp", "event", nodes, { x: 0, y: 0, scale: 1 }, {}, [], []);
+                // 1. 批量调用后端验证
+                const nodeTypes = nodes.map(n => n.node_type || n.type);
+                await NodeService.createNodes(activeTabId, nodeTypes);
 
-                // 2. 调用后端 createNodes (会自动处理 ID 生成和连接重映射)
-                const newSerializedNodes = await NodeService.createNodes(activeTabId, serializedData.nodes);
+                console.log(`[useBackendNodeCreation] Backend validated all nodes successfully`);
 
-                // 3. 反序列化
-                const tempResData: Graph = {
-                    id: activeTabId,
-                    name: "temp",
-                    type: "event", // 这里的类型不重要
-                    nodes: newSerializedNodes,
-                    pins: [],
-                    canvas: { x: 0, y: 0, scale: 1 },
-                    connections: { connections: [] }
-                };
-                const { nodes: newBaseNodes } = deserializeSubGraph(tempResData);
+                // 2. 批量添加到前端状态
+                setNodes((prev) => [...prev, ...nodes]);
 
-                // 4. 更新前端状态
-                if (newBaseNodes.length > 0) {
-                    saveHistory();
-                    setNodes((prev) => [...prev, ...newBaseNodes]);
-                    console.log(`[useBackendNodeCreation] Added ${newBaseNodes.length} nodes to frontend (IDs updated by backend)`);
+                // 3. 保存历史记录（在状态更新后）
+                if (saveHistory && typeof saveHistory === 'function') {
+                    try {
+                        saveHistory();
+                    } catch (historyError) {
+                        console.error('[useBackendNodeCreation] Failed to save history:', historyError);
+                    }
                 }
 
-                return newBaseNodes;
+                return nodes;
             } catch (error) {
                 console.error('[useBackendNodeCreation] Failed to create nodes in backend:', error);
                 return [];
             }
         },
         [activeTabId, setNodes, saveHistory]
-    );
-
-    /**
-     * 创建单个节点（后端优先模式，后端生成 ID）
-     * @param node 要创建的节点
-     * @returns Promise<Node | null> 创建成功的节点，失败返回 null
-     */
-    const createNode = useCallback(
-        async (node: Node): Promise<Node | null> => {
-            const results = await createNodes([node]);
-            return results.length > 0 ? results[0] : null;
-        },
-        [createNodes]
     );
 
     /**
@@ -162,4 +186,3 @@ export function useBackendNodeCreation() {
         deleteNodes
     };
 }
-

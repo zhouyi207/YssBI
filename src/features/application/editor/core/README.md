@@ -17,9 +17,9 @@ editor/
 │   ├── useEditorOperations.ts       # Clipboard, history, node operations
 │   ├── useTabManagement.ts          # Tab opening, closing, switching
 │   ├── useProjectOperations.ts      # Save, load, execute operations
-│   ├── useSubGraphManagement.ts     # Events, functions, macros management
+│   ├── useGraphManagement.ts     # Events, functions, macros management
 │   ├── useVariableManagement.ts     # Variable CRUD and promotion/demotion
-│   ├── useDataFrameManagement.ts    # DataFrame CRUD
+│   ├── useDatabaseManagement.ts    # DataFrame CRUD
 │   ├── useEditorKeyboard.ts         # Keyboard shortcuts
 │   ├── useEditorGroup.ts            # Context-aware editor hook
 │   └── index.ts
@@ -96,7 +96,7 @@ import { useEditorOperations, useTabManagement } from '@/features/editor';
 
 function MyComponent() {
   const { copy, paste, undo, redo } = useEditorOperations();
-  const { openSubGraph, closeTab } = useTabManagement();
+  const { openGraph, closeTab } = useTabManagement();
 }
 ```
 
@@ -113,9 +113,9 @@ The old `CanvasProvider` has been refactored into:
    - `useEditorOperations` - Clipboard and history operations
    - `useTabManagement` - Tab operations
    - `useProjectOperations` - Project-level operations
-   - `useSubGraphManagement` - SubGraph CRUD
+   - `useGraphManagement` - Graph CRUD
    - `useVariableManagement` - Variable operations
-   - `useDataFrameManagement` - DataFrame operations
+   - `useDatabaseManagement` - DataFrame operations
    - `useEditorKeyboard` - Keyboard shortcuts
 
 3. **Simplified Provider** - `CanvasProvider.new.tsx`
@@ -142,7 +142,7 @@ Main hook that combines all editor functionality.
 - All state and operations from sub-hooks
 - Canvas interaction handlers
 - Project operations
-- SubGraph management
+- Graph management
 - Variable management
 - DataFrame management
 - Clipboard operations
@@ -169,18 +169,18 @@ Handles tab operations.
 
 **Returns:**
 - `setActiveTabId(id, targetGroupId?)` - Set active tab
-- `openSubGraph(id, name, type, data?)` - Open a subgraph tab
+- `openGraph(id, name, type, data?)` - Open a subgraph tab
 - `openSettingsTab()` - Open settings tab
 - `closeTab(id, e?)` - Close a tab
 - `splitEditorRight(groupId)` - Split editor to the right
 - `closeGroup(id)` - Close an editor group
 
-### useProjectOperations(openSubGraph)
+### useProjectOperations(openGraph)
 
 Handles project-level operations.
 
 **Parameters:**
-- `openSubGraph` - Function to open a subgraph
+- `openGraph` - Function to open a subgraph
 
 **Returns:**
 - `saveGraph()` - Save current project
@@ -189,12 +189,12 @@ Handles project-level operations.
 - `executeGraph()` - Execute current event
 - `executeAllEvents()` - Execute all events
 
-### useSubGraphManagement(openSubGraph, closeTab, switchSidebarTab)
+### useGraphManagement(openGraph, closeTab, switchSidebarTab)
 
 Handles events, functions, and macros.
 
 **Parameters:**
-- `openSubGraph` - Function to open a subgraph
+- `openGraph` - Function to open a subgraph
 - `closeTab` - Function to close a tab
 - `switchSidebarTab` - Function to switch sidebar tab
 
@@ -223,7 +223,7 @@ Handles variable operations.
 - `promoteVariable(id)` - Promote to global variable
 - `demoteVariable(id)` - Demote to local variable
 
-### useDataFrameManagement()
+### useDatabaseManagement()
 
 Handles DataFrame operations.
 

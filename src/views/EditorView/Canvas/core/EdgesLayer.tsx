@@ -1,11 +1,11 @@
 ﻿import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useViewportStore } from '@/features/core/viewport';
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { useGestureStore } from '@/features/core/gesture';
 import { useExecutionStore } from "@/features/domain/execution/stores";
-import { useTheme } from "@/hooks/useTheme";
+import { useTheme } from "@/features/core/theme/useTheme";
 import { drawEdge } from "./Edge";
-import { DEFAULT_VIEWPORT } from "../constants";
+import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 // 🆕 粒子类型定义
 interface Particle {

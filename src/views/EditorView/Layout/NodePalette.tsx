@@ -1,11 +1,12 @@
 ﻿import React, { useState, useMemo, useEffect } from "react";
-import { useNodeDefinitions } from "@/features/core/node-registry";
+import { useNodeDefinitions } from "@/features/core/nodeRegister";
 import { Pin, Node } from "@/shared/types/domain";
 import { Variable } from "@/shared/types/domain";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
   type: string;
+  node_type?: string; // 兼容性字段，与 type 相同
   title: string;
   category: string[];
   overrides?: Partial<Node>;
@@ -31,7 +32,7 @@ export default function NodePalette({
   onSelect,
   filterPin,
   variables = {},
-  globalVariables = {},
+  Variables = {},
   functions = {},
   macros = {},
 }: {
@@ -40,7 +41,7 @@ export default function NodePalette({
   onSelect: (item: PaletteItem) => void;
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
-  globalVariables?: Record<string, Variable>;
+  Variables?: Record<string, Variable>;
   functions?: Record<string, import("@/shared/types/domain").Graph>;
   macros?: Record<string, import("@/shared/types/domain").Graph>;
 }) {
@@ -52,7 +53,7 @@ export default function NodePalette({
 
   // 将 props 转换为稳定的键数组，避免对象引用变化导致重新计算
   const variableKeys = useMemo(() => Object.keys(variables), [variables]);
-  const globalVariableKeys = useMemo(() => Object.keys(globalVariables), [globalVariables]);
+  const globalVariableKeys = useMemo(() => Object.keys(Variables), [Variables]);
   const functionKeys = useMemo(() => Object.keys(functions), [functions]);
   const macroKeys = useMemo(() => Object.keys(macros), [macros]);
 
@@ -89,7 +90,7 @@ export default function NodePalette({
     });
 
     // 处理变量 (Get/Set)
-    const allVars = { ...globalVariables, ...variables };
+    const allVars = { ...Variables, ...variables };
     Object.values(allVars).forEach((v) => {
       if (!v || !v.name || !v.id) {
         console.warn('[NodePalette] Invalid variable:', v);
@@ -132,7 +133,7 @@ export default function NodePalette({
     });
 
     // 处理函数和宏 (Call)
-    const processSubGraphs = (collection: Record<string, any>, type: 'function' | 'macro') => {
+    const processGraphs = (collection: Record<string, any>, type: 'function' | 'macro') => {
       Object.values(collection).forEach(sub => {
         if (!sub || !sub.name || !sub.id) {
           console.warn('[NodePalette] Invalid subgraph:', sub);
@@ -154,8 +155,8 @@ export default function NodePalette({
         });
       });
     };
-    processSubGraphs(functions, 'function');
-    processSubGraphs(macros, 'macro');
+    processGraphs(functions, 'function');
+    processGraphs(macros, 'macro');
 
     return items;
   }, [filterPin, variableKeys, globalVariableKeys, functionKeys, macroKeys, definitions]);

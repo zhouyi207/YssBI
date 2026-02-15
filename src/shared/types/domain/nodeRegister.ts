@@ -1,4 +1,4 @@
-﻿/// types —— 只放“结构定义”
+/// types —— 只放“结构定义”
 
 import { NodeDefinition } from "@/shared/types/domain";
 import { LoadStatus } from "@/shared/types/ui";

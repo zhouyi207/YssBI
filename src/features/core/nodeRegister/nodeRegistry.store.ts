@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { SchemaService } from "@/services/schema";
 import { NodeDefinition } from "@/shared/types/domain";
-import { NodeDefinitionMap, NodeRegistryState } from "./nodeRegistry.types";
+import { NodeDefinitionMap, NodeRegistryState } from "@/shared/types/domain/nodeRegister";
 import { LoadStatus } from "@/shared/types/ui";
 
 interface NodeRegistryStore extends NodeRegistryState {

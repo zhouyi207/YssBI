@@ -96,14 +96,8 @@ pub fn run() {
             update_variable,
             delete_variable,
             // Nodes 命令
-            get_nodes,
-            set_nodes,
             create_node,
-            create_nodes,
-            create_nodes_with_connections,
             delete_node,
-            connect_pins,
-            disconnect_pin,
             // Connection 命令
             create_connection,
             delete_connection,

@@ -4,13 +4,13 @@ import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/core/schema";
 import { isPrimitiveType } from "@/shared/utils/datatype";
 import { DataType } from "@/shared/types/domain";
-import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useNodeStore } from "@/features/core/_node/useNodeStore";
 import { useShallow } from "zustand/react/shallow";
 import { uiStore } from "@/features/core/ui/UIStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {
-    globalVariables,
+    Variables,
     events,
     functions,
     macros,
@@ -45,7 +45,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
   const selectedData = useMemo(() => {
     if (!selectedItemId || !selectedItemType) return null;
     if (selectedItemType === 'variable') {
-      return allTabsVariables[selectedItemId] || globalVariables[selectedItemId];
+      return allTabsVariables[selectedItemId] || Variables[selectedItemId];
     } else if (selectedItemType === 'event') {
       return events[selectedItemId];
     } else if (selectedItemType === 'function') {
@@ -56,7 +56,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       return dataframes[selectedItemId];
     }
     return null;
-  }, [selectedItemId, selectedItemType, allTabsVariables, globalVariables, events, functions, macros, dataframes]);
+  }, [selectedItemId, selectedItemType, allTabsVariables, Variables, events, functions, macros, dataframes]);
 
   const handleUpdate = (data: any) => {
     if (!selectedItemId || !selectedItemType) return;
