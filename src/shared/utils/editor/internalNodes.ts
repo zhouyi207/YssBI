@@ -19,7 +19,7 @@ export function createInternalNode(
     inputs: SimplePinDef[],
     outputs: SimplePinDef[],
     isInternal: boolean = true
-): Node {
+): Partial<Node> {
     // 将简化的 pin 定义转换为完整的 Pin
     const fullInputs: Pin[] = inputs.map((p, idx) => ({
         id: `${id}_in_${idx}`,

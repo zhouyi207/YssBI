@@ -9,7 +9,7 @@ export interface PaletteItem {
   node_type?: string; // 兼容性字段，与 type 相同
   title: string;
   category: string[];
-  overrides?: Partial<Node>;
+  overrides?: Partial<Node> & { subGraphId?: string };
 }
 
 interface TreeCategory {

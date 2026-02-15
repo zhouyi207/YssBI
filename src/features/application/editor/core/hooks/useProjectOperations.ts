@@ -1,6 +1,5 @@
 ﻿import { useCallback } from 'react';
 import { useProjectStore } from '@/features/core/project';
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -60,8 +59,6 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         p = result.project;
         path = result.path;
       }
-
-      useNodeStore.getState().clearTabs();
 
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = layoutStore.activeEditorGroupId || 'default_editor';

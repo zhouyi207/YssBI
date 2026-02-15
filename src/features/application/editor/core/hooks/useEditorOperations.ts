@@ -1,6 +1,6 @@
-﻿import { useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
+import { useProjectStore } from '@/features/core/project';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '../stores';
 import { deleteNodeInBackend } from '@/shared/utils/editor';
@@ -16,11 +16,11 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
  */
 export function useEditorOperations() {
   const { clipboard, setClipboard } = useClipboardStore();
-  
+
   // Get active tab and group IDs
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
   // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
-  const activeEditorNode = useLayoutStore((s: LayoutState) => 
+  const activeEditorNode = useLayoutStore((s: LayoutState) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
@@ -39,9 +39,14 @@ export function useEditorOperations() {
   const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
-    const currentNodes = useNodeStore.getState().getNodes(tId);
+    const projectStore = useProjectStore.getState();
+    const currentGraph = projectStore.graphs[tId];
+    if (!currentGraph) return;
+
+    const currentNodes = currentGraph.nodes;
     const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
-    useNodeStore.getState().setNodes(tId, nextNodes);
+
+    projectStore.updateGraph(tId, { nodes: nextNodes });
   }, []);
 
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -62,23 +67,20 @@ export function useEditorOperations() {
     }
   }, [activeGroupId]);
 
-  // History operations
+  // History operations - no-op in new architecture (history managed by backend)
   const saveHistory = useCallback(() => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    useNodeStore.getState().saveSnapshot(tid);
+    // History is now managed by the backend through graph updates
+    console.log('[useEditorOperations] saveHistory is no-op in new architecture');
   }, []);
 
   const undo = useCallback(() => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    useNodeStore.getState().undo(tid);
+    // TODO: Implement undo via backend API if needed
+    console.log('[useEditorOperations] undo not yet implemented in new architecture');
   }, []);
 
   const redo = useCallback(() => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    useNodeStore.getState().redo(tid);
+    // TODO: Implement redo via backend API if needed
+    console.log('[useEditorOperations] redo not yet implemented in new architecture');
   }, []);
 
   // Clipboard operations
@@ -86,7 +88,11 @@ export function useEditorOperations() {
     const sIds = new Set(selectedNodeIdsRef.current);
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const currentNodes = useNodeStore.getState().getNodes(tid);
+    const projectStore = useProjectStore.getState();
+    const currentGraph = projectStore.graphs[tid];
+    if (!currentGraph) return;
+
+    const currentNodes = currentGraph.nodes;
     const sel = currentNodes.filter(n => sIds.has(n.id) && !n.isInternal);
     if (sel.length > 0) setClipboard(sel.map(n => n.clone()));
   }, [setClipboard]);
@@ -119,10 +125,10 @@ export function useEditorOperations() {
 
     try {
       console.log('[useEditorOperations] Pasting nodes via backend...');
-      
+
       // Extract node types for backend validation
       const nodeTypes = tempNodes.map(n => n.node_type || n.type);
-      
+
       // Call backend to validate node types
       await NodeService.createNodes(tid, nodeTypes);
 
@@ -185,11 +191,9 @@ export function useEditorOperations() {
     }
   }, [setNodes, setSelectedNodeIds]);
 
-  // Get history state
+  // Get history state - no history in new architecture
   const EMPTY_HISTORY = { past: [], future: [] };
-  const history = activeTabId && useNodeStore.getState().tabs[activeTabId]
-    ? useNodeStore.getState().tabs[activeTabId].history
-    : EMPTY_HISTORY;
+  const history = EMPTY_HISTORY;
 
   return {
     // History

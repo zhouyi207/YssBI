@@ -89,7 +89,7 @@ export function createNodeFromTemplate(
     position: Position,
     _scale: number,
     type: string,
-    overrides?: Partial<Node>
+    overrides?: Partial<Node> & { subGraphId?: string }
 ): Node | null {
     const id = `node_${Date.now()}`;
     const node = createNode(type, id, position);

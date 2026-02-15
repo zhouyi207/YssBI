@@ -8,29 +8,9 @@ import { useProjectOperations } from './useProjectOperations';
 import { useGraphManagement } from './useGraphManagement';
 import { useVariableManagement } from './useVariableManagement';
 import { useDatabaseManagement } from './useDatabaseManagement';
+import { useNodeManagement } from './useNodeManagement';
 
-/**
- * Main Editor Hook (Refactored)
- * 
- * 组合所有编辑器功能的主 hook
- * 
- * 重构说明：
- * - 拆分为 useEditorState（状态）和 useEditorActions（操作）
- * - 减少单个 hook 的复杂度
- * - 提高可测试性和可维护性
- * 
- * 使用方式：
- * ```tsx
- * // 完整功能（向后兼容）
- * const editor = useEditor();
- * 
- * // 只需要状态
- * const state = useEditorState();
- * 
- * // 只需要操作
- * const actions = useEditorActions();
- * ```
- */
+
 export function useEditor() {
   // Get state
   const state = useEditorState();
@@ -46,6 +26,7 @@ export function useEditor() {
   const graphMgmt = useGraphManagement(tabMgmt.openGraph, tabMgmt.closeTab);
   const variableMgmt = useVariableManagement();
   const dataFrameMgmt = useDatabaseManagement();
+  const nodeMgmt = useNodeManagement();
 
   // Canvas interaction
   const canvasInteraction = useCanvasInteraction({
@@ -96,6 +77,14 @@ export function useEditor() {
 
     // DataFrame management
     ...dataFrameMgmt,
+
+    // Node management (override graph management's node handlers)
+    createNode: nodeMgmt.createNode,
+    createNodes: nodeMgmt.createNodes,
+    deleteNode: nodeMgmt.deleteNode,
+    deleteNodes: nodeMgmt.deleteNodes,
+    handleNodeCreated: nodeMgmt.handleNodeCreated,
+    handleNodeDeleted: nodeMgmt.handleNodeDeleted,
   }), [
     state,
     actions,
@@ -106,5 +95,6 @@ export function useEditor() {
     graphMgmt,
     variableMgmt,
     dataFrameMgmt,
+    nodeMgmt,
   ]);
 }

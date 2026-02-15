@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import { PinService } from "@/services";
-import { useNodeStore } from "@/features/core/_node/useNodeStore";
+import { useProjectStore } from "@/features/core/project";
 
 export interface PinInputProps {
   pinId: string;
@@ -25,7 +25,6 @@ export const PinInput: React.FC<PinInputProps> = ({
 }) => {
   const [value, setValue] = useState<any>(initialValue ?? getDefaultValue(pinType));
   const [isFocused, setIsFocused] = useState(false);
-  const updateNode = useNodeStore((state) => state.updateNode);
 
   useEffect(() => {
     if (initialValue !== undefined) {
@@ -80,7 +79,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     } catch (error) {
       console.error("[PinInput] Failed to update pin value:", error);
     }
-  }, [subgraphId, nodeId, pinId, value, pinType, updateNode]);
+  }, [subgraphId, nodeId, pinId, value, pinType]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

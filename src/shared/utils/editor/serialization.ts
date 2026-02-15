@@ -30,7 +30,7 @@ export function serializeGraph(
         for (const targetPinId of outputPin.links) {
           // 创建连接 ID（使用排序后的 pin ID 确保唯一性）
           const connKey = `${outputPin.id}->${targetPinId}`;
-          
+
           if (!processedConnections.has(connKey)) {
             connections.push({
               from_pin: outputPin.id,
@@ -98,17 +98,14 @@ export function deserializeGraph(data: any): {
   inputs: any[];
   outputs: any[];
 } {
-  console.log('[deserializeGraph] Input data:', data);
-  
+
+
   // Graph 类型中没有 variables，使用空对象
   const variables: Record<string, Variable> = {};
-  
+
   // 处理新的 connections 格式：Connection 对象包含 connections 数组
   const connectionsData = data.connections as any;
-  console.log('[deserializeGraph] connectionsData:', connectionsData);
-  console.log('[deserializeGraph] connectionsData type:', typeof connectionsData);
-  console.log('[deserializeGraph] connectionsData.connections:', connectionsData?.connections);
-  
+
   // 确保 connectionsList 是数组
   let connectionsList: any[] = [];
   if (connectionsData) {
@@ -120,12 +117,10 @@ export function deserializeGraph(data: any): {
       connectionsList = connectionsData.connections;
     } else if (typeof connectionsData === 'object') {
       // 如果是对象但没有 connections 数组，转换为空数组
-      console.warn('[deserializeGraph] connections is an object but not in expected format:', connectionsData);
+      // console.warn('[deserializeGraph] connections is an object but not in expected format:', connectionsData);
       connectionsList = [];
     }
   }
-  
-  console.log('[deserializeGraph] connectionsList:', connectionsList);
 
   const nodes = (data.nodes || []).map((n: any) => {
     const def = getNodeDefinition(n.type);
@@ -193,12 +188,12 @@ export function deserializeGraph(data: any): {
   for (const connection of connectionsList) {
     const sourcePin = connection.from_pin;
     const targetPin = connection.to_pin;
-    
+
     if (!sourcePin || !targetPin) {
       console.warn('[deserializeGraph] Invalid connection:', connection);
       continue;
     }
-    
+
     // 找到源 pin（输出 pin）
     for (const node of nodes) {
       const outputPin = node.outputs.find((p: any) => p.id === sourcePin);
@@ -220,7 +215,7 @@ export function deserializeGraph(data: any): {
     }
   }
 
-  console.log('[deserializeGraph] Result nodes:', nodes);
+
 
   return {
     nodes,

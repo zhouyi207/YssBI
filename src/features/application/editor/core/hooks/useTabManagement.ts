@@ -1,10 +1,8 @@
 ﻿import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useProjectStore } from '@/features/core/project';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '../stores';
-import { deserializeGraph } from '@/shared/utils/editor';
 
 /**
  * Tab Management Hook
@@ -38,36 +36,13 @@ export function useTabManagement() {
     setActiveTabId(newId, targetGroupId);
     if (!newId) return;
 
-    const id = newId;
-    const tabState = useNodeStore.getState().tabs[id];
-    
-    console.log('[useTabManagement.handleSetActiveTabId] Tab state exists:', !!tabState);
-
-    if (!tabState) {
-      const st = useProjectStore.getState();
-      // 从 graphs 中获取数据
-      const source = initialData || st.graphs[id];
-      
-      console.log('[useTabManagement.handleSetActiveTabId] Source data:', source);
-      
-      if (source) {
-        const { nodes: n, variables: v } = deserializeGraph(source);
-        console.log('[useTabManagement.handleSetActiveTabId] Deserialized:', { nodes: n.length, variables: Object.keys(v).length });
-        useNodeStore.getState().initTab(id, n, v);
-      } else {
-        console.log('[useTabManagement.handleSetActiveTabId] No source data, initializing empty tab');
-        useNodeStore.getState().initTab(id, [], {});
-      }
-    }
-
     const st = useProjectStore.getState();
-    // 从 graphs 中获取数据
-    const tabSource = st.graphs[id];
+    const tabSource = initialData || st.graphs[newId];
     const type = forceType || (tabSource as any)?.type;
     
     console.log('[useTabManagement.handleSetActiveTabId] Final type:', type, 'tabSource:', tabSource);
     
-    if (type) setSelectedInfo(id, type as any);
+    if (type) setSelectedInfo(newId, type as any);
   }, [setActiveTabId, setSelectedInfo]);
 
   const openGraph = useCallback((

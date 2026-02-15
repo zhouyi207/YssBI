@@ -3,12 +3,12 @@ import { Node } from "../../Nodes/Node";
 import { Pin } from "@/shared/types/domain";
 import { useDragContext } from "../../Context/DragProvider";
 import { useEditorGroup } from "@/features/application/editor";
-import { useNodeStore } from "@/features/core/_node/useNodeStore";
+import { useProjectStore } from "@/features/core/project";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
-import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
+import { createNodeFromTemplate, createInternalNode, deserializeGraph } from "@/shared/utils/editor";
 import { ConnectionLine } from "./ConnectionLine";
-import { useBackendNodeCreation } from "@/features/core/_backendNodeCreation";
+import { useNodeManagement } from "@/features/application/editor";
 import { useExecutionVisualization } from "@/features/domain/execution/hooks";
 
 // Extracted Components
@@ -49,7 +49,7 @@ export default function Canvas() {
   } = useEditorGroup();
   const { activeDrag } = useDragContext();
   const gesture = useGestureStore(state => state.gesture);
-  const { createNode } = useBackendNodeCreation();
+  const { createNode } = useNodeManagement();
 
   const scale = useViewportStore(useCallback(state => state.viewports[groupId]?.scale || 1, [groupId]));
 
@@ -68,7 +68,8 @@ export default function Canvas() {
     // 2. 直接从 Store 获取最新状态，避免闭包过时
     const viewport = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
     const currentTabId = activeTabId || "";
-    const allNodes = useNodeStore.getState().getNodes(currentTabId);
+    const graphData = useProjectStore.getState().graphs[currentTabId];
+    const allNodes = graphData ? deserializeGraph(graphData).nodes : [];
 
     // 3. 计算视口边界（世界坐标系）
     // 核心逻辑：(屏幕边界点 - 容器偏移 - 平移量) / 缩放
@@ -223,7 +224,8 @@ export default function Canvas() {
     const root = ref.current;
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
-    const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
+    const graphData = useProjectStore.getState().graphs[activeTabId || ""];
+    const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
 
     currentNodes.forEach(node => {
       // 关键修复：只在当前 Canvas 容器内查找节点
@@ -270,7 +272,8 @@ export default function Canvas() {
   const getPinWorldPos = useCallback((pinId: string) => {
     const nodeId = pinNodeIdIndex.get(pinId);
     if (!nodeId) return null;
-    const tabNodes = useNodeStore.getState().getNodes(activeTabId || "");
+    const graphData = useProjectStore.getState().graphs[activeTabId || ""];
+    const tabNodes = graphData ? deserializeGraph(graphData).nodes : [];
     const node = tabNodes.find(n => n.id === nodeId);
     const offset = pinOffsets[pinId];
     if (!node || !offset) return null;
@@ -278,7 +281,7 @@ export default function Canvas() {
       x: node.position.x + offset.x,
       y: node.position.y + offset.y
     };
-  }, [pinNodeIdIndex, pinOffsets]);
+  }, [pinNodeIdIndex, pinOffsets, activeTabId]);
 
   const getCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const root = ref.current;
@@ -405,8 +408,9 @@ export default function Canvas() {
 
     // 如果是变量
     if (dragState.template.category === "Variable") {
-      // 安全检查：确保变量依然存在（检查局部和全局）
-      if (!variables[dragState.template.variableId] && !Variables[dragState.template.variableId]) {
+      // 安全检查：确保变量依然存在
+      const allVariables = useProjectStore.getState().variables;
+      if (!variables[dragState.template.variableId] && !allVariables[dragState.template.variableId]) {
         console.warn("Variable no longer exists. Aborting drop.");
         return;
       }

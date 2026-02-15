@@ -2,13 +2,12 @@
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
-import { useNodeStore } from "@/features/core/_node/useNodeStore";
-import { Node } from "@/shared/types/domain";
+import { useProjectStore } from "@/features/core/project";
 import { HUD } from "./HUD";
 import { NodePalette } from "../../Layout/NodePalette";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
-import { useBackendNodeCreation } from "@/features/core/_backendNodeCreation";
+import { createNodeFromTemplate, createInternalNode, deserializeGraph } from "@/shared/utils/editor";
+import { useNodeManagement } from "@/features/application/editor";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 
 
@@ -26,7 +25,6 @@ export default function CanvasOverlays({
         setContextMenu,
         setPendingConnection,
         pendingConnection,
-        connectPins,
         variables,
         Variables,
         functions,
@@ -40,7 +38,7 @@ export default function CanvasOverlays({
         setCanvas // Needed for internal node centering
     } = useEditorGroup();
 
-    const { createNode } = useBackendNodeCreation();
+    const { createNode } = useNodeManagement();
 
 
     const [showExecuteMenu, setShowExecuteMenu] = useState(false);
@@ -55,8 +53,9 @@ export default function CanvasOverlays({
         const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
         if (internalNodeTypes.includes(item.type)) {
             // Check if this internal node already exists
-            const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
-            const existingNode = currentNodes.find(n => n.node_type === item.type && n.isInternal);
+            const graphData = useProjectStore.getState().graphs[activeTabId || ""];
+            const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
+            const existingNode = currentNodes.find((n: any) => n.node_type === item.type && n.isInternal);
             if (existingNode) {
                 // Move canvas to center on the existing node
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -81,7 +80,7 @@ export default function CanvasOverlays({
         const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
         const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-        let newNode: Node | null = null;
+        let newNode: import("@/shared/types/ui").UINode | null = null;
 
         if (item.type === 'call_function' || item.type === 'call_macro') {
             const subId = item.overrides?.subGraphId;
@@ -91,7 +90,7 @@ export default function CanvasOverlays({
                     const subName = subData.name;
                     const type = item.type;
 
-                    newNode = createInternalNode(
+                    const uiNode = createInternalNode(
                         `node_${Date.now()}`,
                         type,
                         subName,
@@ -102,8 +101,9 @@ export default function CanvasOverlays({
                         [{ name: "Out", type: "exec" },
                         ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.node_type as any, isArray: p.isArray }))],
                         false
-                    );
-                    newNode.subGraphId = subId;
+                    ) as import("@/shared/types/ui").UINode;
+                    // 添加 subGraphId 属性
+                    newNode = { ...uiNode, subGraphId: subId };
                 }
             }
         } else {
@@ -111,22 +111,12 @@ export default function CanvasOverlays({
         }
 
         if (newNode) {
-            // 使用后端 API 创建节点（等待后端返回）
-            const createdNode = await createNode(newNode);
+            // 使用后端 API 创建节点（传递 nodeType 和 position）
+            await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
 
-            // 如果有待处理的连接，尝试自动连接
-            if (createdNode && pendingConnection) {
-                const isInput = pendingConnection.direction === "input";
-                const targetDirection = isInput ? "outputs" : "inputs";
-
-                // 寻找新节点中第一个符合类型的引脚
-                const pins = targetDirection === "inputs" ? createdNode.inputs : createdNode.outputs;
-                const compatiblePin = pins.find(p => p.node_type === pendingConnection.node_type);
-
-                if (compatiblePin) {
-                    connectPins(pendingConnection.id, compatiblePin.id);
-                }
-            }
+            // 注意：由于 createNode 返回 void，我们无法直接获取创建的节点
+            // 如果需要自动连接，需要等待后端事件返回后再处理
+            // 这里暂时移除自动连接逻辑，或者需要重新设计
         }
         setContextMenu(null);
         setPendingConnection(null);
@@ -137,7 +127,7 @@ export default function CanvasOverlays({
             <HUD />
 
             {/* ================= FAB (Floating Action Button) for Execution ================= */}
-            {tabs.find(t => t.id === activeTabId)?.node_type === "event" && (
+            {tabs.find(t => t.id === activeTabId)?.type === "event" && (
                 <div className="absolute top-4 right-4 z-40">
                     <div className="relative">
                         <div className="flex items-center gap-1">
@@ -196,7 +186,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Selection Box ================= */}
-            {gesture?.node_type === 'select' && canvasRef.current && (
+            {gesture?.type === 'select' && canvasRef.current && (
                 <div
                     className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
                     style={{
@@ -238,7 +228,8 @@ export default function CanvasOverlays({
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
                         onClick={async () => {
-                            if (!variables[variableDropMenu.variableId] && !Variables[variableDropMenu.variableId]) {
+                            const varId = variableDropMenu.variableId;
+                            if (!(varId in variables) && !(varId in Variables)) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;
@@ -256,8 +247,8 @@ export default function CanvasOverlays({
                                 } as any
                             );
                             if (newNode) {
-                                // 使用后端 API 创建节点（等待后端返回）
-                                await createNode(newNode);
+                                // 使用后端 API 创建节点（传递 nodeType 和 position）
+                                await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
                             }
                             setVariableDropMenu(null);
                         }}
@@ -268,7 +259,8 @@ export default function CanvasOverlays({
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
                         onClick={async () => {
-                            if (!variables[variableDropMenu.variableId] && !Variables[variableDropMenu.variableId]) {
+                            const varId = variableDropMenu.variableId;
+                            if (!(varId in variables) && !(varId in Variables)) {
                                 console.warn("Variable no longer exists.");
                                 setVariableDropMenu(null);
                                 return;
@@ -286,8 +278,8 @@ export default function CanvasOverlays({
                                 } as any
                             );
                             if (newNode) {
-                                // 使用后端 API 创建节点（等待后端返回）
-                                await createNode(newNode);
+                                // 使用后端 API 创建节点（传递 nodeType 和 position）
+                                await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
                             }
                             setVariableDropMenu(null);
                         }}

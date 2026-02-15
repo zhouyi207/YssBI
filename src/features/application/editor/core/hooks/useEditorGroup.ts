@@ -1,7 +1,8 @@
-import { useCallback, useContext, createContext } from 'react';
+import { useCallback, useContext, createContext, useMemo } from 'react';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useTabNodes, useTabVariables } from '@/features/core/_node/useNodeStore';
+import { useProjectStore } from '@/features/core/project';
 import { useEditor } from './useEditor';
+import { deserializeGraph } from '@/shared/utils/editor';
 
 /**
  * GroupContext for scoped canvas operations
@@ -37,9 +38,12 @@ export function useEditorGroup() {
   const activeTabId = functionalNode?.data?.activeTabId || null;
   const selectedNodeIds = functionalNode?.data?.params?.selectedNodeIds || [];
 
-  // Efficiently retrieve nodes and variables for the active tab
-  const nodes = useTabNodes(activeTabId);
-  const variables = useTabVariables(activeTabId);
+  // Efficiently retrieve nodes and variables for the active tab from project store
+  const graphData = useProjectStore(useCallback((s) => activeTabId ? s.graphs[activeTabId] : null, [activeTabId]));
+  const { nodes, variables } = useMemo(() => {
+    if (!graphData) return { nodes: [], variables: {} };
+    return deserializeGraph(graphData);
+  }, [graphData]);
 
   // Wrapped handlers that ensure the correct group is active
   const wrappedOnCanvasPointerDown = useCallback((e: React.PointerEvent) => {
@@ -77,8 +81,8 @@ export function useEditorGroup() {
     editor.setCanvas(updater, targetGroupId || groupId);
   }, [groupId, editor.setCanvas, setActiveGroup]);
 
-  // Return combined object
-  return {
+  // Return combined object - memoize to prevent unnecessary re-renders
+  return useMemo(() => ({
     ...editor,
     groupId,
     tabs,
@@ -91,5 +95,18 @@ export function useEditorGroup() {
     onPinPointerDown: wrappedOnPinPointerDown,
     onCanvasWheel: wrappedOnCanvasWheel,
     setCanvas: wrappedSetCanvas,
-  };
+  }), [
+    editor,
+    groupId,
+    tabs,
+    activeTabId,
+    nodes,
+    variables,
+    selectedNodeIds,
+    wrappedOnCanvasPointerDown,
+    wrappedOnNodePointerDown,
+    wrappedOnPinPointerDown,
+    wrappedOnCanvasWheel,
+    wrappedSetCanvas,
+  ]);
 }

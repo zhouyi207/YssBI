@@ -1,11 +1,12 @@
-﻿import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
+import { useProjectStore } from '@/features/core/project';
 import { useViewportStore } from '@/features/domain/canvas/stores';
 import { useEditorStore } from '../stores';
 import { GraphPosition} from '@/shared/types/domain';
 import { Node } from '@/shared/types/ui';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { deserializeGraph } from '@/shared/utils/editor';
 
 
 /**
@@ -54,9 +55,14 @@ export function useEditorActions() {
   const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
-    const currentNodes = useNodeStore.getState().getNodes(tId);
+    const graphData = useProjectStore.getState().graphs[tId];
+    if (!graphData) return;
+    
+    const { nodes: currentNodes } = deserializeGraph(graphData);
     const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
-    useNodeStore.getState().setNodes(tId, nextNodes);
+    
+    // Update the graph in project store
+    useProjectStore.getState().updateGraph(tId, { nodes: nextNodes as any });
   }, []);
 
   // Canvas operations

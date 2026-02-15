@@ -4,8 +4,6 @@ import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/core/schema";
 import { isPrimitiveType } from "@/shared/utils/datatype";
 import { DataType } from "@/shared/types/domain";
-import { useNodeStore } from "@/features/core/_node/useNodeStore";
-import { useShallow } from "zustand/react/shallow";
 import { uiStore } from "@/features/core/ui/UIStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
@@ -30,22 +28,13 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     deleteDataFrame
   } = useEditorGroup();
 
-  // 使用 useShallow 确保只有当变量内容真正变化时才重新渲染
-  const allTabsVariables = useNodeStore(useShallow(s => {
-    const vars: Record<string, any> = {};
-    Object.values(s.tabs).forEach(tab => {
-      Object.assign(vars, tab.variables);
-    });
-    return vars;
-  }));
-
   const variableTypes = useSchemaStore(s => s.variableTypes);
 
   // Find the selected item's data
   const selectedData = useMemo(() => {
     if (!selectedItemId || !selectedItemType) return null;
     if (selectedItemType === 'variable') {
-      return allTabsVariables[selectedItemId] || Variables[selectedItemId];
+      return Variables[selectedItemId];
     } else if (selectedItemType === 'event') {
       return events[selectedItemId];
     } else if (selectedItemType === 'function') {
@@ -56,7 +45,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       return dataframes[selectedItemId];
     }
     return null;
-  }, [selectedItemId, selectedItemType, allTabsVariables, Variables, events, functions, macros, dataframes]);
+  }, [selectedItemId, selectedItemType, Variables, events, functions, macros, dataframes]);
 
   const handleUpdate = (data: any) => {
     if (!selectedItemId || !selectedItemType) return;

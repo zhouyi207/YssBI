@@ -13,7 +13,8 @@ export { useEditorGroup, GroupContext } from './hooks/useEditorGroup';
 export { useSidebarTab } from './hooks/useSidebarTab';
 
 
-// graph, variable, database
+// graph, variable, database, node
 export { useGraphManagement } from './hooks/useGraphManagement';
 export { useDatabaseManagement } from './hooks/useDatabaseManagement';
 export { useVariableManagement } from './hooks/useVariableManagement';
+export { useNodeManagement } from './hooks/useNodeManagement';

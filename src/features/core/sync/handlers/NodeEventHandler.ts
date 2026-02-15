@@ -2,7 +2,6 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { NodeCreatedPayload, NodeDeletedPayload, EventCallbacks } from '../types';
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
 
 export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
     eventType = 'NodeCreated';

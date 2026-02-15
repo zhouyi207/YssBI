@@ -1,5 +1,4 @@
 ﻿import React, { useCallback, useEffect } from "react";
-import { useNodeStore } from '@/features/core/_node/useNodeStore';
 import { useProjectStore } from "@/features/core/project";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
@@ -15,11 +14,11 @@ import { deserializeGraph } from "@/shared/utils/editor";
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.MutableRefObject<string>;
     activeTabIdRef: React.MutableRefObject<string | null>;
-    canvasRef: React.MutableRefObject<CanvasState>;
+    canvasRef: React.MutableRefObject<GraphPosition>;
     groups: EditorGroup[];
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
-    setCanvas: (updater: CanvasState | ((prev: CanvasState) => CanvasState), targetGroupId?: string) => void;
+    setCanvas: (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition), targetGroupId?: string) => void;
     saveHistory: () => void;
 }
 
@@ -151,7 +150,8 @@ export function useCanvasInteraction({
         // Find pin in current store nodes
         const tid = activeTabIdRef.current;
         if (!tid) return;
-        const currentNodes = useNodeStore.getState().getNodes(tid);
+        const graphData = useProjectStore.getState().graphs[tid];
+        const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
         let pin: Pin | undefined;
         for (const n of currentNodes) {
             pin = [...n.inputs, ...n.outputs].find(p => p.id === pinId);
@@ -219,9 +219,19 @@ export function useCanvasInteraction({
                     const tid = activeTabIdRef.current;
                     if (tid) {
                         // 只更新状态，让 React 处理渲染
-                        sIds.forEach((id: string) => {
-                            useNodeStore.getState().updateNodePosition(tid, id, dx, dy);
-                        });
+                        const graphData = useProjectStore.getState().graphs[tid];
+                        if (graphData) {
+                            const { nodes: currentNodes } = deserializeGraph(graphData);
+                            sIds.forEach((id: string) => {
+                                const nodeIndex = currentNodes.findIndex((n: any) => n.id === id);
+                                if (nodeIndex !== -1) {
+                                    currentNodes[nodeIndex].position.x += dx;
+                                    currentNodes[nodeIndex].position.y += dy;
+                                }
+                            });
+                            // 更新 graph 数据
+                            useProjectStore.getState().updateGraph(tid, { nodes: currentNodes as any });
+                        }
                     }
                     lastX = e.clientX;
                     lastY = e.clientY;
@@ -259,8 +269,9 @@ export function useCanvasInteraction({
                 const gid = g.groupId || activeGroupIdRef.current;
                 const newSelectedIds: string[] = [];
 
-                const currentNodes = useNodeStore.getState().getNodes(activeTabIdRef.current || "");
-                currentNodes.forEach(n => {
+                const graphData = useProjectStore.getState().graphs[activeTabIdRef.current || ""];
+                const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
+                currentNodes.forEach((n: any) => {
                     const el = document.getElementById(n.id); if (!el) return;
                     const r = el.getBoundingClientRect();
                     const overlap = !(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1);
@@ -273,12 +284,6 @@ export function useCanvasInteraction({
                 else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
             } else if (g.type === "drag" && g.moved) {
                 saveHistory();
-                // 拖动结束后同步节点位置到后端
-                const tid = activeTabIdRef.current;
-                if (tid) {
-                    console.log(`[useCanvasInteraction] Drag ended, syncing nodes to backend...`);
-                    useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
-                }
             }
 
             useGestureStore.getState().endConnection();

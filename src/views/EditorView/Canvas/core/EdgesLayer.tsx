@@ -1,11 +1,12 @@
-﻿import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
+﻿import { useRef, useCallback, useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useViewportStore } from '@/features/core/viewport';
-import { useNodeStore } from "@/features/core/_node/useNodeStore";
+import { useProjectStore } from "@/features/core/project";
 import { useGestureStore } from '@/features/core/gesture';
 import { useExecutionStore } from "@/features/domain/execution/stores";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { drawEdge } from "./Edge";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
+import { deserializeGraph } from "@/shared/utils/editor";
 
 // 🆕 粒子类型定义
 interface Particle {
@@ -28,17 +29,17 @@ export const EdgesLayer = ({
     const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef<number | null>(null);
     const isAnimatingRef = useRef(false);
-    
+
     // 使用 useTheme hook 获取 theme
     const { theme } = useTheme();
-    
+
     // 🆕 粒子系统
     const particlesRef = useRef<Particle[]>([]);
     const lastTimeRef = useRef<number>(0);
-    
+
     // 🆕 是否启用数据流动画（可以通过设置控制）
     const [enableDataFlow, _setEnableDataFlow] = useState(true);
-    
+
     // 🆕 获取已完成的连接（显示数据流动画）
     const completedConnections = useExecutionStore((state) => state.completedConnections);
     // 获取活跃的连接（用于高亮显示）
@@ -72,46 +73,46 @@ export const EdgesLayer = ({
     ) => {
         const dx = Math.abs(x1 - x2);
         const curvature = Math.max(dx * 0.5, 40);
-        
+
         const c1x = x1 + curvature;
         const c1y = y1;
         const c2x = x2 - curvature;
         const c2y = y2;
-        
+
         // 三次贝塞尔曲线公式
         const mt = 1 - t;
         const mt2 = mt * mt;
         const mt3 = mt2 * mt;
         const t2 = t * t;
         const t3 = t2 * t;
-        
+
         const x = mt3 * x1 + 3 * mt2 * t * c1x + 3 * mt * t2 * c2x + t3 * x2;
         const y = mt3 * y1 + 3 * mt2 * t * c1y + 3 * mt * t2 * c2y + t3 * y2;
-        
+
         return { x, y };
     }, []);
 
     // 🆕 更新粒子
     const updateParticles = useCallback((deltaTime: number) => {
         const particles = particlesRef.current;
-        
+
         // 更新现有粒子
         for (let i = particles.length - 1; i >= 0; i--) {
             const particle = particles[i];
             particle.progress += particle.speed * deltaTime;
-            
+
             // 移除完成的粒子
             if (particle.progress >= 1) {
                 particles.splice(i, 1);
             }
         }
-        
+
         // 为已完成的连接添加新粒子
         if (enableDataFlow) {
             completedConnections.forEach((connectionKey) => {
                 // 检查是否已有粒子在这条连接上
                 const existingCount = particles.filter(p => p.connectionKey === connectionKey).length;
-                
+
                 // 限制每条连接上的粒子数量
                 if (existingCount < 3) {
                     // 随机决定是否添加新粒子（控制密度）
@@ -128,6 +129,21 @@ export const EdgesLayer = ({
             });
         }
     }, [completedConnections, enableDataFlow]);
+
+    // 🆕 优化：使用 Store Hook获取响应式数据，并缓存结果
+    const graphData = useProjectStore(useCallback((s) => activeTabId ? s.graphs[activeTabId] : null, [activeTabId]));
+
+    // 使用 useMemo 缓存反序列化结果，避免每帧重复计算
+    const nodes = useMemo(() => {
+        if (!graphData) return [];
+        return deserializeGraph(graphData).nodes;
+    }, [graphData]);
+
+    // 使用 ref 存储最新的 nodes，以便动画帧可以访问（避免 stale closures）
+    const nodesRef = useRef(nodes);
+    useEffect(() => {
+        nodesRef.current = nodes;
+    }, [nodes]);
 
     // 绘制连接线的核心逻辑 (GPU 加速)
     const drawAllEdges = useCallback((currentTime: number = 0) => {
@@ -153,10 +169,10 @@ export const EdgesLayer = ({
         ctx.translate(canvas.x, canvas.y);
         ctx.scale(canvas.scale, canvas.scale);
 
-        // 绘制已有连接
-        const nodes = useNodeStore.getState().getNodes(activeTabId || "");
+        // 使用缓存的节点数据
+        const currentNodes = nodesRef.current;
 
-        nodes.forEach(node => {
+        currentNodes.forEach((node: any) => {
             if (!node) return;
 
             node.outputs.forEach((pin: any) => {
@@ -201,7 +217,7 @@ export const EdgesLayer = ({
         });
 
         ctx.restore();
-    }, [getPinWorldPos, theme, groupId, activeTabId, activeConnections, updateParticles, getPointOnBezier, drawParticle]);
+    }, [getPinWorldPos, theme, groupId, activeConnections, updateParticles, getPointOnBezier, drawParticle]);
 
     // 🆕 持续的动画循环（始终运行以支持粒子动画）
     const animate = useCallback((currentTime: number) => {
@@ -253,23 +269,23 @@ export const EdgesLayer = ({
         };
     }, [startAnimation]);
 
-    // 监听 ViewportStore 和 NodeStore 的变化
+    // 监听 ViewportStore 和 ProjectStore 的变化
     useEffect(() => {
         const unsubViewport = useViewportStore.subscribe(() => {
             if (!isAnimatingRef.current) {
                 startAnimation();
             }
         });
-        
-        const unsubNodes = useNodeStore.subscribe(() => {
+
+        const unsubProject = useProjectStore.subscribe(() => {
             if (!isAnimatingRef.current) {
                 startAnimation();
             }
         });
-        
+
         return () => {
             unsubViewport();
-            unsubNodes();
+            unsubProject();
         };
     }, [startAnimation]);
 

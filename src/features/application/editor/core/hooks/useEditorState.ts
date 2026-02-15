@@ -1,9 +1,9 @@
-﻿import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useProjectStore } from '@/features/core/project';
-import { useTabNodes, useTabVariables } from '@/features/core/_node/useNodeStore';
 import { useEditorStore } from '../stores';
 import { useShallow } from 'zustand/react/shallow';
+import { deserializeGraph } from '@/shared/utils/editor';
 
 /**
  * Editor State Hook
@@ -27,9 +27,12 @@ export function useEditorState() {
   const tabs = activeEditorNode?.data?.tabs || [];
   const selectedNodeIds = activeEditorNode?.data?.params?.selectedNodeIds || [];
 
-  // Get data
-  const nodes = useTabNodes(activeTabId);
-  const variables = useTabVariables(activeTabId);
+  // Get data from project store
+  const graphData = useProjectStore(useCallback((s) => activeTabId ? s.graphs[activeTabId] : null, [activeTabId]));
+  const { nodes, variables } = useMemo(() => {
+    if (!graphData) return { nodes: [], variables: {} };
+    return deserializeGraph(graphData);
+  }, [graphData]);
   
   // Get the graphs object reference - only re-render when graphs object changes
   const graphs = useProjectStore((s) => s.graphs);
