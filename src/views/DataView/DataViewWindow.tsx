@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
+﻿import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ProjectService } from '../../services/project/projectService';
+import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
-import { useProjectSync } from '@/features/sync/projectSync';
-import { useProjectStore, initProjectSync } from '@/features/project';
+import { useProjectSync } from '@/features/application/sync/projectSync';
+import { useProjectStore, initProjectSync } from '@/features/core/project';
 import { Select } from '@/shared/ui/Select';
 
 export const DataViewWindow: React.FC = () => {
-  const dataframes = useProjectStore(s => s.dataframes);
+  const dataframes = useProjectStore(s => s.databases);
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const [loadedRows, setLoadedRows] = useState<any[][]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ export const DataViewWindow: React.FC = () => {
   const loadInitialRows = async (id: string) => {
     setLoading(true);
     try {
-      const rows = await ProjectService.getDataFrameRows(id, 0, CHUNK_SIZE);
+      const rows = await DatabaseService.getDataFrameRows(id, 0, CHUNK_SIZE);
       setLoadedRows(rows);
     } catch (e) {
       console.error('Failed to load initial rows:', e);
@@ -66,7 +66,7 @@ export const DataViewWindow: React.FC = () => {
 
     setLoadingMore(true);
     try {
-      const newRows = await ProjectService.getDataFrameRows(selectedDfId, currentCount, CHUNK_SIZE);
+      const newRows = await DatabaseService.getDataFrameRows(selectedDfId, currentCount, CHUNK_SIZE);
       setLoadedRows(prev => [...prev, ...newRows]);
     } catch (e) {
       console.error('Failed to load more rows:', e);
@@ -83,7 +83,7 @@ export const DataViewWindow: React.FC = () => {
     try {
       await initProjectSync();
       if (selectedDfId) {
-        const rows = await ProjectService.getDataFrameRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
+        const rows = await DatabaseService.getDataFrameRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
         setLoadedRows(rows);
 
         setTimeout(() => {
@@ -233,7 +233,7 @@ export const DataViewWindow: React.FC = () => {
               <thead className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
                 <tr>
                   <th className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 w-12 text-center">#</th>
-                  {selectedDf.columns.map((col, i) => (
+                  {selectedDf.columns.map((col: any, i: number) => (
                     <th key={i} className="p-2 text-left border-r border-gray-800 group">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-gray-300">{col.name}</span>

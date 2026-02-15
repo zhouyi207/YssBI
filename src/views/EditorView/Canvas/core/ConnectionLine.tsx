@@ -1,10 +1,10 @@
-import { useRef, useEffect } from "react";
-import { useGestureStore } from "@/features/canvas/stores";
-import { useViewportStore } from "@/features/canvas/stores";
+﻿import { useRef, useEffect } from "react";
+import { useGestureStore } from '@/features/core/gesture';
+import { useViewportStore } from '@/features/core/viewport';
 import { useTheme } from "@/hooks/useTheme";
 import { drawEdge } from "./Edge";
 
-import { Pin } from "@/shared/types/editor";
+import { Pin } from "@/shared/types/domain";
 
 export const ConnectionLine = ({
     groupId,

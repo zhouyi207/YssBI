@@ -1,13 +1,13 @@
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+﻿import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEditorGroup } from "@/features/editor";
+import { useEditorGroup } from "@/features/application/editor";
 import { useState, useEffect } from "react";
-import { useLayoutStore } from "../../../features/editor/stores/layoutStore";
+import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { open } from "@tauri-apps/plugin-dialog";
-import { uiStore } from "@/features/ui/UIStore";
-import { ProjectService } from "../../../services/project/projectService";
-import { useProjectStore } from "@/features/project";
+import { uiStore } from "@/features/core/ui/UIStore";
+import { DatabaseService } from "@/services/database/databaseService";
+import { useProjectStore } from "@/features/core/project";
 import { SettingsService } from "../../../services/settings/settingsService";
 import { DEFAULT_WINDOW } from "@/app/appConfig/default";
 
@@ -158,10 +158,10 @@ export function Menubar() {
 
             if (selected && !Array.isArray(selected)) {
               uiStore.showToast(`正在从 CSV 导入数据...`, "info");
-              const dfData = await ProjectService.importCSV(selected);
+              const dfData = await DatabaseService.importCSV(selected);
 
               // 更新前端 store
-              useProjectStore.getState().addDataFrame(dfData.id, dfData);
+              useProjectStore.getState().addDatabase(dfData.id, dfData);
               uiStore.showToast(`CSV 数据导入成功: ${dfData.row_count} 行`, "success");
             }
           } catch (error) {

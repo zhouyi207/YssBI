@@ -1,0 +1,30 @@
+﻿import { create } from 'zustand';
+import { GraphPosition } from '@/shared/types/domain';
+
+interface ViewportStore {
+  viewports: Record<string, GraphPosition>;
+  setViewport: (groupId: string, updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition)) => void;
+}
+
+const DEFAULT_VIEWPORT: GraphPosition = { x: 0, y: 0, scale: 1 };
+
+export const useViewportStore = create<ViewportStore>((set) => ({
+  viewports: {
+    'main-group': { ...DEFAULT_VIEWPORT },
+  },
+  setViewport: (groupId, updater) => set((state) => {
+    const current = state.viewports[groupId] || { ...DEFAULT_VIEWPORT };
+    const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+    
+    if (current.x === next.x && current.y === next.y && current.scale === next.scale) {
+      return state;
+    }
+    
+    return {
+      viewports: {
+        ...state.viewports,
+        [groupId]: next,
+      },
+    };
+  }),
+}));

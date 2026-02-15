@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { Variable } from "@/shared/types/editor";
+﻿import { invoke } from "@tauri-apps/api/core";
+import { Variable } from "@/shared/types/domain";
 
 /**
  * 变量服务 - 统一的变量管理接口

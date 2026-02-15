@@ -1,5 +1,5 @@
 import React from "react";
-import { useSelectionStore } from "@/features/canvas/stores";
+// import { useSelectionStore } from "@/features/canvas/stores"; // TODO: useSelectionStore 不存在
 
 export const SelectionBox = ({ canvasRef }: { canvasRef: React.RefObject<HTMLDivElement | null> }) => {
     const { startX, startY, currentX, currentY, isVisible } = useSelectionStore();

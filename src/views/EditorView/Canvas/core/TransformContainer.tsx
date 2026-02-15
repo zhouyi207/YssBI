@@ -1,5 +1,5 @@
-import { useRef, useEffect } from "react";
-import { useViewportStore } from "@/features/canvas/stores";
+﻿import { useRef, useEffect } from "react";
+import { useViewportStore } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "../constants";
 
 export const TransformContainer = ({ groupId, children }: { groupId: string, children: React.ReactNode }) => {

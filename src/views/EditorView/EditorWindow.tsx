@@ -1,18 +1,18 @@
-import { useLayoutStore } from "@/features/editor/stores/layoutStore";
+import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { DragProvider } from "./Context/DragProvider";
 import { DragLayer } from "./Layout/DragOverlay";
 import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
-import { useAppInitialization } from "@/features/editor/app-initialization";
-import { LoadStatus } from "@/shared/types/loadStatus";
+import { useAppInitialization } from "@/features/application/initialization";
+import { LoadStatus } from "@/shared/types/ui";
 import { UIHost } from "@/shared/ui/UIHost";
-import { useEditorKeyboard } from "@/features/editor/hooks/useEditorKeyboard";
-import { useEditor } from "@/features/editor";
+import { useEditorKeyboard } from "@/features/application/editor";
+import { useEditor } from "@/features/application/editor";
 import { useCallback } from "react";
-import { useViewportStore } from "@/features/canvas/stores";
-import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/editor/stores/layoutStore";
-import { useProjectSync } from "@/features/sync/projectSync";
+import { useViewportStore } from "@/features/core/viewport";
+import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/application/editor/core/stores/layoutStore";
+import { useProjectSync } from "@/features/application/sync/projectSync";
 
 const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };
 

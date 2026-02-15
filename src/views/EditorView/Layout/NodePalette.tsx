@@ -1,14 +1,14 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { useNodeDefinitions } from "@/features/node-registry";
-import { Pin, BaseNode } from "@/shared/types/editor";
-import { Variable } from "@/shared/types/editor";
+﻿import React, { useState, useMemo, useEffect } from "react";
+import { useNodeDefinitions } from "@/features/core/node-registry";
+import { Pin, Node } from "@/shared/types/domain";
+import { Variable } from "@/shared/types/domain";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
   type: string;
   title: string;
   category: string[];
-  overrides?: Partial<BaseNode>;
+  overrides?: Partial<Node>;
 }
 
 interface TreeCategory {
@@ -41,8 +41,8 @@ export default function NodePalette({
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
   globalVariables?: Record<string, Variable>;
-  functions?: Record<string, import("@/shared/types/editor").Graph>;
-  macros?: Record<string, import("@/shared/types/editor").Graph>;
+  functions?: Record<string, import("@/shared/types/domain").Graph>;
+  macros?: Record<string, import("@/shared/types/domain").Graph>;
 }) {
   const [query, setQuery] = useState("");
   const { definitions } = useNodeDefinitions();

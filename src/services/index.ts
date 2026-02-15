@@ -1,3 +1,8 @@
 export * from "./project";
 export * from "./settings";
 export * from "./schema";
+export { NodeService } from "./graph/node/nodeService";
+export { ConnectionService } from "./graph/connection/connectionService";
+export { PinService } from "./graph/pin/pinService";
+export { GraphService } from "./graph/graphService";
+export { VariableService } from "./variable/variableService";

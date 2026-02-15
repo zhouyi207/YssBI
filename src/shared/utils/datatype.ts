@@ -1,4 +1,4 @@
-import { DataType } from "@/shared/types/editor";
+﻿import { DataType } from "@/shared/types/domain";
 
 /**
  * 检查数据类型是否为基础类型（可以直接编辑值）

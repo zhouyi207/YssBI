@@ -1,6 +1,6 @@
-import { save, open } from "@tauri-apps/plugin-dialog";
+﻿import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/editor";
+import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 
 type CanvasState = GraphPosition;
 
@@ -17,7 +17,7 @@ function toFrontendGraph(data: any): Graph {
     // 将对象转换为数组
     // 假设格式是 { "pin1->pin2": { from_pin: "pin1", to_pin: "pin2" }, ... }
     // 或者是 { "key": [from_pin, to_pin], ... }
-    for (const [key, value] of Object.entries(backendConnections)) {
+    for (const [_key, value] of Object.entries(backendConnections)) {
         if (Array.isArray(value) && value.length === 2) {
             // 格式：{ "key": [from_pin, to_pin] }
             connectionsArray.push({

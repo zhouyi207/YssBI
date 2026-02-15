@@ -1,15 +1,15 @@
-import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
+﻿import { useRef, useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { Node } from "../../Nodes/Node";
-import { Pin } from "@/shared/types/editor";
+import { Pin } from "@/shared/types/domain";
 import { useDragContext } from "../../Context/DragProvider";
-import { useEditorGroup } from "@/features/editor";
-import { useViewportStore } from "@/features/canvas/stores";
-import { useNodeStore } from "@/features/node-registry/stores";
-import { useGestureStore } from "@/features/canvas/stores";
+import { useEditorGroup } from "@/features/application/editor";
+import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useGestureStore } from "@/features/core/gesture";
+import { useViewportStore } from '@/features/core/viewport';
 import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
 import { ConnectionLine } from "./ConnectionLine";
-import { useBackendNodeCreation } from "@/features/node-registry/hooks";
-import { useExecutionVisualization } from "@/features/execution/hooks";
+import { useBackendNodeCreation } from "@/features/core/node-registry/hooks";
+import { useExecutionVisualization } from "@/features/domain/execution/hooks";
 
 // Extracted Components
 import { ViewportGrid } from "./ViewportGrid";
@@ -387,7 +387,6 @@ export default function Canvas() {
       const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, dragState.template.type, {
         variableId: dragState.template.variableId,
         variableName: dragState.template.variableName,
-        initialData: dragState.template.initialData
       });
       if (newNode) {
         // 使用后端 API 创建节点（等待后端返回）
@@ -483,9 +482,9 @@ export default function Canvas() {
         type === 'call_function' ? ["Functions"] : ["Macros"],
         { x, y },
         [{ name: "In", type: "exec" },
-        ...(subData.inputs || []).map(p => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+        ...(subData.inputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
         [{ name: "Out", type: "exec" },
-        ...(subData.outputs || []).map(p => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+        ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
         false
       );
       node.subGraphId = subId;

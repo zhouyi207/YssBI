@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useEditorGroup } from "@/features/editor";
-import { useViewportStore } from "@/features/canvas/stores";
+﻿import { useEffect, useState, useRef, useCallback } from "react";
+import { useEditorGroup } from "@/features/application/editor";
+import { useViewportStore } from "@/features/core/viewport";
 
 
 

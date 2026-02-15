@@ -1,5 +1,5 @@
-import { Pin } from "@/shared/types/editor";
-import { canConnect } from "@/features/shema/shema.helpers";
+﻿import { Pin } from "@/shared/types/domain";
+import { canConnect } from "@/features/core/schema/shema.helpers";
 
 export const isSingleLinkPin = (p: Pin) => p.type === "exec" || p.direction === "input";
 

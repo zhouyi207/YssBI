@@ -1,12 +1,12 @@
-import { forwardRef, useMemo } from "react";
-import { useEditorGroup } from "@/features/editor";
+﻿import { forwardRef, useMemo } from "react";
+import { useEditorGroup } from "@/features/application/editor";
 import { Select } from "../../../shared/ui/Select";
-import { useSchemaStore } from "@/features/shema";
+import { useSchemaStore } from "@/features/core/schema";
 import { isPrimitiveType } from "@/shared/utils/datatype";
-import { DataType } from "@/shared/types/editor";
-import { useNodeStore } from "@/features/node-registry/stores";
+import { DataType } from "@/shared/types/domain";
+import { useNodeStore } from "@/features/core/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
-import { uiStore } from "@/features/ui/UIStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {

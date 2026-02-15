@@ -1,6 +1,6 @@
-// ui/UIHost.tsx
-import { useUIStore } from "@/features/ui/useUIStore";
-import { uiStore } from "@/features/ui/UIStore";
+﻿// ui/UIHost.tsx
+import { useUIStore } from "@/features/core/ui/useUIStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { Toast } from "@/shared/ui/Toast";
 import { Modal } from "@/shared/ui/Modal";
 import { ImportModal } from "@/shared/ui/ImportModal";

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { useNodeStore } from "@/features/node-registry/stores";
+﻿import React, { useState, useEffect, useCallback } from "react";
+import { PinService } from "@/services";
+import { useNodeStore } from "@/features/core/node-registry/stores";
 
 export interface PinInputProps {
   pinId: string;
@@ -54,12 +54,7 @@ export const PinInput: React.FC<PinInputProps> = ({
         pinType
       });
       
-      await invoke("update_pin_user_value", {
-        subgraphId,
-        nodeId,
-        pinId,
-        value,
-      });
+      await PinService.updatePinUserValue(subgraphId, nodeId, pinId, value);
       
       console.log("[PinInput] Value saved successfully to backend");
       
@@ -157,12 +152,7 @@ export const PinInput: React.FC<PinInputProps> = ({
             handleChange(newValue);
             // 立即保存布尔值
             try {
-              await invoke("update_pin_user_value", {
-                subgraphId,
-                nodeId,
-                pinId,
-                value: newValue,
-              });
+              await PinService.updatePinUserValue(subgraphId, nodeId, pinId, newValue);
               console.log("[PinInput] Boolean value saved to backend");
               
               // 🆕 同时更新前端 store

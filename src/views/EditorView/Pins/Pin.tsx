@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Pin as PinModel } from "@/shared/types/editor";
+﻿import React, { useMemo } from "react";
+import { Pin as PinModel } from "@/shared/types/domain";
 import { PinInput } from "./PinInput";
 
 export interface PinProps extends PinModel {

@@ -1,3 +1,10 @@
+import { invoke } from "@tauri-apps/api/core";
+
+/**
+ * Database Service
+ * 数据库服务 - 封装数据帧相关的后端调用
+ */
+export class DatabaseService {
     /**
      * 从 CSV 导入数据
      */
@@ -25,3 +32,4 @@
     static async getDataFrameRows(id: string, offset: number, limit: number): Promise<any[][]> {
         return await invoke("get_dataframe_rows", { id, offset, limit });
     }
+}

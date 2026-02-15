@@ -1,14 +1,16 @@
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, State};
 use crate::project::ProjectState;
 use crate::variable::VariableDefinition;
 use crate::log::log_sys;
+use crate::event::{emit_project_event, Event, EventVariable};
 
 /// 创建变量（统一接口，支持全局和局部变量）
 #[tauri::command]
 pub fn create_variable(
     variable: Value,
     state: State<ProjectState>,
+    app: AppHandle,
 ) -> Result<String, String> {
     log_sys::info!("[create_variable] Creating variable: {:?}", variable);
     

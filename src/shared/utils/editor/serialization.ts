@@ -1,6 +1,7 @@
-import { BaseNode, GraphPosition } from "@/shared/types/editor";
-import { getNodeDefinition } from "@/features/node-registry";
-import { Variable } from "@/shared/types/editor";
+﻿import { Node } from '@/shared/types/ui';
+import { GraphPosition } from "@/shared/types/domain";
+import { getNodeDefinition } from "@/features/core/node-registry";
+import { Variable } from "@/shared/types/domain";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -11,11 +12,11 @@ export function serializeSubGraph(
   id: string,
   name: string,
   type: "event" | "function" | "macro",
-  nodes: BaseNode[],
+  nodes: Node[],
   canvas: GraphPosition,
   variables: Record<string, Variable>,
-  inputs: import("@/shared/types/editor").Pin[] = [],
-  outputs: import("@/shared/types/editor").Pin[] = []
+  inputs: import("@/shared/types/domain").Pin[] = [],
+  outputs: import("@/shared/types/domain").Pin[] = []
 ): any {
 
   // 1. 提取所有连接关系

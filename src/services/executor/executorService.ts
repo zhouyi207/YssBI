@@ -1,4 +1,11 @@
-// ==================== 执行 ====================
+import { invoke } from "@tauri-apps/api/core";
+
+/**
+ * Executor Service
+ * 执行服务 - 封装图执行相关的后端调用
+ */
+export class ExecutorService {
+    // ==================== 执行 ====================
 
     /**
      * 执行当前项目（从状态管理器获取数据）
@@ -12,21 +19,23 @@
      */
     static async executeProject(
         globalVariables: Record<string, any>,
-        events: Record<string, SubGraphData>,
-        functions: Record<string, SubGraphData>,
-        macros: Record<string, SubGraphData>,
+        events: Record<string, any>,
+        functions: Record<string, any>,
+        macros: Record<string, any>,
         dataframes: Record<string, any> = {}
     ): Promise<string> {
-        const project = this.buildProjectData(globalVariables, events, functions, macros, dataframes);
-        // 直接使用 project，字段名已经匹配
         const backendData = {
-            globalVariables: project.globalVariables,
-            events: project.events,
-            functions: project.functions,
-            macros: project.macros,
-            dataframes: project.dataframes,
-            metadata: project.metadata,
+            globalVariables,
+            events,
+            functions,
+            macros,
+            dataframes,
+            metadata: {
+                exportTime: new Date().toISOString(),
+                appVersion: "0.1.0"
+            },
         };
         const res: string[] = await invoke("execute_project", { data: backendData });
         return res.join("\n");
     }
+}

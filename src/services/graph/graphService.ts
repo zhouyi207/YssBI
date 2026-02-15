@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { Graph } from "@/shared/types/editor";
+﻿import { invoke } from "@tauri-apps/api/core";
+import { Graph } from "@/shared/types/domain";
 
 /**
  * Graph Service - 管理 Event、Function、Macro 的创建、删除、更新和查询

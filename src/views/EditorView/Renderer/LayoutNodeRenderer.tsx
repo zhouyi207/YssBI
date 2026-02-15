@@ -1,10 +1,10 @@
-import { useRef, Fragment, useMemo } from 'react';
-import { useLayoutStore } from '../../../features/editor/stores/layoutStore';
+﻿import { useRef, Fragment, useMemo } from 'react';
+import { useLayoutStore } from '@/features/application/editor/core/stores/layoutStore';
 import { Sash } from './Sash';
 import { viewRegistry } from './viewRegistry';
-import { LayoutNode } from '../../../shared/types/layout';
+import { LayoutNode } from '@/shared/types/ui';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { GroupContext } from '@/features/editor';
+import { GroupContext } from '@/features/application/editor';
 import { TabBar } from '../Layout/TabBar';
 
 /**

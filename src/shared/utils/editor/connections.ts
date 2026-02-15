@@ -1,12 +1,12 @@
-/**
- * Connection query helper functions
+﻿/**
+ * ConnectionItem query helper functions
  * 
  * These functions provide convenient ways to query connections in a subgraph.
  * They work with the connections array (single source of truth) rather than Pin.links.
  */
 
-import { Connection } from '@/shared/types/editor';
-import { BaseNode } from '@/shared/types/editor';
+import { ConnectionItem } from '@/shared/types/domain';
+import { Node } from '@/shared/types/ui';
 
 /**
  * Find all connections that involve a specific pin
@@ -16,11 +16,11 @@ import { BaseNode } from '@/shared/types/editor';
  * @returns Array of connections where the pin is either source or target
  */
 export function findConnectionsByPin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
-): Connection[] {
+): ConnectionItem[] {
   return connections.filter(
-    (conn) => conn.sourcePin === pinId || conn.targetPin === pinId
+    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
   );
 }
 
@@ -32,9 +32,9 @@ export function findConnectionsByPin(
  * @returns Array of connections involving any pin on the node
  */
 export function findConnectionsByNode(
-  connections: Connection[],
-  node: BaseNode
-): Connection[] {
+  connections: ConnectionItem[],
+  node: Node
+): ConnectionItem[] {
   // Get all pin IDs for this node
   const pinIds = new Set<string>();
   
@@ -43,22 +43,23 @@ export function findConnectionsByNode(
   
   // Find connections involving any of these pins
   return connections.filter(
-    (conn) => pinIds.has(conn.sourcePin) || pinIds.has(conn.targetPin)
+    (conn) => pinIds.has(conn.from_pin) || pinIds.has(conn.to_pin)
   );
 }
 
 /**
- * Find a connection by its ID
+ * Find a ConnectionItem by its ID
  * 
  * @param connections - Array of connections to search
- * @param connectionId - ID of the connection to find
- * @returns The connection if found, null otherwise
+ * @param connectionId - ID of the ConnectionItem to find
+ * @returns The ConnectionItem if found, null otherwise
  */
 export function findConnectionById(
-  connections: Connection[],
-  connectionId: string
-): Connection | null {
-  return connections.find((conn) => conn.id === connectionId) || null;
+  connections: ConnectionItem[],
+  from_pin: string,
+  to_pin: string
+): ConnectionItem | null {
+  return connections.find((conn) => conn.from_pin === from_pin && conn.to_pin === to_pin) || null;
 }
 
 /**
@@ -70,14 +71,14 @@ export function findConnectionById(
  * @returns True if the pins are connected (in either direction)
  */
 export function areConnected(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId1: string,
   pinId2: string
 ): boolean {
   return connections.some(
     (conn) =>
-      (conn.sourcePin === pinId1 && conn.targetPin === pinId2) ||
-      (conn.sourcePin === pinId2 && conn.targetPin === pinId1)
+      (conn.from_pin === pinId1 && conn.to_pin === pinId2) ||
+      (conn.from_pin === pinId2 && conn.to_pin === pinId1)
   );
 }
 
@@ -89,10 +90,10 @@ export function areConnected(
  * @returns Array of connections where the pin is the source
  */
 export function findConnectionsFromPin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
-): Connection[] {
-  return connections.filter((conn) => conn.sourcePin === pinId);
+): ConnectionItem[] {
+  return connections.filter((conn) => conn.from_pin === pinId);
 }
 
 /**
@@ -103,10 +104,10 @@ export function findConnectionsFromPin(
  * @returns Array of connections where the pin is the target
  */
 export function findConnectionsToPin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
-): Connection[] {
-  return connections.filter((conn) => conn.targetPin === pinId);
+): ConnectionItem[] {
+  return connections.filter((conn) => conn.to_pin === pinId);
 }
 
 /**
@@ -117,12 +118,12 @@ export function findConnectionsToPin(
  * @returns Array of target pin IDs
  */
 export function getTargetPins(
-  connections: Connection[],
+  connections: ConnectionItem[],
   sourcePinId: string
 ): string[] {
   return connections
-    .filter((conn) => conn.sourcePin === sourcePinId)
-    .map((conn) => conn.targetPin);
+    .filter((conn) => conn.from_pin === sourcePinId)
+    .map((conn) => conn.to_pin);
 }
 
 /**
@@ -135,11 +136,11 @@ export function getTargetPins(
  * Note: Input pins should only have one connection, so this returns a single value
  */
 export function getSourcePin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   targetPinId: string
 ): string | null {
-  const conn = connections.find((c) => c.targetPin === targetPinId);
-  return conn ? conn.sourcePin : null;
+  const conn = connections.find((c) => c.to_pin === targetPinId);
+  return conn ? conn.from_pin : null;
 }
 
 /**
@@ -150,11 +151,11 @@ export function getSourcePin(
  * @returns Number of connections involving the pin
  */
 export function countConnectionsForPin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
 ): number {
   return connections.filter(
-    (conn) => conn.sourcePin === pinId || conn.targetPin === pinId
+    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
   ).length;
 }
 
@@ -163,14 +164,14 @@ export function countConnectionsForPin(
  * 
  * @param connections - Array of connections to search
  * @param pinId - ID of the pin
- * @returns True if the pin has at least one connection
+ * @returns True if the pin has at least one ConnectionItem
  */
 export function hasConnections(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
 ): boolean {
   return connections.some(
-    (conn) => conn.sourcePin === pinId || conn.targetPin === pinId
+    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
   );
 }
 
@@ -182,11 +183,11 @@ export function hasConnections(
  * @returns New array with connections removed
  */
 export function removeConnectionsForPin(
-  connections: Connection[],
+  connections: ConnectionItem[],
   pinId: string
-): Connection[] {
+): ConnectionItem[] {
   return connections.filter(
-    (conn) => conn.sourcePin !== pinId && conn.targetPin !== pinId
+    (conn) => conn.from_pin !== pinId && conn.to_pin !== pinId
   );
 }
 
@@ -198,15 +199,15 @@ export function removeConnectionsForPin(
  * @returns New array with connections removed
  */
 export function removeConnectionsForNode(
-  connections: Connection[],
-  node: BaseNode
-): Connection[] {
+  connections: ConnectionItem[],
+  node: Node
+): ConnectionItem[] {
   const pinIds = new Set<string>();
   node.inputs.forEach((pin) => pinIds.add(pin.id));
   node.outputs.forEach((pin) => pinIds.add(pin.id));
   
   return connections.filter(
-    (conn) => !pinIds.has(conn.sourcePin) && !pinIds.has(conn.targetPin)
+    (conn) => !pinIds.has(conn.from_pin) && !pinIds.has(conn.to_pin)
   );
 }
 
@@ -218,59 +219,59 @@ export function removeConnectionsForNode(
  * @returns Array of error messages (empty if valid)
  */
 export function validateConnections(
-  connections: Connection[],
-  nodes: BaseNode[]
+  connections: ConnectionItem[],
+  nodes: Node[]
 ): string[] {
   const errors: string[] = [];
   
   // Build maps of pin IDs to pins
-  const pinMap = new Map<string, { pin: any; node: BaseNode }>();
+  const pinMap = new Map<string, { pin: any; node: Node }>();
   nodes.forEach((node) => {
     node.inputs.forEach((pin) => pinMap.set(pin.id, { pin, node }));
     node.outputs.forEach((pin) => pinMap.set(pin.id, { pin, node }));
   });
   
-  // Check each connection
+  // Check each ConnectionItem
   connections.forEach((conn) => {
-    const sourceInfo = pinMap.get(conn.sourcePin);
-    const targetInfo = pinMap.get(conn.targetPin);
+    const sourceInfo = pinMap.get(conn.from_pin);
+    const targetInfo = pinMap.get(conn.to_pin);
     
     // Check if pins exist
     if (!sourceInfo) {
       errors.push(
-        `Connection ${conn.id} references invalid source pin: ${conn.sourcePin}`
+        `ConnectionItem ${conn.from_pin}->${conn.to_pin} references invalid source pin: ${conn.from_pin}`
       );
       return;
     }
     if (!targetInfo) {
       errors.push(
-        `Connection ${conn.id} references invalid target pin: ${conn.targetPin}`
+        `ConnectionItem ${conn.from_pin}->${conn.to_pin} references invalid target pin: ${conn.to_pin}`
       );
       return;
     }
     
     // Check pin directions
-    const sourcePin = sourceInfo.pin;
-    const targetPin = targetInfo.pin;
+    const from_pin = sourceInfo.pin;
+    const to_pin = targetInfo.pin;
     
-    if (sourcePin.direction !== 'output') {
+    if (from_pin.direction !== 'output') {
       errors.push(
-        `Connection ${conn.id}: source pin ${conn.sourcePin} is not an output pin`
+        `ConnectionItem ${conn.from_pin}->${conn.to_pin}: source pin ${conn.from_pin} is not an output pin`
       );
     }
-    if (targetPin.direction !== 'input') {
+    if (to_pin.direction !== 'input') {
       errors.push(
-        `Connection ${conn.id}: target pin ${conn.targetPin} is not an input pin`
+        `ConnectionItem ${conn.from_pin}->${conn.to_pin}: target pin ${conn.to_pin} is not an input pin`
       );
     }
     
     // Check type compatibility (if types are defined)
-    if (sourcePin.type && targetPin.type) {
+    if (from_pin.type && to_pin.type) {
       // Allow 'any' type to connect to anything
-      if (sourcePin.type !== 'any' && targetPin.type !== 'any') {
-        if (sourcePin.type !== targetPin.type) {
+      if (from_pin.type !== 'any' && to_pin.type !== 'any') {
+        if (from_pin.type !== to_pin.type) {
           errors.push(
-            `Connection ${conn.id}: type mismatch (${sourcePin.type} -> ${targetPin.type})`
+            `ConnectionItem ${conn.from_pin}->${conn.to_pin}: type mismatch (${from_pin.type} -> ${to_pin.type})`
           );
         }
       }
@@ -288,8 +289,8 @@ export function validateConnections(
  * @returns True if all connections are valid
  */
 export function areConnectionsValid(
-  connections: Connection[],
-  nodes: BaseNode[]
+  connections: ConnectionItem[],
+  nodes: Node[]
 ): boolean {
   return validateConnections(connections, nodes).length === 0;
 }

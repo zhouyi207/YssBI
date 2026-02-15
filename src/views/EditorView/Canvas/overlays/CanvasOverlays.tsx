@@ -1,15 +1,15 @@
-import React, { useState } from "react";
-import { useEditorGroup } from "@/features/editor";
-import { useGestureStore } from "@/features/canvas/stores";
-import { useViewportStore } from "@/features/canvas/stores";
-import { useNodeStore } from "@/features/node-registry/stores";
-import { BaseNode } from "@/shared/types/editor";
+﻿import React, { useState } from "react";
+import { useEditorGroup } from "@/features/application/editor";
+import { useGestureStore } from '@/features/core/gesture';
+import { useViewportStore } from '@/features/core/viewport';
+import { useNodeStore } from "@/features/core/node-registry/stores";
+import { Node } from "@/shared/types/domain";
 import HUD from "./HUD";
 import NodePalette from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 import { DEFAULT_VIEWPORT } from "../constants";
 import { createNodeFromTemplate, createInternalNode } from "@/shared/utils/editor";
-import { useBackendNodeCreation } from "@/features/node-registry/hooks";
+import { useBackendNodeCreation } from "@/features/core/node-registry/hooks";
 
 
 export default function CanvasOverlays({
@@ -53,10 +53,10 @@ export default function CanvasOverlays({
 
         // Check if this is an internal node type that should only exist once
         const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
-        if (internalNodeTypes.includes(item.type)) {
+        if (internalNodeTypes.includes(item.node_type)) {
             // Check if this internal node already exists
             const currentNodes = useNodeStore.getState().getNodes(activeTabId || "");
-            const existingNode = currentNodes.find(n => n.type === item.type && n.isInternal);
+            const existingNode = currentNodes.find(n => n.node_type === item.node_type && n.isInternal);
             if (existingNode) {
                 // Move canvas to center on the existing node
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -81,15 +81,15 @@ export default function CanvasOverlays({
         const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
         const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-        let newNode: BaseNode | null = null;
+        let newNode: Node | null = null;
 
-        if (item.type === 'call_function' || item.type === 'call_macro') {
+        if (item.node_type === 'call_function' || item.node_type === 'call_macro') {
             const subId = item.overrides?.subGraphId;
             if (subId) {
-                const subData = item.type === 'call_function' ? functions[subId] : macros[subId];
+                const subData = item.node_type === 'call_function' ? functions[subId] : macros[subId];
                 if (subData) {
                     const subName = subData.name;
-                    const type = item.type;
+                    const type = item.node_type;
 
                     newNode = createInternalNode(
                         `node_${Date.now()}`,
@@ -98,16 +98,16 @@ export default function CanvasOverlays({
                         type === 'call_function' ? ["Functions"] : ["Macros"],
                         { x, y },
                         [{ name: "In", type: "exec" },
-                        ...(subData.inputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+                        ...(subData.inputs || []).map((p: any) => ({ name: p.name, type: p.node_type as any, isArray: p.isArray }))],
                         [{ name: "Out", type: "exec" },
-                        ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.type as any, isArray: p.isArray }))],
+                        ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.node_type as any, isArray: p.isArray }))],
                         false
                     );
                     newNode.subGraphId = subId;
                 }
             }
         } else {
-            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.type, item.overrides);
+            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.node_type, item.overrides);
         }
 
         if (newNode) {
@@ -121,7 +121,7 @@ export default function CanvasOverlays({
 
                 // 寻找新节点中第一个符合类型的引脚
                 const pins = targetDirection === "inputs" ? createdNode.inputs : createdNode.outputs;
-                const compatiblePin = pins.find(p => p.type === pendingConnection.type);
+                const compatiblePin = pins.find(p => p.node_type === pendingConnection.node_type);
 
                 if (compatiblePin) {
                     connectPins(pendingConnection.id, compatiblePin.id);
@@ -137,7 +137,7 @@ export default function CanvasOverlays({
             <HUD />
 
             {/* ================= FAB (Floating Action Button) for Execution ================= */}
-            {tabs.find(t => t.id === activeTabId)?.type === "event" && (
+            {tabs.find(t => t.id === activeTabId)?.node_type === "event" && (
                 <div className="absolute top-4 right-4 z-40">
                     <div className="relative">
                         <div className="flex items-center gap-1">
@@ -196,7 +196,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Selection Box ================= */}
-            {gesture?.type === 'select' && canvasRef.current && (
+            {gesture?.node_type === 'select' && canvasRef.current && (
                 <div
                     className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
                     style={{

@@ -1,7 +1,7 @@
-import { BaseNode } from "@/shared/types/editor";
+﻿import { Node } from '@/shared/types/ui';
 import { Position } from "@/shared/types";
-import { ProjectService } from "@/services/project/projectService";
-import { createNode } from "@/features/node-registry";
+import { NodeService } from "@/services";
+import { createNode } from "@/features/core/node-registry";
 
 /**
  * 使用后端 API 创建节点
@@ -11,16 +11,16 @@ import { createNode } from "@/features/node-registry";
  */
 export async function createNodeInBackend(
     subgraphId: string,
-    node: BaseNode
-): Promise<BaseNode> {
+    node: Node
+): Promise<Node> {
     try {
         console.log(`[BACKEND SYNC] Starting sync for node ${node.id} to subgraph ${subgraphId}`);
-        console.log(`[createNodeInBackend] Creating node: subgraphId=${subgraphId}, nodeId=${node.id}, nodeType=${node.type}`);
+        console.log(`[createNodeInBackend] Creating node: subgraphId=${subgraphId}, nodeId=${node.id}, nodeType=${node.node_type}`);
 
         // 序列化节点为后端格式
         const serializedNode = {
             id: node.id,
-            type: node.type,
+            type: node.node_type,
             title: node.title,
             position: node.position,
             isInternal: node.isInternal,
@@ -32,7 +32,7 @@ export async function createNodeInBackend(
                 id: pin.id,
                 nodeId: pin.nodeId,
                 name: pin.name,
-                type: pin.type,
+                type: pin.node_type,
                 direction: pin.direction,
                 links: pin.links,
                 isArray: pin.isArray
@@ -41,7 +41,7 @@ export async function createNodeInBackend(
                 id: pin.id,
                 nodeId: pin.nodeId,
                 name: pin.name,
-                type: pin.type,
+                type: pin.node_type,
                 direction: pin.direction,
                 links: pin.links,
                 isArray: pin.isArray
@@ -49,7 +49,7 @@ export async function createNodeInBackend(
         };
 
         // 调用后端 API
-        const result = await ProjectService.createNode(subgraphId, serializedNode);
+        const result = await NodeService.createNode(subgraphId, serializedNode);
 
         console.log(`[createNodeInBackend] Node created successfully: ${node.id}, result=${JSON.stringify(result)}`);
 
@@ -73,7 +73,7 @@ export async function deleteNodeInBackend(
     try {
         console.log(`[deleteNodeInBackend] Deleting node: subgraphId=${subgraphId}, nodeId=${nodeId}`);
 
-        await ProjectService.deleteNode(subgraphId, nodeId);
+        await NodeService.deleteNode(subgraphId, nodeId);
 
         console.log('[deleteNodeInBackend] Node deleted successfully');
     } catch (error) {
@@ -89,28 +89,28 @@ export function createNodeFromTemplate(
     position: Position,
     _scale: number,
     type: string,
-    overrides?: Partial<BaseNode>
-): BaseNode | null {
+    overrides?: Partial<Node>
+): Node | null {
     const id = `node_${Date.now()}`;
     const node = createNode(type, id, position);
     if (node && overrides) {
         Object.assign(node, overrides);
 
         // Handle variable/data specific initialization
-        if ((node.type === 'get_variable' || node.type === 'set_variable' || node.type === 'get_dataframe') &&
+        if ((node.node_type === 'get_variable' || node.node_type === 'set_variable' || node.node_type === 'get_dataframe') &&
             node.variableId && node.variableName) {
             const vType = node.variableType || 'dataframe';
             const isArray = (node as any).variableIsArray || false;
             node.setVariable(node.variableId, node.variableName, vType, isArray);
         }
 
-        if (node.type === 'get_column' && node.initialData) {
+        if (node.node_type === 'get_column' && node.initialData) {
             const { columnName, columnType } = node.initialData;
             if (columnName) {
                 node.title = `Get ${columnName}`;
-                const outputPin = node.outputs.find(p => p.name === 'Column');
+                const outputPin = node.outputs.find((p: any) => p.name === 'Column');
                 if (outputPin) {
-                    outputPin.type = columnType || 'array';
+                    outputPin.node_type = columnType || 'array';
                     outputPin.isArray = true;
                 }
             }

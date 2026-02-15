@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DTO 转换工具函数
  * 
  * 提供前后端数据转换的实用工具
@@ -9,9 +9,9 @@ import type {
   Pin,
   Graph,
   Connection,
-} from '@/shared/types/editor';
+} from '@/shared/types/domain';
 
-import type { ProjectData } from '@/shared/types/editor/project';
+import type { ProjectData } from '@/shared/types/domain';
 
 /**
  * 将后端返回的 Graph DTO 转换为前端 Graph 对象

@@ -1,6 +1,6 @@
-import { forwardRef, useContext, useEffect, useRef } from "react";
+﻿import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { useEditorGroup, GroupContext } from "@/features/editor";
+import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import {
   VscEye,
   VscEyeClosed,
@@ -10,7 +10,7 @@ import {
   VscDatabase,
   VscListUnordered
 } from "react-icons/vsc";
-import { useLayoutStore } from "../../../features/editor/stores/layoutStore";
+import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
 import { useState } from "react";
 
 const PIN_COLORS: Record<string, string> = {

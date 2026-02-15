@@ -1,5 +1,6 @@
-import { BaseNode, Pin } from "@/shared/types/editor";
-import { Pin as SubGraphPinDef } from "@/shared/types/editor";
+﻿import { Node } from '@/shared/types/ui';
+import { Pin } from "@/shared/types/domain";
+import { Pin as SubGraphPinDef } from "@/shared/types/domain";
 import { Position } from "@/shared/types";
 
 // 简化的 Pin 定义（用于创建内部节点时）
@@ -18,7 +19,7 @@ export function createInternalNode(
     inputs: SimplePinDef[],
     outputs: SimplePinDef[],
     isInternal: boolean = true
-): BaseNode {
+): Node {
     // 将简化的 pin 定义转换为完整的 Pin
     const fullInputs: Pin[] = inputs.map((p, idx) => ({
         id: `${id}_in_${idx}`,
@@ -41,7 +42,7 @@ export function createInternalNode(
     }));
     
     // 创建节点对象
-    const node: BaseNode = {
+    const node: Node = {
         id,
         type,
         node_type: type,
@@ -57,7 +58,7 @@ export function createInternalNode(
     return node;
 }
 
-export function syncInternalNodePins(node: BaseNode, subGraphPins: SubGraphPinDef[], isInputNode: boolean) {
+export function syncInternalNodePins(node: Node, subGraphPins: SubGraphPinDef[], isInputNode: boolean) {
     // For an input node (like Function Entry or Macro Inputs), the subgraph's inputs become the node's OUTPUT pins
     // For an output node (like Function Return or Macro Outputs), the subgraph's outputs become the node's INPUT pins
 

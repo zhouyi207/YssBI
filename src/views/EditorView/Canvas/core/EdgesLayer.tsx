@@ -1,8 +1,8 @@
-import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { useViewportStore } from "@/features/canvas/stores";
-import { useNodeStore } from "@/features/node-registry/stores";
-import { useGestureStore } from "@/features/canvas/stores";
-import { useExecutionStore } from "@/features/execution/stores";
+﻿import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useViewportStore } from '@/features/core/viewport';
+import { useNodeStore } from "@/features/core/node-registry/stores";
+import { useGestureStore } from '@/features/core/gesture';
+import { useExecutionStore } from "@/features/domain/execution/stores";
 import { useTheme } from "@/hooks/useTheme";
 import { drawEdge } from "./Edge";
 import { DEFAULT_VIEWPORT } from "../constants";

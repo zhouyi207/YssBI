@@ -1,12 +1,53 @@
-export type Position = { x: number; y: number };
+﻿/**
+ * Shared Types
+ * 
+ * 类型系统组织结构：
+ * 
+ * 1. domain/   - 领域模型（与后端一致）
+ * 2. dto/      - 数据传输对象和转换器
+ * 3. ui/       - UI 状态类型（前端专用）
+ * 4. settings/ - 设置相关类型
+ * 
+ * 使用指南：
+ * 
+ * - 后端 API 调用：使用 domain 类型
+ * - 前后端转换：使用 dto 转换器
+ * - UI 组件状态：使用 ui 类型
+ * - 应用设置：使用 settings 类型
+ */
 
-export function clamp(v: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, v));
-}
+// ==================== Domain Types ====================
+// 领域模型 - 与后端数据结构一致
+export * from './domain';
 
-// Re-export all type modules
+// ==================== DTO ====================
+// 数据传输对象和转换器
+export * from './dto';
+
+// ==================== UI Types ====================
+// UI 状态类型 - 前端专用
+export type { EditorGroup, EditorGesture, LayoutDirection, LayoutNode, LayoutTab, LayoutTree, LoadStatus, ExecutionStatus } from './ui';
+export type { Position, Size, Rect } from './ui/common';
+
+// ==================== Settings ====================
+// 设置相关类型
 export * from './settings';
-export * from './editor';
-export * from './layout';
-export * from './loadStatus';
-export * from './logging';
+
+// ==================== Backward Compatibility ====================
+// 向后兼容的类型别名
+
+import type { GraphPosition } from './domain';
+
+/**
+ * @deprecated 使用 GraphPosition 替代
+ */
+export type CanvasState = GraphPosition;
+
+// ==================== Utility Functions ====================
+
+/**
+ * 限制数值在指定范围内
+ */
+export function clamp(v: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, v));
+}

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { useLogStore } from '@/features/log/logStore';
-import { LogMessage, LogLevel, LogType } from '../../shared/types/logging';
+import { useLogStore } from '@/features/core/log/logStore';
+import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 export const LogWindow = () => {

@@ -1,9 +1,9 @@
-import { forwardRef, useState } from "react";
+﻿import { forwardRef, useState } from "react";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core';
-import { useLayoutStore } from "../../../features/editor/stores/layoutStore";
+import { useLayoutStore } from "@/features/application/editor/core/stores/layoutStore";
 import { DropIndicator } from "../Renderer/DropIndicator";
-import { LayoutNode } from "../../../shared/types/layout";
+import { LayoutNode } from "@/shared/types/ui";
 import "../Renderer/viewRegistry"; // 确保业务组件已注册
 
 

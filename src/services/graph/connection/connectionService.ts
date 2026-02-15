@@ -1,4 +1,9 @@
+import { invoke } from "@tauri-apps/api/core";
 
+/**
+ * Connection 服务 - 封装所有连接相关的后端调用
+ */
+export class ConnectionService {
     /**
      * 连接两个 Pin
      * @param subgraphId 子图ID
@@ -90,3 +95,4 @@
         console.log('[ProjectService.deleteConnectionsForNode] Deleted connections:', removedIds);
         return removedIds as string[];
     }
+}
