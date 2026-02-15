@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { BaseNode } from '@/shared/types/editor';
 import { deleteNodeInBackend, serializeSubGraph, deserializeSubGraph } from '@/shared/utils/editor';
 import { useEditorGroup } from '@/features/editor';
-import { ProjectService } from '../../../services/project/projectService';
+import { NodeService } from '../../../services/graph/node/nodeService';
 import { Graph } from '@/shared/types/editor';
 
 /**
@@ -35,7 +35,7 @@ export function useBackendNodeCreation() {
                 const serializedData = serializeSubGraph(activeTabId, "temp", "event", nodes, { x: 0, y: 0, scale: 1 }, {}, [], []);
 
                 // 2. 调用后端 createNodes (会自动处理 ID 生成和连接重映射)
-                const newSerializedNodes = await ProjectService.createNodes(activeTabId, serializedData.nodes);
+                const newSerializedNodes = await NodeService.createNodes(activeTabId, serializedData.nodes);
 
                 // 3. 反序列化
                 const tempResData: Graph = {

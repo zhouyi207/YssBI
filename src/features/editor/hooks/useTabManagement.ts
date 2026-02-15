@@ -33,26 +33,40 @@ export function useTabManagement() {
     initialData?: Graph,
     targetGroupId?: string
   ) => {
+    console.log('[useTabManagement.handleSetActiveTabId] Called with:', { newId, forceType, initialData, targetGroupId });
+    
     setActiveTabId(newId, targetGroupId);
     if (!newId) return;
 
     const id = newId;
     const tabState = useNodeStore.getState().tabs[id];
+    
+    console.log('[useTabManagement.handleSetActiveTabId] Tab state exists:', !!tabState);
 
     if (!tabState) {
       const st = useProjectStore.getState();
-      const source = initialData || st.events[id] || st.functions[id] || st.macros[id];
+      // 从 graphs 中获取数据
+      const source = initialData || st.graphs[id];
+      
+      console.log('[useTabManagement.handleSetActiveTabId] Source data:', source);
+      
       if (source) {
         const { nodes: n, variables: v } = deserializeSubGraph(source);
+        console.log('[useTabManagement.handleSetActiveTabId] Deserialized:', { nodes: n.length, variables: Object.keys(v).length });
         useNodeStore.getState().initTab(id, n, v);
       } else {
+        console.log('[useTabManagement.handleSetActiveTabId] No source data, initializing empty tab');
         useNodeStore.getState().initTab(id, [], {});
       }
     }
 
     const st = useProjectStore.getState();
-    const tabSource = st.events[id] || st.functions[id] || st.macros[id];
+    // 从 graphs 中获取数据
+    const tabSource = st.graphs[id];
     const type = forceType || (tabSource as any)?.type;
+    
+    console.log('[useTabManagement.handleSetActiveTabId] Final type:', type, 'tabSource:', tabSource);
+    
     if (type) setSelectedInfo(id, type as any);
   }, [setActiveTabId, setSelectedInfo]);
 
@@ -62,8 +76,12 @@ export function useTabManagement() {
     type: "event" | "function" | "macro",
     initialData?: Graph
   ) => {
+    console.log('[useTabManagement.openSubGraph] Called with:', { id, name, type, initialData });
+    
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
+    
+    console.log('[useTabManagement.openSubGraph] Target group:', targetGroupId);
 
     layoutStore.addTab(targetGroupId, {
       id,
@@ -72,7 +90,10 @@ export function useTabManagement() {
       type
     });
 
+    console.log('[useTabManagement.openSubGraph] Tab added, setting active group');
     layoutStore.setActiveGroup(targetGroupId);
+    
+    console.log('[useTabManagement.openSubGraph] Calling handleSetActiveTabId');
     handleSetActiveTabId(id, type, initialData, targetGroupId);
   }, [handleSetActiveTabId]);
 

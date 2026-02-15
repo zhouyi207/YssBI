@@ -9,13 +9,39 @@ type CanvasState = GraphPosition;
  */
 function toFrontendGraph(data: any): Graph {
     // 后端返回的结构需要转换
+    // connections 是一个对象：{ connections: {}, reverse_connections: {}, ... }
+    // 需要将 connections 对象转换为数组格式
+    const backendConnections = data.data_state?.connections?.connections || {};
+    const connectionsArray: any[] = [];
+    
+    // 将对象转换为数组
+    // 假设格式是 { "pin1->pin2": { from_pin: "pin1", to_pin: "pin2" }, ... }
+    // 或者是 { "key": [from_pin, to_pin], ... }
+    for (const [key, value] of Object.entries(backendConnections)) {
+        if (Array.isArray(value) && value.length === 2) {
+            // 格式：{ "key": [from_pin, to_pin] }
+            connectionsArray.push({
+                from_pin: value[0],
+                to_pin: value[1]
+            });
+        } else if (typeof value === 'object' && value !== null) {
+            // 格式：{ "key": { from_pin: "...", to_pin: "..." } }
+            connectionsArray.push(value);
+        }
+    }
+    
+    console.log('[toFrontendGraph] Converted connections:', {
+        backend: backendConnections,
+        frontend: connectionsArray
+    });
+    
     return {
         id: data.id,
         name: data.name,
         type: data.kind.toLowerCase() as "event" | "function" | "macro", // 后端是 "Event"/"Function"/"Macro"
         nodes: [], // TODO: 从 data_state.nodes 转换
         pins: [], // TODO: 从 data_state.pins 转换
-        connections: data.data_state?.connections || { connections: {}, reverse_connections: {}, pin_to_node: {}, node_to_pins: {} },
+        connections: { connections: connectionsArray },
         canvas: data.position || { x: 0, y: 0, scale: 1 }
     };
 }

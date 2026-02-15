@@ -3,7 +3,7 @@ import { Variable } from '@/shared/types/editor';
 import { useNodeStore } from '@/features/node-registry/stores';
 import { useProjectStore } from '@/features/project';
 import { useLayoutStore, LayoutState } from '@/features/editor/stores/layoutStore';
-import { ProjectService } from '@/services/project/projectService';
+import { VariableService } from '@/services/variable/variableService';
 
 /**
  * Variable Management Hook
@@ -16,20 +16,38 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
 
-  const addVariable = useCallback(async (name?: string, type: string = "int", isGlobal: boolean = false) => {
-    let scopeId: string | null = null;
-
-    if (!isGlobal && activeTabId) {
-      scopeId = activeTabId;
-    }
-
+  const addVariable = useCallback(async (name?: string, type: string = "Int32", isGlobal: boolean = false) => {
     try {
-      const newVar = await ProjectService.createVariable(scopeId, name, type);
+      // 构建变量对象
+      const variable: Variable = {
+        id: `var_${Date.now()}`, // 临时 ID，后端会生成新的
+        name: name || `variable_${Date.now()}`,
+        data_type: type as any,
+        description: '',
+        scope: isGlobal 
+          ? { type: 'global' }
+          : activeTabId 
+            ? { type: 'function', function_id: activeTabId } // 假设是 function，也可能是 macro
+            : { type: 'global' }, // 如果没有 activeTabId，默认为全局
+        static_value: undefined,
+        is_array: false,
+        is_constant: false,
+        default_value: undefined,
+        is_exposed: false,
+        tags: [],
+      };
 
-      if (scopeId) {
-        useNodeStore.getState().addVariable(scopeId, newVar.id, newVar);
+      // 调用后端创建变量
+      const newVarId = await VariableService.createVariable(variable);
+      
+      // 获取创建后的变量
+      const newVar = await VariableService.getVariable(newVarId);
+
+      // 更新前端状态
+      if (isGlobal || !activeTabId) {
+        useProjectStore.getState().addVariable(newVarId, newVar);
       } else {
-        useProjectStore.getState().addGlobalVariable(newVar.id, newVar);
+        useNodeStore.getState().addVariable(activeTabId, newVarId, newVar);
       }
 
       switchSidebarTab('variables');
@@ -40,11 +58,11 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
 
   const updateVariable = useCallback((id: string, data: Partial<Variable>) => {
     const st = useProjectStore.getState();
-    const isGlobal = !!st.globalVariables[id];
+    const isGlobal = !!st.variables[id];
 
     // Update variable definition
     if (isGlobal) {
-      st.updateGlobalVariable(id, data);
+      st.updateVariable(id, data);
     } else {
       const nodeStore = useNodeStore.getState();
       let found = false;
@@ -64,13 +82,14 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
     const nodeStore = useNodeStore.getState();
     Object.keys(nodeStore.tabs).forEach(tid => {
       const nodes = nodeStore.getNodes(tid);
-      const needsUpdate = nodes.some(n => n.variableId === id);
+      const needsUpdate = nodes.some((n: any) => n.variableId === id);
       if (!needsUpdate) return;
 
-      const newNodes = nodes.map(n => {
+      const newNodes = nodes.map((n: any) => {
         if (n.variableId !== id) return n;
 
-        const clone = n.clone();
+        // 深拷贝节点
+        const clone = JSON.parse(JSON.stringify(n));
 
         if (data.name) clone.variableName = data.name;
         if (data.data_type) {
@@ -78,14 +97,14 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
 
           // Update pin types
           if (clone.type === "get_variable") {
-            clone.outputs.forEach(p => {
+            clone.outputs.forEach((p: any) => {
               if (p.type !== "exec") p.type = data.data_type!;
             });
           } else if (clone.type === "set_variable") {
-            clone.inputs.forEach(p => {
+            clone.inputs.forEach((p: any) => {
               if (p.type !== "exec") p.type = data.data_type!;
             });
-            clone.outputs.forEach(p => {
+            clone.outputs.forEach((p: any) => {
               if (p.type !== "exec") p.type = data.data_type!;
             });
           }
@@ -98,8 +117,8 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
   }, []);
 
   const deleteVariable = useCallback((id: string) => {
-    if (useProjectStore.getState().globalVariables[id]) {
-      useProjectStore.getState().deleteGlobalVariable(id);
+    if (useProjectStore.getState().variables[id]) {
+      useProjectStore.getState().deleteVariable(id);
     } else {
       if (activeTabId) {
         useNodeStore.getState().removeVariable(activeTabId, id);
@@ -112,13 +131,13 @@ export function useVariableManagement(switchSidebarTab: (tab: 'events' | 'functi
     const v = useNodeStore.getState().tabs[activeTabId]?.variables[id];
     if (!v) return;
     useNodeStore.getState().removeVariable(activeTabId, id);
-    useProjectStore.getState().addGlobalVariable(id, v);
+    useProjectStore.getState().addVariable(id, v);
   }, [activeTabId]);
 
   const demoteVariable = useCallback((id: string) => {
-    const v = useProjectStore.getState().globalVariables[id];
+    const v = useProjectStore.getState().variables[id];
     if (!v) return;
-    useProjectStore.getState().deleteGlobalVariable(id);
+    useProjectStore.getState().deleteVariable(id);
     if (activeTabId) {
       useNodeStore.getState().addVariable(activeTabId, id, v);
     }

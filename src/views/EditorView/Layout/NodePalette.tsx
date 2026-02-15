@@ -46,28 +46,44 @@ export default function NodePalette({
 }) {
   const [query, setQuery] = useState("");
   const { definitions } = useNodeDefinitions();
+  
   // 记录哪些文件夹是展开的
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  // 将 props 转换为稳定的键数组，避免对象引用变化导致重新计算
+  const variableKeys = useMemo(() => Object.keys(variables), [variables]);
+  const globalVariableKeys = useMemo(() => Object.keys(globalVariables), [globalVariables]);
+  const functionKeys = useMemo(() => Object.keys(functions), [functions]);
+  const macroKeys = useMemo(() => Object.keys(macros), [macros]);
 
   // 1. 获取所有项
   const allItems = useMemo(() => {
     const items: PaletteItem[] = [];
 
     // 处理注册表中的常规节点 (数学, 逻辑, 调试等)
-    definitions.forEach((node) => {
+    definitions.forEach((node: any) => {
       // 排除需要在下方特殊处理的模板节点
-      if (['get_variable', 'set_variable', 'call_function', 'call_macro'].includes(node.node_type)) return;
+      if (['get_variable', 'set_variable', 'call_function', 'call_macro'].includes(node.name)) {
+        return;
+      }
 
+      // NodeDefinitionDTO 没有 inputs/outputs 信息，所以暂时跳过 pin 过滤
+      // TODO: 后端需要返回完整的节点定义，包括 pins 信息
       if (filterPin) {
         const targetDirection = filterPin.direction === "input" ? "outputs" : "inputs";
-        const pins = node[targetDirection] || [];
-        const hasCompatiblePin = pins.some(p => p.type === filterPin.type || p.type === 'any' || filterPin.type === 'any');
-        if (!hasCompatiblePin) return;
+        const pins = (node as any)[targetDirection] || [];
+        // 如果节点定义没有 pins 信息，则显示所有节点
+        if (pins.length > 0) {
+          const hasCompatiblePin = pins.some((p: any) => p.type === filterPin.type || p.type === 'any' || filterPin.type === 'any');
+          if (!hasCompatiblePin) {
+            return;
+          }
+        }
       }
 
       items.push({
-        type: node.node_type,
-        title: node.title,
+        type: node.name,
+        title: node.name,
         category: node.category,
       });
     });
@@ -75,6 +91,11 @@ export default function NodePalette({
     // 处理变量 (Get/Set)
     const allVars = { ...globalVariables, ...variables };
     Object.values(allVars).forEach((v) => {
+      if (!v || !v.name || !v.id) {
+        console.warn('[NodePalette] Invalid variable:', v);
+        return;
+      }
+      
       const varName = v.name;
       const varId = v.id;
       const varType = v.data_type;
@@ -83,7 +104,7 @@ export default function NodePalette({
       let getCompatible = true;
       if (filterPin) {
         if (filterPin.direction === 'output') getCompatible = false;
-        else getCompatible = (varType === filterPin.type || filterPin.type === 'any' || filterPin.type === 'any');
+        else getCompatible = (varType === filterPin.type || filterPin.type === 'any');
       }
       if (getCompatible) {
         items.push({
@@ -98,7 +119,7 @@ export default function NodePalette({
       let setCompatible = true;
       if (filterPin) {
         if (filterPin.direction === 'input') setCompatible = false;
-        else setCompatible = (varType === filterPin.type || filterPin.type === 'any' || filterPin.type === 'any');
+        else setCompatible = (varType === filterPin.type || filterPin.type === 'any');
       }
       if (setCompatible) {
         items.push({
@@ -113,6 +134,11 @@ export default function NodePalette({
     // 处理函数和宏 (Call)
     const processSubGraphs = (collection: Record<string, any>, type: 'function' | 'macro') => {
       Object.values(collection).forEach(sub => {
+        if (!sub || !sub.name || !sub.id) {
+          console.warn('[NodePalette] Invalid subgraph:', sub);
+          return;
+        }
+        
         if (filterPin) {
           const targetPins = filterPin.direction === 'input' ? sub.outputs : sub.inputs;
           const hasCompatible = (targetPins || []).some((p: any) => p.type === filterPin.type || p.type === 'any' || filterPin.type === 'any');
@@ -132,7 +158,7 @@ export default function NodePalette({
     processSubGraphs(macros, 'macro');
 
     return items;
-  }, [filterPin, variables, globalVariables, functions, macros]);
+  }, [filterPin, variableKeys, globalVariableKeys, functionKeys, macroKeys, definitions]);
 
   // 2. 构建树结构
   const root = useMemo(() => {
@@ -191,6 +217,12 @@ export default function NodePalette({
   // 递归渲染树
   const renderTreeNode = (node: TreeNode, path: string, level: number) => {
     if (node.isLeaf) {
+      // 添加安全检查
+      if (!node.item || !node.item.type) {
+        console.warn('[NodePalette] Invalid node item:', node);
+        return null;
+      }
+      
       return (
         <div
           key={`${path}/${node.name}`}

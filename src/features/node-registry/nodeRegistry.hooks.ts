@@ -36,10 +36,11 @@ export function useNodeRegistry(): NodeRegistryState {
  *
  * - 未 Ready 时返回空数组
  * - 调用方无需关心初始化时序
+ * - 返回缓存的数组引用，避免触发不必要的重渲染
  */
 export function useNodeDefinitions() {
   const { status, error } = useNodeRegistry();
-  const definitions = useNodeRegistryStore((s) => s.getAllDefinitions());
+  const definitions = useNodeRegistryStore((s) => s.definitionsArray);
 
   return {
     definitions: status === LoadStatus.Ready ? definitions : [],

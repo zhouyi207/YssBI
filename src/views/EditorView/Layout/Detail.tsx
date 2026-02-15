@@ -2,7 +2,8 @@ import { forwardRef, useMemo } from "react";
 import { useEditorGroup } from "@/features/editor";
 import { Select } from "../../../shared/ui/Select";
 import { useSchemaStore } from "@/features/shema";
-// import { VariableDataType, isPrimitiveType } from "@/shared/types/editor";
+import { isPrimitiveType } from "@/shared/utils/datatype";
+import { DataType } from "@/shared/types/editor";
 import { useNodeStore } from "@/features/node-registry/stores";
 import { useShallow } from "zustand/react/shallow";
 import { uiStore } from "@/features/ui/UIStore";
@@ -190,7 +191,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                           label: t.display_name,
                           value: t.name
                         }))}
-                        onChange={(val) => handleUpdate({ data_type: val as VariableDataType })}
+                        onChange={(val) => handleUpdate({ data_type: val as DataType })}
                       />
                     </td>
                   </tr>
@@ -221,7 +222,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                     <tr className="border-b border-[#2b2b2b]">
                       <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
                       <td className="p-2">
-                        {selectedData.data_type === "bool" ? (
+                        {(selectedData.data_type === "Boolean" || selectedData.data_type === "bool") ? (
                           <input
                             type="checkbox"
                             className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
@@ -231,10 +232,10 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                         ) : (
                           <input
                             className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
-                            type={selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime" ? "text" : "number"}
+                            type={(selectedData.data_type === "String" || selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime") ? "text" : "number"}
                             value={selectedData.static_value ?? ''}
                             onChange={(e) => {
-                              const val = (selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime")
+                              const val = (selectedData.data_type === "String" || selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime")
                                 ? e.target.value
                                 : Number(e.target.value);
                               handleUpdate({ static_value: val });

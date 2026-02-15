@@ -1,4 +1,4 @@
-// import { BaseNode, Pin, NodeDefinition } from "@/shared/types/editor";
+import { BaseNode, Pin } from "@/shared/types/editor";
 import { Pin as SubGraphPinDef } from "@/shared/types/editor";
 import { Position } from "@/shared/types";
 
@@ -19,7 +19,7 @@ export function createInternalNode(
     outputs: SimplePinDef[],
     isInternal: boolean = true
 ): BaseNode {
-    // 将简化的 pin 定义转换为完整的 PinDefinition
+    // 将简化的 pin 定义转换为完整的 Pin
     const fullInputs: Pin[] = inputs.map((p, idx) => ({
         id: `${id}_in_${idx}`,
         nodeId: id,
@@ -40,16 +40,20 @@ export function createInternalNode(
         isArray: p.isArray
     }));
     
-    const def: NodeDefinition = {
+    // 创建节点对象
+    const node: BaseNode = {
+        id,
+        type,
         node_type: type,
         category,
         title,
+        position,
         inputs: fullInputs,
         outputs: fullOutputs,
-        ui_style: "default"
-    };
-    const node = new BaseNode(id, def, position);
-    node.isInternal = isInternal;
+        ui_style: "default",
+        isInternal,
+    } as any;
+    
     return node;
 }
 
@@ -101,7 +105,8 @@ export function syncInternalNodePins(node: BaseNode, subGraphPins: SubGraphPinDe
 export function syncSubGraphInstanceNodes(nodes: any[], subGraphId: string, inputs?: SubGraphPinDef[], outputs?: SubGraphPinDef[], name?: string) {
     return nodes.map((n: any) => {
         if (n.subGraphId !== subGraphId) return n;
-        const newNode = (n instanceof BaseNode) ? n.clone() : Object.assign(Object.create(Object.getPrototypeOf(n)), n);
+        // 深拷贝节点对象
+        const newNode = JSON.parse(JSON.stringify(n));
         if (name) newNode.title = name;
         const synchronizePins = (newPinDefs: SubGraphPinDef[], existingPins: any[], direction: 'input' | 'output') => {
             const execPins = existingPins.filter((p: any) => p.type === 'exec');

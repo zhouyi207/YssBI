@@ -1,5 +1,4 @@
-// import { BaseNode } from "@/shared/types/editor";
-import { GraphPosition, Graph, Connection } from "@/shared/types/editor";
+import { BaseNode, GraphPosition } from "@/shared/types/editor";
 import { getNodeDefinition } from "@/features/node-registry";
 import { Variable } from "@/shared/types/editor";
 
@@ -13,14 +12,14 @@ export function serializeSubGraph(
   name: string,
   type: "event" | "function" | "macro",
   nodes: BaseNode[],
-  canvas: CanvasState,
+  canvas: GraphPosition,
   variables: Record<string, Variable>,
   inputs: import("@/shared/types/editor").Pin[] = [],
   outputs: import("@/shared/types/editor").Pin[] = []
-): Graph {
+): any {
 
   // 1. 提取所有连接关系
-  const connections: Connection[] = [];
+  const connections: { from_pin: string; to_pin: string }[] = [];
   const processedConnections = new Set<string>(); // 防止重复添加
 
   for (const node of nodes) {
@@ -33,9 +32,8 @@ export function serializeSubGraph(
           
           if (!processedConnections.has(connKey)) {
             connections.push({
-              id: `conn-${crypto.randomUUID()}`,
-              sourcePin: outputPin.id,
-              targetPin: targetPinId
+              from_pin: outputPin.id,
+              to_pin: targetPinId
             });
             processedConnections.add(connKey);
           }
@@ -53,8 +51,8 @@ export function serializeSubGraph(
     variables,
     inputs,
     outputs,
-    connections,  // 独立的连接数组
-    nodes: nodes.map((node) => ({
+    connections: { connections },  // 包装为 ConnectionDTO 格式
+    nodes: nodes.map((node: any) => ({
       id: node.id,
       type: node.type,
       title: node.title,
@@ -65,7 +63,7 @@ export function serializeSubGraph(
       variableType: node.variableType,
       variableName: node.variableName,
       subGraphId: node.subGraphId,
-      inputs: node.inputs.map((p) => ({
+      inputs: node.inputs.map((p: any) => ({
         id: p.id,
         name: p.name,
         type: p.type,
@@ -74,7 +72,7 @@ export function serializeSubGraph(
         userValue: p.userValue,
         isArray: p.isArray,
       })),
-      outputs: node.outputs.map((p) => ({
+      outputs: node.outputs.map((p: any) => ({
         id: p.id,
         name: p.name,
         type: p.type,
@@ -90,47 +88,77 @@ export function serializeSubGraph(
 /**
  * 将反序列化后的节点实例还原为运行时状态
  * 
- * 从 connections 数组重建 Pin.links 字段（仅用于运行时查询）
+ * 从 connections 对象重建 Pin.links 字段（仅用于运行时查询）
  */
-export function deserializeSubGraph(data: Graph): {
-  nodes: BaseNode[];
-  canvas: CanvasState;
+export function deserializeSubGraph(data: any): {
+  nodes: any[];
+  canvas: GraphPosition;
   variables: Record<string, Variable>;
-  inputs: import("@/shared/types/editor").Pin[];
-  outputs: import("@/shared/types/editor").Pin[];
+  inputs: any[];
+  outputs: any[];
 } {
-  const variables: Record<string, Variable> = data.variables || {};
-  const connections: Connection[] = data.connections || [];
+  console.log('[deserializeSubGraph] Input data:', data);
+  
+  // Graph 类型中没有 variables，使用空对象
+  const variables: Record<string, Variable> = {};
+  
+  // 处理新的 connections 格式：Connection 对象包含 connections 数组
+  const connectionsData = data.connections as any;
+  console.log('[deserializeSubGraph] connectionsData:', connectionsData);
+  console.log('[deserializeSubGraph] connectionsData type:', typeof connectionsData);
+  console.log('[deserializeSubGraph] connectionsData.connections:', connectionsData?.connections);
+  
+  // 确保 connectionsList 是数组
+  let connectionsList: any[] = [];
+  if (connectionsData) {
+    if (Array.isArray(connectionsData)) {
+      // 如果 connections 本身就是数组（旧格式）
+      connectionsList = connectionsData;
+    } else if (connectionsData.connections && Array.isArray(connectionsData.connections)) {
+      // 如果是新格式：{ connections: [...] }
+      connectionsList = connectionsData.connections;
+    } else if (typeof connectionsData === 'object') {
+      // 如果是对象但没有 connections 数组，转换为空数组
+      console.warn('[deserializeSubGraph] connections is an object but not in expected format:', connectionsData);
+      connectionsList = [];
+    }
+  }
+  
+  console.log('[deserializeSubGraph] connectionsList:', connectionsList);
 
   const nodes = (data.nodes || []).map((n: any) => {
     const def = getNodeDefinition(n.type);
 
-    let node: BaseNode;
+    let node: any;
     if (def) {
-      node = new BaseNode(n.id, def, n.position);
-    } else {
-      // Create a shell node if definition is missing (common for internal entry/return nodes)
-      node = new BaseNode(n.id, {
-        node_type: n.type,
-        category: ["Internal"],
-        title: n.title,
+      node = {
+        id: n.id,
+        type: n.type,
+        title: n.title || def.name,
+        position: n.position,
         inputs: [],
         outputs: [],
-        ui_style: "default"
-      }, n.position);
-    }
-
-    node.isInternal = !!n.isInternal;
-    node.subGraphId = n.subGraphId;
-    node.title = n.title;
-
-    // 变量节点相关字段
-    node.variableId = n.variableId;
-    node.variableType = n.variableType;
-    node.variableName = n.variableName;
-
-    if (n.variableId && !variables[n.variableId]) {
-      console.warn(`Node ${n.id} in ${data.name} refers to missing variable ${n.variableId}.`);
+        isInternal: !!n.isInternal,
+        subGraphId: n.subGraphId,
+        variableId: n.variableId,
+        variableType: n.variableType,
+        variableName: n.variableName,
+      };
+    } else {
+      // Create a shell node if definition is missing
+      node = {
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        position: n.position,
+        inputs: [],
+        outputs: [],
+        isInternal: !!n.isInternal,
+        subGraphId: n.subGraphId,
+        variableId: n.variableId,
+        variableType: n.variableType,
+        variableName: n.variableName,
+      };
     }
 
     node.inputs = (n.inputs || []).map((p: any) => ({
@@ -148,36 +176,47 @@ export function deserializeSubGraph(data: Graph): {
     }));
 
     return node;
-  }).filter(Boolean) as BaseNode[];
+  }).filter(Boolean);
 
   // 2. 从 connections 数组重建 Pin.links（运行时字段）
-  for (const connection of connections) {
+  // 新格式：{ from_pin: string, to_pin: string }
+  for (const connection of connectionsList) {
+    const sourcePin = connection.from_pin;
+    const targetPin = connection.to_pin;
+    
+    if (!sourcePin || !targetPin) {
+      console.warn('[deserializeSubGraph] Invalid connection:', connection);
+      continue;
+    }
+    
     // 找到源 pin（输出 pin）
     for (const node of nodes) {
-      const outputPin = node.outputs.find(p => p.id === connection.sourcePin);
+      const outputPin = node.outputs.find((p: any) => p.id === sourcePin);
       if (outputPin) {
         if (!outputPin.links) outputPin.links = [];
-        if (!outputPin.links.includes(connection.targetPin)) {
-          outputPin.links.push(connection.targetPin);
+        if (!outputPin.links.includes(targetPin)) {
+          outputPin.links.push(targetPin);
         }
       }
 
       // 找到目标 pin（输入 pin）
-      const inputPin = node.inputs.find(p => p.id === connection.targetPin);
+      const inputPin = node.inputs.find((p: any) => p.id === targetPin);
       if (inputPin) {
         if (!inputPin.links) inputPin.links = [];
-        if (!inputPin.links.includes(connection.sourcePin)) {
-          inputPin.links.push(connection.sourcePin);
+        if (!inputPin.links.includes(sourcePin)) {
+          inputPin.links.push(sourcePin);
         }
       }
     }
   }
 
+  console.log('[deserializeSubGraph] Result nodes:', nodes);
+
   return {
     nodes,
     canvas: data.canvas || { x: 0, y: 0, scale: 1 },
     variables,
-    inputs: data.inputs || [],
-    outputs: data.outputs || [],
+    inputs: [],  // Graph 类型中没有 inputs
+    outputs: [], // Graph 类型中没有 outputs
   };
 }

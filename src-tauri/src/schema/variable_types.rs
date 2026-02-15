@@ -61,7 +61,7 @@ pub struct SelectOption {
 pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
     vec![
         VariableTypeDefinition {
-            name: "bool".into(),
+            name: "Boolean".into(),
             display_name: "Boolean".into(),
             pin_type: "bool".into(),
             default_value: serde_json::Value::Bool(false),
@@ -69,9 +69,9 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "int32".into(),
+            name: "Int32".into(),
             display_name: "Int32".into(),
-            pin_type: "int32".into(),
+            pin_type: "int".into(),
             default_value: serde_json::json!(0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -82,9 +82,9 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "int64".into(),
+            name: "Int64".into(),
             display_name: "Int64".into(),
-            pin_type: "int64".into(),
+            pin_type: "int".into(),
             default_value: serde_json::json!(0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -95,9 +95,9 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "float32".into(),
+            name: "Float32".into(),
             display_name: "Float32".into(),
-            pin_type: "float32".into(),
+            pin_type: "float".into(),
             default_value: serde_json::json!(0.0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -108,9 +108,9 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "float64".into(),
+            name: "Float64".into(),
             display_name: "Float64".into(),
-            pin_type: "float64".into(),
+            pin_type: "float".into(),
             default_value: serde_json::json!(0.0),
             editor_widget: EditorWidget::Number {
                 min: None,
@@ -121,7 +121,7 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "string".into(),
+            name: "String".into(),
             display_name: "String".into(),
             pin_type: "string".into(),
             default_value: serde_json::Value::String("".into()),
@@ -133,31 +133,7 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "date".into(),
-            display_name: "Date".into(),
-            pin_type: "date".into(),
-            default_value: serde_json::Value::Null,
-            editor_widget: EditorWidget::Text {
-                multiline: false,
-                max_length: None,
-                placeholder: Some("YYYY-MM-DD".into()),
-            },
-            supports_array: true,
-        },
-        VariableTypeDefinition {
-            name: "datetime".into(),
-            display_name: "DateTime".into(),
-            pin_type: "datetime".into(),
-            default_value: serde_json::Value::Null,
-            editor_widget: EditorWidget::Text {
-                multiline: false,
-                max_length: None,
-                placeholder: Some("YYYY-MM-DD HH:mm:ss".into()),
-            },
-            supports_array: true,
-        },
-        VariableTypeDefinition {
-            name: "object".into(),
+            name: "Object".into(),
             display_name: "Object".into(),
             pin_type: "object".into(),
             default_value: serde_json::Value::Null,
@@ -165,22 +141,37 @@ pub fn get_variable_type_definitions() -> Vec<VariableTypeDefinition> {
             supports_array: true,
         },
         VariableTypeDefinition {
-            name: "dataframe".into(),
+            name: "DataFrame".into(),
             display_name: "DataFrame".into(),
             pin_type: "dataframe".into(),
             default_value: serde_json::Value::Null,
             editor_widget: EditorWidget::JsonEditor,
             supports_array: false,
         },
-        // 兼容旧版数组
         VariableTypeDefinition {
-            name: "array".into(),
-            display_name: "Array (Legacy)".into(),
+            name: "Array".into(),
+            display_name: "Array".into(),
             pin_type: "array".into(),
             default_value: serde_json::json!([]),
             editor_widget: EditorWidget::ArrayEditor {
                 item_type: "object".into(),
             },
+            supports_array: false,
+        },
+        VariableTypeDefinition {
+            name: "Any".into(),
+            display_name: "Any".into(),
+            pin_type: "object".into(),
+            default_value: serde_json::Value::Null,
+            editor_widget: EditorWidget::JsonEditor,
+            supports_array: true,
+        },
+        VariableTypeDefinition {
+            name: "Null".into(),
+            display_name: "Null".into(),
+            pin_type: "object".into(),
+            default_value: serde_json::Value::Null,
+            editor_widget: EditorWidget::JsonEditor,
             supports_array: false,
         },
     ]

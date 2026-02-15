@@ -8,6 +8,7 @@ import { LoadStatus } from "@/shared/types/loadStatus";
 
 interface NodeRegistryStore extends NodeRegistryState {
     definitions: NodeDefinitionMap;
+    definitionsArray: NodeDefinition[]; // 缓存的数组，避免每次创建新引用
 
     syncFromBackend: () => Promise<void>;
     clear: () => void;
@@ -20,6 +21,7 @@ interface NodeRegistryStore extends NodeRegistryState {
 export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
     // data
     definitions: new Map(),
+    definitionsArray: [],
 
     // state (来自 NodeRegistryState)
     status: LoadStatus.Idle,
@@ -43,10 +45,14 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
             const defs = await SchemaService.getNodeDefinition();
 
             const definitions = new Map<string, NodeDefinition>();
-            defs.forEach((def) => definitions.set(def.node_type, def));
+            defs.forEach((def) => definitions.set(def.name, def));
+
+            // 缓存数组，避免每次 getAllDefinitions 都创建新引用
+            const definitionsArray = Array.from(definitions.values());
 
             set({
                 definitions,
+                definitionsArray,
                 status: LoadStatus.Ready,
             });
 
@@ -71,11 +77,12 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
     clear: () =>
         set({
             definitions: new Map(),
+            definitionsArray: [],
             status: LoadStatus.Idle,
             error: null,
         }),
 
     getDefinition: (type) => get().definitions.get(type),
-    getAllDefinitions: () => Array.from(get().definitions.values()),
+    getAllDefinitions: () => get().definitionsArray,
     hasDefinition: (type) => get().definitions.has(type),
 }));

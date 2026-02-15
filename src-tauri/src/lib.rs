@@ -90,18 +90,11 @@ pub fn run() {
             update_function,
             create_macro,
             update_macro,
-            // Global Variables CRUD
-            get_global_variables,
-            get_global_variable,
-            create_global_variable,
-            update_global_variable,
-            delete_global_variable,
-            // Local Variables CRUD
-            get_local_variables,
-            create_local_variable,
+            // Variables CRUD (统一接口)
             create_variable,
-            update_local_variable,
-            delete_local_variable,
+            get_variable,
+            update_variable,
+            delete_variable,
             // Nodes 命令
             get_nodes,
             set_nodes,

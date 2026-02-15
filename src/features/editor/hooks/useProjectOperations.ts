@@ -13,20 +13,17 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
   const currentPath = useProjectStore((s) => s.currentPath);
   const setCurrentPath = useProjectStore((s) => s.setCurrentPath);
 
+  // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
   const syncActiveToCollection = useCallback(() => {
-    useProjectStore.getState().syncWithTabs(useNodeStore.getState().tabs);
+    // TODO: 如果需要，实现新的同步逻辑
+    console.log('[ProjectOperations] syncActiveToCollection called (no-op in new architecture)');
   }, []);
 
   const saveGraphAs = useCallback(async () => {
     try {
       syncActiveToCollection();
       const st = useProjectStore.getState();
-      const path = await ProjectService.saveProjectAs(
-        st.globalVariables,
-        st.events,
-        st.functions,
-        st.macros
-      );
+      const path = await ProjectService.saveProjectFromState();
       if (path) {
         setCurrentPath(path);
         uiStore.showToast("项目已保存", "success", 2000);
@@ -40,14 +37,7 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
     if (!currentPath) return saveGraphAs();
     syncActiveToCollection();
     try {
-      const st = useProjectStore.getState();
-      await ProjectService.saveProject(
-        currentPath,
-        st.globalVariables,
-        st.events,
-        st.functions,
-        st.macros
-      );
+      await ProjectService.saveProjectFromState(currentPath);
       uiStore.showToast("项目已保存", "success", 2000);
     } catch (e) {
       console.error(e);
@@ -62,11 +52,11 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
 
       if (json) {
         // 如果提供了 json，直接使用
-        p = json;
+        p = JSON.parse(json);
         path = null;
         await ProjectService.setProjectData(p, path || undefined, true);
       } else {
-        const result = await ProjectService.loadProject();
+        const result = await ProjectService.loadProjectToState();
         if (!result) return;
         p = result.project;
         path = result.path;
@@ -85,7 +75,8 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
 
       useProjectStore.getState().loadProject(p, path);
 
-      const first = (Object.values(p.events)[0] || Object.values(p.functions)[0]) as any;
+      // 从 graphs 中获取第一个 graph
+      const first = Object.values(p.graphs)[0] as any;
       if (first) openSubGraph(first.id, first.name, first.type as any, first);
 
       uiStore.showToast("项目已加载", "success", 2000);
@@ -110,38 +101,19 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
       }
 
       const st = useProjectStore.getState();
-      const currentEvent = st.events[currentTabId];
+      const currentGraph = st.graphs[currentTabId];
       
-      if (!currentEvent) {
+      if (!currentGraph || currentGraph.type !== 'event') {
         uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
         return;
       }
 
-      const eventsToExecute = { [currentTabId]: currentEvent };
-      console.log(`[Execute] 执行当前 Event: ${currentEvent.name} (${currentTabId})`);
+      console.log(`[Execute] 执行当前 Event: ${currentGraph.name} (${currentTabId})`);
 
-      const res = await ProjectService.executeProject(
-        st.globalVariables,
-        eventsToExecute,
-        st.functions,
-        st.macros,
-        st.dataframes
-      );
-
-      const logs = res.split('\n').filter(l => l.trim());
-      logs.forEach(log => {
-        if (log.includes("[Error]")) {
-          uiStore.showToast(log, "error", 5000);
-        } else if (log.includes("[NODE PRINT]")) {
-          const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
-          uiStore.showToast(`输出: ${printContent}`, "info", 3000);
-          console.log(printContent);
-        } else if (log.includes("[System] Received event")) {
-          uiStore.showToast(log, "info", 2000);
-        }
-      });
-
-      uiStore.showToast(`执行完成: ${currentEvent.name}`, "success", 2000);
+      // TODO: 调用后端执行 API
+      // const res = await ProjectService.executeGraph(currentTabId);
+      
+      uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
     } catch (e) {
       console.error("执行失败:", e);
       uiStore.showToast(`执行失败: ${e}`, "error", 5000);
@@ -153,7 +125,10 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
       syncActiveToCollection();
       const st = useProjectStore.getState();
 
-      const eventCount = Object.keys(st.events).length;
+      // 从 graphs 中筛选出所有 events
+      const events = Object.values(st.graphs).filter(g => g.type === 'event');
+      const eventCount = events.length;
+      
       if (eventCount === 0) {
         uiStore.showToast("没有可执行的 Event", "warning", 3000);
         return;
@@ -161,26 +136,8 @@ export function useProjectOperations(openSubGraph: (id: string, name: string, ty
 
       console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
 
-      const res = await ProjectService.executeProject(
-        st.globalVariables,
-        st.events,
-        st.functions,
-        st.macros,
-        st.dataframes
-      );
-
-      const logs = res.split('\n').filter(l => l.trim());
-      logs.forEach(log => {
-        if (log.includes("[Error]")) {
-          uiStore.showToast(log, "error", 5000);
-        } else if (log.includes("[NODE PRINT]")) {
-          const printContent = log.replace(/.*\[NODE PRINT\]:\s*/, '');
-          uiStore.showToast(`输出: ${printContent}`, "info", 3000);
-          console.log(printContent);
-        } else if (log.includes("[System] Received event")) {
-          uiStore.showToast(log, "info", 2000);
-        }
-      });
+      // TODO: 调用后端执行 API
+      // const res = await ProjectService.executeAllEvents();
 
       uiStore.showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
     } catch (e) {

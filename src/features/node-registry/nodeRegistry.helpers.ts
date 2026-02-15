@@ -32,8 +32,22 @@ export function createNode(
     return null;
   }
 
-  // return new any(id, def, position);
-  return {};
+  // 创建节点对象
+  const node: any = {
+    id,
+    type,
+    node_type: type,
+    category: def.category || [],
+    title: def.name || type,
+    position,
+    inputs: [],
+    outputs: [],
+    ui_style: def.node_metadata?.ui_style || "default",
+    description: def.node_metadata?.description,
+    isInternal: false,
+  };
+
+  return node;
 }
 
 /**

@@ -16,6 +16,18 @@ import { useState } from "react";
 const PIN_COLORS: Record<string, string> = {
   exec: "var(--exec-color)",
   int: "var(--int-color)",
+  Int32: "var(--int-color)",
+  Int64: "var(--int-color)",
+  Float32: "var(--float-color)",
+  Float64: "var(--float-color)",
+  Boolean: "var(--bool-color)",
+  String: "var(--string-color)",
+  Object: "var(--object-color)",
+  Array: "var(--array-color)",
+  DataFrame: "var(--dataframe-color)",
+  Any: "var(--any-color)",
+  Null: "var(--null-color)",
+  // 保留旧的小写版本以兼容
   int8: "var(--int-color)",
   int16: "var(--int-color)",
   int32: "var(--int-color)",
@@ -31,6 +43,7 @@ const PIN_COLORS: Record<string, string> = {
   datetime: "var(--datetime-color)",
   object: "var(--object-color)",
   array: "var(--array-color)",
+  dataframe: "var(--dataframe-color)",
   struct: "#0055FF",
   delegate: "#FF3333",
   dataframe: "var(--dataframe-color)",
@@ -184,12 +197,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         dragData={dragData}
         onClick={(e) => {
           e.stopPropagation();
+          console.log('[Sidebar.renderItem] Click on:', id, type);
           setSelectedInfo(id, type);
         }}
         onDoubleClick={(e) => {
+          console.log('[Sidebar.renderItem] Double click on:', id, type);
           if (type !== 'variable' && type !== 'data') {
             e.stopPropagation();
+            console.log('[Sidebar.renderItem] Calling openSubGraph:', id, name, type);
             openSubGraph(id, name, type);
+          } else {
+            console.log('[Sidebar.renderItem] Skipping openSubGraph for type:', type);
           }
         }}
         className={`
@@ -212,6 +230,20 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af')) }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
+        {/* 为 event/function/macro 添加打开按钮 */}
+        {(type === 'event' || type === 'function' || type === 'macro') && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log('[Sidebar] Open button clicked for:', id, name, type);
+              openSubGraph(id, name, type);
+            }}
+            className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
+            title="Open"
+          >
+            <VscChevronRight size={12} />
+          </button>
+        )}
         {type === 'data' && <VscDatabase size={12} className="opacity-40" />}
         {type === 'variable' && (
           <>
@@ -259,7 +291,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               else if (activeTab === 'functions') addFunction();
               else if (activeTab === 'macros') addMacro();
               else if (activeTab === 'variables') {
-                addVariable("New Variable", "int", false);
+                addVariable("New Variable", "Int32", false);
               }
               else if (activeTab === 'data') {
                 addDataFrame("New DataFrame");

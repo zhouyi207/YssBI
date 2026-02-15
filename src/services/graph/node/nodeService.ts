@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export class NodeService {
    // ==================== Nodes 操作 ====================
 
     static async getNodes(subgraphId: string): Promise<any[]> {
@@ -66,3 +69,5 @@
         await invoke("delete_node", { subgraphId, nodeId });
         console.log('[ProjectService.deleteNode] Node deleted successfully');
     }
+
+}

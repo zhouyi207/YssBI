@@ -5,6 +5,7 @@ import { NodeDefinition } from "@/shared/types/editor";
 interface NodeRegistryStore {
   // 状态
   definitions: Map<string, NodeDefinition>;
+  definitionsArray: NodeDefinition[]; // 缓存的数组
   isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
@@ -22,6 +23,7 @@ interface NodeRegistryStore {
 export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
   // 初始状态
   definitions: new Map(),
+  definitionsArray: [],
   isInitialized: false,
   isLoading: false,
   error: null,
@@ -36,11 +38,15 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
 
       const definitions = new Map<string, NodeDefinition>();
       defs.forEach(def => {
-        definitions.set(def.node_type, def);
+        definitions.set(def.name, def);
       });
+
+      // 同时更新缓存的数组
+      const definitionsArray = Array.from(definitions.values());
 
       set({
         definitions,
+        definitionsArray,
         isInitialized: true,
         isLoading: false,
         error: null,
@@ -63,6 +69,7 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
   clear: () => {
     set({
       definitions: new Map(),
+      definitionsArray: [],
       isInitialized: false,
       error: null,
     });
@@ -73,9 +80,9 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
     return get().definitions.get(type);
   },
 
-  // 获取所有节点定义
+  // 获取所有节点定义 - 返回缓存的数组
   getAllDefinitions: () => {
-    return Array.from(get().definitions.values());
+    return get().definitionsArray;
   },
 
   // 检查是否存在某个类型的节点定义
@@ -84,8 +91,8 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
   },
 }));
 
-// 选择器 hooks
-export const useNodeDefinitions = () => useNodeRegistryStore((s) => s.getAllDefinitions());
+// 选择器 hooks - 直接访问缓存的数组
+export const useNodeDefinitions = () => useNodeRegistryStore((s) => s.definitionsArray);
 export const useIsNodeRegistryInitialized = () => useNodeRegistryStore((s) => s.isInitialized);
 export const useIsNodeRegistryLoading = () => useNodeRegistryStore((s) => s.isLoading);
 export const useNodeRegistryError = () => useNodeRegistryStore((s) => s.error);
