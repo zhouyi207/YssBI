@@ -8,8 +8,9 @@ use crate::graph::TypeVarKey;
 use super::{DataRole, ExecRole, PinDataTypeDefinition, PinRole};
 use serde::{Deserialize, Serialize};
 
-/// Pin 方向
+/// Pin 方向（lowercase 序列化以与前端 "input"|"output" 一致）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PinDirection {
     /// 输入
     Input,

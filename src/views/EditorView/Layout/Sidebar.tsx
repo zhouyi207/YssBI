@@ -1,4 +1,4 @@
-﻿import { forwardRef, useContext, useEffect, useRef } from "react";
+import { forwardRef, useContext, useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor/core/hooks/useEditorGroup";
 import {
@@ -11,42 +11,7 @@ import {
   VscListUnordered
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { useState } from "react";
-
-const PIN_COLORS: Record<string, string> = {
-  exec: "var(--exec-color)",
-  int: "var(--int-color)",
-  Int32: "var(--int-color)",
-  Int64: "var(--int-color)",
-  Float32: "var(--float-color)",
-  Float64: "var(--float-color)",
-  Boolean: "var(--bool-color)",
-  String: "var(--string-color)",
-  Object: "var(--object-color)",
-  Array: "var(--array-color)",
-  DataFrame: "var(--dataframe-color)",
-  Any: "var(--any-color)",
-  Null: "var(--null-color)",
-  // 保留旧的小写版本以兼容
-  int8: "var(--int-color)",
-  int16: "var(--int-color)",
-  int32: "var(--int-color)",
-  int64: "var(--int-color)",
-  uint32: "var(--int-color)",
-  uint64: "var(--int-color)",
-  float: "var(--float-color)",
-  float32: "var(--float-color)",
-  float64: "var(--float-color)",
-  bool: "var(--bool-color)",
-  string: "var(--string-color)",
-  date: "var(--date-color)",
-  datetime: "var(--datetime-color)",
-  object: "var(--object-color)",
-  array: "var(--array-color)",
-  dataframe: "var(--dataframe-color)",
-  struct: "#0055FF",
-  delegate: "#FF3333",
-};
+import { PIN_COLORS, buildSidebarDragData, buildColumnDragData } from "@/features/domain/sidebar";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
@@ -122,7 +87,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, macrosCount, variablesCount, dataframesCount]);
 
-  // Helper component for draggable items
+  // 拖拽手柄与点击区域分离，避免 dnd-kit 拦截点击
   const DraggableItemWrapper: React.FC<{
     id: string;
     dragData: any;
@@ -139,55 +104,37 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     return (
       <div
         ref={setNodeRef}
-        {...listeners}
-        {...attributes}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
         className={className}
         style={{ opacity: isDragging ? 0.5 : 1 }}
       >
-        {children}
+        {/* 仅拖拽手柄响应拖拽，主区域响应点击 */}
+        <div
+          {...listeners}
+          {...attributes}
+          className="shrink-0 p-0.5 -ml-0.5 rounded cursor-grab active:cursor-grabbing"
+          title="Drag to canvas"
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" className="opacity-40" fill="currentColor">
+            <circle cx="6" cy="5" r="1.5" />
+            <circle cx="10" cy="5" r="1.5" />
+            <circle cx="6" cy="8" r="1.5" />
+            <circle cx="10" cy="8" r="1.5" />
+          </svg>
+        </div>
+        <div
+          onClick={onClick}
+          onDoubleClick={onDoubleClick}
+          className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
+        >
+          {children}
+        </div>
       </div>
     );
   };
 
   const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
-
-    let dragData = null;
-    if (type === 'variable') {
-      dragData = {
-        type: "node-template",
-        template: {
-          type: "get_variable",
-          category: "Variable",
-          variableId: id,
-          variableName: name,
-          variableType: extra?.data_type,
-          variableIsArray: extra?.is_array
-        },
-      };
-    } else if (type === 'function' || type === 'macro') {
-      dragData = {
-        type: "node-template",
-        template: {
-          type: `call_${type}`,
-          category: type === 'function' ? "Functions" : "Macros",
-          subGraphId: id,
-          subName: name,
-        },
-      };
-    } else if (type === 'data') {
-      dragData = {
-        type: "node-template",
-        template: {
-          type: "get_dataframe",
-          category: "Data",
-          variableId: id,
-          variableName: name,
-        },
-      };
-    }
+    const dragData = buildSidebarDragData(id, name, type, extra);
 
     return (
       <DraggableItemWrapper
@@ -196,21 +143,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         dragData={dragData}
         onClick={(e) => {
           e.stopPropagation();
-          console.log('[Sidebar.renderItem] Click on:', id, type);
           setSelectedInfo(id, type);
         }}
         onDoubleClick={(e) => {
-          console.log('[Sidebar.renderItem] Double click on:', id, type);
           if (type !== 'variable' && type !== 'data') {
             e.stopPropagation();
-            console.log('[Sidebar.renderItem] Calling openGraph:', id, name, type);
             openGraph(id, name, type);
-          } else {
-            console.log('[Sidebar.renderItem] Skipping openGraph for type:', type);
           }
         }}
         className={`
-          group flex items-center gap-2 p-1.5 rounded cursor-grab transition-all border
+          group flex items-center gap-1 p-1.5 rounded transition-all border
           ${isSelected
             ? 'bg-[var(--accent-color)] text-white border-[var(--accent-color)] shadow-sm'
             : 'hover:bg-white/5 text-gray-300 border-transparent'}
@@ -234,7 +176,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              console.log('[Sidebar] Open button clicked for:', id, name, type);
               openGraph(id, name, type);
             }}
             className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
@@ -276,7 +217,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   return (
     <div
       ref={ref}
-      className="flex h-full w-full overflow-hidden select-none bg-[var(--sidebar-bg)]"
+      className="sidebar-container flex h-full w-full overflow-hidden select-none bg-[var(--sidebar-bg)] relative z-30"
+      style={{ pointerEvents: "auto" }}
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
@@ -332,20 +274,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   {renderItem(id, data.name, 'data', data)}
                   {expandedDataFrames[id] && data.columns && (
                     <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
-                      {data.columns.map((col, idx) => {
-                        const columnDragData = {
-                          type: "node-template",
-                          template: {
-                            type: "get_column",
-                            category: "Data",
-                            title: `Get ${col.name}`,
-                            initialData: {
-                              columnName: col.name,
-                              columnType: col.type,
-                              dataframeId: id
-                            }
-                          },
-                        };
+                      {data.columns.map((col: { name: string; type: string }, idx: number) => {
+                        const columnDragData = buildColumnDragData(id, idx, col);
 
                         return (
                           <DraggableItemWrapper

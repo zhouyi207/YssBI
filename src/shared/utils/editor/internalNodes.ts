@@ -1,61 +1,28 @@
 import { Node } from '@/shared/types/ui';
-import { Pin } from "@/shared/types/domain";
 import { Pin as GraphPinDef } from "@/shared/types/domain";
 import { Position } from "@/shared/types/ui";
 
-// 简化的 Pin 定义（用于创建内部节点时）
-type SimplePinDef = {
-    name: string;
-    type: string;
-    isArray?: boolean;
-};
+/**
+ * 创建节点请求参数（仅用于发送给后端，不构建完整节点）
+ * 节点结构由后端 create_node 创建，通过 NodeCreated 事件同步到前端渲染
+ */
+export interface CreateNodeRequest {
+    node_type: string;
+    position: Position;
+    /** 可选参数，如 subGraphId（call_function/call_macro），需后端支持 */
+    overrides?: Record<string, unknown>;
+}
 
-export function createInternalNode(
-    id: string,
-    type: string,
-    title: string,
-    category: string[],
+/**
+ * 构建创建节点请求（仅类型+位置+可选参数，不构建完整节点）
+ * 发送给后端后，后端 create_node 创建节点并 emit NodeCreated，前端接收事件同步渲染
+ */
+export function buildCreateNodeRequest(
+    nodeType: string,
     position: Position,
-    inputs: SimplePinDef[],
-    outputs: SimplePinDef[],
-    isInternal: boolean = true
-): Partial<Node> {
-    // 将简化的 pin 定义转换为完整的 Pin
-    const fullInputs: Pin[] = inputs.map((p, idx) => ({
-        id: `${id}_in_${idx}`,
-        nodeId: id,
-        name: p.name,
-        type: p.type as any,
-        direction: 'input' as const,
-        links: [],
-        isArray: p.isArray
-    }));
-    
-    const fullOutputs: Pin[] = outputs.map((p, idx) => ({
-        id: `${id}_out_${idx}`,
-        nodeId: id,
-        name: p.name,
-        type: p.type as any,
-        direction: 'output' as const,
-        links: [],
-        isArray: p.isArray
-    }));
-    
-    // 创建节点对象
-    const node: Node = {
-        id,
-        type,
-        node_type: type,
-        category,
-        title,
-        position,
-        inputs: fullInputs,
-        outputs: fullOutputs,
-        ui_style: "default",
-        isInternal,
-    } as any;
-    
-    return node;
+    overrides?: Record<string, unknown>
+): CreateNodeRequest {
+    return { node_type: nodeType, position, overrides };
 }
 
 export function syncInternalNodePins(node: Node, subGraphPins: GraphPinDef[], isInputNode: boolean) {

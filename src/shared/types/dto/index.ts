@@ -10,4 +10,5 @@
  * - 前后端类型转换
  */
 
+export * from './graph';
 export * from './converters';

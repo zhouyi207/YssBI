@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { PiGraph, PiFunction } from "react-icons/pi";
 import { TiFlowSwitch } from "react-icons/ti";
 import { HiVariable } from "react-icons/hi2";

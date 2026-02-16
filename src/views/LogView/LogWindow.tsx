@@ -1,11 +1,24 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useLogStore } from '@/features/core/log/logStore';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 export const LogWindow = () => {
-  const { logs, filter, addLog, clearLogs, toggleLevel, toggleType, setSearchText, getFilteredLogs, loadLogs, loadMoreLogs, refreshLogs, loading, hasMore, total } = useLogStore();
+  const logs = useLogStore((s) => s.logs);
+  const filter = useLogStore((s) => s.filter);
+  const addLog = useLogStore((s) => s.addLog);
+  const clearLogs = useLogStore((s) => s.clearLogs);
+  const toggleLevel = useLogStore((s) => s.toggleLevel);
+  const toggleType = useLogStore((s) => s.toggleType);
+  const setSearchText = useLogStore((s) => s.setSearchText);
+  const getFilteredLogs = useLogStore((s) => s.getFilteredLogs);
+  const loadLogs = useLogStore((s) => s.loadLogs);
+  const loadMoreLogs = useLogStore((s) => s.loadMoreLogs);
+  const refreshLogs = useLogStore((s) => s.refreshLogs);
+  const loading = useLogStore((s) => s.loading);
+  const hasMore = useLogStore((s) => s.hasMore);
+  const total = useLogStore((s) => s.total);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);

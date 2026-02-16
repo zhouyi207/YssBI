@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useCanvasInteraction } from '@/features/domain/canvas/hooks';
-import { useEditorState } from './useEditorState';
-import { useEditorActions } from './useEditorActions';
+import { useEditorState, useEditorActions } from '@/features/core/editor';
 import { useEditorOperations } from './useEditorOperations';
 import { useTabManagement } from './useTabManagement';
 import { useProjectOperations } from './useProjectOperations';
@@ -10,8 +9,8 @@ import { useVariableManagement } from './useVariableManagement';
 import { useDatabaseManagement } from './useDatabaseManagement';
 import { useNodeManagement } from './useNodeManagement';
 
-
-export function useEditor() {
+export function useEditor(options?: { withCanvasInteraction?: boolean }) {
+  const withCanvasInteraction = options?.withCanvasInteraction ?? true;
   // Get state
   const state = useEditorState();
   
@@ -28,7 +27,7 @@ export function useEditor() {
   const dataFrameMgmt = useDatabaseManagement();
   const nodeMgmt = useNodeManagement();
 
-  // Canvas interaction
+  // Canvas interaction（Sidebar 等组件禁用，避免重复全局监听）
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: actions.activeGroupIdRef,
     activeTabIdRef: actions.activeTabIdRef,
@@ -37,7 +36,8 @@ export function useEditor() {
     setSelectedNodeIds: actions.setSelectedNodeIds,
     setNodes: actions.setNodes,
     setCanvas: actions.setCanvas,
-    saveHistory: editorOps.saveHistory
+    saveHistory: editorOps.saveHistory,
+    enabled: withCanvasInteraction,
   });
 
   return useMemo(() => ({

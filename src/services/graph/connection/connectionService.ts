@@ -1,21 +1,25 @@
 import { invoke } from "@tauri-apps/api/core";
+import { GraphService } from "@/services/graph/graphService";
+import { toFrontendGraph } from "@/services/project/projectService";
+import { useGraphDataStore } from "@/features/core/dataStore";
 
 /**
  * Connection 服务 - 封装所有连接相关的后端调用
  */
 export class ConnectionService {
     /**
-     * 连接两个 Pin
+     * 连接两个 Pin（后端 connect_pins + 刷新 graph 到 store）
      * @param subgraphId 子图ID
      * @param sourcePinId 源 Pin ID
      * @param targetPinId 目标 Pin ID
-     * @returns 更新后的节点列表
      */
-    static async connectPins(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<any[]> {
-        console.log('[ProjectService.connectPins] Connecting:', { subgraphId, sourcePinId, targetPinId });
-        const nodes = await invoke("connect_pins", { subgraphId, sourcePinId, targetPinId });
-        console.log('[ProjectService.connectPins] Connection successful');
-        return nodes as any[];
+    static async connectPins(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<void> {
+        console.log('[ConnectionService.connectPins] Connecting:', { subgraphId, sourcePinId, targetPinId });
+        await invoke("connect_pins", { subgraphId, sourcePinId, targetPinId });
+        console.log('[ConnectionService.connectPins] Connection successful, refreshing graph...');
+        const rawGraph = await GraphService.getGraph(subgraphId);
+        const graph = toFrontendGraph(rawGraph);
+        useGraphDataStore.getState().addGraphFromData(subgraphId, graph as any);
     }
 
     /**

@@ -1,49 +1,27 @@
-import { useCallback, useContext, createContext, useMemo } from 'react';
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useProjectStore } from '@/features/core/project';
+import { useCallback, useContext, useMemo } from 'react';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditor } from './useEditor';
-import { deserializeGraph } from '@/shared/utils/editor';
 
-/**
- * GroupContext for scoped canvas operations
- * When a component is wrapped in GroupContext.Provider, operations will scope to that group
- */
-export const GroupContext = createContext<string | null>(null);
+export { GroupContext };
 
 /**
  * useEditorGroup Hook
- * 
+ *
  * Context-aware editor hook that scopes operations to a specific group.
  * When used within a GroupContext, it automatically scopes to that group.
  * Otherwise, it uses the globally active group.
+ *
+ * Sidebar/detail 等非 Canvas 组件自动禁用 canvas 交互，避免注册全局 pointer 监听器。
  */
 export function useEditorGroup() {
-  const editor = useEditor();
   const currentGroupId = useContext(GroupContext);
-  
-  // Get the active group ID
-  const activeGroupIdFromStore = useLayoutStore((s: LayoutState) => s.activeGroupId);
-  const groupId = currentGroupId || activeGroupIdFromStore || 'default_editor';
+  const overrideGroupId = currentGroupId || undefined;
+  const withCanvasInteraction = overrideGroupId !== 'sidebar' && overrideGroupId !== 'detail';
+  const editor = useEditor({ withCanvasInteraction });
 
-  // Get node and activeEditorGroupId
-  const node = useLayoutStore(useCallback((s: LayoutState) => s.nodes[groupId], [groupId]));
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
-  const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
-
-  // Determine functional node (editor or fallback)
-  const isEditor = node?.type === 'component' && !!node.data?.tabs;
-  const functionalNode = isEditor ? node : (useLayoutStore.getState().nodes[activeEditorGroupId || ''] || node);
-
-  const tabs = functionalNode?.data?.tabs || [];
-  const activeTabId = functionalNode?.data?.activeTabId || null;
-  const selectedNodeIds = functionalNode?.data?.params?.selectedNodeIds || [];
-
-  // Efficiently retrieve nodes and variables for the active tab from project store
-  const graphData = useProjectStore(useCallback((s) => activeTabId ? s.graphs[activeTabId] : null, [activeTabId]));
-  const { nodes, variables } = useMemo(() => {
-    if (!graphData) return { nodes: [], variables: {} };
-    return deserializeGraph(graphData);
-  }, [graphData]);
+  const { groupId, tabs, activeTabId, nodes, variables, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
+  const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
 
   // Wrapped handlers that ensure the correct group is active
   const wrappedOnCanvasPointerDown = useCallback((e: React.PointerEvent) => {

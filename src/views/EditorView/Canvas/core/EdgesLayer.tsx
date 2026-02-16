@@ -1,6 +1,6 @@
-﻿import { useRef, useCallback, useEffect, useLayoutEffect, useState, useMemo } from "react";
+import { useRef, useCallback, useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useViewportStore } from '@/features/core/viewport';
-import { useProjectStore } from "@/features/core/project";
+import { useGraphData, useGraphDataStore } from "@/features/core/dataStore";
 import { useGestureStore } from '@/features/core/gesture';
 import { useExecutionStore } from "@/features/domain/execution/stores";
 import { useTheme } from "@/features/core/theme/useTheme";
@@ -130,8 +130,8 @@ export const EdgesLayer = ({
         }
     }, [completedConnections, enableDataFlow]);
 
-    // 🆕 优化：使用 Store Hook获取响应式数据，并缓存结果
-    const graphData = useProjectStore(useCallback((s) => activeTabId ? s.graphs[activeTabId] : null, [activeTabId]));
+    // 🆕 优化：使用 dataStore 获取响应式 graph 数据
+    const graphData = useGraphData(activeTabId);
 
     // 使用 useMemo 缓存反序列化结果，避免每帧重复计算
     const nodes = useMemo(() => {
@@ -277,7 +277,7 @@ export const EdgesLayer = ({
             }
         });
 
-        const unsubProject = useProjectStore.subscribe(() => {
+        const unsubGraphData = useGraphDataStore.subscribe(() => {
             if (!isAnimatingRef.current) {
                 startAnimation();
             }
@@ -285,7 +285,7 @@ export const EdgesLayer = ({
 
         return () => {
             unsubViewport();
-            unsubProject();
+            unsubGraphData();
         };
     }, [startAnimation]);
 

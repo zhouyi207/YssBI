@@ -99,6 +99,7 @@ pub fn run() {
             create_node,
             delete_node,
             // Connection 命令
+            connect_pins,
             create_connection,
             delete_connection,
             get_connections,

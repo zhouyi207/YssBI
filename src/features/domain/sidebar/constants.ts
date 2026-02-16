@@ -1,0 +1,37 @@
+/**
+ * Pin type to CSS color variable mapping for sidebar item indicators.
+ * Extracted from Sidebar.tsx.
+ */
+export const PIN_COLORS: Record<string, string> = {
+  exec: "var(--exec-color)",
+  int: "var(--int-color)",
+  Int32: "var(--int-color)",
+  Int64: "var(--int-color)",
+  Float32: "var(--float-color)",
+  Float64: "var(--float-color)",
+  Boolean: "var(--bool-color)",
+  String: "var(--string-color)",
+  Object: "var(--object-color)",
+  Array: "var(--array-color)",
+  DataFrame: "var(--dataframe-color)",
+  Any: "var(--any-color)",
+  Null: "var(--null-color)",
+  int8: "var(--int-color)",
+  int16: "var(--int-color)",
+  int32: "var(--int-color)",
+  int64: "var(--int-color)",
+  uint32: "var(--int-color)",
+  uint64: "var(--int-color)",
+  float: "var(--float-color)",
+  float32: "var(--float-color)",
+  float64: "var(--float-color)",
+  bool: "var(--bool-color)",
+  string: "var(--string-color)",
+  date: "var(--date-color)",
+  datetime: "var(--datetime-color)",
+  object: "var(--object-color)",
+  array: "var(--array-color)",
+  dataframe: "var(--dataframe-color)",
+  struct: "#0055FF",
+  delegate: "#FF3333",
+};

@@ -1,35 +1,21 @@
+/**
+ * 编辑器组目录数据：variables、events、functions、macros、dataframes、selectedItem
+ * 直接使用 core hooks，无 application 依赖
+ */
 import { useMemo } from 'react';
-import { useEditorGroup } from '@/features/application/editor/core/hooks/useEditorGroup';
+import { useEditorCollections } from './useEditorCollections';
+import { useEditorUIState } from './useEditorUIState';
 
 export function useEditorGroupCatalog() {
-  const {
-    variables,
-    Variables,
-    events,
-    functions,
-    macros,
-    dataframes,
-    selectedItemId,
-    selectedItemType,
-  } = useEditorGroup();
+  const collections = useEditorCollections();
+  const { selectedItemId, selectedItemType } = useEditorUIState();
 
-  return useMemo(() => ({
-    variables,
-    Variables,
-    events,
-    functions,
-    macros,
-    dataframes,
-    selectedItemId,
-    selectedItemType,
-  }), [
-    variables,
-    Variables,
-    events,
-    functions,
-    macros,
-    dataframes,
-    selectedItemId,
-    selectedItemType,
-  ]);
+  return useMemo(
+    () => ({
+      ...collections,
+      selectedItemId,
+      selectedItemType,
+    }),
+    [collections, selectedItemId, selectedItemType]
+  );
 }

@@ -1,7 +1,7 @@
 use crate::graph::{GraphId, NodeId};
 use crate::project::ProjectState;
 use crate::event::{emit_project_event, Event, EventNode};
-use crate::schema::NodeInstanceDTO;
+use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use crate::log::log_app;
 use tauri::{AppHandle, State};
 
@@ -29,22 +29,25 @@ pub fn create_node(
     
     let mut node_dto: NodeInstanceDTO = (&node_instance).into();
     
-    // 填充 inputs 和 outputs
+    // 填充 inputs 和 outputs，并构建 pins DTO 供前端直接使用
     let pin_instances = graph.get_pin_instances_by_node_id(node_id);
-    for pin in pin_instances {
+    let mut pins_dto = Vec::with_capacity(pin_instances.len());
+    for pin in &pin_instances {
         match pin.definition.direction {
             crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
             crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
         }
+        pins_dto.push(PinInstanceDTO::from(pin));
     }
-    
-    // 发送节点创建事件
+
+    // 发送节点创建事件（含 pins，便于前端 hydrate）
     emit_project_event(
         &app,
         Event::Node(EventNode::NodeCreated {
             graph_id,
             node_id,
             data: node_dto,
+            pins: pins_dto,
         }),
     );
     

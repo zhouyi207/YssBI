@@ -74,6 +74,7 @@ export interface NodeCreatedPayload {
     graph_id: string;
     node_id: string;
     data: any; // NodeInstanceDTO from backend
+    pins: any[]; // PinInstanceDTO[]
 }
 
 export interface NodeDeletedPayload {

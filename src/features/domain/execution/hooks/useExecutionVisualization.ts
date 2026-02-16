@@ -1,4 +1,4 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useExecutionStore } from "../stores";
 import { ExecutionEvent } from "@/shared/types/ui";
@@ -7,17 +7,15 @@ import { ExecutionEvent } from "@/shared/types/ui";
  * 监听后端执行事件并更新执行状态
  */
 export function useExecutionVisualization() {
-  const {
-    startExecution,
-    completeExecution,
-    markNodeExecuting,
-    markNodeCompleted,
-    markNodeError,
-    addActiveConnection,
-    removeActiveConnection,
-    markConnectionCompleted,
-    reset,
-  } = useExecutionStore();
+  const startExecution = useExecutionStore((s) => s.startExecution);
+  const completeExecution = useExecutionStore((s) => s.completeExecution);
+  const markNodeExecuting = useExecutionStore((s) => s.markNodeExecuting);
+  const markNodeCompleted = useExecutionStore((s) => s.markNodeCompleted);
+  const markNodeError = useExecutionStore((s) => s.markNodeError);
+  const addActiveConnection = useExecutionStore((s) => s.addActiveConnection);
+  const removeActiveConnection = useExecutionStore((s) => s.removeActiveConnection);
+  const markConnectionCompleted = useExecutionStore((s) => s.markConnectionCompleted);
+  const reset = useExecutionStore((s) => s.reset);
 
   useEffect(() => {
     console.log("[useExecutionVisualization] Setting up execution event listener...");

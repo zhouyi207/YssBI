@@ -1,1 +1,1 @@
-export { GroupContext } from '@/features/application/editor/core/hooks/useEditorGroup';
+export { GroupContext } from '../context/GroupContext';

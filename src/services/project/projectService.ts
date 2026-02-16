@@ -1,13 +1,13 @@
-﻿import { save, open } from "@tauri-apps/plugin-dialog";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 
 type CanvasState = GraphPosition;
 
 /**
- * 将后端 Graph 数据转换为前端格式
+ * 将后端 Graph 数据转换为前端格式（供 connectPins 等复用）
  */
-function toFrontendGraph(data: any): Graph {
+export function toFrontendGraph(data: any): Graph {
     console.log('[toFrontendGraph] Input data:', data);
     
     // 后端返回的结构：
@@ -26,12 +26,14 @@ function toFrontendGraph(data: any): Graph {
         const pinMap = new Map<string, any>();
         if (data.pins && Array.isArray(data.pins)) {
             data.pins.forEach((pin: any) => {
+                // 后端 PinInstanceDTO 序列化为 type；旧格式可能用 data_type
+                const pinType = pin.type ?? pin.data_type ?? pin.pin_type ?? 'any';
                 pinMap.set(pin.id, {
                     id: pin.id,
                     nodeId: pin.node_id,
                     name: pin.name,
-                    type: pin.data_type || 'any',
-                    node_type: pin.data_type || 'any',
+                    type: pinType,
+                    node_type: pinType,
                     direction: pin.direction,
                     links: [],
                     isArray: pin.is_array || false,
@@ -110,12 +112,15 @@ function toFrontendGraph(data: any): Graph {
         const pinMap = new Map<string, any>();
         if (dataState.pins) {
             Object.values(dataState.pins).forEach((pin: any) => {
+                // data_state 格式：PinInstance 有 definition.kind (Exec/Data)，无顶层 type
+                const pinType = pin.definition?.kind === 'Exec' ? 'exec'
+                    : (pin.type ?? pin.data_type ?? pin.pin_type ?? 'any');
                 pinMap.set(pin.id, {
                     id: pin.id,
                     nodeId: pin.node_id,
                     name: pin.name,
-                    type: pin.data_type || 'any',
-                    node_type: pin.data_type || 'any',
+                    type: pinType,
+                    node_type: pinType,
                     direction: pin.direction,
                     links: [],
                     isArray: pin.is_array || false,
@@ -183,10 +188,13 @@ function toFrontendGraph(data: any): Graph {
         sampleNode: nodes[0]
     });
     
+    // 后端 GraphInstanceDTO 序列化时 graph_type 被 rename 为 "type"
+    const rawType = data.type ?? data.graph_type ?? data.kind ?? 'event';
+    const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function" | "macro";
     return {
         id: data.id,
         name: data.name,
-        type: (data.graph_type || data.kind || 'event').toLowerCase() as "event" | "function" | "macro",
+        type: graphType,
         nodes,
         pins,
         connections: { connections: connectionsArray },
@@ -234,6 +242,13 @@ export class ProjectService {
         });
         
         return result;
+    }
+
+    /**
+     * 获取当前项目数据（getProjectState 的别名，用于兼容）
+     */
+    static async getProjectData(): Promise<ProjectData> {
+        return ProjectService.getProjectState();
     }
 
     /**

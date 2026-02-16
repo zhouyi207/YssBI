@@ -1,5 +1,5 @@
 use crate::graph::{GraphId, NodeId};
-use crate::schema::NodeInstanceDTO;
+use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,6 +9,8 @@ pub enum EventNode {
         graph_id: GraphId,
         node_id: NodeId,
         data: NodeInstanceDTO,
+        /// 新建节点的 pins，便于前端直接 hydrate 到 Store
+        pins: Vec<PinInstanceDTO>,
     },
     NodeDeleted {
         graph_id: GraphId,

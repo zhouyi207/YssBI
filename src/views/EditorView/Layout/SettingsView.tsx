@@ -3,21 +3,19 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { Select } from "@/shared/ui";
 
 export const SettingsView: React.FC = () => {
-    const {
-        theme,
-        editor,
-        appearance,
-        project,
-        isLoading,
-        updateTheme,
-        updateEditor,
-        updateAppearance,
-        updateProject,
-        resetAllToDefaults,
-        resetThemeToDefaults,
-        resetEditorToDefaults,
-        resetAppearanceToDefaults,
-    } = useSettingsStore();
+    const theme = useSettingsStore((s) => s.theme);
+    const editor = useSettingsStore((s) => s.editor);
+    const appearance = useSettingsStore((s) => s.appearance);
+    const project = useSettingsStore((s) => s.project);
+    const isLoading = useSettingsStore((s) => s.isLoading);
+    const updateTheme = useSettingsStore((s) => s.updateTheme);
+    const updateEditor = useSettingsStore((s) => s.updateEditor);
+    const updateAppearance = useSettingsStore((s) => s.updateAppearance);
+    const updateProject = useSettingsStore((s) => s.updateProject);
+    const resetAllToDefaults = useSettingsStore((s) => s.resetAllToDefaults);
+    const resetThemeToDefaults = useSettingsStore((s) => s.resetThemeToDefaults);
+    const resetEditorToDefaults = useSettingsStore((s) => s.resetEditorToDefaults);
+    const resetAppearanceToDefaults = useSettingsStore((s) => s.resetAppearanceToDefaults);
 
     const [activeSection, setActiveSection] = useState("editor");
     const [isResetting, setIsResetting] = useState(false);

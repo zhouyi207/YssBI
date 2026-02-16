@@ -1,8 +1,12 @@
 import React from "react";
-// import { useSelectionStore } from "@/features/canvas/stores"; // TODO: useSelectionStore 不存在
+import { useSelectionStore } from "@/features/domain/canvas/stores";
 
 export const SelectionBox = ({ canvasRef }: { canvasRef: React.RefObject<HTMLDivElement | null> }) => {
-    const { startX, startY, currentX, currentY, isVisible } = useSelectionStore();
+    const startX = useSelectionStore((s) => s.startX);
+    const startY = useSelectionStore((s) => s.startY);
+    const currentX = useSelectionStore((s) => s.currentX);
+    const currentY = useSelectionStore((s) => s.currentY);
+    const isVisible = useSelectionStore((s) => s.isVisible);
 
     if (!isVisible || !canvasRef.current) return null;
 

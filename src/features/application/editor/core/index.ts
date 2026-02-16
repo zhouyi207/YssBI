@@ -1,6 +1,5 @@
-// Stores
-export { useEditorStore } from './stores/useEditorStore';
-export { useClipboardStore } from './stores/useClipboardStore';
+// Stores (from core)
+export { useEditorStore, useClipboardStore } from './stores';
 
 // Hooks
 export { useEditor } from './hooks/useEditor';
@@ -8,7 +7,8 @@ export { useEditorOperations } from './hooks/useEditorOperations';
 export { useTabManagement } from './hooks/useTabManagement';
 export { useProjectOperations } from './hooks/useProjectOperations';
 export { useEditorKeyboard } from './hooks/useEditorKeyboard';
-export { useEditorInit } from './hooks/useEditorInit';
+export { useEditorInit, useRequireEditorInit } from '@/features/core/editor';
+export type { EditorInitState } from '@/features/core/editor';
 export { useEditorGroup, GroupContext } from './hooks/useEditorGroup';
 export { useSidebarTab } from './hooks/useSidebarTab';
 

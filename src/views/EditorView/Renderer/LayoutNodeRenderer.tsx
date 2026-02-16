@@ -1,4 +1,4 @@
-﻿import { useRef, Fragment, useMemo } from 'react';
+import { useRef, Fragment, useMemo } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { Sash } from './Sash';
 import { viewRegistry } from './viewRegistry';
@@ -160,7 +160,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
                 ref={setDragRef}
                 style={style}
                 onClick={() => setActiveGroup(node.id)}
-                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
+                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
                 id={`layout-node-${node.id}`}
             >
                 {/* 统一 Header 区域 */}

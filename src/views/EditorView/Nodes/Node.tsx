@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { Node as NodeModel } from "@/shared/types/ui";
 import { NodeContainer } from "./NodeContainer";
@@ -10,6 +10,8 @@ export interface NodeProps {
   node: NodeModel;
   scale: number;
   selected?: boolean;
+  /** 拖拽时的视觉偏移 */
+  dragDelta?: { x: number; y: number };
   activePinId?: string | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
@@ -34,7 +36,7 @@ export interface NodeProps {
  * - 提高可测试性和可维护性
  */
 export const Node = React.memo<NodeProps>((props) => {
-  const { node, onPointerDown, selected } = props;
+  const { node, onPointerDown, selected, dragDelta } = props;
 
   if (!node) return null;
 
@@ -42,6 +44,7 @@ export const Node = React.memo<NodeProps>((props) => {
     <NodeContainer
       node={node}
       selected={selected}
+      dragDelta={dragDelta}
       onPointerDown={onPointerDown}
     >
       {node.ui_style === "math" ? (
@@ -53,10 +56,14 @@ export const Node = React.memo<NodeProps>((props) => {
   );
 }, (prev, next) => {
   // 极致性能优化：节点对象引用变化时重绘
+  const dragDeltaSame =
+    (prev.dragDelta?.x === next.dragDelta?.x && prev.dragDelta?.y === next.dragDelta?.y) ||
+    (!prev.dragDelta && !next.dragDelta);
   return (
     prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
     prev.node === next.node &&
-    prev.scale === next.scale
+    prev.scale === next.scale &&
+    dragDeltaSame
   );
 });

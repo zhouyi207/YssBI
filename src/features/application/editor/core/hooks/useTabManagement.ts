@@ -1,15 +1,15 @@
-﻿import { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
-import { useProjectStore } from '@/features/core/project';
+import { getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useEditorStore } from '../stores';
+import { useEditorStore } from '@/features/core/editor';
 
 /**
  * Tab Management Hook
  * Handles opening, closing, and switching between tabs
  */
 export function useTabManagement() {
-  const { setSelectedInfo } = useEditorStore();
+  const setSelectedInfo = useEditorStore((s) => s.setSelectedInfo);
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
   // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
 
@@ -36,8 +36,7 @@ export function useTabManagement() {
     setActiveTabId(newId, targetGroupId);
     if (!newId) return;
 
-    const st = useProjectStore.getState();
-    const tabSource = initialData || st.graphs[newId];
+    const tabSource = initialData || getGraphById(newId);
     const type = forceType || (tabSource as any)?.type;
     
     console.log('[useTabManagement.handleSetActiveTabId] Final type:', type, 'tabSource:', tabSource);

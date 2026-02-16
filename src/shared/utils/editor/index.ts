@@ -10,7 +10,8 @@ export {
 
 // Internal nodes
 export { 
-  createInternalNode, 
+  buildCreateNodeRequest,
+  type CreateNodeRequest,
   syncInternalNodePins, 
   syncGraphInstanceNodes 
 } from './internalNodes';

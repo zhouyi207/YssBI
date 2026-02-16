@@ -1,4 +1,4 @@
-﻿// ui/UIHost.tsx
+// ui/UIHost.tsx
 import { useUIStore } from "@/features/core/ui/useUIStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Toast } from "./Toast";
@@ -6,7 +6,8 @@ import { Modal } from "./Modal";
 import { ImportModal } from "./ImportModal";
 
 export const UIHost = () => {
-  const { messages, modals } = useUIStore();
+  const messages = useUIStore((s) => s.messages);
+  const modals = useUIStore((s) => s.modals);
   const top = modals[modals.length - 1];
 
   return (

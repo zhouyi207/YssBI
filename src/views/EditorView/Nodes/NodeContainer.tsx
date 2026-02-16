@@ -1,11 +1,13 @@
-﻿import React from "react";
-import { Node } from "@/shared/types/domain";
+import React from "react";
+import { Node } from "@/shared/types/ui";
 import { useNodeExecution } from "@/features/domain/node/hooks";
 import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
 
 interface NodeContainerProps {
   node: Node;
   selected?: boolean;
+  /** 拖拽时的视觉偏移，仅用于渲染，不写回 store */
+  dragDelta?: { x: number; y: number };
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
   children: React.ReactNode;
 }
@@ -23,9 +25,14 @@ interface NodeContainerProps {
 export const NodeContainer: React.FC<NodeContainerProps> = ({
   node,
   selected,
+  dragDelta,
   onPointerDown,
   children,
 }) => {
+  const dx = selected && dragDelta ? dragDelta.x : 0;
+  const dy = selected && dragDelta ? dragDelta.y : 0;
+  const posX = node.position.x + dx;
+  const posY = node.position.y + dy;
   const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id);
 
   const className = getNodeClassName({
@@ -50,7 +57,7 @@ export const NodeContainer: React.FC<NodeContainerProps> = ({
       className={className}
       style={{
         ...minSize,
-        transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
+        transform: `translate3d(${posX}px, ${posY}px, 0)`,
         background,
         // 只对特定属性应用过渡，排除 transform 以避免拖动延迟
         transition: "border-color 200ms, box-shadow 200ms, background 200ms",

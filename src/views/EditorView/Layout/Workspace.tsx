@@ -1,16 +1,21 @@
-﻿import { forwardRef, useState } from "react";
+import { forwardRef, useState, useEffect, useRef } from "react";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
-import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core';
+import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { DropIndicator } from "../Renderer/DropIndicator";
+import { SidebarDragOverlay } from "./SidebarDragOverlay";
 import { LayoutNode } from "@/shared/types/ui";
 import "../Renderer/viewRegistry"; // 确保业务组件已注册
-
 
 export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeId }, ref) => {
   const moveNode = useLayoutStore(s => s.moveNode);
   const moveTab = useLayoutStore(s => s.moveTab);
   const setDragging = useLayoutStore(s => s.setDragging);
+  const setActiveDrag = useSidebarDragStore(s => s.setActiveDrag);
+  const updatePosition = useSidebarDragStore(s => s.updatePosition);
+
+  const pointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
 
   const [dropState, setDropState] = useState<{ visible: boolean; position: any; type?: 'dock' | 'merge' }>({
     visible: false, position: {}, type: 'dock'
@@ -19,13 +24,32 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5,
+        delay: 150,
+        tolerance: 5,
       },
     })
   );
 
-  const handleDragStart = (_event: DragStartEvent) => {
+  useEffect(() => {
+    return () => {
+      if (pointerMoveRef.current) {
+        document.removeEventListener("pointermove", pointerMoveRef.current);
+      }
+    };
+  }, []);
+
+  const handleDragStart = (event: DragStartEvent) => {
     setDragging(true);
+    const activeData = event.active.data.current as any;
+    if (activeData?.type === "node-template") {
+      const activatorEvent = event.activatorEvent as PointerEvent;
+      const x = activatorEvent?.clientX ?? 0;
+      const y = activatorEvent?.clientY ?? 0;
+      setActiveDrag({ type: activeData.type, template: activeData.template, x, y });
+      const onMove = (e: PointerEvent) => updatePosition(e.clientX, e.clientY);
+      pointerMoveRef.current = onMove;
+      document.addEventListener("pointermove", onMove);
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -89,9 +113,33 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     setDragging(false);
     setDropState(s => ({ ...s, visible: false }));
     const { active, over } = event;
+    const activeData = active.data.current as any;
+
+    if (activeData?.type === "node-template") {
+      if (pointerMoveRef.current) {
+        document.removeEventListener("pointermove", pointerMoveRef.current);
+        pointerMoveRef.current = null;
+      }
+      const dragState = useSidebarDragStore.getState().activeDrag;
+      setActiveDrag(null);
+      const overId = typeof over?.id === "string" ? over.id : "";
+      const groupId = overId.startsWith("canvas-drop-zone-")
+        ? overId.replace("canvas-drop-zone-", "")
+        : null;
+      if (groupId && dragState) {
+        const handler = canvasDropHandlerStore.getHandler(groupId);
+        if (handler) {
+          const ev = event.activatorEvent as PointerEvent;
+          handler(dragState, {
+            altKey: ev?.altKey ?? false,
+            ctrlKey: ev?.ctrlKey ?? false,
+          });
+        }
+      }
+      return;
+    }
 
     if (over && active.id !== over.id) {
-      const activeData = active.data.current as any;
       const dropData = over.data.current as any;
       const dropPosition = dropData?.dropPosition || 'center';
       const targetNodeId = dropData?.targetNodeId || over.id;
@@ -204,6 +252,11 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
         {/* Local Drop Indicator for Workspace */}
         <DropIndicator {...dropState} />
+
+        {/* Drag overlay for sidebar items (node-template) */}
+        <DragOverlay>
+          <SidebarDragOverlay />
+        </DragOverlay>
       </div>
     </DndContext>
   );

@@ -1,8 +1,9 @@
-﻿import { useContext } from 'react';
+import { useContext } from 'react';
 import Canvas from './Canvas';
 import { useEditorGroup, GroupContext } from '@/features/application/editor/core/hooks/useEditorGroup';
 import { WatermarkView } from '../overlays/WatermarkView';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { CanvasDropZone } from './CanvasDropZone';
 
 /**
  * 图形编辑器主组件
@@ -24,13 +25,15 @@ export const GraphEditor = () => {
 
     return (
         <div className="flex flex-col w-full h-full overflow-hidden">
-            {/* 主内容区域 */}
+            {/* 主内容区域 - CanvasDropZone 使侧边栏可拖放到画布 */}
             <div className="flex-1 relative overflow-hidden">
-                {activeTabId ? (
-                    <Canvas />
-                ) : (
-                    <WatermarkView />
-                )}
+                <CanvasDropZone groupId={nodeId || "default_editor"}>
+                    {activeTabId ? (
+                        <Canvas />
+                    ) : (
+                        <WatermarkView />
+                    )}
+                </CanvasDropZone>
             </div>
         </div>
     );

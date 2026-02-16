@@ -1,8 +1,9 @@
-﻿import React, { useCallback, useEffect } from "react";
-import { useProjectStore } from "@/features/core/project";
+import React, { useCallback, useEffect } from "react";
+import { getGraphById, useGraphDataStore } from "@/features/core/dataStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
-import { useEditorStore } from "@/features/application/editor/core/stores/useEditorStore";
+import { useEditorStore } from "@/features/core/editor";
 import { Node } from '@/shared/types/ui';
 import { Pin, Graph, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
@@ -20,6 +21,8 @@ interface UseCanvasInteractionProps {
     setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
     setCanvas: (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition), targetGroupId?: string) => void;
     saveHistory: () => void;
+    /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
+    enabled?: boolean;
 }
 
 export function useCanvasInteraction({
@@ -30,7 +33,8 @@ export function useCanvasInteraction({
     setSelectedNodeIds,
     setNodes,
     setCanvas,
-    saveHistory
+    saveHistory,
+    enabled = true,
 }: UseCanvasInteractionProps) {
 
     // Use store instead of local state
@@ -45,37 +49,12 @@ export function useCanvasInteraction({
 
         try {
             console.log(`[useCanvasInteraction] Connecting pins via backend: ${a} -> ${b}`);
-            
-            // 调用后端 API 进行连接
-            const updatedSerializedNodes = await ConnectionService.connectPins(tid, a, b);
-            
-            // 获取最新的连接列表
-            const connections = await ConnectionService.getConnections(tid);
-            
-            console.log(`[useCanvasInteraction] Connection created, got ${connections.length} connections`);
-
-            // 将返回的 SerializedNode[] 转换为 Node[]
-            // 构造临时的 GraphData 来复用 deserializeGraph 的逻辑
-            const tempGraph: Graph = {
-                id: tid,
-                name: "temp",
-                type: "event",
-                nodes: updatedSerializedNodes as any[],
-                pins: [],
-                connections: { connections },  // Connection 类型包含 connections 数组
-                canvas: { x: 0, y: 0, scale: 1 }
-            };
-
-            const { nodes: newNodes } = deserializeGraph(tempGraph);
-
-            setNodes(newNodes);
+            await ConnectionService.connectPins(tid, a, b);
             saveHistory();
-
         } catch (error) {
             console.error('[useCanvasInteraction] Failed to connect pins:', error);
-            // 这里可以添加 toast 提示用户连接失败（例如类型不兼容）
         }
-    }, [activeTabIdRef, saveHistory, setNodes]);
+    }, [activeTabIdRef, saveHistory]);
 
     const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
         // Button 1 (Middle) or Button 2 (Right) or Alt+Left (Button 0) for panning
@@ -150,7 +129,7 @@ export function useCanvasInteraction({
         // Find pin in current store nodes
         const tid = activeTabIdRef.current;
         if (!tid) return;
-        const graphData = useProjectStore.getState().graphs[tid];
+        const graphData = getGraphById(tid);
         const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
         let pin: Pin | undefined;
         for (const n of currentNodes) {
@@ -170,8 +149,9 @@ export function useCanvasInteraction({
         } else { setCanvas((prev: GraphPosition) => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }), targetGroupId); }
     }, [setCanvas]);
 
-    // Global Pointer Events (Move/Up)
+    // Global Pointer Events (Move/Up) - 仅当 enabled 时注册，避免 Sidebar 等组件重复监听
     useEffect(() => {
+        if (!enabled) return;
         let rAFId: number | null = null;
         let latestEvent: PointerEvent | null = null;
 
@@ -209,34 +189,17 @@ export function useCanvasInteraction({
                 let moved = g.moved;
                 let lastX = g.lastX;
                 let lastY = g.lastY;
+                const prevDelta = g.dragDelta || { x: 0, y: 0 };
+                let dragDelta = prevDelta;
 
                 if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
                     moved = true;
-                    const gid = g.groupId || activeGroupIdRef.current;
-                    const group = groups.find(grp => grp.id === gid);
-                    const sIds = group?.selectedNodeIds || [];
-
-                    const tid = activeTabIdRef.current;
-                    if (tid) {
-                        // 只更新状态，让 React 处理渲染
-                        const graphData = useProjectStore.getState().graphs[tid];
-                        if (graphData) {
-                            const { nodes: currentNodes } = deserializeGraph(graphData);
-                            sIds.forEach((id: string) => {
-                                const nodeIndex = currentNodes.findIndex((n: any) => n.id === id);
-                                if (nodeIndex !== -1) {
-                                    currentNodes[nodeIndex].position.x += dx;
-                                    currentNodes[nodeIndex].position.y += dy;
-                                }
-                            });
-                            // 更新 graph 数据
-                            useProjectStore.getState().updateGraph(tid, { nodes: currentNodes as any });
-                        }
-                    }
+                    dragDelta = { x: prevDelta.x + dx, y: prevDelta.y + dy };
                     lastX = e.clientX;
                     lastY = e.clientY;
                 }
-                nextGesture = { ...g, moved, lastX, lastY };
+                // 仅更新 gesture（含 dragDelta），不写 graphDataStore，减少卡顿
+                nextGesture = { ...g, moved, lastX, lastY, dragDelta };
             }
 
             if (nextGesture) {
@@ -269,7 +232,7 @@ export function useCanvasInteraction({
                 const gid = g.groupId || activeGroupIdRef.current;
                 const newSelectedIds: string[] = [];
 
-                const graphData = useProjectStore.getState().graphs[activeTabIdRef.current || ""];
+                const graphData = getGraphById(activeTabIdRef.current || "");
                 const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
                 currentNodes.forEach((n: any) => {
                     const el = document.getElementById(n.id); if (!el) return;
@@ -283,6 +246,31 @@ export function useCanvasInteraction({
                 if (target) connectPins(g.startPin.id, target.getAttribute("data-pin-id")!);
                 else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
             } else if (g.type === "drag" && g.moved) {
+                // 拖拽结束：将 dragDelta 写回 store
+                const delta = g.dragDelta || { x: 0, y: 0 };
+                if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) {
+                    const gid = g.groupId || activeGroupIdRef.current;
+                    const layoutNode = useLayoutStore.getState().nodes[gid];
+                    const sIds = layoutNode?.data?.params?.selectedNodeIds || [];
+                    const tid = activeTabIdRef.current;
+                    if (tid && sIds.length > 0) {
+                        const store = useGraphDataStore.getState();
+                        const updates: Array<{ nodeId: string; x: number; y: number }> = [];
+                        for (const id of sIds) {
+                            const node = store.nodes[id];
+                            if (node?.position) {
+                                updates.push({
+                                    nodeId: id,
+                                    x: node.position.x + delta.x,
+                                    y: node.position.y + delta.y,
+                                });
+                            }
+                        }
+                        if (updates.length > 0) {
+                            store.batchUpdateNodePositions(updates);
+                        }
+                    }
+                }
                 saveHistory();
             }
 
@@ -296,7 +284,7 @@ export function useCanvasInteraction({
             window.removeEventListener("pointerup", onUp);
             if (rAFId) cancelAnimationFrame(rAFId);
         };
-    }, [activeGroupIdRef, activeTabIdRef, groups, canvasRef, connectPins, saveHistory, setSelectedNodeIds]);
+    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, saveHistory, setSelectedNodeIds]);
 
     return {
         contextMenu,

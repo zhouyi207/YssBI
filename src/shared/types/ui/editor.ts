@@ -126,6 +126,8 @@ export type EditorGesture =
         lastY: number;
         moved: boolean;
         groupId?: string;
+        /** 拖拽期间的视觉偏移（世界坐标），仅在拖拽时更新，不写回 store，减少卡顿 */
+        dragDelta?: { x: number; y: number };
     }
     | null;
 

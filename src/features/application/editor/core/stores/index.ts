@@ -1,2 +1,2 @@
-export { useEditorStore } from './useEditorStore';
-export { useClipboardStore } from './useClipboardStore';
+// Re-export from core
+export { useEditorStore, useClipboardStore } from '@/features/core/editor';

@@ -15,6 +15,7 @@
  * - 可以直接序列化/反序列化
  */
 
+export * from './ids';
 export * from './node';
 export * from './pin';
 export * from './connection';

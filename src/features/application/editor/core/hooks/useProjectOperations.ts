@@ -1,5 +1,5 @@
-﻿import { useCallback } from 'react';
-import { useProjectStore } from '@/features/core/project';
+import { useCallback } from 'react';
+import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -9,8 +9,8 @@ import { uiStore } from '@/features/core/ui/UIStore';
  * Handles save, load, and execute operations
  */
 export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void) {
-  const currentPath = useProjectStore((s) => s.currentPath);
-  const setCurrentPath = useProjectStore((s) => s.setCurrentPath);
+  const currentPath = useProjectIOStore((s) => s.currentPath);
+  const setCurrentPath = useProjectIOStore((s) => s.setCurrentPath);
 
   // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
   const syncActiveToCollection = useCallback(() => {
@@ -69,7 +69,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         });
       }
 
-      useProjectStore.getState().loadProject(p, path);
+      useProjectIOStore.getState().loadProjectFromData(p, path);
 
       // 从 graphs 中获取第一个 graph
       const first = Object.values(p.graphs)[0] as any;
@@ -96,8 +96,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         return;
       }
 
-      const st = useProjectStore.getState();
-      const currentGraph = st.graphs[currentTabId];
+      const currentGraph = getGraphById(currentTabId);
       
       if (!currentGraph || currentGraph.type !== 'event') {
         uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
@@ -119,9 +118,8 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   const executeAllEvents = useCallback(async () => {
     try {
       syncActiveToCollection();
-      const st = useProjectStore.getState();
-      // 从 graphs 中筛选出所有 events
-      const events = Object.values(st.graphs).filter((g: any) => g.type === 'event');
+      const snapshot = useProjectIOStore.getState().exportSnapshot();
+      const events = Object.values(snapshot.graphs).filter((g: any) => g?.type === 'event');
       const eventCount = events.length;
       
       if (eventCount === 0) {

@@ -1,10 +1,10 @@
-export { useEditorInit } from './useEditorInit';
 export { useEditor } from './useEditor';
-export { useEditorState } from './useEditorState';
-export { useEditorActions } from './useEditorActions';
 export { useEditorOperations } from './useEditorOperations';
 export { useTabManagement } from './useTabManagement';
 export { useProjectOperations } from './useProjectOperations';
 export { useGraphManagement } from './useGraphManagement';
 export { useVariableManagement } from './useVariableManagement';
 export { useEditorGroup, GroupContext } from './useEditorGroup';
+export { useCanvasViewport } from './useCanvasViewport';
+export { useCanvasDrop } from './useCanvasDrop';
+export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';

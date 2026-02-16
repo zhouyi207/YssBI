@@ -1,26 +1,20 @@
+/**
+ * 编辑器组 UI 状态和操作：contextMenu、pendingConnection、setters
+ * 直接使用 core hooks，无 application 依赖
+ */
 import { useMemo } from 'react';
-import { useEditorGroup } from '@/features/application/editor/core/hooks/useEditorGroup';
+import { useEditorUIState } from './useEditorUIState';
+import { useEditorUIActions } from './useEditorUIActions';
 
 export function useEditorGroupUI() {
-  const {
-    contextMenu,
-    pendingConnection,
-    setContextMenu,
-    setPendingConnection,
-    setSelectedInfo,
-  } = useEditorGroup();
+  const uiState = useEditorUIState();
+  const uiActions = useEditorUIActions();
 
-  return useMemo(() => ({
-    contextMenu,
-    pendingConnection,
-    setContextMenu,
-    setPendingConnection,
-    setSelectedInfo,
-  }), [
-    contextMenu,
-    pendingConnection,
-    setContextMenu,
-    setPendingConnection,
-    setSelectedInfo,
-  ]);
+  return useMemo(
+    () => ({
+      ...uiState,
+      ...uiActions,
+    }),
+    [uiState, uiActions]
+  );
 }

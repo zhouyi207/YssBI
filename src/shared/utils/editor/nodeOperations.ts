@@ -4,61 +4,16 @@ import { NodeService } from "@/services";
 import { createNode } from "@/features/core/nodeRegister";
 
 /**
- * 使用后端 API 创建节点
- * @param subgraphId 子图ID
- * @param node 节点数据
- * @returns 创建成功的节点
+ * @deprecated 请使用 NodeService.createNode(graphId, nodeType, x, y)，由后端分配 ID。
+ * 此函数已修正为只传 type 和 position，由后端 create_node 分配 ID。
  */
 export async function createNodeInBackend(
     subgraphId: string,
     node: Node
 ): Promise<Node> {
-    try {
-        console.log(`[BACKEND SYNC] Starting sync for node ${node.id} to subgraph ${subgraphId}`);
-        console.log(`[createNodeInBackend] Creating node: subgraphId=${subgraphId}, nodeId=${node.id}, nodeType=${node.node_type}`);
-
-        // 序列化节点为后端格式
-        const serializedNode = {
-            id: node.id,
-            type: node.node_type,
-            title: node.title,
-            position: node.position,
-            isInternal: node.isInternal,
-            variableId: node.variableId,
-            variableName: node.variableName,
-            variableType: node.variableType,
-            subGraphId: node.subGraphId,
-            inputs: node.inputs.map(pin => ({
-                id: pin.id,
-                nodeId: pin.nodeId,
-                name: pin.name,
-                type: pin.node_type,
-                direction: pin.direction,
-                links: pin.links,
-                isArray: pin.isArray
-            })),
-            outputs: node.outputs.map(pin => ({
-                id: pin.id,
-                nodeId: pin.nodeId,
-                name: pin.name,
-                type: pin.node_type,
-                direction: pin.direction,
-                links: pin.links,
-                isArray: pin.isArray
-            }))
-        };
-
-        // 调用后端 API
-        const result = await NodeService.createNode(subgraphId, serializedNode);
-
-        console.log(`[createNodeInBackend] Node created successfully: ${node.id}, result=${JSON.stringify(result)}`);
-
-        // 返回原始节点对象（后端验证通过）
-        return node;
-    } catch (error) {
-        console.error('[createNodeInBackend] Failed to create node:', error);
-        throw error;
-    }
+    const nodeId = await NodeService.createNode(subgraphId, node.node_type, node.position.x, node.position.y);
+    (node as any).id = nodeId;
+    return node;
 }
 
 /**
@@ -83,7 +38,7 @@ export async function deleteNodeInBackend(
 }
 
 /**
- * 从模板创建节点
+ * 从模板创建节点（仅用于本地构建请求参数，ID 由后端 create_node 分配）
  */
 export function createNodeFromTemplate(
     position: Position,
@@ -91,7 +46,7 @@ export function createNodeFromTemplate(
     type: string,
     overrides?: Partial<Node> & { subGraphId?: string }
 ): Node | null {
-    const id = `node_${Date.now()}`;
+    const id = "temp"; // 占位符，实际 ID 由后端 create_node 分配
     const node = createNode(type, id, position);
     if (node && overrides) {
         Object.assign(node, overrides);

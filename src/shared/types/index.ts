@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared Types
  * 
  * 类型系统组织结构：
@@ -29,6 +29,10 @@ export * from './dto';
 // UI 状态类型 - 前端专用
 export type { EditorGroup, EditorGesture, LayoutDirection, LayoutNode, LayoutTab, LayoutTree, LoadStatus, ExecutionStatus } from './ui';
 export type { Position, Size, Rect } from './ui/common';
+
+// ==================== Store Types ====================
+// NodeData, PinData, ConnectionData, GraphData（NodeId 等 ID 类型从 domain 导出）
+export * from './store';
 
 // ==================== State Types ====================
 // 前端状态类型 - Store/Hook 专用

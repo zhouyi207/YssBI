@@ -1,13 +1,13 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
-import { useProjectSync } from '@/features/core/sync';
-import { useProjectStore, initProjectSync } from '@/features/core/project';
+import { useProjectSync } from '@/features/application/initialization';
+import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { Select } from '@/shared/ui';
 
 export const DataViewWindow: React.FC = () => {
-  const dataframes = useProjectStore(s => s.databases);
+  const dataframes = useDatabaseStore(s => s.databases);
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const [loadedRows, setLoadedRows] = useState<any[][]>([]);
   const [loading, setLoading] = useState(true);

@@ -154,10 +154,11 @@ src/services/
 **文件位置：**
 ```
 src/features/core/
-  ├── project/project.store.ts
-  ├── _node/useNodeStore.ts
+  ├── dataStore/          # 项目数据（projectIO, graphMeta, graphData, variable, database）
+  ├── editor/             # 编辑器状态（useEditorStore, useClipboardStore）
+  ├── layout/layoutStore  # 布局状态
   ├── ui/UIStore.ts
-  ├── execution/useExecutionStore.ts
+  ├── execution/          # useExecutionStore
   └── settings/settingsStore.ts
 ```
 
@@ -174,32 +175,34 @@ src/features/core/
 
 **核心实现：**
 ```typescript
-// 全局单例
-let globalUnlisten: (() => void) | null = null;
+// Core: ProjectListener + EventRegistry + Handlers（直接更新 Store）
+// Handlers 负责更新 Store，callbacks 为可选的 UI 扩展（如打开新 Tab）
 
-export function useProjectSync(options = {}) {
-    useEffect(() => {
-        if (globalUnlisten) return; // 已存在，复用
-        
-        globalUnlisten = await listen('project-event', (event) => {
-            const { type, payload } = parseEvent(event);
-            
-            switch (type) {
-                case 'EventCreated':
-                    projectStore.addGraph(payload.id, payload.data);
-                    options.onEventCreated?.(payload.id, payload.data);
-                    break;
-                // ... 其他事件
-            }
-        });
-    }, []);
+// Application: useProjectSync 协调监听器与 useEditor 回调
+export function useProjectSync() {
+  const editor = useEditor();
+  const callbacks = useMemo(() => ({
+    onNodeCreated: editor.handleNodeCreated,
+    onNodeDeleted: editor.handleNodeDeleted,
+    // ...
+  }), [editor.handleNodeCreated, ...]);
+
+  useEffect(() => {
+    const listener = await SingletonManager.getInstance('project-listener', async () => {
+      const l = new ProjectListener(callbacks);
+      await l.start();
+      return l;
+    });
+    return () => SingletonManager.decrementRef('project-listener', l => l.stop());
+  }, []);
 }
 ```
 
 **文件位置：**
 ```
-src/features/core/project/projectSync.ts
-src/features/core/execution/useExecutionVisualization.ts
+src/features/core/sync/           # ProjectListener、EventRegistry、handlers（更新 Store）
+src/features/application/initialization/useProjectSync.ts   # 协调监听器与编辑器回调
+src/features/domain/execution/hooks/useExecutionVisualization.ts  # 执行事件监听
 ```
 
 ---
@@ -315,7 +318,8 @@ if (eventPayload && 'type' in eventPayload) {
 
 3. **全局状态用 Store**
    ```typescript
-   const items = useProjectStore(state => state.items);
+   const items = useGraphMetaStore(state => state.graphs);
+   const nodes = useGraphDataStore(state => state.nodes);
    ```
 
 4. **局部状态用 useState**
@@ -335,7 +339,7 @@ if (eventPayload && 'type' in eventPayload) {
    // ❌ 错误
    static async createEvent() {
        await invoke(...);
-       useProjectStore.getState().addGraph(...); // 不要这样
+       useGraphMetaStore.getState().addGraph(...); // 不要这样
    }
    ```
 

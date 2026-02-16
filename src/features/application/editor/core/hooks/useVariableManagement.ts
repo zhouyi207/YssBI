@@ -1,6 +1,6 @@
-﻿import { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Variable } from '@/shared/types/domain';
-import { useProjectStore } from '@/features/core/project';
+import { useVariableStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from './useSidebarTab';
@@ -19,9 +19,9 @@ export function useVariableManagement() {
 
   const addVariable = useCallback(async (name?: string, type: string = "Int32", isGlobal: boolean = false) => {
     try {
-      // 构建变量对象
+      // 构建变量对象（id 由后端 create_variable 分配）
       const variable: Variable = {
-        id: `var_${Date.now()}`, // 临时 ID，后端会生成新的
+        id: "", // 占位符，后端分配真实 ID
         name: name || `variable_${Date.now()}`,
         data_type: type as any,
         description: '',
@@ -45,7 +45,7 @@ export function useVariableManagement() {
       const newVar = await VariableService.getVariable(newVarId);
 
       // 更新前端状态
-      useProjectStore.getState().addVariable(newVarId, newVar);
+      useVariableStore.getState().addVariable(newVarId, newVar);
 
       switchSidebarTab('variables');
     } catch (e) {
@@ -54,12 +54,11 @@ export function useVariableManagement() {
   }, [activeTabId, switchSidebarTab]);
 
   const updateVariable = useCallback((id: string, data: Partial<Variable>) => {
-    const st = useProjectStore.getState();
-    st.updateVariable(id, data);
+    useVariableStore.getState().updateVariable(id, data);
   }, []);
 
   const deleteVariable = useCallback((id: string) => {
-    useProjectStore.getState().deleteVariable(id);
+    useVariableStore.getState().deleteVariable(id);
   }, []);
 
   const promoteVariable = useCallback((id: string) => {

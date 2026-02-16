@@ -1,12 +1,12 @@
 import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
-import { useProjectStore } from '@/features/core/project';
+import { getGraphById, useGraphDataStore, useGraphHistoryStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useClipboardStore } from '../stores';
+import { useClipboardStore } from '@/features/core/editor';
 import { deleteNodeInBackend } from '@/shared/utils/editor';
 import { NodeService } from '@/services';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useViewportStore } from '@/features/domain/canvas/stores';
+import { useViewportStore } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 
@@ -15,7 +15,8 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
  * Handles clipboard operations, history, and node operations
  */
 export function useEditorOperations() {
-  const { clipboard, setClipboard } = useClipboardStore();
+  const clipboard = useClipboardStore((s) => s.clipboard);
+  const setClipboard = useClipboardStore((s) => s.setClipboard);
 
   // Get active tab and group IDs
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
@@ -39,14 +40,13 @@ export function useEditorOperations() {
   const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
-    const projectStore = useProjectStore.getState();
-    const currentGraph = projectStore.graphs[tId];
+    const currentGraph = getGraphById(tId);
     if (!currentGraph) return;
 
-    const currentNodes = currentGraph.nodes;
+    const currentNodes = currentGraph.nodes || [];
     const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
 
-    projectStore.updateGraph(tId, { nodes: nextNodes });
+    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes);
   }, []);
 
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -67,20 +67,20 @@ export function useEditorOperations() {
     }
   }, [activeGroupId]);
 
-  // History operations - no-op in new architecture (history managed by backend)
+  // History operations
   const saveHistory = useCallback(() => {
-    // History is now managed by the backend through graph updates
-    console.log('[useEditorOperations] saveHistory is no-op in new architecture');
+    const tid = activeTabIdRef.current;
+    if (tid) useGraphHistoryStore.getState().saveSnapshot(tid);
   }, []);
 
   const undo = useCallback(() => {
-    // TODO: Implement undo via backend API if needed
-    console.log('[useEditorOperations] undo not yet implemented in new architecture');
+    const tid = activeTabIdRef.current;
+    return tid ? useGraphHistoryStore.getState().undo(tid) : false;
   }, []);
 
   const redo = useCallback(() => {
-    // TODO: Implement redo via backend API if needed
-    console.log('[useEditorOperations] redo not yet implemented in new architecture');
+    const tid = activeTabIdRef.current;
+    return tid ? useGraphHistoryStore.getState().redo(tid) : false;
   }, []);
 
   // Clipboard operations
@@ -88,11 +88,10 @@ export function useEditorOperations() {
     const sIds = new Set(selectedNodeIdsRef.current);
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const projectStore = useProjectStore.getState();
-    const currentGraph = projectStore.graphs[tid];
+    const currentGraph = getGraphById(tid);
     if (!currentGraph) return;
 
-    const currentNodes = currentGraph.nodes;
+    const currentNodes = currentGraph.nodes || [];
     const sel = currentNodes.filter(n => sIds.has(n.id) && !n.isInternal);
     if (sel.length > 0) setClipboard(sel.map(n => n.clone()));
   }, [setClipboard]);
@@ -147,6 +146,8 @@ export function useEditorOperations() {
     const sIds = new Set(selectedNodeIdsRef.current);
     if (sIds.size === 0) return;
 
+    saveHistory();
+
     let idsToDelete = new Set<string>();
 
     setNodes((prev: Node[]) => {
@@ -189,19 +190,26 @@ export function useEditorOperations() {
         console.error('[useEditorOperations] Failed to sync node deletions:', e);
       });
     }
-  }, [setNodes, setSelectedNodeIds]);
+  }, [saveHistory, setNodes, setSelectedNodeIds]);
 
-  // Get history state - no history in new architecture
-  const EMPTY_HISTORY = { past: [], future: [] };
-  const history = EMPTY_HISTORY;
+  const canUndo = useGraphHistoryStore((s) => {
+    if (!activeTabId) return false;
+    const hist = s.histories[activeTabId];
+    return !!(hist && hist.past.length > 0);
+  });
+  const canRedo = useGraphHistoryStore((s) => {
+    if (!activeTabId) return false;
+    const hist = s.histories[activeTabId];
+    return !!(hist && hist.future.length > 0);
+  });
 
   return {
     // History
     undo,
     redo,
     saveHistory,
-    canUndo: history.past.length > 0,
-    canRedo: history.future.length > 0,
+    canUndo,
+    canRedo,
 
     // Clipboard
     copy,

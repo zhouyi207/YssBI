@@ -1,4 +1,4 @@
-﻿import { Node } from '@/shared/types/ui';
+import { Node } from '@/shared/types/ui';
 import { GraphPosition } from "@/shared/types/domain";
 import { getNodeDefinition } from "@/features/core/nodeRegister";
 import { Variable } from "@/shared/types/domain";
@@ -122,22 +122,33 @@ export function deserializeGraph(data: any): {
     }
   }
 
+  // Pin ID -> 完整 Pin 对象映射（Store 格式中 nodes 只有 inputs/outputs 为 Pin ID 数组）
+  const pinMap = new Map<string, any>();
+  (data.pins || []).forEach((p: any) => pinMap.set(p.id, p));
+
+  const resolvePin = (pinIdOrObj: any, nodeId: string, direction: 'input' | 'output') => {
+    const pin = typeof pinIdOrObj === 'string' ? pinMap.get(pinIdOrObj) : pinIdOrObj;
+    return pin
+      ? { ...pin, nodeId, direction, links: pin.links ?? [] }
+      : { id: pinIdOrObj, nodeId, direction, links: [], name: '', type: 'any' };
+  };
+
   const nodes = (data.nodes || []).map((n: any) => {
-    const def = getNodeDefinition(n.type);
+    const def = getNodeDefinition(n.type ?? n.node_type);
 
     let node: any;
     if (def) {
       node = {
         id: n.id,
-        type: n.type,
-        node_type: n.node_type || n.type,
-        category: n.category || def.category || [],
-        title: n.title || def.name,
+        type: n.type ?? n.node_type,
+        node_type: n.node_type ?? n.type,
+        category: n.category ?? def.category ?? [],
+        title: n.title ?? def.name,
         position: n.position,
         inputs: [],
         outputs: [],
-        ui_style: n.ui_style || def.node_metadata?.ui_style || 'default',
-        description: n.description || def.node_metadata?.description,
+        ui_style: n.ui_style ?? def.node_metadata?.ui_style ?? 'default',
+        description: n.description ?? def.node_metadata?.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
         variableId: n.variableId,
@@ -145,18 +156,16 @@ export function deserializeGraph(data: any): {
         variableName: n.variableName,
       };
     } else {
-      // Create a shell node if definition is missing
-      console.warn('[deserializeGraph] Node definition not found for type:', n.type);
       node = {
         id: n.id,
-        type: n.type,
-        node_type: n.node_type || n.type,
-        category: n.category || [],
-        title: n.title || n.type,
+        type: n.type ?? n.node_type,
+        node_type: n.node_type ?? n.type,
+        category: n.category ?? [],
+        title: n.title ?? n.type,
         position: n.position,
         inputs: [],
         outputs: [],
-        ui_style: n.ui_style || 'default',
+        ui_style: n.ui_style ?? 'default',
         description: n.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
@@ -166,28 +175,21 @@ export function deserializeGraph(data: any): {
       };
     }
 
-    node.inputs = (n.inputs || []).map((p: any) => ({
-      ...p,
-      nodeId: n.id,
-      direction: "input",
-      links: [],  // 初始化为空，稍后从 connections 填充
-    }));
-
-    node.outputs = (n.outputs || []).map((p: any) => ({
-      ...p,
-      nodeId: n.id,
-      direction: "output",
-      links: [],  // 初始化为空，稍后从 connections 填充
-    }));
+    node.inputs = (n.inputs || []).map((p: any) =>
+      resolvePin(p, n.id, 'input')
+    );
+    node.outputs = (n.outputs || []).map((p: any) =>
+      resolvePin(p, n.id, 'output')
+    );
 
     return node;
   }).filter(Boolean);
 
   // 2. 从 connections 数组重建 Pin.links（运行时字段）
-  // 新格式：{ from_pin: string, to_pin: string }
+  // 支持 { from_pin, to_pin } 或 { from, to }
   for (const connection of connectionsList) {
-    const sourcePin = connection.from_pin;
-    const targetPin = connection.to_pin;
+    const sourcePin = connection.from_pin ?? connection.from;
+    const targetPin = connection.to_pin ?? connection.to;
 
     if (!sourcePin || !targetPin) {
       console.warn('[deserializeGraph] Invalid connection:', connection);

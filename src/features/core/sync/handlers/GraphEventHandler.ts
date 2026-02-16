@@ -2,7 +2,7 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
-import { useProjectStore } from '@/features/core/project';
+import { useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
 
 // ==================== Event Handlers ====================
 
@@ -12,8 +12,10 @@ export class EventCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Event created:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.addGraph(payload.id, payload.data);
+        const g = payload.data;
+        // 强制使用 event 类型，不依赖后端 payload.type（后端可能返回错误）
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'event', entryNodeId: (g as any).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
         
         callbacks?.onEventCreated?.(payload.id, payload.data);
     }
@@ -25,8 +27,9 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
     handle(payload: GraphUpdatedPayload): void {
         this.log('Event updated:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.updateGraph(payload.id, payload.data);
+        const meta = useGraphMetaStore.getState().graphs[payload.id];
+        if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
     }
 }
 
@@ -36,8 +39,8 @@ export class EventDeletedHandler extends BaseEventHandler<GraphDeletedPayload> {
     handle(payload: GraphDeletedPayload): void {
         this.log('Event deleted:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.deleteGraph(payload.id);
+        useGraphDataStore.getState().clearGraph(payload.id);
+        useGraphMetaStore.getState().deleteGraph(payload.id);
     }
 }
 
@@ -59,8 +62,10 @@ export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Function created:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.addGraph(payload.id, payload.data);
+        const g = payload.data;
+        // 强制使用 function 类型，不依赖后端 payload.type（后端可能返回错误）
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'function', entryNodeId: (g as any).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
         
         callbacks?.onFunctionCreated?.(payload.id, payload.data);
     }
@@ -72,8 +77,9 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
     handle(payload: GraphUpdatedPayload): void {
         this.log('Function updated:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.updateGraph(payload.id, payload.data);
+        const meta = useGraphMetaStore.getState().graphs[payload.id];
+        if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
     }
 }
 
@@ -83,8 +89,8 @@ export class FunctionDeletedHandler extends BaseEventHandler<GraphDeletedPayload
     handle(payload: GraphDeletedPayload): void {
         this.log('Function deleted:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.deleteGraph(payload.id);
+        useGraphDataStore.getState().clearGraph(payload.id);
+        useGraphMetaStore.getState().deleteGraph(payload.id);
     }
 }
 
@@ -106,8 +112,10 @@ export class MacroCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Macro created:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.addGraph(payload.id, payload.data);
+        const g = payload.data;
+        // 强制使用 macro 类型，不依赖后端 payload.type（后端可能返回错误）
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'macro', entryNodeId: (g as any).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
         
         callbacks?.onMacroCreated?.(payload.id, payload.data);
     }
@@ -119,8 +127,9 @@ export class MacroUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
     handle(payload: GraphUpdatedPayload): void {
         this.log('Macro updated:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.updateGraph(payload.id, payload.data);
+        const meta = useGraphMetaStore.getState().graphs[payload.id];
+        if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
     }
 }
 
@@ -130,8 +139,8 @@ export class MacroDeletedHandler extends BaseEventHandler<GraphDeletedPayload> {
     handle(payload: GraphDeletedPayload): void {
         this.log('Macro deleted:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.deleteGraph(payload.id);
+        useGraphDataStore.getState().clearGraph(payload.id);
+        useGraphMetaStore.getState().deleteGraph(payload.id);
     }
 }
 

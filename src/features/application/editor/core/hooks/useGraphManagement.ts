@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { Graph } from '@/shared/types/domain';
-import { useProjectStore } from '@/features/core/project';
+import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
 import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from './useSidebarTab';
@@ -50,11 +50,13 @@ export function useGraphManagement(
   const addEvent = useCallback(async (name?: string) => {
     console.log("[useGraphManagement] addEvent called with name:", name);
     
-    const store = useProjectStore.getState();
-    // 从 graphs 中筛选出 events
+    const metaStore = useGraphMetaStore.getState();
     const events: Record<string, Graph> = {};
-    for (const [id, graph] of Object.entries(store.graphs)) {
-      if (graph.type === 'event') events[id] = graph;
+    for (const [id, meta] of Object.entries(metaStore.graphs)) {
+      if (meta.type === 'event') {
+        const g = getGraphById(id);
+        if (g) events[id] = g as Graph;
+      }
     }
     
     const finalName = getUniqueName(name || "New Event", Object.values(events));
@@ -80,9 +82,7 @@ export function useGraphManagement(
       // 注册待处理操作：当后端事件到达时打开这个 event
       pendingActionsRef.current.set(id, {
         callback: () => {
-          const updatedStore = useProjectStore.getState();
-          const graph = updatedStore.graphs[id];
-          
+          const graph = getGraphById(id);
           if (graph) {
             console.log("[useGraphManagement] Opening newly created event:", id);
             openGraph(id, graph.name, "event", graph);
@@ -133,15 +133,17 @@ export function useGraphManagement(
   }, [showToast]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<Graph>) => {
-    const store = useProjectStore.getState();
-    const currentGraph = store.graphs[id];
+    const currentGraph = getGraphById(id);
     if (!currentGraph) return;
     
     const fullData = { ...currentGraph, ...data };
     
     try {
       await GraphService.updateEvent(id, fullData);
-      store.updateGraph(id, data);
+      useGraphMetaStore.getState().updateGraph(id, data as any);
+      if (data.nodes || data.pins || data.connections) {
+        useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
+      }
     } catch (error) {
       console.error("[useGraphManagement] Failed to update event:", error);
       throw error;
@@ -151,7 +153,8 @@ export function useGraphManagement(
   const deleteEvent = useCallback(async (id: string) => {
     try {
       await GraphService.removeGraph(id);
-      useProjectStore.getState().deleteGraph(id);
+      useGraphDataStore.getState().clearGraph(id);
+      useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
       console.error("[useGraphManagement] Failed to delete event:", error);
@@ -163,10 +166,13 @@ export function useGraphManagement(
   const addFunction = useCallback(async (name?: string) => {
     console.log("[useGraphManagement] addFunction called with name:", name);
     
-    const store = useProjectStore.getState();
+    const metaStore = useGraphMetaStore.getState();
     const functions: Record<string, Graph> = {};
-    for (const [id, graph] of Object.entries(store.graphs)) {
-      if (graph.type === 'function') functions[id] = graph;
+    for (const [id, meta] of Object.entries(metaStore.graphs)) {
+      if (meta.type === 'function') {
+        const g = getGraphById(id);
+        if (g) functions[id] = g as Graph;
+      }
     }
     
     const finalName = getUniqueName(name || "New Function", Object.values(functions));
@@ -189,9 +195,7 @@ export function useGraphManagement(
       
       pendingActionsRef.current.set(id, {
         callback: () => {
-          const updatedStore = useProjectStore.getState();
-          const graph = updatedStore.graphs[id];
-          
+          const graph = getGraphById(id);
           if (graph) {
             console.log("[useGraphManagement] Opening newly created function:", id);
             openGraph(id, graph.name, "function", graph);
@@ -236,15 +240,17 @@ export function useGraphManagement(
   }, [showToast]);
 
   const updateFunction = useCallback(async (id: string, data: Partial<Graph>) => {
-    const store = useProjectStore.getState();
-    const currentGraph = store.graphs[id];
+    const currentGraph = getGraphById(id);
     if (!currentGraph) return;
     
     const fullData = { ...currentGraph, ...data };
     
     try {
       await GraphService.updateFunction(id, fullData);
-      store.updateGraph(id, data);
+      useGraphMetaStore.getState().updateGraph(id, data as any);
+      if (data.nodes || data.pins || data.connections) {
+        useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
+      }
     } catch (error) {
       console.error("[useGraphManagement] Failed to update function:", error);
       throw error;
@@ -254,7 +260,8 @@ export function useGraphManagement(
   const deleteFunction = useCallback(async (id: string) => {
     try {
       await GraphService.removeGraph(id);
-      useProjectStore.getState().deleteGraph(id);
+      useGraphDataStore.getState().clearGraph(id);
+      useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
       console.error("[useGraphManagement] Failed to delete function:", error);
@@ -266,10 +273,13 @@ export function useGraphManagement(
   const addMacro = useCallback(async (name?: string) => {
     console.log("[useGraphManagement] addMacro called with name:", name);
     
-    const store = useProjectStore.getState();
+    const metaStore = useGraphMetaStore.getState();
     const macros: Record<string, Graph> = {};
-    for (const [id, graph] of Object.entries(store.graphs)) {
-      if (graph.type === 'macro') macros[id] = graph;
+    for (const [id, meta] of Object.entries(metaStore.graphs)) {
+      if (meta.type === 'macro') {
+        const g = getGraphById(id);
+        if (g) macros[id] = g as Graph;
+      }
     }
     
     const finalName = getUniqueName(name || "New Macro", Object.values(macros));
@@ -292,9 +302,7 @@ export function useGraphManagement(
       
       pendingActionsRef.current.set(id, {
         callback: () => {
-          const updatedStore = useProjectStore.getState();
-          const graph = updatedStore.graphs[id];
-          
+          const graph = getGraphById(id);
           if (graph) {
             console.log("[useGraphManagement] Opening newly created macro:", id);
             openGraph(id, graph.name, "macro", graph);
@@ -339,15 +347,17 @@ export function useGraphManagement(
   }, [showToast]);
 
   const updateMacro = useCallback(async (id: string, data: Partial<Graph>) => {
-    const store = useProjectStore.getState();
-    const currentGraph = store.graphs[id];
+    const currentGraph = getGraphById(id);
     if (!currentGraph) return;
     
     const fullData = { ...currentGraph, ...data };
     
     try {
       await GraphService.updateMacro(id, fullData);
-      store.updateGraph(id, data);
+      useGraphMetaStore.getState().updateGraph(id, data as any);
+      if (data.nodes || data.pins || data.connections) {
+        useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
+      }
     } catch (error) {
       console.error("[useGraphManagement] Failed to update macro:", error);
       throw error;
@@ -357,7 +367,8 @@ export function useGraphManagement(
   const deleteMacro = useCallback(async (id: string) => {
     try {
       await GraphService.removeGraph(id);
-      useProjectStore.getState().deleteGraph(id);
+      useGraphDataStore.getState().clearGraph(id);
+      useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
       console.error("[useGraphManagement] Failed to delete macro:", error);
@@ -387,39 +398,17 @@ export function useGraphManagement(
     handleMacroCreated,
     handleMacroCreatedFailed,
     
-    // Nodes (TODO: 实现节点创建和删除的处理)
+    // Nodes：NodeCreatedHandler 已直接更新 Store，此处仅做可选 UI 扩展（如选中新节点）
     handleNodeCreated: useCallback((graphId: string, nodeId: string, data: any) => {
       console.log("[useGraphManagement] handleNodeCreated:", graphId, nodeId, data);
-      
-      // 将后端的 NodeInstanceDTO 转换为前端的 Node 对象
-      const node = {
-        id: data.id || nodeId,
-        node_type: data.node_type,
-        category: data.category || [],
-        title: data.title || data.node_type,
-        inputs: [], // TODO: 需要从 Pin 数据转换
-        outputs: [], // TODO: 需要从 Pin 数据转换
-        ui_style: data.ui_style || 'default',
-        description: data.description,
-        position: data.position || { x: 0, y: 0 },
-        isInternal: false,
-      };
-      
-      // 更新 ProjectStore（持久化）
-      const projectStore = useProjectStore.getState();
-      projectStore.addNodeToGraph(graphId, node);
-      
-      console.log("[useGraphManagement] Node added to ProjectStore");
-      
-      // TODO: 如果该 Graph 当前正在编辑，也需要更新 EditorStore
+      // 不再重复 addNode，NodeCreatedHandler 已更新 Store
     }, []),
     
     handleNodeDeleted: useCallback((graphId: string, nodeId: string) => {
       console.log("[useGraphManagement] handleNodeDeleted:", graphId, nodeId);
       
-      // 更新 ProjectStore（持久化）
-      const projectStore = useProjectStore.getState();
-      projectStore.removeNodeFromGraph(graphId, nodeId);
+      // 更新 dataStore（持久化）
+      useGraphDataStore.getState().deleteNode(nodeId);
       
       console.log("[useGraphManagement] Node removed from ProjectStore");
       

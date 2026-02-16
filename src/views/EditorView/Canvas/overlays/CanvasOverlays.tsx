@@ -1,15 +1,12 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
-import { useGestureStore } from '@/features/core/gesture';
-import { useViewportStore } from '@/features/core/viewport';
-import { useProjectStore } from "@/features/core/project";
+import { useGestureStore } from "@/features/core/gesture";
+import { useViewportStore } from "@/features/core/viewport";
+import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
+import { useCanvasOverlayHandlers } from "@/features/application/editor/core/hooks/useCanvasOverlayHandlers";
 import { HUD } from "./HUD";
 import { NodePalette } from "../../Layout/NodePalette";
-import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-import { createNodeFromTemplate, createInternalNode, deserializeGraph } from "@/shared/utils/editor";
-import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
-
 
 export default function CanvasOverlays({
     canvasRef,
@@ -35,92 +32,37 @@ export default function CanvasOverlays({
         groupId,
         executeGraph,
         executeAllEvents,
-        setCanvas // Needed for internal node centering
+        setCanvas,
     } = useEditorGroup();
 
     const { createNode } = useNodeManagement();
-
-
     const [showExecuteMenu, setShowExecuteMenu] = useState(false);
 
-    const gesture = useGestureStore(state => state.gesture);
-    const scale = useViewportStore(state => state.viewports[groupId]?.scale || 1);
+    const gesture = useGestureStore((state) => state.gesture);
+    const scale = useViewportStore((state) => state.viewports[groupId]?.scale || 1);
 
-    const handleNodePaletteSelect = async (item: import("../../Layout/NodePalette").PaletteItem) => {
-        if (!contextMenu || !canvasRef.current) return;
+    const {
+        handleNodePaletteSelect,
+        handleVariableDropGet,
+        handleVariableDropSet,
+    } = useCanvasOverlayHandlers({
+        canvasRef,
+        groupId,
+        activeTabId,
+        functions,
+        macros,
+        scale,
+        variables,
+        Variables,
+        setContextMenu,
+        setPendingConnection,
+        setVariableDropMenu,
+        createNode,
+        setCanvas,
+    });
 
-        // Check if this is an internal node type that should only exist once
-        const internalNodeTypes = ['event_on_run', 'function_entry', 'function_return', 'macro_inputs', 'macro_outputs'];
-        if (internalNodeTypes.includes(item.type)) {
-            // Check if this internal node already exists
-            const graphData = useProjectStore.getState().graphs[activeTabId || ""];
-            const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
-            const existingNode = currentNodes.find((n: any) => n.node_type === item.type && n.isInternal);
-            if (existingNode) {
-                // Move canvas to center on the existing node
-                const rect = canvasRef.current.getBoundingClientRect();
-                const centerX = rect.width / 2;
-                const centerY = rect.height / 2;
-
-                const currentCanvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-                setCanvas({
-                    ...currentCanvas,
-                    x: centerX - existingNode.position.x * currentCanvas.scale,
-                    y: centerY - existingNode.position.y * currentCanvas.scale
-                });
-
-                setContextMenu(null);
-                setPendingConnection(null);
-                return;
-            }
-        }
-
-        const rect = canvasRef.current.getBoundingClientRect();
-        const currentCanvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-        const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
-        const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
-
-        let newNode: import("@/shared/types/ui").UINode | null = null;
-
-        if (item.type === 'call_function' || item.type === 'call_macro') {
-            const subId = item.overrides?.subGraphId;
-            if (subId) {
-                const subData = item.type === 'call_function' ? functions[subId] : macros[subId];
-                if (subData) {
-                    const subName = subData.name;
-                    const type = item.type;
-
-                    const uiNode = createInternalNode(
-                        `node_${Date.now()}`,
-                        type,
-                        subName,
-                        type === 'call_function' ? ["Functions"] : ["Macros"],
-                        { x, y },
-                        [{ name: "In", type: "exec" },
-                        ...(subData.inputs || []).map((p: any) => ({ name: p.name, type: p.node_type as any, isArray: p.isArray }))],
-                        [{ name: "Out", type: "exec" },
-                        ...(subData.outputs || []).map((p: any) => ({ name: p.name, type: p.node_type as any, isArray: p.isArray }))],
-                        false
-                    ) as import("@/shared/types/ui").UINode;
-                    // 添加 subGraphId 属性
-                    newNode = { ...uiNode, subGraphId: subId };
-                }
-            }
-        } else {
-            newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, item.type, item.overrides);
-        }
-
-        if (newNode) {
-            // 使用后端 API 创建节点（传递 nodeType 和 position）
-            await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
-
-            // 注意：由于 createNode 返回 void，我们无法直接获取创建的节点
-            // 如果需要自动连接，需要等待后端事件返回后再处理
-            // 这里暂时移除自动连接逻辑，或者需要重新设计
-        }
-        setContextMenu(null);
-        setPendingConnection(null);
-    };
+    const onPaletteSelect = (item: import("../../Layout/NodePalette").PaletteItem) =>
+        contextMenu && handleNodePaletteSelect(item, contextMenu);
 
     return (
         <>
@@ -208,7 +150,7 @@ export default function CanvasOverlays({
                     <NodePalette
                         x={contextMenu.x}
                         y={contextMenu.y}
-                        onSelect={handleNodePaletteSelect}
+                        onSelect={onPaletteSelect}
                         filterPin={pendingConnection}
                         variables={variables}
                         Variables={Variables}
@@ -227,62 +169,14 @@ export default function CanvasOverlays({
                 >
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
-                        onClick={async () => {
-                            const varId = variableDropMenu.variableId;
-                            if (!(varId in variables) && !(varId in Variables)) {
-                                console.warn("Variable no longer exists.");
-                                setVariableDropMenu(null);
-                                return;
-                            }
-                            const newNode = createNodeFromTemplate(
-                                { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                                scale,
-                                "get_variable",
-                                {
-                                    title: `Get ${variableDropMenu.variableName}`,
-                                    variableId: variableDropMenu.variableId,
-                                    variableType: variableDropMenu.variableType,
-                                    variableName: variableDropMenu.variableName,
-                                    variableIsArray: variableDropMenu.variableIsArray
-                                } as any
-                            );
-                            if (newNode) {
-                                // 使用后端 API 创建节点（传递 nodeType 和 position）
-                                await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
-                            }
-                            setVariableDropMenu(null);
-                        }}
+                        onClick={() => handleVariableDropGet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-blue-400" />
                         Get {variableDropMenu.variableName}
                     </div>
                     <div
                         className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
-                        onClick={async () => {
-                            const varId = variableDropMenu.variableId;
-                            if (!(varId in variables) && !(varId in Variables)) {
-                                console.warn("Variable no longer exists.");
-                                setVariableDropMenu(null);
-                                return;
-                            }
-                            const newNode = createNodeFromTemplate(
-                                { x: variableDropMenu.worldX, y: variableDropMenu.worldY },
-                                scale,
-                                "set_variable",
-                                {
-                                    title: `Set ${variableDropMenu.variableName}`,
-                                    variableId: variableDropMenu.variableId,
-                                    variableType: variableDropMenu.variableType,
-                                    variableName: variableDropMenu.variableName,
-                                    variableIsArray: variableDropMenu.variableIsArray
-                                } as any
-                            );
-                            if (newNode) {
-                                // 使用后端 API 创建节点（传递 nodeType 和 position）
-                                await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
-                            }
-                            setVariableDropMenu(null);
-                        }}
+                        onClick={() => handleVariableDropSet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-orange-400" />
                         Set {variableDropMenu.variableName}

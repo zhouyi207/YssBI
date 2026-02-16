@@ -1,7 +1,8 @@
-﻿/**
+/**
  * DTO 转换工具函数
- * 
+ *
  * 提供前后端数据转换的实用工具
+ * 统一处理 DTO 与 Store 格式的互转
  */
 
 import type {
@@ -12,6 +13,22 @@ import type {
 } from '@/shared/types/domain';
 
 import type { ProjectData } from '@/shared/types/domain';
+import type { ConnectionItemDTO } from '@/shared/types/dto/graph';
+import type { ConnectionData } from '@/shared/types/store/graph';
+
+/** 将 ConnectionItemDTO 转为 Store 的 ConnectionData */
+export function connectionItemToConnectionData(
+  item: ConnectionItemDTO
+): ConnectionData {
+  const from = item.from_pin;
+  const to = item.to_pin;
+  return { id: `${from}->${to}`, from, to };
+}
+
+/** 将 ConnectionData 转为 ConnectionItemDTO */
+export function connectionDataToItem(conn: ConnectionData): ConnectionItemDTO {
+  return { from_pin: conn.from, to_pin: conn.to };
+}
 
 /**
  * 将后端返回的 Graph DTO 转换为前端 Graph 对象

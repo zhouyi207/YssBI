@@ -1,9 +1,9 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
 import { useSchema } from '@/features/core/schema';
 import { useNodeRegistry } from '@/features/core/nodeRegister';
-import { initProjectSync } from '@/features/core/project';
+import { initProjectSync } from '@/features/core/dataStore';
 
 
 export function useAppInitialization(): InitializationState {

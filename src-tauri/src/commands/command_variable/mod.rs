@@ -15,27 +15,17 @@ pub fn create_variable(
     log_sys::info!("[create_variable] Creating variable: {:?}", variable);
     
     // 解析变量对象
-    let var_def: VariableDefinition = serde_json::from_value(variable)
+    let mut var_def: VariableDefinition = serde_json::from_value(variable)
         .map_err(|e| format!("Failed to parse variable: {}", e))?;
     
-    // 生成新的 ID（如果前端提供的 ID 已存在，则生成新的）
-    let var_id = {
-        let project_data = state.project_data.read().unwrap();
-        if project_data.variables.contains_key(&var_def.id) {
-            format!("var_{}", uuid::Uuid::new_v4().to_string().replace("-", ""))
-        } else {
-            var_def.id.clone()
-        }
-    };
-    
-    // 创建新的变量定义
-    let mut new_var = var_def;
-    new_var.id = var_id.clone();
+    // 始终由后端分配 ID（前端不得分配）
+    let var_id = format!("var_{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
+    var_def.id = var_id.clone();
     
     // 添加到项目数据
     {
         let mut project_data = state.project_data.write().unwrap();
-        project_data.variables.insert(var_id.clone(), new_var.clone());
+        project_data.variables.insert(var_id.clone(), var_def.clone());
     }
     
     log_sys::info!("[create_variable] Variable created with ID: {}", var_id);

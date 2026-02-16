@@ -1,7 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { NodeService } from '@/services';
 import { Node as DomainNode } from '@/shared/types/domain';
-import { useProjectStore } from '@/features/core/project';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 
 /**
@@ -9,7 +8,7 @@ import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore'
  * 
  * 采用命令-事件分离模式管理节点：
  * - 命令流：UI → NodeService → Backend → 执行操作
- * - 事件流：Backend → NodeCreated/NodeDeleted Event → ProjectListener → EventRegistry → NodeEventHandler → useNodeManagement.handleNodeCreated/handleNodeDeleted → 更新ProjectStore
+ * - 事件流：Backend → ProjectListener → NodeEventHandler（直接更新 Store）→ 可选 callbacks（handleNodeCreated 等做 UI 扩展）
  * 
  * 特点：
  * - 后端是唯一的ID生成源
@@ -52,7 +51,7 @@ export function useNodeManagement() {
                 });
 
                 // 3. 调用后端命令（后端会生成真实ID并发送NodeCreated事件）
-                const nodeId = await NodeService.createNode(
+                await NodeService.createNode(
                     activeTabId,
                     nodeType,
                     position.x,
@@ -172,45 +171,25 @@ export function useNodeManagement() {
     );
 
     /**
-     * 处理NodeCreated事件
-     * 当后端创建节点后，通过事件系统调用此方法
+     * 处理 NodeCreated 事件的回调（可选 UI 扩展）
+     * Store 已由 NodeEventHandler 更新，此处仅做 UI 相关逻辑（如聚焦、打开属性面板等）
      */
     const handleNodeCreated = useCallback(
-        (graphId: string, nodeId: string, data: DomainNode) => {
-            if (graphId !== activeTabId) {
-                return;
-            }
-
-            try {
-                // 直接将后端的 Node 数据添加到 ProjectStore
-                const projectStore = useProjectStore.getState();
-                projectStore.addNodeToGraph(graphId, data);
-
-            } catch (error) {
-                console.error('[useNodeManagement] Failed to handle NodeCreated event:', error);
-            }
+        (graphId: string, _nodeId: string, _data: DomainNode) => {
+            if (graphId !== activeTabId) return;
+            // 可选：聚焦新节点、打开属性面板等
         },
         [activeTabId]
     );
 
     /**
-     * 处理NodeDeleted事件
-     * 当后端删除节点后，通过事件系统调用此方法
+     * 处理 NodeDeleted 事件的回调（可选 UI 扩展）
+     * Store 已由 NodeEventHandler 更新
      */
     const handleNodeDeleted = useCallback(
-        (graphId: string, nodeId: string) => {
-            if (graphId !== activeTabId) {
-                return;
-            }
-
-            try {
-                // 直接从 ProjectStore 中删除节点
-                const projectStore = useProjectStore.getState();
-                projectStore.removeNodeFromGraph(graphId, nodeId);
-
-            } catch (error) {
-                console.error('[useNodeManagement] Failed to handle NodeDeleted event:', error);
-            }
+        (graphId: string, _nodeId: string) => {
+            if (graphId !== activeTabId) return;
+            // 可选：清除选中状态等
         },
         [activeTabId]
     );

@@ -2,7 +2,7 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { DataFrameCreatedPayload, DataFrameDeletedPayload, EventCallbacks } from '../types';
-import { useProjectStore } from '@/features/core/project';
+import { useDatabaseStore } from '@/features/core/dataStore';
 
 export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPayload> {
     eventType = 'DataFrameCreated';
@@ -10,8 +10,7 @@ export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPa
     handle(payload: DataFrameCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('DataFrame created:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.addDatabase(payload.id, payload.data);
+        useDatabaseStore.getState().addDatabase(payload.id, payload.data);
         
         callbacks?.onDataFrameCreated?.(payload.id, payload.data);
     }
@@ -23,8 +22,7 @@ export class DataFrameDeletedHandler extends BaseEventHandler<DataFrameDeletedPa
     handle(payload: DataFrameDeletedPayload, callbacks?: EventCallbacks): void {
         this.log('DataFrame deleted:', payload.id);
         
-        const projectStore = useProjectStore.getState();
-        projectStore.deleteDatabase(payload.id);
+        useDatabaseStore.getState().deleteDatabase(payload.id);
         
         callbacks?.onDataFrameDeleted?.(payload.id);
     }
