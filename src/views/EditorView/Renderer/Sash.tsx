@@ -5,18 +5,12 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
 
 interface SashProps {
-    orientation: LayoutDirection; // 'row' means the container is a row, so sash is vertical? No, usually typical split view terminology:
-    // If container is 'row', children are side-by-side, so Sash is a vertical divider.
-    // If container is 'col', children are stacked, so Sash is a horizontal divider.
-    // Let's stick to: orientation is the direction of the parent split view.
+    orientation: LayoutDirection;
+    index: number;
 
-    index: number; // Index of the sash (0 means between child 0 and 1)
-
-    // We pass refs to the elements before and after this sash for direct manipulation
     beforeRef: React.RefObject<HTMLDivElement | null>;
     afterRef: React.RefObject<HTMLDivElement | null>;
 
-    // Node IDs to update in store after drag
     beforeNodeId: string;
     afterNodeId: string;
 }
@@ -32,10 +26,6 @@ export const Sash: React.FC<SashProps> = ({
     const isDragging = useRef(false);
     const startPos = useRef(0);
     const startSizes = useRef<{ before: number; after: number } | null>(null);
-
-    // Store actions
-    // We will need an action to update size. For now we assume we might dispatch later.
-    // const updateNodeSize = useLayoutStore(s => s.updateNodeSize); // TODO: implement this in store
 
     useEffect(() => {
         const sash = sashRef.current;
@@ -83,7 +73,7 @@ export const Sash: React.FC<SashProps> = ({
             const currentPos = orientation === 'row' ? e.clientX : e.clientY;
             const delta = currentPos - startPos.current;
 
-            const { nodes, resizeNode } = useLayoutStore.getState();
+            const { layoutTree: nodes, resizeLayoutNode: resizeNode } = useLayoutStore.getState();
             const beforeNode = nodes[beforeNodeId];
             const afterNode = nodes[afterNodeId];
 

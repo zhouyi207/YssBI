@@ -1,5 +1,5 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
-import { Variable } from "@/shared/types/domain";
+import { VariableData } from "@/shared/types/domain";
 
 /**
  * 变量服务 - 统一的变量管理接口
@@ -13,7 +13,7 @@ export class VariableService {
      * @param variable 变量对象（包含 scope 信息）
      * @returns 创建后的变量 ID
      */
-    static async createVariable(variable: Variable): Promise<string> {
+    static async createVariable(variable: VariableData): Promise<string> {
         console.log('[VariableService.createVariable] Creating variable:', variable);
         const id = await invoke<string>("create_variable", { variable });
         console.log('[VariableService.createVariable] Variable created with ID:', id);
@@ -25,9 +25,9 @@ export class VariableService {
      * @param id 变量 ID
      * @returns 变量对象
      */
-    static async getVariable(id: string): Promise<Variable> {
+    static async getVariable(id: string): Promise<VariableData> {
         console.log('[VariableService.getVariable] Getting variable:', id);
-        const variable = await invoke<Variable>("get_variable", { id });
+        const variable = await invoke<VariableData>("get_variable", { id });
         console.log('[VariableService.getVariable] Variable retrieved:', variable);
         return variable;
     }
@@ -37,7 +37,7 @@ export class VariableService {
      * @param id 变量 ID
      * @param variable 更新后的变量对象
      */
-    static async updateVariable(id: string, variable: Variable): Promise<void> {
+    static async updateVariable(id: string, variable: VariableData): Promise<void> {
         console.log('[VariableService.updateVariable] Updating variable:', id, variable);
         await invoke("update_variable", { id, variable });
         console.log('[VariableService.updateVariable] Variable updated successfully');

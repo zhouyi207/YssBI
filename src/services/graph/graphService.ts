@@ -1,5 +1,5 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
-import { Graph } from "@/shared/types/domain";
+import { GraphData } from "@/shared/types/domain";
 
 /**
  * Graph Service - 管理 Event、Function、Macro 的创建、删除、更新和查询
@@ -74,7 +74,7 @@ export class GraphService {
      * @param id - Event 的 ID
      * @param event - 更新的 Event 数据
      */
-    static async updateEvent(id: string, event: Graph): Promise<void> {
+    static async updateEvent(id: string, event: GraphData): Promise<void> {
         try {
             await invoke("update_event", { id, event });
             console.log(`[GraphService.updateEvent] Event '${id}' updated successfully`);
@@ -89,7 +89,7 @@ export class GraphService {
      * @param id - Function 的 ID
      * @param functionData - 更新的 Function 数据
      */
-    static async updateFunction(id: string, functionData: Graph): Promise<void> {
+    static async updateFunction(id: string, functionData: GraphData): Promise<void> {
         try {
             await invoke("update_function", { id, function: functionData });
             console.log(`[GraphService.updateFunction] Function '${id}' updated successfully`);
@@ -104,7 +104,7 @@ export class GraphService {
      * @param id - Macro 的 ID
      * @param macroData - 更新的 Macro 数据
      */
-    static async updateMacro(id: string, macroData: Graph): Promise<void> {
+    static async updateMacro(id: string, macroData: GraphData): Promise<void> {
         try {
             await invoke("update_macro", { id, macroData });
             console.log(`[GraphService.updateMacro] Macro '${id}' updated successfully`);
@@ -119,9 +119,9 @@ export class GraphService {
      * @param graphId - Graph 的 ID
      * @returns Graph 对象
      */
-    static async getGraph(graphId: string): Promise<Graph> {
+    static async getGraph(graphId: string): Promise<GraphData> {
         try {
-            const graph = await invoke<Graph>("get_graph", { graphId });
+            const graph = await invoke<GraphData>("get_graph", { graphId });
             console.log(`[GraphService.getGraph] Graph '${graphId}' retrieved successfully`);
             return graph;
         } catch (error) {

@@ -20,3 +20,10 @@ export interface ConnectionItem {
 export interface Connection {
     connections: ConnectionItem[];
 }
+
+
+export interface ConnectionData {
+    id: string;
+    from: string;
+    to: string;
+}

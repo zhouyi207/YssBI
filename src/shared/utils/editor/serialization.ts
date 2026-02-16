@@ -1,7 +1,7 @@
 ﻿import { Node } from '@/shared/types/ui';
 import { GraphPosition } from "@/shared/types/domain";
 import { getNodeDefinition } from "@/features/core/nodeRegister";
-import { Variable } from "@/shared/types/domain";
+import { VariableData } from "@/shared/types/domain";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -14,9 +14,9 @@ export function serializeGraph(
   type: "event" | "function" | "macro",
   nodes: Node[],
   canvas: GraphPosition,
-  variables: Record<string, Variable>,
-  inputs: import("@/shared/types/domain").Pin[] = [],
-  outputs: import("@/shared/types/domain").Pin[] = []
+  variables: Record<string, VariableData>,
+  inputs: import("@/shared/types/domain").PinData[] = [],
+  outputs: import("@/shared/types/domain").PinData[] = []
 ): any {
 
   // 1. 提取所有连接关系
@@ -94,14 +94,14 @@ export function serializeGraph(
 export function deserializeGraph(data: any): {
   nodes: any[];
   canvas: GraphPosition;
-  variables: Record<string, Variable>;
+  variables: Record<string, VariableData>;
   inputs: any[];
   outputs: any[];
 } {
 
 
   // Graph 类型中没有 variables，使用空对象
-  const variables: Record<string, Variable> = {};
+  const variables: Record<string, VariableData> = {};
 
   // 处理新的 connections 格式：Connection 对象包含 connections 数组
   const connectionsData = data.connections as any;

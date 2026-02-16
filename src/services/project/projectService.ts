@@ -1,13 +1,13 @@
 ﻿import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
+import { GraphData, ProjectData, GraphPosition, PinData } from "@/shared/types/domain";
 
 type CanvasState = GraphPosition;
 
 /**
  * 将后端 Graph 数据转换为前端格式
  */
-function toFrontendGraph(data: any): Graph {
+function toFrontendGraph(data: any): GraphData {
     console.log('[toFrontendGraph] Input data:', data);
     
     // 后端返回的结构：
@@ -197,8 +197,8 @@ function toFrontendGraph(data: any): Graph {
 /**
  * 将后端 Graph Map 转换为前端 Record
  */
-function convertGraphMap(map: Record<string, any>): Record<string, Graph> {
-    const result: Record<string, Graph> = {};
+function convertGraphMap(map: Record<string, any>): Record<string, GraphData> {
+    const result: Record<string, GraphData> = {};
     for (const [id, data] of Object.entries(map)) {
         result[id] = toFrontendGraph(data);
     }
@@ -213,7 +213,7 @@ export class ProjectService {
     /**
      * 获取当前项目状态 - 使用新的 ProjectData 结构
      */
-    static async getProjectState(): Promise<ProjectData> {
+    static async getProjectData(): Promise<ProjectData> {
         console.log('[ProjectService.getProjectState] Invoking get_project_data...');
         const data: any = await invoke("get_project_data");
         console.log('[ProjectService.getProjectState] Raw backend data:', JSON.stringify(data));
@@ -332,9 +332,9 @@ export class ProjectService {
 
     static async updateSubgraphIo(
         subgraphId: string,
-        inputs?: Pin[],
-        outputs?: Pin[]
-    ): Promise<Graph> {
+        inputs?: PinData[],
+        outputs?: PinData[]
+    ): Promise<GraphData> {
         const result: any = await invoke("update_subgraph_io", {
             subgraphId,
             inputs: inputs || null,
@@ -343,7 +343,7 @@ export class ProjectService {
         return toFrontendGraph(result);
     }
 
-    static async renameSubgraph(subgraphId: string, newName: string): Promise<Graph> {
+    static async renameSubgraph(subgraphId: string, newName: string): Promise<GraphData> {
         const result: any = await invoke("rename_subgraph", { subgraphId, newName });
         return toFrontendGraph(result);
     }

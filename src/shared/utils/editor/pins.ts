@@ -1,13 +1,13 @@
-﻿import { Pin } from "@/shared/types/domain";
+﻿import { PinData } from "@/shared/types/domain";
 import { canConnect } from "@/features/core/schema/shema.helpers";
 
-export const isSingleLinkPin = (p: Pin) => p.type === "exec" || p.direction === "input";
+export const isSingleLinkPin = (p: PinData) => p.type === "exec" || p.direction === "input";
 
 /**
  * 检查两个针脚是否兼容
  * 优先使用 schema store 的类型兼容性规则
  */
-export const isCompatiblePins = (a: Pin, b: Pin) => {
+export const isCompatiblePins = (a: PinData, b: PinData) => {
     // 方向必须不同（一个输入，一个输出）
     if (a.direction === b.direction) return false;
     

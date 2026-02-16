@@ -5,9 +5,9 @@
  */
 
 import type {
-  Node,
-  Pin,
-  Graph,
+  NodeData,
+  PinData,
+  GraphData,
   Connection,
 } from '@/shared/types/domain';
 
@@ -17,12 +17,12 @@ import type { ProjectData } from '@/shared/types/domain';
  * 将后端返回的 Graph DTO 转换为前端 Graph 对象
  * 处理 nodes 和 pins 的关联关系
  */
-export function convertGraphFromDTO(graphDTO: any): Graph {
+export function convertGraphFromDTO(graphDTO: any): GraphData {
   const { nodes, pins, ...rest } = graphDTO;
 
   // 创建 Pin ID 到 Pin 对象的映射
-  const pinMap = new Map<string, Pin>();
-  pins.forEach((pin: Pin) => {
+  const pinMap = new Map<string, PinData>();
+  pins.forEach((pin: PinData) => {
     pinMap.set(pin.id, pin);
   });
 
@@ -54,10 +54,10 @@ export function convertGraphFromDTO(graphDTO: any): Graph {
  * 将前端 Graph 对象转换为后端 DTO
  * 将 Pin 对象转换为 Pin ID 列表
  */
-export function convertGraphToDTO(graph: Graph): any {
+export function convertGraphToDTO(graph: GraphData): any {
   const { nodes, ...rest } = graph;
 
-  const convertedNodes = nodes.map((node: Node) => ({
+  const convertedNodes = nodes.map((node: NodeData) => ({
     ...node,
     inputs: node.inputs.map(pin => pin.id),
     outputs: node.outputs.map(pin => pin.id),
@@ -74,8 +74,8 @@ export function convertGraphToDTO(graph: Graph): any {
  */
 export function convertGraphsFromDTO(
   graphsDTO: Record<string, any>
-): Record<string, Graph> {
-  const result: Record<string, Graph> = {};
+): Record<string, GraphData> {
+  const result: Record<string, GraphData> = {};
   
   for (const [id, graphDTO] of Object.entries(graphsDTO)) {
     result[id] = convertGraphFromDTO(graphDTO);
@@ -88,7 +88,7 @@ export function convertGraphsFromDTO(
  * 批量转换 Graphs 到 DTO
  */
 export function convertGraphsToDTO(
-  graphs: Record<string, Graph>
+  graphs: Record<string, GraphData>
 ): Record<string, any> {
   const result: Record<string, any> = {};
   
@@ -124,7 +124,7 @@ export function convertProjectDataToDTO(data: ProjectData): any {
  * 更新 Pin 对象的 links 数组
  */
 export function applyConnectionsToPins(
-  pins: Pin[],
+  pins: PinData[],
   connections: Connection
 ): void {
   // 清空所有 links
@@ -133,7 +133,7 @@ export function applyConnectionsToPins(
   });
 
   // 创建 Pin ID 到 Pin 对象的映射
-  const pinMap = new Map<string, Pin>();
+  const pinMap = new Map<string, PinData>();
   pins.forEach(pin => {
     pinMap.set(pin.id, pin);
   });
@@ -160,7 +160,7 @@ export function applyConnectionsToPins(
 /**
  * 从 Pins 的 links 构建 Connection DTO
  */
-export function extractConnectionsFromPins(pins: Pin[]): Connection {
+export function extractConnectionsFromPins(pins: PinData[]): Connection {
   const connections: { from_pin: string; to_pin: string }[] = [];
   const seen = new Set<string>();
 

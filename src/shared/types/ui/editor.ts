@@ -1,4 +1,4 @@
-import type { Pin, Node as DomainNode } from '../domain';
+import type { PinData, NodeData as DomainNode } from '../domain';
 
 /**
  * UI Types - Editor
@@ -30,8 +30,8 @@ export class Node implements UINode {
     node_type: string;
     category: string[];
     title: string;
-    inputs: Pin[];
-    outputs: Pin[];
+    inputs: PinData[];
+    outputs: PinData[];
     ui_style: string;
     description?: string;
     position: { x: number; y: number };
@@ -64,7 +64,7 @@ export class Node implements UINode {
         return this.ui_style === "math";
     }
 
-    addInput(pin: Pin): void {
+    addInput(pin: PinData): void {
         this.inputs.push(pin);
     }
 
@@ -111,7 +111,7 @@ export type EditorGesture =
     }
     | {
         type: "connect";
-        startPin: Pin;
+        startPin: PinData;
         startX: number;     // 屏幕坐标
         startY: number;
         currentX: number;

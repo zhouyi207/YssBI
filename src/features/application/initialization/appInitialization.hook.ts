@@ -3,7 +3,6 @@ import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
 import { useSchema } from '@/features/core/schema';
 import { useNodeRegistry } from '@/features/core/nodeRegister';
-import { initProjectSync } from '@/features/core/project';
 
 
 export function useAppInitialization(): InitializationState {
@@ -54,7 +53,6 @@ export function useAppInitialization(): InitializationState {
         // 同步项目状态
         const syncProject = async () => {
             try {
-                await initProjectSync();
                 hasRestoredProjectRef.current = true;
                 setState({ status: LoadStatus.Ready, error: null });
             } catch (error) {

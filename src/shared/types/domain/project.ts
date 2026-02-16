@@ -1,5 +1,5 @@
-import { Graph } from "./graph";
-import { Variable } from "./variable";
+import { GraphData } from "./graph";
+import { VariableData } from "./variable";
 
 /**
  * Domain Types - Project
@@ -20,24 +20,12 @@ export interface ProjectMetadata {
  * 包含项目的所有内容
  */
 export interface ProjectData {
-    variables: Record<string, Variable>;  // 变量集合（ID -> Variable）
-    graphs: Record<string, Graph>;        // 图集合（ID -> Graph）
+    variables: Record<string, VariableData>;  // 变量集合（ID -> Variable）
+    graphs: Record<string, GraphData>;        // 图集合（ID -> Graph）
     databases: Record<string, any>;       // 数据库集合（ID -> Database）
     metadata: ProjectMetadata;            // 元数据
 }
 
-
-/// types —— 只放"结构定义"
-
-import { LoadStatus } from "@/shared/types/ui";
-
-/**
- * Project 初始化状态
- */
-export interface ProjectState {
-    status: LoadStatus;
-    error: string | null;
-}
 
 /**
  * 项目事件类型（与后端 ProjectEvent 对应）

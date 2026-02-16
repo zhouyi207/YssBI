@@ -1,19 +1,22 @@
-import "@/utils/logger";
 import "./App.css";
+import { setupLogger } from "@/shared/utils";
+
+setupLogger();
 
 import { PlotWindow } from "@/views/PlotView/PlotWindow";
-import { DataViewWindow } from "@/views/DataView/DataViewWindow";
+import { DataWindow } from "@/views/DataView/DataWindow";
 import { LogWindow } from "@/views/LogView/LogWindow";
 import { EditorWindow } from "@/views/EditorView/EditorWindow";
-import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
+import { SettingsProvider } from "./providers/SettingsProvider";
+
 
 const isPlotWindow = window.location.hash === "#/plot";
-const isDataViewWindow = window.location.hash === "#/dataview";
+const isDataWindow = window.location.hash === "#/data";
 const isLogsWindow = window.location.hash === "#/logs";
 
 function AppRouter() {
   if (isPlotWindow) return <PlotWindow />;
-  if (isDataViewWindow) return <DataViewWindow />;
+  if (isDataWindow) return <DataWindow />;
   if (isLogsWindow) return <LogWindow />;
 
   return <EditorWindow />;
@@ -21,8 +24,8 @@ function AppRouter() {
 
 export default function App() {
   return (
-    <SettingsEffectsProvider>
+    <SettingsProvider>
       <AppRouter />
-    </SettingsEffectsProvider>
+    </SettingsProvider>
   );
 }

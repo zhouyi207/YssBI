@@ -52,7 +52,7 @@ export type VariableScope = GlobalScope | FunctionScope | MacroScope;
  * 变量实例
  * 代表图中的一个变量定义
  */
-export interface Variable {
+export interface VariableData {
     /** 变量 ID */
     id: string;
 

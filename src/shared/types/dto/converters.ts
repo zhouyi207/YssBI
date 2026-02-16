@@ -12,10 +12,10 @@
 import type {
     NodeDefinition,
     NodeDefinitionDTO,
-    Pin,
+    PinData,
     Connection,
-    Graph,
-    Variable,
+    GraphData,
+    VariableData,
     ProjectData,
     DataSourceConfig,
 } from '../domain';
@@ -44,12 +44,12 @@ export const NodeConverter: Converter<NodeDefinition, NodeDefinitionDTO> = {
 /**
  * Pin 转换器
  */
-export const PinConverter: Converter<Pin> = {
-    fromDTO(dto: Pin): Pin {
+export const PinConverter: Converter<PinData> = {
+    fromDTO(dto: PinData): PinData {
         return dto;
     },
 
-    toDTO(pin: Pin): Pin {
+    toDTO(pin: PinData): PinData {
         return pin;
     },
 };
@@ -70,12 +70,12 @@ export const ConnectionConverter: Converter<Connection> = {
 /**
  * 图转换器
  */
-export const GraphConverter: Converter<Graph> = {
-    fromDTO(dto: Graph): Graph {
+export const GraphConverter: Converter<GraphData> = {
+    fromDTO(dto: GraphData): GraphData {
         return dto;
     },
 
-    toDTO(graph: Graph): Graph {
+    toDTO(graph: GraphData): GraphData {
         return graph;
     },
 };
@@ -83,12 +83,12 @@ export const GraphConverter: Converter<Graph> = {
 /**
  * 变量转换器
  */
-export const VariableConverter: Converter<Variable> = {
-    fromDTO(dto: Variable): Variable {
+export const VariableConverter: Converter<VariableData> = {
+    fromDTO(dto: VariableData): VariableData {
         return dto;
     },
 
-    toDTO(variable: Variable): Variable {
+    toDTO(variable: VariableData): VariableData {
         return variable;
     },
 };

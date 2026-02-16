@@ -40,7 +40,7 @@ export interface PinUI {
  * Pin 实例
  * 代表节点上的一个输入或输出接口
  */
-export interface Pin {
+export interface PinData {
     id: string;                 // 唯一标识
     nodeId: string;             // 所属节点 ID
     name: string;               // 显示名称

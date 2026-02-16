@@ -1,6 +1,6 @@
-import { Connection } from "./connection";
-import { Node } from "./node";
-import { Pin } from "./pin";
+import { NodeData } from "./node";
+import { PinData } from "./pin";
+import { ConnectionData } from "./connection";
 
 /**
  * Domain Types - Graph
@@ -27,12 +27,12 @@ export interface GraphPosition {
  * 图实例
  * 代表一个完整的节点图
  */
-export interface Graph {
+export interface GraphData {
     id: string;                 // 图 ID
     name: string;               // 图名称
     type: GraphType;            // 图类型
-    nodes: Node[];              // 节点列表
-    pins: Pin[];                // Pin 列表（所有节点的 Pin）
-    connections: Connection;    // 连接关系
+    nodes: NodeData[];              // 节点列表
+    pins: PinData[];                // Pin 列表（所有节点的 Pin）
+    connections: ConnectionData[];    // 连接关系
     canvas: GraphPosition;      // 画布状态
 }

@@ -1,6 +1,6 @@
 ﻿import { Node } from '@/shared/types/ui';
-import { Pin } from "@/shared/types/domain";
-import { Pin as GraphPinDef } from "@/shared/types/domain";
+import { PinData } from "@/shared/types/domain";
+import { PinData as GraphPinDef } from "@/shared/types/domain";
 import { Position } from "@/shared/types";
 
 // 简化的 Pin 定义（用于创建内部节点时）
@@ -21,7 +21,7 @@ export function createInternalNode(
     isInternal: boolean = true
 ): Partial<Node> {
     // 将简化的 pin 定义转换为完整的 Pin
-    const fullInputs: Pin[] = inputs.map((p, idx) => ({
+    const fullInputs: PinData[] = inputs.map((p, idx) => ({
         id: `${id}_in_${idx}`,
         nodeId: id,
         name: p.name,
@@ -31,7 +31,7 @@ export function createInternalNode(
         isArray: p.isArray
     }));
     
-    const fullOutputs: Pin[] = outputs.map((p, idx) => ({
+    const fullOutputs: PinData[] = outputs.map((p, idx) => ({
         id: `${id}_out_${idx}`,
         nodeId: id,
         name: p.name,

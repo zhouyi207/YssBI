@@ -1,4 +1,4 @@
-import { Pin } from './pin';
+import { PinId } from './id';
 
 /**
  * Domain Types - Node
@@ -14,13 +14,14 @@ import { Pin } from './pin';
  * 节点实例
  * 代表图中的一个节点实例
  */
-export interface Node {
+export interface NodeData {
     id: string;
+    graphId: string;
     node_type: string;
     category: string[];
     title: string;
-    inputs: Pin[];
-    outputs: Pin[];
+    inputs: PinId[];
+    outputs: PinId[];
     ui_style: string;
     description?: string;
 }

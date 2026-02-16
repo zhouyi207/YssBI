@@ -1,11 +1,4 @@
 /**
- * UI Types - Layout
- * 
- * 布局系统的 UI 状态类型
- * 用于管理编辑器的窗口布局
- */
-
-/**
  * 布局方向
  */
 export type LayoutDirection = 'row' | 'col';

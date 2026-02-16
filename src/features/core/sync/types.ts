@@ -1,6 +1,6 @@
 // src/features/core/sync/types.ts
 
-import { ProjectData, Graph, Variable } from '@/shared/types/domain';
+import { ProjectData, GraphData, VariableData } from '@/shared/types/domain';
 
 // ==================== 基础事件类型 ====================
 
@@ -30,12 +30,12 @@ export interface ProjectSavedPayload {
 
 export interface GraphCreatedPayload {
     id: string;
-    data: Graph;
+    data: GraphData;
 }
 
 export interface GraphUpdatedPayload {
     id: string;
-    data: Partial<Graph>;
+    data: Partial<GraphData>;
 }
 
 export interface GraphDeletedPayload {
@@ -49,12 +49,12 @@ export interface GraphCreatedFailedPayload {
 
 export interface VariableCreatedPayload {
     id: string;
-    data: Variable;
+    data: VariableData;
 }
 
 export interface VariableUpdatedPayload {
     id: string;
-    data: Partial<Variable>;
+    data: Partial<VariableData>;
 }
 
 export interface VariableDeletedPayload {
@@ -95,9 +95,9 @@ export interface EventCallbacks {
     onProjectSaved?: (path: string) => void;
     
     // Graph callbacks
-    onEventCreated?: (id: string, data: Graph) => void;
-    onFunctionCreated?: (id: string, data: Graph) => void;
-    onMacroCreated?: (id: string, data: Graph) => void;
+    onEventCreated?: (id: string, data: GraphData) => void;
+    onFunctionCreated?: (id: string, data: GraphData) => void;
+    onMacroCreated?: (id: string, data: GraphData) => void;
     
     // Graph error callbacks
     onEventCreatedFailed?: (name: string, error: string) => void;
@@ -105,8 +105,8 @@ export interface EventCallbacks {
     onMacroCreatedFailed?: (name: string, error: string) => void;
     
     // Variable callbacks
-    onVariableCreated?: (id: string, data: Variable) => void;
-    onVariableUpdated?: (id: string, data: Partial<Variable>) => void;
+    onVariableCreated?: (id: string, data: VariableData) => void;
+    onVariableUpdated?: (id: string, data: Partial<VariableData>) => void;
     onVariableDeleted?: (id: string) => void;
     
     // DataFrame callbacks

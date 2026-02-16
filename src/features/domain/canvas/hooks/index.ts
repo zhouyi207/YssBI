@@ -1,1 +1,0 @@
-export { useCanvasInteraction } from './useCanvasInteraction';

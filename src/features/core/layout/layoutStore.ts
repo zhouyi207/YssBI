@@ -1,28 +1,28 @@
 ﻿import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
+import { v4 as uuidv4 } from 'uuid';
+import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/layout';
+import { INITIAL_NODES } from '@/app/appConfig/layout';
 
-// Helper to generate IDs
-const generateId = () => Math.random().toString(36).slice(2, 11);
 
 export interface LayoutState {
     rootId: string;
-    nodes: LayoutTree;
+    layoutTree: LayoutTree;
 
     // Actions
-    getNode: (id: string) => LayoutNode | undefined;
+    getLayoutNode: (id: string) => LayoutNode | undefined;
 
     // Basic tree manipulation
-    addNode: (node: LayoutNode) => void;
-    updateNode: (id: string, patches: Partial<LayoutNode>) => void;
-    removeNode: (id: string) => void;
+    addLayoutNode: (node: LayoutNode) => void;
+    updateLayoutNode: (id: string, patches: Partial<LayoutNode>) => void;
+    removeLayoutNode: (id: string) => void;
 
     // High level actions
-    splitNode: (targetId: string, direction: LayoutDirection, newComponentType: string) => void;
-    resizeNode: (nodeId: string, size: number) => void;
+    splitLayoutNode: (targetId: string, direction: LayoutDirection, newComponentType: string) => void;
+    resizeLayoutNode: (nodeId: string, size: number) => void;
 
     // DND Actions
-    moveNode: (sourceId: string, targetId: string, position: 'center' | 'top' | 'bottom' | 'left' | 'right') => void;
+    moveLayoutNode: (sourceId: string, targetId: string, position: 'center' | 'top' | 'bottom' | 'left' | 'right') => void;
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
@@ -38,78 +38,35 @@ export interface LayoutState {
     setAltPressed: (pressed: boolean) => void;
 }
 
-// Initial Layout Structure
-const INITIAL_ROOT_ID = 'root';
-const INITIAL_NODES: LayoutTree = {
-    [INITIAL_ROOT_ID]: {
-        id: INITIAL_ROOT_ID,
-        type: 'row',
-        parentId: null,
-        children: ['sidebar', 'main', 'detail'],
-    },
-    'sidebar': {
-        id: 'sidebar',
-        type: 'component',
-        parentId: INITIAL_ROOT_ID,
-        pixelSize: 260, // Default width
-        minSize: 240,     // Allow collapsing to 0
-        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'events' },
-    },
-    'main': {
-        id: 'main',
-        type: 'row',
-        parentId: INITIAL_ROOT_ID,
-        children: ['default_editor'],
-        size: 1, // Flex grow
-    },
-    'default_editor': {
-        id: 'default_editor',
-        type: 'component',
-        parentId: 'main',
-        data: {
-            component: 'GraphEditor',
-            tabs: []
-        },
-    },
-    'detail': {
-        id: 'detail',
-        type: 'component',
-        parentId: INITIAL_ROOT_ID,
-        pixelSize: 300,
-        minSize: 240,
-        data: { component: 'Detail', visible: true, title: 'Properties', isFixed: true },
-    }
-};
-
 export const useLayoutStore = create<LayoutState>()(
     immer((set, get) => ({
-        rootId: INITIAL_ROOT_ID,
-        nodes: INITIAL_NODES,
+        rootId: 'root',
+        layoutTree: INITIAL_NODES,
         isDragging: false,
         activeGroupId: 'default_editor', // Default focus
         activeEditorGroupId: 'default_editor',
 
-        getNode: (id) => get().nodes[id],
+        getLayoutNode: (id) => get().layoutTree[id],
 
-        addNode: (node) => set((state) => {
-            state.nodes[node.id] = node;
+        addLayoutNode: (node) => set((state) => {
+            state.layoutTree[node.id] = node;
         }),
 
-        updateNode: (id, patches) => set((state) => {
-            const node = state.nodes[id];
+        updateLayoutNode: (id, patches) => set((state) => {
+            const node = state.layoutTree[id];
             if (node) {
                 Object.assign(node, patches);
             }
         }),
 
-        removeNode: (id) => set((state) => {
-            const node = state.nodes[id];
+        removeLayoutNode: (id) => set((state) => {
+            const node = state.layoutTree[id];
             if (!node || !node.parentId) return;
 
             // 识别编辑器组（非固定组件）
             const isEditor = node.type === 'component' && !node.data?.isFixed;
             if (isEditor) {
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length <= 1) {
                     // 如果是最后一个编辑器组，不执行删除，仅清空其内容
                     node.data = {
@@ -121,24 +78,24 @@ export const useLayoutStore = create<LayoutState>()(
                 }
             }
 
-            const parent = state.nodes[node.parentId];
+            const parent = state.layoutTree[node.parentId];
             if (parent && parent.children) {
                 parent.children = parent.children.filter(childId => childId !== id);
 
                 // 如果父容器变空了（且不是根节点），递归删除父容器
                 if (parent.children.length === 0 && parent.parentId) {
                     // 这里可以调用自身逻辑，但由于是 immer，直接操作 state 即可
-                    const grandParent = state.nodes[parent.parentId];
+                    const grandParent = state.layoutTree[parent.parentId];
                     if (grandParent && grandParent.children) {
                         grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
-                        delete state.nodes[parent.id];
+                        delete state.layoutTree[parent.id];
                     }
                 }
             }
-            delete state.nodes[id];
+            delete state.layoutTree[id];
 
             // 自动重设焦点到剩余的编辑器组
-            const remainingEditors = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+            const remainingEditors = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
             if (state.activeGroupId === id) {
                 state.activeGroupId = remainingEditors[0]?.id || null;
             }
@@ -147,7 +104,7 @@ export const useLayoutStore = create<LayoutState>()(
             }
 
             // 最后验证：确保激活的编辑器存在且有效
-            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            const activeNode = state.layoutTree[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
                 if (remainingEditors.length > 0) {
                     state.activeGroupId = remainingEditors[0].id;
@@ -156,18 +113,18 @@ export const useLayoutStore = create<LayoutState>()(
             }
         }),
 
-        splitNode: (targetId, direction, newComponentType) => set((state) => {
-            const targetNode = state.nodes[targetId];
+        splitLayoutNode: (targetId, direction, newComponentType) => set((state) => {
+            const targetNode = state.layoutTree[targetId];
             if (!targetNode || !targetNode.parentId) return;
 
-            const parentNode = state.nodes[targetNode.parentId];
+            const parentNode = state.layoutTree[targetNode.parentId];
             const requiredDirection = direction;
 
             // 只复制当前激活的标签页
             const activeTab = targetNode.data?.tabs?.find(t => t.id === targetNode.data?.activeTabId);
             const newTabs = activeTab ? [{ ...activeTab }] : [];
 
-            const newNodeId = generateId();
+            const newNodeId = uuidv4();
             const newNode: LayoutNode = {
                 id: newNodeId,
                 type: 'component',
@@ -184,9 +141,9 @@ export const useLayoutStore = create<LayoutState>()(
             if (parentNode.type === requiredDirection) {
                 const targetIndex = parentNode.children?.indexOf(targetId) || 0;
                 parentNode.children?.splice(targetIndex + 1, 0, newNodeId);
-                state.nodes[newNodeId] = newNode;
+                state.layoutTree[newNodeId] = newNode;
             } else {
-                const branchId = generateId();
+                const branchId = uuidv4();
                 const branch: LayoutNode = {
                     id: branchId,
                     type: requiredDirection,
@@ -205,8 +162,8 @@ export const useLayoutStore = create<LayoutState>()(
 
                 newNode.parentId = branchId;
 
-                state.nodes[newNodeId] = newNode;
-                state.nodes[branchId] = branch;
+                state.layoutTree[newNodeId] = newNode;
+                state.layoutTree[branchId] = branch;
             }
 
             // 自动聚焦到新分屏的面板
@@ -214,17 +171,17 @@ export const useLayoutStore = create<LayoutState>()(
             state.activeEditorGroupId = newNodeId;
         }),
 
-        resizeNode: (nodeId, size) => set((state) => {
-            const node = state.nodes[nodeId];
+        resizeLayoutNode: (nodeId, size) => set((state) => {
+            const node = state.layoutTree[nodeId];
             if (node) {
                 node.pixelSize = size;
             }
         }),
 
-        moveNode: (sourceId, targetId, position) => set((state) => {
+        moveLayoutNode: (sourceId, targetId, position) => set((state) => {
             console.log('Moving node', sourceId, 'to', targetId, position);
-            const sourceNode = state.nodes[sourceId];
-            const targetNode = state.nodes[targetId];
+            const sourceNode = state.layoutTree[sourceId];
+            const targetNode = state.layoutTree[targetId];
             if (!sourceNode || !targetNode || sourceId === targetId) return;
 
             // 如果是中心区域停靠，执行合并逻辑
@@ -241,11 +198,11 @@ export const useLayoutStore = create<LayoutState>()(
                     };
 
                     // 从父节点移除源节点
-                    const sourceParent = state.nodes[sourceNode.parentId!];
+                    const sourceParent = state.layoutTree[sourceNode.parentId!];
                     if (sourceParent && sourceParent.children) {
                         sourceParent.children = sourceParent.children.filter(id => id !== sourceId);
                     }
-                    delete state.nodes[sourceId];
+                    delete state.layoutTree[sourceId];
                     return;
                 }
                 return;
@@ -256,7 +213,7 @@ export const useLayoutStore = create<LayoutState>()(
             if (!sourceParentId || !targetParentId) return;
 
             // 从原父节点移除
-            const sourceParent = state.nodes[sourceParentId];
+            const sourceParent = state.layoutTree[sourceParentId];
             if (sourceParent.children) {
                 sourceParent.children = sourceParent.children.filter(id => id !== sourceId);
             }
@@ -265,7 +222,7 @@ export const useLayoutStore = create<LayoutState>()(
             const direction: 'row' | 'col' = (position === 'left' || position === 'right') ? 'row' : 'col';
             const isAfter = position === 'right' || position === 'bottom';
 
-            const targetParent = state.nodes[targetParentId];
+            const targetParent = state.layoutTree[targetParentId];
             if (targetParent.type === direction) {
                 // 如果父节点方向一致，直接插入
                 const targetIndex = targetParent.children?.indexOf(targetId) || 0;
@@ -273,7 +230,7 @@ export const useLayoutStore = create<LayoutState>()(
                 sourceNode.parentId = targetParentId;
             } else {
                 // 否则需要创建新的分支节点
-                const branchId = generateId();
+                const branchId = uuidv4();
                 const branch: LayoutNode = {
                     id: branchId,
                     type: direction,
@@ -294,13 +251,13 @@ export const useLayoutStore = create<LayoutState>()(
                 sourceNode.size = 1;
                 sourceNode.pixelSize = undefined;
 
-                state.nodes[branchId] = branch;
+                state.layoutTree[branchId] = branch;
             }
         }),
 
         moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => set((state) => {
-            const sourceNode = state.nodes[sourceNodeId];
-            const targetNode = state.nodes[targetNodeId];
+            const sourceNode = state.layoutTree[sourceNodeId];
+            const targetNode = state.layoutTree[targetNodeId];
             if (!sourceNode || !targetNode) return;
 
             const sourceTabs = sourceNode.data?.tabs || [];
@@ -323,13 +280,13 @@ export const useLayoutStore = create<LayoutState>()(
 
                 // 清理空的源节点
                 if (sourceNode.data!.tabs.length === 0) {
-                    const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                    const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                     if (editorGroups.length > 1) {
-                        const parent = state.nodes[sourceNode.parentId!];
+                        const parent = state.layoutTree[sourceNode.parentId!];
                         if (parent && parent.children) {
                             parent.children = parent.children.filter(id => id !== sourceNodeId);
                         }
-                        delete state.nodes[sourceNodeId];
+                        delete state.layoutTree[sourceNodeId];
 
                         // 如果删除的是当前激活的编辑器，切换到目标编辑器
                         if (state.activeGroupId === sourceNodeId) {
@@ -381,13 +338,13 @@ export const useLayoutStore = create<LayoutState>()(
 
             // VS Code 逻辑：如果源节点没有 tabs 了，且不是最后一个编辑器组，移除源节点
             if (sourceNode.data!.tabs.length === 0) {
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length > 1) {
-                    const parent = state.nodes[sourceNode.parentId!];
+                    const parent = state.layoutTree[sourceNode.parentId!];
                     if (parent && parent.children) {
                         parent.children = parent.children.filter(id => id !== sourceNodeId);
                     }
-                    delete state.nodes[sourceNodeId];
+                    delete state.layoutTree[sourceNodeId];
 
                     // 如果删除的是当前激活的编辑器，切换到目标编辑器
                     if (state.activeGroupId === sourceNodeId) {
@@ -417,9 +374,9 @@ export const useLayoutStore = create<LayoutState>()(
             state.activeEditorGroupId = targetNodeId;
 
             // 最后验证：确保激活的编辑器存在且有效
-            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            const activeNode = state.layoutTree[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length > 0) {
                     state.activeGroupId = editorGroups[0].id;
                     state.activeEditorGroupId = editorGroups[0].id;
@@ -428,7 +385,7 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         removeTab: (nodeId, tabId) => set((state) => {
-            const node = state.nodes[nodeId];
+            const node = state.layoutTree[nodeId];
             if (!node || !node.data?.tabs) return;
 
             const currentTabs = node.data.tabs;
@@ -439,26 +396,26 @@ export const useLayoutStore = create<LayoutState>()(
 
             if (newTabs.length === 0) {
                 // 如果是最后一个标签
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
 
                 if (editorGroups.length > 1) {
                     // 如果有多个组，移除该组
-                    const parent = state.nodes[node.parentId!];
+                    const parent = state.layoutTree[node.parentId!];
                     if (parent && parent.children) {
                         parent.children = parent.children.filter(id => id !== nodeId);
 
                         if (parent.children.length === 0 && parent.parentId) {
-                            const grandParent = state.nodes[parent.parentId];
+                            const grandParent = state.layoutTree[parent.parentId];
                             if (grandParent && grandParent.children) {
                                 grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
-                                delete state.nodes[parent.id];
+                                delete state.layoutTree[parent.id];
                             }
                         }
                     }
-                    delete state.nodes[nodeId];
+                    delete state.layoutTree[nodeId];
 
                     // 重设焦点
-                    const remainingEditors = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                    const remainingEditors = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                     state.activeGroupId = remainingEditors[0]?.id || null;
                     state.activeEditorGroupId = remainingEditors[0]?.id || null;
                 } else {
@@ -478,9 +435,9 @@ export const useLayoutStore = create<LayoutState>()(
             }
 
             // 最后验证：确保激活的编辑器存在且有效
-            const activeNode = state.nodes[state.activeEditorGroupId || ''];
+            const activeNode = state.layoutTree[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
+                const editorGroups = Object.values(state.layoutTree).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length > 0) {
                     state.activeGroupId = editorGroups[0].id;
                     state.activeEditorGroupId = editorGroups[0].id;
@@ -489,7 +446,7 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         addTab: (nodeId, tab) => set((state) => {
-            const node = state.nodes[nodeId];
+            const node = state.layoutTree[nodeId];
             if (!node || node.type !== 'component') return;
 
             const tabs = node.data?.tabs || [];
@@ -526,7 +483,7 @@ export const useLayoutStore = create<LayoutState>()(
             state.activeGroupId = id;
 
             // 逻辑补充：如果该节点是非固定组件（编辑器组），则更新 activeEditorGroupId
-            const node = id ? state.nodes[id] : null;
+            const node = id ? state.layoutTree[id] : null;
             if (node?.type === 'component' && !node.data?.isFixed) {
                 state.activeEditorGroupId = id;
             }
