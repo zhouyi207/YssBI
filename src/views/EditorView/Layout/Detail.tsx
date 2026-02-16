@@ -1,8 +1,8 @@
-﻿import { forwardRef, useMemo } from "react";
-import { useEditorGroup } from "@/features/application/editor";
-import { Select } from "../../../shared/ui/Select";
+import { forwardRef, useMemo } from "react";
+import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { Select } from "@/shared/ui";
 import { useSchemaStore } from "@/features/core/schema";
-import { isPrimitiveType } from "@/shared/utils/datatype";
+import { isPrimitiveType } from "@/shared/utils";
 import { DataType } from "@/shared/types/domain";
 import { uiStore } from "@/features/core/ui/UIStore";
 

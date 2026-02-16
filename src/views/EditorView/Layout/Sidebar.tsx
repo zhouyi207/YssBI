@@ -1,6 +1,6 @@
 ﻿import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { useEditorGroup, GroupContext } from "@/features/application/editor";
+import { useEditorGroup, GroupContext } from "@/features/application/editor/core/hooks/useEditorGroup";
 import {
   VscEye,
   VscEyeClosed,

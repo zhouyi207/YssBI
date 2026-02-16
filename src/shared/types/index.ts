@@ -5,8 +5,9 @@
  * 
  * 1. domain/   - 领域模型（与后端一致）
  * 2. dto/      - 数据传输对象和转换器
- * 3. ui/       - UI 状态类型（前端专用）
- * 4. settings/ - 设置相关类型
+ * 3. ui/       - UI 相关类型（前端专用）
+ * 4. state/    - 前端状态类型（Store/Hook）
+ * 5. settings/ - 设置相关类型
  * 
  * 使用指南：
  * 
@@ -29,6 +30,10 @@ export * from './dto';
 export type { EditorGroup, EditorGesture, LayoutDirection, LayoutNode, LayoutTab, LayoutTree, LoadStatus, ExecutionStatus } from './ui';
 export type { Position, Size, Rect } from './ui/common';
 
+// ==================== State Types ====================
+// 前端状态类型 - Store/Hook 专用
+export * from './state';
+
 // ==================== Settings ====================
 // 设置相关类型
 export * from './settings';
@@ -43,11 +48,7 @@ import type { GraphPosition } from './domain';
  */
 export type CanvasState = GraphPosition;
 
-// ==================== Utility Functions ====================
-
 /**
- * 限制数值在指定范围内
+ * @deprecated 使用 @/shared/utils 中的 clamp
  */
-export function clamp(v: number, min: number, max: number): number {
-    return Math.min(max, Math.max(min, v));
-}
+export { clamp } from '../utils/math';

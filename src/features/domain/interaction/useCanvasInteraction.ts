@@ -2,12 +2,12 @@
 import { useProjectStore } from "@/features/core/project";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
-import { useEditorStore } from "@/features/application/editor/core/stores";
+import { useEditorStore } from "@/features/application/editor/core/stores/useEditorStore";
 import { Node } from '@/shared/types/ui';
 import { Pin, Graph, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
-import { clamp } from "../../../shared/types";
+import { clamp } from "@/shared/utils";
 import { ConnectionService } from "@/services";
 import { deserializeGraph } from "@/shared/utils/editor";
 

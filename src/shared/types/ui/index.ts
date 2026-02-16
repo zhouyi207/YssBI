@@ -17,5 +17,6 @@
 
 export * from './common';
 export * from './editor';
-export * from '../layout/layout';
+export * from '../layout';
 export * from './execution';
+export * from './types';

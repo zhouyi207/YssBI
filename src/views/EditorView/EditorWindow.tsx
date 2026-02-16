@@ -6,7 +6,7 @@ import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
-import { UIHost } from "@/shared/ui/UIHost";
+import { UIHost } from "@/shared/ui";
 import { useViewportStore } from "@/features/core/viewport";
 import { useLayoutStore as useLayoutStoreForKeyboard } from "@/features/core/layout/layoutStore";
 import { useProjectSync } from "@/features/core/sync";

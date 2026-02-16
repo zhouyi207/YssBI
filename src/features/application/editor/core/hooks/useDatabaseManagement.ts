@@ -1,7 +1,7 @@
 ﻿import { useCallback } from 'react';
 import { useProjectStore } from '@/features/core/project';
 import { useEditorStore } from '../stores';
-import { getUniqueName } from '@/shared/utils/getUniqueName';
+import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from './useSidebarTab';
 
 

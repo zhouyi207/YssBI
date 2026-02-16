@@ -1,7 +1,7 @@
-﻿import { Node } from '@/shared/types/ui';
+import { Node } from '@/shared/types/ui';
 import { Pin } from "@/shared/types/domain";
 import { Pin as GraphPinDef } from "@/shared/types/domain";
-import { Position } from "@/shared/types";
+import { Position } from "@/shared/types/ui";
 
 // 简化的 Pin 定义（用于创建内部节点时）
 type SimplePinDef = {

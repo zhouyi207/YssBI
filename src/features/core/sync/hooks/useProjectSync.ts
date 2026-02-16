@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { ProjectListener } from '../listeners/ProjectListener';
 import { SingletonManager } from '../utils/singletonManager';
-import { useEditor } from '@/features/application/editor';
+import { useEditor } from '@/features/application/editor/core/hooks/useEditor';
 import { useMemo } from "react";
 
 const LISTENER_KEY = 'project-listener';

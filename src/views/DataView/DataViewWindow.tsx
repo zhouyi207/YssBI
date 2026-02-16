@@ -4,7 +4,7 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectSync } from '@/features/core/sync';
 import { useProjectStore, initProjectSync } from '@/features/core/project';
-import { Select } from '@/shared/ui/Select';
+import { Select } from '@/shared/ui';
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useProjectStore(s => s.databases);

@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui';
-import { ProjectState } from '@/shared/types/domain';
+import { ProjectState } from '@/shared/types/state';
 import { Graph, ProjectData } from '@/shared/types/domain';
 import { Variable } from '@/shared/types/domain';
 import { ProjectService } from '@/services/project/projectService';

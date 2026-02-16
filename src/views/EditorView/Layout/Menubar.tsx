@@ -1,6 +1,6 @@
 ﻿import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEditorGroup } from "@/features/application/editor";
+import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
 import { useState, useEffect } from "react";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";

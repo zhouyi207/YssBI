@@ -2,13 +2,13 @@
 import { Node } from "../../Nodes/Node";
 import { Pin } from "@/shared/types/domain";
 import { useDragContext } from "../../Context/DragProvider";
-import { useEditorGroup } from "@/features/application/editor";
+import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
 import { useProjectStore } from "@/features/core/project";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
 import { createNodeFromTemplate, createInternalNode, deserializeGraph } from "@/shared/utils/editor";
 import { ConnectionLine } from "./ConnectionLine";
-import { useNodeManagement } from "@/features/application/editor";
+import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
 import { useExecutionVisualization } from "@/features/domain/execution/hooks";
 
 // Extracted Components

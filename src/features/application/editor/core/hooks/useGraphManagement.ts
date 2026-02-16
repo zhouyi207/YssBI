@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { useProjectStore } from '@/features/core/project';
 import { GraphService } from '@/services/graph/graphService';
-import { getUniqueName } from '@/shared/utils/getUniqueName';
+import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from './useSidebarTab';
 
 interface PendingAction {

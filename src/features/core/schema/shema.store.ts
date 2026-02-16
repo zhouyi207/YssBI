@@ -3,8 +3,8 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { LoadStatus } from "@/shared/types/ui";
+import { SchemaState } from "@/shared/types/state";
 import {
-  SchemaState,
   PinTypeDefinition,
   CategoryDefinition,
   UIStyleDefinition,
@@ -12,7 +12,7 @@ import {
   NodeValidationRule,
   GraphValidationRule,
   EditorSchema,
-} from "../../../shared/types/domain/shema";
+} from "@/shared/types/domain/schema";
 
 interface SchemaStore extends SchemaState {
   // Schema 数据

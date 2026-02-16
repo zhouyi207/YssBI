@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useSchemaStore } from "./shema.store";
-import { SchemaState } from "../../../shared/types/domain/shema";
+import { SchemaState } from "@/shared/types/state";
 import { LoadStatus } from "@/shared/types/ui";
 
 /**

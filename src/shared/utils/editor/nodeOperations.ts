@@ -1,5 +1,5 @@
-﻿import { Node } from '@/shared/types/ui';
-import { Position } from "@/shared/types";
+import { Node } from '@/shared/types/ui';
+import { Position } from "@/shared/types/ui";
 import { NodeService } from "@/services";
 import { createNode } from "@/features/core/nodeRegister";
 

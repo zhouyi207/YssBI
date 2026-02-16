@@ -5,17 +5,8 @@
  * 前端启动时从后端获取这些定义并缓存。
  */
 
-import { LoadStatus } from "@/shared/types/ui";
-
-// ==================== Schema 状态 ====================
-
-/**
- * Schema 初始化状态
- */
-export interface SchemaState {
-    status: LoadStatus;
-    error: string | null;
-}
+// Backward-compat: schema loading state moved to `shared/types/state`.
+export type { SchemaState } from "../state/schema";
 
 // ==================== Pin 类型 ====================
 

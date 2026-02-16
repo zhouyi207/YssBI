@@ -1,5 +1,5 @@
 ﻿import React, { useState } from "react";
-import { useEditorGroup } from "@/features/application/editor";
+import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
 import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
 import { useProjectStore } from "@/features/core/project";
@@ -7,7 +7,7 @@ import { HUD } from "./HUD";
 import { NodePalette } from "../../Layout/NodePalette";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { createNodeFromTemplate, createInternalNode, deserializeGraph } from "@/shared/utils/editor";
-import { useNodeManagement } from "@/features/application/editor";
+import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 
 

@@ -22,4 +22,5 @@ export * from './graph';
 export * from './variable';
 export * from './project';
 export * from './database';
-export * from './shema';
+export * from './schema';
+export * from './nodeRegister';

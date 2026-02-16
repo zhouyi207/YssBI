@@ -1,6 +1,6 @@
-﻿import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload } from "react-icons/vsc";
+import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload } from "react-icons/vsc";
 import { BsDatabaseFill } from "react-icons/bs";
-import { ImportDialogOptions } from "@/shared/types/ui/types";
+import { ImportDialogOptions } from "@/shared/types/ui";
 
 export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions; onClose: () => void }) => {
   const types = [

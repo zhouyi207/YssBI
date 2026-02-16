@@ -1,9 +1,9 @@
 ﻿// ui/UIHost.tsx
 import { useUIStore } from "@/features/core/ui/useUIStore";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { Toast } from "@/shared/ui/Toast";
-import { Modal } from "@/shared/ui/Modal";
-import { ImportModal } from "@/shared/ui/ImportModal";
+import { Toast } from "./Toast";
+import { Modal } from "./Modal";
+import { ImportModal } from "./ImportModal";
 
 export const UIHost = () => {
   const { messages, modals } = useUIStore();

@@ -1,6 +1,6 @@
-﻿/// helpers —— 非 React 的纯函数
+/// helpers —— 非 React 的纯函数
 
-import { Position } from "@/shared/types";
+import { Position } from "@/shared/types/ui";
 import { useNodeRegistryStore } from "./nodeRegistry.store";
 import { LoadStatus } from "@/shared/types/ui";
 
