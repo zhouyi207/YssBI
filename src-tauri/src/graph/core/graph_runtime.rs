@@ -162,9 +162,7 @@ impl GraphRuntime {
         // 4. 检查默认值
         if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
             if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
-                if let Some(default_value) = data_type.default_value() {
-                    return Some(default_value);
-                }
+                return Some(data_type.default_value());
             }
         }
         

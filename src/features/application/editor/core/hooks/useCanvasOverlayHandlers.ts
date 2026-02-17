@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import { getGraphById } from "@/features/core/dataStore";
 import { useViewportStore } from "@/features/core/viewport";
-import { createNodeFromTemplate, buildCreateNodeRequest, deserializeGraph } from "@/shared/utils/editor";
+import { createNodeFromTemplate, deserializeGraph } from "@/features/core/dataStore";
+import { buildCreateNodeRequest } from "@/shared/utils/editor";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 export interface PaletteItem {

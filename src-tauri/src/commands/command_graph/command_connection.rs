@@ -4,6 +4,28 @@ use serde_json::Value;
 use tauri::State;
 use uuid::Uuid;
 
+/// 断开指定 Pin 的所有连接（前端 Alt+Click 调用 disconnect_pin）
+#[tauri::command]
+pub fn disconnect_pin(
+    state: State<ProjectState>,
+    subgraph_id: String,
+    pin_id: String,
+) -> Result<(), String> {
+    let graph_id = GraphId::from(
+        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
+    );
+    let pin = PinId::from(
+        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
+    );
+
+    let graph = state
+        .get_graph(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+
+    graph.disconnect_pin(pin);
+    Ok(())
+}
+
 /// 连接两个 Pin（前端调用 connect_pins）
 #[tauri::command]
 pub fn connect_pins(

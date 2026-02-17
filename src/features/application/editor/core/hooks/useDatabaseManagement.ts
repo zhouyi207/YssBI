@@ -13,7 +13,7 @@ export function useDatabaseManagement() {
 
   const addDataFrame = useCallback((name?: string) => {
     const st = useDatabaseStore.getState();
-    const finalName = getUniqueName(name || "New DataFrame", Object.values(st.databases));
+    const finalName = getUniqueName(name || "New DataFrame", Object.values(st.databases) as { name: string }[]);
     const id = `df-${crypto.randomUUID()}`;
     const df: any = {
       id,

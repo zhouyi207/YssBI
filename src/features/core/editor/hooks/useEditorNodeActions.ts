@@ -6,7 +6,7 @@ import { getGraphById, useGraphDataStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import type { LayoutState } from '@/features/core/layout/layoutStore';
 import { Node } from '@/shared/types/ui';
-import { deserializeGraph } from '@/shared/utils/editor';
+import { deserializeGraph } from '@/features/core/dataStore';
 
 export function useEditorNodeActions(
   activeTabIdRef: RefObject<string | null>,
@@ -19,9 +19,9 @@ export function useEditorNodeActions(
     if (!graphData) return;
 
     const { nodes: currentNodes } = deserializeGraph(graphData);
-    const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
+    const nextNodes = typeof updater === 'function' ? updater(currentNodes as unknown as Node[]) : updater;
 
-    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes as any);
+    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes as import('@/shared/types/store/graph').RuntimeNodeInput[]);
   }, [activeTabIdRef]);
 
   const setSelectedNodeIds = useCallback(

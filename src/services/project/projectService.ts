@@ -241,9 +241,19 @@ export class ProjectService {
      * 设置完整的项目数据（用于批量同步）- 使用新的 ProjectData 结构
      */
     static async setProjectData(data: ProjectData, path?: string, emitEvent: boolean = false): Promise<void> {
-        // 直接发送新格式数据
+        const { dataTypeToBackend } = await import("@/shared/types/dto/dataType");
+        // 转换 variables.dataType 为后端格式（前端 DataType 对象 -> 后端期望的 string | { Array }）
+        const variables = Object.fromEntries(
+            Object.entries(data.variables).map(([id, v]) => {
+                const dt = v.dataType;
+                const dataType = (dt && typeof dt === "object" && "kind" in dt)
+                    ? dataTypeToBackend(dt as import("@/shared/types/domain").DataType)
+                    : dt;
+                return [id, { ...v, dataType }];
+            })
+        );
         const backendData = {
-            variables: data.variables,
+            variables,
             graphs: data.graphs,
             databases: data.databases,
             metadata: data.metadata,

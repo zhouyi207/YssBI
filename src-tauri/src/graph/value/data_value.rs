@@ -8,12 +8,15 @@ use std::ops::{Add, Sub, Mul, Div};
 /// 运行时数据值
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DataValue {
+    // 基础类型
     Boolean(bool),
     Int32(i32),
     Int64(i64),
     Float32(f32),
     Float64(f64),
     String(String),
+
+    // 复合类型
     Array(Vec<DataValue>),
     Object(serde_json::Map<String, JsonValue>),
     DataFrame(String), // DataFrame ID
@@ -22,24 +25,24 @@ pub enum DataValue {
 
 impl DataValue {
     /// 获取值的类型
-    pub fn value_type(&self) -> DataType {
+    pub fn value_type(&self) -> Option<DataType> {
         match self {
-            DataValue::Boolean(_) => DataType::Boolean,
-            DataValue::Int32(_) => DataType::Int32,
-            DataValue::Int64(_) => DataType::Int64,
-            DataValue::Float32(_) => DataType::Float32,
-            DataValue::Float64(_) => DataType::Float64,
-            DataValue::String(_) => DataType::String,
+            DataValue::Boolean(_) => Some(DataType::Boolean),
+            DataValue::Int32(_) => Some(DataType::Int32),
+            DataValue::Int64(_) => Some(DataType::Int64),
+            DataValue::Float32(_) => Some(DataType::Float32),
+            DataValue::Float64(_) => Some(DataType::Float64),
+            DataValue::String(_) => Some(DataType::String),
             DataValue::Array(arr) => {
                 if let Some(first) = arr.first() {
-                    DataType::Array(Box::new(first.value_type()))
+                    Some(DataType::Array(Box::new(first.value_type().unwrap())))
                 } else {
-                    DataType::Array(Box::new(DataType::Any))
+                    Some(DataType::Array(Box::new(DataType::Any)))
                 }
             }
-            DataValue::Object(_) => DataType::Object,
-            DataValue::Null => DataType::Null,
-            DataValue::DataFrame(_) => DataType::DataFrame,
+            DataValue::Object(_) => Some(DataType::Object),
+            DataValue::Null => None,
+            DataValue::DataFrame(_) => Some(DataType::DataFrame),
         }
     }
 

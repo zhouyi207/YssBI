@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useCanvasInteraction } from '@/features/domain/canvas/hooks';
+import { useCanvasInteraction } from '@/features/core/canvas';
 import { useEditorState, useEditorActions } from '@/features/core/editor';
 import { useEditorOperations } from './useEditorOperations';
 import { useTabManagement } from './useTabManagement';

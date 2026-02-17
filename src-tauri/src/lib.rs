@@ -64,10 +64,6 @@ pub fn run() {
             // Schema 命令
             get_node_definitions,
             get_editor_schema_command,
-            get_pin_types,
-            get_categories,
-            get_ui_styles,
-            get_variable_types,
             // check_type_connection,
             // get_pin_type_info,
             // check_pin_compatibility_detailed,
@@ -101,6 +97,7 @@ pub fn run() {
             update_node_positions,
             // Connection 命令
             connect_pins,
+            disconnect_pin,
             create_connection,
             delete_connection,
             get_connections,

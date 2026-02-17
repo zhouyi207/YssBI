@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
-import { useSchema } from '@/features/core/schema';
-import { useNodeRegistry } from '@/features/core/nodeRegister';
+import { useSchemaStore } from '@/features/core/schema';
+import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { initProjectSync } from '@/features/core/dataStore';
 
 
@@ -15,8 +15,8 @@ export function useAppInitialization(): InitializationState {
     // 使用 ref 防止重复初始化项目同步
     const hasRestoredProjectRef = useRef(false);
 
-    const { status: schemaStatus, error: schemaError } = useSchema();
-    const { status: registryStatus, error: registryError } = useNodeRegistry();
+    const { status: schemaStatus, error: schemaError } = useSchemaStore();
+    const { status: registryStatus, error: registryError } = useNodeRegistryStore();
 
     const isSchemaReady = schemaStatus === LoadStatus.Ready;
     const isRegistryReady = registryStatus === LoadStatus.Ready;
@@ -45,9 +45,16 @@ export function useAppInitialization(): InitializationState {
             return;
         }
 
-        // 如果 Schema 或 Registry 还未准备好，等待
+        // 如果 Schema 或 Registry 还未准备好，触发加载并等待
         if (!isSchemaReady || !isRegistryReady) {
             setState({ status: LoadStatus.Loading, error: null });
+            // 触发加载（幂等，Idle 时才会执行）
+            if (schemaStatus === LoadStatus.Idle) {
+                useSchemaStore.getState().syncFromBackend();
+            }
+            if (registryStatus === LoadStatus.Idle) {
+                useNodeRegistryStore.getState().syncFromBackend();
+            }
             return;
         }
 

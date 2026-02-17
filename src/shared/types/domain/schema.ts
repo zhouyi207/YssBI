@@ -1,1 +1,2 @@
-export * from "./shema";
+export interface EditorSchema {
+}

@@ -1,7 +1,8 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
-import { Pin as PinModel, Node } from "@/shared/types/domain";
-import { useNodeStyle } from "@/features/domain/node/hooks";
+import { Pin as PinModel } from "@/shared/types/domain";
+import type { Node } from "@/shared/types/ui";
+import { useNodeStyle } from "@/features/core/node";
 
 interface MathNodeLayoutProps {
   node: Node;

@@ -12,6 +12,7 @@ import {
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { PIN_COLORS, buildSidebarDragData, buildColumnDragData } from "@/features/domain/sidebar";
+import { dataTypeKind, dataTypeDisplay } from "@/shared/types/domain/dataType";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
@@ -168,7 +169,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         )}
         <div
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.data_type ? PIN_COLORS[extra.data_type] : '#9ca3af')) }}
+          style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.dataType ? PIN_COLORS[typeof extra.dataType === 'string' ? extra.dataType : dataTypeKind(extra.dataType)] : '#9ca3af')) }}
         />
         <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
         {/* 为 event/function/macro 添加打开按钮 */}
@@ -205,8 +206,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </button>
             )}
             <span className={`text-[9px] font-black uppercase px-1 rounded flex items-center gap-1 ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
-              {extra?.data_type}
-              {extra?.is_array && <span className="text-[7px] bg-blue-500/20 text-blue-400 px-0.5 rounded">[]</span>}
+              {extra?.dataType ? (typeof extra.dataType === 'string' ? extra.dataType : dataTypeDisplay(extra.dataType)) : ''}
+              {extra?.dataType && typeof extra.dataType === 'object' && 'kind' in extra.dataType && extra.dataType.kind === 'Array' && (
+                <span className="text-[7px] bg-blue-500/20 text-blue-400 px-0.5 rounded">[]</span>
+              )}
             </span>
           </>
         )}
@@ -271,10 +274,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             <>
               {Object.entries(dataframes).map(([id, data]) => (
                 <div key={id}>
-                  {renderItem(id, data.name, 'data', data)}
-                  {expandedDataFrames[id] && data.columns && (
+                  {renderItem(id, String((data as { name?: unknown }).name ?? ''), 'data', data)}
+                  {expandedDataFrames[id] && (data as { columns?: unknown[] }).columns && (
                     <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
-                      {data.columns.map((col: { name: string; type: string }, idx: number) => {
+                      {((data as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, idx) => {
                         const columnDragData = buildColumnDragData(id, idx, col);
 
                         return (

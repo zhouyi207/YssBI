@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useNodeDefinitions } from "@/features/core/nodeRegister";
+import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
+import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
@@ -45,7 +46,7 @@ export function NodePalette({
   macros?: Record<string, Graph>;
 }) {
   const [query, setQuery] = useState("");
-  const { definitions } = useNodeDefinitions();
+  const definitions = useNodeRegistryStore((s) => s.definitionsArray);
   
   // 记录哪些文件夹是展开的
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
@@ -98,20 +99,20 @@ export function NodePalette({
       
       const varName = v.name;
       const varId = v.id;
-      const varType = v.data_type;
+      const varType = v.dataType;
 
       // Get 节点
       let getCompatible = true;
       if (filterPin) {
         if (filterPin.direction === 'output') getCompatible = false;
-        else getCompatible = (varType === filterPin.type || filterPin.type === 'any');
+        else getCompatible = (dataTypeMatches(varType, filterPin.type) || filterPin.type === 'any');
       }
       if (getCompatible) {
         items.push({
           type: 'get_variable',
           title: `Get ${varName}`,
           category: ['Variables'],
-          overrides: { title: `Get ${varName}`, variableId: varId, variableName: varName, variableType: varType } as any
+          overrides: { title: `Get ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) } as any
         });
       }
 
@@ -119,14 +120,14 @@ export function NodePalette({
       let setCompatible = true;
       if (filterPin) {
         if (filterPin.direction === 'input') setCompatible = false;
-        else setCompatible = (varType === filterPin.type || filterPin.type === 'any');
+        else setCompatible = (dataTypeMatches(varType, filterPin.type) || filterPin.type === 'any');
       }
       if (setCompatible) {
         items.push({
           type: 'set_variable',
           title: `Set ${varName}`,
           category: ['Variables'],
-          overrides: { title: `Set ${varName}`, variableId: varId, variableName: varName, variableType: varType } as any
+          overrides: { title: `Set ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) } as any
         });
       }
     });

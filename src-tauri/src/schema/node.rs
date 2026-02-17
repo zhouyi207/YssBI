@@ -7,14 +7,12 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct NodeInstanceDTO {
     pub id: NodeId,
-    #[serde(rename = "nodeType")]
     pub node_type: String,
     pub category: Vec<String>,
     pub title: String,
     pub inputs: Vec<String>,  // Pin IDs
     pub outputs: Vec<String>, // Pin IDs
     pub ui_style: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub position: NodePosition,  // 添加位置信息
 }

@@ -3,7 +3,7 @@ import { Node } from '@/shared/types/ui';
 import { getGraphById, useGraphDataStore, useGraphHistoryStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '@/features/core/editor';
-import { deleteNodeInBackend } from '@/shared/utils/editor';
+import { deleteNodeInBackend } from '@/features/core/dataStore';
 import { NodeService } from '@/services';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useViewportStore } from '@/features/core/viewport';
@@ -43,10 +43,10 @@ export function useEditorOperations() {
     const currentGraph = getGraphById(tId);
     if (!currentGraph) return;
 
-    const currentNodes = currentGraph.nodes || [];
+    const currentNodes = (currentGraph.nodes || []) as unknown as Node[];
     const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
 
-    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes);
+    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes as import('@/shared/types/store/graph').RuntimeNodeInput[]);
   }, []);
 
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -92,8 +92,8 @@ export function useEditorOperations() {
     if (!currentGraph) return;
 
     const currentNodes = currentGraph.nodes || [];
-    const sel = currentNodes.filter(n => sIds.has(n.id) && !n.isInternal);
-    if (sel.length > 0) setClipboard(sel.map(n => n.clone()));
+    const sel = currentNodes.filter((n: { id: string; isInternal?: boolean }) => sIds.has(n.id) && !n.isInternal);
+    if (sel.length > 0) setClipboard(sel.map((n) => ('clone' in n && typeof (n as any).clone === 'function' ? (n as any).clone() : { ...n }) as Node));
   }, [setClipboard]);
 
   const cut = useCallback(() => {
@@ -116,8 +116,8 @@ export function useEditorOperations() {
     const offX = tX - minX, offY = tY - minY;
 
     // Prepare nodes with new positions
-    const tempNodes = clipboard.map(n => {
-      const clone = n.clone();
+    const tempNodes = clipboard.map((n: Node) => {
+      const clone = 'clone' in n && typeof (n as any).clone === 'function' ? (n as any).clone() : { ...n };
       clone.position = { x: n.position.x + offX, y: n.position.y + offY };
       return clone;
     });
@@ -126,7 +126,7 @@ export function useEditorOperations() {
       console.log('[useEditorOperations] Pasting nodes via backend...');
 
       // Extract node types for backend validation
-      const nodeTypes = tempNodes.map(n => n.node_type || n.type);
+      const nodeTypes = tempNodes.map((n: { node_type?: string; type?: string }) => n.node_type || n.type).filter((t): t is string => t != null);
 
       // Call backend to validate node types
       await NodeService.createNodes(tid, nodeTypes);

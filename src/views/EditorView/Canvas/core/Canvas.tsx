@@ -5,7 +5,7 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
 import { useCanvasViewport, useCanvasDrop } from "@/features/application/editor/core/hooks";
-import { useExecutionVisualization } from "@/features/domain/execution/hooks";
+import { useExecutionVisualization } from "@/features/core/execution";
 
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
@@ -125,7 +125,7 @@ export default function Canvas() {
               <Node
                 key={node.id}
                 id={node.id}
-                node={node}
+                node={node as unknown as import('@/shared/types/ui').Node}
                 scale={scale}
                 selected={selectedNodeIdsSet.has(node.id)}
                 dragDelta={dragDelta ?? undefined}

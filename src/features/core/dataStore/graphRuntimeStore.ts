@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { GraphId, NodeId, PinId } from '@/shared/types';
-import { Camera } from '@/shared/types/domain/camera';
+
+interface Camera {
+  zoom: number;
+  offset: { x: number; y: number };
+}
 
 interface GraphRuntimeStore {
   activeGraphId: GraphId | null;
@@ -32,7 +36,7 @@ interface GraphRuntimeStore {
   clearPreviewConnection(): void;
 }
 
-export const useGraphRuntimeStore = create<GraphRuntimeStore>((set, get) => ({
+export const useGraphRuntimeStore = create<GraphRuntimeStore>((set) => ({
   activeGraphId: null,
 
   selection: {
@@ -78,9 +82,9 @@ export const useGraphRuntimeStore = create<GraphRuntimeStore>((set, get) => ({
   },
 
   clearSelection: () =>
-    set((state) => ({
+    set({
       selection: { nodes: new Set(), pins: new Set() },
-    })),
+    }),
 
   // ==========================
   // Camera

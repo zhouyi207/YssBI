@@ -1,7 +1,25 @@
 import { Node } from '@/shared/types/ui';
 import { Position } from "@/shared/types/ui";
 import { NodeService } from "@/services";
-import { createNode } from "@/features/core/nodeRegister";
+import { useNodeRegistryStore } from "@/features/core/nodeRegister";
+
+/**
+ * 从类型和位置创建 Node 实例（用于本地构建，ID 由后端分配）
+ */
+function buildNodeFromType(type: string, id: string, position: Position): Node {
+    const def = useNodeRegistryStore.getState().getDefinition(type);
+    return new Node({
+        id,
+        node_type: type,
+        category: def?.category ?? [],
+        title: def?.name ?? type,
+        inputs: [],
+        outputs: [],
+        ui_style: def?.node_metadata?.ui_style ?? 'default',
+        description: def?.node_metadata?.description,
+        position: { x: position.x, y: position.y },
+    });
+}
 
 /**
  * @deprecated 请使用 NodeService.createNode(graphId, nodeType, x, y)，由后端分配 ID。
@@ -47,27 +65,18 @@ export function createNodeFromTemplate(
     overrides?: Partial<Node> & { subGraphId?: string }
 ): Node | null {
     const id = "temp"; // 占位符，实际 ID 由后端 create_node 分配
-    const node = createNode(type, id, position);
-    if (node && overrides) {
+    const node = buildNodeFromType(type, id, position);
+    if (overrides) {
         Object.assign(node, overrides);
 
-        // Handle variable/data specific initialization
-        if ((node.node_type === 'get_variable' || node.node_type === 'set_variable' || node.node_type === 'get_dataframe') &&
-            node.variableId && node.variableName) {
-            const vType = node.variableType || 'dataframe';
-            const isArray = (node as any).variableIsArray || false;
-            node.setVariable(node.variableId, node.variableName, vType, isArray);
-        }
-
-        if (node.node_type === 'get_column' && node.initialData) {
-            const { columnName, columnType } = node.initialData;
-            if (columnName) {
-                node.title = `Get ${columnName}`;
-                const outputPin = node.outputs.find((p: any) => p.name === 'Column');
-                if (outputPin) {
-                    outputPin.node_type = columnType || 'array';
-                    outputPin.isArray = true;
-                }
+        // Handle get_column specific initialization
+        const initialData = (overrides as { initialData?: { columnName?: string; columnType?: string } }).initialData;
+        if (node.node_type === 'get_column' && initialData?.columnName) {
+            node.title = `Get ${initialData.columnName}`;
+            const outputPin = node.outputs.find((p: { name: string }) => p.name === 'Column');
+            if (outputPin) {
+                (outputPin as { type?: string; node_type?: string; isArray?: boolean }).type = initialData.columnType ?? 'array';
+                (outputPin as { isArray?: boolean }).isArray = true;
             }
         }
     }

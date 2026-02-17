@@ -1,6 +1,6 @@
 import React from "react";
 import { Node } from "@/shared/types/ui";
-import { useNodeExecution } from "@/features/domain/node/hooks";
+import { useNodeExecution } from "@/features/core/node";
 import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
 
 interface NodeContainerProps {

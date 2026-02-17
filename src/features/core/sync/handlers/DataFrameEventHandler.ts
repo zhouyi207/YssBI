@@ -10,7 +10,7 @@ export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPa
     handle(payload: DataFrameCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('DataFrame created:', payload.id);
         
-        useDatabaseStore.getState().addDatabase(payload.id, payload.data);
+        useDatabaseStore.getState().addDatabase(payload.id, payload.data as Record<string, unknown>);
         
         callbacks?.onDataFrameCreated?.(payload.id, payload.data);
     }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useViewportStore } from "@/features/core/viewport";
 import { useVariableStore } from "@/features/core/dataStore";
-import { createNodeFromTemplate, buildCreateNodeRequest } from "@/shared/utils/editor";
+import { createNodeFromTemplate } from "@/features/core/dataStore";
+import { buildCreateNodeRequest } from "@/shared/utils/editor";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 

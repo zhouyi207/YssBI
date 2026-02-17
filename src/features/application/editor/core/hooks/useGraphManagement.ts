@@ -76,7 +76,7 @@ export function useGraphManagement(
     for (const [id, meta] of Object.entries(metaStore.graphs)) {
       if (meta.type === 'event') {
         const g = getGraphById(id);
-        if (g) events[id] = g as Graph;
+        if (g) events[id] = g as unknown as Graph;
       }
     }
     
@@ -163,7 +163,7 @@ export function useGraphManagement(
     const fullData = { ...currentGraph, ...data };
     
     try {
-      await GraphService.updateEvent(id, fullData);
+      await GraphService.updateEvent(id, fullData as any);
       useGraphMetaStore.getState().updateGraph(id, data as any);
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
@@ -195,7 +195,7 @@ export function useGraphManagement(
     for (const [id, meta] of Object.entries(metaStore.graphs)) {
       if (meta.type === 'function') {
         const g = getGraphById(id);
-        if (g) functions[id] = g as Graph;
+        if (g) functions[id] = g as unknown as Graph;
       }
     }
     
@@ -271,7 +271,7 @@ export function useGraphManagement(
     const fullData = { ...currentGraph, ...data };
     
     try {
-      await GraphService.updateFunction(id, fullData);
+      await GraphService.updateFunction(id, fullData as any);
       useGraphMetaStore.getState().updateGraph(id, data as any);
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
@@ -303,7 +303,7 @@ export function useGraphManagement(
     for (const [id, meta] of Object.entries(metaStore.graphs)) {
       if (meta.type === 'macro') {
         const g = getGraphById(id);
-        if (g) macros[id] = g as Graph;
+        if (g) macros[id] = g as unknown as Graph;
       }
     }
     
@@ -379,7 +379,7 @@ export function useGraphManagement(
     const fullData = { ...currentGraph, ...data };
     
     try {
-      await GraphService.updateMacro(id, fullData);
+      await GraphService.updateMacro(id, fullData as any);
       useGraphMetaStore.getState().updateGraph(id, data as any);
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);

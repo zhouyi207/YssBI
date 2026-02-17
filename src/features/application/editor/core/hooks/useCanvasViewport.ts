@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useMemo } from "reac
 import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
 import { getGraphById } from "@/features/core/dataStore";
-import { deserializeGraph } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 const NODE_WIDTH = 300;

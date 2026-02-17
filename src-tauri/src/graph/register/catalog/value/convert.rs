@@ -61,7 +61,7 @@ fn register_convert(registry: &NodeRegistry) {
             // 记录转换信息
             ctx.log(format!(
                 "Convert: {} -> {}",
-                input_value.value_type(),
+                input_value.value_type().expect("None").to_string(),
                 output_type
             ));
 

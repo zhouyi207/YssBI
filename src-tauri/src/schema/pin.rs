@@ -27,7 +27,8 @@ fn data_type_to_pin_type(dt: &DataType) -> &'static str {
         DataType::Float32 | DataType::Float64 => "float",
         DataType::String => "string",
         DataType::Array(_) => "array",
-        DataType::Object | DataType::Any | DataType::Null => "object",
+        DataType::Object => "object",
+        DataType::Any => "any",
         DataType::DataFrame => "dataframe",
     }
 }

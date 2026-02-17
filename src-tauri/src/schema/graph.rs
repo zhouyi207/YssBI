@@ -44,13 +44,20 @@ impl From<&GraphInstance> for GraphInstanceDTO {
         let data_state = value.data_state.read().unwrap();
 
         // 构建 node_id -> (inputs, outputs) 的映射
+        // 必须按 node.pin_ids 顺序遍历，否则 HashMap 迭代顺序不确定会导致 pin 渲染顺序错乱
         let mut node_pins: HashMap<NodeId, (Vec<String>, Vec<String>)> = HashMap::new();
-        for (pin_id, pin) in &data_state.pins {
-            let entry = node_pins.entry(pin.node_id).or_insert((Vec::new(), Vec::new()));
-            match pin.definition.direction {
-                crate::graph::PinDirection::Input => entry.0.push(pin_id.to_string()),
-                crate::graph::PinDirection::Output => entry.1.push(pin_id.to_string()),
+        for node in data_state.nodes.values() {
+            let mut inputs = Vec::new();
+            let mut outputs = Vec::new();
+            for pin_id in &node.pin_ids {
+                if let Some(pin) = data_state.pins.get(pin_id) {
+                    match pin.definition.direction {
+                        crate::graph::PinDirection::Input => inputs.push(pin_id.to_string()),
+                        crate::graph::PinDirection::Output => outputs.push(pin_id.to_string()),
+                    }
+                }
             }
+            node_pins.insert(node.id, (inputs, outputs));
         }
 
         let nodes: Vec<NodeInstanceDTO> = data_state

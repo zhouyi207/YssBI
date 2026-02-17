@@ -1,6 +1,5 @@
 import { Node } from '@/shared/types/ui';
 import { GraphPosition, Pin, Variable } from "@/shared/types/domain";
-import { getNodeDefinition } from "@/features/core/nodeRegister";
 import type {
   SerializedGraphData,
   SerializedPin,
@@ -8,6 +7,7 @@ import type {
   DeserializedPin,
   DeserializeGraphInput,
 } from "@/shared/types/store/serialization";
+import { useNodeRegistryStore } from "../nodeRegister";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -129,17 +129,17 @@ export function deserializeGraph(data: DeserializeGraphInput): {
   };
 
   const nodes = (data.nodes || []).map((n) => {
-    const def = getNodeDefinition(n.type ?? n.node_type ?? '');
+    const def = useNodeRegistryStore((s) => s.getDefinition(n.type ?? n.node_type ?? ''));
 
     let node: DeserializedNode;
     if (def) {
       node = {
         id: n.id,
-        type: n.type ?? n.node_type,
-        node_type: n.node_type ?? n.type,
+        type: (n.type ?? n.node_type) ?? '',
+        node_type: (n.node_type ?? n.type) ?? '',
         category: n.category ?? def.category ?? [],
         title: n.title ?? def.name,
-        position: n.position,
+        position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
         ui_style: n.ui_style ?? def.node_metadata?.ui_style ?? 'default',
@@ -153,11 +153,11 @@ export function deserializeGraph(data: DeserializeGraphInput): {
     } else {
       node = {
         id: n.id,
-        type: n.type ?? n.node_type,
-        node_type: n.node_type ?? n.type,
+        type: (n.type ?? n.node_type) ?? '',
+        node_type: (n.node_type ?? n.type) ?? '',
         category: n.category ?? [],
-        title: n.title ?? n.type,
-        position: n.position,
+        title: n.title ?? (n.type ?? n.node_type ?? ''),
+        position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
         ui_style: n.ui_style ?? 'default',
@@ -193,7 +193,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
 
     // 找到源 pin（输出 pin）
     for (const node of nodes) {
-      const outputPin = node.outputs.find((p) => p.id === sourcePin);
+      const outputPin: DeserializedPin | undefined = node.outputs.find((p) => p.id === sourcePin);
       if (outputPin) {
         if (!outputPin.links) outputPin.links = [];
         if (!outputPin.links.includes(targetPin)) {
@@ -202,7 +202,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
       }
 
       // 找到目标 pin（输入 pin）
-      const inputPin = node.inputs.find((p) => p.id === targetPin);
+      const inputPin: DeserializedPin | undefined = node.inputs.find((p) => p.id === targetPin);
       if (inputPin) {
         if (!inputPin.links) inputPin.links = [];
         if (!inputPin.links.includes(sourcePin)) {

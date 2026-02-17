@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useViewportStore } from '@/features/core/viewport';
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 interface UseEditorKeyboardProps {
   deleteSelected: () => void;
@@ -15,7 +17,6 @@ interface UseEditorKeyboardProps {
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null, targetGroupId?: string) => void;
   splitEditorRight: (groupId: string) => void;
-  getActiveCanvasLocalPoint: (clientX: number, clientY: number) => { x: number; y: number };
 }
 
 /**
@@ -36,9 +37,21 @@ export function useEditorKeyboard({
   closeTab,
   setActiveTabId,
   splitEditorRight,
-  getActiveCanvasLocalPoint,
 }: UseEditorKeyboardProps) {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+
+  const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
+    const layoutStore = useLayoutStore.getState();
+    const gid = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
+    const el = document.getElementById(`layout-node-${gid}`);
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    const currentCanvas = useViewportStore.getState().viewports[gid] || DEFAULT_VIEWPORT;
+    return {
+      x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
+      y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,
+    };
+  }, []);
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
@@ -165,6 +178,5 @@ export function useEditorKeyboard({
     closeTab,
     setActiveTabId,
     splitEditorRight,
-    getActiveCanvasLocalPoint,
   ]);
 }

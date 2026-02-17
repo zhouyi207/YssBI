@@ -39,3 +39,19 @@ name category 应该在 node definition 创建的时候赋值，这样就可以�
 缓冲层和存储层，主要用于大型数据计算 —— 目前架构好像还是比较好加的，先处理前端先
 
 undo/redo 也是比较好加的，可以处理完毕后再进行添加
+
+
+
+## node_instance.rs 设计
+
+3.3 order 与 pin_ids 的冗余
+
+- PinInstance 有 order: PinOrder
+- NodeInstance 有 pin_ids: Vec<PinId>
+- 顺序信息在两个地方都有，存在冗余
+- 若 pin_ids 顺序是唯一真相来源，PinInstance.order 可考虑弱化或移除
+
+3.4 动态 Pin 支持不足
+
+- NodeMetaData.supports_dynamic_pins 已存在，但 from_definition 只处理静态 pins
+- 动态添加/删除 pin 的逻辑尚未在此体现，后续扩展时需要额外设计

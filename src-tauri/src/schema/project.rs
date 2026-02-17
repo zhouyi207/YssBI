@@ -1,4 +1,4 @@
-use super::{GraphInstanceDTO, VariableDefinitionDTO, DatabaseDeclDTO};
+use super::{GraphInstanceDTO, VariableInstanceDTO, DatabaseDeclDTO};
 use crate::graph::GraphId;
 use crate::project::{ProjectMetadata, ProjectData};
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ impl From<&ProjectMetadata> for ProjectMetadataDTO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDataDTO {
-    pub variables: HashMap<String, VariableDefinitionDTO>,
+    pub variables: HashMap<String, VariableInstanceDTO>,
     pub graphs: HashMap<GraphId, GraphInstanceDTO>,
     pub databases: HashMap<String, DatabaseDeclDTO>,
     pub metadata: ProjectMetadataDTO,
@@ -35,7 +35,7 @@ impl From<&ProjectData> for ProjectDataDTO {
             variables: value
                 .variables
                 .iter()
-                .map(|(k, v)| (k.clone(), VariableDefinitionDTO::from(v)))
+                .map(|(k, v)| (k.to_string(), VariableInstanceDTO::from(v)))
                 .collect(),
             graphs: value
                 .graphs

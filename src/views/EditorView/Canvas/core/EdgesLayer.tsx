@@ -2,11 +2,11 @@ import { useRef, useCallback, useEffect, useLayoutEffect, useState, useMemo } fr
 import { useViewportStore } from '@/features/core/viewport';
 import { useGraphData, useGraphDataStore } from "@/features/core/dataStore";
 import { useGestureStore } from '@/features/core/gesture';
-import { useExecutionStore } from "@/features/domain/execution/stores";
+import { useExecutionStore } from "@/features/core/execution";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { drawEdge } from "./Edge";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-import { deserializeGraph } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/features/core/dataStore";
 
 // 🆕 粒子类型定义
 interface Particle {

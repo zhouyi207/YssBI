@@ -1,18 +1,18 @@
 import { create } from 'zustand';
-import { VariableId, VariableData } from '@/shared/types';
+import type { VariableId, Variable } from '@/shared/types';
 
 interface VariableStore {
-  variables: Record<VariableId, VariableData>;
+  variables: Record<VariableId, Variable>;
 
-  addVariable(id: VariableId, v: VariableData): void;
-  updateVariable(id: VariableId, patch: Partial<VariableData>): void;
+  addVariable(id: VariableId, v: Variable): void;
+  updateVariable(id: VariableId, patch: Partial<Variable>): void;
   deleteVariable(id: VariableId): void;
 
-  setVariables(vars: Record<VariableId, VariableData>): void;
+  setVariables(vars: Record<VariableId, Variable>): void;
   clear(): void;
 }
 
-export const useVariableStore = create<VariableStore>((set, get) => ({
+export const useVariableStore = create<VariableStore>((set) => ({
   variables: {},
 
   // ==========================

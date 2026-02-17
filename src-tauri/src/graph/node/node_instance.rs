@@ -8,6 +8,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// 节点创建结果，便于扩展（如未来加入默认连接等）
+#[derive(Debug)]
+pub struct NodeCreationResult {
+    pub node: NodeInstance,
+    pub pins: Vec<PinInstance>,
+}
+
 /// Node 实例（运行时）
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +37,7 @@ pub struct NodeInstance {
 
 impl NodeInstance {
     /// 从定义创建实例
-    pub fn from_definition(definition: Arc<NodeDefinition>) -> (Self, Vec<PinInstance>) {
+    pub fn from_definition(definition: Arc<NodeDefinition>) -> Result<NodeCreationResult, String> {
         let node_id = NodeId::new();
 
         // ---------- TypeVar 映射 ----------
@@ -44,12 +51,10 @@ impl NodeInstance {
         }
 
         // ---------- 创建 PinInstance ----------
-        let pin_defs = definition
+        let pin_defs = (definition
             .pin_generator
             .as_ref()
-            .ok_or("pin_generator missing")
-            .unwrap()()
-        .unwrap(); // 假设这里返回 Vec<PinDefinition>
+            .ok_or("pin_generator missing")?)()?;
 
         let pin_instances: Vec<PinInstance> = pin_defs
             .iter()
@@ -77,16 +82,16 @@ impl NodeInstance {
         // ---------- 收集 pin_ids ----------
         let pin_ids = pin_instances.iter().map(|p| p.id).collect();
 
-        (
-            Self {
+        Ok(NodeCreationResult {
+            node: Self {
                 id: node_id,
                 definition,
                 type_var_map,
                 position: NodePosition { x: 0.0, y: 0.0 },
                 pin_ids,
             },
-            pin_instances,
-        )
+            pins: pin_instances,
+        })
     }
 
     /// 设置位置

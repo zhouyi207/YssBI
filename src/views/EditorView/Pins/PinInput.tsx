@@ -1,5 +1,5 @@
 import React from "react";
-import { usePinInput } from "@/features/domain/pin";
+import { usePinInput } from "@/features/core/pin";
 
 export interface PinInputProps {
   pinId: string;

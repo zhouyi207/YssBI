@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import { useGraphData } from '@/features/core/dataStore';
-import { deserializeGraph } from '@/shared/utils/editor';
+import { deserializeGraph } from '@/features/core/dataStore';
 
 export function useEditorGraphData(activeTabId: string | null) {
   const graphData = useGraphData(activeTabId);

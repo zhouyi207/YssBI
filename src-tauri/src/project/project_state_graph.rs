@@ -3,7 +3,7 @@ use crate::graph::{GraphInstance, GraphId, GraphKind};
 use std::sync::Arc;
 
 impl ProjectState {
-    fn add_graph(&self, graph_name: &str, graph_kind: GraphKind) -> GraphInstance {
+    pub fn add_graph(&self, graph_name: &str, graph_kind: GraphKind) -> GraphInstance {
         let graph_register = {
             let store = self.project_store.read().unwrap();
             Arc::clone(&store.node_register)

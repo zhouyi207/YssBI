@@ -85,16 +85,16 @@ impl GraphInstance {
             .get(node_type)
             .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
 
-        let (node, pins) = NodeInstance::from_definition(definition.clone());
-        let node_id = node.id;
-        
+        let result = NodeInstance::from_definition(definition.clone())?;
+        let node_id = result.node.id;
+
         // 设置位置
-        let node_with_position = node.with_position(x, y);
+        let node_with_position = result.node.with_position(x, y);
 
         {
             let mut data_state = self.data_state.write().unwrap();
             data_state.add_node(node_with_position);
-            data_state.add_pins(pins);
+            data_state.add_pins(result.pins);
         }
         
         // 自动运行类型推断
@@ -292,6 +292,17 @@ impl GraphInstance {
         {
             let data_state = self.data_state.write().unwrap();
             data_state.connections.disconnect(from_pin, to_pin);
+        }
+        
+        // 自动运行类型推断
+        let _ = self.infer_types();
+    }
+
+    /// 断开指定 Pin 的所有连接（输入和输出）
+    pub fn disconnect_pin(&self, pin_id: PinId) {
+        {
+            let data_state = self.data_state.write().unwrap();
+            data_state.connections.disconnect_all(pin_id);
         }
         
         // 自动运行类型推断

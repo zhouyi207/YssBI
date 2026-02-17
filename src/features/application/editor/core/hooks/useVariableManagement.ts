@@ -1,9 +1,30 @@
 import { useCallback } from 'react';
-import { Variable } from '@/shared/types/domain';
-import { useVariableStore } from '@/features/core/dataStore';
+import type { Variable, VariableScope } from '@/shared/types/domain';
+import { dataTypeFromKey, getDefaultValue } from '@/shared/types/domain/dataType';
+import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
+import { useVariableStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from './useSidebarTab';
+
+/** 根据 activeTabId 和 graph 类型构建 scope */
+function buildScope(
+  isGlobal: boolean,
+  activeTabId: string | null,
+  graphType: 'event' | 'function' | 'macro' | undefined
+): VariableScope {
+  if (isGlobal || !activeTabId) return { type: 'global' };
+  switch (graphType) {
+    case 'event':
+      return { type: 'event', eventId: activeTabId };
+    case 'function':
+      return { type: 'function', functionId: activeTabId };
+    case 'macro':
+      return { type: 'macro', macroId: activeTabId };
+    default:
+      return { type: 'global' };
+  }
+}
 
 /**
  * Variable Management Hook
@@ -11,47 +32,35 @@ import { useSidebarTab } from './useSidebarTab';
  */
 export function useVariableManagement() {
   const switchSidebarTab = useSidebarTab();
-  // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
-  const activeEditorNode = useLayoutStore((s: LayoutState) => 
+  const activeEditorNode = useLayoutStore((s: LayoutState) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const graphType = useGraphMetaStore((s) =>
+    activeTabId ? s.graphs[activeTabId]?.type : undefined
+  );
 
-  const addVariable = useCallback(async (name?: string, type: string = "Int32", isGlobal: boolean = false) => {
+  const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
     try {
-      // 构建变量对象（id 由后端 create_variable 分配）
-      const variable: Variable = {
-        id: "", // 占位符，后端分配真实 ID
+      const dataType = dataTypeFromKey(type);
+      const variable: Omit<Variable, 'id'> = {
         name: name || `variable_${Date.now()}`,
-        data_type: type as any,
+        dataType,
+        dataValue: dataValueFromRaw(getDefaultValue(dataType), dataType),
         description: '',
-        scope: isGlobal 
-          ? { type: 'global' }
-          : activeTabId 
-            ? { type: 'function', function_id: activeTabId } // 假设是 function，也可能是 macro
-            : { type: 'global' }, // 如果没有 activeTabId，默认为全局
-        static_value: undefined,
-        is_array: false,
-        is_constant: false,
-        default_value: undefined,
-        is_exposed: false,
+        scope: buildScope(isGlobal, activeTabId, graphType),
         tags: [],
       };
 
-      // 调用后端创建变量
       const newVarId = await VariableService.createVariable(variable);
-      
-      // 获取创建后的变量
       const newVar = await VariableService.getVariable(newVarId);
-
-      // 更新前端状态
       useVariableStore.getState().addVariable(newVarId, newVar);
 
       switchSidebarTab('variables');
     } catch (e) {
-      console.error("Failed to create variable:", e);
+      console.error('Failed to create variable:', e);
     }
-  }, [activeTabId, switchSidebarTab]);
+  }, [activeTabId, graphType, switchSidebarTab]);
 
   const updateVariable = useCallback((id: string, data: Partial<Variable>) => {
     useVariableStore.getState().updateVariable(id, data);
@@ -61,12 +70,12 @@ export function useVariableManagement() {
     useVariableStore.getState().deleteVariable(id);
   }, []);
 
-  const promoteVariable = useCallback((id: string) => {
+  const promoteVariable = useCallback((_id: string) => {
     // No-op in new architecture - all variables are in project store
     console.log('[useVariableManagement] promoteVariable is no-op in new architecture');
   }, []);
 
-  const demoteVariable = useCallback((id: string) => {
+  const demoteVariable = useCallback((_id: string) => {
     // No-op in new architecture - all variables are in project store
     console.log('[useVariableManagement] demoteVariable is no-op in new architecture');
   }, []);

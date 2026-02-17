@@ -7,3 +7,4 @@ export type PinId = string;
 export type GraphId = string;
 export type ConnectionId = string;
 export type VariableId = string;
+export type DatabaseId = string;

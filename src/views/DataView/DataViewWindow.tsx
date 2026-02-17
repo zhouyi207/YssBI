@@ -58,7 +58,7 @@ export const DataViewWindow: React.FC = () => {
   const loadMoreRows = async () => {
     if (!selectedDfId || loadingMore) return;
     const currentCount = loadedRows.length;
-    const totalCount = dataframes[selectedDfId]?.rowCount || 0;
+    const totalCount = (dataframes[selectedDfId]?.rowCount as number) ?? 0;
 
     if (currentCount >= totalCount) return;
 
@@ -196,7 +196,7 @@ export const DataViewWindow: React.FC = () => {
             value={selectedDfId || ''}
             onChange={(val) => setSelectedDfId(val)}
             options={Object.entries(dataframes).map(([id, df]) => ({
-              label: df.name,
+              label: String((df as { name?: unknown }).name ?? ''),
               value: id
             }))}
           />
@@ -213,8 +213,8 @@ export const DataViewWindow: React.FC = () => {
 
         {selectedDf && (
           <div className="ml-auto flex items-center gap-4 text-[10px] font-mono opacity-50">
-            <span>COLUMNS: {selectedDf.columnCount}</span>
-            <span>ROWS: {selectedDf.rowCount}</span>
+            <span>COLUMNS: {(selectedDf as { columnCount?: number }).columnCount ?? 0}</span>
+            <span>ROWS: {(selectedDf as { rowCount?: number }).rowCount ?? 0}</span>
           </div>
         )}
       </div>
@@ -231,7 +231,7 @@ export const DataViewWindow: React.FC = () => {
               <thead className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
                 <tr>
                   <th className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 w-12 text-center">#</th>
-                  {selectedDf.columns.map((col: any, i: number) => (
+                  {(selectedDf.columns as Array<{ name: string; type: string }>).map((col, i) => (
                     <th key={i} className="p-2 text-left border-r border-gray-800 group">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-gray-300">{col.name}</span>
@@ -259,12 +259,12 @@ export const DataViewWindow: React.FC = () => {
                 Loading more data...
               </div>
             )}
-            {selectedDf.rowCount > loadedRows.length && !loadingMore && (
+            {((selectedDf as { rowCount?: number }).rowCount ?? 0) > loadedRows.length && !loadingMore && (
               <div className="p-4 text-center text-xs text-gray-500 italic border-t border-gray-800">
-                Scroll down to load more (showing {loadedRows.length} of {selectedDf.rowCount})
+                Scroll down to load more (showing {loadedRows.length} of {(selectedDf as { rowCount?: number }).rowCount ?? 0})
               </div>
             )}
-            {selectedDf.rowCount <= loadedRows.length && selectedDf.rowCount > 0 && (
+            {((selectedDf as { rowCount?: number }).rowCount ?? 0) <= loadedRows.length && ((selectedDf as { rowCount?: number }).rowCount ?? 0) > 0 && (
               <div className="p-4 text-center text-[9px] text-gray-600 uppercase tracking-widest border-t border-gray-800/30">
                 End of data
               </div>

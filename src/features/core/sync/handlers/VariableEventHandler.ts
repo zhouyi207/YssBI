@@ -1,41 +1,49 @@
 // src/features/core/sync/handlers/VariableEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { VariableCreatedPayload, VariableUpdatedPayload, VariableDeletedPayload, EventCallbacks } from '../types';
+import {
+  VariableCreatedPayload,
+  VariableUpdatedPayload,
+  VariableDeletedPayload,
+  EventCallbacks,
+} from '../types';
 import { useVariableStore } from '@/features/core/dataStore';
+import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 
 export class VariableCreatedHandler extends BaseEventHandler<VariableCreatedPayload> {
-    eventType = 'GlobalVariableCreated';
-    
-    handle(payload: VariableCreatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Variable created:', payload.id);
-        
-        useVariableStore.getState().addVariable(payload.id, payload.data);
-        
-        callbacks?.onVariableCreated?.(payload.id, payload.data);
-    }
+  eventType = 'VariableCreated';
+
+  handle(payload: VariableCreatedPayload, callbacks?: EventCallbacks): void {
+    this.log('Variable created:', payload.variableId);
+
+    const variable = normalizeVariableFromBackend(payload.data);
+    useVariableStore.getState().addVariable(payload.variableId, variable);
+
+    callbacks?.onVariableCreated?.(payload.variableId, variable);
+  }
 }
 
 export class VariableUpdatedHandler extends BaseEventHandler<VariableUpdatedPayload> {
-    eventType = 'GlobalVariableUpdated';
-    
-    handle(payload: VariableUpdatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Variable updated:', payload.id);
-        
-        useVariableStore.getState().updateVariable(payload.id, payload.data);
-        
-        callbacks?.onVariableUpdated?.(payload.id, payload.data);
-    }
+  eventType = 'VariableUpdated';
+
+  handle(payload: VariableUpdatedPayload, callbacks?: EventCallbacks): void {
+    this.log('Variable updated:', payload.variableId);
+
+    const variable = normalizeVariableFromBackend(payload.data);
+    useVariableStore.getState().updateVariable(payload.variableId, variable);
+
+    callbacks?.onVariableUpdated?.(payload.variableId, variable);
+  }
 }
 
 export class VariableDeletedHandler extends BaseEventHandler<VariableDeletedPayload> {
-    eventType = 'GlobalVariableDeleted';
-    
-    handle(payload: VariableDeletedPayload, callbacks?: EventCallbacks): void {
-        this.log('Variable deleted:', payload.id);
-        
-        useVariableStore.getState().deleteVariable(payload.id);
-        
-        callbacks?.onVariableDeleted?.(payload.id);
-    }
+  eventType = 'VariableDeleted';
+
+  handle(payload: VariableDeletedPayload, callbacks?: EventCallbacks): void {
+    this.log('Variable deleted:', payload.variableId);
+
+    useVariableStore.getState().deleteVariable(payload.variableId);
+
+    callbacks?.onVariableDeleted?.(payload.variableId);
+  }
 }

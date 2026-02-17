@@ -1,6 +1,6 @@
 // src/features/core/sync/types.ts
 
-import { ProjectData, Graph, Variable, Node } from '@/shared/types/domain';
+import type { ProjectData, Graph, Variable, VariableScope, Node } from '@/shared/types/domain';
 import type { NodeInstanceDTO, PinInstanceDTO } from '@/shared/types/dto';
 
 // ==================== 基础事件类型 ====================
@@ -48,18 +48,22 @@ export interface GraphCreatedFailedPayload {
     error: string;
 }
 
+/** 变量创建/更新事件 payload（与后端 EventVariable 对应） */
 export interface VariableCreatedPayload {
-    id: string;
+    variableId: string;
+    variableScope: VariableScope;
     data: Variable;
 }
 
 export interface VariableUpdatedPayload {
-    id: string;
-    data: Partial<Variable>;
+    variableId: string;
+    variableScope: VariableScope;
+    data: Variable;
 }
 
 export interface VariableDeletedPayload {
-    id: string;
+    variableId: string;
+    variableScope: VariableScope;
 }
 
 export interface DataFrameCreatedPayload {

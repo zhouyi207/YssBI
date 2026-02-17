@@ -5,12 +5,12 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { Node } from '@/shared/types/ui';
-import { Pin, Graph, GraphPosition } from "@/shared/types/domain";
+import { Pin, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "@/shared/utils";
 import { ConnectionService, NodeService } from "@/services";
-import { deserializeGraph } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/features/core/dataStore";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
@@ -99,24 +99,7 @@ export function useCanvasInteraction({
 
             try {
                 console.log(`[useCanvasInteraction] Disconnecting pin via backend: ${pinId}`);
-                const updatedSerializedNodes = await ConnectionService.disconnectPin(tid, pinId);
-                
-                // 获取最新的连接列表
-                const connections = await ConnectionService.getConnections(tid);
-
-                const tempGraph: Graph = {
-                    id: tid,
-                    name: "temp",
-                    type: "event",
-                    nodes: updatedSerializedNodes as any[],
-                    pins: [],
-                    connections: { connections },  // Connection 类型包含 connections 数组
-                    canvas: { x: 0, y: 0, scale: 1 }
-                };
-
-                const { nodes: newNodes } = deserializeGraph(tempGraph);
-
-                setNodes(newNodes);
+                await ConnectionService.disconnectPin(tid, pinId);
                 saveHistory();
             } catch (error) {
                 console.error('[useCanvasInteraction] Failed to disconnect pin:', error);

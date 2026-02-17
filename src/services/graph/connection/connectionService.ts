@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { GraphService } from "@/services/graph/graphService";
-import { toFrontendGraph } from "@/services/project/projectService";
 import { useGraphDataStore } from "@/features/core/dataStore";
 
 /**
@@ -18,21 +17,20 @@ export class ConnectionService {
         await invoke("connect_pins", { subgraphId, sourcePinId, targetPinId });
         console.log('[ConnectionService.connectPins] Connection successful, refreshing graph...');
         const rawGraph = await GraphService.getGraph(subgraphId);
-        const graph = toFrontendGraph(rawGraph);
-        useGraphDataStore.getState().addGraphFromData(subgraphId, graph);
+        useGraphDataStore.getState().addGraphFromData(subgraphId, rawGraph);
     }
 
     /**
-     * 断开 Pin 的所有连接
+     * 断开 Pin 的所有连接（Alt+Click 触发）
      * @param subgraphId 子图ID
      * @param pinId Pin ID
-     * @returns 更新后的节点列表
      */
-    static async disconnectPin(subgraphId: string, pinId: string): Promise<unknown[]> {
-        console.log('[ProjectService.disconnectPin] Disconnecting:', { subgraphId, pinId });
-        const nodes = await invoke<unknown[]>("disconnect_pin", { subgraphId, pinId });
-        console.log('[ProjectService.disconnectPin] Disconnection successful');
-        return nodes;
+    static async disconnectPin(subgraphId: string, pinId: string): Promise<void> {
+        console.log('[ConnectionService.disconnectPin] Disconnecting:', { subgraphId, pinId });
+        await invoke("disconnect_pin", { subgraphId, pinId });
+        console.log('[ConnectionService.disconnectPin] Disconnection successful, refreshing graph...');
+        const rawGraph = await GraphService.getGraph(subgraphId);
+        useGraphDataStore.getState().addGraphFromData(subgraphId, rawGraph);
     }
 
     // ==================== Connection 管理 ====================

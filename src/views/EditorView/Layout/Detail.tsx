@@ -1,9 +1,8 @@
 import { forwardRef, useMemo } from "react";
 import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
 import { Select } from "@/shared/ui";
-import { useSchemaStore } from "@/features/core/schema";
-import { isPrimitiveType } from "@/shared/utils";
-import { DataType } from "@/shared/types/domain";
+import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from "@/shared/types/domain/dataType";
+import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
 import { uiStore } from "@/features/core/ui/UIStore";
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
@@ -28,7 +27,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     deleteDataFrame
   } = useEditorGroup();
 
-  const variableTypes = useSchemaStore(s => s.variableTypes);
 
   // Find the selected item's data
   const selectedData = useMemo(() => {
@@ -175,59 +173,44 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                     <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
                     <td className="p-2">
                       <Select
-                        value={selectedData.data_type}
-                        options={Array.from(variableTypes.values()).map(t => ({
-                          label: t.display_name,
-                          value: t.name
-                        }))}
-                        onChange={(val) => handleUpdate({ data_type: val as DataType })}
+                        value={dataTypeKind(selectedData.dataType)}
+                        options={[
+                          { label: 'Boolean', value: 'Boolean' },
+                          { label: 'Int32', value: 'Int32' },
+                          { label: 'Int64', value: 'Int64' },
+                          { label: 'Float32', value: 'Float32' },
+                          { label: 'Float64', value: 'Float64' },
+                          { label: 'String', value: 'String' },
+                          { label: 'Object', value: 'Object' },
+                          { label: 'Any', value: 'Any' },
+                          { label: 'DataFrame', value: 'DataFrame' },
+                          { label: 'Array', value: 'Array' },
+                        ]}
+                        onChange={(val) => handleUpdate({ dataType: dataTypeFromKey(val as string) })}
                       />
                     </td>
                   </tr>
-                  <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Is Array</td>
-                    <td className="p-2">
-                      <input
-                        type="checkbox"
-                        className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
-                        checked={!!selectedData.is_array}
-                        disabled={!variableTypes.get(selectedData.data_type)?.supports_array}
-                        onChange={(e) => handleUpdate({ is_array: e.target.checked })}
-                      />
-                    </td>
-                  </tr>
-                  <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Constant</td>
-                    <td className="p-2">
-                      <input
-                        type="checkbox"
-                        className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
-                        checked={!!selectedData.is_constant}
-                        onChange={(e) => handleUpdate({ is_constant: e.target.checked })}
-                      />
-                    </td>
-                  </tr>
-                  {!selectedData.is_array && isPrimitiveType(selectedData.data_type) && (
+                  {selectedData.dataType.kind !== "Array" && isPrimitiveType(selectedData.dataType) && (
                     <tr className="border-b border-[#2b2b2b]">
                       <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
                       <td className="p-2">
-                        {(selectedData.data_type === "Boolean" || selectedData.data_type === "bool") ? (
+                        {(selectedData.dataType.kind === "Boolean") ? (
                           <input
                             type="checkbox"
                             className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
-                            checked={!!selectedData.static_value}
-                            onChange={(e) => handleUpdate({ static_value: e.target.checked })}
+                            checked={!!dataValueToRaw(selectedData.dataValue)}
+                            onChange={(e) => handleUpdate({ dataValue: dataValueFromRaw(e.target.checked, selectedData.dataType) })}
                           />
                         ) : (
                           <input
                             className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
-                            type={(selectedData.data_type === "String" || selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime") ? "text" : "number"}
-                            value={selectedData.static_value ?? ''}
+                            type={selectedData.dataType.kind === "String" ? "text" : "number"}
+                            value={String(dataValueToRaw(selectedData.dataValue) ?? '')}
                             onChange={(e) => {
-                              const val = (selectedData.data_type === "String" || selectedData.data_type === "string" || selectedData.data_type === "date" || selectedData.data_type === "datetime")
+                              const val = selectedData.dataType.kind === "String"
                                 ? e.target.value
                                 : Number(e.target.value);
-                              handleUpdate({ static_value: val });
+                              handleUpdate({ dataValue: dataValueFromRaw(val, selectedData.dataType) });
                             }}
                           />
                         )}

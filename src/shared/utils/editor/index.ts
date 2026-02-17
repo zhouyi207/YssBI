@@ -1,22 +1,4 @@
-// Serialization utilities
-export { serializeGraph, deserializeGraph } from './serialization';
-
-// Node operations
-export { 
-  createNodeInBackend, 
-  deleteNodeInBackend, 
-  createNodeFromTemplate 
-} from './nodeOperations';
-
-// Internal nodes
-export { 
-  buildCreateNodeRequest,
-  type CreateNodeRequest,
-  syncInternalNodePins, 
-  syncGraphInstanceNodes 
-} from './internalNodes';
-
-// Connection helpers
+// Connection helpers (pure functions, no external deps)
 export {
   findConnectionsByPin,
   findConnectionsByNode,
@@ -31,13 +13,10 @@ export {
   removeConnectionsForPin,
   removeConnectionsForNode,
   validateConnections,
-  areConnectionsValid
+  areConnectionsValid,
 } from './connections';
 
-// Pin utilities
-export { isSingleLinkPin, isCompatiblePins } from './pins';
-
-// DTO converters
+// DTO converters（已迁移至 @/shared/types/dto/graphConverters）
 export {
   convertGraphFromDTO,
   convertGraphToDTO,
@@ -50,5 +29,12 @@ export {
   validateGraphDTO,
   cloneDTO,
   mergeProjectData,
-} from './dtoConverters';
+} from '@/shared/types/dto/graphConverters';
 
+// Internal nodes (pure functions, no external deps)
+export {
+  buildCreateNodeRequest,
+  type CreateNodeRequest,
+  syncInternalNodePins,
+  syncGraphInstanceNodes,
+} from './internalNodes';

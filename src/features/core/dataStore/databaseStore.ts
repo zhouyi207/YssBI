@@ -1,17 +1,19 @@
 import { create } from 'zustand';
-import { DatabaseId } from '@/shared/types/domain/id';
-import { Database } from '@/shared/types';
+import { DatabaseId } from '@/shared/types/domain/ids';
+
+/** 数据库/数据帧记录（支持 DatabaseDecl 及 DataFrame 等扩展字段） */
+export type DatabaseRecord = Record<string, unknown>;
 
 interface DatabaseStore {
-  databases: Record<DatabaseId, Database>;
+  databases: Record<DatabaseId, DatabaseRecord>;
 
   // CRUD
-  addDatabase(id: DatabaseId, db: Database): void;
-  updateDatabase(id: DatabaseId, patch: Partial<Database>): void;
+  addDatabase(id: DatabaseId, db: DatabaseRecord): void;
+  updateDatabase(id: DatabaseId, patch: Partial<DatabaseRecord>): void;
   deleteDatabase(id: DatabaseId): void;
 
   // 项目级
-  setDatabases(dbs: Record<DatabaseId, Database>): void;
+  setDatabases(dbs: Record<DatabaseId, DatabaseRecord>): void;
   clear(): void;
 }
 

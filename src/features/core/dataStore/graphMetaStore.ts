@@ -28,7 +28,7 @@ interface GraphMetaStore {
   clear(): void;
 }
 
-export const useGraphMetaStore = create<GraphMetaStore>((set, get) => ({
+export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
   // ==========================
   // State
   // ==========================

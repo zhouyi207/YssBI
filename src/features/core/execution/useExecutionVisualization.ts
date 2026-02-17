@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useExecutionStore } from "../stores";
+import { useExecutionStore } from "./useExecutionStore";
 import { ExecutionEvent } from "@/shared/types/ui";
 
 /**

@@ -4,7 +4,6 @@ import {
   PinId,
   GraphId,
   ConnectionId,
-  GraphData,
   GraphDataLike,
   NodeData,
   PinData,
@@ -428,19 +427,21 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       const toPinId = (p: string | PinData): string =>
         typeof p === 'object' && p?.id ? p.id : String(p);
 
-      (graph.nodes || []).forEach((node: RuntimeNodeInput) => {
+      (graph.nodes || []).forEach((node: { id: string; node_type?: string; nodeType?: string; ui_style?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string }) => {
         const inputIds = (node.inputs ?? []).map(toPinId).filter(Boolean);
         const outputIds = (node.outputs ?? []).map(toPinId).filter(Boolean);
         const allPinIds = [...inputIds, ...outputIds];
+        const nodeType = node.node_type ?? node.nodeType ?? '';
+        const uiStyle = node.ui_style ?? node.uiStyle ?? 'default';
         nextNodes[node.id] = {
           id: node.id,
           graphId,
-          node_type: node.node_type,
+          node_type: nodeType,
           category: node.category ?? [],
           title: node.title ?? '',
           inputs: inputIds,
           outputs: outputIds,
-          ui_style: node.ui_style ?? 'default',
+          ui_style: uiStyle,
           description: node.description,
           position: node.position ?? { x: 0, y: 0 },
           isInternal: node.isInternal,

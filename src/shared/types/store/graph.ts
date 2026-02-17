@@ -5,9 +5,10 @@
  */
 
 import type { NodeId, PinId, GraphId, ConnectionId } from '../domain/ids';
+export type { NodeId, PinId, GraphId, ConnectionId };
 import type { GraphPosition, Graph } from '../domain/graph';
-import type { PinDirection, PinType } from '../domain/pin';
-import type { PinUI } from '../domain/pin';
+import type { PinDirection, PinType, PinUI } from '../domain/pin';
+import type { GraphInstanceDTO } from '../dto/graph';
 
 // ==================== NodeData ====================
 /** 节点数据（Store 规范化格式） */
@@ -89,5 +90,5 @@ export interface GraphDataInput extends Omit<GraphData, 'nodes'> {
   nodes: RuntimeNodeInput[];
 }
 
-/** addGraphFromData 接受的图格式（GraphData、GraphDataInput 或 domain Graph） */
-export type GraphDataLike = GraphData | GraphDataInput | Graph;
+/** addGraphFromData 接受的图格式（GraphData、GraphDataInput、domain Graph 或后端 DTO） */
+export type GraphDataLike = GraphData | GraphDataInput | Graph | GraphInstanceDTO;

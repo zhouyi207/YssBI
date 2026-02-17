@@ -43,7 +43,7 @@ export function isValidEventType(type: string): boolean {
         'FunctionCreated', 'FunctionUpdated', 'FunctionDeleted', 'FunctionCreatedFailed',
         'MacroCreated', 'MacroUpdated', 'MacroDeleted', 'MacroCreatedFailed',
         // Variable
-        'GlobalVariableCreated', 'GlobalVariableUpdated', 'GlobalVariableDeleted',
+        'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted',
         // Node
