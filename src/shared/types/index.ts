@@ -17,6 +17,9 @@
  * - 应用设置：使用 settings 类型
  */
 
+// ==================== Common Types ====================
+export type { PinValue, JsonValue } from './common';
+
 // ==================== Domain Types ====================
 // 领域模型 - 与后端数据结构一致
 export * from './domain';

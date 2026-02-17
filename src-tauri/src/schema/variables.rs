@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 /// 变量数据类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "camelCase")]
 pub enum VariableDataType {
     /// 整数
     Int8,
@@ -51,7 +51,7 @@ impl Default for VariableDataType {
 
 /// 变量作用域
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum VariableScope {
     /// 全局作用域
     Global,
@@ -77,7 +77,7 @@ impl Default for VariableScope {
 
 /// 数据来源配置（用于复杂数据类型）
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum DataSourceConfig {
     /// CSV 文件
     Csv {
@@ -352,8 +352,9 @@ fn default_true() -> bool {
     true
 }
 
-/// 变量定义（持久化到项目文件）
+/// 变量定义 DTO - 对应前端 Variable 类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VariableDefinitionDTO {
     // ===== 元数据 =====
     /// 变量 ID

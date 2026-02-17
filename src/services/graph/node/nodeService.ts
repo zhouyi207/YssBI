@@ -3,11 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 export class NodeService {
    // ==================== Nodes 操作 ====================
 
-    static async getNodes(subgraphId: string): Promise<any[]> {
-        return await invoke("get_nodes", { subgraphId });
+    static async getNodes(subgraphId: string): Promise<unknown[]> {
+        return await invoke<unknown[]>("get_nodes", { subgraphId });
     }
 
-    static async setNodes(subgraphId: string, nodes: any[]): Promise<void> {
+    static async setNodes(subgraphId: string, nodes: unknown[]): Promise<void> {
         await invoke("set_nodes", { subgraphId, nodes });
     }
 
@@ -80,6 +80,19 @@ export class NodeService {
             nodeId: nodeId 
         });
         console.log('[NodeService.deleteNode] Node deleted successfully');
+    }
+
+    /**
+     * 批量更新节点位置（拖拽结束时调用，CQRS 模式）
+     * @param graphId 子图 ID
+     * @param updates 节点位置更新列表
+     */
+    static async updateNodePositions(
+        graphId: string,
+        updates: Array<{ nodeId: string; x: number; y: number }>
+    ): Promise<void> {
+        if (updates.length === 0) return;
+        await invoke("update_node_positions", { graphId, updates });
     }
 
 }

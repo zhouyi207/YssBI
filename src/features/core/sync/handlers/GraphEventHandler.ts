@@ -3,6 +3,9 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
 import { useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
+import type { Graph } from '@/shared/types/domain';
+
+type GraphWithMeta = Graph & { entryNodeId?: string };
 
 // ==================== Event Handlers ====================
 
@@ -12,10 +15,9 @@ export class EventCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Event created:', payload.id);
         
-        const g = payload.data;
-        // 强制使用 event 类型，不依赖后端 payload.type（后端可能返回错误）
-        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'event', entryNodeId: (g as any).entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
+        const g = payload.data as GraphWithMeta;
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'event', entryNodeId: g.entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g);
         
         callbacks?.onEventCreated?.(payload.id, payload.data);
     }
@@ -29,7 +31,7 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
         
         const meta = useGraphMetaStore.getState().graphs[payload.id];
         if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
-        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data });
     }
 }
 
@@ -62,10 +64,9 @@ export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Function created:', payload.id);
         
-        const g = payload.data;
-        // 强制使用 function 类型，不依赖后端 payload.type（后端可能返回错误）
-        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'function', entryNodeId: (g as any).entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
+        const g = payload.data as GraphWithMeta;
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'function', entryNodeId: g.entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g);
         
         callbacks?.onFunctionCreated?.(payload.id, payload.data);
     }
@@ -79,7 +80,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
         
         const meta = useGraphMetaStore.getState().graphs[payload.id];
         if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
-        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data });
     }
 }
 
@@ -112,10 +113,9 @@ export class MacroCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
     handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Macro created:', payload.id);
         
-        const g = payload.data;
-        // 强制使用 macro 类型，不依赖后端 payload.type（后端可能返回错误）
-        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'macro', entryNodeId: (g as any).entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(payload.id, g as any);
+        const g = payload.data as GraphWithMeta;
+        useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'macro', entryNodeId: g.entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(payload.id, g);
         
         callbacks?.onMacroCreated?.(payload.id, payload.data);
     }
@@ -129,7 +129,7 @@ export class MacroUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
         
         const meta = useGraphMetaStore.getState().graphs[payload.id];
         if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
-        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data } as any);
+        if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data });
     }
 }
 

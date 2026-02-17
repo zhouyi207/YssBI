@@ -1,5 +1,6 @@
-import { Graph } from "./graph";
-import { Variable } from "./variable";
+import type { Graph } from "./graph";
+import type { Variable } from "./variable";
+import type { DatabaseDecl } from "./database";
 
 /**
  * Domain Types - Project
@@ -22,7 +23,7 @@ export interface ProjectMetadata {
 export interface ProjectData {
     variables: Record<string, Variable>;  // 变量集合（ID -> Variable）
     graphs: Record<string, Graph>;        // 图集合（ID -> Graph）
-    databases: Record<string, any>;       // 数据库集合（ID -> Database）
+    databases: Record<string, DatabaseDecl>;  // 数据库集合（ID -> DatabaseDecl）
     metadata: ProjectMetadata;            // 元数据
 }
 

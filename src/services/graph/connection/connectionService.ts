@@ -19,7 +19,7 @@ export class ConnectionService {
         console.log('[ConnectionService.connectPins] Connection successful, refreshing graph...');
         const rawGraph = await GraphService.getGraph(subgraphId);
         const graph = toFrontendGraph(rawGraph);
-        useGraphDataStore.getState().addGraphFromData(subgraphId, graph as any);
+        useGraphDataStore.getState().addGraphFromData(subgraphId, graph);
     }
 
     /**
@@ -28,11 +28,11 @@ export class ConnectionService {
      * @param pinId Pin ID
      * @returns 更新后的节点列表
      */
-    static async disconnectPin(subgraphId: string, pinId: string): Promise<any[]> {
+    static async disconnectPin(subgraphId: string, pinId: string): Promise<unknown[]> {
         console.log('[ProjectService.disconnectPin] Disconnecting:', { subgraphId, pinId });
-        const nodes = await invoke("disconnect_pin", { subgraphId, pinId });
+        const nodes = await invoke<unknown[]>("disconnect_pin", { subgraphId, pinId });
         console.log('[ProjectService.disconnectPin] Disconnection successful');
-        return nodes as any[];
+        return nodes;
     }
 
     // ==================== Connection 管理 ====================
@@ -44,7 +44,7 @@ export class ConnectionService {
      * @param targetPinId 目标 Pin ID（输入）
      * @returns 创建的连接对象
      */
-    static async createConnection(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<any> {
+    static async createConnection(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<unknown> {
         console.log('[ProjectService.createConnection] Creating connection:', { subgraphId, sourcePinId, targetPinId });
         const connection = await invoke("create_connection", { subgraphId, sourcePinId, targetPinId });
         console.log('[ProjectService.createConnection] Connection created:', connection);
@@ -67,11 +67,11 @@ export class ConnectionService {
      * @param subgraphId 子图ID
      * @returns 连接列表
      */
-    static async getConnections(subgraphId: string): Promise<any[]> {
+    static async getConnections(subgraphId: string): Promise<unknown[]> {
         console.log('[ProjectService.getConnections] Getting connections:', { subgraphId });
-        const connections = await invoke("get_connections", { subgraphId });
-        console.log('[ProjectService.getConnections] Got connections:', (connections as any[]).length);
-        return connections as any[];
+        const connections = await invoke<unknown[]>("get_connections", { subgraphId });
+        console.log('[ProjectService.getConnections] Got connections:', connections.length);
+        return connections;
     }
 
     /**

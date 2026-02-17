@@ -27,6 +27,7 @@ impl From<&GraphKind> for GraphTypeDTO {
 
 /// Graph instance DTO - 对应前端 Graph 类型
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GraphInstanceDTO {
     pub id: GraphId,
     pub name: String,
@@ -68,7 +69,19 @@ impl From<&GraphInstance> for GraphInstanceDTO {
         let pins: Vec<PinInstanceDTO> = data_state
             .pins
             .values()
-            .map(PinInstanceDTO::from)
+            .map(|pin| {
+                let resolved_type = data_state.pin_types.get(&pin.id);
+                let links = if pin.definition.direction == crate::graph::PinDirection::Output {
+                    data_state.connections.get_downstream(pin.id)
+                } else {
+                    data_state
+                        .connections
+                        .get_upstream(pin.id)
+                        .map(|p| vec![p])
+                        .unwrap_or_default()
+                };
+                PinInstanceDTO::from_pin_with_context(pin, resolved_type, links)
+            })
             .collect();
 
         Self {
@@ -85,7 +98,7 @@ impl From<&GraphInstance> for GraphInstanceDTO {
 
 /// Graph data state DTO - 内部使用
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "camelCase")]
 pub struct GraphDataStateDTO {
     pub nodes: HashMap<NodeId, NodeInstanceDTO>,
     pub pins: HashMap<PinId, PinInstanceDTO>,
@@ -104,7 +117,22 @@ impl From<&GraphDataState> for GraphDataStateDTO {
             pins: value
                 .pins
                 .iter()
-                .map(|(id, pin)| (*id, PinInstanceDTO::from(pin)))
+                .map(|(id, pin)| {
+                    let resolved_type = value.pin_types.get(&pin.id);
+                    let links = if pin.definition.direction == crate::graph::PinDirection::Output {
+                        value.connections.get_downstream(pin.id)
+                    } else {
+                        value
+                            .connections
+                            .get_upstream(pin.id)
+                            .map(|p| vec![p])
+                            .unwrap_or_default()
+                    };
+                    (
+                        *id,
+                        PinInstanceDTO::from_pin_with_context(pin, resolved_type, links),
+                    )
+                })
                 .collect(),
 
             connections: ConnectionDTO::from(&value.connections),

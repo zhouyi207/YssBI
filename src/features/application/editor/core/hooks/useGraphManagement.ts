@@ -5,6 +5,27 @@ import { GraphService } from '@/services/graph/graphService';
 import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from './useSidebarTab';
 
+/** 兜底：若 EventCreated 未到达，用 get_graph 拉取并打开（解决监听器竞态导致的超时） */
+async function fulfillPendingGraph(
+  id: string,
+  graphType: 'event' | 'function' | 'macro',
+  openGraph: (id: string, name: string, type: string, data?: any) => void,
+  pendingActionsRef: React.RefObject<Map<string, { callback: () => void; timeout: NodeJS.Timeout }>>
+) {
+  try {
+    const graph = await GraphService.getGraph(id);
+    const action = pendingActionsRef.current.get(id);
+    if (!action) return; // 事件已处理
+    clearTimeout(action.timeout);
+    pendingActionsRef.current.delete(id);
+    useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: graphType, entryNodeId: (graph as any).entryNodeId });
+    useGraphDataStore.getState().addGraphFromData(id, graph as any);
+    openGraph(id, graph.name, graphType, graph);
+  } catch (e) {
+    console.warn(`[useGraphManagement] Fallback get_graph for ${id} failed:`, e);
+  }
+}
+
 interface PendingAction {
     callback: () => void;
     timestamp: number;
@@ -92,6 +113,9 @@ export function useGraphManagement(
         timeout: timeoutId,
         name: finalName,
       });
+      
+      // 兜底：若 EventCreated 未到达（监听器竞态等），用 get_graph 拉取并打开
+      fulfillPendingGraph(id, 'event', openGraph, pendingActionsRef);
       
       // 切换到 events 标签页
       switchSidebarTab('events');
@@ -206,6 +230,7 @@ export function useGraphManagement(
         name: finalName,
       });
       
+      fulfillPendingGraph(id, 'function', openGraph, pendingActionsRef);
       switchSidebarTab('functions');
       cleanupExpiredActions();
       
@@ -313,6 +338,7 @@ export function useGraphManagement(
         name: finalName,
       });
       
+      fulfillPendingGraph(id, 'macro', openGraph, pendingActionsRef);
       switchSidebarTab('macros');
       cleanupExpiredActions();
       

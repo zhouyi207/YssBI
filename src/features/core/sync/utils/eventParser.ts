@@ -4,7 +4,7 @@ import { BaseEvent, NestedEvent } from '../types';
 
 export interface ParsedEvent {
     type: string;
-    payload: any;
+    payload: unknown;
 }
 
 /**
@@ -16,11 +16,11 @@ export function parseEvent(event: BaseEvent | NestedEvent): ParsedEvent {
     const eventPayload = event.payload;
 
     // 检查是否为嵌套事件
-    if (eventPayload && typeof eventPayload === 'object' && 'type' in eventPayload) {
-        // 嵌套事件：Event/Function/Macro/Variable/Node/Connection/DataFrame
+    if (eventPayload && typeof eventPayload === 'object' && 'type' in eventPayload && 'payload' in eventPayload) {
+        const nested = eventPayload as { type: string; payload: unknown };
         return {
-            type: eventPayload.type,
-            payload: eventPayload.payload
+            type: nested.type,
+            payload: nested.payload
         };
     }
 
@@ -47,7 +47,7 @@ export function isValidEventType(type: string): boolean {
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted',
         // Node
-        'NodeCreated', 'NodeUpdated', 'NodeDeleted',
+        'NodeCreated', 'NodeUpdated', 'NodeDeleted', 'NodePositionsUpdated',
         // Connection (可选)
         'ConnectionCreated', 'ConnectionDeleted',
     ];

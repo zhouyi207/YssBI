@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// 变量定义（持久化到项目文件）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VariableDefinition {
     // ===== 元数据 =====
     /// 变量 ID

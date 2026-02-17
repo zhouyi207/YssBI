@@ -5,7 +5,7 @@ import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor/core/hooks/useCanvasOverlayHandlers";
 import { HUD } from "./HUD";
-import { NodePalette } from "../../Layout/NodePalette";
+import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
 
 export default function CanvasOverlays({
@@ -61,7 +61,7 @@ export default function CanvasOverlays({
         setCanvas,
     });
 
-    const onPaletteSelect = (item: import("../../Layout/NodePalette").PaletteItem) =>
+    const onPaletteSelect = (item: PaletteItem) =>
         contextMenu && handleNodePaletteSelect(item, contextMenu);
 
     return (

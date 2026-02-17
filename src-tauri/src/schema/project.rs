@@ -5,10 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectMetadataDTO {
-    #[serde(rename = "exportTime")]
     pub export_time: String,
-    #[serde(rename = "appVersion")]
     pub app_version: String,
 }
 
@@ -22,6 +21,7 @@ impl From<&ProjectMetadata> for ProjectMetadataDTO {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectDataDTO {
     pub variables: HashMap<String, VariableDefinitionDTO>,
     pub graphs: HashMap<GraphId, GraphInstanceDTO>,

@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 /// Node 实例（运行时）
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NodeInstance {
     /// 节点 ID
     pub id: NodeId,

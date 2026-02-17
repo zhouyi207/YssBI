@@ -1,52 +1,47 @@
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
+import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 
 type CanvasState = GraphPosition;
 
 /**
  * 将后端 Graph 数据转换为前端格式（供 connectPins 等复用）
  */
-export function toFrontendGraph(data: any): Graph {
+export function toFrontendGraph(data: GraphInstanceDTO): Graph {
     console.log('[toFrontendGraph] Input data:', data);
     
-    // 后端返回的结构：
-    // - 新格式（GraphInstanceDTO）：{ id, name, graph_type, nodes: [], pins: [], connections: {...}, canvas }
-    // - 旧格式（GraphInstance）：{ id, name, kind, data_state: { nodes: {}, pins: {}, connections: {} }, position }
+    // 后端返回的结构（GraphInstanceDTO）：{ id, name, type, nodes: [], pins: [], connections: {...}, canvas }
     
-    let nodes: any[] = [];
-    let pins: any[] = [];
-    let connectionsArray: any[] = [];
+    let nodes: Graph["nodes"] = [];
+    let pins: Graph["pins"] = [];
+    let connectionsArray: { fromPin: string; toPin: string }[] = [];
     
-    // 检查是否是新格式（GraphInstanceDTO）
     if (data.nodes && Array.isArray(data.nodes)) {
-        // 新格式：nodes 是数组
-        
         // 先处理 pins 数组，创建 Pin ID 到 Pin 对象的映射
-        const pinMap = new Map<string, any>();
+        const pinMap = new Map<string, Pin>();
         if (data.pins && Array.isArray(data.pins)) {
-            data.pins.forEach((pin: any) => {
-                // 后端 PinInstanceDTO 序列化为 type；旧格式可能用 data_type
-                const pinType = pin.type ?? pin.data_type ?? pin.pin_type ?? 'any';
+            data.pins.forEach((pin) => {
+                const pinType = pin.type ?? 'any';
                 pinMap.set(pin.id, {
                     id: pin.id,
-                    nodeId: pin.node_id,
+                    nodeId: pin.nodeId,
                     name: pin.name,
                     type: pinType,
-                    node_type: pinType,
                     direction: pin.direction,
                     links: [],
-                    isArray: pin.is_array || false,
-                    defaultValue: pin.default_value,
-                    userValue: pin.user_value,
+                    isArray: pin.isArray ?? false,
+                    defaultValue: pin.defaultValue,
+                    userValue: pin.userValue,
+                    ui: pin.ui ? { x: pin.ui.x, y: pin.ui.y, color: pin.ui.color } : undefined,
                 });
             });
         }
         
         // 转换节点，并从 pinMap 中获取对应的 Pin
-        nodes = data.nodes.map((node: any) => {
-            const nodeInputs: any[] = [];
-            const nodeOutputs: any[] = [];
+        nodes = data.nodes.map((node) => {
+            const nodeInputs: Pin[] = [];
+            const nodeOutputs: Pin[] = [];
             
             // 从 node.inputs (Pin IDs) 中获取完整的 Pin 对象
             if (node.inputs && Array.isArray(node.inputs)) {
@@ -70,13 +65,13 @@ export function toFrontendGraph(data: any): Graph {
             
             return {
                 id: node.id,
-                type: node.node_type,        // deserializeGraph 需要这个字段
-                node_type: node.node_type,   // 保持一致性
+                type: node.nodeType,
+                node_type: node.nodeType,
                 category: node.category || [],
                 title: node.title,
                 inputs: nodeInputs,
                 outputs: nodeOutputs,
-                ui_style: node.ui_style || 'default',
+                ui_style: node.uiStyle ?? 'default',
                 description: node.description,
                 position: node.position || { x: 0, y: 0 },
             };
@@ -95,88 +90,13 @@ export function toFrontendGraph(data: any): Graph {
                 for (const [_key, value] of Object.entries(data.connections)) {
                     if (Array.isArray(value) && value.length === 2) {
                         connectionsArray.push({
-                            from_pin: value[0],
-                            to_pin: value[1]
+                            fromPin: value[0],
+                            toPin: value[1]
                         });
                     } else if (typeof value === 'object' && value !== null) {
                         connectionsArray.push(value);
                     }
                 }
-            }
-        }
-    } else if (data.data_state) {
-        // 旧格式：data_state 包含 nodes, pins, connections
-        const dataState = data.data_state;
-        
-        // 先处理 pins
-        const pinMap = new Map<string, any>();
-        if (dataState.pins) {
-            Object.values(dataState.pins).forEach((pin: any) => {
-                // data_state 格式：PinInstance 有 definition.kind (Exec/Data)，无顶层 type
-                const pinType = pin.definition?.kind === 'Exec' ? 'exec'
-                    : (pin.type ?? pin.data_type ?? pin.pin_type ?? 'any');
-                pinMap.set(pin.id, {
-                    id: pin.id,
-                    nodeId: pin.node_id,
-                    name: pin.name,
-                    type: pinType,
-                    node_type: pinType,
-                    direction: pin.direction,
-                    links: [],
-                    isArray: pin.is_array || false,
-                    defaultValue: pin.default_value,
-                    userValue: pin.user_value,
-                });
-            });
-        }
-        
-        // 转换 nodes（从 HashMap 到数组）
-        if (dataState.nodes) {
-            nodes = Object.values(dataState.nodes).map((node: any) => {
-                const nodeInputs: any[] = [];
-                const nodeOutputs: any[] = [];
-                
-                if (node.inputs && Array.isArray(node.inputs)) {
-                    node.inputs.forEach((pinId: string) => {
-                        const pin = pinMap.get(pinId);
-                        if (pin) nodeInputs.push(pin);
-                    });
-                }
-                
-                if (node.outputs && Array.isArray(node.outputs)) {
-                    node.outputs.forEach((pinId: string) => {
-                        const pin = pinMap.get(pinId);
-                        if (pin) nodeOutputs.push(pin);
-                    });
-                }
-                
-                return {
-                    id: node.id,
-                    type: node.node_type,        // deserializeGraph 需要这个字段
-                    node_type: node.node_type,   // 保持一致性
-                    category: node.category || [],
-                    title: node.title,
-                    inputs: nodeInputs,
-                    outputs: nodeOutputs,
-                    ui_style: node.ui_style || 'default',
-                    description: node.description,
-                    position: node.position || { x: 0, y: 0 },
-                };
-            });
-        }
-        
-        pins = Array.from(pinMap.values());
-        
-        // 转换 connections
-        const backendConnections = dataState.connections?.connections || {};
-        for (const [_key, value] of Object.entries(backendConnections)) {
-            if (Array.isArray(value) && value.length === 2) {
-                connectionsArray.push({
-                    from_pin: value[0],
-                    to_pin: value[1]
-                });
-            } else if (typeof value === 'object' && value !== null) {
-                connectionsArray.push(value);
             }
         }
     }
@@ -188,8 +108,7 @@ export function toFrontendGraph(data: any): Graph {
         sampleNode: nodes[0]
     });
     
-    // 后端 GraphInstanceDTO 序列化时 graph_type 被 rename 为 "type"
-    const rawType = data.type ?? data.graph_type ?? data.kind ?? 'event';
+    const rawType = data.type ?? 'event';
     const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function" | "macro";
     return {
         id: data.id,
@@ -198,14 +117,14 @@ export function toFrontendGraph(data: any): Graph {
         nodes,
         pins,
         connections: { connections: connectionsArray },
-        canvas: data.canvas || data.position || { x: 0, y: 0, scale: 1 }
+        canvas: data.canvas ?? (data as GraphInstanceDTO & { position?: GraphPosition }).position ?? { x: 0, y: 0, scale: 1 }
     };
 }
 
 /**
  * 将后端 Graph Map 转换为前端 Record
  */
-function convertGraphMap(map: Record<string, any>): Record<string, Graph> {
+function convertGraphMap(map: Record<string, GraphInstanceDTO>): Record<string, Graph> {
     const result: Record<string, Graph> = {};
     for (const [id, data] of Object.entries(map)) {
         result[id] = toFrontendGraph(data);
@@ -223,7 +142,7 @@ export class ProjectService {
      */
     static async getProjectState(): Promise<ProjectData> {
         console.log('[ProjectService.getProjectState] Invoking get_project_data...');
-        const data: any = await invoke("get_project_data");
+        const data = await invoke<ProjectDataDTO>("get_project_data");
         console.log('[ProjectService.getProjectState] Raw backend data:', JSON.stringify(data));
         
         // 新格式：直接使用 variables, graphs, databases
@@ -281,7 +200,7 @@ export class ProjectService {
                 filePath = selected as string;
             }
 
-            const data: any = await invoke("load_project_to_state", { path: filePath });
+            const data = await invoke<ProjectDataDTO>("load_project_to_state", { path: filePath });
             return {
                 project: {
                     variables: data.variables || {},
@@ -350,7 +269,7 @@ export class ProjectService {
         inputs?: Pin[],
         outputs?: Pin[]
     ): Promise<Graph> {
-        const result: any = await invoke("update_subgraph_io", {
+        const result = await invoke<GraphInstanceDTO>("update_subgraph_io", {
             subgraphId,
             inputs: inputs || null,
             outputs: outputs || null,
@@ -359,7 +278,7 @@ export class ProjectService {
     }
 
     static async renameSubgraph(subgraphId: string, newName: string): Promise<Graph> {
-        const result: any = await invoke("rename_subgraph", { subgraphId, newName });
+        const result = await invoke<GraphInstanceDTO>("rename_subgraph", { subgraphId, newName });
         return toFrontendGraph(result);
     }
 

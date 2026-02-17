@@ -1,4 +1,6 @@
 import type { LoadStatus } from "../ui";
+import type { ProjectData } from "../domain/project";
+import type { Graph } from "../domain/graph";
 
 /**
  * Project 初始化状态
@@ -13,7 +15,7 @@ export interface ProjectState {
  */
 export interface ProjectEventPayload {
   type: string;
-  payload: any;
+  payload: unknown;
 }
 
 /**
@@ -21,10 +23,10 @@ export interface ProjectEventPayload {
  */
 export interface UseProjectSyncOptions {
   enabled?: boolean;
-  onProjectLoaded?: (data: any, path: string | null) => void;
+  onProjectLoaded?: (data: ProjectData, path: string | null) => void;
   onProjectCleared?: () => void;
   onProjectSaved?: (path: string) => void;
-  onEventCreated?: (id: string, data: any) => void;
-  onFunctionCreated?: (id: string, data: any) => void;
-  onMacroCreated?: (id: string, data: any) => void;
+  onEventCreated?: (id: string, data: Graph) => void;
+  onFunctionCreated?: (id: string, data: Graph) => void;
+  onMacroCreated?: (id: string, data: Graph) => void;
 }

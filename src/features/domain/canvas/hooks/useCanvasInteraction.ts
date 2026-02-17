@@ -9,13 +9,13 @@ import { Pin, Graph, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "@/shared/utils";
-import { ConnectionService } from "@/services";
+import { ConnectionService, NodeService } from "@/services";
 import { deserializeGraph } from "@/shared/utils/editor";
 
 interface UseCanvasInteractionProps {
-    activeGroupIdRef: React.MutableRefObject<string>;
-    activeTabIdRef: React.MutableRefObject<string | null>;
-    canvasRef: React.MutableRefObject<GraphPosition>;
+    activeGroupIdRef: React.RefObject<string>;
+    activeTabIdRef: React.RefObject<string | null>;
+    canvasRef: React.RefObject<GraphPosition>;
     groups: EditorGroup[];
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
@@ -268,6 +268,10 @@ export function useCanvasInteraction({
                         }
                         if (updates.length > 0) {
                             store.batchUpdateNodePositions(updates);
+                            // 拖拽结束时调用后端同步位置（CQRS，不拖拽过程中连续调用）
+                            NodeService.updateNodePositions(tid, updates).catch((e) =>
+                                console.warn("[useCanvasInteraction] updateNodePositions failed:", e)
+                            );
                         }
                     }
                 }

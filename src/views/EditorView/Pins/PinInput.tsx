@@ -6,8 +6,8 @@ export interface PinInputProps {
   nodeId: string;
   subgraphId: string;
   pinType: string;
-  value?: any;
-  onValueChange?: (value: any) => void;
+  value?: unknown;
+  onValueChange?: (value: unknown) => void;
 }
 
 /**
@@ -44,7 +44,7 @@ export const PinInput: React.FC<PinInputProps> = ({
         <input
           type="number"
           step="1"
-          value={value ?? 0}
+          value={value != null ? Number(value) : 0}
           onChange={(e) => handleChange(parseInt(e.target.value) || 0)}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
@@ -67,7 +67,7 @@ export const PinInput: React.FC<PinInputProps> = ({
         <input
           type="number"
           step="0.1"
-          value={value ?? 0}
+          value={value != null ? Number(value) : 0}
           onChange={(e) => handleChange(parseFloat(e.target.value) || 0)}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
@@ -89,7 +89,7 @@ export const PinInput: React.FC<PinInputProps> = ({
       return (
         <input
           type="checkbox"
-          checked={value ?? false}
+          checked={Boolean(value)}
           onChange={async (e) => {
             const newValue = e.target.checked;
             handleChange(newValue);
@@ -102,11 +102,11 @@ export const PinInput: React.FC<PinInputProps> = ({
       );
 
     case "string":
-    case "any":  // 🆕 添加 any 类型支持
+    case "any":
       return (
         <input
           type="text"
-          value={value ?? ""}
+          value={value != null ? String(value) : ""}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
@@ -129,7 +129,7 @@ export const PinInput: React.FC<PinInputProps> = ({
       return (
         <input
           type="text"
-          value={typeof value === "object" ? JSON.stringify(value) : value ?? ""}
+          value={value != null ? (typeof value === "object" ? JSON.stringify(value) : String(value)) : ""}
           onChange={(e) => {
             try {
               const parsed = JSON.parse(e.target.value);

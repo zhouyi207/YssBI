@@ -10,41 +10,42 @@ import type {
   Pin,
   Graph,
   Connection,
+  ProjectData,
 } from '@/shared/types/domain';
 
-import type { ProjectData } from '@/shared/types/domain';
-import type { ConnectionItemDTO } from '@/shared/types/dto/graph';
+import type { ConnectionItemDTO, GraphInstanceDTO, NodeInstanceDTO } from '@/shared/types/dto/graph';
 import type { ConnectionData } from '@/shared/types/store/graph';
+import type { ProjectDataDTO } from '@/shared/types/dto';
 
 /** 将 ConnectionItemDTO 转为 Store 的 ConnectionData */
 export function connectionItemToConnectionData(
   item: ConnectionItemDTO
 ): ConnectionData {
-  const from = item.from_pin;
-  const to = item.to_pin;
+  const from = item.fromPin;
+  const to = item.toPin;
   return { id: `${from}->${to}`, from, to };
 }
 
 /** 将 ConnectionData 转为 ConnectionItemDTO */
 export function connectionDataToItem(conn: ConnectionData): ConnectionItemDTO {
-  return { from_pin: conn.from, to_pin: conn.to };
+  return { fromPin: conn.from, toPin: conn.to };
 }
 
 /**
  * 将后端返回的 Graph DTO 转换为前端 Graph 对象
  * 处理 nodes 和 pins 的关联关系
  */
-export function convertGraphFromDTO(graphDTO: any): Graph {
+export function convertGraphFromDTO(graphDTO: GraphInstanceDTO): Graph {
   const { nodes, pins, ...rest } = graphDTO;
 
   // 创建 Pin ID 到 Pin 对象的映射
   const pinMap = new Map<string, Pin>();
-  pins.forEach((pin: Pin) => {
-    pinMap.set(pin.id, pin);
+  pins.forEach((pin) => {
+    pinMap.set(pin.id, pin as Pin);
   });
 
   // 为每个节点关联其 inputs 和 outputs
-  const convertedNodes = nodes.map((node: any) => {
+  const convertedNodes = nodes.map((node: NodeInstanceDTO) => {
     const inputPins = (node.inputs || [])
       .map((pinId: string) => pinMap.get(pinId))
       .filter(Boolean);
@@ -71,14 +72,23 @@ export function convertGraphFromDTO(graphDTO: any): Graph {
  * 将前端 Graph 对象转换为后端 DTO
  * 将 Pin 对象转换为 Pin ID 列表
  */
-export function convertGraphToDTO(graph: Graph): any {
+export function convertGraphToDTO(graph: Graph): GraphInstanceDTO {
   const { nodes, ...rest } = graph;
 
-  const convertedNodes = nodes.map((node: Node) => ({
-    ...node,
-    inputs: node.inputs.map(pin => pin.id),
-    outputs: node.outputs.map(pin => pin.id),
-  }));
+  const convertedNodes: NodeInstanceDTO[] = nodes.map((node) => {
+    const nodeWithPos = node as Node & { position?: { x: number; y: number } };
+    return {
+      id: node.id,
+      nodeType: node.node_type,
+      category: node.category,
+      title: node.title,
+      inputs: node.inputs.map(pin => pin.id),
+      outputs: node.outputs.map(pin => pin.id),
+      uiStyle: node.ui_style,
+      description: node.description,
+      position: nodeWithPos.position ?? { x: 0, y: 0 },
+    };
+  });
 
   return {
     ...rest,
@@ -90,7 +100,7 @@ export function convertGraphToDTO(graph: Graph): any {
  * 批量转换 Graphs
  */
 export function convertGraphsFromDTO(
-  graphsDTO: Record<string, any>
+  graphsDTO: Record<string, GraphInstanceDTO>
 ): Record<string, Graph> {
   const result: Record<string, Graph> = {};
   
@@ -106,8 +116,8 @@ export function convertGraphsFromDTO(
  */
 export function convertGraphsToDTO(
   graphs: Record<string, Graph>
-): Record<string, any> {
-  const result: Record<string, any> = {};
+): Record<string, GraphInstanceDTO> {
+  const result: Record<string, GraphInstanceDTO> = {};
   
   for (const [id, graph] of Object.entries(graphs)) {
     result[id] = convertGraphToDTO(graph);
@@ -119,7 +129,7 @@ export function convertGraphsToDTO(
 /**
  * 转换 ProjectData 从 DTO
  */
-export function convertProjectDataFromDTO(dto: any): ProjectData {
+export function convertProjectDataFromDTO(dto: ProjectDataDTO): ProjectData {
   return {
     ...dto,
     graphs: convertGraphsFromDTO(dto.graphs),
@@ -129,7 +139,7 @@ export function convertProjectDataFromDTO(dto: any): ProjectData {
 /**
  * 转换 ProjectData 到 DTO
  */
-export function convertProjectDataToDTO(data: ProjectData): any {
+export function convertProjectDataToDTO(data: ProjectData): ProjectDataDTO {
   return {
     ...data,
     graphs: convertGraphsToDTO(data.graphs),
@@ -155,20 +165,19 @@ export function applyConnectionsToPins(
     pinMap.set(pin.id, pin);
   });
 
-  // 应用连接关系
-  connections.connections.forEach(conn => {
-    const fromPin = pinMap.get(conn.from_pin);
-    const toPin = pinMap.get(conn.to_pin);
+  // 应用连接关系（camelCase: fromPin, toPin）
+  connections.connections.forEach((conn: { fromPin: string; toPin: string }) => {
+    const fromId = conn.fromPin;
+    const toId = conn.toPin;
+    const fromPin = fromId ? pinMap.get(fromId) : undefined;
+    const toPin = toId ? pinMap.get(toId) : undefined;
 
     if (fromPin && toPin) {
-      // 输出 Pin 记录所有连接的目标
-      if (!fromPin.links.includes(conn.to_pin)) {
-        fromPin.links.push(conn.to_pin);
+      if (!fromPin.links.includes(toId!)) {
+        fromPin.links.push(toId!);
       }
-      
-      // 输入 Pin 记录来源（通常只有一个）
-      if (!toPin.links.includes(conn.from_pin)) {
-        toPin.links.push(conn.from_pin);
+      if (!toPin.links.includes(fromId!)) {
+        toPin.links.push(fromId!);
       }
     }
   });
@@ -178,7 +187,7 @@ export function applyConnectionsToPins(
  * 从 Pins 的 links 构建 Connection DTO
  */
 export function extractConnectionsFromPins(pins: Pin[]): Connection {
-  const connections: { from_pin: string; to_pin: string }[] = [];
+  const connections: { fromPin: string; toPin: string }[] = [];
   const seen = new Set<string>();
 
   pins.forEach(pin => {
@@ -188,8 +197,8 @@ export function extractConnectionsFromPins(pins: Pin[]): Connection {
         const key = `${pin.id}->${targetPinId}`;
         if (!seen.has(key)) {
           connections.push({
-            from_pin: pin.id,
-            to_pin: targetPinId,
+            fromPin: pin.id,
+            toPin: targetPinId,
           });
           seen.add(key);
         }
@@ -203,7 +212,7 @@ export function extractConnectionsFromPins(pins: Pin[]): Connection {
 /**
  * 验证 DTO 数据的完整性
  */
-export function validateGraphDTO(graphDTO: any): {
+export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
   valid: boolean;
   errors: string[];
 } {

@@ -9,6 +9,7 @@ use std::collections::HashMap;
 /// - 所有 Pin 实例
 /// - 所有连接关系
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GraphDataState {
     pub nodes: HashMap<NodeId, NodeInstance>,
     pub pins: HashMap<PinId, PinInstance>,

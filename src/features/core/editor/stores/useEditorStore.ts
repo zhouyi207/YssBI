@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Pin } from '@/shared/types/domain';
 
 interface ContextMenuState {
   x: number;
@@ -14,8 +15,8 @@ interface EditorStore {
   selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null;
   setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null) => void;
 
-  pendingConnection: any | null;
-  setPendingConnection: (pin: any | null) => void;
+  pendingConnection: Pin | null;
+  setPendingConnection: (pin: Pin | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({

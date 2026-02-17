@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// 连接（边）
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Connection {
     pub from_pin: PinId,
     pub to_pin: PinId,
@@ -24,6 +25,7 @@ impl Connection {
 
 /// 连接管理器
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionManager {
     /// 所有连接（from_pin -> [to_pins]）
     connections: Mutex<HashMap<PinId, Vec<PinId>>>,

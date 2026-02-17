@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DatabaseDeclDTO {
     pub id: String,
     pub engine: DatabaseEngineDTO,
@@ -20,6 +21,7 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineDTO {
     /// SQLite（本地文件）
     Sql {
@@ -79,6 +81,7 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineSqlDTO {
     Sqlite { auto_create: bool },
     Postgres { ssl: bool },

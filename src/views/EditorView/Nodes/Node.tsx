@@ -18,7 +18,7 @@ export interface NodeProps {
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
-  onPinValueChange?: (pinId: string, value: any) => void;
+  onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
 /**

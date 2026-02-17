@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { PinInput } from "./PinInput";
 
@@ -7,7 +7,7 @@ export interface PinProps extends PinModel {
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
-  onValueChange?: (pinId: string, value: any) => void;
+  onValueChange?: (pinId: string, value: unknown) => void;
 }
 
 // 提取主题逻辑，避免每次渲染都创建新对象

@@ -3,7 +3,16 @@ use crate::project::ProjectState;
 use crate::event::{emit_project_event, Event, EventNode};
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use crate::log::log_app;
+use serde::Deserialize;
 use tauri::{AppHandle, State};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodePositionUpdate {
+    node_id: NodeId,
+    x: f32,
+    y: f32,
+}
 
 #[tauri::command]
 pub fn create_node(
@@ -77,5 +86,37 @@ pub fn delete_node(
         }),
     );
     
+    Ok(())
+}
+
+/// 批量更新节点位置（拖拽结束时调用，CQRS 模式）
+#[tauri::command]
+pub fn update_node_positions(
+    app: AppHandle,
+    state: State<ProjectState>,
+    graph_id: GraphId,
+    updates: Vec<NodePositionUpdate>,
+) -> Result<(), String> {
+    let updates_tuple: Vec<(NodeId, f32, f32)> = updates
+        .iter()
+        .map(|u| (u.node_id, u.x, u.y))
+        .collect();
+
+    let bounding = state.project_data.write().unwrap();
+    let graph = bounding
+        .graphs
+        .get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+
+    graph.set_node_positions(&updates_tuple)?;
+
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodePositionsUpdated {
+            graph_id,
+            updates: updates_tuple,
+        }),
+    );
+
     Ok(())
 }

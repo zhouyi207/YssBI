@@ -1,10 +1,11 @@
 // src/features/core/sync/types.ts
 
-import { ProjectData, Graph, Variable } from '@/shared/types/domain';
+import { ProjectData, Graph, Variable, Node } from '@/shared/types/domain';
+import type { NodeInstanceDTO, PinInstanceDTO } from '@/shared/types/dto';
 
 // ==================== 基础事件类型 ====================
 
-export interface BaseEvent<T = any> {
+export interface BaseEvent<T = unknown> {
     type: string;
     payload: T;
 }
@@ -13,7 +14,7 @@ export interface NestedEvent {
     type: string;
     payload: {
         type: string;
-        payload: any;
+        payload: unknown;
     };
 }
 
@@ -63,7 +64,7 @@ export interface VariableDeletedPayload {
 
 export interface DataFrameCreatedPayload {
     id: string;
-    data: any;
+    data: unknown;
 }
 
 export interface DataFrameDeletedPayload {
@@ -71,20 +72,26 @@ export interface DataFrameDeletedPayload {
 }
 
 export interface NodeCreatedPayload {
-    graph_id: string;
-    node_id: string;
-    data: any; // NodeInstanceDTO from backend
-    pins: any[]; // PinInstanceDTO[]
+    graphId: string;
+    nodeId: string;
+    data: NodeInstanceDTO;
+    pins: PinInstanceDTO[];
 }
 
 export interface NodeDeletedPayload {
-    graph_id: string;
-    node_id: string;
+    graphId: string;
+    nodeId: string;
+}
+
+export interface NodePositionsUpdatedPayload {
+    graphId: string;
+    /** [[nodeId, x, y], ...] from backend */
+    updates: Array<[string, number, number]>;
 }
 
 // ==================== 事件处理器接口 ====================
 
-export interface EventHandler<T = any> {
+export interface EventHandler<T = unknown> {
     eventType: string;
     handle: (payload: T, callbacks?: EventCallbacks) => void;
 }
@@ -111,11 +118,11 @@ export interface EventCallbacks {
     onVariableDeleted?: (id: string) => void;
     
     // DataFrame callbacks
-    onDataFrameCreated?: (id: string, data: any) => void;
+    onDataFrameCreated?: (id: string, data: unknown) => void;
     onDataFrameDeleted?: (id: string) => void;
     
     // Node callbacks
-    onNodeCreated?: (graphId: string, nodeId: string, data: any) => void;
+    onNodeCreated?: (graphId: string, nodeId: string, data: NodeInstanceDTO | Node) => void;
     onNodeDeleted?: (graphId: string, nodeId: string) => void;
 }
 

@@ -6,7 +6,7 @@ import { useGraphDataStore } from "@/features/core/dataStore";
  * Get default value for a pin type.
  * Extracted from PinInput.tsx.
  */
-export function getDefaultValue(pinType: string): any {
+export function getDefaultValue(pinType: string): unknown {
   switch (pinType) {
     case "int":
     case "float":
@@ -38,10 +38,10 @@ export function usePinInput({
   nodeId: string;
   subgraphId: string;
   pinType: string;
-  initialValue?: any;
-  onValueChange?: (value: any) => void;
+  initialValue?: unknown;
+  onValueChange?: (value: unknown) => void;
 }) {
-  const [value, setValue] = useState<any>(initialValue ?? getDefaultValue(pinType));
+  const [value, setValue] = useState<unknown>(initialValue ?? getDefaultValue(pinType));
   const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function usePinInput({
   }, [initialValue]);
 
   const handleChange = useCallback(
-    (newValue: any) => {
+    (newValue: unknown) => {
       setValue(newValue);
       onValueChange?.(newValue);
     },
@@ -59,7 +59,7 @@ export function usePinInput({
   );
 
   const savePinValue = useCallback(
-    async (val?: any) => {
+    async (val?: unknown) => {
       const toSave = val !== undefined ? val : value;
       try {
         await PinService.updatePinUserValue(subgraphId, nodeId, pinId, toSave);

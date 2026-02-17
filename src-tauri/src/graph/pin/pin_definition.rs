@@ -28,6 +28,7 @@ pub enum PinKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PinMetaData {
     /// 是否显示 Widget
     pub show_widget: bool,
@@ -51,6 +52,7 @@ impl Default for PinMetaData {
 
 /// Pin 定义（静态描述，用于节点原型）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PinDefinition {
     /// Pin 名称
     pub name: String,

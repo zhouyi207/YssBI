@@ -98,6 +98,7 @@ pub fn run() {
             // Nodes 命令
             create_node,
             delete_node,
+            update_node_positions,
             // Connection 命令
             connect_pins,
             create_connection,

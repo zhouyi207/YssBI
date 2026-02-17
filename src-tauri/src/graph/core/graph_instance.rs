@@ -22,7 +22,7 @@ use std::sync::{Arc, RwLock};
 /// - 所有 Node, Pin 实例 和连接关系
 /// - 类型推断上下文
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "camelCase")]
 pub struct GraphInstance {
     // 图 id
     pub id: GraphId,
@@ -106,6 +106,18 @@ impl GraphInstance {
     pub fn get_node_instance(&self, node_id: NodeId) -> Option<NodeInstance> {
         let data_state = self.data_state.read().unwrap();
         data_state.nodes.get(&node_id).cloned()
+    }
+
+    /// 批量更新节点位置（拖拽结束时调用，CQRS 模式）
+    pub fn set_node_positions(&self, updates: &[(NodeId, f32, f32)]) -> Result<(), String> {
+        let mut data_state = self.data_state.write().unwrap();
+        for (node_id, x, y) in updates {
+            if let Some(node) = data_state.nodes.get_mut(node_id) {
+                node.position.x = *x;
+                node.position.y = *y;
+            }
+        }
+        Ok(())
     }
 
     pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {

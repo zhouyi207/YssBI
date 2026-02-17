@@ -172,10 +172,10 @@ export const EdgesLayer = ({
         // 使用缓存的节点数据
         const currentNodes = nodesRef.current;
 
-        currentNodes.forEach((node: any) => {
-            if (!node) return;
+        currentNodes.forEach((node: { outputs: Array<{ id: string; links: string[]; type?: string; ui?: { color?: string } }> }) => {
+          if (!node) return;
 
-            node.outputs.forEach((pin: any) => {
+          node.outputs.forEach((pin) => {
                 pin.links.forEach((targetId: string) => {
                     const start = getPinWorldPos(pin.id);
                     const end = getPinWorldPos(targetId);

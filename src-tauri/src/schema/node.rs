@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 
 /// Node instance DTO - 对应前端 Node 类型
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NodeInstanceDTO {
     pub id: NodeId,
-    #[serde(rename = "node_type")]
+    #[serde(rename = "nodeType")]
     pub node_type: String,
     pub category: Vec<String>,
     pub title: String,
@@ -36,6 +37,7 @@ impl From<&NodeInstance> for NodeInstanceDTO {
 
 /// Node definition DTO - 用于节点注册
 #[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct NodeDefinitionDTO {
     pub name: String,
     pub category: Vec<String>,

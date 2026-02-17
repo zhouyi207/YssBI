@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import { LoadStatus } from '@/shared/types/ui/common';
-import { ProjectData } from '@/shared/types';
+import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
@@ -15,7 +15,7 @@ const EMPTY_CANVAS = { x: 0, y: 0, scale: 1 };
 /**
  * 从 GraphMetaStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
  */
-export function getGraphById(graphId: string): any | null {
+export function getGraphById(graphId: string): GraphData | null {
   const meta = useGraphMetaStore.getState().graphs[graphId];
   if (!meta) return null;
 
@@ -35,9 +35,9 @@ export function getGraphById(graphId: string): any | null {
 /**
  * 获取所有 graphs（按 graphOrder 顺序）
  */
-export function getGraphs(): Record<string, any> {
+export function getGraphs(): Record<string, GraphData> {
   const metaStore = useGraphMetaStore.getState();
-  const result: Record<string, any> = {};
+  const result: Record<string, GraphData> = {};
   for (const gid of metaStore.graphOrder) {
     const g = getGraphById(gid);
     if (g) result[gid] = g;

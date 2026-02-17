@@ -4,6 +4,16 @@
  * 数据库和数据源相关的类型定义
  */
 
+// ==================== 数据库声明 ====================
+
+/** 数据库声明（与后端 DatabaseDeclDTO 对应） */
+export interface DatabaseDecl {
+  id: string;
+  engine: Record<string, unknown>;
+  schemaVersion: number;
+  required: boolean;
+}
+
 // ==================== 数据来源配置 ====================
 
 /**

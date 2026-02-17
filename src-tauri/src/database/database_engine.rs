@@ -7,6 +7,7 @@ use super::DatabaseEngineSql;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub enum DatabaseEngine {
     /// SQLite（本地文件）
     Sql {

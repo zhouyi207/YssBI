@@ -9,8 +9,8 @@
  * 表示从一个输出 Pin 到一个输入 Pin 的连接
  */
 export interface ConnectionItem {
-    from_pin: string;  // 源 Pin ID（输出）
-    to_pin: string;    // 目标 Pin ID（输入）
+    fromPin: string;  // 源 Pin ID（输出）
+    toPin: string;    // 目标 Pin ID（输入）
 }
 
 /**

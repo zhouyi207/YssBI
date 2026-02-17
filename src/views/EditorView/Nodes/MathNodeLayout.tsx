@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, Node } from "@/shared/types/domain";
 import { useNodeStyle } from "@/features/domain/node/hooks";
@@ -10,7 +10,7 @@ interface MathNodeLayoutProps {
   onAddInput?: (id: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
-  onPinValueChange?: (pinId: string, value: any) => void;
+  onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
 /**

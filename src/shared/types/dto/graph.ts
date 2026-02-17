@@ -5,7 +5,7 @@
  */
 
 import type { GraphPosition } from '../domain/graph';
-import type { PinDirection, PinType } from '../domain/pin';
+import type { PinDirection } from '../domain/pin';
 
 // ==================== Node DTO ====================
 
@@ -14,15 +14,15 @@ export interface NodePositionDTO {
   y: number;
 }
 
-/** 后端 NodeInstanceDTO 对应 */
+/** 后端 NodeInstanceDTO 对应（camelCase） */
 export interface NodeInstanceDTO {
   id: string;
-  node_type: string;
+  nodeType: string;
   category: string[];
   title: string;
   inputs: string[];  // Pin IDs
   outputs: string[]; // Pin IDs
-  ui_style: string;
+  uiStyle: string;
   description?: string;
   position: NodePositionDTO;
 }
@@ -51,10 +51,10 @@ export interface PinInstanceDTO {
 
 // ==================== Connection DTO ====================
 
-/** 后端 ConnectionItemDTO 对应 */
+/** 后端 ConnectionItemDTO 对应（camelCase） */
 export interface ConnectionItemDTO {
-  from_pin: string;
-  to_pin: string;
+  fromPin: string;
+  toPin: string;
 }
 
 /** 后端 ConnectionDTO 对应 */

@@ -23,7 +23,7 @@ interface ProjectIOStore {
 }
 
 /** 将 Graph 转为 GraphMeta 格式 */
-function toGraphMetaMap(graphs: Record<string, any>): Record<string, { id: string; name: string; type: 'event' | 'function' | 'macro'; entryNodeId?: string }> {
+function toGraphMetaMap(graphs: Record<string, { id: string; name: string; type: 'event' | 'function' | 'macro'; entryNodeId?: string }>): Record<string, { id: string; name: string; type: 'event' | 'function' | 'macro'; entryNodeId?: string }> {
   return Object.fromEntries(
     Object.entries(graphs).map(([id, g]) => [
       id,

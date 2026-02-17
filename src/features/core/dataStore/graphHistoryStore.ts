@@ -4,15 +4,15 @@
  */
 
 import { create } from 'zustand';
-import type { GraphId } from '@/shared/types';
+import type { GraphId, NodeData, PinData, GraphData } from '@/shared/types';
 import { getGraphById } from './projectHelpers';
 import { useGraphDataStore } from './graphDataStore';
 
 /** 可恢复的图快照（与 addGraphFromData 入参格式一致） */
 export interface GraphSnapshot {
-  nodes: any[];
-  pins: any[];
-  connections: { connections: Array<{ from_pin: string; to_pin: string }> };
+  nodes: NodeData[];
+  pins: PinData[];
+  connections: { connections: Array<{ fromPin: string; toPin: string }> };
 }
 
 interface GraphHistory {
@@ -46,10 +46,13 @@ interface GraphHistoryStore {
   canRedo: (graphId: GraphId) => boolean;
 }
 
-function graphToSnapshot(graph: any): GraphSnapshot {
-  const connections = (graph.connections || []).map((c: any) => ({
-    from_pin: c.from,
-    to_pin: c.to,
+function graphToSnapshot(graph: GraphData): GraphSnapshot {
+  const conns = Array.isArray(graph.connections)
+    ? graph.connections
+    : graph.connections.connections;
+  const connections = conns.map((c) => ({
+    fromPin: 'from' in c ? c.from : c.fromPin,
+    toPin: 'to' in c ? c.to : c.toPin,
   }));
   return {
     nodes: graph.nodes ? [...graph.nodes] : [],
@@ -108,8 +111,9 @@ export const useGraphHistoryStore = create<GraphHistoryStore>((set, get) => ({
       id: graphId,
       name: graph.name,
       type: graph.type,
+      canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
       ...prevSnapshot,
-    } as any);
+    });
 
     return true;
   },
@@ -141,8 +145,9 @@ export const useGraphHistoryStore = create<GraphHistoryStore>((set, get) => ({
       id: graphId,
       name: graph.name,
       type: graph.type,
+      canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
       ...nextSnapshot,
-    } as any);
+    });
 
     return true;
   },

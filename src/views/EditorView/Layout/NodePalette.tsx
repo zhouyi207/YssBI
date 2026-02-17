@@ -1,7 +1,6 @@
-﻿import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNodeDefinitions } from "@/features/core/nodeRegister";
-import { Pin, Node } from "@/shared/types/domain";
-import { Variable } from "@/shared/types/domain";
+import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
@@ -42,8 +41,8 @@ export function NodePalette({
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
   Variables?: Record<string, Variable>;
-  functions?: Record<string, import("@/shared/types/domain").Graph>;
-  macros?: Record<string, import("@/shared/types/domain").Graph>;
+  functions?: Record<string, Graph>;
+  macros?: Record<string, Graph>;
 }) {
   const [query, setQuery] = useState("");
   const { definitions } = useNodeDefinitions();

@@ -1,11 +1,11 @@
-﻿/**
+/**
  * ConnectionItem query helper functions
  * 
  * These functions provide convenient ways to query connections in a subgraph.
  * They work with the connections array (single source of truth) rather than Pin.links.
  */
 
-import { ConnectionItem } from '@/shared/types/domain';
+import { ConnectionItem, Pin } from '@/shared/types/domain';
 import { Node } from '@/shared/types/ui';
 
 /**
@@ -20,7 +20,7 @@ export function findConnectionsByPin(
   pinId: string
 ): ConnectionItem[] {
   return connections.filter(
-    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
+    (conn) => conn.fromPin === pinId || conn.toPin === pinId
   );
 }
 
@@ -43,7 +43,7 @@ export function findConnectionsByNode(
   
   // Find connections involving any of these pins
   return connections.filter(
-    (conn) => pinIds.has(conn.from_pin) || pinIds.has(conn.to_pin)
+    (conn) => pinIds.has(conn.fromPin) || pinIds.has(conn.toPin)
   );
 }
 
@@ -56,10 +56,10 @@ export function findConnectionsByNode(
  */
 export function findConnectionById(
   connections: ConnectionItem[],
-  from_pin: string,
-  to_pin: string
+  fromPin: string,
+  toPin: string
 ): ConnectionItem | null {
-  return connections.find((conn) => conn.from_pin === from_pin && conn.to_pin === to_pin) || null;
+  return connections.find((conn) => conn.fromPin === fromPin && conn.toPin === toPin) || null;
 }
 
 /**
@@ -77,8 +77,8 @@ export function areConnected(
 ): boolean {
   return connections.some(
     (conn) =>
-      (conn.from_pin === pinId1 && conn.to_pin === pinId2) ||
-      (conn.from_pin === pinId2 && conn.to_pin === pinId1)
+      (conn.fromPin === pinId1 && conn.toPin === pinId2) ||
+      (conn.fromPin === pinId2 && conn.toPin === pinId1)
   );
 }
 
@@ -93,7 +93,7 @@ export function findConnectionsFromPin(
   connections: ConnectionItem[],
   pinId: string
 ): ConnectionItem[] {
-  return connections.filter((conn) => conn.from_pin === pinId);
+  return connections.filter((conn) => conn.fromPin === pinId);
 }
 
 /**
@@ -107,7 +107,7 @@ export function findConnectionsToPin(
   connections: ConnectionItem[],
   pinId: string
 ): ConnectionItem[] {
-  return connections.filter((conn) => conn.to_pin === pinId);
+  return connections.filter((conn) => conn.toPin === pinId);
 }
 
 /**
@@ -122,8 +122,8 @@ export function getTargetPins(
   sourcePinId: string
 ): string[] {
   return connections
-    .filter((conn) => conn.from_pin === sourcePinId)
-    .map((conn) => conn.to_pin);
+    .filter((conn) => conn.fromPin === sourcePinId)
+    .map((conn) => conn.toPin);
 }
 
 /**
@@ -139,8 +139,8 @@ export function getSourcePin(
   connections: ConnectionItem[],
   targetPinId: string
 ): string | null {
-  const conn = connections.find((c) => c.to_pin === targetPinId);
-  return conn ? conn.from_pin : null;
+  const conn = connections.find((c) => c.toPin === targetPinId);
+  return conn ? conn.fromPin : null;
 }
 
 /**
@@ -155,7 +155,7 @@ export function countConnectionsForPin(
   pinId: string
 ): number {
   return connections.filter(
-    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
+    (conn) => conn.fromPin === pinId || conn.toPin === pinId
   ).length;
 }
 
@@ -171,7 +171,7 @@ export function hasConnections(
   pinId: string
 ): boolean {
   return connections.some(
-    (conn) => conn.from_pin === pinId || conn.to_pin === pinId
+    (conn) => conn.fromPin === pinId || conn.toPin === pinId
   );
 }
 
@@ -187,7 +187,7 @@ export function removeConnectionsForPin(
   pinId: string
 ): ConnectionItem[] {
   return connections.filter(
-    (conn) => conn.from_pin !== pinId && conn.to_pin !== pinId
+    (conn) => conn.fromPin !== pinId && conn.toPin !== pinId
   );
 }
 
@@ -207,7 +207,7 @@ export function removeConnectionsForNode(
   node.outputs.forEach((pin) => pinIds.add(pin.id));
   
   return connections.filter(
-    (conn) => !pinIds.has(conn.from_pin) && !pinIds.has(conn.to_pin)
+    (conn) => !pinIds.has(conn.fromPin) && !pinIds.has(conn.toPin)
   );
 }
 
@@ -225,7 +225,7 @@ export function validateConnections(
   const errors: string[] = [];
   
   // Build maps of pin IDs to pins
-  const pinMap = new Map<string, { pin: any; node: Node }>();
+  const pinMap = new Map<string, { pin: Pin; node: Node }>();
   nodes.forEach((node) => {
     node.inputs.forEach((pin) => pinMap.set(pin.id, { pin, node }));
     node.outputs.forEach((pin) => pinMap.set(pin.id, { pin, node }));
@@ -233,19 +233,19 @@ export function validateConnections(
   
   // Check each ConnectionItem
   connections.forEach((conn) => {
-    const sourceInfo = pinMap.get(conn.from_pin);
-    const targetInfo = pinMap.get(conn.to_pin);
+    const sourceInfo = pinMap.get(conn.fromPin);
+    const targetInfo = pinMap.get(conn.toPin);
     
     // Check if pins exist
     if (!sourceInfo) {
       errors.push(
-        `ConnectionItem ${conn.from_pin}->${conn.to_pin} references invalid source pin: ${conn.from_pin}`
+        `ConnectionItem ${conn.fromPin}->${conn.toPin} references invalid source pin: ${conn.fromPin}`
       );
       return;
     }
     if (!targetInfo) {
       errors.push(
-        `ConnectionItem ${conn.from_pin}->${conn.to_pin} references invalid target pin: ${conn.to_pin}`
+        `ConnectionItem ${conn.fromPin}->${conn.toPin} references invalid target pin: ${conn.toPin}`
       );
       return;
     }
@@ -256,12 +256,12 @@ export function validateConnections(
     
     if (from_pin.direction !== 'output') {
       errors.push(
-        `ConnectionItem ${conn.from_pin}->${conn.to_pin}: source pin ${conn.from_pin} is not an output pin`
+        `ConnectionItem ${conn.fromPin}->${conn.toPin}: source pin ${conn.fromPin} is not an output pin`
       );
     }
     if (to_pin.direction !== 'input') {
       errors.push(
-        `ConnectionItem ${conn.from_pin}->${conn.to_pin}: target pin ${conn.to_pin} is not an input pin`
+        `ConnectionItem ${conn.fromPin}->${conn.toPin}: target pin ${conn.toPin} is not an input pin`
       );
     }
     
@@ -271,7 +271,7 @@ export function validateConnections(
       if (from_pin.type !== 'any' && to_pin.type !== 'any') {
         if (from_pin.type !== to_pin.type) {
           errors.push(
-            `ConnectionItem ${conn.from_pin}->${conn.to_pin}: type mismatch (${from_pin.type} -> ${to_pin.type})`
+            `ConnectionItem ${conn.fromPin}->${conn.toPin}: type mismatch (${from_pin.type} -> ${to_pin.type})`
           );
         }
       }

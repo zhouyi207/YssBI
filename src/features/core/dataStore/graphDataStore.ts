@@ -1,6 +1,16 @@
 import { create } from 'zustand';
-import { NodeId, PinId, GraphId, ConnectionId, GraphData } from '@/shared/types';
-import { NodeData, PinData, ConnectionData } from '@/shared/types';
+import {
+  NodeId,
+  PinId,
+  GraphId,
+  ConnectionId,
+  GraphData,
+  GraphDataLike,
+  NodeData,
+  PinData,
+  ConnectionData,
+  RuntimeNodeInput,
+} from '@/shared/types';
 
 interface GraphDataStore {
   // ======================
@@ -43,10 +53,10 @@ interface GraphDataStore {
   // Graph
   // ======================
   clearGraph(graphId: GraphId): void;
-  hydrateGraphs(graphs: Record<GraphId, GraphData>): void;
-  addGraphFromData(graphId: GraphId, graph: GraphData): void;
+  hydrateGraphs(graphs: Record<GraphId, GraphDataLike>): void;
+  addGraphFromData(graphId: GraphId, graph: GraphDataLike): void;
   /** 用新的 nodes 替换图中节点（用于 setNodes 等批量更新） */
-  replaceGraphNodes(graphId: GraphId, nodes: any[]): void;
+  replaceGraphNodes(graphId: GraphId, nodes: RuntimeNodeInput[]): void;
 }
 
 export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
@@ -351,14 +361,31 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     const nodePins: Record<NodeId, PinId[]> = {};
     const pinConnections: Record<PinId, ConnectionId[]> = {};
 
-    Object.values(graphs).forEach((graph: any) => {
-      const nodeIds: NodeId[] = [];
-      const conns = graph.connections.connections;
+    const toPinIds = (arr: unknown): string[] => {
+      if (!Array.isArray(arr)) return [];
+      return arr.map((p) => (typeof p === 'string' ? p : (p as { id?: string })?.id ?? '')).filter(Boolean);
+    };
 
-      (graph.nodes || []).forEach((node: any) => {
-        const inputIds = node.inputs ?? [];
-        const outputIds = node.outputs ?? [];
-        nodes[node.id] = { ...node, graphId: graph.id, inputs: inputIds, outputs: outputIds };
+    Object.values(graphs).forEach((graph) => {
+      const nodeIds: NodeId[] = [];
+      const conns = Array.isArray(graph.connections)
+        ? graph.connections.map((c: { from: string; to: string }) => ({ fromPin: c.from, toPin: c.to }))
+        : graph.connections.connections;
+
+      (graph.nodes || []).forEach((node) => {
+        const inputIds = toPinIds(node.inputs);
+        const outputIds = toPinIds(node.outputs);
+        nodes[node.id] = {
+          ...node,
+          graphId: graph.id,
+          inputs: inputIds,
+          outputs: outputIds,
+          node_type: (node as NodeData).node_type ?? (node as { node_type?: string }).node_type ?? '',
+          category: (node as NodeData).category ?? [],
+          title: (node as NodeData).title ?? '',
+          ui_style: (node as NodeData).ui_style ?? 'default',
+          position: (node as NodeData).position ?? { x: 0, y: 0 },
+        };
         nodeIds.push(node.id);
         const pinIds = [...inputIds, ...outputIds];
         nodePins[node.id] = pinIds;
@@ -367,13 +394,13 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
 
       graphNodes[graph.id] = nodeIds;
 
-      (graph.pins || []).forEach((pin: any) => {
+      (graph.pins || []).forEach((pin: PinData) => {
         pins[pin.id] = pin;
       });
 
-      conns.forEach((c: any) => {
-        const from = c.from_pin;
-        const to = c.to_pin;
+      conns.forEach((c: { fromPin: string; toPin: string }) => {
+        const from = c.fromPin;
+        const to = c.toPin;
         const id = `${from}->${to}`;
         connections[id] = { id, from, to };
         pinConnections[from] = pinConnections[from] ?? [];
@@ -387,7 +414,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
   },
 
   addGraphFromData: (graphId, graph) => {
-    const conns = (graph.connections as any).connections;
+    const conns = Array.isArray(graph.connections)
+      ? graph.connections.map((c: { from: string; to: string }) => ({ fromPin: c.from, toPin: c.to }))
+      : graph.connections.connections;
     set((state) => {
       const nodeIds: NodeId[] = [];
       const nextNodes = { ...state.nodes };
@@ -396,16 +425,29 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       const nextNodePins = { ...state.nodePins };
       const nextPinConnections = { ...state.pinConnections };
 
-      (graph.nodes || []).forEach((node: any) => {
-        const toPinId = (p: any) => (typeof p === 'object' && p?.id ? p.id : p);
+      const toPinId = (p: string | PinData): string =>
+        typeof p === 'object' && p?.id ? p.id : String(p);
+
+      (graph.nodes || []).forEach((node: RuntimeNodeInput) => {
         const inputIds = (node.inputs ?? []).map(toPinId).filter(Boolean);
         const outputIds = (node.outputs ?? []).map(toPinId).filter(Boolean);
         const allPinIds = [...inputIds, ...outputIds];
         nextNodes[node.id] = {
-          ...node,
+          id: node.id,
           graphId,
+          node_type: node.node_type,
+          category: node.category ?? [],
+          title: node.title ?? '',
           inputs: inputIds,
           outputs: outputIds,
+          ui_style: node.ui_style ?? 'default',
+          description: node.description,
+          position: node.position ?? { x: 0, y: 0 },
+          isInternal: node.isInternal,
+          variableId: node.variableId,
+          variableName: node.variableName,
+          variableType: node.variableType,
+          subGraphId: node.subGraphId,
         };
         nodeIds.push(node.id);
         nextNodePins[node.id] = allPinIds;
@@ -414,13 +456,13 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         });
       });
 
-      (graph.pins || []).forEach((pin: any) => {
+      (graph.pins || []).forEach((pin: PinData) => {
         nextPins[pin.id] = pin;
       });
 
-      conns.forEach((c: any) => {
-        const from = c.from_pin;
-        const to = c.to_pin;
+      conns.forEach((c: { fromPin: string; toPin: string }) => {
+        const from = c.fromPin;
+        const to = c.toPin;
         const id = `${from}->${to}`;
         nextConnections[id] = { id, from, to };
         nextPinConnections[from] = nextPinConnections[from] || [];
@@ -444,30 +486,34 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     const state = get();
     const pinsRecord = state.pins;
 
-    const pins: any[] = [];
-    const connectionItems: { from_pin: string; to_pin: string }[] = [];
-    const nodeData = nodes.map((n: any) => {
-      const inputIds = (n.inputs || []).map((p: any) => (typeof p === 'string' ? p : p?.id)).filter(Boolean);
-      const outputIds = (n.outputs || []).map((p: any) => (typeof p === 'string' ? p : p?.id)).filter(Boolean);
+    const pins: PinData[] = [];
+    const connectionItems: { fromPin: string; toPin: string }[] = [];
+    const toPinId = (p: string | PinData): string =>
+      typeof p === 'string' ? p : (p?.id ?? '');
+
+    const nodeData = nodes.map((n: RuntimeNodeInput) => {
+      const inputIds = (n.inputs || []).map(toPinId).filter(Boolean);
+      const outputIds = (n.outputs || []).map(toPinId).filter(Boolean);
 
       // 收集完整 Pin 对象：节点含 Pin 对象则用其展开，否则从 Store 查找
-      [...(n.inputs || []), ...(n.outputs || [])].forEach((p: any) => {
-        const pin = typeof p === 'object' && p?.id ? p : pinsRecord[typeof p === 'string' ? p : p?.id];
-        if (pin && !pins.some((x: any) => x.id === (pin.id ?? p))) {
+      [...(n.inputs || []), ...(n.outputs || [])].forEach((p) => {
+        const pin = typeof p === 'object' && p?.id ? p : pinsRecord[toPinId(p)];
+        if (pin && !pins.some((x) => x.id === (pin.id ?? toPinId(p)))) {
           pins.push(pin);
         }
       });
 
       // 提取连接：Pin 对象有 links 则用 links，否则从 pinConnections 推导
-      (n.outputs || []).forEach((p: any) => {
-        const pinId = typeof p === 'string' ? p : p?.id;
-        const links = typeof p === 'object' && Array.isArray(p?.links)
-          ? p.links
-          : (state.pinConnections[pinId] ?? []).map((cid: string) => {
+      (n.outputs || []).forEach((p) => {
+        const pinId = toPinId(p);
+        const pinObj = typeof p === 'object' ? p : null;
+        const links = pinObj && Array.isArray(pinObj.links)
+          ? pinObj.links
+          : (state.pinConnections[pinId] ?? []).map((cid) => {
               const conn = state.connections[cid];
               return conn?.from === pinId ? conn?.to : conn?.from;
             }).filter(Boolean);
-        links.forEach((toId: string) => connectionItems.push({ from_pin: pinId, to_pin: toId }));
+        links.forEach((toId) => connectionItems.push({ fromPin: pinId, toPin: toId }));
       });
 
       return { ...n, inputs: inputIds, outputs: outputIds };
@@ -477,9 +523,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       id: graphId,
       name: '',
       type: 'event',
+      canvas: { x: 0, y: 0, scale: 1 },
       nodes: nodeData,
       pins,
       connections: { connections: connectionItems },
-    } as any);
+    });
   },
 }));

@@ -1,7 +1,13 @@
 import { Node } from '@/shared/types/ui';
-import { GraphPosition } from "@/shared/types/domain";
+import { GraphPosition, Pin, Variable } from "@/shared/types/domain";
 import { getNodeDefinition } from "@/features/core/nodeRegister";
-import { Variable } from "@/shared/types/domain";
+import type {
+  SerializedGraphData,
+  SerializedPin,
+  DeserializedNode,
+  DeserializedPin,
+  DeserializeGraphInput,
+} from "@/shared/types/store/serialization";
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -15,12 +21,12 @@ export function serializeGraph(
   nodes: Node[],
   canvas: GraphPosition,
   variables: Record<string, Variable>,
-  inputs: import("@/shared/types/domain").Pin[] = [],
-  outputs: import("@/shared/types/domain").Pin[] = []
-): any {
+  inputs: Pin[] = [],
+  outputs: Pin[] = []
+): SerializedGraphData {
 
   // 1. 提取所有连接关系
-  const connections: { from_pin: string; to_pin: string }[] = [];
+  const connections: { fromPin: string; toPin: string }[] = [];
   const processedConnections = new Set<string>(); // 防止重复添加
 
   for (const node of nodes) {
@@ -33,8 +39,8 @@ export function serializeGraph(
 
           if (!processedConnections.has(connKey)) {
             connections.push({
-              from_pin: outputPin.id,
-              to_pin: targetPinId
+              fromPin: outputPin.id,
+              toPin: targetPinId
             });
             processedConnections.add(connKey);
           }
@@ -42,6 +48,15 @@ export function serializeGraph(
       }
     }
   }
+
+  const toSerializedPin = (p: Pin): SerializedPin => ({
+    id: p.id,
+    name: p.name,
+    type: p.type,
+    defaultValue: p.defaultValue,
+    userValue: p.userValue,
+    isArray: p.isArray,
+  });
 
   // 2. 序列化节点（不包含 links 字段）
   return {
@@ -53,35 +68,18 @@ export function serializeGraph(
     inputs,
     outputs,
     connections: { connections },  // 包装为 ConnectionDTO 格式
-    nodes: nodes.map((node: any) => ({
+    nodes: nodes.map((node) => ({
       id: node.id,
-      type: node.type,
+      type: node.node_type,
       title: node.title,
       position: node.position,
-
       isInternal: node.isInternal,
       variableId: node.variableId,
       variableType: node.variableType,
       variableName: node.variableName,
       subGraphId: node.subGraphId,
-      inputs: node.inputs.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        // links 字段不再序列化
-        defaultValue: p.defaultValue,
-        userValue: p.userValue,
-        isArray: p.isArray,
-      })),
-      outputs: node.outputs.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        // links 字段不再序列化
-        defaultValue: p.defaultValue,
-        userValue: p.userValue,
-        isArray: p.isArray,
-      })),
+      inputs: node.inputs.map(toSerializedPin),
+      outputs: node.outputs.map(toSerializedPin),
     })),
   };
 }
@@ -91,23 +89,21 @@ export function serializeGraph(
  * 
  * 从 connections 对象重建 Pin.links 字段（仅用于运行时查询）
  */
-export function deserializeGraph(data: any): {
-  nodes: any[];
+export function deserializeGraph(data: DeserializeGraphInput): {
+  nodes: DeserializedNode[];
   canvas: GraphPosition;
   variables: Record<string, Variable>;
-  inputs: any[];
-  outputs: any[];
+  inputs: Pin[];
+  outputs: Pin[];
 } {
-
-
   // Graph 类型中没有 variables，使用空对象
   const variables: Record<string, Variable> = {};
 
   // 处理新的 connections 格式：Connection 对象包含 connections 数组
-  const connectionsData = data.connections as any;
+  const connectionsData = data.connections;
 
   // 确保 connectionsList 是数组
-  let connectionsList: any[] = [];
+  let connectionsList: Array<{ fromPin?: string; toPin?: string; from?: string; to?: string }> = [];
   if (connectionsData) {
     if (Array.isArray(connectionsData)) {
       // 如果 connections 本身就是数组（旧格式）
@@ -116,27 +112,26 @@ export function deserializeGraph(data: any): {
       // 如果是新格式：{ connections: [...] }
       connectionsList = connectionsData.connections;
     } else if (typeof connectionsData === 'object') {
-      // 如果是对象但没有 connections 数组，转换为空数组
-      // console.warn('[deserializeGraph] connections is an object but not in expected format:', connectionsData);
       connectionsList = [];
     }
   }
 
   // Pin ID -> 完整 Pin 对象映射（Store 格式中 nodes 只有 inputs/outputs 为 Pin ID 数组）
-  const pinMap = new Map<string, any>();
-  (data.pins || []).forEach((p: any) => pinMap.set(p.id, p));
+  const pinMap = new Map<string, SerializedPin>();
+  (data.pins || []).forEach((p) => pinMap.set(p.id, p));
 
-  const resolvePin = (pinIdOrObj: any, nodeId: string, direction: 'input' | 'output') => {
+  const resolvePin = (pinIdOrObj: string | SerializedPin, nodeId: string, direction: 'input' | 'output'): DeserializedPin => {
     const pin = typeof pinIdOrObj === 'string' ? pinMap.get(pinIdOrObj) : pinIdOrObj;
+    const pinWithLinks = pin as (SerializedPin & { links?: string[] }) | undefined;
     return pin
-      ? { ...pin, nodeId, direction, links: pin.links ?? [] }
-      : { id: pinIdOrObj, nodeId, direction, links: [], name: '', type: 'any' };
+      ? { ...pin, nodeId, direction, links: pinWithLinks?.links ?? [] }
+      : { id: String(pinIdOrObj), nodeId, name: '', type: 'any', direction, links: [] };
   };
 
-  const nodes = (data.nodes || []).map((n: any) => {
-    const def = getNodeDefinition(n.type ?? n.node_type);
+  const nodes = (data.nodes || []).map((n) => {
+    const def = getNodeDefinition(n.type ?? n.node_type ?? '');
 
-    let node: any;
+    let node: DeserializedNode;
     if (def) {
       node = {
         id: n.id,
@@ -175,21 +170,21 @@ export function deserializeGraph(data: any): {
       };
     }
 
-    node.inputs = (n.inputs || []).map((p: any) =>
+    node.inputs = (n.inputs || []).map((p) =>
       resolvePin(p, n.id, 'input')
     );
-    node.outputs = (n.outputs || []).map((p: any) =>
+    node.outputs = (n.outputs || []).map((p) =>
       resolvePin(p, n.id, 'output')
     );
 
     return node;
-  }).filter(Boolean);
+  }).filter(Boolean) as DeserializedNode[];
 
   // 2. 从 connections 数组重建 Pin.links（运行时字段）
-  // 支持 { from_pin, to_pin } 或 { from, to }
+  // 使用 camelCase: { fromPin, toPin }
   for (const connection of connectionsList) {
-    const sourcePin = connection.from_pin ?? connection.from;
-    const targetPin = connection.to_pin ?? connection.to;
+    const sourcePin = connection.fromPin ?? connection.from;
+    const targetPin = connection.toPin ?? connection.to;
 
     if (!sourcePin || !targetPin) {
       console.warn('[deserializeGraph] Invalid connection:', connection);
@@ -198,7 +193,7 @@ export function deserializeGraph(data: any): {
 
     // 找到源 pin（输出 pin）
     for (const node of nodes) {
-      const outputPin = node.outputs.find((p: any) => p.id === sourcePin);
+      const outputPin = node.outputs.find((p) => p.id === sourcePin);
       if (outputPin) {
         if (!outputPin.links) outputPin.links = [];
         if (!outputPin.links.includes(targetPin)) {
@@ -207,7 +202,7 @@ export function deserializeGraph(data: any): {
       }
 
       // 找到目标 pin（输入 pin）
-      const inputPin = node.inputs.find((p: any) => p.id === targetPin);
+      const inputPin = node.inputs.find((p) => p.id === targetPin);
       if (inputPin) {
         if (!inputPin.links) inputPin.links = [];
         if (!inputPin.links.includes(sourcePin)) {

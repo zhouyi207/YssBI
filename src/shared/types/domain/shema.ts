@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Schema 类型定义
  *
  * 这些类型与后端的 schema 模块对应。
@@ -82,7 +82,7 @@ export type EditorWidget =
   | { type: "Number"; config: { min?: number; max?: number; step?: number; precision?: number } }
   | { type: "Text"; config: { multiline: boolean; max_length?: number; placeholder?: string } }
   | { type: "Checkbox" }
-  | { type: "Select"; config: { options: { value: any; label: string }[] } }
+  | { type: "Select"; config: { options: { value: unknown; label: string }[] } }
   | { type: "Color" }
   | { type: "JsonEditor" }
   | { type: "ArrayEditor"; config: { item_type: string } };
@@ -96,7 +96,7 @@ export interface VariableTypeDefinition {
   /** 对应的 Pin 类型 */
   pin_type: string;
   /** 默认值 */
-  default_value: any;
+  default_value: unknown;
   /** 编辑器控件类型 */
   editor_widget: EditorWidget;
   /** 是否支持数组 */

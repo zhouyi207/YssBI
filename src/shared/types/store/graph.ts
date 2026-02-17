@@ -5,7 +5,7 @@
  */
 
 import type { NodeId, PinId, GraphId, ConnectionId } from '../domain/ids';
-import type { GraphPosition } from '../domain/graph';
+import type { GraphPosition, Graph } from '../domain/graph';
 import type { PinDirection, PinType } from '../domain/pin';
 import type { PinUI } from '../domain/pin';
 
@@ -61,6 +61,33 @@ export interface GraphData {
   type: 'event' | 'function' | 'macro';
   nodes: NodeData[];
   pins: PinData[];
-  connections: ConnectionData[] | { connections: Array<{ from_pin: string; to_pin: string }> };
+  connections: ConnectionData[] | { connections: Array<{ fromPin: string; toPin: string }> };
   canvas: GraphPosition;
 }
+
+/** 运行时节点（inputs/outputs 可为 Pin ID 或完整 Pin 对象） */
+export interface RuntimeNodeInput {
+  id: string;
+  graphId?: string;
+  node_type: string;
+  category?: string[];
+  title?: string;
+  position?: { x: number; y: number };
+  inputs?: (string | PinData)[];
+  outputs?: (string | PinData)[];
+  ui_style?: string;
+  description?: string;
+  isInternal?: boolean;
+  variableId?: string;
+  variableName?: string;
+  variableType?: string;
+  subGraphId?: string;
+}
+
+/** 图数据输入（addGraphFromData 等接受 nodes 含 Pin 对象的格式） */
+export interface GraphDataInput extends Omit<GraphData, 'nodes'> {
+  nodes: RuntimeNodeInput[];
+}
+
+/** addGraphFromData 接受的图格式（GraphData、GraphDataInput 或 domain Graph） */
+export type GraphDataLike = GraphData | GraphDataInput | Graph;

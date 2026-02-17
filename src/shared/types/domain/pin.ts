@@ -47,8 +47,8 @@ export interface Pin {
     type: PinType;              // 数据类型
     direction: PinDirection;    // 方向（输入/输出）
     links: string[];            // 连接的其他 Pin ID 列表
-    defaultValue?: any;         // 默认值（数据针脚）
-    userValue?: any;            // 用户设置的值（覆盖默认值）
+    defaultValue?: unknown;     // 默认值（数据针脚）
+    userValue?: unknown;        // 用户设置的值（覆盖默认值）
     isArray?: boolean;          // 是否为数组/List 类型
     ui?: PinUI;                 // UI 配置
 }

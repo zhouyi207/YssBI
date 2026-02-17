@@ -7,6 +7,7 @@ use crate::graph::{DataValue, NodeId, TypeVarId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PinInstance {
     pub id: PinId,
     pub node_id: NodeId,
