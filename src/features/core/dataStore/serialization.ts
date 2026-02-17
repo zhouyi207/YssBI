@@ -70,7 +70,7 @@ export function serializeGraph(
     connections: { connections },  // 包装为 ConnectionDTO 格式
     nodes: nodes.map((node) => ({
       id: node.id,
-      type: node.node_type,
+      nodeType: node.nodeType,
       title: node.title,
       position: node.position,
       isInternal: node.isInternal,
@@ -129,20 +129,20 @@ export function deserializeGraph(data: DeserializeGraphInput): {
   };
 
   const nodes = (data.nodes || []).map((n) => {
-    const def = useNodeRegistryStore((s) => s.getDefinition(n.type ?? n.node_type ?? ''));
+    const nodeType = n.nodeType ?? '';
+    const def = useNodeRegistryStore.getState().getDefinition(nodeType);
 
     let node: DeserializedNode;
     if (def) {
       node = {
         id: n.id,
-        type: (n.type ?? n.node_type) ?? '',
-        node_type: (n.node_type ?? n.type) ?? '',
+        nodeType,
         category: n.category ?? def.category ?? [],
         title: n.title ?? def.name,
         position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
-        ui_style: n.ui_style ?? def.node_metadata?.ui_style ?? 'default',
+        uiStyle: n.uiStyle ?? def.node_metadata?.uiStyle ?? def.node_metadata?.ui_style ?? 'default',
         description: n.description ?? def.node_metadata?.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
@@ -153,14 +153,13 @@ export function deserializeGraph(data: DeserializeGraphInput): {
     } else {
       node = {
         id: n.id,
-        type: (n.type ?? n.node_type) ?? '',
-        node_type: (n.node_type ?? n.type) ?? '',
+        nodeType,
         category: n.category ?? [],
-        title: n.title ?? (n.type ?? n.node_type ?? ''),
+        title: n.title ?? nodeType,
         position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
-        ui_style: n.ui_style ?? 'default',
+        uiStyle: n.uiStyle ?? 'default',
         description: n.description,
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,

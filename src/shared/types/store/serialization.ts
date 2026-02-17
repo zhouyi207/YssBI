@@ -17,10 +17,10 @@ export interface SerializedPin {
   isArray?: boolean;
 }
 
-/** 序列化后的节点 */
+/** 序列化后的节点（camelCase 与后端 DTO 一致） */
 export interface SerializedNode {
   id: string;
-  type: string;
+  nodeType: string;
   title: string;
   position: { x: number; y: number };
   isInternal?: boolean;
@@ -45,16 +45,15 @@ export interface SerializedGraphData {
   nodes: SerializedNode[];
 }
 
-/** 反序列化输入（可能来自 Store 或后端） */
+/** 反序列化输入（来自后端 DTO，camelCase） */
 export interface DeserializeGraphInput {
   nodes?: Array<{
     id: string;
-    type?: string;
-    node_type?: string;
+    nodeType?: string;
     category?: string[];
     title?: string;
     position?: { x: number; y: number };
-    ui_style?: string;
+    uiStyle?: string;
     description?: string;
     isInternal?: boolean;
     subGraphId?: string;
@@ -76,17 +75,16 @@ export interface DeserializedPin extends SerializedPin {
   links: string[];
 }
 
-/** 反序列化后的节点（运行时格式，含 links） */
+/** 反序列化后的节点（运行时格式，含 links，camelCase） */
 export interface DeserializedNode {
   id: string;
-  type: string;
-  node_type: string;
+  nodeType: string;
   category: string[];
   title: string;
   position: { x: number; y: number };
   inputs: DeserializedPin[];
   outputs: DeserializedPin[];
-  ui_style: string;
+  uiStyle: string;
   description?: string;
   isInternal?: boolean;
   subGraphId?: string;

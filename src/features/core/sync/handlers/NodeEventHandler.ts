@@ -19,12 +19,12 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
         const nodeData: NodeData = {
             id: payload.nodeId,
             graphId: payload.graphId,
-            node_type: d.nodeType,
+            nodeType: d.nodeType,
             category: d.category ?? [],
             title: d.title ?? '',
             inputs: d.inputs ?? [],
             outputs: d.outputs ?? [],
-            ui_style: d.uiStyle ?? 'default',
+            uiStyle: d.uiStyle ?? 'default',
             description: d.description,
             position: d.position ?? { x: 0, y: 0 },
         };

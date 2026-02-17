@@ -6,8 +6,8 @@ import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { UIHost } from "@/shared/ui";
 import { useProjectSyncWithEditor } from "@/features/application/initialization";
-import { useEditorGroup } from "@/features/application/editor/core";
-import { useEditorKeyboard } from "@/features/application/editor/core";
+import { useEditorGroup } from "@/features/application/editor";
+import { useEditorKeyboard } from "@/features/application/editor";
 
 
 export const EditorWindow = () => {

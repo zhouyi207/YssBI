@@ -126,7 +126,7 @@ export function useEditorOperations() {
       console.log('[useEditorOperations] Pasting nodes via backend...');
 
       // Extract node types for backend validation
-      const nodeTypes = tempNodes.map((n: { node_type?: string; type?: string }) => n.node_type || n.type).filter((t): t is string => t != null);
+      const nodeTypes = tempNodes.map((n: { nodeType?: string }) => n.nodeType).filter((t): t is string => t != null);
 
       // Call backend to validate node types
       await NodeService.createNodes(tid, nodeTypes);

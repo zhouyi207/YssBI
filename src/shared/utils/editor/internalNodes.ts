@@ -7,7 +7,7 @@ import { Position } from "@/shared/types/ui";
  * 节点结构由后端 create_node 创建，通过 NodeCreated 事件同步到前端渲染
  */
 export interface CreateNodeRequest {
-    node_type: string;
+    nodeType: string;
     position: Position;
     /** 可选参数，如 subGraphId（call_function/call_macro），需后端支持 */
     overrides?: Record<string, unknown>;
@@ -22,7 +22,7 @@ export function buildCreateNodeRequest(
     position: Position,
     overrides?: Record<string, unknown>
 ): CreateNodeRequest {
-    return { node_type: nodeType, position, overrides };
+    return { nodeType, position, overrides };
 }
 
 export function syncInternalNodePins(node: Node, subGraphPins: GraphPinDef[], isInputNode: boolean) {

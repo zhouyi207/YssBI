@@ -6,7 +6,7 @@ import { buildCreateNodeRequest } from "@/shared/utils/editor";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 export interface PaletteItem {
-  type: string;
+  nodeType: string;
   overrides?: { subGraphId?: string };
 }
 
@@ -64,11 +64,11 @@ export function useCanvasOverlayHandlers({
         "macro_outputs",
       ];
 
-      if (internalNodeTypes.includes(item.type)) {
+      if (internalNodeTypes.includes(item.nodeType)) {
         const graphData = getGraphById(activeTabId || "");
         const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
         const existingNode = currentNodes.find(
-          (n: any) => n.node_type === item.type && n.isInternal
+          (n: any) => n.nodeType === item.nodeType && n.isInternal
         );
         if (existingNode) {
           const rect = canvasRef.current.getBoundingClientRect();
@@ -95,25 +95,25 @@ export function useCanvasOverlayHandlers({
 
       let newNode: any = null;
 
-      if (item.type === "call_function" || item.type === "call_macro") {
+      if (item.nodeType === "call_function" || item.nodeType === "call_macro") {
         const subId = item.overrides?.subGraphId;
         if (subId) {
-          const subData = item.type === "call_function" ? functions[subId] : macros[subId];
+          const subData = item.nodeType === "call_function" ? functions[subId] : macros[subId];
           if (subData) {
-            newNode = buildCreateNodeRequest(item.type, { x, y }, { subGraphId: subId });
+            newNode = buildCreateNodeRequest(item.nodeType, { x, y }, { subGraphId: subId });
           }
         }
       } else {
         newNode = createNodeFromTemplate(
           { x, y },
           currentCanvas.scale,
-          item.type,
+          item.nodeType,
           item.overrides
         );
       }
 
       if (newNode) {
-        await createNode(newNode.node_type, newNode.position);
+        await createNode(newNode.nodeType, newNode.position);
       }
       setContextMenu(null);
       setPendingConnection(null);
@@ -152,7 +152,7 @@ export function useCanvasOverlayHandlers({
         } as any
       );
       if (newNode) {
-        await createNode(newNode.node_type, {
+        await createNode(newNode.nodeType, {
           x: newNode.position.x,
           y: newNode.position.y,
         });
@@ -183,7 +183,7 @@ export function useCanvasOverlayHandlers({
         } as any
       );
       if (newNode) {
-        await createNode(newNode.node_type, {
+        await createNode(newNode.nodeType, {
           x: newNode.position.x,
           y: newNode.position.y,
         });

@@ -20,6 +20,6 @@ export function useNodeStyle(node: Node) {
 
   return {
     centerSymbol,
-    uiStyle: node.ui_style,
+    uiStyle: node.uiStyle,
   };
 }

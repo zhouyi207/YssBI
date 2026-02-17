@@ -4,10 +4,7 @@ import { useEditorState, useEditorActions } from '@/features/core/editor';
 import { useEditorOperations } from './useEditorOperations';
 import { useTabManagement } from './useTabManagement';
 import { useProjectOperations } from './useProjectOperations';
-import { useGraphManagement } from './useGraphManagement';
-import { useVariableManagement } from './useVariableManagement';
-import { useDatabaseManagement } from './useDatabaseManagement';
-import { useNodeManagement } from './useNodeManagement';
+import { useGraphManagement, useVariableManagement, useDatabaseManagement, useNodeManagement } from '@/features/application/dataManagement';
 
 export function useEditor(options?: { withCanvasInteraction?: boolean }) {
   const withCanvasInteraction = options?.withCanvasInteraction ?? true;

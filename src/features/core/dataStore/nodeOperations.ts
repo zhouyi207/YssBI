@@ -10,12 +10,12 @@ function buildNodeFromType(type: string, id: string, position: Position): Node {
     const def = useNodeRegistryStore.getState().getDefinition(type);
     return new Node({
         id,
-        node_type: type,
+        nodeType: type,
         category: def?.category ?? [],
         title: def?.name ?? type,
         inputs: [],
         outputs: [],
-        ui_style: def?.node_metadata?.ui_style ?? 'default',
+        uiStyle: def?.node_metadata?.uiStyle ?? def?.node_metadata?.ui_style ?? 'default',
         description: def?.node_metadata?.description,
         position: { x: position.x, y: position.y },
     });
@@ -29,7 +29,7 @@ export async function createNodeInBackend(
     subgraphId: string,
     node: Node
 ): Promise<Node> {
-    const nodeId = await NodeService.createNode(subgraphId, node.node_type, node.position.x, node.position.y);
+    const nodeId = await NodeService.createNode(subgraphId, node.nodeType, node.position.x, node.position.y);
     (node as any).id = nodeId;
     return node;
 }
@@ -71,7 +71,7 @@ export function createNodeFromTemplate(
 
         // Handle get_column specific initialization
         const initialData = (overrides as { initialData?: { columnName?: string; columnType?: string } }).initialData;
-        if (node.node_type === 'get_column' && initialData?.columnName) {
+        if (node.nodeType === 'get_column' && initialData?.columnName) {
             node.title = `Get ${initialData.columnName}`;
             const outputPin = node.outputs.find((p: { name: string }) => p.name === 'Column');
             if (outputPin) {

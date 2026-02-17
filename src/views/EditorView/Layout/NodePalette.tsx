@@ -5,8 +5,7 @@ import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 export interface PaletteItem {
-  type: string;
-  node_type?: string; // 兼容性字段，与 type 相同
+  nodeType: string;
   title: string;
   category: string[];
   overrides?: Partial<Node> & { subGraphId?: string };
@@ -82,10 +81,12 @@ export function NodePalette({
         }
       }
 
+      // 后端使用 category:name 格式查找节点类型，需保持一致
+      const fullType = [...(node.category || []), node.name].join(':');
       items.push({
-        type: node.name,
+        nodeType: fullType,
         title: node.name,
-        category: node.category,
+        category: node.category || [],
       });
     });
 
@@ -109,7 +110,7 @@ export function NodePalette({
       }
       if (getCompatible) {
         items.push({
-          type: 'get_variable',
+          nodeType: 'get_variable',
           title: `Get ${varName}`,
           category: ['Variables'],
           overrides: { title: `Get ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) } as any
@@ -124,7 +125,7 @@ export function NodePalette({
       }
       if (setCompatible) {
         items.push({
-          type: 'set_variable',
+          nodeType: 'set_variable',
           title: `Set ${varName}`,
           category: ['Variables'],
           overrides: { title: `Set ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) } as any
@@ -148,7 +149,7 @@ export function NodePalette({
         }
 
         items.push({
-          type: type === 'function' ? 'call_function' : 'call_macro',
+          nodeType: type === 'function' ? 'call_function' : 'call_macro',
           title: `${type === 'function' ? 'Call' : 'Macro'} ${sub.name}`,
           category: type === 'function' ? ['Functions'] : ['Macros'],
           overrides: { subGraphId: sub.id, title: sub.name } as any
@@ -219,7 +220,7 @@ export function NodePalette({
   const renderTreeNode = (node: TreeNode, path: string, level: number) => {
     if (node.isLeaf) {
       // 添加安全检查
-      if (!node.item || !node.item.type) {
+      if (!node.item || !node.item.nodeType) {
         console.warn('[NodePalette] Invalid node item:', node);
         return null;
       }
@@ -231,9 +232,9 @@ export function NodePalette({
           style={{ paddingLeft: `${(level + 1) * 12 + 12}px` }}
           onClick={() => onSelect(node.item)}
         >
-          {node.item.type.includes('variable') ? (
+          {node.item.nodeType.includes('variable') ? (
             <VscSymbolVariable className="text-blue-400 shrink-0" size={14} />
-          ) : node.item.type.includes('call') ? (
+          ) : node.item.nodeType.includes('call') ? (
             <VscSymbolMethod className="text-purple-400 shrink-0" size={14} />
           ) : (
             <VscSymbolProperty className="text-[var(--accent-color)] shrink-0" size={14} />
@@ -294,7 +295,7 @@ export function NodePalette({
           searchResults?.length ? (
             searchResults.map((item, idx) => (
               <div
-                key={`${item.type}-${idx}`}
+                key={`${item.nodeType}-${idx}`}
                 className="px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer group flex flex-col"
                 onClick={() => onSelect(item)}
               >

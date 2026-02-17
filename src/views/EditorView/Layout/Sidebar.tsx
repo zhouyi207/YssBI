@@ -1,6 +1,6 @@
 import { forwardRef, useContext, useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { useEditorGroup, GroupContext } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import {
   VscEye,
   VscEyeClosed,
@@ -15,7 +15,7 @@ import { PIN_COLORS, buildSidebarDragData, buildColumnDragData } from "@/feature
 import { dataTypeKind, dataTypeDisplay } from "@/shared/types/domain/dataType";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
-  const nodeId = useContext(GroupContext); // 从布局上下文获取节点 ID
+  const nodeId = useContext(GroupContext) as string | null; // 从布局上下文获取节点 ID
   const {
     variables,
     Variables,
@@ -49,7 +49,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const listRef = useRef<HTMLDivElement>(null);
 
   // Read active tab from Layout Store
-  const sidebarNode = useLayoutStore(s => s.nodes[nodeId || 'sidebar']);
+  const sidebarNode = useLayoutStore(s => s.nodes[nodeId ?? 'sidebar']);
   const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
 
   // 记录每个 Tab 的数量，用于触发滚动
@@ -254,19 +254,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         >
           {activeTab === 'events' && (
             <>
-              {Object.entries(events).map(([id, data]) => renderItem(id, data.name, 'event'))}
+              {Object.entries(events).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'event'))}
               {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No events</div>}
             </>
           )}
           {activeTab === 'functions' && (
             <>
-              {Object.entries(functions).map(([id, data]) => renderItem(id, data.name, 'function'))}
+              {Object.entries(functions).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'function'))}
               {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No functions</div>}
             </>
           )}
           {activeTab === 'macros' && (
             <>
-              {Object.entries(macros).map(([id, data]) => renderItem(id, data.name, 'macro'))}
+              {Object.entries(macros).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'macro'))}
               {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
             </>
           )}
@@ -311,7 +311,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     Global
                     <div className="h-px flex-1 bg-white/5" />
                   </div>
-                  {Object.entries(Variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                  {Object.entries(Variables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
                 </div>
               )}
               {/* Local */}
@@ -322,7 +322,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     <div className="h-px flex-1 bg-white/5" />
                   </div>
                 )}
-                {Object.entries(variables).map(([id, data]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
+                {Object.entries(variables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
               </div>
               {Object.keys(variables).length === 0 && Object.keys(Variables).length === 0 && (
                 <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>

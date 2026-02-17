@@ -14,7 +14,7 @@ export const DraggableItem: React.FC<{ template: any }> = ({ template }) => {
       {...attributes}
       className={`p-2 border rounded ${isDragging ? "opacity-50" : ""}`}
     >
-      {template.title || template.type}
+      {template.title || template.nodeType}
     </div>
   );
 };

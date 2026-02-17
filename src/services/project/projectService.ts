@@ -65,13 +65,12 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
             
             return {
                 id: node.id,
-                type: node.nodeType,
-                node_type: node.nodeType,
+                nodeType: node.nodeType,
                 category: node.category || [],
                 title: node.title,
                 inputs: nodeInputs,
                 outputs: nodeOutputs,
-                ui_style: node.uiStyle ?? 'default',
+                uiStyle: node.uiStyle ?? 'default',
                 description: node.description,
                 position: node.position || { x: 0, y: 0 },
             };

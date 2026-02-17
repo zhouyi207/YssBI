@@ -27,12 +27,12 @@ export interface UINode extends DomainNode {
  */
 export class Node implements UINode {
     id: string;
-    node_type: string;
+    nodeType: string;
     category: string[];
     title: string;
     inputs: Pin[];
     outputs: Pin[];
-    ui_style: string;
+    uiStyle: string;
     description?: string;
     position: { x: number; y: number };
     isInternal: boolean;
@@ -44,12 +44,12 @@ export class Node implements UINode {
 
     constructor(data: UINode) {
         this.id = data.id;
-        this.node_type = data.node_type;
+        this.nodeType = data.nodeType;
         this.category = data.category;
         this.title = data.title;
         this.inputs = data.inputs;
         this.outputs = data.outputs;
-        this.ui_style = data.ui_style;
+        this.uiStyle = data.uiStyle;
         this.description = data.description;
         this.position = data.position;
         this.isInternal = data.isInternal || false;
@@ -61,7 +61,7 @@ export class Node implements UINode {
     }
 
     get noHeader(): boolean {
-        return this.ui_style === "math";
+        return this.uiStyle === "math";
     }
 
     addInput(pin: Pin): void {
@@ -71,12 +71,12 @@ export class Node implements UINode {
     clone(): Node {
         return new Node({
             id: this.id,
-            node_type: this.node_type,
+            nodeType: this.nodeType,
             category: [...this.category],
             title: this.title,
             inputs: this.inputs.map(p => ({ ...p, links: p.links ? [...p.links] : [] })),
             outputs: this.outputs.map(p => ({ ...p, links: p.links ? [...p.links] : [] })),
-            ui_style: this.ui_style,
+            uiStyle: this.uiStyle,
             description: this.description,
             position: { ...this.position },
             isInternal: this.isInternal,

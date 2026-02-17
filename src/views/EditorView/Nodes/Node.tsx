@@ -47,7 +47,7 @@ export const Node = React.memo<NodeProps>((props) => {
       dragDelta={dragDelta}
       onPointerDown={onPointerDown}
     >
-      {node.ui_style === "math" ? (
+      {node.uiStyle === "math" ? (
         <MathNodeLayout {...props} />
       ) : (
         <DefaultNodeLayout {...props} />

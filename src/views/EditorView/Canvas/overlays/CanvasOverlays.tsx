@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import type { LayoutTab } from "@/shared/types";
+import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
-import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
-import { useCanvasOverlayHandlers } from "@/features/application/editor/core/hooks/useCanvasOverlayHandlers";
+import { useNodeManagement } from "@/features/application/dataManagement";
+import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { HUD } from "./HUD";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
 import { VscRunAll, VscChevronDown } from "react-icons/vsc";
@@ -69,7 +70,7 @@ export default function CanvasOverlays({
             <HUD />
 
             {/* ================= FAB (Floating Action Button) for Execution ================= */}
-            {tabs.find(t => t.id === activeTabId)?.type === "event" && (
+            {tabs.find((t: LayoutTab) => t.id === activeTabId)?.type === "event" && (
                 <div className="absolute top-4 right-4 z-40">
                     <div className="relative">
                         <div className="flex items-center gap-1">

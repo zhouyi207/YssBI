@@ -4,7 +4,7 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
-import { useEditor } from '@/features/application/editor/core/hooks/useEditor';
+import { useEditor } from '@/features/application/editor';
 import type { EventCallbacks } from '@/features/core/sync/types';
 
 const LISTENER_KEY = 'project-listener';

@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEditorGroup } from "@/features/application/editor";
 import { useState } from "react";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";

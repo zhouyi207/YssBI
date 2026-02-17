@@ -11,16 +11,16 @@ import type { PinDirection, PinType, PinUI } from '../domain/pin';
 import type { GraphInstanceDTO } from '../dto/graph';
 
 // ==================== NodeData ====================
-/** 节点数据（Store 规范化格式） */
+/** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */
 export interface NodeData {
   id: string;
   graphId: string;
-  node_type: string;
+  nodeType: string;
   category: string[];
   title: string;
   inputs: string[];   // Pin IDs
   outputs: string[]; // Pin IDs
-  ui_style: string;
+  uiStyle: string;
   description?: string;
   position: { x: number; y: number };
   /** 以下为 UI 扩展字段 */
@@ -70,13 +70,13 @@ export interface GraphData {
 export interface RuntimeNodeInput {
   id: string;
   graphId?: string;
-  node_type: string;
+  nodeType: string;
   category?: string[];
   title?: string;
   position?: { x: number; y: number };
   inputs?: (string | PinData)[];
   outputs?: (string | PinData)[];
-  ui_style?: string;
+  uiStyle?: string;
   description?: string;
   isInternal?: boolean;
   variableId?: string;

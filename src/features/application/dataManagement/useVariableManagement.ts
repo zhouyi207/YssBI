@@ -5,7 +5,7 @@ import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { useVariableStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
-import { useSidebarTab } from './useSidebarTab';
+import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
 function buildScope(

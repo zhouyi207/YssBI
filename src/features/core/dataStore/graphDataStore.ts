@@ -379,10 +379,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
           graphId: graph.id,
           inputs: inputIds,
           outputs: outputIds,
-          node_type: (node as NodeData).node_type ?? (node as { node_type?: string }).node_type ?? '',
+          nodeType: (node as NodeData).nodeType ?? (node as { nodeType?: string }).nodeType ?? '',
           category: (node as NodeData).category ?? [],
           title: (node as NodeData).title ?? '',
-          ui_style: (node as NodeData).ui_style ?? 'default',
+          uiStyle: (node as NodeData).uiStyle ?? 'default',
           position: (node as NodeData).position ?? { x: 0, y: 0 },
         };
         nodeIds.push(node.id);
@@ -427,21 +427,21 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       const toPinId = (p: string | PinData): string =>
         typeof p === 'object' && p?.id ? p.id : String(p);
 
-      (graph.nodes || []).forEach((node: { id: string; node_type?: string; nodeType?: string; ui_style?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string }) => {
+      (graph.nodes || []).forEach((node: { id: string; nodeType?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string }) => {
         const inputIds = (node.inputs ?? []).map(toPinId).filter(Boolean);
         const outputIds = (node.outputs ?? []).map(toPinId).filter(Boolean);
         const allPinIds = [...inputIds, ...outputIds];
-        const nodeType = node.node_type ?? node.nodeType ?? '';
-        const uiStyle = node.ui_style ?? node.uiStyle ?? 'default';
+        const nodeType = node.nodeType ?? '';
+        const uiStyle = node.uiStyle ?? 'default';
         nextNodes[node.id] = {
           id: node.id,
           graphId,
-          node_type: nodeType,
+          nodeType,
           category: node.category ?? [],
           title: node.title ?? '',
           inputs: inputIds,
           outputs: outputIds,
-          ui_style: uiStyle,
+          uiStyle,
           description: node.description,
           position: node.position ?? { x: 0, y: 0 },
           isInternal: node.isInternal,

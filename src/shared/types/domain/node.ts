@@ -16,12 +16,12 @@ import { Pin } from './pin';
  */
 export interface Node {
     id: string;
-    node_type: string;
+    nodeType: string;
     category: string[];
     title: string;
     inputs: Pin[];
     outputs: Pin[];
-    ui_style: string;
+    uiStyle: string;
     description?: string;
 }
 
@@ -29,8 +29,11 @@ export interface Node {
  * 节点元数据
  * 描述节点类型的配置信息
  */
+/** 节点元数据（后端发送 snake_case，前端优先使用 camelCase） */
 export interface NodeMetaData {
-    ui_style: string;
+    uiStyle?: string;
+    /** @deprecated 后端 DTO 格式，优先使用 uiStyle */
+    ui_style?: string;
     description?: string;
     supports_dynamic_pins: boolean;
 }

@@ -47,8 +47,8 @@ export function convertGraphFromDTO(graphDTO: GraphInstanceDTO): Graph {
 
     return {
       ...node,
-      node_type: node.nodeType ?? '',
-      ui_style: node.uiStyle ?? 'default',
+      nodeType: node.nodeType ?? '',
+      uiStyle: node.uiStyle ?? 'default',
       inputs: inputPins as Pin[],
       outputs: outputPins as Pin[],
     } as Node;
@@ -69,12 +69,12 @@ export function convertGraphToDTO(graph: Graph): GraphInstanceDTO {
     const nodeWithPos = node as Node & { position?: { x: number; y: number } };
     return {
       id: node.id,
-      nodeType: node.node_type,
+      nodeType: node.nodeType,
       category: node.category,
       title: node.title,
       inputs: node.inputs.map((pin) => pin.id),
       outputs: node.outputs.map((pin) => pin.id),
-      uiStyle: node.ui_style,
+      uiStyle: node.uiStyle,
       description: node.description,
       position: nodeWithPos.position ?? { x: 0, y: 0 },
     };

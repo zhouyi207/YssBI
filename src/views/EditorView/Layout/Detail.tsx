@@ -1,5 +1,5 @@
 import { forwardRef, useMemo } from "react";
-import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEditorGroup } from "@/features/application/editor";
 import { Select } from "@/shared/ui";
 import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from "@/shared/types/domain/dataType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";

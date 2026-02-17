@@ -14,7 +14,7 @@ export const DragLayer: React.FC = () => {
           >
             <div className="w-2 h-2 rounded-full bg-blue-500" />
             <span className="text-xs font-bold text-gray-700">
-              {activeDrag.template.title || activeDrag.template.type}
+              {activeDrag.template.title || activeDrag.template.nodeType}
             </span>
           </div>
         </div>

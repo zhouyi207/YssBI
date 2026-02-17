@@ -1,4 +1,4 @@
-﻿import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEditorGroup } from "@/features/application/editor";
 
 export const WatermarkView = () => {
   const { addEvent, addFunction, addMacro, importGraph } = useEditorGroup();

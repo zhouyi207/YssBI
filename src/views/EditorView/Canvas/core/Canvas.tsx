@@ -1,10 +1,9 @@
 import { useRef, useMemo } from "react";
 import { Node } from "../../Nodes/Node";
-import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
-import { useNodeManagement } from "@/features/application/editor/core/hooks/useNodeManagement";
-import { useCanvasViewport, useCanvasDrop } from "@/features/application/editor/core/hooks";
+import { useNodeManagement } from "@/features/application/dataManagement";
 import { useExecutionVisualization } from "@/features/core/execution";
 
 import { ViewportGrid } from "./ViewportGrid";
@@ -76,7 +75,7 @@ export default function Canvas() {
     setContextMenu,
     setPendingConnection,
     saveHistory,
-    createNode: (nodeType, position) => createNode(nodeType, position),
+    createNode: (nodeType: string, position: { x: number; y: number }) => createNode(nodeType, position),
   });
 
   const selectedNodeIdsSet = useMemo(
@@ -120,8 +119,8 @@ export default function Canvas() {
 
         <TransformContainer groupId={groupId}>
           {nodes
-            .filter((n) => visibleNodeIds.has(n.id))
-            .map((node) => (
+            .filter((n: { id: string }) => visibleNodeIds.has(n.id))
+            .map((node: { id: string }) => (
               <Node
                 key={node.id}
                 id={node.id}

@@ -134,11 +134,11 @@ export function useCanvasDrop({
         const newNode = createNodeFromTemplate(
           { x, y },
           currentCanvas.scale,
-          dragState.template.type,
+          dragState.template.nodeType,
           { variableId: dragState.template.variableId, variableName: dragState.template.variableName }
         );
         if (newNode) {
-          await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
+          await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
           // TODO: connect after node created - backend returns nodeId, need pin IDs for connection
         }
         return;
@@ -166,7 +166,7 @@ export function useCanvasDrop({
             variableIsArray: dragState.template.variableIsArray,
           } as any);
           if (newNode) {
-            await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
+            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
           }
           return;
         }
@@ -179,7 +179,7 @@ export function useCanvasDrop({
             variableIsArray: dragState.template.variableIsArray,
           } as any);
           if (newNode) {
-            await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
+            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
           }
           return;
         }
@@ -198,26 +198,26 @@ export function useCanvasDrop({
       }
 
       if (
-        dragState.template.type === "call_function" ||
-        dragState.template.type === "call_macro"
+        dragState.template.nodeType === "call_function" ||
+        dragState.template.nodeType === "call_macro"
       ) {
-        const type = dragState.template.type;
+        const type = dragState.template.nodeType;
         const subId = dragState.template.subGraphId;
         const subData = type === "call_function" ? functions[subId] : macros[subId];
         if (!subData) return;
 
         const req = buildCreateNodeRequest(type, { x, y }, { subGraphId: subId });
-        await createNode(req.node_type, req.position);
+        await createNode(req.nodeType, req.position);
         return;
       }
 
       const newNode = createNodeFromTemplate(
         { x, y },
         currentCanvas.scale,
-        dragState.template.type
+        dragState.template.nodeType
       );
       if (newNode) {
-        await createNode(newNode.node_type, { x: newNode.position.x, y: newNode.position.y });
+            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
       }
     },
     [

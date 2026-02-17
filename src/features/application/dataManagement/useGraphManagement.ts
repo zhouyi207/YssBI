@@ -3,7 +3,7 @@ import { Graph } from '@/shared/types/domain';
 import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
 import { getUniqueName } from '@/shared/utils';
-import { useSidebarTab } from './useSidebarTab';
+import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 
 /** 兜底：若 EventCreated 未到达，用 get_graph 拉取并打开（解决监听器竞态导致的超时） */
 async function fulfillPendingGraph(

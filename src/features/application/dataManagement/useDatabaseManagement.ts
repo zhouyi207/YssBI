@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { getUniqueName } from '@/shared/utils';
-import { useSidebarTab } from './useSidebarTab';
+import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 
 
 // database

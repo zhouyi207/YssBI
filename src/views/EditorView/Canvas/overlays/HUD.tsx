@@ -1,5 +1,5 @@
-﻿import { useEffect, useState, useRef, useCallback } from "react";
-import { useEditorGroup } from "@/features/application/editor/core/hooks/useEditorGroup";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useEditorGroup } from "@/features/application/editor";
 import { useViewportStore } from "@/features/core/viewport";
 
 
