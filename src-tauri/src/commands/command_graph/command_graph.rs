@@ -1,8 +1,10 @@
 use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction, EventMacro};
 use crate::graph::{GraphId, GraphKind};
+use crate::log::log_app;
 use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
+use serde::Deserialize;
 use serde_json::Value;
 use tauri::{AppHandle, State};
 
@@ -81,19 +83,58 @@ pub fn remove_graph(
     Ok(())
 }
 
-#[tauri::command]
-pub fn update_event(_id: String, _event: Value) -> Result<(), String> {
+/// 从 Value 中提取可更新的图属性
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphUpdateData {
+    name: Option<String>,
+}
+
+/// 通用的图更新逻辑
+fn update_graph_inner(
+    app: &AppHandle,
+    state: &State<ProjectState>,
+    id: GraphId,
+    data: Value,
+) -> Result<(), String> {
+    let update: GraphUpdateData = serde_json::from_value(data)
+        .map_err(|e| format!("Invalid update data: {}", e))?;
+
+    let mut project_data = state.project_data.write().unwrap();
+    let graph = project_data
+        .graphs
+        .get_mut(&id)
+        .ok_or_else(|| format!("Graph '{}' not found", id))?;
+
+    if let Some(name) = update.name {
+        log_app::info!("[command.update_graph] graph={}, new_name={}", id, name);
+        graph.name = name;
+    }
+
+    let dto: GraphInstanceDTO = (&*graph).into();
+    let event = match graph.kind {
+        GraphKind::Event => Event::Event(EventEvent::EventUpdated { id, data: dto }),
+        GraphKind::Function => Event::Function(EventFunction::FunctionUpdated { id, data: dto }),
+        GraphKind::Macro => Event::Macro(EventMacro::MacroUpdated { id, data: dto }),
+    };
+    drop(project_data);
+    emit_project_event(app, event);
     Ok(())
 }
 
 #[tauri::command]
-pub fn update_function(_id: String, _function: Value) -> Result<(), String> {
-    Ok(())
+pub fn update_event(app: AppHandle, state: State<ProjectState>, id: GraphId, event: Value) -> Result<(), String> {
+    update_graph_inner(&app, &state, id, event)
 }
 
 #[tauri::command]
-pub fn update_macro(_id: String, _macro_data: Value) -> Result<(), String> {
-    Ok(())
+pub fn update_function(app: AppHandle, state: State<ProjectState>, id: GraphId, function: Value) -> Result<(), String> {
+    update_graph_inner(&app, &state, id, function)
+}
+
+#[tauri::command]
+pub fn update_macro(app: AppHandle, state: State<ProjectState>, id: GraphId, macro_data: Value) -> Result<(), String> {
+    update_graph_inner(&app, &state, id, macro_data)
 }
 
 #[tauri::command]

@@ -8,13 +8,12 @@ import { drawEdge } from "./Edge";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { deserializeGraph } from "@/features/core/dataStore";
 
-// 🆕 粒子类型定义
 interface Particle {
-    connectionKey: string; // "fromPinId->toPinId"
-    progress: number; // 0-1
-    speed: number; // 每帧移动的距离
-    size: number; // 粒子大小
-    color: string; // 粒子颜色
+    connectionKey: string;
+    progress: number;
+    speed: number;
+    size: number;
+    color: string;
 }
 
 export const EdgesLayer = ({
@@ -29,197 +28,142 @@ export const EdgesLayer = ({
     const edgeCanvasRef = useRef<HTMLCanvasElement>(null);
     const rafRef = useRef<number | null>(null);
     const isAnimatingRef = useRef(false);
-
-    // 使用 useTheme hook 获取 theme
-    const { theme } = useTheme();
-
-    // 🆕 粒子系统
     const particlesRef = useRef<Particle[]>([]);
     const lastTimeRef = useRef<number>(0);
 
-    // 🆕 是否启用数据流动画（可以通过设置控制）
-    const [enableDataFlow, _setEnableDataFlow] = useState(true);
+    const { theme } = useTheme();
 
-    // 🆕 获取已完成的连接（显示数据流动画）
     const completedConnections = useExecutionStore((state) => state.completedConnections);
-    // 获取活跃的连接（用于高亮显示）
     const activeConnections = useExecutionStore((state) => state.activeConnections);
 
-    // 🆕 绘制粒子
-    const drawParticle = useCallback((
-        ctx: CanvasRenderingContext2D,
-        x: number,
-        y: number,
-        size: number,
-        color: string
-    ) => {
-        ctx.save();
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = size * 2;
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    }, []);
-
-    // 🆕 计算贝塞尔曲线上的点
-    const getPointOnBezier = useCallback((
-        t: number,
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number
-    ) => {
-        const dx = Math.abs(x1 - x2);
-        const curvature = Math.max(dx * 0.5, 40);
-
-        const c1x = x1 + curvature;
-        const c1y = y1;
-        const c2x = x2 - curvature;
-        const c2y = y2;
-
-        // 三次贝塞尔曲线公式
-        const mt = 1 - t;
-        const mt2 = mt * mt;
-        const mt3 = mt2 * mt;
-        const t2 = t * t;
-        const t3 = t2 * t;
-
-        const x = mt3 * x1 + 3 * mt2 * t * c1x + 3 * mt * t2 * c2x + t3 * x2;
-        const y = mt3 * y1 + 3 * mt2 * t * c1y + 3 * mt * t2 * c2y + t3 * y2;
-
-        return { x, y };
-    }, []);
-
-    // 🆕 更新粒子
-    const updateParticles = useCallback((deltaTime: number) => {
-        const particles = particlesRef.current;
-
-        // 更新现有粒子
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const particle = particles[i];
-            particle.progress += particle.speed * deltaTime;
-
-            // 移除完成的粒子
-            if (particle.progress >= 1) {
-                particles.splice(i, 1);
-            }
-        }
-
-        // 为已完成的连接添加新粒子
-        if (enableDataFlow) {
-            completedConnections.forEach((connectionKey) => {
-                // 检查是否已有粒子在这条连接上
-                const existingCount = particles.filter(p => p.connectionKey === connectionKey).length;
-
-                // 限制每条连接上的粒子数量
-                if (existingCount < 3) {
-                    // 随机决定是否添加新粒子（控制密度）
-                    if (Math.random() < 0.1) {
-                        particles.push({
-                            connectionKey,
-                            progress: 0,
-                            speed: 0.01 + Math.random() * 0.01, // 0.01-0.02 per frame
-                            size: 3 + Math.random() * 2, // 3-5px
-                            color: '#10b981', // 绿色表示已完成
-                        });
-                    }
-                }
-            });
-        }
-    }, [completedConnections, enableDataFlow]);
-
-    // 🆕 优化：使用 dataStore 获取响应式 graph 数据
     const graphData = useGraphData(activeTabId);
-
-    // 使用 useMemo 缓存反序列化结果，避免每帧重复计算
     const nodes = useMemo(() => {
         if (!graphData) return [];
         return deserializeGraph(graphData).nodes;
     }, [graphData]);
 
-    // 使用 ref 存储最新的 nodes，以便动画帧可以访问（避免 stale closures）
+    // ============================================================
+    // 将所有动画帧需要的数据存入 ref，使 drawAllEdges 保持稳定引用
+    // ============================================================
+    const getPinWorldPosRef = useRef(getPinWorldPos);
+    const themeRef = useRef(theme);
     const nodesRef = useRef(nodes);
-    useEffect(() => {
-        nodesRef.current = nodes;
-    }, [nodes]);
+    const activeConnectionsRef = useRef(activeConnections);
+    const completedConnectionsRef = useRef(completedConnections);
+    const groupIdRef = useRef(groupId);
 
-    // 绘制连接线的核心逻辑 (GPU 加速)
+    useEffect(() => { getPinWorldPosRef.current = getPinWorldPos; }, [getPinWorldPos]);
+    useEffect(() => { themeRef.current = theme; }, [theme]);
+    useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+    useEffect(() => { activeConnectionsRef.current = activeConnections; }, [activeConnections]);
+    useEffect(() => { completedConnectionsRef.current = completedConnections; }, [completedConnections]);
+    useEffect(() => { groupIdRef.current = groupId; }, [groupId]);
+
+    const getPointOnBezier = useCallback((
+        t: number, x1: number, y1: number, x2: number, y2: number
+    ) => {
+        const dx = Math.abs(x1 - x2);
+        const curvature = Math.max(dx * 0.5, 40);
+        const c1x = x1 + curvature, c1y = y1;
+        const c2x = x2 - curvature, c2y = y2;
+        const mt = 1 - t, mt2 = mt * mt, mt3 = mt2 * mt;
+        const t2 = t * t, t3 = t2 * t;
+        return {
+            x: mt3 * x1 + 3 * mt2 * t * c1x + 3 * mt * t2 * c2x + t3 * x2,
+            y: mt3 * y1 + 3 * mt2 * t * c1y + 3 * mt * t2 * c2y + t3 * y2,
+        };
+    }, []);
+
+    // ============================================================
+    // drawAllEdges — 稳定引用，通过 ref 读取最新数据
+    // ============================================================
     const drawAllEdges = useCallback((currentTime: number = 0) => {
         const canvasEl = edgeCanvasRef.current;
         if (!canvasEl) return;
         const ctx = canvasEl.getContext("2d");
         if (!ctx) return;
 
-        const canvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-
-        // 计算 deltaTime
+        const canvas = useViewportStore.getState().viewports[groupIdRef.current] || DEFAULT_VIEWPORT;
         const deltaTime = lastTimeRef.current ? (currentTime - lastTimeRef.current) / 16.67 : 1;
         lastTimeRef.current = currentTime;
 
-        // 🆕 更新粒子
-        updateParticles(deltaTime);
+        const particles = particlesRef.current;
+        const completed = completedConnectionsRef.current;
+        const active = activeConnectionsRef.current;
 
-        // 清除画布
+        // 更新粒子
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].progress += particles[i].speed * deltaTime;
+            if (particles[i].progress >= 1) particles.splice(i, 1);
+        }
+
+        if (completed.size > 0) {
+            completed.forEach((connectionKey) => {
+                const existingCount = particles.filter(p => p.connectionKey === connectionKey).length;
+                if (existingCount < 3 && Math.random() < 0.1) {
+                    particles.push({
+                        connectionKey,
+                        progress: 0,
+                        speed: 0.01 + Math.random() * 0.01,
+                        size: 3 + Math.random() * 2,
+                        color: '#10b981',
+                    });
+                }
+            });
+        }
+
         ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-
-        // 设置变换矩阵 (同步画布的平移和缩放)
         ctx.save();
         ctx.translate(canvas.x, canvas.y);
         ctx.scale(canvas.scale, canvas.scale);
 
-        // 使用缓存的节点数据
+        const currentTheme = themeRef.current;
+        const currentGetPinWorldPos = getPinWorldPosRef.current;
         const currentNodes = nodesRef.current;
 
-        currentNodes.forEach((node: { outputs: Array<{ id: string; links: string[]; type?: string; ui?: { color?: string } }> }) => {
-          if (!node) return;
-
-          node.outputs.forEach((pin) => {
-                pin.links.forEach((targetId: string) => {
-                    const start = getPinWorldPos(pin.id);
-                    const end = getPinWorldPos(targetId);
-                    if (!start || !end) return;
+        for (const node of currentNodes) {
+            if (!node) continue;
+            for (const pin of node.outputs) {
+                for (const targetId of pin.links) {
+                    const start = currentGetPinWorldPos(pin.id);
+                    const end = currentGetPinWorldPos(targetId);
+                    if (!start || !end) continue;
 
                     const connectionKey = `${pin.id}->${targetId}`;
-                    const isActive = activeConnections.has(connectionKey);
-                    const isCompleted = completedConnections.has(connectionKey);
+                    const isActive = active.has(connectionKey);
+                    const isCompleted = completed.has(connectionKey);
 
-                    // 绘制连接线
                     drawEdge(
                         ctx,
                         start.x, start.y,
                         end.x, end.y,
-                        isActive ? '#facc15' : (pin.ui?.color ?? (theme[`${pin.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines),
+                        isActive ? '#facc15' : (pin.ui?.color ?? (currentTheme[`${pin.type}Color` as keyof typeof currentTheme] as string) ?? currentTheme.connectionLines),
                         isActive ? 3 / canvas.scale : 2 / canvas.scale
                     );
 
-                    // 🆕 绘制该连接上的粒子（仅在已完成的连接上）
                     if (isCompleted) {
-                        const particles = particlesRef.current.filter(p => p.connectionKey === connectionKey);
-                        particles.forEach(particle => {
-                            const point = getPointOnBezier(
-                                particle.progress,
-                                start.x, start.y,
-                                end.x, end.y
-                            );
-                            drawParticle(
-                                ctx,
-                                point.x,
-                                point.y,
-                                particle.size / canvas.scale,
-                                particle.color
-                            );
-                        });
+                        for (const particle of particles.filter(p => p.connectionKey === connectionKey)) {
+                            const point = getPointOnBezier(particle.progress, start.x, start.y, end.x, end.y);
+                            ctx.save();
+                            ctx.fillStyle = particle.color;
+                            ctx.shadowColor = particle.color;
+                            ctx.shadowBlur = particle.size * 2;
+                            ctx.beginPath();
+                            ctx.arc(point.x, point.y, particle.size / canvas.scale, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                        }
                     }
-                });
-            });
-        });
+                }
+            }
+        }
 
         ctx.restore();
-    }, [getPinWorldPos, theme, groupId, activeConnections, updateParticles, getPointOnBezier, drawParticle]);
+    }, [getPointOnBezier]); // 稳定依赖 — 不含 props/state
 
-    // 🆕 持续的动画循环（始终运行以支持粒子动画）
+    // ============================================================
+    // 动画循环：稳定引用，不会因 props 变化而重建
+    // ============================================================
     const animate = useCallback((currentTime: number) => {
         drawAllEdges(currentTime);
         if (isAnimatingRef.current) {
@@ -227,7 +171,14 @@ export const EdgesLayer = ({
         }
     }, [drawAllEdges]);
 
-    // 🆕 启动动画循环
+    const requestRedraw = useCallback(() => {
+        if (!isAnimatingRef.current) {
+            rafRef.current = requestAnimationFrame((t) => {
+                drawAllEdges(t);
+            });
+        }
+    }, [drawAllEdges]);
+
     const startAnimation = useCallback(() => {
         if (!isAnimatingRef.current) {
             isAnimatingRef.current = true;
@@ -236,7 +187,6 @@ export const EdgesLayer = ({
         }
     }, [animate]);
 
-    // 🆕 停止动画循环
     const stopAnimation = useCallback(() => {
         isAnimatingRef.current = false;
         if (rafRef.current !== null) {
@@ -245,73 +195,54 @@ export const EdgesLayer = ({
         }
     }, []);
 
-    // 🆕 始终运行动画循环（支持粒子动画）
+    // 仅在有粒子时运行持续动画，否则按需单帧重绘
     useEffect(() => {
-        startAnimation();
-        return () => {
+        if (completedConnections.size > 0) {
+            startAnimation();
+        } else {
             stopAnimation();
-        };
-    }, [startAnimation, stopAnimation]);
+            requestRedraw();
+        }
+        return () => stopAnimation();
+    }, [completedConnections.size, startAnimation, stopAnimation, requestRedraw]);
 
-    // 监听手势状态（保留原有逻辑）
+    // 手势活跃时运行持续动画
     useEffect(() => {
         const unsubGesture = useGestureStore.subscribe((state) => {
-            const currentGesture = state.gesture;
-            if (currentGesture && (currentGesture.type === "drag" || currentGesture.type === "pan")) {
-                if (!isAnimatingRef.current) {
-                    startAnimation();
+            const g = state.gesture;
+            if (g && (g.type === "drag" || g.type === "pan" || g.type === "connect")) {
+                startAnimation();
+            } else {
+                // 手势结束，最后画一帧然后停下
+                if (completedConnectionsRef.current.size === 0) {
+                    stopAnimation();
+                    requestRedraw();
                 }
             }
         });
+        return () => unsubGesture();
+    }, [startAnimation, stopAnimation, requestRedraw]);
 
-        return () => {
-            unsubGesture();
-        };
-    }, [startAnimation]);
-
-    // 监听 ViewportStore 和 ProjectStore 的变化
+    // viewport/数据变化时触发单帧重绘
     useEffect(() => {
-        const unsubViewport = useViewportStore.subscribe(() => {
-            if (!isAnimatingRef.current) {
-                startAnimation();
-            }
-        });
+        const unsubViewport = useViewportStore.subscribe(() => requestRedraw());
+        const unsubGraphData = useGraphDataStore.subscribe(() => requestRedraw());
+        return () => { unsubViewport(); unsubGraphData(); };
+    }, [requestRedraw]);
 
-        const unsubGraphData = useGraphDataStore.subscribe(() => {
-            if (!isAnimatingRef.current) {
-                startAnimation();
-            }
-        });
-
-        return () => {
-            unsubViewport();
-            unsubGraphData();
-        };
-    }, [startAnimation]);
-
-    // 同步画布尺寸并触发重绘
+    // 同步画布尺寸
     useLayoutEffect(() => {
         const canvasEl = edgeCanvasRef.current;
         if (!canvasEl) return;
-
-        // 确保从正确的父元素获取尺寸
         const rect = canvasEl.parentElement?.getBoundingClientRect();
         if (!rect || rect.width === 0 || rect.height === 0) return;
-
         const dpr = window.devicePixelRatio || 1;
-
-        // 设置实际像素大小 (防止模糊)
         canvasEl.width = rect.width * dpr;
         canvasEl.height = rect.height * dpr;
-        // 设置 CSS 大小
         canvasEl.style.width = `${rect.width}px`;
         canvasEl.style.height = `${rect.height}px`;
-
         const ctx = canvasEl.getContext("2d");
-        if (ctx) {
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // 使用 setTransform 替代 scale 避免累加
-        }
-
+        if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         drawAllEdges();
     }, [drawAllEdges]);
 

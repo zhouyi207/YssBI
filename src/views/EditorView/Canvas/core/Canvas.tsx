@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useCallback } from "react";
 import { Node } from "../../Nodes/Node";
 import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
@@ -8,9 +8,21 @@ import { useExecutionVisualization } from "@/features/core/execution";
 
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
-import { EdgesLayer } from "./EdgesLayer";
+import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
+
+// 粒度化 gesture 选择器：仅在值实际改变时触发 re-render
+const selectDragDelta = (state: { gesture: any }) => {
+  const g = state.gesture;
+  return g?.type === "drag" ? g.dragDelta ?? null : null;
+};
+const selectGestureType = (state: { gesture: any }) => state.gesture?.type ?? null;
+const selectActivePin = (state: { gesture: any }) => {
+  const g = state.gesture;
+  return g?.type === "connect" ? g.startPin : null;
+};
+const dragDeltaEq = (a: any, b: any) => a?.x === b?.x && a?.y === b?.y;
 
 export default function Canvas() {
   useExecutionVisualization();
@@ -36,17 +48,15 @@ export default function Canvas() {
     selectedNodeIds,
   } = useEditorGroup();
 
-  const gesture = useGestureStore((state) => state.gesture);
+  // 粒度化订阅：dragDelta 用自定义相等函数，避免对象引用变化触发 re-render
+  const dragDelta = useGestureStore(selectDragDelta, dragDeltaEq);
+  const gestureType = useGestureStore(selectGestureType);
+  const gesturePinData = useGestureStore(selectActivePin);
+
   const { createNode } = useNodeManagement();
 
   const ref = useRef<HTMLDivElement>(null);
   const scale = useViewportStore((state) => state.viewports[groupId]?.scale || 1);
-
-  const dragDelta = useMemo(() => {
-    if (gesture?.type === "drag" && "dragDelta" in gesture && gesture.dragDelta)
-      return gesture.dragDelta;
-    return null;
-  }, [gesture]);
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     ref,
@@ -54,7 +64,7 @@ export default function Canvas() {
     activeTabId,
     nodes,
     scale,
-    gesture,
+    gestureType,
     setCanvas,
     dragDelta,
     selectedNodeIds
@@ -75,7 +85,7 @@ export default function Canvas() {
     setContextMenu,
     setPendingConnection,
     saveHistory,
-    createNode: (nodeType: string, position: { x: number; y: number }) => createNode(nodeType, position),
+    createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => createNode(nodeType, position, params),
   });
 
   const selectedNodeIdsSet = useMemo(
@@ -84,12 +94,13 @@ export default function Canvas() {
   );
 
   const activePin = useMemo(() => {
-    if (gesture?.type === "connect") return gesture.startPin;
+    if (gesturePinData) return gesturePinData;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
     return null;
-  }, [gesture, pendingConnection, contextMenu]);
+  }, [gesturePinData, pendingConnection, contextMenu]);
 
-  const handlePinClick = () => {};
+  const handlePinClick = useCallback(() => {}, []);
+  const handlePinValueChange = useCallback(() => {}, []);
 
   return (
     <div
@@ -103,12 +114,6 @@ export default function Canvas() {
         onPointerDown={onCanvasPointerDown}
         onContextMenu={handleContextMenu}
       >
-        <EdgesLayer
-          groupId={groupId}
-          getPinWorldPos={getPinWorldPos}
-          activeTabId={activeTabId}
-        />
-
         <ConnectionLine
           groupId={groupId}
           getPinWorldPos={getPinWorldPos}
@@ -118,25 +123,32 @@ export default function Canvas() {
         />
 
         <TransformContainer groupId={groupId}>
+          <EdgesOverlay
+            nodes={nodes}
+            getPinWorldPos={getPinWorldPos}
+          />
           {nodes
             .filter((n: { id: string }) => visibleNodeIds.has(n.id))
-            .map((node: { id: string }) => (
-              <Node
-                key={node.id}
-                id={node.id}
-                node={node as unknown as import('@/shared/types/ui').Node}
-                scale={scale}
-                selected={selectedNodeIdsSet.has(node.id)}
-                dragDelta={dragDelta ?? undefined}
-                activePinId={activePin?.id}
-                subgraphId={activeTabId || undefined}
-                onPointerDown={(id, e) => onNodePointerDown(id, e)}
-                onAddInput={handleNodeAddInput}
-                onPinClick={handlePinClick}
-                onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
-                onPinValueChange={() => {}}
-              />
-            ))}
+            .map((node: { id: string }) => {
+              const isSelected = selectedNodeIdsSet.has(node.id);
+              return (
+                <Node
+                  key={node.id}
+                  id={node.id}
+                  node={node as unknown as import('@/shared/types/ui').Node}
+                  scale={scale}
+                  selected={isSelected}
+                  dragDelta={isSelected ? (dragDelta ?? undefined) : undefined}
+                  activePinId={activePin?.id}
+                  subgraphId={activeTabId || undefined}
+                  onPointerDown={onNodePointerDown}
+                  onAddInput={handleNodeAddInput}
+                  onPinClick={handlePinClick}
+                  onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
+                  onPinValueChange={handlePinValueChange}
+                />
+              );
+            })}
         </TransformContainer>
       </div>
 

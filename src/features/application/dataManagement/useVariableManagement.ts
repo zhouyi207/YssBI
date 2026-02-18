@@ -13,8 +13,11 @@ function buildScope(
   activeTabId: string | null,
   graphType: 'event' | 'function' | 'macro' | undefined
 ): VariableScope {
+  // 明确要求全局变量，或无打开图 → 全局
   if (isGlobal || !activeTabId) return { type: 'global' };
-  switch (graphType) {
+  // 有打开图 → 创建该图的局部变量（优先用 graphType，未知时默认 event）
+  const scopeType = graphType ?? 'event';
+  switch (scopeType) {
     case 'event':
       return { type: 'event', eventId: activeTabId };
     case 'function':
@@ -22,7 +25,7 @@ function buildScope(
     case 'macro':
       return { type: 'macro', macroId: activeTabId };
     default:
-      return { type: 'global' };
+      return { type: 'event', eventId: activeTabId };
   }
 }
 
@@ -36,9 +39,15 @@ export function useVariableManagement() {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const graphType = useGraphMetaStore((s) =>
+  // 优先从当前 tab 取 type，否则从 graphMetaStore 取（确保打开图时能正确识别为局部变量）
+  const graphTypeFromTab = activeTabId && activeEditorNode?.data?.tabs
+    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === activeTabId)?.type
+    : undefined;
+  const graphTypeFromMeta = useGraphMetaStore((s) =>
     activeTabId ? s.graphs[activeTabId]?.type : undefined
   );
+  const rawType = graphTypeFromTab || graphTypeFromMeta;
+  const graphType = (rawType === 'event' || rawType === 'function' || rawType === 'macro' ? rawType : undefined) as 'event' | 'function' | 'macro' | undefined;
 
   const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
     try {

@@ -31,8 +31,7 @@ fn register_convert(registry: &NodeRegistry) {
     let input_key = input_type_var.id.clone();
     let output_key = output_type_var.id.clone();
 
-    let definition = NodeDefinition::new("Convert")
-        .with_category(vec!["Value".to_string(), "Conversion".to_string()])
+    let definition = NodeDefinition::new("Convert", vec!["Value".to_string(), "Conversion".to_string()])
         .with_ui_style("value")
         .with_description("Convert value from one type to another")
         .with_type_vars(vec![input_type_var, output_type_var])

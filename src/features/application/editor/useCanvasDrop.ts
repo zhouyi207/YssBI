@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useViewportStore } from "@/features/core/viewport";
 import { useVariableStore } from "@/features/core/dataStore";
-import { createNodeFromTemplate } from "@/features/core/dataStore";
-import { buildCreateNodeRequest } from "@/shared/utils/editor";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 
 export interface VariableDropMenu {
   x: number;
@@ -27,7 +25,7 @@ interface UseCanvasDropParams {
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
   saveHistory: () => void;
-  createNode: (nodeType: string, position: { x: number; y: number }) => Promise<void>;
+  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<void>;
 }
 
 /**
@@ -46,9 +44,7 @@ export function useCanvasDrop({
   saveHistory,
   createNode,
 }: UseCanvasDropParams) {
-  const activeDrag = useSidebarDragStore((s) => s.activeDrag);
   const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
-  const prevDragRef = useRef(activeDrag);
 
   useEffect(() => {
     const handleClickOutside = (e: PointerEvent) => {
@@ -72,7 +68,6 @@ export function useCanvasDrop({
           if (node.id === id) {
             const newNode = node.clone();
             const newIndex = newNode.inputs.length;
-            // TODO: 需要后端 add_node_input API，由后端分配 pin ID。当前为本地临时 ID。
             newNode.addInput({
               id: `pending_${id}_input_${newIndex}`,
               nodeId: id,
@@ -126,24 +121,20 @@ export function useCanvasDrop({
       const x = (screenX - currentCanvas.x) / currentCanvas.scale;
       const y = (screenY - currentCanvas.y) / currentCanvas.scale;
 
-      const elements = document.elementsFromPoint(dragState.x, dragState.y);
-      const pinEl = elements.find((e) => e.closest("[data-pin-id]"))?.closest("[data-pin-id]");
-      const targetPinId = pinEl?.getAttribute("data-pin-id");
-
+      // DataFrame / Column 拖放
       if (dragState.template.category === "Data") {
-        const newNode = createNodeFromTemplate(
-          { x, y },
-          currentCanvas.scale,
-          dragState.template.nodeType,
-          { variableId: dragState.template.variableId, variableName: dragState.template.variableName }
-        );
-        if (newNode) {
-          await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
-          // TODO: connect after node created - backend returns nodeId, need pin IDs for connection
-        }
+        const params = dragState.template.nodeType === "get_column"
+          ? {
+              dataframeId: dragState.template.initialData?.dataframeId,
+              columnName: dragState.template.initialData?.columnName,
+              columnType: dragState.template.initialData?.columnType,
+            }
+          : { dataframeId: dragState.template.variableId };
+        await createNode(dragState.template.nodeType, { x, y }, params);
         return;
       }
 
+      // 变量拖放
       if (dragState.template.category === "Variable") {
         const allVariables = useVariableStore.getState().variables;
         if (
@@ -154,36 +145,31 @@ export function useCanvasDrop({
           return;
         }
 
+        const varParams = {
+          variableId: dragState.template.variableId,
+          variableName: dragState.template.variableName,
+          variableType: dragState.template.variableType,
+        };
+
         let spawnType: "get_variable" | "set_variable" | null = null;
         if (event.altKey) spawnType = "set_variable";
         else if (event.ctrlKey) spawnType = "get_variable";
 
         if (spawnType) {
-          const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, spawnType, {
-            variableId: dragState.template.variableId,
-            variableName: dragState.template.variableName,
-            variableType: dragState.template.variableType,
-            variableIsArray: dragState.template.variableIsArray,
-          } as any);
-          if (newNode) {
-            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
-          }
+          await createNode(spawnType, { x, y }, varParams);
           return;
         }
 
+        // 拖放到 pin 上时自动创建 get_variable
+        const elements = document.elementsFromPoint(dragState.x, dragState.y);
+        const pinEl = elements.find((e) => e.closest("[data-pin-id]"))?.closest("[data-pin-id]");
+        const targetPinId = pinEl?.getAttribute("data-pin-id");
         if (targetPinId) {
-          const newNode = createNodeFromTemplate({ x, y }, currentCanvas.scale, "get_variable", {
-            variableId: dragState.template.variableId,
-            variableName: dragState.template.variableName,
-            variableType: dragState.template.variableType,
-            variableIsArray: dragState.template.variableIsArray,
-          } as any);
-          if (newNode) {
-            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
-          }
+          await createNode("get_variable", { x, y }, varParams);
           return;
         }
 
+        // 否则弹出选择菜单
         setVariableDropMenu({
           x: dragState.x,
           y: dragState.y,
@@ -197,6 +183,7 @@ export function useCanvasDrop({
         return;
       }
 
+      // Function / Macro 拖放
       if (
         dragState.template.nodeType === "call_function" ||
         dragState.template.nodeType === "call_macro"
@@ -206,19 +193,12 @@ export function useCanvasDrop({
         const subData = type === "call_function" ? functions[subId] : macros[subId];
         if (!subData) return;
 
-        const req = buildCreateNodeRequest(type, { x, y }, { subGraphId: subId });
-        await createNode(req.nodeType, req.position);
+        await createNode(type, { x, y }, { subGraphId: subId });
         return;
       }
 
-      const newNode = createNodeFromTemplate(
-        { x, y },
-        currentCanvas.scale,
-        dragState.template.nodeType
-      );
-      if (newNode) {
-            await createNode(newNode.nodeType, { x: newNode.position.x, y: newNode.position.y });
-      }
+      // 普通节点拖放
+      await createNode(dragState.template.nodeType, { x, y });
     },
     [
       canvasRef,
@@ -230,19 +210,6 @@ export function useCanvasDrop({
       setVariableDropMenu,
     ]
   );
-
-  useEffect(() => {
-    if (prevDragRef.current && !activeDrag) {
-      const last = prevDragRef.current;
-      if (last.type === "node-template") {
-        handleDropTemplate(last, {
-          altKey: (window as any)._lastAltKey || false,
-          ctrlKey: (window as any)._lastCtrlKey || false,
-        } as any);
-      }
-    }
-    prevDragRef.current = activeDrag;
-  }, [activeDrag, variables, handleDropTemplate]);
 
   useEffect(() => {
     canvasDropHandlerStore.setHandler(groupId, handleDropTemplate as any);

@@ -1,9 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
-import { getGraphById, useGraphDataStore, useGraphHistoryStore } from '@/features/core/dataStore';
+import { getGraphById, useGraphHistoryStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '@/features/core/editor';
-import { deleteNodeInBackend } from '@/features/core/dataStore';
 import { NodeService } from '@/services';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useViewportStore } from '@/features/core/viewport';
@@ -35,19 +34,6 @@ export function useEditorOperations() {
   // Update refs
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
-
-  // Helper to get/set nodes
-  const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
-    const tId = activeTabIdRef.current;
-    if (!tId) return;
-    const currentGraph = getGraphById(tId);
-    if (!currentGraph) return;
-
-    const currentNodes = (currentGraph.nodes || []) as unknown as Node[];
-    const nextNodes = typeof updater === 'function' ? updater(currentNodes) : updater;
-
-    useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes as import('@/shared/types/store/graph').RuntimeNodeInput[]);
-  }, []);
 
   const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
     const gid = targetGroupId || activeGroupId;
@@ -96,11 +82,6 @@ export function useEditorOperations() {
     if (sel.length > 0) setClipboard(sel.map((n) => ('clone' in n && typeof (n as any).clone === 'function' ? (n as any).clone() : { ...n }) as Node));
   }, [setClipboard]);
 
-  const cut = useCallback(() => {
-    copy();
-    deleteSelected();
-  }, [copy]);
-
   const paste = useCallback(async (pos?: { x: number; y: number }) => {
     if (clipboard.length === 0) return;
     const tid = activeTabIdRef.current;
@@ -108,89 +89,78 @@ export function useEditorOperations() {
 
     saveHistory();
 
-    // Calculate position offset
-    let tX = pos ? pos.x : -canvasRef.current.x / canvasRef.current.scale + 100;
-    let tY = pos ? pos.y : -canvasRef.current.y / canvasRef.current.scale + 100;
+    const vp = canvasRef.current;
+    const tX = pos ? pos.x : -vp.x / vp.scale + 100;
+    const tY = pos ? pos.y : -vp.y / vp.scale + 100;
     const minX = Math.min(...clipboard.map(n => n.position.x));
     const minY = Math.min(...clipboard.map(n => n.position.y));
     const offX = tX - minX, offY = tY - minY;
 
-    // Prepare nodes with new positions
-    const tempNodes = clipboard.map((n: Node) => {
-      const clone = 'clone' in n && typeof (n as any).clone === 'function' ? (n as any).clone() : { ...n };
-      clone.position = { x: n.position.x + offX, y: n.position.y + offY };
-      return clone;
-    });
+    const requests = clipboard
+      .filter(n => !!n.nodeType)
+      .map(n => {
+        const params: Record<string, string | undefined> = {};
+        if (n.variableId) params.variableId = n.variableId;
+        if (n.variableName) params.variableName = n.variableName;
+        if (n.variableType) params.variableType = n.variableType;
+        if (n.subGraphId) params.subGraphId = n.subGraphId;
+        if (n.dataframeId) params.dataframeId = n.dataframeId;
+        if (n.columnName) params.columnName = n.columnName;
+        if (n.columnType) params.columnType = n.columnType;
+
+        return {
+          nodeType: n.nodeType,
+          x: n.position.x + offX,
+          y: n.position.y + offY,
+          params: Object.keys(params).length > 0 ? params : undefined,
+        };
+      });
 
     try {
-      console.log('[useEditorOperations] Pasting nodes via backend...');
+      const newNodeIds = await NodeService.batchCreateNodes(tid, requests);
 
-      // Extract node types for backend validation
-      const nodeTypes = tempNodes.map((n: { nodeType?: string }) => n.nodeType).filter((t): t is string => t != null);
+      // NodesBatchCreatedHandler adds all nodes in one event;
+      // yield a tick so the event listener can process before we select.
+      await new Promise(r => setTimeout(r, 50));
 
-      // Call backend to validate node types
-      await NodeService.createNodes(tid, nodeTypes);
-
-      // If backend validation succeeds, add nodes to frontend
-      setNodes((prev) => [...prev, ...tempNodes]);
-      setSelectedNodeIds(tempNodes.map(n => n.id));
-
-      console.log('[useEditorOperations] Paste completed successfully');
+      if (newNodeIds.length > 0) {
+        setSelectedNodeIds(newNodeIds);
+      }
     } catch (e) {
       console.error('[useEditorOperations] Failed to paste nodes:', e);
       uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [clipboard, saveHistory, setNodes, setSelectedNodeIds]);
+  }, [clipboard, saveHistory, setSelectedNodeIds]);
 
   const deleteSelected = useCallback(() => {
     const sIds = new Set(selectedNodeIdsRef.current);
     if (sIds.size === 0) return;
+    const tid = activeTabIdRef.current;
+    if (!tid) return;
+
+    const currentGraph = getGraphById(tid);
+    if (!currentGraph) return;
+
+    const currentNodes = (currentGraph.nodes || []) as unknown as Node[];
+    const idsToDelete = currentNodes
+      .filter(n => sIds.has(n.id) && !n.isInternal)
+      .map(n => n.id);
+    if (idsToDelete.length === 0) return;
 
     saveHistory();
-
-    let idsToDelete = new Set<string>();
-
-    setNodes((prev: Node[]) => {
-      const nodesToDelete = prev.filter(n => sIds.has(n.id) && !n.isInternal);
-      idsToDelete = new Set(nodesToDelete.map(n => n.id));
-      if (idsToDelete.size === 0) return prev;
-
-      const pinsToDelete = new Set<string>();
-      nodesToDelete.forEach(n => {
-        [...n.inputs, ...n.outputs].forEach(p => pinsToDelete.add(p.id));
-      });
-
-      return prev.filter(n => !idsToDelete.has(n.id)).map(n => {
-        const clone = n.clone();
-        let changed = false;
-        clone.inputs.forEach(p => {
-          const newLinks = p.links.filter(l => !pinsToDelete.has(l));
-          if (newLinks.length !== p.links.length) {
-            p.links = newLinks;
-            changed = true;
-          }
-        });
-        clone.outputs.forEach(p => {
-          const newLinks = p.links.filter(l => !pinsToDelete.has(l));
-          if (newLinks.length !== p.links.length) {
-            p.links = newLinks;
-            changed = true;
-          }
-        });
-        return changed ? clone : n;
-      });
-    });
     setSelectedNodeIds([]);
 
-    // Sync deletion to backend
-    const tid = activeTabIdRef.current;
-    if (tid && idsToDelete.size > 0) {
-      console.log(`[useEditorOperations] Deleting nodes from backend:`, Array.from(idsToDelete));
-      Promise.all(Array.from(idsToDelete).map(id => deleteNodeInBackend(tid, id))).catch(e => {
-        console.error('[useEditorOperations] Failed to sync node deletions:', e);
-      });
-    }
-  }, [saveHistory, setNodes, setSelectedNodeIds]);
+    // CQRS: backend batch delete → NodesBatchDeleted event → store update
+    NodeService.batchDeleteNodes(tid, idsToDelete).catch(e => {
+      console.error('[useEditorOperations] Failed to delete nodes:', e);
+      uiStore.showToast("删除失败", "error", 2000);
+    });
+  }, [saveHistory, setSelectedNodeIds]);
+
+  const cut = useCallback(() => {
+    copy();
+    deleteSelected();
+  }, [copy, deleteSelected]);
 
   const canUndo = useGraphHistoryStore((s) => {
     if (!activeTabId) return false;

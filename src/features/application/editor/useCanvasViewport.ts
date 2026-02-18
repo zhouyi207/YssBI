@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
-import { getGraphById } from "@/features/core/dataStore";
-import { deserializeGraph } from "@/features/core/dataStore";
+import { useGraphDataStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 const NODE_WIDTH = 300;
@@ -19,9 +18,8 @@ export function useCanvasViewport(
   activeTabId: string | null,
   nodes: { id: string; position: { x: number; y: number }; inputs: Pin[]; outputs: Pin[] }[],
   scale: number,
-  gesture: { type: string } | null,
+  gestureType: string | null,
   setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGroupId?: string) => void,
-  /** 拖拽时的视觉偏移，用于 getPinWorldPos 使边线跟随 */
   dragDelta?: { x: number; y: number } | null,
   selectedNodeIds?: string[]
 ) {
@@ -34,9 +32,6 @@ export function useCanvasViewport(
 
     const rect = el.getBoundingClientRect();
     const viewport = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
-    const currentTabId = activeTabId || "";
-    const graphData = getGraphById(currentTabId);
-    const allNodes = graphData ? deserializeGraph(graphData).nodes : [];
 
     const padding = CULLING_PADDING_FACTOR / viewport.scale;
     const worldViewLeft = -viewport.x / viewport.scale - padding;
@@ -44,15 +39,21 @@ export function useCanvasViewport(
     const worldViewRight = (rect.width - viewport.x) / viewport.scale + padding;
     const worldViewBottom = (rect.height - viewport.y) / viewport.scale + padding;
 
+    // 直接从 store 读取节点位置，避免 deserializeGraph
+    const store = useGraphDataStore.getState();
+    const nodeIds = activeTabId ? store.graphNodes[activeTabId] ?? [] : [];
+
     const visible = new Set<string>();
-    allNodes.forEach((node) => {
+    for (const nid of nodeIds) {
+      const node = store.nodes[nid];
+      if (!node?.position) continue;
       const isVisible =
         node.position.x + NODE_WIDTH > worldViewLeft &&
         node.position.x < worldViewRight &&
         node.position.y + NODE_HEIGHT > worldViewTop &&
         node.position.y < worldViewBottom;
-      if (isVisible) visible.add(node.id);
-    });
+      if (isVisible) visible.add(nid);
+    }
     setVisibleNodes(visible);
   }, [canvasRef, groupId, activeTabId]);
 
@@ -61,8 +62,8 @@ export function useCanvasViewport(
   }, [scale, nodes, updateVisibleNodes]);
 
   useEffect(() => {
-    if (!gesture) updateVisibleNodes();
-  }, [gesture, updateVisibleNodes]);
+    if (!gestureType) updateVisibleNodes();
+  }, [gestureType, updateVisibleNodes]);
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
@@ -114,7 +115,8 @@ export function useCanvasViewport(
     return () => window.removeEventListener("wheel", handleWheel, { capture: true });
   }, [handleWheel]);
 
-  const pinNodeIdIndex = useCallback(() => {
+  // pin→nodeId 映射，只在 nodes 变化时重建
+  const pinNodeIdMap = useMemo(() => {
     const map = new Map<string, string>();
     nodes.forEach((node) => {
       node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
@@ -123,14 +125,19 @@ export function useCanvasViewport(
     return map;
   }, [nodes]);
 
+  // node 位置映射，只在 nodes 变化时重建
+  const nodePositionMap = useMemo(() => {
+    const map = new Map<string, { x: number; y: number }>();
+    nodes.forEach((node) => map.set(node.id, node.position));
+    return map;
+  }, [nodes]);
+
   useLayoutEffect(() => {
     const root = canvasRef.current;
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
-    const graphData = getGraphById(activeTabId || "");
-    const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
 
-    currentNodes.forEach((node) => {
+    nodes.forEach((node) => {
       const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
       if (!nodeEl) return;
 
@@ -164,31 +171,29 @@ export function useCanvasViewport(
       }
       return nextOffsets;
     });
-  }, [canvasRef, activeTabId, scale, visibleNodeIds, nodes]);
+  }, [canvasRef, scale, visibleNodeIds, nodes]);
 
   const selectedSet = useMemo(
     () => (selectedNodeIds ? new Set(selectedNodeIds) : new Set<string>()),
     [selectedNodeIds]
   );
 
+  // getPinWorldPos: 使用 useMemo 缓存的 Map，O(1) 查找，不再调用 deserializeGraph
   const getPinWorldPos = useCallback(
     (pinId: string) => {
-      const map = pinNodeIdIndex();
-      const nodeId = map.get(pinId);
+      const nodeId = pinNodeIdMap.get(pinId);
       if (!nodeId) return null;
-      const graphData = getGraphById(activeTabId || "");
-      const tabNodes = graphData ? deserializeGraph(graphData).nodes : [];
-      const node = tabNodes.find((n) => n.id === nodeId);
+      const position = nodePositionMap.get(nodeId);
       const offset = pinOffsets[pinId];
-      if (!node || !offset) return null;
+      if (!position || !offset) return null;
       const dx = dragDelta && selectedSet.has(nodeId) ? dragDelta.x : 0;
       const dy = dragDelta && selectedSet.has(nodeId) ? dragDelta.y : 0;
       return {
-        x: node.position.x + offset.x + dx,
-        y: node.position.y + offset.y + dy,
+        x: position.x + offset.x + dx,
+        y: position.y + offset.y + dy,
       };
     },
-    [pinNodeIdIndex, pinOffsets, activeTabId, dragDelta, selectedSet]
+    [pinNodeIdMap, nodePositionMap, pinOffsets, dragDelta, selectedSet]
   );
 
   const getCanvasLocalPoint = useCallback(

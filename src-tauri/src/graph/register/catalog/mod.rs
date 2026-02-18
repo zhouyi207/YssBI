@@ -5,6 +5,7 @@ pub mod control;
 pub mod debug;
 pub mod logic;
 pub mod value;
+pub mod dataframe;
 
 use super::NodeRegistry;
 
@@ -15,4 +16,5 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     debug::register(registry);
     logic::register(registry);
     value::register(registry);
+    dataframe::register(registry);
 }

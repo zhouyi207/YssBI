@@ -140,27 +140,32 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
     Ok(())
 }
 
+/// @deprecated 使用 save_project_from_state 替代
 #[tauri::command]
 pub fn save_project(_path: String, _data: Value) -> Result<(), String> {
-    Ok(())
+    Err("Deprecated: use save_project_from_state instead".to_string())
 }
 
+/// @deprecated 使用 load_project_to_state 替代
 #[tauri::command]
 pub fn load_project(_path: String) -> Result<Value, String> {
-    Ok(Value::Null)
+    Err("Deprecated: use load_project_to_state instead".to_string())
 }
 
+/// @deprecated 使用 set_project_data 替代
 #[tauri::command]
 pub fn parse_project(_data: Value) -> Result<Value, String> {
-    Ok(Value::Null)
+    Err("Deprecated: use set_project_data instead".to_string())
 }
 
+/// @deprecated 使用 set_project_data 替代
 #[tauri::command]
 pub fn serialize_project(_data: Value) -> Result<Value, String> {
-    Ok(Value::Null)
+    Err("Deprecated: use get_project_data instead".to_string())
 }
 
+/// 执行项目（待实现）
 #[tauri::command]
 pub fn execute_project() -> Result<Value, String> {
-    Ok(Value::Null)
+    Err("Not yet implemented".to_string())
 }

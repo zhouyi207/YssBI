@@ -32,35 +32,41 @@ export function useNodeManagement() {
      * 创建单个节点（CQRS模式）
      * @param nodeType 节点类型
      * @param position 节点位置
+     * @param params 实例参数（variableId、subGraphId 等，用于 variable/function/macro/dataframe 节点）
      * @returns Promise<void>
      */
     const createNode = useCallback(
-        async (nodeType: string, position: { x: number; y: number }): Promise<void> => {
+        async (
+            nodeType: string,
+            position: { x: number; y: number },
+            params?: {
+                variableId?: string;
+                variableName?: string;
+                variableType?: string;
+                subGraphId?: string;
+                dataframeId?: string;
+                columnName?: string;
+                columnType?: string;
+            }
+        ): Promise<void> => {
             if (!activeTabId) {
                 console.warn('[useNodeManagement] Cannot create node: no active tab');
                 return;
             }
 
             try {
-                // 1. 生成临时key用于关联（使用时间戳 + 随机数确保唯一性）
                 const tempKey = `${nodeType}-${Date.now()}-${Math.random()}`;
+                pendingActionsRef.current.set(tempKey, () => {});
 
-                // 2. 注册待处理操作（当后端事件到达时会执行）
-                pendingActionsRef.current.set(tempKey, () => {
-                    // 这里可以添加额外的UI反馈，如选中新创建的节点
-                });
-
-                // 3. 调用后端命令（后端会生成真实ID并发送NodeCreated事件）
                 await NodeService.createNode(
                     activeTabId,
                     nodeType,
                     position.x,
-                    position.y
+                    position.y,
+                    params
                 );
 
-                // 4. 清除待处理操作
                 pendingActionsRef.current.delete(tempKey);
-
             } catch (error) {
                 console.error('[useNodeManagement] Failed to create node:', error);
                 throw error;

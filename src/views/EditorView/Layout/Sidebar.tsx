@@ -14,11 +14,52 @@ import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { PIN_COLORS, buildSidebarDragData, buildColumnDragData } from "@/features/domain/sidebar";
 import { dataTypeKind, dataTypeDisplay } from "@/shared/types/domain/dataType";
 
+/**
+ * 可拖拽的侧边栏项 — 整行可拖拽。
+ * 必须定义在 Sidebar 组件外以保证 useDraggable hook 稳定。
+ *
+ * PointerSensor activationConstraint (distance: 5) 确保：
+ *  - 简单 click / doubleClick 不会触发拖拽
+ *  - 按住并移动 >= 5px 后才开始拖拽
+ */
+const SidebarDraggableItem: React.FC<{
+  id: string;
+  dragData: { type: string; template?: unknown } | null;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
+}> = ({ id, dragData, children, className, onClick, onDoubleClick }) => {
+  const canDrag = !!dragData;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `sidebar-item-${id}`,
+    data: dragData ?? { type: "node-template", template: {} },
+    disabled: !canDrag,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(canDrag ? listeners : {})}
+      {...(canDrag ? attributes : {})}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className={`${className ?? ""} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+      style={{
+        opacity: isDragging ? 0.5 : 1,
+        touchAction: canDrag ? "none" : undefined,
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const nodeId = useContext(GroupContext) as string | null; // 从布局上下文获取节点 ID
   const {
-    variables,
-    Variables,
+    variables: graphVariables,
+    Variables: allVariables,
     selectedItemId,
     selectedItemType,
     setSelectedInfo,
@@ -48,6 +89,27 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const listRef = useRef<HTMLDivElement>(null);
 
+  // 当前激活的图 ID（用于过滤局部变量）
+  const activeEditorNode = useLayoutStore((s) =>
+    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
+  );
+  const activeTabId = activeEditorNode?.data?.activeTabId || null;
+
+  // 按 scope 分区：Global = scope.type==='global'，Local = 当前图的 event/function/macro 变量
+  const { Variables: globalVariables, localVariables } = (() => {
+    const global: Record<string, { name: string; dataType?: unknown }> = {};
+    const local: Record<string, { name: string; dataType?: unknown }> = {};
+    for (const [id, v] of Object.entries(allVariables)) {
+      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string; macroId?: string } }).scope;
+      if (scope?.type === 'global') {
+        global[id] = v as { name: string; dataType?: unknown };
+      } else if (activeTabId && scope && (scope.eventId === activeTabId || scope.functionId === activeTabId || scope.macroId === activeTabId)) {
+        local[id] = v as { name: string; dataType?: unknown };
+      }
+    }
+    return { Variables: global, localVariables: { ...graphVariables, ...local } };
+  })();
+
   // Read active tab from Layout Store
   const sidebarNode = useLayoutStore(s => s.nodes[nodeId ?? 'sidebar']);
   const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
@@ -56,7 +118,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
   const macrosCount = Object.keys(macros).length;
-  const variablesCount = Object.keys(variables).length + Object.keys(Variables).length;
+  const variablesCount = Object.keys(localVariables).length + Object.keys(globalVariables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
   // 记录上一次的数量，用于判断是否是“增加”
@@ -88,57 +150,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, macrosCount, variablesCount, dataframesCount]);
 
-  // 拖拽手柄与点击区域分离，避免 dnd-kit 拦截点击
-  const DraggableItemWrapper: React.FC<{
-    id: string;
-    dragData: any;
-    children: React.ReactNode;
-    className?: string;
-    onClick?: (e: React.MouseEvent) => void;
-    onDoubleClick?: (e: React.MouseEvent) => void;
-  }> = ({ id, dragData, children, className, onClick, onDoubleClick }) => {
-    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-      id: `sidebar-item-${id}`,
-      data: dragData,
-    });
-
-    return (
-      <div
-        ref={setNodeRef}
-        className={className}
-        style={{ opacity: isDragging ? 0.5 : 1 }}
-      >
-        {/* 仅拖拽手柄响应拖拽，主区域响应点击 */}
-        <div
-          {...listeners}
-          {...attributes}
-          className="shrink-0 p-0.5 -ml-0.5 rounded cursor-grab active:cursor-grabbing"
-          title="Drag to canvas"
-        >
-          <svg width="10" height="10" viewBox="0 0 16 16" className="opacity-40" fill="currentColor">
-            <circle cx="6" cy="5" r="1.5" />
-            <circle cx="10" cy="5" r="1.5" />
-            <circle cx="6" cy="8" r="1.5" />
-            <circle cx="10" cy="8" r="1.5" />
-          </svg>
-        </div>
-        <div
-          onClick={onClick}
-          onDoubleClick={onDoubleClick}
-          className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer"
-        >
-          {children}
-        </div>
-      </div>
-    );
-  };
-
   const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
     const dragData = buildSidebarDragData(id, name, type, extra);
 
     return (
-      <DraggableItemWrapper
+      <SidebarDraggableItem
         key={id}
         id={id}
         dragData={dragData}
@@ -213,7 +230,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             </span>
           </>
         )}
-      </DraggableItemWrapper>
+      </SidebarDraggableItem>
     );
   };
 
@@ -281,7 +298,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                         const columnDragData = buildColumnDragData(id, idx, col);
 
                         return (
-                          <DraggableItemWrapper
+                          <SidebarDraggableItem
                             key={`${id}-col-${idx}`}
                             id={`${id}-col-${idx}`}
                             dragData={columnDragData}
@@ -292,7 +309,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                             <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
                               {col.type.replace("Owned", "")}
                             </span>
-                          </DraggableItemWrapper>
+                          </SidebarDraggableItem>
                         );
                       })}
                     </div>
@@ -305,26 +322,26 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           {activeTab === 'variables' && (
             <>
               {/* Global */}
-              {Object.keys(Variables).length > 0 && (
+              {Object.keys(globalVariables).length > 0 && (
                 <div className="mb-2">
                   <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
                     Global
                     <div className="h-px flex-1 bg-white/5" />
                   </div>
-                  {Object.entries(Variables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
+                  {Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
                 </div>
               )}
               {/* Local */}
               <div className="mb-2">
-                {Object.keys(Variables).length > 0 && (
+                {Object.keys(localVariables).length > 0 && (
                   <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
                     Local
                     <div className="h-px flex-1 bg-white/5" />
                   </div>
                 )}
-                {Object.entries(variables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
+                {Object.entries(localVariables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
               </div>
-              {Object.keys(variables).length === 0 && Object.keys(Variables).length === 0 && (
+              {Object.keys(localVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
                 <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
               )}
             </>

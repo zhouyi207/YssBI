@@ -104,14 +104,6 @@ impl PinInstanceDTO {
             }
         };
 
-        let color = pin_type_to_color(&pin_type).map(|c| c.to_string());
-
-        let ui = color.map(|c| PinUIDTO {
-            x: None,
-            y: None,
-            color: Some(c),
-        });
-
         Self {
             id: pin.id,
             node_id: pin.node_id,
@@ -122,7 +114,7 @@ impl PinInstanceDTO {
             default_value: None,
             user_value: None,
             is_array: None,
-            ui,
+            ui: None,
         }
     }
 }

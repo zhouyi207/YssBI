@@ -34,6 +34,10 @@ interface GraphDataStore {
   /** 批量更新节点位置（拖拽时使用，避免 replaceGraphNodes 的 O(n) 清空+重建） */
   batchUpdateNodePositions(updates: Array<{ nodeId: NodeId; x: number; y: number }>): void;
   deleteNode(nodeId: NodeId): void;
+  /** 批量添加节点和它们的 pin（单次 set，避免 N 次 re-render） */
+  batchAddNodesAndPins(graphId: GraphId, items: Array<{ node: NodeData; pins: PinData[] }>): void;
+  /** 批量删除节点（单次 set） */
+  batchDeleteNodes(nodeIds: NodeId[]): void;
 
   // ======================
   // Pin
@@ -41,12 +45,20 @@ interface GraphDataStore {
   addPin(nodeId: NodeId, pin: PinData): void;
   updatePin(pinId: PinId, patch: Partial<PinData>): void;
   deletePin(pinId: PinId): void;
+  /** 批量更新 pin（断连 + 删 pin + 加 pin，单次 set） */
+  batchUpdatePins(params: {
+    disconnectIds: ConnectionId[];
+    removePinIds: PinId[];
+    addPins: Array<{ nodeId: NodeId; pin: PinData }>;
+  }): void;
 
   // ======================
   // Connection
   // ======================
   connect(from: PinId, to: PinId): void;
   disconnect(connectionId: ConnectionId): void;
+  /** 批量断开连接（单次 set） */
+  batchDisconnect(connectionIds: ConnectionId[]): void;
 
   // ======================
   // Graph
@@ -189,6 +201,87 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       };
     }),
 
+  batchAddNodesAndPins: (graphId, items) =>
+    set((state) => {
+      if (items.length === 0) return state;
+
+      const nextNodes = { ...state.nodes };
+      const nextPins = { ...state.pins };
+      const nextNodePins = { ...state.nodePins };
+      const graphNodeIds = [...(state.graphNodes[graphId] ?? [])];
+
+      for (const { node, pins } of items) {
+        if (nextNodes[node.id]) continue;
+        nextNodes[node.id] = node;
+        graphNodeIds.push(node.id);
+
+        const pinIds: PinId[] = [];
+        for (const pin of pins) {
+          if (!nextPins[pin.id]) {
+            nextPins[pin.id] = pin;
+            pinIds.push(pin.id);
+          }
+        }
+        nextNodePins[node.id] = pinIds;
+      }
+
+      return {
+        nodes: nextNodes,
+        pins: nextPins,
+        nodePins: nextNodePins,
+        graphNodes: { ...state.graphNodes, [graphId]: graphNodeIds },
+      };
+    }),
+
+  batchDeleteNodes: (nodeIds) =>
+    set((state) => {
+      if (nodeIds.length === 0) return state;
+
+      const nextNodes = { ...state.nodes };
+      const nextNodePins = { ...state.nodePins };
+      const nextPins = { ...state.pins };
+      const nextPinConnections = { ...state.pinConnections };
+      const nextConnections = { ...state.connections };
+      const nextGraphNodes = { ...state.graphNodes };
+
+      for (const nodeId of nodeIds) {
+        const node = nextNodes[nodeId];
+        if (!node) continue;
+
+        const pinIds = nextNodePins[nodeId] ?? [];
+        for (const pinId of pinIds) {
+          const connIds = nextPinConnections[pinId] ?? [];
+          for (const connId of connIds) {
+            const conn = nextConnections[connId];
+            if (!conn) continue;
+            const otherPin = conn.from === pinId ? conn.to : conn.from;
+            nextPinConnections[otherPin] =
+              (nextPinConnections[otherPin] ?? []).filter((id) => id !== connId);
+            delete nextConnections[connId];
+          }
+          delete nextPinConnections[pinId];
+          delete nextPins[pinId];
+        }
+
+        delete nextNodePins[nodeId];
+        delete nextNodes[nodeId];
+
+        const graphId = node.graphId;
+        if (nextGraphNodes[graphId]) {
+          nextGraphNodes[graphId] = nextGraphNodes[graphId].filter((id) => id !== nodeId);
+        }
+      }
+
+      return {
+        nodes: nextNodes,
+        pins: nextPins,
+        connections: nextConnections,
+        nodePins: nextNodePins,
+        pinConnections: nextPinConnections,
+        graphNodes: nextGraphNodes,
+      };
+    }),
+
   // ======================================================
   // Pin
   // ======================================================
@@ -279,6 +372,60 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       };
     }),
 
+  batchUpdatePins: ({ disconnectIds, removePinIds, addPins }) =>
+    set((state) => {
+      const nextPins = { ...state.pins };
+      const nextConnections = { ...state.connections };
+      const nextNodePins = { ...state.nodePins };
+      const nextPinConnections = { ...state.pinConnections };
+
+      // 1. 断开连接
+      for (const connId of disconnectIds) {
+        const conn = nextConnections[connId];
+        if (!conn) continue;
+        nextPinConnections[conn.from] =
+          (nextPinConnections[conn.from] ?? []).filter((id) => id !== connId);
+        nextPinConnections[conn.to] =
+          (nextPinConnections[conn.to] ?? []).filter((id) => id !== connId);
+        delete nextConnections[connId];
+      }
+
+      // 2. 删除 pin
+      for (const pinId of removePinIds) {
+        const pin = nextPins[pinId];
+        if (!pin) continue;
+        const connIds = nextPinConnections[pinId] ?? [];
+        for (const connId of connIds) {
+          const conn = nextConnections[connId];
+          if (!conn) continue;
+          const otherPin = conn.from === pinId ? conn.to : conn.from;
+          nextPinConnections[otherPin] =
+            (nextPinConnections[otherPin] ?? []).filter((id) => id !== connId);
+          delete nextConnections[connId];
+        }
+        delete nextPinConnections[pinId];
+        delete nextPins[pinId];
+        nextNodePins[pin.nodeId] =
+          (nextNodePins[pin.nodeId] ?? []).filter((id) => id !== pinId);
+      }
+
+      // 3. 添加新 pin
+      for (const { nodeId, pin } of addPins) {
+        if (!nextPins[pin.id]) {
+          nextPins[pin.id] = pin;
+          nextNodePins[nodeId] = [...(nextNodePins[nodeId] ?? []), pin.id];
+          nextPinConnections[pin.id] = [];
+        }
+      }
+
+      return {
+        pins: nextPins,
+        connections: nextConnections,
+        nodePins: nextNodePins,
+        pinConnections: nextPinConnections,
+      };
+    }),
+
   // ======================================================
   // Connection
   // ======================================================
@@ -329,6 +476,31 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         );
 
       delete nextConnections[connectionId];
+
+      return {
+        connections: nextConnections,
+        pinConnections: nextPinConnections,
+      };
+    }),
+
+  batchDisconnect: (connectionIds) =>
+    set((state) => {
+      if (connectionIds.length === 0) return state;
+
+      const nextConnections = { ...state.connections };
+      const nextPinConnections = { ...state.pinConnections };
+
+      for (const connectionId of connectionIds) {
+        const conn = nextConnections[connectionId];
+        if (!conn) continue;
+
+        nextPinConnections[conn.from] =
+          (nextPinConnections[conn.from] ?? []).filter((id) => id !== connectionId);
+        nextPinConnections[conn.to] =
+          (nextPinConnections[conn.to] ?? []).filter((id) => id !== connectionId);
+
+        delete nextConnections[connectionId];
+      }
 
       return {
         connections: nextConnections,
@@ -427,7 +599,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       const toPinId = (p: string | PinData): string =>
         typeof p === 'object' && p?.id ? p.id : String(p);
 
-      (graph.nodes || []).forEach((node: { id: string; nodeType?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string }) => {
+      (graph.nodes || []).forEach((node: { id: string; nodeType?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string; dataframeId?: string; columnName?: string; columnType?: string }) => {
         const inputIds = (node.inputs ?? []).map(toPinId).filter(Boolean);
         const outputIds = (node.outputs ?? []).map(toPinId).filter(Boolean);
         const allPinIds = [...inputIds, ...outputIds];
@@ -449,6 +621,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
           variableName: node.variableName,
           variableType: node.variableType,
           subGraphId: node.subGraphId,
+          dataframeId: node.dataframeId,
+          columnName: node.columnName,
+          columnType: node.columnType,
         };
         nodeIds.push(node.id);
         nextNodePins[node.id] = allPinIds;

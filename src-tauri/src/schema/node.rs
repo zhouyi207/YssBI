@@ -1,8 +1,11 @@
-use crate::graph::{NodeDefinition, NodeMetaData, NodePosition};
+use crate::graph::{NodeDefinition, NodeMetaData, NodePosition, NodeInstanceParams};
 use crate::graph::{NodeId, NodeInstance};
 use serde::{Deserialize, Serialize};
 
 /// Node instance DTO - 对应前端 Node 类型
+///
+/// 实例参数（variable_id, sub_graph_id 等）通过 `#[serde(flatten)]` 自动展开到 JSON 顶层，
+/// 新增参数只需修改 `NodeInstanceParams`，此处无需改动。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeInstanceDTO {
@@ -14,21 +17,31 @@ pub struct NodeInstanceDTO {
     pub outputs: Vec<String>, // Pin IDs
     pub ui_style: String,
     pub description: Option<String>,
-    pub position: NodePosition,  // 添加位置信息
+    pub position: NodePosition,
+    /// 实例参数（flatten 到 JSON 顶层，保持前端兼容）
+    #[serde(flatten)]
+    pub instance_params: NodeInstanceParams,
 }
 
 impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
+        let p = &value.instance_params;
+        let title = match (value.definition.node_type.as_str(), p.variable_name.as_deref()) {
+            ("get_variable", Some(name)) => format!("Get {}", name),
+            ("set_variable", Some(name)) => format!("Set {}", name),
+            _ => value.definition.name.clone(),
+        };
         Self {
             id: value.id,
-            node_type: value.definition.name.clone(),
+            node_type: value.definition.node_type.clone(),
             category: value.definition.category.clone(),
-            title: value.definition.name.clone(),
-            inputs: Vec::new(),  // 需要从 GraphDataState 中获取
-            outputs: Vec::new(), // 需要从 GraphDataState 中获取
+            title,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
             ui_style: value.definition.metadata.ui_style.clone(),
             description: value.definition.metadata.description.clone(),
             position: value.position.clone(),
+            instance_params: p.clone(),
         }
     }
 }
@@ -39,6 +52,7 @@ impl From<&NodeInstance> for NodeInstanceDTO {
 pub struct NodeDefinitionDTO {
     pub name: String,
     pub category: Vec<String>,
+    pub node_type: String,
     pub node_metadata: NodeMetaData,
 }
 
@@ -47,6 +61,7 @@ impl From<&NodeDefinition> for NodeDefinitionDTO {
         Self {
             name: value.name.clone(),
             category: value.category.clone(),
+            node_type: value.node_type.clone(),
             node_metadata: value.metadata.clone(),
         }
     }

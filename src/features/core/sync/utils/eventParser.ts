@@ -47,9 +47,9 @@ export function isValidEventType(type: string): boolean {
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted',
         // Node
-        'NodeCreated', 'NodeUpdated', 'NodeDeleted', 'NodePositionsUpdated',
-        // Connection (可选)
-        'ConnectionCreated', 'ConnectionDeleted',
+        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated',
+        // Connection
+        'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted',
     ];
     
     return validTypes.includes(type);

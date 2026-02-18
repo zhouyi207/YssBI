@@ -11,8 +11,36 @@ pub type FlowProcessor =
 pub type DataEvaluator =
     Arc<dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<(), String> + Send + Sync>;
 
+/// 静态 Pin 生成器：节点创建时调用一次，生成初始 pins
 pub type PinGenerator =
     Arc<dyn Fn() -> Result<Vec<PinDefinition>, String> + Send + Sync>;
+
+/// 动态 Pin 解析器：连接/参数变化时重新调用，根据上下文动态生成 pins
+pub type PinResolver =
+    Arc<dyn Fn(&PinResolverContext) -> Result<Vec<PinDefinition>, String> + Send + Sync>;
+
+/// Pin 解析器上下文
+///
+/// 提供节点的运行时信息（instance_params）和上游输入的 schema，
+/// 用于 `PinResolver` 决定应该生成哪些 pins。
+#[derive(Debug, Clone, Default)]
+pub struct PinResolverContext {
+    pub instance_params: super::NodeInstanceParams,
+    pub input_schemas: std::collections::HashMap<crate::graph::PinRole, DataSchema>,
+}
+
+/// 数据源 schema（如 DataFrame 的列结构）
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DataSchema {
+    pub columns: Vec<ColumnSchema>,
+}
+
+/// 数据列 schema
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColumnSchema {
+    pub name: String,
+    pub data_type: crate::graph::DataType,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMetaData {
@@ -51,6 +79,9 @@ pub struct NodeDefinition {
     /// 分类路径
     pub category: Vec<String>,
 
+    // 唯一定义
+    pub node_type: String,
+
     /// 节点的 pin 类型推断
     pub type_vars: Vec<TypeVarDefinition>,
 
@@ -62,9 +93,13 @@ pub struct NodeDefinition {
     #[serde(skip)]
     pub data_evaluator: Option<DataEvaluator>,
 
-    /// 动态生成输入输出 Pin
+    /// 静态生成输入输出 Pin（创建时调用一次）
     #[serde(skip)]
     pub pin_generator: Option<PinGenerator>,
+
+    /// 动态 Pin 解析器（连接/参数变化时重新调用，可选）
+    #[serde(skip)]
+    pub pin_resolver: Option<PinResolver>,
 
     /// 元数据
     pub metadata: NodeMetaData,
@@ -76,10 +111,12 @@ impl std::fmt::Debug for NodeDefinition {
         f.debug_struct("NodeDefinition")
             .field("name", &self.name)
             .field("category", &self.category)
+            .field("node_type", &self.node_type)
             .field("type_vars", &self.type_vars)
             .field("flow_processor", &self.flow_processor.as_ref().map(|_| "<function>"))
             .field("data_evaluator", &self.data_evaluator.as_ref().map(|_| "<function>"))
             .field("pin_generator", &self.pin_generator.as_ref().map(|_| "<function>"))
+            .field("pin_resolver", &self.pin_resolver.as_ref().map(|_| "<function>"))
             .field("metadata", &self.metadata)
             .finish()
     }
@@ -87,32 +124,33 @@ impl std::fmt::Debug for NodeDefinition {
 
 impl NodeDefinition {
     /// 创建新的节点定义
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, category: Vec<String>) -> Self {
+        let name = name.into();
+        let mut category = category.clone();
+        category.push(name.clone());
+        let node_type = category.join(":");
+        
         Self {
-            name: name.into(),
-            category: vec![],
+            name,
+            category,
+            node_type,
             type_vars: vec![],
             flow_processor: None,
             data_evaluator: None,
             pin_generator: None,
+            pin_resolver: None,
             metadata: NodeMetaData::default(),
         }
     }
 
-    // 在定义时这样使用
-    //     .add_type_var(TypeVarDefinition {
-    //     id: TypeVarId::placeholder("T"),
-    //     constraints: vec![TypeConstraint::Numeric],
-    //     bound: None,
-    // })
-    pub fn with_type_vars(mut self, type_vars: Vec<TypeVarDefinition>) -> Self {
-        self.type_vars = type_vars;
+    /// 覆盖默认的 node_type（用于 get_variable、call_function 等前端约定的类型名）
+    pub fn with_node_type(mut self, node_type: impl Into<String>) -> Self {
+        self.node_type = node_type.into();
         self
     }
 
-    /// 设置分类
-    pub fn with_category(mut self, category: Vec<String>) -> Self {
-        self.category = category;
+    pub fn with_type_vars(mut self, type_vars: Vec<TypeVarDefinition>) -> Self {
+        self.type_vars = type_vars;
         self
     }
 
@@ -130,6 +168,16 @@ impl NodeDefinition {
 
     pub fn with_pin_generator(mut self, generator: PinGenerator) -> Self {
         self.pin_generator = Some(generator);
+        self
+    }
+
+    /// 设置动态 Pin 解析器
+    ///
+    /// 有 `pin_resolver` 的节点在连接/参数变化时会重新计算 pins。
+    /// `pin_generator` 仍然负责创建时的初始 pins。
+    pub fn with_pin_resolver(mut self, resolver: PinResolver) -> Self {
+        self.pin_resolver = Some(resolver);
+        self.metadata.supports_dynamic_pins = true;
         self
     }
 

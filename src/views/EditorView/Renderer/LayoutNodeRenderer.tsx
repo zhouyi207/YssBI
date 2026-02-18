@@ -1,5 +1,6 @@
 import { useRef, Fragment, useMemo } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { Sash } from './Sash';
 import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '@/shared/types/ui';
@@ -201,10 +202,13 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
 
 /**
  * 拖拽停靠区域覆盖层 (DND Drop Zones)
+ * 仅在拖拽布局节点或 Tab 时显示，不在拖拽 sidebar node-template 时显示，
+ * 避免遮挡 CanvasDropZone 导致 sidebar 拖拽失效。
  */
 const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
     const isDragging = useLayoutStore(s => s.isDragging);
-    if (!isDragging) return null;
+    const isSidebarDrag = useSidebarDragStore(s => !!s.activeDrag);
+    if (!isDragging || isSidebarDrag) return null;
 
     return (
         <div className="absolute inset-0 pointer-events-none z-10 flex flex-col">

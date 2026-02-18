@@ -16,8 +16,7 @@ pub fn register(registry: &NodeRegistry) {
 
 /// Equal 节点 - 比较两个值是否相等
 fn register_equal(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Equal (==)")
-        .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
+    let definition = NodeDefinition::new("Equal (==)", vec!["Logic".to_string(), "Comparison".to_string()])
         .with_ui_style("logic")
         .with_description("Check if two values are equal")
         .with_pin_generator(Arc::new(|| {
@@ -58,8 +57,7 @@ fn register_equal(registry: &NodeRegistry) {
 
 /// Not Equal 节点 - 比较两个值是否不相等
 fn register_not_equal(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Not Equal (!=)")
-        .with_category(vec!["Logic".to_string(), "Comparison".to_string()])
+    let definition = NodeDefinition::new("Not Equal (!=)", vec!["Logic".to_string(), "Comparison".to_string()])
         .with_ui_style("logic")
         .with_description("Check if two values are not equal")
         .with_pin_generator(Arc::new(|| {
@@ -100,8 +98,7 @@ fn register_not_equal(registry: &NodeRegistry) {
 
 /// And 节点 - 逻辑与
 fn register_and(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("And (&&)")
-        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+    let definition = NodeDefinition::new("And (&&)", vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical AND operation")
         .with_pin_generator(Arc::new(|| {
@@ -144,8 +141,7 @@ fn register_and(registry: &NodeRegistry) {
 
 /// Or 节点 - 逻辑或
 fn register_or(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Or (||)")
-        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+    let definition = NodeDefinition::new("Or (||)", vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical OR operation")
         .with_pin_generator(Arc::new(|| {
@@ -188,8 +184,7 @@ fn register_or(registry: &NodeRegistry) {
 
 /// Not 节点 - 逻辑非
 fn register_not(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Not (!)")
-        .with_category(vec!["Logic".to_string(), "Boolean".to_string()])
+    let definition = NodeDefinition::new("Not (!)", vec!["Logic".to_string(), "Boolean".to_string()])
         .with_ui_style("logic")
         .with_description("Logical NOT operation")
         .with_pin_generator(Arc::new(|| {

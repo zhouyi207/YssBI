@@ -1,23 +1,9 @@
-impl NodeLayoutResolver for BreakDataFrameNode {
-    fn resolve(
-        &self,
-        ctx: &dyn NodeLayoutContext,
-        node: &NodeInstance,
-    ) -> Vec<DynamicPinSpec> {
+//! DataFrame 相关节点
 
-        let Some(PinSchema::DataFrame(df)) =
-            ctx.input_schema(node.id, &PinRole::Data(DataRole::Input))
-        else {
-            return vec![];
-        };
+mod nodes;
 
-        df.columns.iter().enumerate().map(|(i, col)| {
-            DynamicPinSpec {
-                role: PinRole::Data(DataRole::Outputs(i)),
-                kind: PinKind::Data,
-                data_type: PinDataType::Concrete(DataType::Series(col.ty)),
-                name: col.name.clone(),
-            }
-        }).collect()
-    }
+use crate::graph::register::NodeRegistry;
+
+pub fn register(registry: &NodeRegistry) {
+    nodes::register(registry);
 }

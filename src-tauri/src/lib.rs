@@ -61,23 +61,21 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Schema 命令
+            // ==================== Schema ====================
             get_node_definitions,
             get_editor_schema_command,
-            // check_type_connection,
-            // get_pin_type_info,
-            // check_pin_compatibility_detailed,
-            // 项目状态命令
+            // ==================== 项目管理 ====================
             get_project_data,
             get_project_path,
             new_project,
             load_project_to_state,
             save_project_from_state,
             set_project_data,
-            // 设置相关
+            execute_project,
+            // ==================== 设置 ====================
             load_settings,
             save_settings,
-            // Graph CRUD
+            // ==================== Graph CRUD ====================
             get_graph,
             remove_graph,
             create_event,
@@ -86,16 +84,18 @@ pub fn run() {
             update_function,
             create_macro,
             update_macro,
-            // Variables CRUD (统一接口)
+            // ==================== Variable CRUD ====================
             create_variable,
             get_variable,
             update_variable,
             delete_variable,
-            // Nodes 命令
+            // ==================== Node ====================
             create_node,
+            batch_create_nodes,
             delete_node,
+            batch_delete_nodes,
             update_node_positions,
-            // Connection 命令
+            // ==================== Connection ====================
             connect_pins,
             disconnect_pin,
             create_connection,
@@ -103,37 +103,27 @@ pub fn run() {
             get_connections,
             delete_connections_for_pin,
             delete_connections_for_node,
+            // ==================== Pin ====================
+            update_pin_user_value,
+            clear_pin_user_value,
+            // ==================== 子图管理 ====================
             update_canvas,
             update_subgraph_io,
             rename_subgraph,
-            // Pin 值管理命令
-            update_pin_user_value,
-            clear_pin_user_value,
-            // 动态 Pin 命令
-            get_node_dynamic_constraints,
-            add_dynamic_pin,
-            remove_dynamic_pin,
-            // 执行命令
-            // execute_graph,
-            execute_project,
-            // 兼容旧接口
-            save_project,
-            load_project,
-            parse_project,
-            serialize_project,
-            // 动态 Pin 命令（旧接口，保持兼容）
-            add_node_dynamic_pin,
-            remove_node_dynamic_pin,
-            validate_pin_operation,
-            // 数据导入
+            // ==================== DataFrame ====================
             import_csv,
             delete_dataframe,
             create_dataframe,
             get_dataframe_rows,
-            // 日志命令
+            // ==================== 日志 ====================
             get_logs,
             get_log_file_path,
             get_log_count,
+            // ==================== 兼容旧接口（已废弃） ====================
+            save_project,
+            load_project,
+            parse_project,
+            serialize_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
-import { useViewportStore } from "@/features/core/viewport";
+
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { HUD } from "./HUD";
@@ -40,7 +40,6 @@ export default function CanvasOverlays({
     const [showExecuteMenu, setShowExecuteMenu] = useState(false);
 
     const gesture = useGestureStore((state) => state.gesture);
-    const scale = useViewportStore((state) => state.viewports[groupId]?.scale || 1);
 
     const {
         handleNodePaletteSelect,
@@ -52,7 +51,6 @@ export default function CanvasOverlays({
         activeTabId,
         functions,
         macros,
-        scale,
         variables,
         Variables,
         setContextMenu,

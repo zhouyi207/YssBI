@@ -24,8 +24,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 150,
-        tolerance: 5,
+        distance: 5,
       },
     })
   );
@@ -53,7 +52,15 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
+    const { over, active } = event;
+    const activeData = active.data.current as any;
+
+    // node-template 拖拽不显示布局 DropIndicator（由 Canvas 处理）
+    if (activeData?.type === "node-template") {
+      setDropState(s => ({ ...s, visible: false }));
+      return;
+    }
+
     if (!over) {
       setDropState(s => ({ ...s, visible: false }));
       return;
@@ -62,7 +69,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const overData = over.data.current as any;
     const dropType = overData?.dropType;
     
-    // 如果拖到 TabBar，不显示 DropIndicator（TabBar 有自己的高亮效果）
     if (dropType === 'tabbar') {
       setDropState(s => ({ ...s, visible: false }));
       return;
@@ -123,16 +129,17 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       const dragState = useSidebarDragStore.getState().activeDrag;
       setActiveDrag(null);
       const overId = typeof over?.id === "string" ? over.id : "";
-      const groupId = overId.startsWith("canvas-drop-zone-")
+      const groupId: string | null = overId.startsWith("canvas-drop-zone-")
         ? overId.replace("canvas-drop-zone-", "")
         : null;
       if (groupId && dragState) {
         const handler = canvasDropHandlerStore.getHandler(groupId);
         if (handler) {
-          const ev = event.activatorEvent as PointerEvent;
+          // 使用 drop 时的 modifier 状态（与 useEditorKeyboard 同步）
+          const win = window as Window & { _lastAltKey?: boolean; _lastCtrlKey?: boolean };
           handler(dragState, {
-            altKey: ev?.altKey ?? false,
-            ctrlKey: ev?.ctrlKey ?? false,
+            altKey: win._lastAltKey ?? (event.activatorEvent as PointerEvent)?.altKey ?? false,
+            ctrlKey: win._lastCtrlKey ?? (event.activatorEvent as PointerEvent)?.ctrlKey ?? false,
           });
         }
       }

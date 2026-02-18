@@ -7,4 +7,3 @@ export * from './variableStore';
 export * from './graphDataStore';
 export * from './graphHistoryStore';
 export { serializeGraph, deserializeGraph } from './serialization';
-export { createNodeInBackend, deleteNodeInBackend, createNodeFromTemplate } from './nodeOperations';

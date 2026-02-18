@@ -1,12 +1,17 @@
 import React from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useSelectionStore } from "@/features/core/canvas";
 
 export const SelectionBox = ({ canvasRef }: { canvasRef: React.RefObject<HTMLDivElement | null> }) => {
-    const startX = useSelectionStore((s) => s.startX);
-    const startY = useSelectionStore((s) => s.startY);
-    const currentX = useSelectionStore((s) => s.currentX);
-    const currentY = useSelectionStore((s) => s.currentY);
-    const isVisible = useSelectionStore((s) => s.isVisible);
+    const { startX, startY, currentX, currentY, isVisible } = useSelectionStore(
+        useShallow((s) => ({
+            startX: s.startX,
+            startY: s.startY,
+            currentX: s.currentX,
+            currentY: s.currentY,
+            isVisible: s.isVisible,
+        }))
+    );
 
     if (!isVisible || !canvasRef.current) return null;
 

@@ -45,6 +45,7 @@ export interface NodeMetaData {
 export interface NodeDefinitionDTO {
     name: string;
     category: string[];
+    nodeType: string;
     node_metadata: NodeMetaData;
 }
 

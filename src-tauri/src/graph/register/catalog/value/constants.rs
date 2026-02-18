@@ -15,8 +15,7 @@ pub fn register(registry: &NodeRegistry) {
 
 /// Boolean 常量节点
 fn register_boolean_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Boolean")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("Boolean", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("Boolean constant value")
         .with_pin_generator(Arc::new(|| {
@@ -32,8 +31,7 @@ fn register_boolean_constant(registry: &NodeRegistry) {
 
 /// Int32 常量节点
 fn register_int32_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Int32")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("Int32", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("32-bit integer constant value")
         .with_pin_generator(Arc::new(|| {
@@ -49,8 +47,7 @@ fn register_int32_constant(registry: &NodeRegistry) {
 
 /// Int64 常量节点
 fn register_int64_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Int64")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("Int64", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("64-bit integer constant value")
         .with_pin_generator(Arc::new(|| {
@@ -66,8 +63,7 @@ fn register_int64_constant(registry: &NodeRegistry) {
 
 /// Float32 常量节点
 fn register_float32_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Float32")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("Float32", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("32-bit floating point constant value")
         .with_pin_generator(Arc::new(|| {
@@ -83,8 +79,7 @@ fn register_float32_constant(registry: &NodeRegistry) {
 
 /// Float64 常量节点
 fn register_float64_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Float64")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("Float64", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("64-bit floating point constant value")
         .with_pin_generator(Arc::new(|| {
@@ -100,8 +95,7 @@ fn register_float64_constant(registry: &NodeRegistry) {
 
 /// String 常量节点
 fn register_string_constant(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("String")
-        .with_category(vec!["Value".to_string(), "Constants".to_string()])
+    let definition = NodeDefinition::new("String", vec!["Value".to_string(), "Constants".to_string()])
         .with_ui_style("value")
         .with_description("String constant value")
         .with_pin_generator(Arc::new(|| {

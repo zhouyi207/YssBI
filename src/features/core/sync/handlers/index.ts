@@ -6,6 +6,7 @@ export * from './GraphEventHandler';
 export * from './VariableEventHandler';
 export * from './DataFrameEventHandler';
 export * from './NodeEventHandler';
+export * from './ConnectionEventHandler';
 
 import { EventHandler } from '../types';
 import {
@@ -38,9 +39,17 @@ import {
 } from './DataFrameEventHandler';
 import {
     NodeCreatedHandler,
+    NodesBatchCreatedHandler,
     NodeDeletedHandler,
+    NodesBatchDeletedHandler,
     NodePositionsUpdatedHandler,
+    NodePinsUpdatedHandler,
 } from './NodeEventHandler';
+import {
+    ConnectionCreatedHandler,
+    ConnectionDeletedHandler,
+    ConnectionsBatchDeletedHandler,
+} from './ConnectionEventHandler';
 
 /**
  * 创建所有事件处理器实例
@@ -81,7 +90,15 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         
         // Node
         new NodeCreatedHandler() as EventHandler<unknown>,
+        new NodesBatchCreatedHandler() as EventHandler<unknown>,
         new NodeDeletedHandler() as EventHandler<unknown>,
+        new NodesBatchDeletedHandler() as EventHandler<unknown>,
         new NodePositionsUpdatedHandler() as EventHandler<unknown>,
+        new NodePinsUpdatedHandler() as EventHandler<unknown>,
+
+        // Connection
+        new ConnectionCreatedHandler() as EventHandler<unknown>,
+        new ConnectionDeletedHandler() as EventHandler<unknown>,
+        new ConnectionsBatchDeletedHandler() as EventHandler<unknown>,
     ];
 }

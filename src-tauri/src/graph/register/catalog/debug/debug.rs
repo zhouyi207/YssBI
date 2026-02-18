@@ -13,8 +13,7 @@ pub fn register(registry: &NodeRegistry) {
 
 /// Print 节点 - 打印字符串到控制台
 fn register_print(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Print")
-        .with_category(vec!["Debug".to_string()])
+    let definition = NodeDefinition::new("Print", vec!["Debug".to_string()])
         .with_ui_style("debug")
         .with_description("Print a string to the console")
         .with_pin_generator(Arc::new(|| {

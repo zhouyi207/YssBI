@@ -15,8 +15,7 @@ pub fn register(registry: &NodeRegistry) {
 
 /// Add 节点 - 加法运算
 fn register_add(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Add (+)")
-        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+    let definition = NodeDefinition::new("Add (+)", vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Add two numbers together")
         .with_pin_generator(Arc::new(|| {
@@ -53,8 +52,7 @@ fn register_add(registry: &NodeRegistry) {
 
 /// Subtract 节点 - 减法运算
 fn register_subtract(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Subtract (-)")
-        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+    let definition = NodeDefinition::new("Subtract (-)", vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Subtract B from A")
         .with_pin_generator(Arc::new(|| {
@@ -91,8 +89,7 @@ fn register_subtract(registry: &NodeRegistry) {
 
 /// Multiply 节点 - 乘法运算
 fn register_multiply(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Multiply (*)")
-        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+    let definition = NodeDefinition::new("Multiply (*)", vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Multiply two numbers")
         .with_pin_generator(Arc::new(|| {
@@ -129,8 +126,7 @@ fn register_multiply(registry: &NodeRegistry) {
 
 /// Divide 节点 - 除法运算
 fn register_divide(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Divide (/)")
-        .with_category(vec!["Math".to_string(), "Operators".to_string()])
+    let definition = NodeDefinition::new("Divide (/)", vec!["Math".to_string(), "Operators".to_string()])
         .with_ui_style("math")
         .with_description("Divide A by B")
         .with_pin_generator(Arc::new(|| {

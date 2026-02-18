@@ -41,9 +41,30 @@ pub fn get_variable(
     Ok((&variable).into())
 }
 
-/// 更新变量（统一接口）
+/// 更新变量（统一接口，部分更新）
 #[tauri::command]
-pub fn update_variable(id: String, state: State<ProjectState>) -> Result<(), String> {
+pub fn update_variable(
+    app: AppHandle,
+    state: State<ProjectState>,
+    variable_id: VariableId,
+    name: Option<String>,
+    data_type: Option<DataType>,
+    data_value: Option<DataValue>,
+    description: Option<String>,
+    tags: Option<Vec<String>>,
+) -> Result<(), String> {
+    let updated = state
+        .update_variable(&variable_id, name, data_type, data_value, description, tags)
+        .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+
+    emit_project_event(
+        &app,
+        Event::Variable(EventVariable::VariableUpdated {
+            variable_id: updated.id,
+            variable_scope: updated.scope.clone(),
+            data: (&updated).into(),
+        }),
+    );
     Ok(())
 }
 

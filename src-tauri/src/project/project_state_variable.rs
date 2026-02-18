@@ -43,4 +43,24 @@ impl ProjectState {
     pub fn get_variable(&self, variable_id: &VariableId) -> Option<VariableInstance> {
         self.project_data.read().unwrap().variables.get(variable_id).cloned()
     }
+
+    /// 更新变量（部分字段），返回更新后的实例
+    pub fn update_variable(
+        &self,
+        variable_id: &VariableId,
+        name: Option<String>,
+        data_type: Option<DataType>,
+        data_value: Option<DataValue>,
+        description: Option<String>,
+        tags: Option<Vec<String>>,
+    ) -> Option<VariableInstance> {
+        let mut data = self.project_data.write().unwrap();
+        let var = data.variables.get_mut(variable_id)?;
+        if let Some(n) = name { var.name = n; }
+        if let Some(dt) = data_type { var.data_type = dt; }
+        if let Some(dv) = data_value { var.data_value = dv; }
+        if let Some(d) = description { var.description = d; }
+        if let Some(t) = tags { var.tags = t; }
+        Some(var.clone())
+    }
 }

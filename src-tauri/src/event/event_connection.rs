@@ -1,12 +1,27 @@
-pub use crate::graph::Connection;
+use crate::graph::{GraphId, PinId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum EventConnection {
+    /// 连接已创建（from_pin → to_pin）
     #[serde(rename_all = "camelCase")]
-    ConnectionsUpdated {
-        subgraph_id: String,
-        connections: Vec<Connection>,
+    ConnectionCreated {
+        graph_id: GraphId,
+        from_pin: PinId,
+        to_pin: PinId,
+    },
+    /// 连接已删除（from_pin → to_pin）
+    #[serde(rename_all = "camelCase")]
+    ConnectionDeleted {
+        graph_id: GraphId,
+        from_pin: PinId,
+        to_pin: PinId,
+    },
+    /// Pin 的所有连接已断开（列出所有被删除的连接对）
+    #[serde(rename_all = "camelCase")]
+    ConnectionsBatchDeleted {
+        graph_id: GraphId,
+        removed_connections: Vec<(PinId, PinId)>,
     },
 }

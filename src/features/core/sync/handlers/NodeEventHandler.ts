@@ -2,9 +2,10 @@
 // 按 README 范式：Handler 直接更新 Store，callbacks 仅用于可选 UI 扩展
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { NodeCreatedPayload, NodeDeletedPayload, NodePositionsUpdatedPayload, EventCallbacks } from '../types';
+import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import type { NodeData, PinData } from '@/shared/types';
+import type { NodeInstanceDTO } from '@/shared/types/dto';
 
 export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
     eventType = 'NodeCreated';
@@ -13,30 +14,56 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
         this.log('Node created:', payload.nodeId, 'in graph:', payload.graphId);
 
         const store = useGraphDataStore.getState();
-        const d = payload.data;
-
-        // 1. 添加节点到 Store（NodeInstanceDTO -> NodeData）
-        const nodeData: NodeData = {
-            id: payload.nodeId,
-            graphId: payload.graphId,
-            nodeType: d.nodeType,
-            category: d.category ?? [],
-            title: d.title ?? '',
-            inputs: d.inputs ?? [],
-            outputs: d.outputs ?? [],
-            uiStyle: d.uiStyle ?? 'default',
-            description: d.description,
-            position: d.position ?? { x: 0, y: 0 },
-        };
-        store.addNode(payload.graphId, nodeData);
-
-        // 2. 添加 pins 到 Store（后端 NodeCreated 已包含 pins）
+        store.addNode(payload.graphId, dtoToNodeData(payload.graphId, payload.nodeId, payload.data));
         payload.pins.forEach((pin) => {
             store.addPin(payload.nodeId, pin as PinData);
         });
-
-        // 3. 可选回调：UI 扩展
         callbacks?.onNodeCreated?.(payload.graphId, payload.nodeId, payload.data);
+    }
+}
+
+function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): NodeData {
+    return {
+        id: nodeId,
+        graphId,
+        nodeType: d.nodeType,
+        category: d.category ?? [],
+        title: d.title ?? '',
+        inputs: d.inputs ?? [],
+        outputs: d.outputs ?? [],
+        uiStyle: d.uiStyle ?? 'default',
+        description: d.description,
+        position: d.position ?? { x: 0, y: 0 },
+        variableId: d.variableId,
+        variableName: d.variableName,
+        variableType: d.variableType,
+        subGraphId: d.subGraphId,
+        dataframeId: d.dataframeId,
+        columnName: d.columnName,
+        columnType: d.columnType,
+    };
+}
+
+export class NodesBatchCreatedHandler extends BaseEventHandler<NodesBatchCreatedPayload> {
+    eventType = 'NodesBatchCreated';
+
+    handle(payload: NodesBatchCreatedPayload, callbacks?: EventCallbacks): void {
+        this.log('Batch nodes created:', payload.nodes.length, 'in graph:', payload.graphId);
+
+        const store = useGraphDataStore.getState();
+
+        const items = payload.nodes.map(([nodeId, data, pins]) => ({
+            node: dtoToNodeData(payload.graphId, nodeId, data),
+            pins: pins as PinData[],
+        }));
+
+        store.batchAddNodesAndPins(payload.graphId, items);
+
+        if (callbacks?.onNodeCreated) {
+            for (const [nodeId, data] of payload.nodes) {
+                callbacks.onNodeCreated(payload.graphId, nodeId, data);
+            }
+        }
     }
 }
 
@@ -45,12 +72,24 @@ export class NodeDeletedHandler extends BaseEventHandler<NodeDeletedPayload> {
 
     handle(payload: NodeDeletedPayload, callbacks?: EventCallbacks): void {
         this.log('Node deleted:', payload.nodeId, 'from graph:', payload.graphId);
-
-        // 1. Handler 直接更新 Store
         useGraphDataStore.getState().deleteNode(payload.nodeId);
-
-        // 2. 可选回调：UI 扩展
         callbacks?.onNodeDeleted?.(payload.graphId, payload.nodeId);
+    }
+}
+
+export class NodesBatchDeletedHandler extends BaseEventHandler<NodesBatchDeletedPayload> {
+    eventType = 'NodesBatchDeleted';
+
+    handle(payload: NodesBatchDeletedPayload, callbacks?: EventCallbacks): void {
+        this.log('Batch nodes deleted:', payload.nodeIds.length, 'from graph:', payload.graphId);
+        const store = useGraphDataStore.getState();
+        store.batchDeleteNodes(payload.nodeIds);
+
+        if (callbacks?.onNodeDeleted) {
+            for (const nodeId of payload.nodeIds) {
+                callbacks.onNodeDeleted(payload.graphId, nodeId);
+            }
+        }
     }
 }
 
@@ -62,5 +101,22 @@ export class NodePositionsUpdatedHandler extends BaseEventHandler<NodePositionsU
 
         const updates = payload.updates.map(([nodeId, x, y]) => ({ nodeId, x, y }));
         useGraphDataStore.getState().batchUpdateNodePositions(updates);
+    }
+}
+
+export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayload> {
+    eventType = 'NodePinsUpdated';
+
+    handle(payload: NodePinsUpdatedPayload, _callbacks?: EventCallbacks): void {
+        this.log('Node pins updated:', payload.nodeId, 'removed:', payload.removedPinIds.length, 'added:', payload.addedPins.length);
+
+        useGraphDataStore.getState().batchUpdatePins({
+            disconnectIds: payload.removedConnections.map(([from, to]) => `${from}->${to}`),
+            removePinIds: payload.removedPinIds,
+            addPins: payload.addedPins.map((pin) => ({
+                nodeId: payload.nodeId,
+                pin: pin as PinData,
+            })),
+        });
     }
 }

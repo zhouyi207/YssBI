@@ -14,8 +14,7 @@ pub fn register(registry: &NodeRegistry) {
 
 /// If-Else 节点（混合节点：既有数据输入，又有控制流输出）
 fn register_if_else(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Branch")
-        .with_category(vec!["Control Flow".to_string()])
+    let definition = NodeDefinition::new("Branch", vec!["Control Flow".to_string()])
         .with_ui_style("control")
         .with_description("Branch execution based on condition")
         .with_pin_generator(Arc::new(|| {
@@ -48,8 +47,7 @@ fn register_if_else(registry: &NodeRegistry) {
 
 /// Sequence 节点 - 按顺序执行多个步骤（纯控制流节点）
 fn register_sequence(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Sequence")
-        .with_category(vec!["Control Flow".to_string()])
+    let definition = NodeDefinition::new("Sequence", vec!["Control Flow".to_string()])
         .with_ui_style("control")
         .with_description("Execute steps in sequence")
         .with_pin_generator(Arc::new(|| {

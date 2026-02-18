@@ -82,15 +82,53 @@ export interface NodeCreatedPayload {
     pins: PinInstanceDTO[];
 }
 
+export interface NodesBatchCreatedPayload {
+    graphId: string;
+    nodes: Array<[string, NodeInstanceDTO, PinInstanceDTO[]]>;
+}
+
 export interface NodeDeletedPayload {
     graphId: string;
     nodeId: string;
+}
+
+export interface NodesBatchDeletedPayload {
+    graphId: string;
+    nodeIds: string[];
 }
 
 export interface NodePositionsUpdatedPayload {
     graphId: string;
     /** [[nodeId, x, y], ...] from backend */
     updates: Array<[string, number, number]>;
+}
+
+/** 节点动态 pins 变化事件（由 PinResolver 触发） */
+export interface NodePinsUpdatedPayload {
+    graphId: string;
+    nodeId: string;
+    removedPinIds: string[];
+    addedPins: PinInstanceDTO[];
+    removedConnections: Array<[string, string]>;
+}
+
+// ==================== Connection 事件 Payload ====================
+
+export interface ConnectionCreatedPayload {
+    graphId: string;
+    fromPin: string;
+    toPin: string;
+}
+
+export interface ConnectionDeletedPayload {
+    graphId: string;
+    fromPin: string;
+    toPin: string;
+}
+
+export interface ConnectionsBatchDeletedPayload {
+    graphId: string;
+    removedConnections: Array<[string, string]>;
 }
 
 // ==================== 事件处理器接口 ====================

@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
+import { useTheme } from "@/features/core/theme/useTheme";
 import { PinInput } from "./PinInput";
 
 export interface PinProps extends PinModel {
@@ -45,10 +46,10 @@ export const Pin: React.FC<PinProps> = (props) => {
     onValueChange,
   } = props;
 
-  // 颜色逻辑已完全迁移至前端主题系统
-  // 从 CSS 变量获取颜色，或者使用 ui?.color 覆盖
+  const { theme: appTheme } = useTheme();
   const isConnected = links.length > 0 || (isActive ?? false);
-  const baseColor = ui?.color ?? `var(--${type}-color, #CCCCCC)`;
+  const themeColor = appTheme[`${type}Color` as keyof typeof appTheme] as string | undefined;
+  const baseColor = ui?.color ?? themeColor ?? "#CCCCCC";
 
   // 使用 useMemo 缓存主题计算结果
   const theme = useMemo(

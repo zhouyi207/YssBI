@@ -1,4 +1,7 @@
-use crate::{event::Connection, graph::ConnectionManager, graph::PinId};
+use crate::{
+    graph::PinId,
+    graph::{Connection, ConnectionManager},
+};
 use serde::{Deserialize, Serialize};
 
 /// Connection DTO - 对应前端 Connection 类型

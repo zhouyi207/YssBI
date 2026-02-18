@@ -1,4 +1,4 @@
-﻿/// store —— 只负责「状态 + backend 同步」
+/// store —— 只负责「状态 + backend 同步」
 
 import { create } from "zustand";
 import { SchemaService } from "@/services/schema";
@@ -46,8 +46,8 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
 
             const definitions = new Map<string, NodeDefinition>();
             defs.forEach((def) => {
-                // 使用完整路径 (category:name) 作为主键
-                const fullName = [...def.category, def.name].join(':');
+                // 使用 nodeType 作为主键（与后端 registry 一致，DTO 已包含 node_type）
+                const fullName = def.nodeType;
                 definitions.set(fullName, def);
                 
                 // 同时使用简单名称作为别名，方便查找

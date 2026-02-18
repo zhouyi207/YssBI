@@ -42,13 +42,11 @@ impl NodeRegistry {
 
     /// 注册节点定义
     pub fn register(&self, definition: NodeDefinition) {
-        let mut category = definition.category.clone();
-        category.push(definition.name.clone());
-        let node_type = category.join(":");
+
         self.definitions
             .write()
             .unwrap()
-            .insert(node_type, Arc::new(definition));
+            .insert(definition.node_type.clone(), Arc::new(definition));
     }
 
     /// 获取节点定义

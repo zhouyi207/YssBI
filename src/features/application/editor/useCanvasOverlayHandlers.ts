@@ -1,13 +1,20 @@
 import { useCallback } from "react";
 import { getGraphById } from "@/features/core/dataStore";
 import { useViewportStore } from "@/features/core/viewport";
-import { createNodeFromTemplate, deserializeGraph } from "@/features/core/dataStore";
-import { buildCreateNodeRequest } from "@/shared/utils/editor";
+import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 
 export interface PaletteItem {
   nodeType: string;
-  overrides?: { subGraphId?: string };
+  overrides?: {
+    subGraphId?: string;
+    variableId?: string;
+    variableName?: string;
+    variableType?: string;
+    dataframeId?: string;
+    columnName?: string;
+    columnType?: string;
+  };
 }
 
 export interface VariableDropMenu {
@@ -29,7 +36,6 @@ export function useCanvasOverlayHandlers({
   activeTabId,
   functions,
   macros,
-  scale,
   variables,
   Variables,
   setContextMenu,
@@ -43,13 +49,12 @@ export function useCanvasOverlayHandlers({
   activeTabId: string | null;
   functions: Record<string, any>;
   macros: Record<string, any>;
-  scale: number;
   variables: Record<string, any>;
   Variables: Record<string, any>;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
   setVariableDropMenu: (menu: VariableDropMenu | null) => void;
-  createNode: (nodeType: string, position: { x: number; y: number }) => Promise<void>;
+  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<void>;
   setCanvas: (updater: any, targetGroupId?: string) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
@@ -64,6 +69,7 @@ export function useCanvasOverlayHandlers({
         "macro_outputs",
       ];
 
+      // Internal 节点：已存在则平移画布到该节点，不重复创建
       if (internalNodeTypes.includes(item.nodeType)) {
         const graphData = getGraphById(activeTabId || "");
         const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
@@ -87,34 +93,23 @@ export function useCanvasOverlayHandlers({
         }
       }
 
+      // 计算画布坐标
       const rect = canvasRef.current.getBoundingClientRect();
       const currentCanvas =
         useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      let newNode: any = null;
-
+      // call_function / call_macro 需要验证子图存在
       if (item.nodeType === "call_function" || item.nodeType === "call_macro") {
         const subId = item.overrides?.subGraphId;
-        if (subId) {
-          const subData = item.nodeType === "call_function" ? functions[subId] : macros[subId];
-          if (subData) {
-            newNode = buildCreateNodeRequest(item.nodeType, { x, y }, { subGraphId: subId });
-          }
-        }
-      } else {
-        newNode = createNodeFromTemplate(
-          { x, y },
-          currentCanvas.scale,
-          item.nodeType,
-          item.overrides
-        );
+        if (!subId) { setContextMenu(null); setPendingConnection(null); return; }
+        const subData = item.nodeType === "call_function" ? functions[subId] : macros[subId];
+        if (!subData) { setContextMenu(null); setPendingConnection(null); return; }
       }
 
-      if (newNode) {
-        await createNode(newNode.nodeType, newNode.position);
-      }
+      // CQRS：直接发送 nodeType + position + params 给后端
+      await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
       setContextMenu(null);
       setPendingConnection(null);
     },
@@ -139,27 +134,14 @@ export function useCanvasOverlayHandlers({
         setVariableDropMenu(null);
         return;
       }
-      const newNode = createNodeFromTemplate(
-        { x: menu.worldX, y: menu.worldY },
-        scale,
-        "get_variable",
-        {
-          title: `Get ${menu.variableName}`,
-          variableId: menu.variableId,
-          variableType: menu.variableType,
-          variableName: menu.variableName,
-          variableIsArray: menu.variableIsArray,
-        } as any
-      );
-      if (newNode) {
-        await createNode(newNode.nodeType, {
-          x: newNode.position.x,
-          y: newNode.position.y,
-        });
-      }
+      await createNode("get_variable", { x: menu.worldX, y: menu.worldY }, {
+        variableId: menu.variableId,
+        variableName: menu.variableName,
+        variableType: menu.variableType,
+      });
       setVariableDropMenu(null);
     },
-    [variables, Variables, scale, createNode, setVariableDropMenu]
+    [variables, Variables, createNode, setVariableDropMenu]
   );
 
   const handleVariableDropSet = useCallback(
@@ -170,27 +152,14 @@ export function useCanvasOverlayHandlers({
         setVariableDropMenu(null);
         return;
       }
-      const newNode = createNodeFromTemplate(
-        { x: menu.worldX, y: menu.worldY },
-        scale,
-        "set_variable",
-        {
-          title: `Set ${menu.variableName}`,
-          variableId: menu.variableId,
-          variableType: menu.variableType,
-          variableName: menu.variableName,
-          variableIsArray: menu.variableIsArray,
-        } as any
-      );
-      if (newNode) {
-        await createNode(newNode.nodeType, {
-          x: newNode.position.x,
-          y: newNode.position.y,
-        });
-      }
+      await createNode("set_variable", { x: menu.worldX, y: menu.worldY }, {
+        variableId: menu.variableId,
+        variableName: menu.variableName,
+        variableType: menu.variableType,
+      });
       setVariableDropMenu(null);
     },
-    [variables, Variables, scale, createNode, setVariableDropMenu]
+    [variables, Variables, createNode, setVariableDropMenu]
   );
 
   return {

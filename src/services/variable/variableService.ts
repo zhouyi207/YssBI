@@ -17,8 +17,8 @@ export class VariableService {
   static async createVariable(variable: Omit<Variable, 'id'>): Promise<string> {
     const id = await invoke<string>('create_variable', {
       name: variable.name,
-      data_type: dataTypeToBackend(variable.dataType),
-      data_value: dataValueToBackend(variable.dataValue),
+      dataType: dataTypeToBackend(variable.dataType),
+      dataValue: dataValueToBackend(variable.dataValue),
       description: variable.description,
       scope: variable.scope,
       tags: variable.tags,
@@ -30,7 +30,7 @@ export class VariableService {
    * 获取变量
    */
   static async getVariable(variableId: string): Promise<Variable> {
-    const raw = await invoke<Record<string, unknown>>('get_variable', { variable_id: variableId });
+    const raw = await invoke<Record<string, unknown>>('get_variable', { variableId });
     return normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
 
@@ -46,6 +46,6 @@ export class VariableService {
    * 删除变量
    */
   static async deleteVariable(variableId: string): Promise<void> {
-    await invoke('delete_variable', { variable_id: variableId });
+    await invoke('delete_variable', { variableId });
   }
 }

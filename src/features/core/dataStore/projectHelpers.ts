@@ -3,7 +3,8 @@
  * 替代原 @/features/core/project 中的 helpers
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
@@ -51,40 +52,65 @@ export function getGraphs(): Record<string, GraphData> {
  */
 export function useGraphData(activeTabId: string | null) {
   const meta = useGraphMetaStore((s) => (activeTabId ? s.graphs[activeTabId] : null));
-  const graphNodeIds = useGraphDataStore((s) =>
-    activeTabId && s.graphNodes[activeTabId] ? s.graphNodes[activeTabId] : null
+
+  // 只提取当前图的 node 数组，useShallow 对比每个 node 引用，
+  // 其他图变化时 node 引用不变 → 不触发 re-render
+  const graphNodes = useGraphDataStore(
+    useShallow((s) => {
+      if (!activeTabId) return null;
+      const ids = s.graphNodes[activeTabId];
+      if (!ids) return null;
+      return ids.map((nid) => s.nodes[nid]).filter(Boolean);
+    })
   );
-  const nodesRecord = useGraphDataStore((s) => s.nodes);
-  const nodePinsRecord = useGraphDataStore((s) => s.nodePins);
-  const pinsRecord = useGraphDataStore((s) => s.pins);
-  const pinConnectionsRecord = useGraphDataStore((s) => s.pinConnections);
-  const connectionsRecord = useGraphDataStore((s) => s.connections);
+
+  const graphPins = useGraphDataStore(
+    useShallow((s) => {
+      if (!activeTabId) return null;
+      const nodeIds = s.graphNodes[activeTabId];
+      if (!nodeIds) return null;
+      return nodeIds.flatMap((nid) =>
+        (s.nodePins[nid] ?? []).map((pid) => s.pins[pid]).filter(Boolean)
+      );
+    })
+  );
+
+  const graphConnections = useGraphDataStore(
+    useShallow((s) => {
+      if (!activeTabId) return null;
+      const nodeIds = s.graphNodes[activeTabId];
+      if (!nodeIds) return null;
+      const connIds = new Set<string>();
+      for (const nid of nodeIds) {
+        for (const pid of s.nodePins[nid] ?? []) {
+          for (const cid of s.pinConnections[pid] ?? []) {
+            connIds.add(cid);
+          }
+        }
+      }
+      return Array.from(connIds).map((cid) => s.connections[cid]).filter(Boolean);
+    })
+  );
+
+  // 用 ref 缓存上一次结果，只在内容真正变化时返回新引用
+  const prevRef = useRef<GraphData | null>(null);
 
   return useMemo(() => {
-    if (!activeTabId || !meta || !graphNodeIds) return null;
+    if (!activeTabId || !meta || !graphNodes) {
+      prevRef.current = null;
+      return null;
+    }
 
-    const nodeIds = graphNodeIds;
-    const nodes = nodeIds.map((nid) => nodesRecord[nid]).filter(Boolean);
-    const pins = nodeIds.flatMap((nid) =>
-      (nodePinsRecord[nid] ?? []).map((pid) => pinsRecord[pid]).filter(Boolean)
-    );
-    const connIds = new Set<string>();
-    pins.forEach((p) =>
-      (pinConnectionsRecord[p?.id] ?? []).forEach((cid) => connIds.add(cid))
-    );
-    const connections = Array.from(connIds).map((cid) => connectionsRecord[cid]).filter(Boolean);
-
-    return { ...meta, nodes, pins, connections, canvas: EMPTY_CANVAS };
-  }, [
-    activeTabId,
-    meta,
-    graphNodeIds,
-    nodesRecord,
-    nodePinsRecord,
-    pinsRecord,
-    pinConnectionsRecord,
-    connectionsRecord,
-  ]);
+    const result: GraphData = {
+      ...meta,
+      nodes: graphNodes,
+      pins: graphPins ?? [],
+      connections: graphConnections ?? [],
+      canvas: EMPTY_CANVAS,
+    };
+    prevRef.current = result;
+    return result;
+  }, [activeTabId, meta, graphNodes, graphPins, graphConnections]);
 }
 
 /**

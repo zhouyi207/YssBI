@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
@@ -22,13 +22,20 @@ export const ConnectionLine = ({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const { theme } = useTheme();
 
+    // 用 ref 存储高频变化的值，避免 effect 因依赖变化而反复重建订阅
+    const getPinWorldPosRef = useRef(getPinWorldPos);
+    const getCanvasLocalPointRef = useRef(getCanvasLocalPoint);
+    const themeRef = useRef(theme);
+    const pendingConnectionRef = useRef(pendingConnection);
+    const menuPosRef = useRef(menuPos);
+
+    useEffect(() => { getPinWorldPosRef.current = getPinWorldPos; }, [getPinWorldPos]);
+    useEffect(() => { getCanvasLocalPointRef.current = getCanvasLocalPoint; }, [getCanvasLocalPoint]);
+    useEffect(() => { themeRef.current = theme; }, [theme]);
+    useEffect(() => { pendingConnectionRef.current = pendingConnection; }, [pendingConnection]);
+    useEffect(() => { menuPosRef.current = menuPos; }, [menuPos]);
+
     useEffect(() => {
-        // Subscribe to both stores. We might trigger redraws from either.
-        // However, for high-freq mouse moves, we want to read from gesture store directly in the RAF loop or subscription.
-
-        // Actually, simple subscription to gesture store update is fine, but we need to ensure we don't re-render React.
-        // So we use subscribe and manipulate Canvas manually.
-
         const render = () => {
             const { gesture } = useGestureStore.getState();
             const isConnecting = gesture?.type === "connect";
@@ -38,11 +45,9 @@ export const ConnectionLine = ({
 
             const canvasEl = canvasRef.current;
             if (!canvasEl) return;
-
             const ctx = canvasEl.getContext("2d");
             if (!ctx) return;
 
-            // Clear always
             ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
             let activeStart = null;
@@ -51,32 +56,28 @@ export const ConnectionLine = ({
             if (isConnecting && gestureStartPin) {
                 activeStart = gestureStartPin;
                 activeEndScreen = { x: currentX, y: currentY };
-            } else if (pendingConnection && menuPos) {
-                // If not actively dragging but we have a pending connection awaiting menu selection
-                activeStart = pendingConnection;
-                activeEndScreen = menuPos;
+            } else if (pendingConnectionRef.current && menuPosRef.current) {
+                activeStart = pendingConnectionRef.current;
+                activeEndScreen = menuPosRef.current;
             }
 
-            if (!activeStart || !activeEndScreen) {
-                return;
-            }
+            if (!activeStart || !activeEndScreen) return;
 
             const viewport = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+            const currentTheme = themeRef.current;
 
-            // Setup transform
             ctx.save();
             ctx.translate(viewport.x, viewport.y);
             ctx.scale(viewport.scale, viewport.scale);
 
-            const start = getPinWorldPos(activeStart.id);
+            const start = getPinWorldPosRef.current(activeStart.id);
             if (start) {
-                const end = getCanvasLocalPoint(activeEndScreen.x, activeEndScreen.y);
-
+                const end = getCanvasLocalPointRef.current(activeEndScreen.x, activeEndScreen.y);
                 drawEdge(
                     ctx,
                     start.x, start.y,
                     end.x, end.y,
-                    activeStart.ui?.color ?? (theme[`${activeStart.type}Color` as keyof typeof theme] as string) ?? theme.connectionLines,
+                    activeStart.ui?.color ?? (currentTheme[`${activeStart.type}Color` as keyof typeof currentTheme] as string) ?? currentTheme.connectionLines,
                     2 / viewport.scale,
                     activeStart.direction === "input"
                 );
@@ -86,16 +87,11 @@ export const ConnectionLine = ({
         };
 
         const unsubGesture = useGestureStore.subscribe(render);
-        const unsubViewport = useViewportStore.subscribe(render); // Viewport changes (pan/zoom) should also redraw active line
-
-        // Initial check to catch pending state which doesn't trigger store updates
+        const unsubViewport = useViewportStore.subscribe(render);
         render();
 
-        return () => {
-            unsubGesture();
-            unsubViewport();
-        };
-    }, [groupId, getPinWorldPos, getCanvasLocalPoint, theme, pendingConnection, menuPos]);
+        return () => { unsubGesture(); unsubViewport(); };
+    }, [groupId]);
 
     // Handle canvas resizing
     useEffect(() => {

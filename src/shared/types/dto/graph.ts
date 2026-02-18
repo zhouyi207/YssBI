@@ -25,6 +25,17 @@ export interface NodeInstanceDTO {
   uiStyle: string;
   description?: string;
   position: NodePositionDTO;
+  /** 变量节点：绑定的变量 ID */
+  variableId?: string;
+  variableName?: string;
+  variableType?: string;
+  /** 函数/宏调用节点：子图 ID */
+  subGraphId?: string;
+  /** DataFrame 节点：数据帧 ID */
+  dataframeId?: string;
+  /** Get Column 节点：列名、列类型 */
+  columnName?: string;
+  columnType?: string;
 }
 
 // ==================== Pin DTO ====================

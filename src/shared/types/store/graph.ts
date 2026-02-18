@@ -29,6 +29,12 @@ export interface NodeData {
   variableName?: string;
   variableType?: string;
   subGraphId?: string;
+  /** DataFrame 节点：数据帧 ID */
+  dataframeId?: string;
+  /** Get Column 节点：列名 */
+  columnName?: string;
+  /** Get Column 节点：列类型 */
+  columnType?: string;
 }
 
 // ==================== PinData ====================
@@ -83,6 +89,9 @@ export interface RuntimeNodeInput {
   variableName?: string;
   variableType?: string;
   subGraphId?: string;
+  dataframeId?: string;
+  columnName?: string;
+  columnType?: string;
 }
 
 /** 图数据输入（addGraphFromData 等接受 nodes 含 Pin 对象的格式） */

@@ -81,10 +81,8 @@ export function NodePalette({
         }
       }
 
-      // 后端使用 category:name 格式查找节点类型，需保持一致
-      const fullType = [...(node.category || []), node.name].join(':');
       items.push({
-        nodeType: fullType,
+        nodeType: node.nodeType,
         title: node.name,
         category: node.category || [],
       });
