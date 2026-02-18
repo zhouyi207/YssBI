@@ -1,6 +1,7 @@
 use crate::graph::{DataType, GraphId, NodeId, PinId, PinChangeSet};
 use crate::event::{emit_project_event, Event, EventNode, EventConnection};
-use crate::schema::pin::data_type_to_pin_type;
+use crate::event::event_node::InferredPinType;
+use crate::schema::pin::{data_type_to_pin_type, data_type_to_container};
 use crate::schema::PinInstanceDTO;
 use crate::project::ProjectState;
 use crate::log::log_app;
@@ -48,9 +49,13 @@ fn emit_inferred_types(
     if inferred.is_empty() {
         return;
     }
-    let pin_types: Vec<(PinId, String)> = inferred
+    let pin_types: Vec<InferredPinType> = inferred
         .into_iter()
-        .map(|(pin_id, dt)| (pin_id, data_type_to_pin_type(&dt).to_string()))
+        .map(|(pin_id, dt)| InferredPinType {
+            pin_id,
+            pin_type: data_type_to_pin_type(&dt).to_string(),
+            container_type: data_type_to_container(&dt).map(|s| s.to_string()),
+        })
         .collect();
     emit_project_event(
         app,

@@ -46,14 +46,17 @@ pub fn create_node(
     
     // 填充 inputs 和 outputs，并构建 pins DTO 供前端直接使用
     let pin_instances = graph.get_pin_instances_by_node_id(node_id);
+    let data_state = graph.data_state.read().unwrap();
     let mut pins_dto = Vec::with_capacity(pin_instances.len());
     for pin in &pin_instances {
         match pin.definition.direction {
             crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
             crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
         }
-        pins_dto.push(PinInstanceDTO::from(pin));
+        let resolved_type = data_state.pin_types.get(&pin.id);
+        pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type, Vec::new()));
     }
+    drop(data_state);
 
     // 发送节点创建事件（含 pins，便于前端 hydrate）
     emit_project_event(

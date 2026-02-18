@@ -52,7 +52,18 @@ pub enum EventNode {
     #[serde(rename_all = "camelCase")]
     PinTypesInferred {
         graph_id: GraphId,
-        /// (pin_id, resolved_type_string) — type string 与 PinInstanceDTO.pin_type 格式一致
-        pin_types: Vec<(PinId, String)>,
+        pin_types: Vec<InferredPinType>,
     },
+}
+
+/// 单个 pin 的推断结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferredPinType {
+    pub pin_id: PinId,
+    /// 基础类型字符串（用于颜色），如 "float", "int", "string"
+    pub pin_type: String,
+    /// 容器类型（用于形状），如 "array", "dataseries"，基础类型为 None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container_type: Option<String>,
 }

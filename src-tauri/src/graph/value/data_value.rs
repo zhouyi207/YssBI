@@ -44,7 +44,7 @@ impl DataValue {
             DataValue::Object(_) => Some(DataType::Object),
             DataValue::Null => None,
             DataValue::DataFrame(_) => Some(DataType::DataFrame),
-            DataValue::DataSeries(_) => Some(DataType::DataSeries),
+            DataValue::DataSeries(_) => Some(DataType::DataSeries(Box::new(DataType::Any))),
         }
     }
 

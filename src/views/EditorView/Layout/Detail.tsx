@@ -114,13 +114,15 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
               <button
                 onClick={() => {
                   const newPins = [...pins];
-                  newPins[idx] = { ...newPins[idx], isArray: !newPins[idx].isArray };
+                  const current = newPins[idx].containerType;
+                  const next = current === 'array' ? 'dataseries' : current === 'dataseries' ? undefined : 'array';
+                  newPins[idx] = { ...newPins[idx], containerType: next };
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
-                className={`p-1 rounded transition-colors ${pin.isArray ? 'text-blue-400 bg-blue-500/10' : 'text-gray-500 hover:bg-white/5'}`}
-                title="Toggle Array"
+                className={`p-1 rounded transition-colors ${pin.containerType ? 'text-blue-400 bg-blue-500/10' : 'text-gray-500 hover:bg-white/5'}`}
+                title={`Container: ${pin.containerType ?? 'none'} (click to cycle)`}
               >
-                <span className="text-[9px] font-black">[]</span>
+                <span className="text-[9px] font-black">{pin.containerType === 'dataseries' ? '◇' : pin.containerType === 'array' ? '[]' : '·'}</span>
               </button>
               <button
                 onClick={() => {

@@ -55,7 +55,7 @@ export function syncInternalNodePins(node: Node, subGraphPins: GraphPinDef[], is
             nodeId: node.id,
             name: p.name,
             type: p.type as any,
-            isArray: p.isArray,
+            containerType: p.containerType,
             direction: (isInputNode ? "output" : "input") as any,
             links: existingPin ? existingPin.links : []
         };
@@ -82,7 +82,7 @@ export function syncGraphInstanceNodes(nodes: any[], subGraphId: string, inputs?
             const newDataPins = newPinDefs.map(newDef => {
                 const newPinId = `${newNode.id}_${direction === 'input' ? 'in' : 'out'}_${newDef.id}`;
                 const existingPin = dataPins.find((p: any) => p.id === newPinId) || dataPins.find((p: any) => p.name === newDef.name && p.type === newDef.type);
-                return { id: newPinId, nodeId: newNode.id, name: newDef.name, type: newDef.type as any, isArray: newDef.isArray, direction, links: existingPin ? existingPin.links : [] };
+                return { id: newPinId, nodeId: newNode.id, name: newDef.name, type: newDef.type as any, containerType: newDef.containerType, direction, links: existingPin ? existingPin.links : [] };
             });
             return [...execPins, ...newDataPins];
         };

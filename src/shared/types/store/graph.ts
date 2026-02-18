@@ -48,7 +48,7 @@ export interface PinData {
   links: string[];
   defaultValue?: unknown;
   userValue?: unknown;
-  isArray?: boolean;
+  containerType?: string;
   ui?: PinUI;
 }
 

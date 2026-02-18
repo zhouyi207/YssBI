@@ -22,6 +22,13 @@ fn is_type_compatible(value_type: Option<DataType>, expected: &DataType) -> bool
                 false
             }
         }
+        DataType::DataSeries(inner) => {
+            if let DataType::DataSeries(v_inner) = vt {
+                is_type_compatible(Some(*v_inner), inner)
+            } else {
+                false
+            }
+        }
         _ => vt == *expected,
     }
 }

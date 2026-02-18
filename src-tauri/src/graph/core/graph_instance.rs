@@ -9,7 +9,7 @@
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
 use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
-use crate::graph::pin::{PinId, PinInstance, PinRole, PinDirection};
+use crate::graph::pin::{PinId, PinInstance, PinKind, PinRole, PinDirection};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
 use crate::graph::{DataType, GraphId};
@@ -142,12 +142,25 @@ impl GraphInstance {
         let node_id = result.node.id;
 
         let mut node = result.node.with_position(x, y);
-        if let Some(p) = params {
-            node = node.with_instance_params(p);
+        if let Some(ref p) = params {
+            node = node.with_instance_params(p.clone());
         }
+
+        // 根据 instance_params 中的类型信息设置数据 pin 的具体类型
+        let variable_data_type = params
+            .as_ref()
+            .and_then(|p| p.variable_type.as_deref())
+            .and_then(|vt| vt.parse::<DataType>().ok());
 
         {
             let mut data_state = self.data_state.write().unwrap();
+            if let Some(ref dt) = variable_data_type {
+                for pin in &result.pins {
+                    if pin.definition.kind == PinKind::Data {
+                        data_state.pin_types.insert(pin.id, dt.clone());
+                    }
+                }
+            }
             data_state.add_node(node);
             data_state.add_pins(result.pins);
         }

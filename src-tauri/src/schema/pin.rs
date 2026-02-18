@@ -19,18 +19,28 @@ const DEFAULT_COLORS: &[(&str, &str)] = &[
     ("array", "#d19a66"),
 ];
 
-/// 将 DataType 映射为前端期望的 pin type 字符串（exec, int, float, bool, string 等）
+/// 将 DataType 映射为前端期望的基础 pin type 字符串（用于颜色）
+/// 容器类型（Array, DataSeries）会递归到内部类型
 pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
     match dt {
         DataType::Boolean => "bool",
         DataType::Int32 | DataType::Int64 => "int",
         DataType::Float32 | DataType::Float64 => "float",
         DataType::String => "string",
-        DataType::Array(_) => "array",
+        DataType::Array(inner) => data_type_to_pin_type(inner),
         DataType::Object => "object",
         DataType::Any => "any",
         DataType::DataFrame => "dataframe",
-        DataType::DataSeries => "dataseries",
+        DataType::DataSeries(inner) => data_type_to_pin_type(inner),
+    }
+}
+
+/// 返回容器类型字符串（用于前端 pin 形状）
+pub fn data_type_to_container(dt: &DataType) -> Option<&'static str> {
+    match dt {
+        DataType::Array(_) => Some("array"),
+        DataType::DataSeries(_) => Some("dataseries"),
+        _ => None,
     }
 }
 
@@ -78,7 +88,7 @@ pub struct PinInstanceDTO {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_array: Option<bool>,
+    pub container_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui: Option<PinUIDTO>,
 }
@@ -92,18 +102,22 @@ impl PinInstanceDTO {
         resolved_type: Option<&DataType>,
         links: Vec<PinId>,
     ) -> Self {
+        let dt = match pin.definition.kind {
+            PinKind::Exec => None,
+            PinKind::Data => resolved_type
+                .cloned()
+                .or_else(|| pin.definition.data_type.as_ref().and_then(definition_to_data_type)),
+        };
+
         let pin_type = match pin.definition.kind {
             PinKind::Exec => "exec".to_string(),
-            PinKind::Data => {
-                let dt = resolved_type
-                    .cloned()
-                    .or_else(|| pin.definition.data_type.as_ref().and_then(definition_to_data_type));
-                match &dt {
-                    Some(d) => data_type_to_pin_type(d).to_string(),
-                    None => "object".to_string(), // any/unknown 映射为 object
-                }
-            }
+            PinKind::Data => match &dt {
+                Some(d) => data_type_to_pin_type(d).to_string(),
+                None => "object".to_string(),
+            },
         };
+
+        let container_type = dt.as_ref().and_then(|d| data_type_to_container(d).map(|s| s.to_string()));
 
         Self {
             id: pin.id,
@@ -114,7 +128,7 @@ impl PinInstanceDTO {
             links,
             default_value: None,
             user_value: pin.user_value.clone(),
-            is_array: None,
+            container_type,
             ui: None,
         }
     }

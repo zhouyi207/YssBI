@@ -17,17 +17,21 @@ export type DataType =
   | { kind: 'Object' }
   | { kind: 'Any' }
   | { kind: 'DataFrame' }
-  | { kind: 'Array'; inner: DataType };
+  | { kind: 'Array'; inner: DataType }
+  | { kind: 'DataSeries'; inner: DataType };
 
 /** 获取 DataType 的 kind 字符串 */
 export function dataTypeKind(dt: DataType): string {
   return dt.kind;
 }
 
-/** 将 DataType 转为显示字符串，如 "Int32"、"Array<String>" */
+/** 将 DataType 转为显示字符串，如 "Int32"、"Array<String>"、"DataSeries<Float64>" */
 export function dataTypeDisplay(dt: DataType): string {
   if (dt.kind === 'Array') {
     return `Array<${dataTypeDisplay(dt.inner)}>`;
+  }
+  if (dt.kind === 'DataSeries') {
+    return `DataSeries<${dataTypeDisplay(dt.inner)}>`;
   }
   return dt.kind;
 }
@@ -37,6 +41,9 @@ export function dataTypeFromKey(key: string, inner?: DataType): DataType {
   const k = key as DataType['kind'];
   if (k === 'Array') {
     return { kind: 'Array', inner: inner ?? { kind: 'Any' } };
+  }
+  if (k === 'DataSeries') {
+    return { kind: 'DataSeries', inner: inner ?? { kind: 'Any' } };
   }
   return { kind: k };
 }
@@ -50,7 +57,7 @@ export function isPrimitiveType(dataType: DataType): boolean {
 
 /** 检查数据类型是否为复杂类型 */
 export function isComplexType(dataType: DataType): boolean {
-  return ['DataFrame', 'Object', 'Array'].includes(dataType.kind);
+  return ['DataFrame', 'DataSeries', 'Object', 'Array'].includes(dataType.kind);
 }
 
 /** 获取数据类型的默认值 */
@@ -107,6 +114,8 @@ export function dataTypeFromPinType(pinType: string): DataType {
       return { kind: 'DataFrame' };
     case 'array':
       return { kind: 'Array', inner: { kind: 'Any' } };
+    case 'dataseries':
+      return { kind: 'DataSeries', inner: { kind: 'Any' } };
     case 'any':
     default:
       return { kind: 'String' }; // 文本输入默认按 String 处理

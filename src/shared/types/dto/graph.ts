@@ -56,7 +56,7 @@ export interface PinInstanceDTO {
   links: string[];
   defaultValue?: unknown;
   userValue?: unknown;
-  isArray?: boolean;
+  containerType?: string;
   ui?: PinUIDTO;
 }
 

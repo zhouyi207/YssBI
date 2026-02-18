@@ -12,7 +12,7 @@ export interface VariableDropMenu {
   variableId: string;
   variableName: string;
   variableType: string;
-  variableIsArray?: boolean;
+  containerType?: string;
 }
 
 interface UseCanvasDropParams {
@@ -182,7 +182,7 @@ export function useCanvasDrop({
           variableId: dragState.template.variableId,
           variableName: dragState.template.variableName,
           variableType: dragState.template.variableType,
-          variableIsArray: dragState.template.variableIsArray,
+          containerType: dragState.template.containerType,
         });
         return;
       }

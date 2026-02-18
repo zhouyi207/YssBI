@@ -21,7 +21,7 @@ pub enum DataType {
 
     // 数据框架
     DataFrame,
-    DataSeries,
+    DataSeries(Box<DataType>),
 
     // 特殊类型
     Any,
@@ -39,7 +39,7 @@ impl fmt::Display for DataType {
             DataType::Array(inner) => write!(f, "Array<{}>", inner),
             DataType::Object => write!(f, "Object"),
             DataType::DataFrame => write!(f, "DataFrame"),
-            DataType::DataSeries => write!(f, "DataSeries"),
+            DataType::DataSeries(inner) => write!(f, "DataSeries<{}>", inner),
             DataType::Any => write!(f, "Any"),
         }
     }
@@ -58,12 +58,16 @@ impl FromStr for DataType {
             "String" => Ok(DataType::String),
             "Object" => Ok(DataType::Object),
             "DataFrame" => Ok(DataType::DataFrame),
-            "DataSeries" => Ok(DataType::DataSeries),
+            "DataSeries" => Ok(DataType::DataSeries(Box::new(DataType::Any))),
             "Any" => Ok(DataType::Any),
             _ => {
                 if let Some(inner) = s.strip_prefix("Array<").and_then(|s| s.strip_suffix('>')) {
                     let inner = inner.parse()?;
                     return Ok(DataType::Array(Box::new(inner)));
+                }
+                if let Some(inner) = s.strip_prefix("DataSeries<").and_then(|s| s.strip_suffix('>')) {
+                    let inner = inner.parse()?;
+                    return Ok(DataType::DataSeries(Box::new(inner)));
                 }
                 Err(format!("Unknown DataType: {}", s))
             }
@@ -83,7 +87,7 @@ impl DataType {
             DataType::String => DataValue::String(String::new()),
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),
-            DataType::Any | DataType::DataFrame | DataType::DataSeries => DataValue::Null,
+            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) => DataValue::Null,
         }
     }
 
@@ -130,6 +134,14 @@ impl DataType {
     pub fn array_inner(&self) -> Option<&DataType> {
         match self {
             DataType::Array(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// DataSeries 的元素类型，非 DataSeries 返回 None
+    pub fn series_inner(&self) -> Option<&DataType> {
+        match self {
+            DataType::DataSeries(inner) => Some(inner),
             _ => None,
         }
     }

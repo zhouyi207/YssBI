@@ -49,6 +49,6 @@ export interface Pin {
     links: string[];            // 连接的其他 Pin ID 列表
     defaultValue?: unknown;     // 默认值（数据针脚）
     userValue?: unknown;        // 用户设置的值（覆盖默认值）
-    isArray?: boolean;          // 是否为数组/List 类型
+    containerType?: string;     // 容器类型: "array" | "dataseries"，决定 pin 形状
     ui?: PinUI;                 // UI 配置
 }

@@ -118,7 +118,38 @@ impl TypeInferenceContext {
         };
         self.unify(&a, &b)?;
 
+        // 细化容器类型中的 Any 内部类型
+        if let (PinDataTypeInference::Concrete(from_dt), PinDataTypeInference::Concrete(to_dt)) =
+            (&a, &b)
+        {
+            if let Some(refined) = Self::refine_inner_any(to_dt, from_dt) {
+                self.pin_types
+                    .insert(to, PinDataTypeInference::Concrete(refined));
+            }
+            if let Some(refined) = Self::refine_inner_any(from_dt, to_dt) {
+                self.pin_types
+                    .insert(from, PinDataTypeInference::Concrete(refined));
+            }
+        }
+
         Ok(())
+    }
+
+    /// 当 target 容器内部为 Any 而 source 有具体类型时，返回细化后的类型
+    fn refine_inner_any(target: &DataType, source: &DataType) -> Option<DataType> {
+        match (target, source) {
+            (DataType::DataSeries(t_inner), DataType::DataSeries(s_inner))
+                if **t_inner == DataType::Any && **s_inner != DataType::Any =>
+            {
+                Some(DataType::DataSeries(s_inner.clone()))
+            }
+            (DataType::Array(t_inner), DataType::Array(s_inner))
+                if **t_inner == DataType::Any && **s_inner != DataType::Any =>
+            {
+                Some(DataType::Array(s_inner.clone()))
+            }
+            _ => None,
+        }
     }
 
     /// 推断完成后提交结果（写回 TypeVarInference.bound）
@@ -283,14 +314,22 @@ impl TypeInferenceContext {
         }
     }
 
-    /// 值类型兼容性
+    /// 值类型兼容性（递归处理容器类型）
     fn is_value_type_compatible(&self, from: &DataType, to: &DataType) -> bool {
-        from == to
-            || matches!(to, DataType::Any)
-            || matches!(
-                (from, to),
-                (DataType::Int64, DataType::Float64) | (DataType::Float64, DataType::Int64)
-            )
+        if from == to {
+            return true;
+        }
+        if matches!(to, DataType::Any) || matches!(from, DataType::Any) {
+            return true;
+        }
+        match (from, to) {
+            (DataType::Int64, DataType::Float64) | (DataType::Float64, DataType::Int64) => true,
+            (DataType::Array(a), DataType::Array(b)) => self.is_value_type_compatible(a, b),
+            (DataType::DataSeries(a), DataType::DataSeries(b)) => {
+                self.is_value_type_compatible(a, b)
+            }
+            _ => false,
+        }
     }
 
     fn get_pin_type(&self, pin_id: PinId) -> Result<&PinDataTypeInference, String> {

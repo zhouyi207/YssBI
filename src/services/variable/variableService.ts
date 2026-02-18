@@ -35,11 +35,17 @@ export class VariableService {
   }
 
   /**
-   * 更新变量（后端 update_variable 当前为占位实现）
+   * 更新变量（部分字段）
    */
-  static async updateVariable(_id: string, _variable: Variable): Promise<void> {
-    // TODO: 后端 update_variable 待实现
-    console.warn('[VariableService] updateVariable not yet implemented in backend');
+  static async updateVariable(id: string, patch: Partial<Variable>): Promise<void> {
+    await invoke('update_variable', {
+      variableId: id,
+      name: patch.name ?? null,
+      dataType: patch.dataType ? dataTypeToBackend(patch.dataType) : null,
+      dataValue: patch.dataValue ? dataValueToBackend(patch.dataValue) : null,
+      description: patch.description ?? null,
+      tags: patch.tags ?? null,
+    });
   }
 
   /**

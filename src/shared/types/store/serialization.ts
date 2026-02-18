@@ -14,7 +14,7 @@ export interface SerializedPin {
   type: string;
   defaultValue?: unknown;
   userValue?: unknown;
-  isArray?: boolean;
+  containerType?: string;
 }
 
 /** 序列化后的节点（camelCase 与后端 DTO 一致） */

@@ -61,7 +61,7 @@ fn register_get_column(registry: &NodeRegistry) {
                 PinDefinition::data_output(
                     "Column",
                     DataRole::Output,
-                    PinDataTypeDefinition::concrete(DataType::DataSeries),
+                    PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                 ),
             ])
         }))
@@ -125,7 +125,7 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
                         PinDefinition::data_output(
                             &col.name,
                             DataRole::Custom(col.name.clone()),
-                            PinDataTypeDefinition::concrete(DataType::DataSeries),
+                            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(col.data_type.clone()))),
                         )
                         .with_dynamic(true),
                     );

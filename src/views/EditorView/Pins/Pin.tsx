@@ -22,12 +22,13 @@ export interface PinProps extends PinModel {
   onValueChange?: (pinId: string, value: unknown) => void;
 }
 
-// 提取主题逻辑，避免每次渲染都创建新对象
-const getPinTheme = (type: string, isConnected: boolean, baseColor: string, isArray?: boolean) => {
+const getPinTheme = (type: string, isConnected: boolean, baseColor: string, containerType?: string) => {
   const isExec = type === "exec";
+  const isDataFrame = type === "dataframe";
   return {
     isExec,
-    isArray: !!isArray,
+    isDataFrame,
+    containerType,
     fill: isConnected
       ? baseColor
       : isExec
@@ -51,7 +52,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     onPinClick,
     onPinPointerDown,
     isActive,
-    isArray,
+    containerType,
     defaultValue,
     userValue,  // 🆕 添加 userValue
     onValueChange,
@@ -62,10 +63,9 @@ export const Pin: React.FC<PinProps> = (props) => {
   const themeColor = appTheme[`${type}Color` as keyof typeof appTheme] as string | undefined;
   const baseColor = ui?.color ?? themeColor ?? "#CCCCCC";
 
-  // 使用 useMemo 缓存主题计算结果
   const theme = useMemo(
-    () => getPinTheme(type, isConnected, baseColor, isArray),
-    [type, isConnected, baseColor, isArray]
+    () => getPinTheme(type, isConnected, baseColor, containerType),
+    [type, isConnected, baseColor, containerType]
   );
 
   // 判断是否显示输入控件
@@ -115,7 +115,6 @@ export const Pin: React.FC<PinProps> = (props) => {
           style={{ display: "block" }}
         >
           {theme.isExec ? (
-            // 更接近 UE 的五角形 Exec 路径
             <path
               d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
               fill={theme.fill}
@@ -123,8 +122,13 @@ export const Pin: React.FC<PinProps> = (props) => {
               strokeWidth={theme.strokeWidth}
               strokeLinejoin="miter"
             />
-          ) : theme.isArray ? (
-            // 数组/List 显示为圆角矩形
+          ) : theme.isDataFrame ? (
+            <g>
+              <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={theme.fill} stroke={theme.stroke} strokeWidth={theme.strokeWidth} />
+              <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={theme.stroke} strokeWidth="0.8" />
+              <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={theme.stroke} strokeWidth="0.8" />
+            </g>
+          ) : theme.containerType === "array" ? (
             <rect
               x="2"
               y="2"
@@ -134,6 +138,14 @@ export const Pin: React.FC<PinProps> = (props) => {
               fill={theme.fill}
               stroke={theme.stroke}
               strokeWidth={theme.strokeWidth}
+            />
+          ) : theme.containerType === "dataseries" ? (
+            <polygon
+              points="6,1 11,6 6,11 1,6"
+              fill={theme.fill}
+              stroke={theme.stroke}
+              strokeWidth={theme.strokeWidth}
+              strokeLinejoin="miter"
             />
           ) : (
             <circle

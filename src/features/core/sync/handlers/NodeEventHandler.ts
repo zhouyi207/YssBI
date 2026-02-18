@@ -137,8 +137,8 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
         this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphId);
 
         const store = useGraphDataStore.getState();
-        for (const [pinId, resolvedType] of payload.pinTypes) {
-            store.updatePin(pinId, { type: resolvedType });
+        for (const { pinId, pinType, containerType } of payload.pinTypes) {
+            store.updatePin(pinId, { type: pinType, containerType: containerType ?? undefined });
         }
     }
 }

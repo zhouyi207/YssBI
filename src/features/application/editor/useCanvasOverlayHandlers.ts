@@ -23,7 +23,7 @@ export interface VariableDropMenu {
   variableId: string;
   variableName: string;
   variableType: string;
-  variableIsArray?: boolean;
+  containerType?: string;
 }
 
 /**

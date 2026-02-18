@@ -38,6 +38,21 @@ impl<'g> TypeInferenceSession<'g> {
         for pin_instance in data_state.pins.values() {
             self.ctx.register_pin_type(pin_instance.clone());
         }
+
+        // 3. 用 data_state.pin_types 中已有的具体类型覆盖定义中的 Any
+        //    （如 variable 节点创建时根据 instance_params 设定的 pin 类型）
+        for (&pin_id, resolved) in data_state.pin_types.iter() {
+            if *resolved == DataType::Any {
+                continue;
+            }
+            if let Some(existing) = self.ctx.pin_types.get(&pin_id) {
+                if matches!(existing, PinDataTypeInference::Concrete(DataType::Any)) {
+                    self.ctx
+                        .pin_types
+                        .insert(pin_id, PinDataTypeInference::Concrete(resolved.clone()));
+                }
+            }
+        }
     }
 
     /// 推断整张图（全量）

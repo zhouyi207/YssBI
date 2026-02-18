@@ -71,8 +71,13 @@ export function useVariableManagement() {
     }
   }, [activeTabId, graphType, switchSidebarTab]);
 
-  const updateVariable = useCallback((id: string, data: Partial<Variable>) => {
+  const updateVariable = useCallback(async (id: string, data: Partial<Variable>) => {
     useVariableStore.getState().updateVariable(id, data);
+    try {
+      await VariableService.updateVariable(id, data);
+    } catch (e) {
+      console.error('[useVariableManagement] Failed to update variable in backend:', e);
+    }
   }, []);
 
   const deleteVariable = useCallback((id: string) => {

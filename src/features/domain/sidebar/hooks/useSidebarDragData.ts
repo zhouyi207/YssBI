@@ -17,7 +17,9 @@ export function buildSidebarDragData(
         ? dt
         : dataTypeDisplay(dt)
       : undefined;
-    const isArray = dt && typeof dt === "object" && "kind" in dt && dt.kind === "Array";
+    const containerType = dt && typeof dt === "object" && "kind" in dt
+      ? dt.kind === "Array" ? "array" : dt.kind === "DataSeries" ? "dataseries" : undefined
+      : undefined;
     return {
       type: "node-template",
       template: {
@@ -26,7 +28,7 @@ export function buildSidebarDragData(
         variableId: id,
         variableName: name,
         variableType,
-        variableIsArray: isArray,
+        containerType,
       },
     };
   }

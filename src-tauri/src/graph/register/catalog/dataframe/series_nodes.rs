@@ -30,7 +30,7 @@ fn register_get_dataseries(registry: &NodeRegistry) {
                 PinDefinition::data_output(
                     "Series",
                     DataRole::Output,
-                    PinDataTypeDefinition::concrete(DataType::DataSeries),
+                    PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                 ),
             ])
         }))
@@ -77,7 +77,7 @@ fn register_series_length(registry: &NodeRegistry) {
                     PinDefinition::data_input(
                         "Series",
                         DataRole::Input,
-                        PinDataTypeDefinition::concrete(DataType::DataSeries),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                     ),
                     PinDefinition::data_output(
                         "Length",
@@ -118,7 +118,7 @@ fn register_series_sum(registry: &NodeRegistry) {
                     PinDefinition::data_input(
                         "Series",
                         DataRole::Input,
-                        PinDataTypeDefinition::concrete(DataType::DataSeries),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                     ),
                     PinDefinition::data_output(
                         "Sum",
@@ -166,7 +166,7 @@ fn register_series_mean(registry: &NodeRegistry) {
                     PinDefinition::data_input(
                         "Series",
                         DataRole::Input,
-                        PinDataTypeDefinition::concrete(DataType::DataSeries),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                     ),
                     PinDefinition::data_output(
                         "Mean",

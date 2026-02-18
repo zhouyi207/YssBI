@@ -55,7 +55,7 @@ export function serializeGraph(
     type: p.type,
     defaultValue: p.defaultValue,
     userValue: p.userValue,
-    isArray: p.isArray,
+    containerType: p.containerType,
   });
 
   // 2. 序列化节点（不包含 links 字段）
