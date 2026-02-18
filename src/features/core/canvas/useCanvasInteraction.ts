@@ -158,6 +158,31 @@ export function useCanvasInteraction({
                 nextGesture = { ...g, lastX: e.clientX, lastY: e.clientY, moved: true };
             } else if (g.type === "select") {
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY };
+                // 实时选择：拖拽过程中立即更新框选中的节点（优化：避免重复更新、避免重反序列化）
+                const x1 = Math.min(g.startX, e.clientX), y1 = Math.min(g.startY, e.clientY);
+                const x2 = Math.max(g.startX, e.clientX), y2 = Math.max(g.startY, e.clientY);
+                const gid = g.groupId || activeGroupIdRef.current;
+                const graphData = getGraphById(activeTabIdRef.current || "");
+                const currentNodes = graphData?.nodes ?? [];
+                const newSelectedIds: string[] = [];
+                for (const n of currentNodes) {
+                    const nodeId = (n as { id?: string }).id;
+                    if (!nodeId) continue;
+                    const el = document.getElementById(nodeId);
+                    if (!el) continue;
+                    const r = el.getBoundingClientRect();
+                    if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
+                        newSelectedIds.push(nodeId);
+                    }
+                }
+                // 仅当选择结果变化时才更新，减少不必要的 re-render
+                const layoutNode = useLayoutStore.getState().nodes[gid];
+                const current = layoutNode?.data?.params?.selectedNodeIds ?? [];
+                const newSet = new Set(newSelectedIds);
+                const curSet = new Set(current);
+                if (newSet.size !== curSet.size || [...newSet].some((id) => !curSet.has(id))) {
+                    setSelectedNodeIds(newSelectedIds, gid);
+                }
             }
             else if (g.type === "connect") {
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY };
@@ -213,16 +238,19 @@ export function useCanvasInteraction({
                 const x1 = Math.min(rect.startX, rect.currentX), y1 = Math.min(rect.startY, rect.currentY);
                 const x2 = Math.max(rect.startX, rect.currentX), y2 = Math.max(rect.startY, rect.currentY);
                 const gid = g.groupId || activeGroupIdRef.current;
-                const newSelectedIds: string[] = [];
-
                 const graphData = getGraphById(activeTabIdRef.current || "");
-                const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
-                currentNodes.forEach((n: any) => {
-                    const el = document.getElementById(n.id); if (!el) return;
+                const currentNodes = graphData?.nodes ?? [];
+                const newSelectedIds: string[] = [];
+                for (const n of currentNodes) {
+                    const nodeId = (n as { id?: string }).id;
+                    if (!nodeId) continue;
+                    const el = document.getElementById(nodeId);
+                    if (!el) continue;
                     const r = el.getBoundingClientRect();
-                    const overlap = !(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1);
-                    if (overlap) newSelectedIds.push(n.id);
-                });
+                    if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
+                        newSelectedIds.push(nodeId);
+                    }
+                }
                 setSelectedNodeIds(newSelectedIds, gid);
             } else if (g.type === "connect") {
                 const target = (e.target as HTMLElement).closest("[data-pin-id]");

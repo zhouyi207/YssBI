@@ -24,7 +24,7 @@ export const SelectionBox = ({ canvasRef }: { canvasRef: React.RefObject<HTMLDiv
 
     return (
         <div
-            className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
+            className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
             style={{
                 left: x1 - rect.left,
                 top: y1 - rect.top,

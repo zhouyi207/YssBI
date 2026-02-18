@@ -74,7 +74,7 @@ export const Edge = React.memo<EdgeProps>(({
         stroke={isActive ? "#facc15" : color}
         strokeWidth={isActive ? thickness + 1 : thickness}
         strokeLinecap="round"
-        className="pointer-events-none transition-all duration-200"
+        className="pointer-events-none"
       />
       
       {/* 🆕 流动动画 */}

@@ -129,7 +129,7 @@ export default function CanvasOverlays({
             {/* ================= Selection Box ================= */}
             {gesture?.type === 'select' && canvasRef.current && (
                 <div
-                    className="absolute border border-[var(--accent-color)] bg-[var(--selection-region)] pointer-events-none z-50"
+                    className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
                     style={{
                         left:
                             Math.min(gesture.startX, gesture.currentX) -
