@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+fn default_csv_delimiter() -> char {
+    ','
+}
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseDeclDTO {
@@ -32,8 +39,11 @@ pub enum DatabaseEngineDTO {
     /// CSV file
     Csv {
         path: String,
+        #[serde(default = "default_csv_delimiter")]
         delimiter: char,
+        #[serde(default = "default_true", rename = "hasHeader")]
         has_header: bool,
+        #[serde(default, rename = "inferSchemaLength")]
         infer_schema_length: Option<usize>,
     },
 
@@ -99,6 +109,60 @@ impl From<&crate::database::DatabaseEngineSql> for DatabaseEngineSqlDTO {
             }
             crate::database::DatabaseEngineSql::Mysql { charset } => {
                 DatabaseEngineSqlDTO::Mysql { charset: charset.clone() }
+            }
+        }
+    }
+}
+
+impl TryFrom<DatabaseEngineSqlDTO> for crate::database::DatabaseEngineSql {
+    type Error = String;
+
+    fn try_from(dto: DatabaseEngineSqlDTO) -> Result<Self, Self::Error> {
+        match dto {
+            DatabaseEngineSqlDTO::Sqlite { auto_create } => {
+                Ok(crate::database::DatabaseEngineSql::Sqlite { auto_create })
+            }
+            DatabaseEngineSqlDTO::Postgres { ssl } => {
+                Ok(crate::database::DatabaseEngineSql::Postgres { ssl })
+            }
+            DatabaseEngineSqlDTO::Mysql { charset } => {
+                Ok(crate::database::DatabaseEngineSql::Mysql { charset })
+            }
+        }
+    }
+}
+
+impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
+    type Error = String;
+
+    fn try_from(dto: DatabaseEngineDTO) -> Result<Self, Self::Error> {
+        match dto {
+            DatabaseEngineDTO::Csv {
+                path,
+                delimiter,
+                has_header,
+                infer_schema_length,
+            } => Ok(crate::database::DatabaseEngine::Csv {
+                path,
+                delimiter,
+                has_header,
+                infer_schema_length,
+            }),
+            DatabaseEngineDTO::Parquet { path, columns } => {
+                Ok(crate::database::DatabaseEngine::Parquet { path, columns })
+            }
+            DatabaseEngineDTO::Sql {
+                engine,
+                connection_string,
+            } => {
+                let engine = crate::database::DatabaseEngineSql::try_from(engine)?;
+                Ok(crate::database::DatabaseEngine::Sql {
+                    engine,
+                    connection_string,
+                })
+            }
+            DatabaseEngineDTO::InMemory { name } => {
+                Ok(crate::database::DatabaseEngine::InMemory { name })
             }
         }
     }

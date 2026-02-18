@@ -1,8 +1,14 @@
+use crate::execution::ExecutionDataStore;
+use crate::graph::node::NodeInstanceParams;
 use crate::graph::NodeDefinition;
 use crate::graph::{DataType, DataValue, GraphInstance, PinInstance, PinRole};
 use crate::graph::{NodeId, NodeRuntimeState, PinId, PinRuntimeState};
+use crate::project::{ProjectData, ProjectStore};
+use crate::variable::VariableId;
+use polars::prelude::{DataFrame, Series};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 pub struct GraphRuntime {
     graph_instance: Arc<GraphInstance>,
@@ -12,17 +18,40 @@ pub struct GraphRuntime {
 
     // 运行期 node 状态
     nodes_runtime_state: HashMap<NodeId, NodeRuntimeState>,
+
+    // 执行期数据缓存（中间 DataFrame / Series）
+    data_store: ExecutionDataStore,
+
+    // 项目数据引用（变量、数据库元数据）
+    project_data: Arc<RwLock<ProjectData>>,
+
+    // 项目运行时存储引用（原始 DataFrame 实例）
+    project_store: Arc<RwLock<ProjectStore>>,
 }
 
-/// output data 是无法设置值的
 impl GraphRuntime {
-    pub fn new(graph_instance: Arc<GraphInstance>) -> Self {
-        // 在这里需要解析获取 pins_runtime_state 和 nodes_runtime_state
+    pub fn new(
+        graph_instance: Arc<GraphInstance>,
+        project_data: Arc<RwLock<ProjectData>>,
+        project_store: Arc<RwLock<ProjectStore>>,
+    ) -> Self {
         Self {
             graph_instance,
             pins_runtime_state: HashMap::new(),
             nodes_runtime_state: HashMap::new(),
+            data_store: ExecutionDataStore::new(),
+            project_data,
+            project_store,
         }
+    }
+
+    /// 简化构造（用于测试等不需要项目数据的场景）
+    pub fn new_standalone(graph_instance: Arc<GraphInstance>) -> Self {
+        Self::new(
+            graph_instance,
+            Arc::new(RwLock::new(ProjectData::default())),
+            Arc::new(RwLock::new(ProjectStore::default())),
+        )
     }
 
     pub fn set_pin_current_value(&mut self, pin_id: PinId, value: DataValue) {
@@ -169,9 +198,95 @@ impl GraphRuntime {
         None
     }
 
-    pub fn get_pin() {}
+    // ========================================================================
+    // 节点实例参数
+    // ========================================================================
 
-    pub fn get_node() {}
+    pub fn get_node_instance_params(&self, node_id: NodeId) -> NodeInstanceParams {
+        self.graph_instance
+            .get_node_instance_by_node_id(node_id)
+            .map(|n| n.instance_params.clone())
+            .unwrap_or_default()
+    }
 
-    pub fn get_pin_by_role() {}
+    // ========================================================================
+    // 执行期数据缓存操作
+    // ========================================================================
+
+    /// 获取 DataFrame：先查执行缓存，再查 ProjectStore 原始数据
+    pub fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String> {
+        // 1. 先从执行缓存查找
+        if let Some(df) = self.data_store.get_dataframe(id) {
+            return Ok(df);
+        }
+
+        // 2. 再从 ProjectStore 原始数据库加载
+        let mut store = self.project_store.write().map_err(|e| e.to_string())?;
+        if let Some(db_instance) = store.databases.get_mut(id) {
+            let df = db_instance
+                .ensure_loaded()
+                .map_err(|e| format!("Failed to load database '{}': {}", id, e))?;
+            let arc_df = Arc::new(df.clone());
+            // 缓存到执行存储中，后续访问不再触发 IO
+            self.data_store
+                .put_dataframe_with_id(id.to_string(), arc_df.clone());
+            return Ok(arc_df);
+        }
+
+        Err(format!("DataFrame '{}' not found", id))
+    }
+
+    /// 存入中间 DataFrame，返回引用 ID
+    pub fn put_dataframe(&mut self, df: DataFrame) -> String {
+        self.data_store.put_dataframe(df)
+    }
+
+    /// 获取 Series：从执行缓存查找
+    pub fn get_series(&self, id: &str) -> Result<Series, String> {
+        self.data_store
+            .get_series(id)
+            .cloned()
+            .ok_or_else(|| format!("Series '{}' not found", id))
+    }
+
+    /// 存入中间 Series，返回引用 ID
+    pub fn put_series(&mut self, s: Series) -> String {
+        self.data_store.put_series(s)
+    }
+
+    // ========================================================================
+    // 变量操作
+    // ========================================================================
+
+    /// 读取变量值
+    pub fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {
+        let var_id = Self::parse_variable_id(variable_id)?;
+        let data = self.project_data.read().map_err(|e| e.to_string())?;
+        data.variables
+            .get(&var_id)
+            .map(|v| v.data_value.clone())
+            .ok_or_else(|| format!("Variable '{}' not found", variable_id))
+    }
+
+    /// 写入变量值
+    pub fn set_variable_value(
+        &self,
+        variable_id: &str,
+        value: DataValue,
+    ) -> Result<(), String> {
+        let var_id = Self::parse_variable_id(variable_id)?;
+        let mut data = self.project_data.write().map_err(|e| e.to_string())?;
+        let var = data
+            .variables
+            .get_mut(&var_id)
+            .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+        var.data_value = value;
+        Ok(())
+    }
+
+    fn parse_variable_id(id: &str) -> Result<VariableId, String> {
+        let uuid = Uuid::parse_str(id)
+            .map_err(|e| format!("Invalid variable ID '{}': {}", id, e))?;
+        Ok(VariableId::from(uuid))
+    }
 }

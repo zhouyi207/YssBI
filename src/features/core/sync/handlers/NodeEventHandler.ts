@@ -2,10 +2,19 @@
 // 按 README 范式：Handler 直接更新 Store，callbacks 仅用于可选 UI 扩展
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, EventCallbacks } from '../types';
+import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
+
+function resolveNodeTitle(dto: NodeInstanceDTO): string {
+    const raw = dto.title ?? '';
+    const nodeType = dto.nodeType ?? '';
+    if (raw && raw !== nodeType) return raw;
+    const def = useNodeRegistryStore.getState().getDefinition(nodeType);
+    return def?.name ?? raw ?? nodeType;
+}
 
 export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
     eventType = 'NodeCreated';
@@ -28,7 +37,7 @@ function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): Nod
         graphId,
         nodeType: d.nodeType,
         category: d.category ?? [],
-        title: d.title ?? '',
+        title: resolveNodeTitle(d),
         inputs: d.inputs ?? [],
         outputs: d.outputs ?? [],
         uiStyle: d.uiStyle ?? 'default',
@@ -118,5 +127,18 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
                 pin: pin as PinData,
             })),
         });
+    }
+}
+
+export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPayload> {
+    eventType = 'PinTypesInferred';
+
+    handle(payload: PinTypesInferredPayload, _callbacks?: EventCallbacks): void {
+        this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphId);
+
+        const store = useGraphDataStore.getState();
+        for (const [pinId, resolvedType] of payload.pinTypes) {
+            store.updatePin(pinId, { type: resolvedType });
+        }
     }
 }

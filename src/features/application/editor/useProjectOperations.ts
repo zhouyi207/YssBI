@@ -105,8 +105,11 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       console.log(`[Execute] 执行当前 Event: ${currentGraph.name} (${currentTabId})`);
 
-      // TODO: 调用后端执行 API
-      // const res = await ProjectService.executeGraph(currentTabId);
+      const res = await ProjectService.executeProject();
+      if (res.logs.length > 0) {
+        console.log("[Execute] 执行日志:");
+        res.logs.forEach((line) => console.log("  ", line));
+      }
       
       uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
     } catch (e) {
@@ -129,10 +132,13 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
 
-      // TODO: 调用后端执行 API
-      // const res = await ProjectService.executeAllEvents();
+      const res = await ProjectService.executeProject();
+      if (res.logs.length > 0) {
+        console.log("[Execute] 执行日志:");
+        res.logs.forEach((line) => console.log("  ", line));
+      }
 
-      uiStore.showToast(`执行完成: 共执行 ${eventCount} 个 Events`, "success", 2000);
+      uiStore.showToast(`执行完成: 共执行 ${res.executedGraphs} 个 Events`, "success", 2000);
     } catch (e) {
       console.error("执行失败:", e);
       uiStore.showToast(`执行失败: ${e}`, "error", 5000);

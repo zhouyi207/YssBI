@@ -26,9 +26,27 @@ pub struct NodeInstanceDTO {
 impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
         let p = &value.instance_params;
-        let title = match (value.definition.node_type.as_str(), p.variable_name.as_deref()) {
-            ("get_variable", Some(name)) => format!("Get {}", name),
-            ("set_variable", Some(name)) => format!("Set {}", name),
+        let title = match value.definition.node_type.as_str() {
+            "get_variable" => p
+                .variable_name
+                .as_deref()
+                .map(|n| format!("Get {}", n))
+                .unwrap_or_else(|| value.definition.name.clone()),
+            "set_variable" => p
+                .variable_name
+                .as_deref()
+                .map(|n| format!("Set {}", n))
+                .unwrap_or_else(|| value.definition.name.clone()),
+            "get_dataframe" => p
+                .variable_name
+                .as_deref()
+                .map(|n| format!("Get {}", n))
+                .unwrap_or_else(|| value.definition.name.clone()),
+            "get_column" => p
+                .column_name
+                .as_deref()
+                .map(|n| format!("Get {}", n))
+                .unwrap_or_else(|| value.definition.name.clone()),
             _ => value.definition.name.clone(),
         };
         Self {

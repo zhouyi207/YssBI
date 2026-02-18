@@ -43,7 +43,7 @@ mod tests {
             .expect("Failed to set message value");
 
         // 创建 GraphRuntime 并使用 Executor 执行
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print_node);
 
@@ -75,7 +75,7 @@ mod tests {
             .expect("Failed to create print node");
 
         // 创建 GraphRuntime 并使用 Executor 执行
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print_node);
 
@@ -175,7 +175,7 @@ mod tests {
             .expect("Failed to connect print2 to print3");
 
         // 创建 GraphRuntime 并使用 Executor 执行
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(graph_runtime);
         let result = executor.start(print1_node);
 

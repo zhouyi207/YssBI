@@ -1,4 +1,5 @@
 use super::TypeInferenceContext;
+use crate::graph::pin::PinDataTypeInference;
 use crate::graph::{DataType, GraphInstance, PinId};
 
 /// 一次推断会话
@@ -83,29 +84,42 @@ impl<'g> TypeInferenceSession<'g> {
         self.ctx.commit()
     }
 
-    pub fn commit_to_graph(&mut self) -> Result<(), String> {
+    /// 提交推断结果到 graph data_state，返回所有被写入的 (PinId, DataType) 列表
+    pub fn commit_to_graph(&mut self) -> Result<Vec<(PinId, DataType)>, String> {
         let mut data_state = self.graph.data_state.write().unwrap();
+        let mut resolved = Vec::new();
 
-        // 写回 Pin 类型
         for (&pin_id, pin_data) in self.ctx.pin_types.iter() {
-            if let Ok(concrete_type) = self.ctx.resolve_pin_type(pin_id) {
-                data_state.pin_types.insert(pin_id, concrete_type);
+            match self.ctx.resolve_pin_type(pin_id) {
+                Ok(concrete_type) => {
+                    data_state.pin_types.insert(pin_id, concrete_type.clone());
+                    resolved.push((pin_id, concrete_type));
+                }
+                Err(_) => {
+                    // TypeVar pin 没有绑定 — 恢复为 Any（未确定状态）
+                    if matches!(pin_data, PinDataTypeInference::TypeVar(_)) {
+                        let fallback = DataType::Any;
+                        data_state.pin_types.insert(pin_id, fallback.clone());
+                        resolved.push((pin_id, fallback));
+                    }
+                }
             }
         }
 
-        // 写回 TypeVar 绑定
+        // 写回 TypeVar 绑定，清理不再绑定的旧条目
         for (&var_id, var_def) in self.ctx.type_vars.iter() {
             if let Some(bound_type) = &var_def.bound {
                 data_state
                     .type_var_bindings
                     .insert(var_id, bound_type.clone());
+            } else if self.ctx.bindings.get(&var_id).is_none() {
+                data_state.type_var_bindings.remove(&var_id);
             }
         }
 
-        // 仍然保留原来的 commit 功能
         self.ctx.commit()?;
 
-        Ok(())
+        Ok(resolved)
     }
 
     /// 查询某个 pin 的最终类型

@@ -1,5 +1,6 @@
-use crate::graph::{GraphId, NodeId, PinId, PinChangeSet};
+use crate::graph::{DataType, GraphId, NodeId, PinId, PinChangeSet};
 use crate::event::{emit_project_event, Event, EventNode, EventConnection};
+use crate::schema::pin::data_type_to_pin_type;
 use crate::schema::PinInstanceDTO;
 use crate::project::ProjectState;
 use crate::log::log_app;
@@ -38,6 +39,25 @@ fn emit_pin_change_events(
     }
 }
 
+/// 将推断出的 pin 类型转为事件并发送
+fn emit_inferred_types(
+    app: &AppHandle,
+    graph_id: GraphId,
+    inferred: Vec<(PinId, DataType)>,
+) {
+    if inferred.is_empty() {
+        return;
+    }
+    let pin_types: Vec<(PinId, String)> = inferred
+        .into_iter()
+        .map(|(pin_id, dt)| (pin_id, data_type_to_pin_type(&dt).to_string()))
+        .collect();
+    emit_project_event(
+        app,
+        Event::Node(EventNode::PinTypesInferred { graph_id, pin_types }),
+    );
+}
+
 // ==================== 核心连接命令 ====================
 
 /// 连接两个 Pin（前端 ConnectionService.connectPins）
@@ -68,7 +88,7 @@ pub fn connect_pins(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (auto_disconnected, change_sets) = graph.connect(from_pin, to_pin)?;
+    let (auto_disconnected, change_sets, inferred) = graph.connect(from_pin, to_pin)?;
 
     // 先发送被自动断开的旧连接事件
     if let Some((old_from, old_to)) = auto_disconnected {
@@ -94,6 +114,9 @@ pub fn connect_pins(
 
     // 发送动态 pin 变更事件（如有）
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
+
+    // 发送推断出的 pin 类型
+    emit_inferred_types(&app, graph_id, inferred);
     Ok(())
 }
 
@@ -121,7 +144,7 @@ pub fn disconnect_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (removed_connections, change_sets) = graph.disconnect_pin(pin);
+    let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
 
     // 发送批量断开事件
     if !removed_connections.is_empty() {
@@ -135,6 +158,7 @@ pub fn disconnect_pin(
     }
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_inferred_types(&app, graph_id, inferred);
     Ok(())
 }
 
@@ -190,7 +214,7 @@ pub fn delete_connection(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let change_sets = graph.disconnect(from_pin, to_pin);
+    let (change_sets, inferred) = graph.disconnect(from_pin, to_pin);
 
     emit_project_event(
         &app,
@@ -202,6 +226,7 @@ pub fn delete_connection(
     );
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_inferred_types(&app, graph_id, inferred);
     Ok(())
 }
 
@@ -272,7 +297,7 @@ pub fn delete_connections_for_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (removed_connections, change_sets) = graph.disconnect_pin(pin);
+    let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
 
     let removed_ids: Vec<String> = removed_connections.iter()
         .map(|(from, to)| format!("{}->{}", from, to))
@@ -289,6 +314,7 @@ pub fn delete_connections_for_pin(
     }
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_inferred_types(&app, graph_id, inferred);
 
     Ok(removed_ids)
 }
@@ -323,12 +349,14 @@ pub fn delete_connections_for_node(
     let mut all_removed_connections = Vec::new();
     let mut removed_ids = Vec::new();
 
+    let mut all_inferred = Vec::new();
     for pin in &pin_instances {
-        let (removed_connections, change_sets) = graph.disconnect_pin(pin.id);
+        let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin.id);
         for (from, to) in &removed_connections {
             removed_ids.push(format!("{}->{}", from, to));
         }
         all_removed_connections.extend(removed_connections);
+        all_inferred.extend(inferred);
         emit_pin_change_events(&app, graph_id, &graph, change_sets);
     }
 
@@ -341,6 +369,8 @@ pub fn delete_connections_for_node(
             }),
         );
     }
+
+    emit_inferred_types(&app, graph_id, all_inferred);
 
     Ok(removed_ids)
 }

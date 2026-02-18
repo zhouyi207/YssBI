@@ -8,13 +8,16 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
+use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
 use crate::graph::pin::{PinId, PinInstance, PinRole, PinDirection};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
 use crate::graph::{DataType, GraphId};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
+
+/// 模式提供器：通过 dataframe_id 查询 DataFrame 的列结构
+pub type SchemaProvider = Arc<dyn Fn(&str) -> Option<DataSchema> + Send + Sync>;
 
 /// 动态 pin 重建的变更集
 #[derive(Debug, Clone, Default)]
@@ -30,7 +33,7 @@ pub struct PinChangeSet {
 /// Graph 是唯一的运行时真实来源，管理：
 /// - 所有 Node, Pin 实例 和连接关系
 /// - 类型推断上下文
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphInstance {
     // 图 id
@@ -52,6 +55,22 @@ pub struct GraphInstance {
     // 节点类型注册表（序列化时跳过，需要在加载后重新设置）
     #[serde(skip)]
     registry: Arc<NodeRegistry>,
+
+    // 模式提供器（序列化时跳过，运行时通过 ProjectState 注入）
+    #[serde(skip)]
+    schema_provider: Option<SchemaProvider>,
+}
+
+impl std::fmt::Debug for GraphInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GraphInstance")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("kind", &self.kind)
+            .field("position", &self.position)
+            .field("data_state", &self.data_state)
+            .finish_non_exhaustive()
+    }
 }
 
 /// 创建和清理
@@ -64,6 +83,7 @@ impl GraphInstance {
             kind,
             data_state: Default::default(),
             registry,
+            schema_provider: None,
         }
     }
 
@@ -74,6 +94,11 @@ impl GraphInstance {
     /// 设置节点注册表（用于反序列化后恢复）
     pub fn set_registry(&mut self, registry: Arc<NodeRegistry>) {
         self.registry = registry;
+    }
+
+    /// 设置模式提供器（用于 pin_resolver 查询 DataFrame 列结构）
+    pub fn set_schema_provider(&mut self, provider: SchemaProvider) {
+        self.schema_provider = Some(provider);
     }
 
     /// 获取节点注册表的引用
@@ -133,6 +158,27 @@ impl GraphInstance {
     pub fn get_node_instance(&self, node_id: NodeId) -> Option<NodeInstance> {
         let data_state = self.data_state.read().unwrap();
         data_state.nodes.get(&node_id).cloned()
+    }
+
+    /// 更新节点的 instance_params 并触发动态 pin 重建
+    pub fn update_instance_params(
+        &self,
+        node_id: NodeId,
+        params: NodeInstanceParams,
+    ) -> Result<Vec<PinChangeSet>, String> {
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            let node = data_state
+                .nodes
+                .get_mut(&node_id)
+                .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+            node.instance_params = params;
+        }
+        let mut change_sets = Vec::new();
+        if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
+            change_sets.push(cs);
+        }
+        Ok(change_sets)
     }
 
     /// 批量更新节点位置（拖拽结束时调用，CQRS 模式）
@@ -293,8 +339,8 @@ impl GraphInstance {
 impl GraphInstance {
     /// 连接两个 pin，自动运行类型推断和动态 pin 重建
     ///
-    /// 返回 (被自动断开的旧连接, 动态 pin 变更集)
-    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(Option<(PinId, PinId)>, Vec<PinChangeSet>), String> {
+    /// 返回 (被自动断开的旧连接, 动态 pin 变更集, 推断出的 pin 类型)
+    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(Option<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
         let affected_node_id;
         let auto_disconnected;
         {
@@ -307,13 +353,12 @@ impl GraphInstance {
                 return Err(format!("Target pin {:?} not found", to_pin));
             }
             affected_node_id = pins.get(&to_pin).map(|p| p.node_id);
-            // 记录 to_pin 上已有的连接（会被自动断开）
             auto_disconnected = data_state.connections.get_upstream(to_pin)
                 .map(|old_from| (old_from, to_pin));
             data_state.connections.connect(from_pin, to_pin)?;
         }
 
-        let _ = self.infer_types();
+        let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
         if let Some(node_id) = affected_node_id {
@@ -322,7 +367,7 @@ impl GraphInstance {
             }
         }
 
-        Ok((auto_disconnected, change_sets))
+        Ok((auto_disconnected, change_sets, inferred))
     }
 
     pub fn get_downstream_by_pin_id(&self, pin_id: PinId) -> Vec<PinId> {
@@ -336,7 +381,9 @@ impl GraphInstance {
     }
 
     /// 断开连接，自动运行类型推断和动态 pin 重建
-    pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> Vec<PinChangeSet> {
+    ///
+    /// 返回 (动态 pin 变更集, 推断出的 pin 类型)
+    pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         let affected_node_id;
         {
             let data_state = self.data_state.write().unwrap();
@@ -344,7 +391,7 @@ impl GraphInstance {
             data_state.connections.disconnect(from_pin, to_pin);
         }
 
-        let _ = self.infer_types();
+        let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
         if let Some(node_id) = affected_node_id {
@@ -352,19 +399,18 @@ impl GraphInstance {
                 change_sets.push(cs);
             }
         }
-        change_sets
+        (change_sets, inferred)
     }
 
     /// 断开指定 Pin 的所有连接（输入和输出）
     ///
-    /// 返回 (被删除的连接对列表, 动态 pin 变更集)
-    pub fn disconnect_pin(&self, pin_id: PinId) -> (Vec<(PinId, PinId)>, Vec<PinChangeSet>) {
+    /// 返回 (被删除的连接对列表, 动态 pin 变更集, 推断出的 pin 类型)
+    pub fn disconnect_pin(&self, pin_id: PinId) -> (Vec<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         let affected_node_id;
         let mut removed_connections = Vec::new();
         {
             let data_state = self.data_state.write().unwrap();
             affected_node_id = data_state.pins.get(&pin_id).map(|p| p.node_id);
-            // 收集将被删除的连接
             for to_pin in data_state.connections.get_downstream(pin_id) {
                 removed_connections.push((pin_id, to_pin));
             }
@@ -374,7 +420,7 @@ impl GraphInstance {
             data_state.connections.disconnect_all(pin_id);
         }
 
-        let _ = self.infer_types();
+        let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
         if let Some(node_id) = affected_node_id {
@@ -382,7 +428,7 @@ impl GraphInstance {
                 change_sets.push(cs);
             }
         }
-        (removed_connections, change_sets)
+        (removed_connections, change_sets, inferred)
     }
 
     pub fn all_connections(&self) -> Vec<Connection> {
@@ -400,7 +446,7 @@ impl GraphInstance {
     /// 2. 注册所有 Pin 的类型
     /// 3. 根据连接关系推断类型
     /// 4. 将推断结果写回 GraphDataState
-    pub fn infer_types(&self) -> Result<(), String> {
+    pub fn infer_types(&self) -> Result<Vec<(PinId, DataType)>, String> {
         crate::graph::infer::infer_graph(self)
     }
 }
@@ -560,15 +606,20 @@ impl GraphInstance {
 
     /// 从上游节点的 instance_params 提取 DataSchema
     ///
-    /// 当前实现（Plan A）：通过节点类型和 instance_params 静态推断。
-    /// 未来演进（Plan B）：从 DataType 携带的 schema 信息中提取。
+    /// 通过节点类型和 instance_params 中的 dataframe_id，
+    /// 使用 schema_provider 查询实际的 DataFrame 列结构。
     fn extract_schema_from_params(
         &self,
-        _params: &NodeInstanceParams,
-        _node_type: &str,
-    ) -> Option<crate::graph::node::DataSchema> {
-        // 目前 DataFrame 存储系统尚未实现，返回 None
-        // 后续实现时，通过 dataframe_id 查询 ProjectState 中的 DataFrame schema
-        None
+        params: &NodeInstanceParams,
+        node_type: &str,
+    ) -> Option<DataSchema> {
+        match node_type {
+            "get_dataframe" => {
+                let df_id = params.dataframe_id.as_deref()?;
+                let provider = self.schema_provider.as_ref()?;
+                provider(df_id)
+            }
+            _ => None,
+        }
     }
 }

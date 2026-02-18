@@ -73,7 +73,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     events,
     addEvent,
     dataframes,
-    addDataFrame,
+    triggerImportData,
     openGraph,
   } = useEditorGroup();
 
@@ -255,7 +255,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 addVariable("New Variable", "Int32", false);
               }
               else if (activeTab === 'data') {
-                addDataFrame("New DataFrame");
+                triggerImportData();
               }
             }}
             className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"

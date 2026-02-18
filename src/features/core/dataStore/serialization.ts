@@ -125,15 +125,18 @@ export function deserializeGraph(data: DeserializeGraphInput): {
 
   const resolvePin = (pinIdOrObj: string | SerializedPin, nodeId: string, direction: 'input' | 'output'): DeserializedPin => {
     const pin = typeof pinIdOrObj === 'string' ? pinMap.get(pinIdOrObj) : pinIdOrObj;
-    const pinWithLinks = pin as (SerializedPin & { links?: string[] }) | undefined;
+    // links 必须始终从 connectionsList 重建，不能从 store 中的 pin 读取（可能是脏数据）
     return pin
-      ? { ...pin, nodeId, direction, links: pinWithLinks?.links ?? [] }
+      ? { ...pin, nodeId, direction, links: [] }
       : { id: String(pinIdOrObj), nodeId, name: '', type: 'any', direction, links: [] };
   };
 
   const nodes = (data.nodes || []).map((n) => {
     const nodeType = n.nodeType ?? '';
     const def = useNodeRegistryStore.getState().getDefinition(nodeType);
+    const rawTitle = n.title ?? '';
+    const useDefName = !rawTitle || rawTitle === nodeType;
+    const title = def && useDefName ? def.name : (rawTitle || nodeType);
 
     let node: DeserializedNode;
     if (def) {
@@ -141,7 +144,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
         id: n.id,
         nodeType,
         category: n.category ?? def.category ?? [],
-        title: n.title ?? def.name,
+        title,
         position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
@@ -158,7 +161,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
         id: n.id,
         nodeType,
         category: n.category ?? [],
-        title: n.title ?? nodeType,
+        title,
         position: n.position ?? { x: 0, y: 0 },
         inputs: [],
         outputs: [],
@@ -172,12 +175,14 @@ export function deserializeGraph(data: DeserializeGraphInput): {
       };
     }
 
-    node.inputs = (n.inputs || []).map((p) =>
-      resolvePin(p, n.id, 'input')
-    );
-    node.outputs = (n.outputs || []).map((p) =>
-      resolvePin(p, n.id, 'output')
-    );
+    // 从 pins 中按 nodeId 和 direction 派生 inputs/outputs，以支持动态 pin（如 Decompose DataFrame）
+    const nodePinsList = (data.pins || []).filter((p: { nodeId?: string }) => p.nodeId === n.id);
+    node.inputs = nodePinsList
+      .filter((p: { direction?: string }) => p.direction === 'input')
+      .map((p: { id: string }) => resolvePin(p.id, n.id, 'input'));
+    node.outputs = nodePinsList
+      .filter((p: { direction?: string }) => p.direction === 'output')
+      .map((p: { id: string }) => resolvePin(p.id, n.id, 'output'));
 
     return node;
   }).filter(Boolean) as DeserializedNode[];

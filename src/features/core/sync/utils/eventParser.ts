@@ -7,27 +7,31 @@ export interface ParsedEvent {
     payload: unknown;
 }
 
+/** 顶层事件分类（需递归解析到具体类型） */
+const TOP_LEVEL_TYPES = new Set([
+    'Project', 'Event', 'Function', 'Macro', 'Variable', 'Node', 'Connection', 'DataFrame',
+]);
+
 /**
  * 解析后端事件结构
- * 处理嵌套事件：{ type: "Event", payload: { type: "EventCreated", payload: {...} } }
+ * 递归处理嵌套：Event { type: "Connection", payload: { type: "ConnectionsBatchDeleted", payload: {...} } }
  */
 export function parseEvent(event: BaseEvent | NestedEvent): ParsedEvent {
-    const eventType = event.type;
-    const eventPayload = event.payload;
+    let current: { type: string; payload?: unknown } = event as { type: string; payload?: unknown };
 
-    // 检查是否为嵌套事件
-    if (eventPayload && typeof eventPayload === 'object' && 'type' in eventPayload && 'payload' in eventPayload) {
-        const nested = eventPayload as { type: string; payload: unknown };
-        return {
-            type: nested.type,
-            payload: nested.payload
-        };
+    // 递归解析直到得到具体事件类型（非顶层分类）
+    while (current?.payload && typeof current.payload === 'object' && 'type' in current.payload && 'payload' in current.payload) {
+        const nested = current.payload as { type: string; payload: unknown };
+        if (TOP_LEVEL_TYPES.has(nested.type)) {
+            current = nested;
+        } else {
+            return { type: nested.type, payload: nested.payload };
+        }
     }
 
-    // 直接事件：Project
     return {
-        type: eventType,
-        payload: eventPayload
+        type: current.type,
+        payload: current.payload
     };
 }
 
@@ -47,7 +51,7 @@ export function isValidEventType(type: string): boolean {
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted',
         // Node
-        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated',
+        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred',
         // Connection
         'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted',
     ];

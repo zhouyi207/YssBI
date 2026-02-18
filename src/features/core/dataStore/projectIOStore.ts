@@ -34,6 +34,42 @@ function toGraphMetaMap(graphs: Record<string, { id: string; name: string; type:
   );
 }
 
+/** 从 engine path 提取显示名称 */
+function nameFromEngine(record: Record<string, unknown>): string | undefined {
+  const engine = record?.engine as Record<string, unknown> | undefined;
+  if (!engine) return undefined;
+  const csv = engine.csv as { path?: string } | undefined;
+  const parquet = engine.parquet as { path?: string } | undefined;
+  const path = csv?.path ?? parquet?.path;
+  if (typeof path === 'string') {
+    const parts = path.replace(/\\/g, '/').split('/');
+    const file = parts[parts.length - 1] || '';
+    const stem = file.replace(/\.[^.]+$/, '');
+    return stem || file || undefined;
+  }
+  return undefined;
+}
+
+/** 规范化数据库记录：补充 name（从 engine path 推导），合并已有富元数据 */
+function normalizeDatabases(
+  dbs: Record<string, DatabaseRecord>
+): Record<string, DatabaseRecord> {
+  const existing = useDatabaseStore.getState().databases;
+  const result: Record<string, DatabaseRecord> = {};
+  for (const [id, db] of Object.entries(dbs)) {
+    const rec = typeof db === 'object' && db !== null ? { ...db } : { id };
+    if (!rec.name) {
+      rec.name = nameFromEngine(rec) ?? (existing[id] as Record<string, unknown>)?.name ?? id;
+    }
+    const prev = existing[id] as Record<string, unknown> | undefined;
+    if (prev?.columns && !rec.columns) rec.columns = prev.columns;
+    if (prev?.rowCount != null && rec.rowCount == null) rec.rowCount = prev.rowCount;
+    if (prev?.columnCount != null && rec.columnCount == null) rec.columnCount = prev.columnCount;
+    result[id] = rec as DatabaseRecord;
+  }
+  return result;
+}
+
 /** 将后端变量 DTO 规范化为前端 Variable */
 function normalizeVariables(
   vars: Record<string, Variable | Record<string, unknown>>
@@ -65,7 +101,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
       // 分发到子 store（规范化变量 dataType）
       useVariableStore.getState().setVariables(normalizeVariables(projectData.variables));
-      useDatabaseStore.getState().setDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>);
+      useDatabaseStore.getState().setDatabases(normalizeDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>));
       useGraphMetaStore.getState().setGraphs(toGraphMetaMap(projectData.graphs));
       useGraphDataStore.getState().hydrateGraphs(projectData.graphs);
 
@@ -80,7 +116,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
   loadProjectFromData: (project, path) => {
     useVariableStore.getState().setVariables(normalizeVariables(project.variables));
-    useDatabaseStore.getState().setDatabases(project.databases as unknown as Record<string, DatabaseRecord>);
+    useDatabaseStore.getState().setDatabases(normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>));
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
     useGraphHistoryStore.getState().clearAll();
@@ -97,7 +133,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
       const path = await ProjectService.getProjectPath();
 
       useVariableStore.getState().setVariables(normalizeVariables(projectData.variables));
-      useDatabaseStore.getState().setDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>);
+      useDatabaseStore.getState().setDatabases(normalizeDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>));
       useGraphMetaStore.getState().setGraphs(toGraphMetaMap(projectData.graphs));
       useGraphDataStore.getState().hydrateGraphs(projectData.graphs);
       useGraphHistoryStore.getState().clearAll();

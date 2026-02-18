@@ -1,9 +1,8 @@
 use crate::graph::pin::PinDataTypeDefinition;
 use crate::graph::value::DataType;
 use crate::graph::PinInstance;
-use crate::graph::{NodeId, PinDirection, PinId, PinKind};
+use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 
 /// 默认 Pin 类型颜色（与前端 ThemeSettings 一致）
 const DEFAULT_COLORS: &[(&str, &str)] = &[
@@ -15,12 +14,13 @@ const DEFAULT_COLORS: &[(&str, &str)] = &[
     ("date", "#c678dd"),
     ("datetime", "#c678dd"),
     ("dataframe", "#61afef"),
+    ("dataseries", "#56b6c2"),
     ("object", "#abb2bf"),
     ("array", "#d19a66"),
 ];
 
 /// 将 DataType 映射为前端期望的 pin type 字符串（exec, int, float, bool, string 等）
-fn data_type_to_pin_type(dt: &DataType) -> &'static str {
+pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
     match dt {
         DataType::Boolean => "bool",
         DataType::Int32 | DataType::Int64 => "int",
@@ -30,6 +30,7 @@ fn data_type_to_pin_type(dt: &DataType) -> &'static str {
         DataType::Object => "object",
         DataType::Any => "any",
         DataType::DataFrame => "dataframe",
+        DataType::DataSeries => "dataseries",
     }
 }
 
@@ -73,9 +74,9 @@ pub struct PinInstanceDTO {
     pub direction: PinDirection,
     pub links: Vec<PinId>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_value: Option<JsonValue>,
+    pub default_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_value: Option<JsonValue>,
+    pub user_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_array: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,7 +113,7 @@ impl PinInstanceDTO {
             direction: pin.definition.direction,
             links,
             default_value: None,
-            user_value: None,
+            user_value: pin.user_value.clone(),
             is_array: None,
             ui: None,
         }

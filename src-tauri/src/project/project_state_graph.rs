@@ -8,7 +8,8 @@ impl ProjectState {
             let store = self.project_store.read().unwrap();
             Arc::clone(&store.node_register)
         };
-        let graph_data = GraphInstance::new(graph_name, graph_kind, graph_register);
+        let mut graph_data = GraphInstance::new(graph_name, graph_kind, graph_register);
+        graph_data.set_schema_provider(self.build_schema_provider());
         let graph_id = graph_data.id;
         self.project_data
             .write()

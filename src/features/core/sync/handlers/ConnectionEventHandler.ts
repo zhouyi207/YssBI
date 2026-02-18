@@ -32,10 +32,33 @@ export class ConnectionsBatchDeletedHandler extends BaseEventHandler<Connections
     handle(payload: ConnectionsBatchDeletedPayload, _callbacks?: EventCallbacks): void {
         this.log('Connections batch deleted:', payload.removedConnections.length, 'in graph:', payload.graphId);
         const store = useGraphDataStore.getState();
-        // 使用 batchDisconnect 避免多次 set
-        const connectionIds = payload.removedConnections.map(
-            ([from, to]) => `${from}->${to}`
+
+        const connectionIds = new Set<string>();
+        for (const [fromPin, toPin] of payload.removedConnections) {
+            for (const cid of store.pinConnections[fromPin] ?? []) {
+                const conn = store.connections[cid];
+                if (conn && (conn.to === toPin || conn.from === toPin)) {
+                    connectionIds.add(cid);
+                    break;
+                }
+            }
+            for (const cid of store.pinConnections[toPin] ?? []) {
+                const conn = store.connections[cid];
+                if (conn && (conn.from === fromPin || conn.to === fromPin)) {
+                    connectionIds.add(cid);
+                    break;
+                }
+            }
+        }
+        if (connectionIds.size > 0) {
+            store.batchDisconnect(Array.from(connectionIds));
+            return;
+        }
+
+        this.error(
+            'Connection not found in store (frontend-backend out of sync):',
+            'graphId=', payload.graphId,
+            'removedConnections=', payload.removedConnections
         );
-        store.batchDisconnect(connectionIds);
     }
 }

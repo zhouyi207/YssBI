@@ -42,7 +42,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), add_node);
         
         // 获取节点定义并执行 data_evaluator
@@ -101,7 +101,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), subtract_node);
         
         // 获取节点定义并执行 data_evaluator
@@ -160,7 +160,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), multiply_node);
         
         // 获取节点定义并执行 data_evaluator
@@ -219,7 +219,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
-        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new(graph.clone())));
+        let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), divide_node);
         
         // 获取节点定义并执行 data_evaluator

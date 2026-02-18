@@ -359,7 +359,7 @@ fn test_complex_node_graph() {
 
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
-    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
     let mut executor = Executor::new(runtime);
     let result = executor.start(seq1_node);
 
@@ -576,7 +576,7 @@ fn test_nested_sequence_tree() {
 
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
-    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
     let mut executor = Executor::new(runtime);
     let result = executor.start(root_seq);
 

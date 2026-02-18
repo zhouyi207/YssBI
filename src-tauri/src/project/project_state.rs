@@ -1,5 +1,7 @@
 //! 状态管理模块
 
+use crate::database::dataframe_to_schema;
+use crate::graph::core::SchemaProvider;
 use crate::log::log_sys;
 use crate::project::{ProjectData, ProjectStore};
 use std::sync::{Arc, RwLock};
@@ -36,8 +38,9 @@ impl ProjectState {
         *self.project_data.write().unwrap() = project_data;
         *self.project_store.write().unwrap() = ProjectStore::default();
         
-        // 恢复所有图的 registry
+        // 恢复所有图的 registry 和 schema provider
         self.restore_graph_registries();
+        self.set_graph_schema_providers();
     }
 
     /// 恢复所有图的 registry（在加载项目后调用）
@@ -50,6 +53,26 @@ impl ProjectState {
         let mut project_data = self.project_data.write().unwrap();
         for graph in project_data.graphs.values_mut() {
             graph.set_registry(Arc::clone(&registry));
+        }
+    }
+
+    /// 构建 SchemaProvider 闭包（捕获 project_store 的引用）
+    pub fn build_schema_provider(&self) -> SchemaProvider {
+        let store = Arc::clone(&self.project_store);
+        Arc::new(move |dataframe_id: &str| {
+            let mut store = store.write().ok()?;
+            let db = store.databases.get_mut(dataframe_id)?;
+            let df = db.ensure_loaded().ok()?;
+            Some(dataframe_to_schema(df))
+        })
+    }
+
+    /// 为所有图设置 schema provider（在加载项目后调用）
+    fn set_graph_schema_providers(&self) {
+        let provider = self.build_schema_provider();
+        let mut project_data = self.project_data.write().unwrap();
+        for graph in project_data.graphs.values_mut() {
+            graph.set_schema_provider(provider.clone());
         }
     }
 

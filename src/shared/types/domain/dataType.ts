@@ -80,3 +80,35 @@ export function dataTypeMatches(dt: DataType, typeStr: string): boolean {
   if (typeStr === 'any') return true;
   return dataTypeDisplay(dt) === typeStr || dataTypeKind(dt) === typeStr;
 }
+
+/** 从 Pin 的 type 字符串（如 "string"、"int"）映射为 DataType */
+export function dataTypeFromPinType(pinType: string): DataType {
+  const t = pinType?.toLowerCase() ?? 'any';
+  switch (t) {
+    case 'bool':
+    case 'boolean':
+      return { kind: 'Boolean' };
+    case 'int':
+    case 'int32':
+      return { kind: 'Int32' };
+    case 'int64':
+      return { kind: 'Int64' };
+    case 'float':
+    case 'float32':
+      return { kind: 'Float32' };
+    case 'number':
+    case 'float64':
+      return { kind: 'Float64' };
+    case 'string':
+      return { kind: 'String' };
+    case 'object':
+      return { kind: 'Object' };
+    case 'dataframe':
+      return { kind: 'DataFrame' };
+    case 'array':
+      return { kind: 'Array', inner: { kind: 'Any' } };
+    case 'any':
+    default:
+      return { kind: 'String' }; // 文本输入默认按 String 处理
+  }
+}

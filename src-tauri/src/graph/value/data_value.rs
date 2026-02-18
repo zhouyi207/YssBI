@@ -2,7 +2,7 @@
 
 use super::DataType;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
 
 /// 运行时数据值
@@ -18,8 +18,9 @@ pub enum DataValue {
 
     // 复合类型
     Array(Vec<DataValue>),
-    Object(serde_json::Map<String, JsonValue>),
-    DataFrame(String), // DataFrame ID
+    Object(HashMap<String, DataValue>),
+    DataFrame(String),   // DataFrame ID
+    DataSeries(String),  // DataSeries ID
     Null,
 }
 
@@ -43,58 +44,7 @@ impl DataValue {
             DataValue::Object(_) => Some(DataType::Object),
             DataValue::Null => None,
             DataValue::DataFrame(_) => Some(DataType::DataFrame),
-        }
-    }
-
-    /// 转换为 JSON
-    pub fn to_json(&self) -> JsonValue {
-        match self {
-            DataValue::Boolean(b) => JsonValue::Bool(*b),
-            DataValue::Int32(i) => JsonValue::Number((*i).into()),
-            DataValue::Int64(i) => JsonValue::Number((*i).into()),
-            DataValue::Float32(f) => {
-                serde_json::Number::from_f64(*f as f64)
-                    .map(JsonValue::Number)
-                    .unwrap_or(JsonValue::Null)
-            }
-            DataValue::Float64(f) => {
-                serde_json::Number::from_f64(*f)
-                    .map(JsonValue::Number)
-                    .unwrap_or(JsonValue::Null)
-            }
-            DataValue::String(s) => JsonValue::String(s.clone()),
-            DataValue::Array(arr) => {
-                JsonValue::Array(arr.iter().map(|v| v.to_json()).collect())
-            }
-            DataValue::Object(obj) => JsonValue::Object(obj.clone()),
-            DataValue::Null => JsonValue::Null,
-            DataValue::DataFrame(id) => JsonValue::String(format!("DataFrame:{}", id)),
-        }
-    }
-
-    /// 从 JSON 创建
-    pub fn from_json(json: &JsonValue, target_type: &DataType) -> Self {
-        match (json, target_type) {
-            (JsonValue::Bool(b), DataType::Boolean) => DataValue::Boolean(*b),
-            (JsonValue::Number(n), DataType::Int32) => {
-                DataValue::Int32(n.as_i64().unwrap_or(0) as i32)
-            }
-            (JsonValue::Number(n), DataType::Int64) => {
-                DataValue::Int64(n.as_i64().unwrap_or(0))
-            }
-            (JsonValue::Number(n), DataType::Float32) => {
-                DataValue::Float32(n.as_f64().unwrap_or(0.0) as f32)
-            }
-            (JsonValue::Number(n), DataType::Float64) => {
-                DataValue::Float64(n.as_f64().unwrap_or(0.0))
-            }
-            (JsonValue::String(s), DataType::String) => DataValue::String(s.clone()),
-            (JsonValue::Array(arr), DataType::Array(inner)) => {
-                DataValue::Array(arr.iter().map(|v| Self::from_json(v, inner)).collect())
-            }
-            (JsonValue::Object(obj), DataType::Object) => DataValue::Object(obj.clone()),
-            (JsonValue::Null, _) => DataValue::Null,
-            _ => DataValue::Null,
+            DataValue::DataSeries(_) => Some(DataType::DataSeries),
         }
     }
 

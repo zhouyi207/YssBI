@@ -44,6 +44,7 @@ import {
     NodesBatchDeletedHandler,
     NodePositionsUpdatedHandler,
     NodePinsUpdatedHandler,
+    PinTypesInferredHandler,
 } from './NodeEventHandler';
 import {
     ConnectionCreatedHandler,
@@ -95,6 +96,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new NodesBatchDeletedHandler() as EventHandler<unknown>,
         new NodePositionsUpdatedHandler() as EventHandler<unknown>,
         new NodePinsUpdatedHandler() as EventHandler<unknown>,
+        new PinTypesInferredHandler() as EventHandler<unknown>,
 
         // Connection
         new ConnectionCreatedHandler() as EventHandler<unknown>,

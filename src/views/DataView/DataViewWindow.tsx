@@ -43,10 +43,30 @@ export const DataViewWindow: React.FC = () => {
     }
   }, [selectedDfId]);
 
+  // 当选中项缺少 name/columns 时，从后端拉取元数据并更新 store
+  useEffect(() => {
+    if (!selectedDfId) return;
+    const df = dataframes[selectedDfId] as Record<string, unknown> | undefined;
+    if (!df) return;
+    const hasMeta = df.name && Array.isArray(df.columns) && df.columns.length > 0;
+    if (hasMeta) return;
+
+    DatabaseService.getDatabaseMeta(selectedDfId)
+      .then((meta) => {
+        useDatabaseStore.getState().updateDatabase(selectedDfId, {
+          name: meta.name,
+          columns: meta.columns,
+          rowCount: meta.rowCount,
+          columnCount: meta.columnCount,
+        });
+      })
+      .catch((e) => console.warn('[DataViewWindow] getDatabaseMeta failed:', e));
+  }, [selectedDfId, dataframes]);
+
   const loadInitialRows = async (id: string) => {
     setLoading(true);
     try {
-      const rows = await DatabaseService.getDataFrameRows(id, 0, CHUNK_SIZE);
+      const rows = await DatabaseService.getDatabaseRows(id, 0, CHUNK_SIZE);
       setLoadedRows(rows);
     } catch (e) {
       console.error('Failed to load initial rows:', e);
@@ -64,7 +84,7 @@ export const DataViewWindow: React.FC = () => {
 
     setLoadingMore(true);
     try {
-      const newRows = await DatabaseService.getDataFrameRows(selectedDfId, currentCount, CHUNK_SIZE);
+      const newRows = await DatabaseService.getDatabaseRows(selectedDfId, currentCount, CHUNK_SIZE);
       setLoadedRows(prev => [...prev, ...newRows]);
     } catch (e) {
       console.error('Failed to load more rows:', e);
@@ -81,7 +101,7 @@ export const DataViewWindow: React.FC = () => {
     try {
       await initProjectSync();
       if (selectedDfId) {
-        const rows = await DatabaseService.getDataFrameRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
+        const rows = await DatabaseService.getDatabaseRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
         setLoadedRows(rows);
 
         setTimeout(() => {
@@ -195,10 +215,19 @@ export const DataViewWindow: React.FC = () => {
           <Select
             value={selectedDfId || ''}
             onChange={(val) => setSelectedDfId(val)}
-            options={Object.entries(dataframes).map(([id, df]) => ({
-              label: String((df as { name?: unknown }).name ?? ''),
-              value: id
-            }))}
+            options={Object.entries(dataframes).map(([id, df]) => {
+              const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string } } };
+              let label = d.name;
+              if (!label && d.engine?.csv?.path) {
+                const p = d.engine.csv.path;
+                label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p;
+              }
+              if (!label && d.engine?.parquet?.path) {
+                const p = d.engine.parquet.path;
+                label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p;
+              }
+              return { label: String(label ?? id), value: id };
+            })}
           />
         </div>
 
@@ -231,7 +260,7 @@ export const DataViewWindow: React.FC = () => {
               <thead className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
                 <tr>
                   <th className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 w-12 text-center">#</th>
-                  {(selectedDf.columns as Array<{ name: string; type: string }>).map((col, i) => (
+                  {((selectedDf as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, i) => (
                     <th key={i} className="p-2 text-left border-r border-gray-800 group">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-gray-300">{col.name}</span>
@@ -242,10 +271,10 @@ export const DataViewWindow: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50">
-                {loadedRows.map((row, i) => (
+                {(loadedRows ?? []).map((row, i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors">
                     <td className="p-2 text-[10px] font-mono text-gray-600 border-r border-gray-800 text-center">{i + 1}</td>
-                    {row.map((val, j) => (
+                    {(Array.isArray(row) ? row : []).map((val, j) => (
                       <td key={j} className="p-2 text-[11px] text-gray-400 border-r border-gray-800/50 truncate max-w-[200px]">
                         {val === null ? <span className="italic opacity-30">null</span> : String(val)}
                       </td>

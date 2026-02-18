@@ -52,7 +52,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         // 执行节点
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);
@@ -109,7 +109,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         // 执行节点
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);
@@ -172,7 +172,7 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         // 执行节点
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);

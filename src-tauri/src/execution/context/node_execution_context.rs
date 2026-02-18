@@ -1,9 +1,10 @@
 use super::NodeExecutionContextTrait;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
-use crate::graph::node::NodeId;
+use crate::graph::node::{NodeId, NodeInstanceParams};
 use crate::graph::pin::{PinId, PinRole};
 use crate::graph::value::{DataType, DataValue};
+use polars::prelude::{DataFrame, Series};
 use std::sync::{Arc, Mutex};
 
 /// 具体的执行上下文实现
@@ -146,6 +147,53 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         graph.get_pin_data_type_by_pin_role(pin.id)
             .ok_or_else(|| format!("Pin {:?} has no resolved type", role))
     }
+
+    // ====================================================================
+    // 节点实例参数
+    // ====================================================================
+
+    fn get_instance_params(&self) -> NodeInstanceParams {
+        let graph = self.graph.lock().unwrap();
+        graph.get_node_instance_params(self.node_id)
+    }
+
+    // ====================================================================
+    // 数据缓存操作
+    // ====================================================================
+
+    fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String> {
+        let mut graph = self.graph.lock().unwrap();
+        graph.get_dataframe(id)
+    }
+
+    fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String> {
+        let mut graph = self.graph.lock().unwrap();
+        Ok(graph.put_dataframe(df))
+    }
+
+    fn get_series(&self, id: &str) -> Result<Series, String> {
+        let graph = self.graph.lock().unwrap();
+        graph.get_series(id)
+    }
+
+    fn put_series(&mut self, s: Series) -> Result<String, String> {
+        let mut graph = self.graph.lock().unwrap();
+        Ok(graph.put_series(s))
+    }
+
+    fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {
+        let graph = self.graph.lock().unwrap();
+        graph.get_variable_value(variable_id)
+    }
+
+    fn set_variable_value(&mut self, variable_id: &str, value: DataValue) -> Result<(), String> {
+        let graph = self.graph.lock().unwrap();
+        graph.set_variable_value(variable_id, value)
+    }
+
+    // ====================================================================
+    // 日志
+    // ====================================================================
 
     fn log(&mut self, message: String) {
         self.logs.push(message);

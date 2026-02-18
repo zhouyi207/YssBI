@@ -1,7 +1,9 @@
 use crate::graph::infer::TypeVarId;
-use crate::graph::node::NodeId;
+use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::PinRole;
 use crate::graph::value::{DataType, DataValue};
+use polars::prelude::{DataFrame, Series};
+use std::sync::Arc;
 
 /// Node 执行上下文
 ///
@@ -30,7 +32,6 @@ pub trait NodeExecutionContextTrait {
     /// 检查输入是否已连接
     fn is_input_connected(&self, role: &PinRole) -> bool;
 
-
     /// 获取类型变量的绑定类型
     ///
     /// 用于在运行时获取类型推断的结果
@@ -41,6 +42,39 @@ pub trait NodeExecutionContextTrait {
     ///
     /// 用于在运行时获取 Pin 的实际类型（经过类型推断后）
     fn get_pin_type_by_role(&self, role: &PinRole) -> Result<DataType, String>;
+
+    // ====================================================================
+    // 节点实例参数
+    // ====================================================================
+
+    /// 获取当前节点的实例参数（variable_id、dataframe_id 等）
+    fn get_instance_params(&self) -> NodeInstanceParams;
+
+    // ====================================================================
+    // 数据缓存操作（DataFrame / Series / 变量）
+    // ====================================================================
+
+    /// 按 ID 获取 DataFrame（先查执行缓存，再查原始数据库）
+    fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String>;
+
+    /// 存入中间 DataFrame，返回引用 ID
+    fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String>;
+
+    /// 按 ID 获取 Series
+    fn get_series(&self, id: &str) -> Result<Series, String>;
+
+    /// 存入中间 Series，返回引用 ID
+    fn put_series(&mut self, s: Series) -> Result<String, String>;
+
+    /// 读取变量值
+    fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String>;
+
+    /// 写入变量值
+    fn set_variable_value(&mut self, variable_id: &str, value: DataValue) -> Result<(), String>;
+
+    // ====================================================================
+    // 日志
+    // ====================================================================
 
     /// 记录日志
     fn log(&mut self, message: String);

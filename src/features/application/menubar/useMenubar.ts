@@ -1,11 +1,8 @@
 import { useEffect, useCallback } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { uiStore } from "@/features/core/ui/UIStore";
-import { useDatabaseStore } from "@/features/core/dataStore";
-import { DatabaseService } from "@/services/database/databaseService";
+import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import { SettingsService } from "@/services/settings/settingsService";
 import { DEFAULT_WINDOW } from "@/app/appConfig/default";
 
@@ -71,30 +68,7 @@ export function useMenubar() {
   }, []);
 
   const handleImportData = useCallback(() => {
-    uiStore.showImportDialog({
-      onSelect: async (type) => {
-        if (type === "csv") {
-          try {
-            const selected = await open({
-              multiple: false,
-              filters: [{ name: "CSV File", extensions: ["csv"] }],
-            });
-
-            if (selected && !Array.isArray(selected)) {
-              uiStore.showToast(`正在从 CSV 导入数据...`, "info");
-              const dfData = await DatabaseService.importCSV(selected);
-              useDatabaseStore.getState().addDatabase(dfData.id, dfData);
-              uiStore.showToast(`CSV 数据导入成功: ${dfData.row_count} 行`, "success");
-            }
-          } catch (error) {
-            console.error("Failed to import CSV:", error);
-            uiStore.showToast(`CSV 导入失败: ${error}`, "error");
-          }
-        } else {
-          uiStore.showToast(`${type.toUpperCase()} 导入功能开发中...`, "warning");
-        }
-      },
-    });
+    triggerImportData();
   }, []);
 
   const handleSplitRight = useCallback(() => {

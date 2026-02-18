@@ -1,12 +1,15 @@
 use crate::event::EventProject;
 use crate::event::{emit_project_event, Event};
+use crate::execution::Executor;
 use crate::frontend::FrontendError;
+use crate::graph::GraphKind;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{load_project_from_file, save_project_to_file, ProjectData, ProjectState};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// 获取当前项目数据
 #[tauri::command]
@@ -164,8 +167,67 @@ pub fn serialize_project(_data: Value) -> Result<Value, String> {
     Err("Deprecated: use get_project_data instead".to_string())
 }
 
-/// 执行项目（待实现）
+/// 执行项目
+///
+/// 遍历所有 Event 图，从 event_begin 节点开始执行。
+/// 若图中无 event_begin 节点则跳过该图。
 #[tauri::command]
-pub fn execute_project() -> Result<Value, String> {
-    Err("Not yet implemented".to_string())
+pub fn execute_project(state: State<ProjectState>) -> Result<Value, String> {
+    let project_data = state.get_data();
+
+    let mut all_logs = Vec::new();
+    let mut executed_count = 0;
+
+    for (_graph_id, graph) in project_data.graphs.iter() {
+        if graph.kind != GraphKind::Event {
+            continue;
+        }
+
+        let event_begin_nodes: Vec<_> = {
+            let data_state = graph.data_state.read().map_err(|e| e.to_string())?;
+            data_state
+                .nodes
+                .iter()
+                .filter(|(_, n)| n.definition.node_type == "event_begin")
+                .map(|(id, _)| *id)
+                .collect()
+        };
+
+        if event_begin_nodes.is_empty() {
+            log_app!(
+                LogLevel::Info,
+                "[execute_project] Graph '{}' has no event_begin node, skipping",
+                graph.name
+            );
+            continue;
+        }
+
+        let entry_node = event_begin_nodes[0];
+        log_app!(
+            LogLevel::Info,
+            "[execute_project] Starting graph '{}' from event_begin node {:?}",
+            graph.name,
+            entry_node
+        );
+
+        let runtime = crate::graph::GraphRuntime::new(
+            Arc::new(graph.clone()),
+            Arc::clone(&state.project_data),
+            Arc::clone(&state.project_store),
+        );
+
+        let mut executor = Executor::new(Arc::new(Mutex::new(runtime)));
+        executor.start(entry_node)?;
+
+        for line in executor.logs() {
+            all_logs.push(line.clone());
+            log_app!(LogLevel::Info, "[Execute] {}", line);
+        }
+        executed_count += 1;
+    }
+
+    Ok(json!({
+        "executedGraphs": executed_count,
+        "logs": all_logs,
+    }))
 }

@@ -9,18 +9,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngine {
-    /// SQLite（本地文件）
-    Sql {
-        engine: DatabaseEngineSql,
-        connection_string: String,
-    },
-
     /// CSV file
     Csv {
         path: String,
         delimiter: char,
         has_header: bool,
         infer_schema_length: Option<usize>,
+    },
+
+    /// SQLite（本地文件）
+    Sql {
+        engine: DatabaseEngineSql,
+        connection_string: String,
     },
 
     /// Parquet file

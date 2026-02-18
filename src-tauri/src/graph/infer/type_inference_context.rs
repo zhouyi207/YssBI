@@ -106,10 +106,16 @@ impl TypeInferenceContext {
         }
     }
 
-    /// 推断一条连接
+    /// 推断一条连接（跳过未注册的 pin，如 exec pin）
     pub fn infer_connection(&mut self, from: PinId, to: PinId) -> Result<(), String> {
-        let a = self.get_pin_type(from)?.clone();
-        let b = self.get_pin_type(to)?.clone();
+        let a = match self.get_pin_type(from) {
+            Ok(t) => t.clone(),
+            Err(_) => return Ok(()),
+        };
+        let b = match self.get_pin_type(to) {
+            Ok(t) => t.clone(),
+            Err(_) => return Ok(()),
+        };
         self.unify(&a, &b)?;
 
         Ok(())

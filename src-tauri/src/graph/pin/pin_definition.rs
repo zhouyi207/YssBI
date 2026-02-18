@@ -38,6 +38,10 @@ pub struct PinMetaData {
 
     /// 动态添加
     pub is_dynamic: bool,
+
+    /// Widget 可选项（用于 dropdown 等控件）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub widget_options: Option<Vec<String>>,
 }
 
 impl Default for PinMetaData {
@@ -46,6 +50,7 @@ impl Default for PinMetaData {
             show_widget: false,
             widget_type: None,
             is_dynamic: false,
+            widget_options: None,
         }
     }
 }
@@ -140,6 +145,12 @@ impl PinDefinition {
     /// 动态添加 Pin
     pub fn with_dynamic(mut self, is_dynamic: bool) -> Self {
         self.meta_data.is_dynamic = is_dynamic;
+        self
+    }
+
+    /// 设置 Widget 可选项（用于 dropdown 等控件）
+    pub fn with_widget_options(mut self, options: Vec<String>) -> Self {
+        self.meta_data.widget_options = Some(options);
         self
     }
     

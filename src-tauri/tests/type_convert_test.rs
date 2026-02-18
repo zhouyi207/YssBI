@@ -187,7 +187,7 @@ fn test_multiple_type_conversions() {
 
     // 执行所有 print 节点
     use yssbi_lib::graph::core::GraphRuntime;
-    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
     let mut executor = Executor::new(runtime);
 
     println!("\n--- Executing Boolean conversion ---");

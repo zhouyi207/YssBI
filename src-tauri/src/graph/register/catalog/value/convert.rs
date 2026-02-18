@@ -204,6 +204,7 @@ fn convert_to_string_value(value: DataValue) -> Result<DataValue, String> {
         DataValue::Array(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::Object(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::DataFrame(id) => Ok(DataValue::String(format!("DataFrame({})", id))),
+        DataValue::DataSeries(id) => Ok(DataValue::String(format!("DataSeries({})", id))),
     }
 }
 

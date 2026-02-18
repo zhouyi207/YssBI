@@ -2,6 +2,17 @@ import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { PinInput } from "./PinInput";
+import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
+import { dataValueToRaw } from "@/shared/types/domain/dataValue";
+
+/** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
+function toDisplayValue(v: unknown): unknown {
+  if (v == null) return v;
+  if (typeof v === "object" && !Array.isArray(v) && ("String" in v || "Boolean" in v || "Int32" in v || "Int64" in v || "Float32" in v || "Float64" in v || "Null" in v)) {
+    return dataValueToRaw(dataValueFromBackend(v));
+  }
+  return v;
+}
 
 export interface PinProps extends PinModel {
   subgraphId?: string;
@@ -166,7 +177,7 @@ export const Pin: React.FC<PinProps> = (props) => {
             nodeId={nodeId}
             subgraphId={subgraphId}
             pinType={type}
-            value={userValue ?? defaultValue}  // 🆕 优先使用 userValue
+            value={toDisplayValue(userValue ?? defaultValue)}
             onValueChange={(value) => onValueChange?.(id, value)}
           />
         </div>

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { PinService } from "@/services";
 import { useGraphDataStore } from "@/features/core/dataStore";
+import { dataValueFromRaw } from "@/shared/types/domain/dataValue";
+import { dataValueToBackend } from "@/shared/types/dto/dataValue";
+import { dataTypeFromPinType } from "@/shared/types/domain/dataType";
 
 /**
  * Get default value for a pin type.
@@ -60,15 +63,18 @@ export function usePinInput({
 
   const savePinValue = useCallback(
     async (val?: unknown) => {
-      const toSave = val !== undefined ? val : value;
+      const raw = val !== undefined ? val : value;
       try {
-        await PinService.updatePinUserValue(subgraphId, nodeId, pinId, toSave);
-        useGraphDataStore.getState().updatePin(pinId, { userValue: toSave });
+        const dataType = dataTypeFromPinType(pinType);
+        const dv = dataValueFromRaw(raw, dataType);
+        const dto = dataValueToBackend(dv);
+        await PinService.updatePinUserValue(subgraphId, nodeId, pinId, dto);
+        useGraphDataStore.getState().updatePin(pinId, { userValue: raw });
       } catch (error) {
         console.error("[PinInput] Failed to update pin value:", error);
       }
     },
-    [subgraphId, nodeId, pinId, value]
+    [subgraphId, nodeId, pinId, pinType, value]
   );
 
   const handleBlur = useCallback(async () => {

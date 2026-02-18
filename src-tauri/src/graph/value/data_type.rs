@@ -21,6 +21,7 @@ pub enum DataType {
 
     // 数据框架
     DataFrame,
+    DataSeries,
 
     // 特殊类型
     Any,
@@ -38,6 +39,7 @@ impl fmt::Display for DataType {
             DataType::Array(inner) => write!(f, "Array<{}>", inner),
             DataType::Object => write!(f, "Object"),
             DataType::DataFrame => write!(f, "DataFrame"),
+            DataType::DataSeries => write!(f, "DataSeries"),
             DataType::Any => write!(f, "Any"),
         }
     }
@@ -56,6 +58,7 @@ impl FromStr for DataType {
             "String" => Ok(DataType::String),
             "Object" => Ok(DataType::Object),
             "DataFrame" => Ok(DataType::DataFrame),
+            "DataSeries" => Ok(DataType::DataSeries),
             "Any" => Ok(DataType::Any),
             _ => {
                 if let Some(inner) = s.strip_prefix("Array<").and_then(|s| s.strip_suffix('>')) {
@@ -79,8 +82,8 @@ impl DataType {
             DataType::Float64 => DataValue::Float64(0.0),
             DataType::String => DataValue::String(String::new()),
             DataType::Array(_) => DataValue::Array(Vec::new()),
-            DataType::Object => DataValue::Object(serde_json::Map::new()), // 在这里需要做一些操作
-            DataType::Any | DataType::DataFrame => DataValue::Null, // 在这里需要做一些操作
+            DataType::Object => DataValue::Object(std::collections::HashMap::new()),
+            DataType::Any | DataType::DataFrame | DataType::DataSeries => DataValue::Null,
         }
     }
 

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { DataValueBackend } from "@/shared/types/dto/dataValue";
 
 /**
  * Pin 服务 - 封装所有 Pin 相关的后端调用
@@ -9,13 +10,13 @@ export class PinService {
      * @param subgraphId 子图ID
      * @param nodeId 节点ID
      * @param pinId Pin ID
-     * @param value 用户设置的值
+     * @param value DataValue DTO 格式（前端负责类型转换）
      */
     static async updatePinUserValue(
         subgraphId: string,
         nodeId: string,
         pinId: string,
-        value: any
+        value: DataValueBackend | { Null: null }
     ): Promise<void> {
         console.log('[PinService.updatePinUserValue] Updating pin value:', {
             subgraphId,

@@ -123,14 +123,18 @@ export function useCanvasDrop({
 
       // DataFrame / Column 拖放
       if (dragState.template.category === "Data") {
-        const params = dragState.template.nodeType === "get_column"
+        const nodeType = dragState.template.nodeType;
+        const params = nodeType === "get_column"
           ? {
               dataframeId: dragState.template.initialData?.dataframeId,
               columnName: dragState.template.initialData?.columnName,
               columnType: dragState.template.initialData?.columnType,
             }
-          : { dataframeId: dragState.template.variableId };
-        await createNode(dragState.template.nodeType, { x, y }, params);
+          : {
+              dataframeId: dragState.template.variableId,
+              variableName: dragState.template.variableName,
+            };
+        await createNode(nodeType, { x, y }, params);
         return;
       }
 
@@ -188,12 +192,12 @@ export function useCanvasDrop({
         dragState.template.nodeType === "call_function" ||
         dragState.template.nodeType === "call_macro"
       ) {
-        const type = dragState.template.nodeType;
+        const nodeType = dragState.template.nodeType;
         const subId = dragState.template.subGraphId;
-        const subData = type === "call_function" ? functions[subId] : macros[subId];
+        const subData = nodeType === "call_function" ? functions[subId] : macros[subId];
         if (!subData) return;
 
-        await createNode(type, { x, y }, { subGraphId: subId });
+        await createNode(nodeType, { x, y }, { subGraphId: subId });
         return;
       }
 

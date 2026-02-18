@@ -291,4 +291,13 @@ export class ProjectService {
         return toFrontendGraph(result);
     }
 
+    /**
+     * 执行项目（从 event_begin 节点开始执行所有 Event 图）
+     * @returns { executedGraphs, logs }
+     */
+    static async executeProject(): Promise<{ executedGraphs: number; logs: string[] }> {
+        const res = await invoke<{ executedGraphs: number; logs: string[] }>("execute_project");
+        return res;
+    }
+
 }

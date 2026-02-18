@@ -110,11 +110,11 @@ pub fn run() {
             update_canvas,
             update_subgraph_io,
             rename_subgraph,
-            // ==================== DataFrame ====================
-            import_csv,
-            delete_dataframe,
-            create_dataframe,
-            get_dataframe_rows,
+            // ==================== Database ====================
+            load_database,
+            get_database_meta,
+            delete_database,
+            get_database_rows,
             // ==================== 日志 ====================
             get_logs,
             get_log_file_path,

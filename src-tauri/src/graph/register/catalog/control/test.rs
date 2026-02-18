@@ -80,7 +80,7 @@ mod tests {
             .expect("Failed to set condition value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         // 执行节点（使用 flow_processor）
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
@@ -122,7 +122,7 @@ mod tests {
             .expect("Failed to set condition value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
@@ -152,7 +152,7 @@ mod tests {
             .expect("Failed to create branch node");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
@@ -223,7 +223,7 @@ mod tests {
             .expect("Failed to create sequence node");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
 
         // 执行节点
         let definition = runtime.lock().unwrap().get_node_definition_by_node_id(seq_node);
@@ -326,7 +326,7 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
@@ -413,7 +413,7 @@ mod tests {
             .expect("Failed to connect branch1 false to branch2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
@@ -519,7 +519,7 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
@@ -636,7 +636,7 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 
@@ -759,7 +759,7 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut executor = Executor::new(runtime);
         let result = executor.start(branch1_node);
 

@@ -92,13 +92,12 @@ export function useCanvasInteraction({
     const onPinPointerDown = useCallback(async (pinId: string, e: React.PointerEvent, groupId?: string) => {
         e.stopPropagation();
 
-        // Alt + Click to Disconnect (后端优先)
+        // Alt + Click to Disconnect (CQRS: 后端命令 → 事件 → Handler 更新 store)
         if (e.altKey && e.button === 0) {
             const tid = activeTabIdRef.current;
             if (!tid) return;
 
             try {
-                console.log(`[useCanvasInteraction] Disconnecting pin via backend: ${pinId}`);
                 await ConnectionService.disconnectPin(tid, pinId);
                 saveHistory();
             } catch (error) {

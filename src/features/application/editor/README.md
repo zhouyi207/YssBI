@@ -228,7 +228,7 @@ Handles variable operations.
 Handles DataFrame operations.
 
 **Returns:**
-- `addDataFrame(name?)` - Create DataFrame
+- `triggerImportData()` - 打开导入数据弹窗（CSV 等）
 - `updateDataFrame(id, data)` - Update DataFrame
 - `deleteDataFrame(id)` - Delete DataFrame
 

@@ -1,6 +1,6 @@
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinDataTypeDefinition, PinRole};
+use crate::graph::pin::{DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 /// Get Variable 节点 - 读取变量值（纯数据节点，无副作用）
-/// 输出类型为 Any，运行时根据 variable_id 绑定的变量类型确定
+/// 通过 instance_params.variable_id 绑定具体变量
 fn register_get_variable(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get Variable", vec!["Variables".to_string()])
         .with_node_type("get_variable")
@@ -23,6 +23,17 @@ fn register_get_variable(registry: &NodeRegistry) {
                 DataRole::Output,
                 PinDataTypeDefinition::concrete(DataType::Any),
             )])
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let params = ctx.get_instance_params();
+            let variable_id = params
+                .variable_id
+                .as_deref()
+                .ok_or("Get Variable: variable_id not set")?;
+
+            let value = ctx.get_variable_value(variable_id)?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), value)?;
+            Ok(())
         }));
 
     registry.register(definition);
@@ -59,8 +70,15 @@ fn register_set_variable(registry: &NodeRegistry) {
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }))
         .with_data_evaluator(Arc::new(|ctx| {
-            // pass-through：将输入值直接传递给输出
+            let params = ctx.get_instance_params();
+            let variable_id = params
+                .variable_id
+                .as_deref()
+                .ok_or("Set Variable: variable_id not set")?;
+
             let value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+
+            ctx.set_variable_value(variable_id, value.clone())?;
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), value)?;
             Ok(())
         }));
