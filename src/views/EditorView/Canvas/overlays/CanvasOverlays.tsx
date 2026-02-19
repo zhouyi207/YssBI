@@ -127,7 +127,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Selection Box ================= */}
-            {gesture?.type === 'select' && canvasRef.current && (
+            {gesture?.type === 'select' && gesture?.groupId === groupId && canvasRef.current && (
                 <div
                     className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
                     style={{

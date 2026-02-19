@@ -17,6 +17,10 @@ const selectDragDelta = (state: { gesture: any }) => {
   const g = state.gesture;
   return g?.type === "drag" ? g.dragDelta ?? null : null;
 };
+const selectDragNodeIds = (state: { gesture: any }) => {
+  const g = state.gesture;
+  return g?.type === "drag" ? g.dragNodeIds ?? null : null;
+};
 const selectGestureType = (state: { gesture: any }) => state.gesture?.type ?? null;
 const selectActivePin = (state: { gesture: any }) => {
   const g = state.gesture;
@@ -48,8 +52,8 @@ export default function Canvas() {
     selectedNodeIds,
   } = useEditorGroup();
 
-  // 粒度化订阅：dragDelta 用自定义相等函数，避免对象引用变化触发 re-render
   const dragDelta = useGestureStore(selectDragDelta, dragDeltaEq);
+  const dragNodeIds = useGestureStore(selectDragNodeIds);
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
 
@@ -57,6 +61,16 @@ export default function Canvas() {
 
   const ref = useRef<HTMLDivElement>(null);
   const scale = useViewportStore((state) => state.viewports[groupId]?.scale || 1);
+
+  const selectedNodeIdsSet = useMemo(
+    () => new Set(selectedNodeIds),
+    [selectedNodeIds]
+  );
+
+  const dragNodeIdsSet = useMemo(
+    () => (dragNodeIds ? new Set(dragNodeIds) : new Set<string>()),
+    [dragNodeIds]
+  );
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     ref,
@@ -67,7 +81,7 @@ export default function Canvas() {
     gestureType,
     setCanvas,
     dragDelta,
-    selectedNodeIds
+    dragNodeIdsSet
   );
 
   const {
@@ -88,11 +102,6 @@ export default function Canvas() {
     createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => createNode(nodeType, position, params),
   });
 
-  const selectedNodeIdsSet = useMemo(
-    () => new Set(selectedNodeIds),
-    [selectedNodeIds]
-  );
-
   const activePin = useMemo(() => {
     if (gesturePinData) return gesturePinData;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
@@ -105,6 +114,7 @@ export default function Canvas() {
   return (
     <div
       ref={ref}
+      data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
       <ViewportGrid groupId={groupId} />
@@ -131,6 +141,7 @@ export default function Canvas() {
             .filter((n: { id: string }) => visibleNodeIds.has(n.id))
             .map((node: { id: string }) => {
               const isSelected = selectedNodeIdsSet.has(node.id);
+              const isDragging = dragNodeIdsSet.has(node.id);
               return (
                 <Node
                   key={node.id}
@@ -138,7 +149,7 @@ export default function Canvas() {
                   node={node as unknown as import('@/shared/types/ui').Node}
                   scale={scale}
                   selected={isSelected}
-                  dragDelta={isSelected ? (dragDelta ?? undefined) : undefined}
+                  dragDelta={isDragging ? (dragDelta ?? undefined) : undefined}
                   activePinId={activePin?.id}
                   subgraphId={activeTabId || undefined}
                   onPointerDown={onNodePointerDown}

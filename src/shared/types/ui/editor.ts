@@ -126,8 +126,11 @@ export type EditorGesture =
         startPin: Pin;
         startX: number;     // 屏幕坐标
         startY: number;
-        currentX: number;
+        currentX: number;   // 屏幕坐标（用于 hit-test）
         currentY: number;
+        /** 连接线终点的世界坐标（用于多 editor 同步渲染） */
+        worldX?: number;
+        worldY?: number;
         isReconnect?: boolean;
         groupId?: string;
     }
@@ -138,7 +141,9 @@ export type EditorGesture =
         lastY: number;
         moved: boolean;
         groupId?: string;
-        /** 拖拽期间的视觉偏移（世界坐标），仅在拖拽时更新，不写回 store，减少卡顿 */
+        /** 正在被拖拽的节点 ID 列表（用于多 editor 同步应用偏移） */
+        dragNodeIds?: string[];
+        /** 拖拽期间的累计偏移（世界坐标） */
         dragDelta?: { x: number; y: number };
     }
     | null;

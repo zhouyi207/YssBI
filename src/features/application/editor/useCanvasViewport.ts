@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
 import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -21,7 +21,7 @@ export function useCanvasViewport(
   gestureType: string | null,
   setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGroupId?: string) => void,
   dragDelta?: { x: number; y: number } | null,
-  selectedNodeIds?: string[]
+  dragNodeIds?: Set<string>
 ) {
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
@@ -173,11 +173,6 @@ export function useCanvasViewport(
     });
   }, [canvasRef, scale, visibleNodeIds, nodes]);
 
-  const selectedSet = useMemo(
-    () => (selectedNodeIds ? new Set(selectedNodeIds) : new Set<string>()),
-    [selectedNodeIds]
-  );
-
   // getPinWorldPos: 使用 useMemo 缓存的 Map，O(1) 查找，不再调用 deserializeGraph
   const getPinWorldPos = useCallback(
     (pinId: string) => {
@@ -186,14 +181,14 @@ export function useCanvasViewport(
       const position = nodePositionMap.get(nodeId);
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
-      const dx = dragDelta && selectedSet.has(nodeId) ? dragDelta.x : 0;
-      const dy = dragDelta && selectedSet.has(nodeId) ? dragDelta.y : 0;
+      const ddx = dragDelta && dragNodeIds?.has(nodeId) ? dragDelta.x : 0;
+      const ddy = dragDelta && dragNodeIds?.has(nodeId) ? dragDelta.y : 0;
       return {
-        x: position.x + offset.x + dx,
-        y: position.y + offset.y + dy,
+        x: position.x + offset.x + ddx,
+        y: position.y + offset.y + ddy,
       };
     },
-    [pinNodeIdMap, nodePositionMap, pinOffsets, dragDelta, selectedSet]
+    [pinNodeIdMap, nodePositionMap, pinOffsets, dragDelta, dragNodeIds]
   );
 
   const getCanvasLocalPoint = useCallback(

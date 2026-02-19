@@ -84,7 +84,12 @@ export function useCanvasInteraction({
                 setSelectedNodeIds([nodeId], gid);
             }
         }
-        useGestureStore.getState().setGesture({ type: "drag", nodeId, lastX: e.clientX, lastY: e.clientY, moved: false, groupId: gid });
+        // 记录被拖拽的节点 ID 列表，用于多 editor 同步
+        const layoutNode = useLayoutStore.getState().nodes[gid];
+        const dragNodeIds = layoutNode?.data?.params?.selectedNodeIds || [];
+        // 确保当前点击的节点也在列表中
+        const finalDragNodeIds = dragNodeIds.includes(nodeId) ? dragNodeIds : [nodeId, ...dragNodeIds];
+        useGestureStore.getState().setGesture({ type: "drag", nodeId, lastX: e.clientX, lastY: e.clientY, moved: false, groupId: gid, dragNodeIds: finalDragNodeIds, dragDelta: { x: 0, y: 0 } });
     }, [activeGroupIdRef, groups, setSelectedNodeIds]);
 
 
@@ -120,7 +125,18 @@ export function useCanvasInteraction({
         }
         if (!pin) return;
 
-        useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, groupId });
+        // 计算初始世界坐标，避免第一帧在多 editor 中终点不一致
+        const gid = groupId || activeGroupIdRef.current;
+        const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
+        let worldX = e.clientX;
+        let worldY = e.clientY;
+        if (canvasEl) {
+            const rect = canvasEl.getBoundingClientRect();
+            const vp = useViewportStore.getState().viewports[gid] || { x: 0, y: 0, scale: 1 };
+            worldX = (e.clientX - rect.left - vp.x) / vp.scale;
+            worldY = (e.clientY - rect.top - vp.y) / vp.scale;
+        }
+        useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
     }, [activeTabIdRef, saveHistory, setNodes]);
 
 
@@ -161,13 +177,20 @@ export function useCanvasInteraction({
                 const x1 = Math.min(g.startX, e.clientX), y1 = Math.min(g.startY, e.clientY);
                 const x2 = Math.max(g.startX, e.clientX), y2 = Math.max(g.startY, e.clientY);
                 const gid = g.groupId || activeGroupIdRef.current;
-                const graphData = getGraphById(activeTabIdRef.current || "");
+                // 使用 gesture 所在 editor group 的 activeTabId，而非全局 activeTabIdRef
+                const layoutNode = useLayoutStore.getState().nodes[gid];
+                const tabId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current ?? null;
+                const graphData = getGraphById(tabId || "");
                 const currentNodes = graphData?.nodes ?? [];
                 const newSelectedIds: string[] = [];
+                // 在 gesture 所在 editor 的 canvas 内查找节点，避免多 editor 同 graph 时 document.getElementById 返回错误 editor 的节点
+                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
                 for (const n of currentNodes) {
                     const nodeId = (n as { id?: string }).id;
                     if (!nodeId) continue;
-                    const el = document.getElementById(nodeId);
+                    const el = canvasEl
+                        ? (canvasEl as Element).querySelector(`[data-node-id="${nodeId}"]`)
+                        : document.getElementById(nodeId);
                     if (!el) continue;
                     const r = el.getBoundingClientRect();
                     if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
@@ -175,7 +198,6 @@ export function useCanvasInteraction({
                     }
                 }
                 // 仅当选择结果变化时才更新，减少不必要的 re-render
-                const layoutNode = useLayoutStore.getState().nodes[gid];
                 const current = layoutNode?.data?.params?.selectedNodeIds ?? [];
                 const newSet = new Set(newSelectedIds);
                 const curSet = new Set(current);
@@ -184,8 +206,20 @@ export function useCanvasInteraction({
                 }
             }
             else if (g.type === "connect") {
-                nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY };
-                useGestureStore.getState().updateConnection(e.clientX, e.clientY);
+                // 计算世界坐标，使多 editor 渲染同一连接线时终点一致
+                const gid = g.groupId || activeGroupIdRef.current;
+                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
+                let worldX = e.clientX;
+                let worldY = e.clientY;
+                if (canvasEl) {
+                    const rect = canvasEl.getBoundingClientRect();
+                    const vp = useViewportStore.getState().viewports[gid] || { x: 0, y: 0, scale: 1 };
+                    worldX = (e.clientX - rect.left - vp.x) / vp.scale;
+                    worldY = (e.clientY - rect.top - vp.y) / vp.scale;
+                }
+                nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY, worldX, worldY };
+                useGestureStore.getState().setGesture(nextGesture);
+                nextGesture = null; // already set above
             }
             else if (g.type === "drag") {
                 const canvas = canvasRef.current || { scale: 1 };
@@ -205,7 +239,6 @@ export function useCanvasInteraction({
                     lastX = e.clientX;
                     lastY = e.clientY;
                 }
-                // 仅更新 gesture（含 dragDelta），不写 graphDataStore，减少卡顿
                 nextGesture = { ...g, moved, lastX, lastY, dragDelta };
             }
 
@@ -237,13 +270,20 @@ export function useCanvasInteraction({
                 const x1 = Math.min(rect.startX, rect.currentX), y1 = Math.min(rect.startY, rect.currentY);
                 const x2 = Math.max(rect.startX, rect.currentX), y2 = Math.max(rect.startY, rect.currentY);
                 const gid = g.groupId || activeGroupIdRef.current;
-                const graphData = getGraphById(activeTabIdRef.current || "");
+                // 使用 gesture 所在 editor group 的 activeTabId，而非全局 activeTabIdRef
+                const layoutNode = useLayoutStore.getState().nodes[gid];
+                const tabId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current ?? null;
+                const graphData = getGraphById(tabId || "");
                 const currentNodes = graphData?.nodes ?? [];
                 const newSelectedIds: string[] = [];
+                // 在 gesture 所在 editor 的 canvas 内查找节点，避免多 editor 同 graph 时 document.getElementById 返回错误 editor 的节点
+                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
                 for (const n of currentNodes) {
                     const nodeId = (n as { id?: string }).id;
                     if (!nodeId) continue;
-                    const el = document.getElementById(nodeId);
+                    const el = canvasEl
+                        ? (canvasEl as Element).querySelector(`[data-node-id="${nodeId}"]`)
+                        : document.getElementById(nodeId);
                     if (!el) continue;
                     const r = el.getBoundingClientRect();
                     if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
@@ -256,17 +296,16 @@ export function useCanvasInteraction({
                 if (target) connectPins(g.startPin.id, target.getAttribute("data-pin-id")!);
                 else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
             } else if (g.type === "drag" && g.moved) {
-                // 拖拽结束：将 dragDelta 写回 store
                 const delta = g.dragDelta || { x: 0, y: 0 };
                 if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) {
+                    const dragIds = g.dragNodeIds || [];
                     const gid = g.groupId || activeGroupIdRef.current;
-                    const layoutNode = useLayoutStore.getState().nodes[gid];
-                    const sIds = layoutNode?.data?.params?.selectedNodeIds || [];
-                    const tid = activeTabIdRef.current;
-                    if (tid && sIds.length > 0) {
+                    const lNode = useLayoutStore.getState().nodes[gid];
+                    const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
+                    if (tid && dragIds.length > 0) {
                         const store = useGraphDataStore.getState();
                         const updates: Array<{ nodeId: string; x: number; y: number }> = [];
-                        for (const id of sIds) {
+                        for (const id of dragIds) {
                             const node = store.nodes[id];
                             if (node?.position) {
                                 updates.push({
@@ -278,7 +317,6 @@ export function useCanvasInteraction({
                         }
                         if (updates.length > 0) {
                             store.batchUpdateNodePositions(updates);
-                            // 拖拽结束时调用后端同步位置（CQRS，不拖拽过程中连续调用）
                             NodeService.updateNodePositions(tid, updates).catch((e) =>
                                 console.warn("[useCanvasInteraction] updateNodePositions failed:", e)
                             );

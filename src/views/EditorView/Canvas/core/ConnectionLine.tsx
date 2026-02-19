@@ -40,8 +40,6 @@ export const ConnectionLine = ({
             const { gesture } = useGestureStore.getState();
             const isConnecting = gesture?.type === "connect";
             const gestureStartPin = isConnecting ? (gesture as any).startPin : null;
-            const currentX = isConnecting ? (gesture as any).currentX : 0;
-            const currentY = isConnecting ? (gesture as any).currentY : 0;
 
             const canvasEl = canvasRef.current;
             if (!canvasEl) return;
@@ -51,17 +49,22 @@ export const ConnectionLine = ({
             ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
             let activeStart = null;
-            let activeEndScreen: { x: number, y: number } | null = null;
+            let endWorld: { x: number, y: number } | null = null;
 
             if (isConnecting && gestureStartPin) {
                 activeStart = gestureStartPin;
-                activeEndScreen = { x: currentX, y: currentY };
+                // 优先使用世界坐标（多 editor 同步正确），回退到屏幕坐标转换
+                if ((gesture as any).worldX != null && (gesture as any).worldY != null) {
+                    endWorld = { x: (gesture as any).worldX, y: (gesture as any).worldY };
+                } else {
+                    endWorld = getCanvasLocalPointRef.current((gesture as any).currentX, (gesture as any).currentY);
+                }
             } else if (pendingConnectionRef.current && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;
-                activeEndScreen = menuPosRef.current;
+                endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
             }
 
-            if (!activeStart || !activeEndScreen) return;
+            if (!activeStart || !endWorld) return;
 
             const viewport = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
             const currentTheme = themeRef.current;
@@ -72,11 +75,10 @@ export const ConnectionLine = ({
 
             const start = getPinWorldPosRef.current(activeStart.id);
             if (start) {
-                const end = getCanvasLocalPointRef.current(activeEndScreen.x, activeEndScreen.y);
                 drawEdge(
                     ctx,
                     start.x, start.y,
-                    end.x, end.y,
+                    endWorld.x, endWorld.y,
                     activeStart.ui?.color ?? (currentTheme[`${activeStart.type}Color` as keyof typeof currentTheme] as string) ?? currentTheme.connectionLines,
                     2 / viewport.scale,
                     activeStart.direction === "input"

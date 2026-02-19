@@ -18,8 +18,8 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   onPointerDown,
   children,
 }) => {
-  const dx = selected && dragDelta ? dragDelta.x : 0;
-  const dy = selected && dragDelta ? dragDelta.y : 0;
+  const dx = dragDelta ? dragDelta.x : 0;
+  const dy = dragDelta ? dragDelta.y : 0;
   const posX = node.position.x + dx;
   const posY = node.position.y + dy;
   const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id);

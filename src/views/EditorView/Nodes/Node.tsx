@@ -10,7 +10,6 @@ export interface NodeProps {
   node: NodeModel;
   scale: number;
   selected?: boolean;
-  /** 拖拽时的视觉偏移 */
   dragDelta?: { x: number; y: number };
   activePinId?: string | null;
   subgraphId?: string;
@@ -55,7 +54,6 @@ export const Node = React.memo<NodeProps>((props) => {
     </NodeContainer>
   );
 }, (prev, next) => {
-  // 极致性能优化：节点对象引用变化时重绘
   const dragDeltaSame =
     (prev.dragDelta?.x === next.dragDelta?.x && prev.dragDelta?.y === next.dragDelta?.y) ||
     (!prev.dragDelta && !next.dragDelta);
