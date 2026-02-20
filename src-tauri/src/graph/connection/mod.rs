@@ -3,6 +3,8 @@
 //! ConnectionManager 是连接关系的唯一真实来源（Single Source of Truth）。
 //! Pin 不存储连接信息，所有连接查询都通过 ConnectionManager。
 
+pub mod connection_validator;
+
 use crate::graph::NodeId;
 use crate::graph::PinId;
 use std::collections::{HashMap, HashSet};
@@ -73,20 +75,19 @@ impl ConnectionManager {
             .push(pin_id);
     }
 
-    /// 连接两个 Pin
+    /// 连接两个 Pin（底层操作，调用前应先通过 ConnectionValidator 验证）
     ///
     /// 规则：
-    /// - Data In Pin: 最多 1 条输入边（自动断开旧连接）
-    /// - Exec In Pin: 最多 1 条输入边（自动断开旧连接）
-    /// - Out Pin: 可以有多条输出边
-    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(), String> {
-        // 检查是否会形成循环
-        if self.would_create_cycle(from_pin, to_pin) {
-            return Err("Connection would create a cycle".to_string());
-        }
-
+    /// - Input Pin: 最多 1 条输入边（自动断开旧连接）
+    /// - Output Pin: 可以有多条输出边
+    ///
+    /// 返回被自动断开的旧连接（如有）
+    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Option<(PinId, PinId)> {
         // 如果 to_pin 已有连接，先断开（保证最多 1 条输入边）
-        self.disconnect_input(to_pin);
+        let auto_disconnected = self.get_upstream(to_pin).map(|old_from| {
+            self.disconnect(old_from, to_pin);
+            (old_from, to_pin)
+        });
 
         // 建立新连接
         self.connections
@@ -101,7 +102,7 @@ impl ConnectionManager {
             .unwrap()
             .insert(to_pin, from_pin);
 
-        Ok(())
+        auto_disconnected
     }
 
     /// 断开连接
@@ -198,7 +199,7 @@ impl ConnectionManager {
     }
 
     /// 检查是否会形成循环
-    fn would_create_cycle(&self, from_pin: PinId, to_pin: PinId) -> bool {
+    pub fn would_create_cycle(&self, from_pin: PinId, to_pin: PinId) -> bool {
         let from_node = match self.get_pin_node(from_pin) {
             Some(n) => n,
             None => return false,

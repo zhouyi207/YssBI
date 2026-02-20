@@ -19,8 +19,14 @@ pub struct NodeCreationResult {
 ///
 /// 每种参数化节点类型对应一个变体，编译期保证类型安全。
 /// 通过 `#[serde(tag = "paramsKind")]` + `#[serde(flatten)]` 展开到 DTO JSON 顶层。
+///
+/// 前端 DTO 格式示例：
+/// - `{ paramsKind: "none" }`
+/// - `{ paramsKind: "variable", variableId: "...", variableName: "...", variableType: "..." }`
+/// - `{ paramsKind: "subGraph", subGraphId: "..." }`
+/// - `{ paramsKind: "dataFrame", dataframeId: "..." }`
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "paramsKind", rename_all = "camelCase")]
+#[serde(tag = "paramsKind")]
 pub enum NodeInstanceParams {
     /// 无特殊参数的节点
     #[serde(rename = "none")]
@@ -29,22 +35,25 @@ pub enum NodeInstanceParams {
     /// 变量节点（get_variable / set_variable）
     #[serde(rename = "variable")]
     Variable {
+        #[serde(rename = "variableId")]
         variable_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "variableName", skip_serializing_if = "Option::is_none")]
         variable_name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "variableType", skip_serializing_if = "Option::is_none")]
         variable_type: Option<String>,
     },
 
     /// 函数/宏调用节点（call_function / call_macro）
     #[serde(rename = "subGraph")]
     SubGraph {
+        #[serde(rename = "subGraphId")]
         sub_graph_id: String,
     },
 
     /// DataFrame 节点（get_dataframe）
     #[serde(rename = "dataFrame")]
     DataFrame {
+        #[serde(rename = "dataframeId")]
         dataframe_id: String,
     },
 }
@@ -180,6 +189,70 @@ impl NodeInstance {
                 position: NodePosition { x: 0.0, y: 0.0 },
                 instance_params: NodeInstanceParams::default(),
                 pin_ids,
+            },
+            pins: pin_instances,
+        })
+    }
+
+    /// Create an instance with predetermined node ID and pin IDs (for redo / restore).
+    /// The caller must supply exactly the right number of pin IDs matching the definition.
+    pub fn from_definition_with_ids(
+        definition: Arc<NodeDefinition>,
+        node_id: NodeId,
+        pin_ids: &[PinId],
+    ) -> Result<NodeCreationResult, String> {
+        let mut type_var_map = HashMap::new();
+        let mut type_var_map_reverse = HashMap::new();
+
+        for type_var in definition.type_vars.iter().cloned() {
+            let type_var_id = TypeVarId::new();
+            type_var_map.insert(type_var_id, type_var.clone());
+            type_var_map_reverse.insert(type_var, type_var_id);
+        }
+
+        let pin_defs = (definition
+            .pin_generator
+            .as_ref()
+            .ok_or("pin_generator missing")?)()?;
+
+        if pin_ids.len() != pin_defs.len() {
+            return Err(format!(
+                "Expected {} pin IDs, got {}",
+                pin_defs.len(),
+                pin_ids.len()
+            ));
+        }
+
+        let pin_instances: Vec<PinInstance> = pin_defs
+            .iter()
+            .enumerate()
+            .map(|(index, pin_definition)| {
+                let order = index as i32;
+                let mut pin = PinInstance::from_definition(pin_definition, node_id, order);
+                pin.id = pin_ids[index];
+
+                if let Some(type_var_key) = pin_definition.get_type_var_key() {
+                    if let Some(type_var_def) = definition.type_vars.iter().find(|tv| tv.id == type_var_key) {
+                        if let Some(&type_var_id) = type_var_map_reverse.get(type_var_def) {
+                            pin = pin.with_type_var_id(Some(type_var_id));
+                        }
+                    }
+                }
+
+                pin
+            })
+            .collect();
+
+        let collected_pin_ids = pin_instances.iter().map(|p| p.id).collect();
+
+        Ok(NodeCreationResult {
+            node: Self {
+                id: node_id,
+                definition,
+                type_var_map,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                instance_params: NodeInstanceParams::default(),
+                pin_ids: collected_pin_ids,
             },
             pins: pin_instances,
         })

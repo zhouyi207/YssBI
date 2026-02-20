@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { PinService } from "@/services";
-import { useGraphDataStore } from "@/features/core/dataStore";
-import { dataValueFromRaw } from "@/shared/types/domain/dataValue";
-import { dataValueToBackend } from "@/shared/types/dto/dataValue";
-import { dataTypeFromPinType } from "@/shared/types/domain/dataType";
+import { executeCommand } from "@/features/core/history";
 
 /**
  * Get default value for a pin type.
@@ -65,11 +61,12 @@ export function usePinInput({
     async (val?: unknown) => {
       const raw = val !== undefined ? val : value;
       try {
-        const dataType = dataTypeFromPinType(pinType);
-        const dv = dataValueFromRaw(raw, dataType);
-        const dto = dataValueToBackend(dv);
-        await PinService.updatePinUserValue(subgraphId, nodeId, pinId, dto);
-        useGraphDataStore.getState().updatePin(pinId, { userValue: raw });
+        await executeCommand(
+          subgraphId,
+          'SetPinValue',
+          { pinId, nodeId, pinType, newValue: raw },
+          { mergeKey: `pin-value-${pinId}` },
+        );
       } catch (error) {
         console.error("[PinInput] Failed to update pin value:", error);
       }

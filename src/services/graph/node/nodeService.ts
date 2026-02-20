@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface CreateNodeResult {
+    nodeId: string;
+    pinIds: string[];
+}
+
 export class NodeService {
    // ==================== Nodes 操作 ====================
 
@@ -32,18 +37,73 @@ export class NodeService {
             subGraphId?: string;
             dataframeId?: string;
         }
-    ): Promise<string> {
+    ): Promise<CreateNodeResult> {
         console.log('[NodeService.createNode] Creating node:', { subgraphId, nodeType, x, y, params });
         const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
-        const nodeId = await invoke<string>("create_node", { 
+        const result = await invoke<CreateNodeResult>("create_node", { 
             graphId: subgraphId, 
             nodeType: nodeType,
             x: x !== undefined ? x : null,
             y: y !== undefined ? y : null,
             params: taggedParams,
         });
-        console.log('[NodeService.createNode] Node created successfully, ID:', nodeId);
-        return nodeId;
+        console.log('[NodeService.createNode] Node created successfully, ID:', result.nodeId);
+        return result;
+    }
+
+    /**
+     * Create a node with specific IDs (for redo — preserves node/pin identity)
+     */
+    static async createNodeWithId(
+        graphId: string,
+        nodeId: string,
+        pinIds: string[],
+        nodeType: string,
+        x?: number,
+        y?: number,
+        params?: {
+            variableId?: string;
+            variableName?: string;
+            variableType?: string;
+            subGraphId?: string;
+            dataframeId?: string;
+        }
+    ): Promise<void> {
+        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
+        await invoke("create_node_with_id", {
+            graphId,
+            nodeId,
+            pinIds,
+            nodeType,
+            x: x ?? null,
+            y: y ?? null,
+            params: taggedParams,
+        });
+    }
+
+    /**
+     * Restore previously deleted nodes/pins/connections (for DeleteNodes undo)
+     */
+    static async restoreNodes(
+        graphId: string,
+        nodes: Array<{
+            nodeId: string;
+            nodeType: string;
+            x: number;
+            y: number;
+            params?: Record<string, unknown> | null;
+            pins: Array<{ pinId: string; userValue?: unknown }>;
+        }>,
+        connections: Array<{ fromPin: string; toPin: string }>,
+    ): Promise<void> {
+        await invoke("restore_nodes", {
+            graphId,
+            nodes: nodes.map(n => ({
+                ...n,
+                params: n.params ? NodeService.buildTaggedParams(n.params as any) : null,
+            })),
+            connections,
+        });
     }
 
     /**

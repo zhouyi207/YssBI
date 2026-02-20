@@ -2,6 +2,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { NodeService } from '@/services';
 import { Node as DomainNode } from '@/shared/types/domain';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { executeCommand } from '@/features/core/history';
 
 /**
  * Node Management Hook (CQRS Pattern)
@@ -53,18 +54,12 @@ export function useNodeManagement() {
             }
 
             try {
-                const tempKey = `${nodeType}-${Date.now()}-${Math.random()}`;
-                pendingActionsRef.current.set(tempKey, () => {});
-
-                await NodeService.createNode(
-                    activeTabId,
+                await executeCommand(activeTabId, 'CreateNode', {
                     nodeType,
-                    position.x,
-                    position.y,
-                    params
-                );
-
-                pendingActionsRef.current.delete(tempKey);
+                    x: position.x,
+                    y: position.y,
+                    params,
+                });
             } catch (error) {
                 console.error('[useNodeManagement] Failed to create node:', error);
                 throw error;

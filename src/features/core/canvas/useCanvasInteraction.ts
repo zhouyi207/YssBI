@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect } from "react";
-import { getGraphById, useGraphDataStore } from "@/features/core/dataStore";
+import { getGraphById } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
+import { executeCommand } from "@/features/core/history";
 import { Node } from '@/shared/types/ui';
 import { Pin, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "@/shared/utils";
-import { ConnectionService, NodeService } from "@/services";
 import { deserializeGraph } from "@/features/core/dataStore";
 
 interface UseCanvasInteractionProps {
@@ -20,7 +20,6 @@ interface UseCanvasInteractionProps {
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
     setCanvas: (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition), targetGroupId?: string) => void;
-    saveHistory: () => void;
     /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
     enabled?: boolean;
 }
@@ -33,7 +32,6 @@ export function useCanvasInteraction({
     setSelectedNodeIds,
     setNodes,
     setCanvas,
-    saveHistory,
     enabled = true,
 }: UseCanvasInteractionProps) {
 
@@ -48,13 +46,11 @@ export function useCanvasInteraction({
         if (!tid) return;
 
         try {
-            console.log(`[useCanvasInteraction] Connecting pins via backend: ${a} -> ${b}`);
-            await ConnectionService.connectPins(tid, a, b);
-            saveHistory();
+            await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });
         } catch (error) {
             console.error('[useCanvasInteraction] Failed to connect pins:', error);
         }
-    }, [activeTabIdRef, saveHistory]);
+    }, [activeTabIdRef]);
 
     const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
         // Button 1 (Middle) or Button 2 (Right) or Alt+Left (Button 0) for panning
@@ -97,14 +93,12 @@ export function useCanvasInteraction({
     const onPinPointerDown = useCallback(async (pinId: string, e: React.PointerEvent, groupId?: string) => {
         e.stopPropagation();
 
-        // Alt + Click to Disconnect (CQRS: 后端命令 → 事件 → Handler 更新 store)
         if (e.altKey && e.button === 0) {
             const tid = activeTabIdRef.current;
             if (!tid) return;
 
             try {
-                await ConnectionService.disconnectPin(tid, pinId);
-                saveHistory();
+                await executeCommand(tid, 'DisconnectPin', { pinId });
             } catch (error) {
                 console.error('[useCanvasInteraction] Failed to disconnect pin:', error);
             }
@@ -137,7 +131,7 @@ export function useCanvasInteraction({
             worldY = (e.clientY - rect.top - vp.y) / vp.scale;
         }
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
-    }, [activeTabIdRef, saveHistory, setNodes]);
+    }, [activeTabIdRef, setNodes]);
 
 
     const onCanvasWheel = useCallback((e: React.WheelEvent, targetGroupId?: string) => {
@@ -303,27 +297,16 @@ export function useCanvasInteraction({
                     const lNode = useLayoutStore.getState().nodes[gid];
                     const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
                     if (tid && dragIds.length > 0) {
-                        const store = useGraphDataStore.getState();
-                        const updates: Array<{ nodeId: string; x: number; y: number }> = [];
-                        for (const id of dragIds) {
-                            const node = store.nodes[id];
-                            if (node?.position) {
-                                updates.push({
-                                    nodeId: id,
-                                    x: node.position.x + delta.x,
-                                    y: node.position.y + delta.y,
-                                });
-                            }
-                        }
-                        if (updates.length > 0) {
-                            store.batchUpdateNodePositions(updates);
-                            NodeService.updateNodePositions(tid, updates).catch((e) =>
-                                console.warn("[useCanvasInteraction] updateNodePositions failed:", e)
-                            );
-                        }
+                        executeCommand(
+                            tid,
+                            'MoveNodes',
+                            { nodeIds: dragIds, delta },
+                            { mergeKey: `move-${[...dragIds].sort().join(',')}` },
+                        ).catch((e) =>
+                            console.warn("[useCanvasInteraction] MoveNodes command failed:", e)
+                        );
                     }
                 }
-                saveHistory();
             }
 
             useGestureStore.getState().endConnection();
@@ -336,7 +319,7 @@ export function useCanvasInteraction({
             window.removeEventListener("pointerup", onUp);
             if (rAFId) cancelAnimationFrame(rAFId);
         };
-    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, saveHistory, setSelectedNodeIds]);
+    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, setSelectedNodeIds]);
 
     return {
         contextMenu,

@@ -91,14 +91,15 @@ pub fn run() {
             delete_variable,
             // ==================== Node ====================
             create_node,
+            create_node_with_id,
             batch_create_nodes,
             delete_node,
             batch_delete_nodes,
             update_node_positions,
+            restore_nodes,
             // ==================== Connection ====================
             connect_pins,
             disconnect_pin,
-            create_connection,
             delete_connection,
             get_connections,
             delete_connections_for_pin,
@@ -106,6 +107,8 @@ pub fn run() {
             // ==================== Pin ====================
             update_pin_user_value,
             clear_pin_user_value,
+            // ==================== History ====================
+            sync_graph_state,
             // ==================== 子图管理 ====================
             update_canvas,
             update_subgraph_io,

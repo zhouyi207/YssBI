@@ -1,5 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface ConnectPinsResult {
+    fromPin: string;
+    toPin: string;
+    autoDisconnectedFrom: string | null;
+    autoDisconnectedTo: string | null;
+}
+
+export interface RemovedConnection {
+    fromPin: string;
+    toPin: string;
+}
+
 /**
  * Connection 服务 — 封装所有连接相关的后端调用
  *
@@ -9,23 +21,23 @@ import { invoke } from "@tauri-apps/api/core";
  */
 export class ConnectionService {
     /**
-     * 连接两个 Pin
+     * 连接两个 Pin（无序，后端自动验证方向和兼容性）
      *
-     * 后端会自动处理：
-     * - 输入 pin 只允许 1 条连接（自动断开旧连接 → ConnectionDeleted 事件）
-     * - 环路检测
-     * - 类型推断
-     * - 动态 pin 重建（→ NodePinsUpdated 事件）
+     * Returns the actual connection direction and any auto-disconnected connection,
+     * used by the command system for undo context.
      */
-    static async connectPins(subgraphId: string, sourcePinId: string, targetPinId: string): Promise<void> {
-        await invoke("connect_pins", { subgraphId, sourcePinId, targetPinId });
+    static async connectPins(subgraphId: string, pinA: string, pinB: string): Promise<ConnectPinsResult> {
+        return await invoke<ConnectPinsResult>("connect_pins", { subgraphId, pinA, pinB });
     }
 
     /**
      * 断开 Pin 的所有连接（Alt+Click 触发）
+     *
+     * Returns the list of connections that were removed,
+     * used by the command system for undo context.
      */
-    static async disconnectPin(subgraphId: string, pinId: string): Promise<void> {
-        await invoke("disconnect_pin", { subgraphId, pinId });
+    static async disconnectPin(subgraphId: string, pinId: string): Promise<RemovedConnection[]> {
+        return await invoke<RemovedConnection[]>("disconnect_pin", { subgraphId, pinId });
     }
 
     /**

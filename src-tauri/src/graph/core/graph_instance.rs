@@ -105,6 +105,107 @@ impl GraphInstance {
     pub fn registry(&self) -> &Arc<NodeRegistry> {
         &self.registry
     }
+
+    /// 从前端快照重建后端 Graph 状态（用于 undo/redo 后同步）
+    ///
+    /// 流程：
+    /// 1. 清空当前状态
+    /// 2. 按快照重建所有节点（保留原始 ID）
+    /// 3. 重建所有连接
+    /// 4. 运行类型推断
+    /// 从前端快照重建后端 Graph 状态（用于 undo/redo 后同步）
+    ///
+    /// 流程：
+    /// 1. 清空当前状态
+    /// 2. 按快照重建所有节点（保留原始 ID）
+    /// 3. 重建所有连接
+    /// 4. 运行类型推断
+    pub fn rebuild_from_snapshot(
+        &self,
+        snapshot: crate::schema::GraphRebuildSnapshot,
+    ) -> Result<(), String> {
+        use crate::graph::pin::PinId;
+        use uuid::Uuid;
+
+        let parse_node_id = |s: &str| -> Result<NodeId, String> {
+            Uuid::parse_str(s)
+                .map(NodeId::from)
+                .map_err(|e| format!("Invalid node id '{}': {}", s, e))
+        };
+        let parse_pin_id = |s: &str| -> Result<PinId, String> {
+            Uuid::parse_str(s)
+                .map(PinId::from)
+                .map_err(|e| format!("Invalid pin id '{}': {}", s, e))
+        };
+
+        let mut data_state = self.data_state.write().unwrap();
+        *data_state = GraphDataState::default();
+
+        for node_snap in &snapshot.nodes {
+            let definition = self
+                .registry
+                .get(&node_snap.node_type)
+                .ok_or_else(|| format!("Node type '{}' not found in registry", node_snap.node_type))?;
+
+            let result = NodeInstance::from_definition(definition.clone())
+                .map_err(|e| format!("Failed to create node '{}': {}", node_snap.node_type, e))?;
+
+            let target_node_id = parse_node_id(&node_snap.id)?;
+
+            let mut node = result.node;
+            node.id = target_node_id;
+            node.position = crate::graph::NodePosition { x: node_snap.x, y: node_snap.y };
+            if let Some(ref params) = node_snap.params {
+                node.instance_params = params.clone();
+            }
+
+            let mut pins = result.pins;
+
+            for (i, pin) in pins.iter_mut().enumerate() {
+                pin.node_id = target_node_id;
+                if let Some(snap_pin) = node_snap.pins.get(i) {
+                    if let Ok(pid) = parse_pin_id(&snap_pin.id) {
+                        pin.id = pid;
+                    }
+                    if let Some(ref val) = snap_pin.user_value {
+                        pin.user_value = Some(val.clone());
+                    }
+                }
+            }
+
+            node.pin_ids = pins.iter().map(|p| p.id).collect();
+
+            if let Some(dt) = node_snap.params.as_ref()
+                .and_then(|p| p.variable_type())
+                .and_then(|vt| vt.parse::<DataType>().ok())
+            {
+                for pin in &pins {
+                    if pin.definition.kind == PinKind::Data {
+                        data_state.pin_types.insert(pin.id, dt.clone());
+                    }
+                }
+            }
+
+            for pin in &pins {
+                data_state.connections.register_pin(pin.id, target_node_id);
+            }
+
+            data_state.add_node(node);
+            data_state.add_pins(pins);
+        }
+
+        for conn in &snapshot.connections {
+            let from_pin = parse_pin_id(&conn.from_pin)?;
+            let to_pin = parse_pin_id(&conn.to_pin)?;
+            data_state.connections.connect(from_pin, to_pin);
+        }
+
+        drop(data_state);
+
+        let _ = self.infer_types();
+
+        Ok(())
+    }
 }
 
 /// Node 管理
@@ -147,6 +248,50 @@ impl GraphInstance {
         }
 
         // 根据 instance_params 中的类型信息设置数据 pin 的具体类型
+        let variable_data_type = params
+            .as_ref()
+            .and_then(|p| p.variable_type())
+            .and_then(|vt| vt.parse::<DataType>().ok());
+
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            if let Some(ref dt) = variable_data_type {
+                for pin in &result.pins {
+                    if pin.definition.kind == PinKind::Data {
+                        data_state.pin_types.insert(pin.id, dt.clone());
+                    }
+                }
+            }
+            data_state.add_node(node);
+            data_state.add_pins(result.pins);
+        }
+
+        Ok(node_id)
+    }
+
+    /// Create a node with specific IDs (for undo/redo ID preservation).
+    /// Does NOT run type inference — call `infer_types()` after.
+    pub fn create_node_raw_with_ids(
+        &self,
+        node_type: &str,
+        node_id: NodeId,
+        pin_ids: &[PinId],
+        x: f32,
+        y: f32,
+        params: Option<NodeInstanceParams>,
+    ) -> Result<NodeId, String> {
+        let definition = self
+            .registry
+            .get(node_type)
+            .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
+
+        let result = NodeInstance::from_definition_with_ids(definition.clone(), node_id, pin_ids)?;
+
+        let mut node = result.node.with_position(x, y);
+        if let Some(ref p) = params {
+            node = node.with_instance_params(p.clone());
+        }
+
         let variable_data_type = params
             .as_ref()
             .and_then(|p| p.variable_type())
@@ -350,25 +495,35 @@ impl GraphInstance {
 
 /// 连接管理
 impl GraphInstance {
-    /// 连接两个 pin，自动运行类型推断和动态 pin 重建
+    /// 连接两个 pin（无序），后端自动验证方向、类型兼容性等
     ///
-    /// 返回 (被自动断开的旧连接, 动态 pin 变更集, 推断出的 pin 类型)
-    pub fn connect(&self, from_pin: PinId, to_pin: PinId) -> Result<(Option<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+    /// 验证链：存在性 → 同 Pin → 同节点 → 方向推断 → Kind 兼容
+    ///        → 重复连接 → 类型兼容 → 环路检测
+    ///
+    /// 返回 (已确定方向的 from/to, 被自动断开的旧连接, 动态 pin 变更集, 推断出的 pin 类型)
+    pub fn connect(
+        &self,
+        pin_a: PinId,
+        pin_b: PinId,
+    ) -> Result<(PinId, PinId, Option<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+        use crate::graph::connection::connection_validator::validate_connection;
+
         let affected_node_id;
         let auto_disconnected;
+        let from_pin;
+        let to_pin;
         {
             let data_state = self.data_state.write().unwrap();
-            let pins = data_state.pins.clone();
-            if !pins.contains_key(&from_pin) {
-                return Err(format!("Source pin {:?} not found", from_pin));
-            }
-            if !pins.contains_key(&to_pin) {
-                return Err(format!("Target pin {:?} not found", to_pin));
-            }
-            affected_node_id = pins.get(&to_pin).map(|p| p.node_id);
-            auto_disconnected = data_state.connections.get_upstream(to_pin)
-                .map(|old_from| (old_from, to_pin));
-            data_state.connections.connect(from_pin, to_pin)?;
+
+            // 验证链（8 步）
+            let validated = validate_connection(&data_state, pin_a, pin_b)?;
+            from_pin = validated.from_pin;
+            to_pin = validated.to_pin;
+
+            affected_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
+
+            // 建立连接（含自动断开旧输入连接）
+            auto_disconnected = data_state.connections.connect(from_pin, to_pin);
         }
 
         let inferred = self.infer_types().unwrap_or_default();
@@ -380,7 +535,7 @@ impl GraphInstance {
             }
         }
 
-        Ok((auto_disconnected, change_sets, inferred))
+        Ok((from_pin, to_pin, auto_disconnected, change_sets, inferred))
     }
 
     pub fn get_downstream_by_pin_id(&self, pin_id: PinId) -> Vec<PinId> {

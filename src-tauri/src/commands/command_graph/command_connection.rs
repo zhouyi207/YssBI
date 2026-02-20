@@ -63,37 +63,61 @@ fn emit_inferred_types(
     );
 }
 
+// ==================== 结果 DTO ====================
+
+/// ConnectPins 返回值，供前端 Command 系统使用
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPinsResult {
+    pub from_pin: String,
+    pub to_pin: String,
+    pub auto_disconnected_from: Option<String>,
+    pub auto_disconnected_to: Option<String>,
+}
+
+/// DisconnectPin 返回值
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovedConnection {
+    pub from_pin: String,
+    pub to_pin: String,
+}
+
 // ==================== 核心连接命令 ====================
 
-/// 连接两个 Pin（前端 ConnectionService.connectPins）
+/// 连接两个 Pin（无序，后端自动验证方向和兼容性）
+///
+/// 返回 ConnectPinsResult，包含实际连接方向和被自动断开的旧连接。
+/// 前端 Command 系统使用此结果构建 undo 上下文。
 #[tauri::command]
 pub fn connect_pins(
     app: AppHandle,
     state: State<ProjectState>,
     subgraph_id: String,
-    source_pin_id: String,
-    target_pin_id: String,
-) -> Result<(), String> {
+    pin_a: String,
+    pin_b: String,
+) -> Result<ConnectPinsResult, String> {
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
-    let from_pin = PinId::from(
-        Uuid::parse_str(&source_pin_id).map_err(|e| format!("Invalid source_pin_id: {}", e))?,
+    let id_a = PinId::from(
+        Uuid::parse_str(&pin_a).map_err(|e| format!("Invalid pin_a: {}", e))?,
     );
-    let to_pin = PinId::from(
-        Uuid::parse_str(&target_pin_id).map_err(|e| format!("Invalid target_pin_id: {}", e))?,
+    let id_b = PinId::from(
+        Uuid::parse_str(&pin_b).map_err(|e| format!("Invalid pin_b: {}", e))?,
     );
 
     log_app::info!(
-        "[command.connect_pins] graph={}, from={}, to={}",
-        subgraph_id, source_pin_id, target_pin_id
+        "[command.connect_pins] graph={}, a={}, b={}",
+        subgraph_id, pin_a, pin_b
     );
 
     let graph = state
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (auto_disconnected, change_sets, inferred) = graph.connect(from_pin, to_pin)?;
+    let (from_pin, to_pin, auto_disconnected, change_sets, inferred) =
+        graph.connect(id_a, id_b)?;
 
     // 先发送被自动断开的旧连接事件
     if let Some((old_from, old_to)) = auto_disconnected {
@@ -112,27 +136,36 @@ pub fn connect_pins(
         &app,
         Event::Connection(EventConnection::ConnectionCreated {
             graph_id,
-            from_pin: from_pin,
-            to_pin: to_pin,
+            from_pin,
+            to_pin,
         }),
     );
 
-    // 发送动态 pin 变更事件（如有）
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
-
-    // 发送推断出的 pin 类型
     emit_inferred_types(&app, graph_id, inferred);
-    Ok(())
+
+    let (ad_from, ad_to) = match auto_disconnected {
+        Some((f, t)) => (Some(f.to_string()), Some(t.to_string())),
+        None => (None, None),
+    };
+    Ok(ConnectPinsResult {
+        from_pin: from_pin.to_string(),
+        to_pin: to_pin.to_string(),
+        auto_disconnected_from: ad_from,
+        auto_disconnected_to: ad_to,
+    })
 }
 
 /// 断开指定 Pin 的所有连接（前端 Alt+Click 调用 disconnect_pin）
+///
+/// 返回被断开的连接列表，供前端 Command 系统使用。
 #[tauri::command]
 pub fn disconnect_pin(
     app: AppHandle,
     state: State<ProjectState>,
     subgraph_id: String,
     pin_id: String,
-) -> Result<(), String> {
+) -> Result<Vec<RemovedConnection>, String> {
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
@@ -151,7 +184,14 @@ pub fn disconnect_pin(
 
     let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
 
-    // 发送批量断开事件
+    let result: Vec<RemovedConnection> = removed_connections
+        .iter()
+        .map(|(f, t)| RemovedConnection {
+            from_pin: f.to_string(),
+            to_pin: t.to_string(),
+        })
+        .collect();
+
     if !removed_connections.is_empty() {
         emit_project_event(
             &app,
@@ -164,25 +204,10 @@ pub fn disconnect_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    Ok(())
+    Ok(result)
 }
 
-// ==================== 兼容连接命令 ====================
-// 前端 ConnectionService 的 createConnection/deleteConnection 等
-
-/// 创建连接（与 connect_pins 功能相同，兼容旧接口）
-///
-/// 前端 ConnectionService.createConnection(subgraphId, sourcePinId, targetPinId)
-#[tauri::command]
-pub fn create_connection(
-    app: AppHandle,
-    state: State<ProjectState>,
-    subgraph_id: String,
-    source_pin_id: String,
-    target_pin_id: String,
-) -> Result<(), String> {
-    connect_pins(app, state, subgraph_id, source_pin_id, target_pin_id)
-}
+// ==================== 其他连接命令 ====================
 
 /// 删除连接（按 from->to 格式的 connectionId 断开）
 ///

@@ -18,13 +18,13 @@ export interface VariableDropMenu {
 interface UseCanvasDropParams {
   canvasRef: React.RefObject<HTMLDivElement | null>;
   groupId: string;
+  graphId: string | null;
   variables: Record<string, any>;
   functions: Record<string, any>;
   macros: Record<string, any>;
   setNodes: (updater: (prev: any[]) => any[]) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
-  saveHistory: () => void;
   createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<void>;
 }
 
@@ -35,13 +35,13 @@ interface UseCanvasDropParams {
 export function useCanvasDrop({
   canvasRef,
   groupId,
+  graphId: _graphId,
   variables,
   functions,
   macros,
   setNodes,
   setContextMenu,
   setPendingConnection,
-  saveHistory,
   createNode,
 }: UseCanvasDropParams) {
   const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
@@ -62,7 +62,6 @@ export function useCanvasDrop({
 
   const handleNodeAddInput = useCallback(
     (id: string) => {
-      saveHistory();
       setNodes((prev) =>
         prev.map((node) => {
           if (node.id === id) {
@@ -82,7 +81,7 @@ export function useCanvasDrop({
         })
       );
     },
-    [saveHistory, setNodes]
+    [setNodes]
   );
 
   const handleContextMenu = useCallback(

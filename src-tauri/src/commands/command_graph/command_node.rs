@@ -1,10 +1,11 @@
-use crate::graph::{GraphId, NodeId, NodeInstanceParams};
+use crate::graph::{GraphId, NodeId, PinId, NodeInstanceParams, DataValue};
 use crate::project::ProjectState;
 use crate::event::{emit_project_event, Event, EventNode};
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use crate::log::log_app;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +13,14 @@ pub struct NodePositionUpdate {
     node_id: NodeId,
     x: f32,
     y: f32,
+}
+
+/// Return value from create_node — includes pin IDs for undo/redo context
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateNodeResult {
+    pub node_id: String,
+    pub pin_ids: Vec<String>,
 }
 
 #[tauri::command]
@@ -23,7 +32,7 @@ pub fn create_node(
     x: Option<f32>,
     y: Option<f32>,
     params: Option<NodeInstanceParams>,
-) -> Result<String, String> {
+) -> Result<CreateNodeResult, String> {
     log_app::info!("create_node called: graph_id={}, node_type={}, x={:?}, y={:?}", graph_id, node_type, x, y);
     
     let bounding = state.project_data.write().unwrap();
@@ -58,7 +67,8 @@ pub fn create_node(
     }
     drop(data_state);
 
-    // 发送节点创建事件（含 pins，便于前端 hydrate）
+    let pin_id_strings: Vec<String> = pin_instances.iter().map(|p| p.id.to_string()).collect();
+
     emit_project_event(
         &app,
         Event::Node(EventNode::NodeCreated {
@@ -69,8 +79,10 @@ pub fn create_node(
         }),
     );
     
-    // 返回节点 ID
-    Ok(node_id.to_string())
+    Ok(CreateNodeResult {
+        node_id: node_id.to_string(),
+        pin_ids: pin_id_strings,
+    })
 }
 
 /// 批量创建节点请求
@@ -228,6 +240,206 @@ pub fn update_node_positions(
         Event::Node(EventNode::NodePositionsUpdated {
             graph_id,
             updates: updates_tuple,
+        }),
+    );
+
+    Ok(())
+}
+
+// ==================== Undo/Redo 支持命令 ====================
+
+/// Create a node with specific IDs (for redo — preserves node/pin identity).
+#[tauri::command]
+pub fn create_node_with_id(
+    app: AppHandle,
+    state: State<ProjectState>,
+    graph_id: GraphId,
+    node_id: String,
+    pin_ids: Vec<String>,
+    node_type: String,
+    x: Option<f32>,
+    y: Option<f32>,
+    params: Option<NodeInstanceParams>,
+) -> Result<(), String> {
+    let nid = NodeId::from(
+        Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?,
+    );
+    let pids: Vec<PinId> = pin_ids
+        .iter()
+        .map(|s| Uuid::parse_str(s).map(PinId::from).map_err(|e| format!("Invalid pin_id '{}': {}", s, e)))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    log_app::info!(
+        "[create_node_with_id] graph={}, node={}, type={}, pins={}",
+        graph_id, node_id, node_type, pids.len()
+    );
+
+    let bounding = state.project_data.write().unwrap();
+    let graph = bounding
+        .graphs
+        .get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+
+    graph.create_node_raw_with_ids(
+        &node_type,
+        nid,
+        &pids,
+        x.unwrap_or(0.0),
+        y.unwrap_or(0.0),
+        params,
+    )?;
+    let _ = graph.infer_types();
+
+    let node_instance = graph.get_node_instance(nid)
+        .ok_or_else(|| format!("Node '{}' not found after creation", node_id))?;
+
+    let mut node_dto: NodeInstanceDTO = (&node_instance).into();
+    let pin_instances = graph.get_pin_instances_by_node_id(nid);
+    let data_state_r = graph.data_state.read().unwrap();
+    let mut pins_dto = Vec::with_capacity(pin_instances.len());
+    for pin in &pin_instances {
+        match pin.definition.direction {
+            crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
+            crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
+        }
+        let resolved_type = data_state_r.pin_types.get(&pin.id);
+        pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type, Vec::new()));
+    }
+    drop(data_state_r);
+
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodeCreated {
+            graph_id,
+            node_id: nid,
+            data: node_dto,
+            pins: pins_dto,
+        }),
+    );
+
+    Ok(())
+}
+
+/// DTO for a node snapshot (used by restore_nodes).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreNodeDTO {
+    pub node_id: String,
+    pub node_type: String,
+    pub x: f32,
+    pub y: f32,
+    pub params: Option<NodeInstanceParams>,
+    pub pins: Vec<RestorePinDTO>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorePinDTO {
+    pub pin_id: String,
+    pub user_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreConnectionDTO {
+    pub from_pin: String,
+    pub to_pin: String,
+}
+
+/// Incrementally restore nodes/pins/connections that were previously deleted.
+/// Used by the DeleteNodes command's undo.
+#[tauri::command]
+pub fn restore_nodes(
+    app: AppHandle,
+    state: State<ProjectState>,
+    graph_id: GraphId,
+    nodes: Vec<RestoreNodeDTO>,
+    connections: Vec<RestoreConnectionDTO>,
+) -> Result<(), String> {
+    log_app::info!(
+        "[restore_nodes] graph={}, nodes={}, connections={}",
+        graph_id, nodes.len(), connections.len()
+    );
+
+    let bounding = state.project_data.write().unwrap();
+    let graph = bounding
+        .graphs
+        .get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+
+    let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
+
+    for node_snap in &nodes {
+        let nid = NodeId::from(
+            Uuid::parse_str(&node_snap.node_id)
+                .map_err(|e| format!("Invalid node_id '{}': {}", node_snap.node_id, e))?,
+        );
+        let pids: Vec<PinId> = node_snap
+            .pins
+            .iter()
+            .map(|p| {
+                Uuid::parse_str(&p.pin_id)
+                    .map(PinId::from)
+                    .map_err(|e| format!("Invalid pin_id '{}': {}", p.pin_id, e))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        graph.create_node_raw_with_ids(
+            &node_snap.node_type,
+            nid,
+            &pids,
+            node_snap.x,
+            node_snap.y,
+            node_snap.params.clone(),
+        )?;
+
+        // Restore pin user values
+        for pin_snap in &node_snap.pins {
+            if let Some(ref raw_val) = pin_snap.user_value {
+                let pid = PinId::from(Uuid::parse_str(&pin_snap.pin_id).unwrap());
+                if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                    let _ = graph.set_pin_user_value_by_pin_id(pid, dv);
+                }
+            }
+        }
+
+        // Build DTOs for event
+        let node_instance = graph.get_node_instance(nid)
+            .ok_or_else(|| format!("Restored node '{}' not found", node_snap.node_id))?;
+        let mut node_dto: NodeInstanceDTO = (&node_instance).into();
+        let pin_instances = graph.get_pin_instances_by_node_id(nid);
+        let mut pins_dto = Vec::with_capacity(pin_instances.len());
+        for pin in &pin_instances {
+            match pin.definition.direction {
+                crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
+                crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
+            }
+            pins_dto.push(PinInstanceDTO::from(pin));
+        }
+        all_results.push((nid, node_dto, pins_dto));
+    }
+
+    // Restore connections
+    for conn in &connections {
+        let from_pid = PinId::from(
+            Uuid::parse_str(&conn.from_pin)
+                .map_err(|e| format!("Invalid from_pin '{}': {}", conn.from_pin, e))?,
+        );
+        let to_pid = PinId::from(
+            Uuid::parse_str(&conn.to_pin)
+                .map_err(|e| format!("Invalid to_pin '{}': {}", conn.to_pin, e))?,
+        );
+        let _ = graph.connect(from_pid, to_pid);
+    }
+
+    let _ = graph.infer_types();
+
+    // Emit batch created event so frontend adds nodes to store
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodesBatchCreated {
+            graph_id,
+            nodes: all_results,
         }),
     );
 

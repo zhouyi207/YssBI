@@ -1,9 +1,10 @@
 import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
-import { getGraphById, useGraphHistoryStore } from '@/features/core/dataStore';
+import { getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '@/features/core/editor';
-import { NodeService } from '@/services';
+import { useHistoryStore, executeCommand } from '@/features/core/history';
+import type { GraphHistory } from '@/features/core/history';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
@@ -17,21 +18,17 @@ export function useEditorOperations() {
   const clipboard = useClipboardStore((s) => s.clipboard);
   const setClipboard = useClipboardStore((s) => s.setClipboard);
 
-  // Get active tab and group IDs
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
-  // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
   const activeEditorNode = useLayoutStore((s: LayoutState) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
   const selectedNodeIds = activeEditorNode?.data?.params?.selectedNodeIds || [];
 
-  // Refs for stable access in callbacks
   const activeTabIdRef = useRef(activeTabId);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
   const canvasRef = useRef(useViewportStore.getState().viewports[activeGroupId || ''] || DEFAULT_VIEWPORT);
 
-  // Update refs
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
 
@@ -53,23 +50,18 @@ export function useEditorOperations() {
     }
   }, [activeGroupId]);
 
-  // History operations
-  const saveHistory = useCallback(() => {
+  // ===== History =====
+  const undo = useCallback(async () => {
     const tid = activeTabIdRef.current;
-    if (tid) useGraphHistoryStore.getState().saveSnapshot(tid);
+    return tid ? useHistoryStore.getState().undo(tid) : false;
   }, []);
 
-  const undo = useCallback(() => {
+  const redo = useCallback(async () => {
     const tid = activeTabIdRef.current;
-    return tid ? useGraphHistoryStore.getState().undo(tid) : false;
+    return tid ? useHistoryStore.getState().redo(tid) : false;
   }, []);
 
-  const redo = useCallback(() => {
-    const tid = activeTabIdRef.current;
-    return tid ? useGraphHistoryStore.getState().redo(tid) : false;
-  }, []);
-
-  // Clipboard operations
+  // ===== Clipboard =====
   const copy = useCallback(() => {
     const sIds = new Set(selectedNodeIdsRef.current);
     const tid = activeTabIdRef.current;
@@ -86,8 +78,6 @@ export function useEditorOperations() {
     if (clipboard.length === 0) return;
     const tid = activeTabIdRef.current;
     if (!tid) return;
-
-    saveHistory();
 
     const vp = canvasRef.current;
     const tX = pos ? pos.x : -vp.x / vp.scale + 100;
@@ -115,22 +105,15 @@ export function useEditorOperations() {
       });
 
     try {
-      const newNodeIds = await NodeService.batchCreateNodes(tid, requests);
-
-      // NodesBatchCreatedHandler adds all nodes in one event;
-      // yield a tick so the event listener can process before we select.
+      await executeCommand(tid, 'Composite', { requests });
       await new Promise(r => setTimeout(r, 50));
-
-      if (newNodeIds.length > 0) {
-        setSelectedNodeIds(newNodeIds);
-      }
     } catch (e) {
       console.error('[useEditorOperations] Failed to paste nodes:', e);
       uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [clipboard, saveHistory, setSelectedNodeIds]);
+  }, [clipboard, setSelectedNodeIds]);
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const sIds = new Set(selectedNodeIdsRef.current);
     if (sIds.size === 0) return;
     const tid = activeTabIdRef.current;
@@ -145,44 +128,40 @@ export function useEditorOperations() {
       .map(n => n.id);
     if (idsToDelete.length === 0) return;
 
-    saveHistory();
     setSelectedNodeIds([]);
 
-    // CQRS: backend batch delete → NodesBatchDeleted event → store update
-    NodeService.batchDeleteNodes(tid, idsToDelete).catch(e => {
+    try {
+      await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
+    } catch (e) {
       console.error('[useEditorOperations] Failed to delete nodes:', e);
       uiStore.showToast("删除失败", "error", 2000);
-    });
-  }, [saveHistory, setSelectedNodeIds]);
+    }
+  }, [setSelectedNodeIds]);
 
   const cut = useCallback(() => {
     copy();
     deleteSelected();
   }, [copy, deleteSelected]);
 
-  const canUndo = useGraphHistoryStore((s) => {
+  const canUndo = useHistoryStore((s) => {
     if (!activeTabId) return false;
-    const hist = s.histories[activeTabId];
-    return !!(hist && hist.past.length > 0);
+    const hist: GraphHistory | undefined = s.histories[activeTabId];
+    return !!(hist && hist.undoStack.length > 0);
   });
-  const canRedo = useGraphHistoryStore((s) => {
+  const canRedo = useHistoryStore((s) => {
     if (!activeTabId) return false;
-    const hist = s.histories[activeTabId];
-    return !!(hist && hist.future.length > 0);
+    const hist: GraphHistory | undefined = s.histories[activeTabId];
+    return !!(hist && hist.redoStack.length > 0);
   });
 
   return {
-    // History
     undo,
     redo,
-    saveHistory,
     canUndo,
     canRedo,
-
-    // Clipboard
     copy,
     cut,
     paste,
-    deleteSelected
+    deleteSelected,
   };
 }

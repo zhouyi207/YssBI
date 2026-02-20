@@ -5,5 +5,4 @@ export * from './projectIOStore';
 export * from './projectHelpers';
 export * from './variableStore';
 export * from './graphDataStore';
-export * from './graphHistoryStore';
 export { serializeGraph, deserializeGraph } from './serialization';

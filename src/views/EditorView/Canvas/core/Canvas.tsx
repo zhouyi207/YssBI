@@ -42,7 +42,6 @@ export default function Canvas() {
     setContextMenu,
     variables,
     Variables,
-    saveHistory,
     activeTabId,
     pendingConnection,
     setPendingConnection,
@@ -92,13 +91,13 @@ export default function Canvas() {
   } = useCanvasDrop({
     canvasRef: ref,
     groupId,
+    graphId: activeTabId,
     variables: { ...variables, ...Variables },
     functions,
     macros,
     setNodes,
     setContextMenu,
     setPendingConnection,
-    saveHistory,
     createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => createNode(nodeType, position, params),
   });
 

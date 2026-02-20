@@ -33,7 +33,6 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     setSelectedNodeIds: actions.setSelectedNodeIds,
     setNodes: actions.setNodes,
     setCanvas: actions.setCanvas,
-    saveHistory: editorOps.saveHistory,
     enabled: withCanvasInteraction,
   });
 

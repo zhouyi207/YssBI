@@ -9,7 +9,7 @@ import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
-import { useGraphHistoryStore } from './graphHistoryStore';
+import { useHistoryStore } from '@/features/core/history';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -119,7 +119,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     useDatabaseStore.getState().setDatabases(normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>));
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
-    useGraphHistoryStore.getState().clearAll();
+    useHistoryStore.getState().clear();
     set({ status: LoadStatus.Ready, currentPath: path });
   },
 
@@ -136,7 +136,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
       useDatabaseStore.getState().setDatabases(normalizeDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>));
       useGraphMetaStore.getState().setGraphs(toGraphMetaMap(projectData.graphs));
       useGraphDataStore.getState().hydrateGraphs(projectData.graphs);
-      useGraphHistoryStore.getState().clearAll();
+      useHistoryStore.getState().clear();
 
       set({ status: LoadStatus.Ready, currentPath: path });
       console.log('[ProjectIOStore] Synced from backend');

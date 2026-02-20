@@ -95,7 +95,7 @@ fn test_dataframe_pipeline_iris_mean() {
         .find(|p| p.definition.role == PinRole::Data(DataRole::Input) && p.is_input())
         .expect("Decompose DataFrame input pin not found");
 
-    let (_, change_sets) = graph
+    let (_, _, _, change_sets, _) = graph
         .connect(get_df_output_pin.id, decompose_input_pin.id)
         .expect("Failed to connect Get DataFrame to Decompose DataFrame");
 

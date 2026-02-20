@@ -151,15 +151,23 @@ impl DataType {
         if from == self {
             return true;
         }
-        if matches!(self, DataType::Any) {
+        if matches!(self, DataType::Any) || matches!(from, DataType::Any) {
             return true;
         }
-        matches!(
-            (from, self),
+        match (from, self) {
+            // 数值隐式提升
             (DataType::Int32, DataType::Int64)
-                | (DataType::Int32, DataType::Float64)
-                | (DataType::Int64, DataType::Float64)
-                | (DataType::Float32, DataType::Float64)
-        )
+            | (DataType::Int32, DataType::Float64)
+            | (DataType::Int64, DataType::Float64)
+            | (DataType::Float32, DataType::Float64) => true,
+            // 容器类型：内层 Any 接受任意具体类型
+            (DataType::Array(from_inner), DataType::Array(to_inner)) => {
+                to_inner.can_accept(from_inner)
+            }
+            (DataType::DataSeries(from_inner), DataType::DataSeries(to_inner)) => {
+                to_inner.can_accept(from_inner)
+            }
+            _ => false,
+        }
     }
 }
