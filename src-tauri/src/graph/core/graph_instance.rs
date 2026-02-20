@@ -92,7 +92,20 @@ impl GraphInstance {
     }
 
     /// 设置节点注册表（用于反序列化后恢复）
+    ///
+    /// Re-attaches the full `NodeDefinition` (with function pointers like
+    /// `pin_generator` and `pin_resolver`) from the registry to each existing
+    /// node, because those fields are `#[serde(skip)]` and lost during
+    /// deserialization.
     pub fn set_registry(&mut self, registry: Arc<NodeRegistry>) {
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            for node in data_state.nodes.values_mut() {
+                if let Some(full_def) = registry.get(&node.definition.node_type) {
+                    node.definition = full_def;
+                }
+            }
+        }
         self.registry = registry;
     }
 
@@ -269,7 +282,51 @@ impl GraphInstance {
         Ok(node_id)
     }
 
-    /// Create a node with specific IDs (for undo/redo ID preservation).
+    /// Create a node with a specific node ID but auto-generated pin IDs.
+    /// Handles dynamic-pin nodes where saved pin count may differ from base definition.
+    /// Does NOT run type inference — call `infer_types()` after.
+    pub fn create_node_raw_with_node_id(
+        &self,
+        node_type: &str,
+        node_id: NodeId,
+        x: f32,
+        y: f32,
+        params: Option<NodeInstanceParams>,
+    ) -> Result<NodeId, String> {
+        let definition = self
+            .registry
+            .get(node_type)
+            .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
+
+        let result = NodeInstance::from_definition_with_node_id(definition.clone(), node_id)?;
+
+        let mut node = result.node.with_position(x, y);
+        if let Some(ref p) = params {
+            node = node.with_instance_params(p.clone());
+        }
+
+        let variable_data_type = params
+            .as_ref()
+            .and_then(|p| p.variable_type())
+            .and_then(|vt| vt.parse::<DataType>().ok());
+
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            if let Some(ref dt) = variable_data_type {
+                for pin in &result.pins {
+                    if pin.definition.kind == PinKind::Data {
+                        data_state.pin_types.insert(pin.id, dt.clone());
+                    }
+                }
+            }
+            data_state.add_node(node);
+            data_state.add_pins(result.pins);
+        }
+
+        Ok(node_id)
+    }
+
+    /// Create a node with specific IDs (for redo — preserves node/pin identity).
     /// Does NOT run type inference — call `infer_types()` after.
     pub fn create_node_raw_with_ids(
         &self,
@@ -352,17 +409,46 @@ impl GraphInstance {
     }
 
     pub fn remove_node(&self, node_id: NodeId) -> Result<(), String> {
-        self.remove_node_raw(node_id)?;
+        let neighbors = self.remove_node_raw(node_id)?;
         let _ = self.infer_types();
+        for nid in neighbors {
+            let _ = self.resolve_dynamic_pins(nid);
+        }
         Ok(())
     }
 
     /// 删除节点但不运行类型推断（用于批量删除，外部负责最终调一次 infer_types）
-    pub fn remove_node_raw(&self, node_id: NodeId) -> Result<(), String> {
+    ///
+    /// Returns the set of neighbor node IDs whose connections were affected,
+    /// so the caller can run `resolve_dynamic_pins` on them after deletion.
+    pub fn remove_node_raw(&self, node_id: NodeId) -> Result<std::collections::HashSet<NodeId>, String> {
         let pins = self.get_pin_instances_by_node_id(node_id);
 
+        let mut neighbor_node_ids = std::collections::HashSet::new();
         {
             let mut data_state = self.data_state.write().unwrap();
+            if !data_state.nodes.contains_key(&node_id) {
+                return Ok(neighbor_node_ids);
+            }
+
+            // Collect neighbor nodes before removing connections
+            for pin in &pins {
+                for downstream_pin_id in data_state.connections.get_downstream(pin.id) {
+                    if let Some(p) = data_state.pins.get(&downstream_pin_id) {
+                        if p.node_id != node_id {
+                            neighbor_node_ids.insert(p.node_id);
+                        }
+                    }
+                }
+                if let Some(upstream_pin_id) = data_state.connections.get_upstream(pin.id) {
+                    if let Some(p) = data_state.pins.get(&upstream_pin_id) {
+                        if p.node_id != node_id {
+                            neighbor_node_ids.insert(p.node_id);
+                        }
+                    }
+                }
+            }
+
             data_state.connections.remove_node(node_id);
 
             for pin in pins {
@@ -371,7 +457,7 @@ impl GraphInstance {
             data_state.nodes.remove(&node_id);
         }
 
-        Ok(())
+        Ok(neighbor_node_ids)
     }
 
     pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> Option<NodeId> {
@@ -394,12 +480,14 @@ impl GraphInstance {
 impl GraphInstance {
     pub fn get_pin_instances_by_node_id(&self, node_id: NodeId) -> Vec<PinInstance> {
         let data_state = self.data_state.read().unwrap();
-        let pin_ids = data_state.nodes.get(&node_id).unwrap().pin_ids.clone();
-        let pins = data_state.pins.clone();
+        let pin_ids = match data_state.nodes.get(&node_id) {
+            Some(node) => node.pin_ids.clone(),
+            None => return Vec::new(),
+        };
 
         pin_ids
             .into_iter()
-            .filter_map(|id| pins.get(&id).cloned())
+            .filter_map(|id| data_state.pins.get(&id).cloned())
             .collect()
     }
 
@@ -507,30 +595,39 @@ impl GraphInstance {
     ) -> Result<(PinId, PinId, Option<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
         use crate::graph::connection::connection_validator::validate_connection;
 
-        let affected_node_id;
+        let from_node_id;
+        let to_node_id;
         let auto_disconnected;
+        let auto_disconnected_from_node_id;
         let from_pin;
         let to_pin;
         {
             let data_state = self.data_state.write().unwrap();
 
-            // 验证链（8 步）
             let validated = validate_connection(&data_state, pin_a, pin_b)?;
             from_pin = validated.from_pin;
             to_pin = validated.to_pin;
 
-            affected_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
+            from_node_id = data_state.pins.get(&from_pin).map(|p| p.node_id);
+            to_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
 
-            // 建立连接（含自动断开旧输入连接）
+            // Look up the old from_pin's node BEFORE auto-disconnect removes it
+            auto_disconnected_from_node_id = data_state.connections
+                .get_upstream(to_pin)
+                .and_then(|old_from| data_state.pins.get(&old_from).map(|p| p.node_id));
+
             auto_disconnected = data_state.connections.connect(from_pin, to_pin);
         }
 
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
-        if let Some(node_id) = affected_node_id {
-            if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
-                change_sets.push(cs);
+        let mut resolved = std::collections::HashSet::new();
+        for node_id in [to_node_id, from_node_id, auto_disconnected_from_node_id].into_iter().flatten() {
+            if resolved.insert(node_id) {
+                if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
+                    change_sets.push(cs);
+                }
             }
         }
 
@@ -561,17 +658,19 @@ impl GraphInstance {
     ///
     /// 返回 (动态 pin 变更集, 推断出的 pin 类型)
     pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
-        let affected_node_id;
+        let from_node_id;
+        let to_node_id;
         {
             let data_state = self.data_state.write().unwrap();
-            affected_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
+            from_node_id = data_state.pins.get(&from_pin).map(|p| p.node_id);
+            to_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
             data_state.connections.disconnect(from_pin, to_pin);
         }
 
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
-        if let Some(node_id) = affected_node_id {
+        for node_id in [from_node_id, to_node_id].into_iter().flatten() {
             if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
                 change_sets.push(cs);
             }
@@ -583,15 +682,23 @@ impl GraphInstance {
     ///
     /// 返回 (被删除的连接对列表, 动态 pin 变更集, 推断出的 pin 类型)
     pub fn disconnect_pin(&self, pin_id: PinId) -> (Vec<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
-        let affected_node_id;
         let mut removed_connections = Vec::new();
+        let mut affected_node_ids = std::collections::HashSet::new();
         {
             let data_state = self.data_state.write().unwrap();
-            affected_node_id = data_state.pins.get(&pin_id).map(|p| p.node_id);
+            if let Some(p) = data_state.pins.get(&pin_id) {
+                affected_node_ids.insert(p.node_id);
+            }
             for to_pin in data_state.connections.get_downstream(pin_id) {
+                if let Some(p) = data_state.pins.get(&to_pin) {
+                    affected_node_ids.insert(p.node_id);
+                }
                 removed_connections.push((pin_id, to_pin));
             }
             if let Some(from_pin) = data_state.connections.get_upstream(pin_id) {
+                if let Some(p) = data_state.pins.get(&from_pin) {
+                    affected_node_ids.insert(p.node_id);
+                }
                 removed_connections.push((from_pin, pin_id));
             }
             data_state.connections.disconnect_all(pin_id);
@@ -600,7 +707,7 @@ impl GraphInstance {
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
-        if let Some(node_id) = affected_node_id {
+        for node_id in affected_node_ids {
             if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
                 change_sets.push(cs);
             }

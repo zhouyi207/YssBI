@@ -1,11 +1,13 @@
-use crate::graph::{GraphId, NodeId, PinId, NodeInstanceParams, DataValue};
+use std::collections::HashMap;
+use crate::graph::{GraphId, NodeId, PinId, PinDirection, NodeInstanceParams, DataValue};
 use crate::project::ProjectState;
-use crate::event::{emit_project_event, Event, EventNode};
+use crate::event::{emit_project_event, Event, EventNode, EventConnection};
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use crate::log::log_app;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
+use super::command_connection::{emit_pin_change_events, emit_inferred_types};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,9 +172,9 @@ pub fn delete_node(
     let graph = bounding.graphs.get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
     
-    graph.remove_node(node_id)?;
+    let neighbors = graph.remove_node_raw(node_id)?;
+    let _ = graph.infer_types();
     
-    // 发送节点删除事件
     emit_project_event(
         &app,
         Event::Node(EventNode::NodeDeleted {
@@ -180,6 +182,12 @@ pub fn delete_node(
             node_id,
         }),
     );
+
+    for nid in neighbors {
+        if let Ok(Some(cs)) = graph.resolve_dynamic_pins(nid) {
+            emit_pin_change_events(&app, graph_id, &graph, vec![cs]);
+        }
+    }
     
     Ok(())
 }
@@ -198,9 +206,15 @@ pub fn batch_delete_nodes(
     let graph = bounding.graphs.get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
 
+    let deleted_set: std::collections::HashSet<NodeId> = node_ids.iter().copied().collect();
+    let mut all_neighbors = std::collections::HashSet::new();
     for &nid in &node_ids {
-        graph.remove_node_raw(nid)?;
+        let neighbors = graph.remove_node_raw(nid)?;
+        all_neighbors.extend(neighbors);
     }
+    // Exclude nodes that were themselves deleted
+    all_neighbors.retain(|n| !deleted_set.contains(n));
+
     let _ = graph.infer_types();
 
     emit_project_event(
@@ -210,6 +224,13 @@ pub fn batch_delete_nodes(
             node_ids,
         }),
     );
+
+    // Resolve dynamic pins on neighbor nodes and emit pin update events
+    for nid in all_neighbors {
+        if let Ok(Some(cs)) = graph.resolve_dynamic_pins(nid) {
+            emit_pin_change_events(&app, graph_id, &graph, vec![cs]);
+        }
+    }
 
     Ok(())
 }
@@ -336,6 +357,8 @@ pub struct RestoreNodeDTO {
 #[serde(rename_all = "camelCase")]
 pub struct RestorePinDTO {
     pub pin_id: String,
+    pub name: String,
+    pub direction: PinDirection,
     pub user_value: Option<serde_json::Value>,
 }
 
@@ -347,6 +370,7 @@ pub struct RestoreConnectionDTO {
 }
 
 /// Incrementally restore nodes/pins/connections that were previously deleted.
+/// Uses pin name+direction mapping to handle dynamic-pin nodes correctly.
 /// Used by the DeleteNodes command's undo.
 #[tauri::command]
 pub fn restore_nodes(
@@ -368,42 +392,43 @@ pub fn restore_nodes(
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
 
     let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
+    let mut pin_mapping: HashMap<String, String> = HashMap::new();
+    let mut used_new_pins: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for node_snap in &nodes {
         let nid = NodeId::from(
             Uuid::parse_str(&node_snap.node_id)
                 .map_err(|e| format!("Invalid node_id '{}': {}", node_snap.node_id, e))?,
         );
-        let pids: Vec<PinId> = node_snap
-            .pins
-            .iter()
-            .map(|p| {
-                Uuid::parse_str(&p.pin_id)
-                    .map(PinId::from)
-                    .map_err(|e| format!("Invalid pin_id '{}': {}", p.pin_id, e))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
 
-        graph.create_node_raw_with_ids(
+        graph.create_node_raw_with_node_id(
             &node_snap.node_type,
             nid,
-            &pids,
             node_snap.x,
             node_snap.y,
             node_snap.params.clone(),
         )?;
 
-        // Restore pin user values
-        for pin_snap in &node_snap.pins {
-            if let Some(ref raw_val) = pin_snap.user_value {
-                let pid = PinId::from(Uuid::parse_str(&pin_snap.pin_id).unwrap());
-                if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
-                    let _ = graph.set_pin_user_value_by_pin_id(pid, dv);
+        let new_pins = graph.get_pin_instances_by_node_id(nid);
+
+        for old_pin in &node_snap.pins {
+            if let Some(new_pin) = new_pins.iter().find(|np| {
+                np.definition.name == old_pin.name
+                    && np.definition.direction == old_pin.direction
+                    && !used_new_pins.contains(&np.id.to_string())
+            }) {
+                let new_id = new_pin.id.to_string();
+                pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
+                used_new_pins.insert(new_id);
+
+                if let Some(ref raw_val) = old_pin.user_value {
+                    if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                        let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
+                    }
                 }
             }
         }
 
-        // Build DTOs for event
         let node_instance = graph.get_node_instance(nid)
             .ok_or_else(|| format!("Restored node '{}' not found", node_snap.node_id))?;
         let mut node_dto: NodeInstanceDTO = (&node_instance).into();
@@ -419,22 +444,7 @@ pub fn restore_nodes(
         all_results.push((nid, node_dto, pins_dto));
     }
 
-    // Restore connections
-    for conn in &connections {
-        let from_pid = PinId::from(
-            Uuid::parse_str(&conn.from_pin)
-                .map_err(|e| format!("Invalid from_pin '{}': {}", conn.from_pin, e))?,
-        );
-        let to_pid = PinId::from(
-            Uuid::parse_str(&conn.to_pin)
-                .map_err(|e| format!("Invalid to_pin '{}': {}", conn.to_pin, e))?,
-        );
-        let _ = graph.connect(from_pid, to_pid);
-    }
-
-    let _ = graph.infer_types();
-
-    // Emit batch created event so frontend adds nodes to store
+    // Emit nodes first so frontend has them before connection events
     emit_project_event(
         &app,
         Event::Node(EventNode::NodesBatchCreated {
@@ -443,5 +453,301 @@ pub fn restore_nodes(
         }),
     );
 
+    // Multi-pass connection restoration.
+    //
+    // Dynamic pins (e.g. on `decompose dataframe`) are only created after their
+    // trigger connection is established (via resolve_dynamic_pins). When connections
+    // arrive in arbitrary order, a connection referencing a not-yet-existing dynamic
+    // pin will fail. We retry in rounds until convergence (no new successes).
+    //
+    // An alternative is topological sorting: order connections so that trigger
+    // connections (whose target node has a pin_resolver) precede connections that
+    // use the dynamic pins they create. That yields a single-pass restore but
+    // couples ordering logic to pin_resolver internals and does not naturally
+    // handle deep dynamic-pin chains (A→B→C all dynamic) without a full
+    // topological sort of the connection dependency graph.
+    let mut pending: Vec<usize> = (0..connections.len()).collect();
+    loop {
+        let mut next_pending = Vec::new();
+        let mut made_progress = false;
+
+        for &idx in &pending {
+            let conn = &connections[idx];
+            let mapped_from = pin_mapping.get(&conn.from_pin)
+                .cloned()
+                .unwrap_or_else(|| conn.from_pin.clone());
+            let mapped_to = pin_mapping.get(&conn.to_pin)
+                .cloned()
+                .unwrap_or_else(|| conn.to_pin.clone());
+
+            let connected = match (Uuid::parse_str(&mapped_from), Uuid::parse_str(&mapped_to)) {
+                (Ok(from_uuid), Ok(to_uuid)) => {
+                    let from_pin = PinId::from(from_uuid);
+                    let to_pin = PinId::from(to_uuid);
+                    if let Ok((actual_from, actual_to, _, change_sets, inferred)) = graph.connect(from_pin, to_pin) {
+                        emit_project_event(
+                            &app,
+                            Event::Connection(EventConnection::ConnectionCreated {
+                                graph_id,
+                                from_pin: actual_from,
+                                to_pin: actual_to,
+                            }),
+                        );
+                        emit_pin_change_events(&app, graph_id, &graph, change_sets);
+                        emit_inferred_types(&app, graph_id, inferred);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            };
+
+            if connected {
+                made_progress = true;
+                // Re-scan all restored nodes for newly created dynamic pins
+                for node_snap in &nodes {
+                    let nid = NodeId::from(Uuid::parse_str(&node_snap.node_id).unwrap());
+                    let current_pins = graph.get_pin_instances_by_node_id(nid);
+                    for old_pin in &node_snap.pins {
+                        if pin_mapping.contains_key(&old_pin.pin_id) {
+                            continue;
+                        }
+                        if let Some(new_pin) = current_pins.iter().find(|np| {
+                            np.definition.name == old_pin.name
+                                && np.definition.direction == old_pin.direction
+                                && !used_new_pins.contains(&np.id.to_string())
+                        }) {
+                            let new_id = new_pin.id.to_string();
+                            pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
+                            used_new_pins.insert(new_id);
+                            if let Some(ref raw_val) = old_pin.user_value {
+                                if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                                    let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                next_pending.push(idx);
+            }
+        }
+
+        if !made_progress || next_pending.is_empty() {
+            break;
+        }
+        pending = next_pending;
+    }
+
+    let _ = graph.infer_types();
+
     Ok(())
+}
+
+// ==================== Batch Create with Connections ====================
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchPinEntry {
+    pub pin_id: String,
+    pub name: String,
+    pub direction: PinDirection,
+    pub user_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchNodeEntry {
+    pub node_type: String,
+    pub x: f32,
+    pub y: f32,
+    pub params: Option<NodeInstanceParams>,
+    pub pins: Vec<BatchPinEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchConnectionEntry {
+    pub from_pin: String,
+    pub to_pin: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchCreateWithConnectionsResult {
+    pub node_ids: Vec<String>,
+    pub pin_mapping: HashMap<String, String>,
+}
+
+/// Batch-create nodes with pin remapping and connection restoration.
+/// Used by paste, template import, and similar bulk-creation scenarios.
+#[tauri::command]
+pub fn batch_create_with_connections(
+    app: AppHandle,
+    state: State<ProjectState>,
+    graph_id: GraphId,
+    entries: Vec<BatchNodeEntry>,
+    connections: Vec<BatchConnectionEntry>,
+) -> Result<BatchCreateWithConnectionsResult, String> {
+    log_app::info!(
+        "[batch_create_with_connections] graph={}, entries={}, connections={}",
+        graph_id, entries.len(), connections.len()
+    );
+
+    let bounding = state.project_data.write().unwrap();
+    let graph = bounding
+        .graphs
+        .get(&graph_id)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+
+    let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
+    let mut created_node_ids: Vec<NodeId> = Vec::new();
+    let mut pin_mapping: HashMap<String, String> = HashMap::new();
+    let mut used_new_pins: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for entry in &entries {
+        let node_id = graph.create_node_raw(
+            &entry.node_type,
+            entry.x,
+            entry.y,
+            entry.params.clone(),
+        )?;
+        created_node_ids.push(node_id);
+
+        let new_pins = graph.get_pin_instances_by_node_id(node_id);
+
+        for old_pin in &entry.pins {
+            if let Some(new_pin) = new_pins.iter().find(|np| {
+                np.definition.name == old_pin.name
+                    && np.definition.direction == old_pin.direction
+                    && !used_new_pins.contains(&np.id.to_string())
+            }) {
+                let new_id = new_pin.id.to_string();
+                pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
+                used_new_pins.insert(new_id);
+
+                if let Some(ref raw_val) = old_pin.user_value {
+                    if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                        let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
+                    }
+                }
+            }
+        }
+
+        let node_instance = graph.get_node_instance(node_id)
+            .ok_or_else(|| format!("Node '{}' not found after creation", node_id))?;
+        let mut node_dto: NodeInstanceDTO = (&node_instance).into();
+        let pin_instances = graph.get_pin_instances_by_node_id(node_id);
+        let mut pins_dto = Vec::with_capacity(pin_instances.len());
+        for pin in &pin_instances {
+            match pin.definition.direction {
+                PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
+                PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
+            }
+            pins_dto.push(PinInstanceDTO::from(pin));
+        }
+        all_results.push((node_id, node_dto, pins_dto));
+    }
+
+    let node_id_strings: Vec<String> = created_node_ids.iter().map(|id| id.to_string()).collect();
+
+    emit_project_event(
+        &app,
+        Event::Node(EventNode::NodesBatchCreated {
+            graph_id,
+            nodes: all_results,
+        }),
+    );
+
+    // Multi-pass connection restoration (same strategy as restore_nodes).
+    //
+    // Dynamic pins are created lazily when their trigger connection is established.
+    // Since the connection array order is not guaranteed to respect this dependency,
+    // connections referencing not-yet-existing dynamic pins will fail on the first
+    // pass. We retry until no more progress is made (fixed-point convergence).
+    //
+    // Topological sort alternative: pre-sort connections so that those targeting
+    // nodes with pin_resolver come first. Single-pass but couples to pin_resolver
+    // internals and breaks on deep dynamic-pin chains without full topo-sort.
+    let mut pending: Vec<usize> = (0..connections.len()).collect();
+    loop {
+        let mut next_pending = Vec::new();
+        let mut made_progress = false;
+
+        for &idx in &pending {
+            let conn = &connections[idx];
+            let new_from = pin_mapping.get(&conn.from_pin).cloned();
+            let new_to = pin_mapping.get(&conn.to_pin).cloned();
+
+            let connected = if let (Some(from_str), Some(to_str)) = (new_from, new_to) {
+                match (Uuid::parse_str(&from_str), Uuid::parse_str(&to_str)) {
+                    (Ok(from_uuid), Ok(to_uuid)) => {
+                        let from_pin = PinId::from(from_uuid);
+                        let to_pin = PinId::from(to_uuid);
+                        if let Ok((actual_from, actual_to, _, change_sets, inferred)) = graph.connect(from_pin, to_pin) {
+                            emit_project_event(
+                                &app,
+                                Event::Connection(EventConnection::ConnectionCreated {
+                                    graph_id,
+                                    from_pin: actual_from,
+                                    to_pin: actual_to,
+                                }),
+                            );
+                            emit_pin_change_events(&app, graph_id, &graph, change_sets);
+                            emit_inferred_types(&app, graph_id, inferred);
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                }
+            } else {
+                false
+            };
+
+            if connected {
+                made_progress = true;
+                // Re-scan all created nodes for newly created dynamic pins
+                for (entry_idx, entry) in entries.iter().enumerate() {
+                    let nid = created_node_ids[entry_idx];
+                    let current_pins = graph.get_pin_instances_by_node_id(nid);
+                    for old_pin in &entry.pins {
+                        if pin_mapping.contains_key(&old_pin.pin_id) {
+                            continue;
+                        }
+                        if let Some(new_pin) = current_pins.iter().find(|np| {
+                            np.definition.name == old_pin.name
+                                && np.definition.direction == old_pin.direction
+                                && !used_new_pins.contains(&np.id.to_string())
+                        }) {
+                            let new_id = new_pin.id.to_string();
+                            pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
+                            used_new_pins.insert(new_id);
+                            if let Some(ref raw_val) = old_pin.user_value {
+                                if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                                    let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                next_pending.push(idx);
+            }
+        }
+
+        if !made_progress || next_pending.is_empty() {
+            break;
+        }
+        pending = next_pending;
+    }
+
+    let _ = graph.infer_types();
+
+    Ok(BatchCreateWithConnectionsResult {
+        node_ids: node_id_strings,
+        pin_mapping,
+    })
 }

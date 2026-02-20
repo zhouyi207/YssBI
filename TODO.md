@@ -29,7 +29,7 @@ dataframe 接入
 然后是节点的相对位置
 
 
-目前连接状态的结构体有没有必要修改，from-to 连接应该是无向的
+
 
 
 而 DTO 应该只包含节点的必要信息，比如节点类型，节点的 pins，以及节点的相对位置
@@ -67,3 +67,12 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 pin input 需要处理
 
 catelog math 节点应该是 any
+
+
+get_dataframe 节点的显示问题，应该显示为 get_iris
+
+存储 graph canvas position
+
+type infer 使用 dirty 的形式推测，不要每次都推测全量类型
+
+function, macro 功能添加（感觉没必要区分 function 和 macro ）

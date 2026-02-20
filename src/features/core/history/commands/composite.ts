@@ -1,37 +1,39 @@
 import { NodeService } from '@/services';
+import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
 import type { CommandHandler } from '../types';
 
-// ==================== Paste ====================
+// ==================== Composite (Batch Create with Connections) ====================
 
-export interface PasteNodesArgs {
-  requests: Array<{
-    nodeType: string;
-    x: number;
-    y: number;
-    params?: {
-      variableId?: string;
-      variableName?: string;
-      variableType?: string;
-      subGraphId?: string;
-      dataframeId?: string;
-    };
-  }>;
+export interface BatchCreateArgs {
+  snapshot: ClipboardSnapshot;
 }
 
-export interface PasteNodesContext {
-  /** IDs of nodes created by paste — used for undo (delete all) */
+export interface BatchCreateContext {
   createdNodeIds: string[];
-  /** Original request data — used for redo (recreate) */
-  requests: PasteNodesArgs['requests'];
+  snapshot: ClipboardSnapshot;
 }
 
-export const pasteNodesCommand: CommandHandler<PasteNodesArgs, PasteNodesContext> = {
+function snapshotToServiceEntries(snapshot: ClipboardSnapshot) {
+  return snapshot.entries.map(e => ({
+    nodeType: e.nodeType,
+    x: e.position.x,
+    y: e.position.y,
+    params: e.params,
+    pins: e.pins,
+  }));
+}
+
+export const batchCreateCommand: CommandHandler<BatchCreateArgs, BatchCreateContext> = {
   async execute(graphId, args) {
-    const nodeIds = await NodeService.batchCreateNodes(graphId, args.requests);
+    const result = await NodeService.batchCreateWithConnections(
+      graphId,
+      snapshotToServiceEntries(args.snapshot),
+      args.snapshot.internalConnections,
+    );
 
     return {
-      createdNodeIds: nodeIds,
-      requests: args.requests,
+      createdNodeIds: result.nodeIds,
+      snapshot: args.snapshot,
     };
   },
 
@@ -42,6 +44,11 @@ export const pasteNodesCommand: CommandHandler<PasteNodesArgs, PasteNodesContext
   },
 
   async redo(graphId, context) {
-    await NodeService.batchCreateNodes(graphId, context.requests);
+    const result = await NodeService.batchCreateWithConnections(
+      graphId,
+      snapshotToServiceEntries(context.snapshot),
+      context.snapshot.internalConnections,
+    );
+    context.createdNodeIds = result.nodeIds;
   },
 };

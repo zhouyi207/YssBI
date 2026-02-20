@@ -18,7 +18,7 @@ interface SavedNode {
     subGraphId?: string;
     dataframeId?: string;
   } | null;
-  pins: Array<{ pinId: string; userValue?: unknown }>;
+  pins: Array<{ pinId: string; name: string; direction: string; userValue?: unknown }>;
 }
 
 export interface DeleteNodesContext {
@@ -40,13 +40,15 @@ export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, DeleteNodesCont
       if (!node) continue;
 
       const pinIds = store.nodePins[nodeId] ?? [];
-      const pins: Array<{ pinId: string; userValue?: unknown }> = [];
+      const pins: Array<{ pinId: string; name: string; direction: string; userValue?: unknown }> = [];
 
       for (const pinId of pinIds) {
         const pin = store.pins[pinId];
         if (pin) {
           pins.push({
             pinId: pin.id,
+            name: pin.name,
+            direction: pin.direction,
             userValue: pin.userValue,
           });
 

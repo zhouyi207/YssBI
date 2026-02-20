@@ -14,10 +14,14 @@ import {
   VscSymbolMethod,
   VscSymbolKeyword,
   VscSymbolVariable,
+  VscDiscard,
+  VscRedo,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useHistoryStore } from "@/features/core/history";
+import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
-import { TYPE_ICON_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
+import { PIN_COLORS, TYPE_ICON_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 
@@ -25,6 +29,12 @@ function safeDataTypeDisplay(dt: unknown): string {
   if (typeof dt === "string") return dt;
   if (dt && typeof dt === "object" && "kind" in dt) return dataTypeDisplay(dt as DataType);
   return "";
+}
+
+function safeDataTypeColor(dt: unknown): string {
+  if (typeof dt === "string") return PIN_COLORS[dt] ?? "rgba(156,163,175,0.7)";
+  if (dt && typeof dt === "object" && "kind" in dt) return PIN_COLORS[(dt as DataType).kind] ?? "rgba(156,163,175,0.7)";
+  return "rgba(156,163,175,0.7)";
 }
 
 /**
@@ -195,7 +205,7 @@ const CollapsibleSection = ({
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   useContext(GroupContext);
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | null;
+  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null;
 
   const {
     variables: graphVariables,
@@ -409,21 +419,23 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </button>
             )}
             <span
-              className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12] text-gray-300" : "bg-white/[0.04] text-gray-500"}`}
+              className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-white/[0.04]"}`}
+              style={{ color: safeDataTypeColor(extra?.dataType) }}
             >
               {safeDataTypeDisplay(extra?.dataType)}
               {extra?.dataType &&
                 typeof extra.dataType === "object" &&
                 "kind" in extra.dataType &&
                 (extra.dataType as DataType).kind === "Array"
-                  ? <span className="text-[8px] text-blue-400/80">[]</span>
+                  ? <span className="text-[8px]">[]</span>
                   : null}
             </span>
           </>
         )}
         {type === "variable" && readOnly && (
           <span
-            className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12] text-gray-300" : "bg-white/[0.04] text-gray-500"}`}
+            className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-white/[0.04]"}`}
+            style={{ color: safeDataTypeColor(extra?.dataType) }}
           >
             {safeDataTypeDisplay(extra?.dataType)}
           </span>
@@ -442,7 +454,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
         <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
           <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-            {currentTab === "graphs" ? "Graphs" : currentTab === "variables" ? "Variables" : currentTab === "data" ? "Data" : ""}
+            {currentTab === "graphs" ? "Graphs" : currentTab === "variables" ? "Variables" : currentTab === "data" ? "Data" : currentTab === "commands" ? "Commands" : ""}
           </span>
         </div>
 
@@ -617,10 +629,95 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </StackedCollapsibleSection>
             </div>
           )}
+          {currentTab === "commands" && (
+            <CommandsPanel activeTabId={activeTabId} />
+          )}
         </div>
       </div>
     </div>
   );
 });
+
+const COMMAND_LABELS: Record<string, string> = {
+  MoveNodes: "Move Nodes",
+  SetPinValue: "Set Pin Value",
+  ConnectPins: "Connect Pins",
+  DisconnectPin: "Disconnect Pin",
+  CreateNode: "Create Node",
+  DeleteNodes: "Delete Nodes",
+  Composite: "Composite",
+};
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
+}
+
+const EMPTY_STACK: HistoryEntry[] = [];
+
+function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
+  const undoStack = useHistoryStore((s) =>
+    activeTabId ? s.histories[activeTabId]?.undoStack ?? EMPTY_STACK : EMPTY_STACK
+  );
+  const redoStack = useHistoryStore((s) =>
+    activeTabId ? s.histories[activeTabId]?.redoStack ?? EMPTY_STACK : EMPTY_STACK
+  );
+
+  if (!activeTabId) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="text-[12px] text-gray-500/60 pl-4 py-3">No active graph</div>
+      </div>
+    );
+  }
+
+  const reversedUndo = [...undoStack].reverse();
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <StackedCollapsibleSection
+        label={`Undo (${undoStack.length})`}
+        expanded={true}
+        onToggle={() => {}}
+      >
+        {reversedUndo.length > 0 ? reversedUndo.map((entry, i) => (
+          <div
+            key={entry.id}
+            className={`flex items-center gap-2 px-4 py-1.5 text-gray-400 ${i === 0 ? "bg-white/[0.04]" : ""}`}
+          >
+            <VscDiscard size={11} className="shrink-0 text-gray-500" />
+            <span className="flex-1 text-[12px] tracking-tight truncate">
+              {COMMAND_LABELS[entry.commandType] ?? entry.commandType}
+            </span>
+            <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
+          </div>
+        )) : (
+          <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+        )}
+      </StackedCollapsibleSection>
+
+      <StackedCollapsibleSection
+        label={`Redo (${redoStack.length})`}
+        expanded={true}
+        onToggle={() => {}}
+      >
+        {redoStack.length > 0 ? redoStack.map((entry) => (
+          <div
+            key={entry.id}
+            className="flex items-center gap-2 px-4 py-1.5 text-gray-500"
+          >
+            <VscRedo size={11} className="shrink-0 text-gray-600" />
+            <span className="flex-1 text-[12px] tracking-tight truncate">
+              {COMMAND_LABELS[entry.commandType] ?? entry.commandType}
+            </span>
+            <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
+          </div>
+        )) : (
+          <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+        )}
+      </StackedCollapsibleSection>
+    </div>
+  );
+}
 
 export default Sidebar;

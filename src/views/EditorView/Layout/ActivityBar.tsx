@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
-import { VscDatabase } from "react-icons/vsc";
+import { VscDatabase, VscTerminal } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean; onClick: () => void; children: React.ReactNode; title: string; id: string }) => (
@@ -17,7 +17,7 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 
 export function ActivityBar() {
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const activeTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | null;
+  const activeTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null;
 
   const activityBarRef = useRef<HTMLDivElement>(null);
   const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
@@ -25,8 +25,8 @@ export function ActivityBar() {
   const updateNode = useLayoutStore((s) => s.updateNode);
   const previousSizeRef = useRef(260);
 
-  const toggleTab = (tab: "graphs" | "variables" | "data") => {
-    let newTab: "graphs" | "variables" | "data" | null = tab;
+  const toggleTab = (tab: "graphs" | "variables" | "data" | "commands") => {
+    let newTab: "graphs" | "variables" | "data" | "commands" | null = tab;
     let visible = true;
 
     if (activeTab === tab) {
@@ -87,6 +87,9 @@ export function ActivityBar() {
       </ActivityIcon>
       <ActivityIcon id="data" active={activeTab === "data"} onClick={() => toggleTab("data")} title="Data">
         <VscDatabase size={24} />
+      </ActivityIcon>
+      <ActivityIcon id="commands" active={activeTab === "commands"} onClick={() => toggleTab("commands")} title="Commands">
+        <VscTerminal size={24} />
       </ActivityIcon>
     </div>
   );

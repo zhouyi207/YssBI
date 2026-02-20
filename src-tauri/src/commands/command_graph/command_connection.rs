@@ -11,7 +11,7 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 /// 将 PinChangeSet 转为事件并发送
-fn emit_pin_change_events(
+pub fn emit_pin_change_events(
     app: &AppHandle,
     graph_id: GraphId,
     graph: &crate::graph::GraphInstance,
@@ -41,7 +41,7 @@ fn emit_pin_change_events(
 }
 
 /// 将推断出的 pin 类型转为事件并发送
-fn emit_inferred_types(
+pub fn emit_inferred_types(
     app: &AppHandle,
     graph_id: GraphId,
     inferred: Vec<(PinId, DataType)>,

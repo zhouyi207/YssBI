@@ -73,7 +73,7 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
                 uiStyle: node.uiStyle ?? 'default',
                 description: node.description,
                 position: node.position || { x: 0, y: 0 },
-                // 实例参数：刷新后必须保留，否则 get_variable/set_variable 无法从 variable store 响应式读取名称
+                paramsKind: node.paramsKind ?? 'none', // 缺失这个会导致初始化的节点和复制的节点类型不一致
                 variableId: node.variableId,
                 variableName: node.variableName,
                 variableType: node.variableType,

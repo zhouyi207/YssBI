@@ -92,7 +92,7 @@ export class NodeService {
             x: number;
             y: number;
             params?: Record<string, unknown> | null;
-            pins: Array<{ pinId: string; userValue?: unknown }>;
+            pins: Array<{ pinId: string; name: string; direction: string; userValue?: unknown }>;
         }>,
         connections: Array<{ fromPin: string; toPin: string }>,
     ): Promise<void> {
@@ -162,6 +162,46 @@ export class NodeService {
     ): Promise<void> {
         if (updates.length === 0) return;
         await invoke("update_node_positions", { graphId, updates });
+    }
+
+    /**
+     * Batch-create nodes with pin remapping and connection restoration.
+     * Used by paste, template import, and similar bulk-creation scenarios.
+     */
+    static async batchCreateWithConnections(
+        graphId: string,
+        entries: Array<{
+            nodeType: string;
+            x: number;
+            y: number;
+            params?: {
+                variableId?: string;
+                variableName?: string;
+                variableType?: string;
+                subGraphId?: string;
+                dataframeId?: string;
+            };
+            pins: Array<{
+                pinId: string;
+                name: string;
+                direction: 'input' | 'output';
+                userValue?: unknown;
+            }>;
+        }>,
+        connections: Array<{ fromPin: string; toPin: string }>,
+    ): Promise<{ nodeIds: string[]; pinMapping: Record<string, string> }> {
+        if (entries.length === 0) return { nodeIds: [], pinMapping: {} };
+        return await invoke<{ nodeIds: string[]; pinMapping: Record<string, string> }>("batch_create_with_connections", {
+            graphId,
+            entries: entries.map(e => ({
+                nodeType: e.nodeType,
+                x: e.x,
+                y: e.y,
+                params: e.params ? NodeService.buildTaggedParams(e.params) : null,
+                pins: e.pins,
+            })),
+            connections,
+        });
     }
 
     private static buildTaggedParams(params: {

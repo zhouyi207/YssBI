@@ -5,7 +5,7 @@ import { connectPinsCommand } from './connectPins';
 import { disconnectPinCommand } from './disconnectPin';
 import { createNodeCommand } from './createNode';
 import { deleteNodesCommand } from './deleteNodes';
-import { pasteNodesCommand } from './composite';
+import { batchCreateCommand } from './composite';
 
 export const commandRegistry: Record<string, CommandHandler<any, any>> = {
   MoveNodes: moveNodesCommand,
@@ -14,7 +14,7 @@ export const commandRegistry: Record<string, CommandHandler<any, any>> = {
   DisconnectPin: disconnectPinCommand,
   CreateNode: createNodeCommand,
   DeleteNodes: deleteNodesCommand,
-  Composite: pasteNodesCommand,
+  Composite: batchCreateCommand,
 };
 
 export function getCommandHandler(type: CommandType): CommandHandler<any, any> {
@@ -31,4 +31,4 @@ export type { ConnectPinsArgs, ConnectPinsContext } from './connectPins';
 export type { DisconnectPinArgs, DisconnectPinContext } from './disconnectPin';
 export type { CreateNodeArgs, CreateNodeContext } from './createNode';
 export type { DeleteNodesArgs, DeleteNodesContext } from './deleteNodes';
-export type { PasteNodesArgs, PasteNodesContext } from './composite';
+export type { BatchCreateArgs, BatchCreateContext } from './composite';

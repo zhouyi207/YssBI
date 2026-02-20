@@ -258,6 +258,61 @@ impl NodeInstance {
         })
     }
 
+    /// Create an instance with a predetermined node ID but auto-generated pin IDs.
+    /// Used by restore_nodes to handle dynamic-pin nodes where saved pin count
+    /// may differ from the base definition.
+    pub fn from_definition_with_node_id(
+        definition: Arc<NodeDefinition>,
+        node_id: NodeId,
+    ) -> Result<NodeCreationResult, String> {
+        let mut type_var_map = HashMap::new();
+        let mut type_var_map_reverse = HashMap::new();
+
+        for type_var in definition.type_vars.iter().cloned() {
+            let type_var_id = TypeVarId::new();
+            type_var_map.insert(type_var_id, type_var.clone());
+            type_var_map_reverse.insert(type_var, type_var_id);
+        }
+
+        let pin_defs = (definition
+            .pin_generator
+            .as_ref()
+            .ok_or("pin_generator missing")?)()?;
+
+        let pin_instances: Vec<PinInstance> = pin_defs
+            .iter()
+            .enumerate()
+            .map(|(index, pin_definition)| {
+                let order = index as i32;
+                let mut pin = PinInstance::from_definition(pin_definition, node_id, order);
+
+                if let Some(type_var_key) = pin_definition.get_type_var_key() {
+                    if let Some(type_var_def) = definition.type_vars.iter().find(|tv| tv.id == type_var_key) {
+                        if let Some(&type_var_id) = type_var_map_reverse.get(type_var_def) {
+                            pin = pin.with_type_var_id(Some(type_var_id));
+                        }
+                    }
+                }
+
+                pin
+            })
+            .collect();
+
+        let pin_ids = pin_instances.iter().map(|p| p.id).collect();
+
+        Ok(NodeCreationResult {
+            node: Self {
+                id: node_id,
+                definition,
+                type_var_map,
+                position: NodePosition { x: 0.0, y: 0.0 },
+                instance_params: NodeInstanceParams::default(),
+                pin_ids,
+            },
+            pins: pin_instances,
+        })
+    }
+
     /// 设置位置
     pub fn with_position(mut self, x: f32, y: f32) -> Self {
         self.position = NodePosition { x, y };

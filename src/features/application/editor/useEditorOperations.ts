@@ -1,8 +1,10 @@
 import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
 import { getGraphById } from '@/features/core/dataStore';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '@/features/core/editor';
+import type { ClipboardSnapshot, ClipboardEntry, ClipboardPinEntry } from '@/features/core/editor/stores/useClipboardStore';
 import { useHistoryStore, executeCommand } from '@/features/core/history';
 import type { GraphHistory } from '@/features/core/history';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -64,54 +66,99 @@ export function useEditorOperations() {
   // ===== Clipboard =====
   const copy = useCallback(() => {
     const sIds = new Set(selectedNodeIdsRef.current);
+    if (sIds.size === 0) return;
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const currentGraph = getGraphById(tid);
-    if (!currentGraph) return;
 
-    const currentNodes = currentGraph.nodes || [];
-    const sel = currentNodes.filter((n: { id: string; isInternal?: boolean }) => sIds.has(n.id) && !n.isInternal);
-    if (sel.length > 0) setClipboard(sel.map((n) => ('clone' in n && typeof (n as any).clone === 'function' ? (n as any).clone() : { ...n }) as Node));
+    const dataStore = useGraphDataStore.getState();
+    const graphNodeIds = dataStore.graphNodes[tid] ?? [];
+
+    const selectedNodeIdList = graphNodeIds.filter((nid) => sIds.has(nid));
+    if (selectedNodeIdList.length === 0) return;
+
+    const allSelectedPinIds = new Set<string>();
+    const entries: ClipboardEntry[] = [];
+
+    for (const nodeId of selectedNodeIdList) {
+      const node = dataStore.nodes[nodeId];
+      if (!node || node.isInternal) continue;
+
+      const pinIds = dataStore.nodePins[nodeId] ?? [];
+      const pins: ClipboardPinEntry[] = [];
+
+      for (const pinId of pinIds) {
+        const pin = dataStore.pins[pinId];
+        if (!pin) continue;
+        allSelectedPinIds.add(pinId);
+        pins.push({
+          pinId: pin.id,
+          name: pin.name,
+          direction: pin.direction as 'input' | 'output',
+          userValue: pin.userValue,
+        });
+      }
+
+      const params: ClipboardEntry['params'] = {};
+      if (node.variableId) params.variableId = node.variableId;
+      if (node.variableName) params.variableName = node.variableName;
+      if (node.variableType) params.variableType = node.variableType;
+      if (node.subGraphId) params.subGraphId = node.subGraphId;
+      if (node.dataframeId) params.dataframeId = node.dataframeId;
+
+      entries.push({
+        nodeType: node.nodeType,
+        position: { x: node.position.x, y: node.position.y },
+        params: Object.keys(params).length > 0 ? params : undefined,
+        pins,
+      });
+    }
+
+    const internalConnections: ClipboardSnapshot['internalConnections'] = [];
+    const seenConnIds = new Set<string>();
+
+    for (const pinId of allSelectedPinIds) {
+      const connIds = dataStore.pinConnections[pinId] ?? [];
+      for (const connId of connIds) {
+        if (seenConnIds.has(connId)) continue;
+        seenConnIds.add(connId);
+        const conn = dataStore.connections[connId];
+        if (!conn) continue;
+        if (allSelectedPinIds.has(conn.from) && allSelectedPinIds.has(conn.to)) {
+          internalConnections.push({ fromPin: conn.from, toPin: conn.to });
+        }
+      }
+    }
+
+    setClipboard({ entries, internalConnections });
   }, [setClipboard]);
 
   const paste = useCallback(async (pos?: { x: number; y: number }) => {
-    if (clipboard.length === 0) return;
+    if (!clipboard || clipboard.entries.length === 0) return;
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
     const vp = canvasRef.current;
     const tX = pos ? pos.x : -vp.x / vp.scale + 100;
     const tY = pos ? pos.y : -vp.y / vp.scale + 100;
-    const minX = Math.min(...clipboard.map(n => n.position.x));
-    const minY = Math.min(...clipboard.map(n => n.position.y));
-    const offX = tX - minX, offY = tY - minY;
+    const minX = Math.min(...clipboard.entries.map(e => e.position.x));
+    const minY = Math.min(...clipboard.entries.map(e => e.position.y));
 
-    const requests = clipboard
-      .filter(n => !!n.nodeType)
-      .map(n => {
-        const params: Record<string, string | undefined> = {};
-        if (n.variableId) params.variableId = n.variableId;
-        if (n.variableName) params.variableName = n.variableName;
-        if (n.variableType) params.variableType = n.variableType;
-        if (n.subGraphId) params.subGraphId = n.subGraphId;
-        if (n.dataframeId) params.dataframeId = n.dataframeId;
-
-        return {
-          nodeType: n.nodeType,
-          x: n.position.x + offX,
-          y: n.position.y + offY,
-          params: Object.keys(params).length > 0 ? params : undefined,
-        };
-      });
+    const snapshot: ClipboardSnapshot = {
+      ...clipboard,
+      entries: clipboard.entries.map(e => ({
+        ...e,
+        position: { x: e.position.x + (tX - minX), y: e.position.y + (tY - minY) },
+      })),
+    };
 
     try {
-      await executeCommand(tid, 'Composite', { requests });
+      await executeCommand(tid, 'Composite', { snapshot });
       await new Promise(r => setTimeout(r, 50));
     } catch (e) {
       console.error('[useEditorOperations] Failed to paste nodes:', e);
       uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [clipboard, setSelectedNodeIds]);
+  }, [clipboard]);
 
   const deleteSelected = useCallback(async () => {
     const sIds = new Set(selectedNodeIdsRef.current);

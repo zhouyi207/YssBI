@@ -98,6 +98,7 @@ pub fn run() {
             batch_delete_nodes,
             update_node_positions,
             restore_nodes,
+            batch_create_with_connections,
             // ==================== Connection ====================
             connect_pins,
             disconnect_pin,
