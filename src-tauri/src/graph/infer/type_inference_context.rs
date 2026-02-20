@@ -176,20 +176,22 @@ impl TypeInferenceContext {
     }
 
     /// 解析 Pin 的最终类型（供 NodeProcessor 使用）
-    pub fn resolve_pin_type(&self, pin_id: PinId) -> Result<DataType, String> {
-        let pin = self.get_pin_type(pin_id)?;
+    /// 使用 find_root 查找绑定，确保 union 后的 TypeVar 能正确解析
+    pub fn resolve_pin_type(&mut self, pin_id: PinId) -> Result<DataType, String> {
+        let pin = self.get_pin_type(pin_id)?.clone();
 
         match &pin {
             PinDataTypeInference::Concrete(vt) => Ok(vt.clone()),
             PinDataTypeInference::TypeVar(var) => {
-                if let Some(vt) = self.bindings.get(var) {
+                let root = self.find_root(*var);
+                if let Some(vt) = self.bindings.get(&root) {
                     Ok(vt.clone())
-                } else if let Some(def) = self.type_vars.get(var) {
+                } else if let Some(def) = self.type_vars.get(&root) {
                     def.bound
                         .clone()
-                        .ok_or_else(|| format!("TypeVar {:?} not bound", var))
+                        .ok_or_else(|| format!("TypeVar {:?} not bound", root))
                 } else {
-                    Err(format!("Unknown TypeVar {:?}", var))
+                    Err(format!("Unknown TypeVar {:?}", root))
                 }
             }
             PinDataTypeInference::Unknown => Err("Type is still unknown".into()),
@@ -221,14 +223,15 @@ impl TypeInferenceContext {
                     .get(&root)
                     .ok_or_else(|| format!("TypeVar {:?} not defined", root))?;
 
-                if !def.satisfies_constraints(&vt) {
+                // 当 TypeVar 期望标量时，DataSeries(inner) 可解包为 inner 进行约束检查
+                // 绑定类型使用实际连接的类型（如 DataSeries<float>），UI 显示与实际一致
+                if !def.satisfies_constraints_with_unwrap(&vt) {
                     return Err(format!(
                         "Type {:?} does not satisfy constraints of {:?}",
                         vt, root
                     ));
                 }
-
-                self.bind(root, vt)
+                self.bind(root, vt.clone())
             }
 
             // TypeVar ↔ TypeVar
@@ -323,7 +326,6 @@ impl TypeInferenceContext {
             return true;
         }
         match (from, to) {
-            (DataType::Int64, DataType::Float64) | (DataType::Float64, DataType::Int64) => true,
             (DataType::Array(a), DataType::Array(b)) => self.is_value_type_compatible(a, b),
             (DataType::DataSeries(a), DataType::DataSeries(b)) => {
                 self.is_value_type_compatible(a, b)

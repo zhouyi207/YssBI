@@ -1,4 +1,4 @@
-import { forwardRef, useContext, useEffect, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import {
@@ -8,11 +8,24 @@ import {
   VscChevronRight,
   VscChevronDown,
   VscDatabase,
-  VscListUnordered
+  VscListUnordered,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useSidebarStore } from "@/features/core/sidebar";
 import { PIN_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
-import { dataTypeKind, dataTypeDisplay } from "@/shared/types/domain/dataType";
+import type { DataType } from "@/shared/types/domain/dataType";
+import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+
+function safeDataTypeDisplay(dt: unknown): string {
+  if (typeof dt === "string") return dt;
+  if (dt && typeof dt === "object" && "kind" in dt) return dataTypeDisplay(dt as DataType);
+  return "";
+}
+
+function safeDataTypeKind(dt: unknown): string {
+  if (dt && typeof dt === "object" && "kind" in dt) return (dt as DataType).kind;
+  return "Any";
+}
 
 /**
  * 可拖拽的侧边栏项 — 整行可拖拽。
@@ -55,8 +68,59 @@ const SidebarDraggableItem: React.FC<{
   );
 };
 
+/**
+ * 可折叠分类区块
+ * 顶层为类别，下层为子项。点击左侧箭头展开/折叠子节点。
+ */
+const CollapsibleSection = ({
+  label,
+  expanded,
+  onToggle,
+  onAdd,
+  children,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onAdd?: () => void;
+  children: React.ReactNode;
+}) => (
+  <div className="mb-1">
+    <div
+      className="flex items-center gap-2 py-2 px-2.5 rounded-md hover:bg-white/[0.06] cursor-pointer group transition-colors"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      <span className="text-gray-500 shrink-0 transition-transform duration-200" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
+        <VscChevronDown size={14} />
+      </span>
+      <span className="flex-1 text-[11px] font-semibold text-gray-400 tracking-wide">{label}</span>
+      {onAdd && (
+        <button
+          data-add-btn
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd();
+          }}
+          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-400 hover:text-[var(--accent-color)] transition-all shrink-0"
+        >
+          <VscAdd size={12} />
+        </button>
+      )}
+    </div>
+    {expanded && <div className="ml-5 pl-2 border-l border-white/[0.06] space-y-0.5">{children}</div>}
+  </div>
+);
+
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
-  const nodeId = useContext(GroupContext) as string | null; // 从布局上下文获取节点 ID
+  useContext(GroupContext);
+  const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
+  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | null;
+
   const {
     variables: graphVariables,
     Variables: allVariables,
@@ -77,82 +141,115 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     openGraph,
   } = useEditorGroup();
 
-  const [expandedDataFrames, setExpandedDataFrames] = useState<Record<string, boolean>>({});
+  const { toggleSection, toggleDataFrame: toggleDataFrameStore, isSectionExpanded, isDataFrameExpanded } = useSidebarStore();
 
   const toggleDataFrame = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpandedDataFrames(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    toggleDataFrameStore(id);
   };
 
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 当前激活的图 ID（用于过滤局部变量）
   const activeEditorNode = useLayoutStore((s) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
 
-  // 按 scope 分区：Global = scope.type==='global'，Local = 当前图的 event/function/macro 变量
-  const { Variables: globalVariables, localVariables } = (() => {
+  // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
+  const { Variables: globalVariables, graphScopeVariables } = (() => {
     const global: Record<string, { name: string; dataType?: unknown }> = {};
     const local: Record<string, { name: string; dataType?: unknown }> = {};
     for (const [id, v] of Object.entries(allVariables)) {
       const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string; macroId?: string } }).scope;
-      if (scope?.type === 'global') {
+      if (scope?.type === "global") {
         global[id] = v as { name: string; dataType?: unknown };
-      } else if (activeTabId && scope && (scope.eventId === activeTabId || scope.functionId === activeTabId || scope.macroId === activeTabId)) {
+      } else if (
+        activeTabId &&
+        scope &&
+        (scope.eventId === activeTabId || scope.functionId === activeTabId || scope.macroId === activeTabId)
+      ) {
         local[id] = v as { name: string; dataType?: unknown };
       }
     }
-    return { Variables: global, localVariables: { ...graphVariables, ...local } };
+    return { Variables: global, graphScopeVariables: { ...graphVariables, ...local } };
   })();
 
-  // Read active tab from Layout Store
-  const sidebarNode = useLayoutStore(s => s.nodes[nodeId ?? 'sidebar']);
-  const activeTab = sidebarNode?.data?.currentTab as 'events' | 'functions' | 'macros' | 'variables' | 'data' | null;
+  // Variables (read-only): Global + Local(按 graph 分组)
+  const { variablesGlobal, localVariablesByGraph } = (() => {
+    const global: Record<string, { name: string; dataType?: unknown }> = {};
+    const byGraph: Record<string, { graphName: string; graphType: string; variables: Record<string, { name: string; dataType?: unknown }> }> = {};
+    for (const [id, v] of Object.entries(allVariables)) {
+      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string; macroId?: string } }).scope;
+      const data = v as { name: string; dataType?: unknown };
+      if (scope?.type === "global") {
+        global[id] = data;
+      } else {
+        const graphId = scope?.eventId ?? scope?.functionId ?? scope?.macroId;
+        if (graphId) {
+          if (!byGraph[graphId]) {
+            const meta = events[graphId] ?? functions[graphId] ?? macros[graphId];
+            byGraph[graphId] = {
+              graphName: (meta as { name?: string })?.name ?? graphId,
+              graphType: (meta as { type?: string })?.type ?? "event",
+              variables: {},
+            };
+          }
+          byGraph[graphId].variables[id] = data;
+        }
+      }
+    }
+    const localList = Object.entries(byGraph).map(([graphId, { graphName, graphType, variables }]) => ({
+      graphId,
+      graphName,
+      graphType,
+      variables,
+    }));
+    return { variablesGlobal: global, localVariablesByGraph: localList };
+  })();
 
-  // 记录每个 Tab 的数量，用于触发滚动
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
   const macrosCount = Object.keys(macros).length;
-  const variablesCount = Object.keys(localVariables).length + Object.keys(globalVariables).length;
+  const graphVarsCount = Object.keys(graphScopeVariables).length + Object.keys(globalVariables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
-  // 记录上一次的数量，用于判断是否是“增加”
-  const prevCounts = useRef({ events: eventsCount, functions: functionsCount, macros: macrosCount, variables: variablesCount, dataframes: dataframesCount });
+  const prevCounts = useRef({
+    events: eventsCount,
+    functions: functionsCount,
+    macros: macrosCount,
+    variables: graphVarsCount,
+    dataframes: dataframesCount,
+  });
 
-  // 监听数量变化并滚动到底部
   useEffect(() => {
     const isAdded =
       eventsCount > prevCounts.current.events ||
       functionsCount > prevCounts.current.functions ||
       macrosCount > prevCounts.current.macros ||
-      variablesCount > prevCounts.current.variables ||
+      graphVarsCount > prevCounts.current.variables ||
       dataframesCount > prevCounts.current.dataframes;
 
     if (isAdded && listRef.current) {
-      listRef.current.scrollTo({
-        top: listRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
     }
-
-    // 更新记录
     prevCounts.current = {
       events: eventsCount,
       functions: functionsCount,
       macros: macrosCount,
-      variables: variablesCount,
-      dataframes: dataframesCount
+      variables: graphVarsCount,
+      dataframes: dataframesCount,
     };
-  }, [eventsCount, functionsCount, macrosCount, variablesCount, dataframesCount]);
+  }, [eventsCount, functionsCount, macrosCount, graphVarsCount, dataframesCount]);
 
-  const renderItem = (id: string, name: string, type: 'variable' | 'function' | 'macro' | 'event' | 'data', extra?: any) => {
+  const renderItem = (
+    id: string,
+    name: string,
+    type: "variable" | "function" | "macro" | "event" | "data",
+    extra?: { dataType?: unknown; isGlobal?: boolean },
+    readOnly?: boolean
+  ) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
-    const dragData = buildSidebarDragData(id, name, type, extra);
+    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string } | undefined);
 
     return (
       <SidebarDraggableItem
@@ -164,71 +261,98 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           setSelectedInfo(id, type);
         }}
         onDoubleClick={(e) => {
-          if (type !== 'variable' && type !== 'data') {
+          if (type !== "variable" && type !== "data") {
             e.stopPropagation();
             openGraph(id, name, type);
           }
         }}
         className={`
-          group flex items-center gap-1 p-1.5 rounded transition-all border
+          group flex items-center gap-2 px-2.5 py-2 rounded-md transition-all duration-150
           ${isSelected
-            ? 'bg-[var(--accent-color)] text-white border-[var(--accent-color)] shadow-sm'
-            : 'hover:bg-white/5 text-gray-300 border-transparent'}
+            ? "bg-[var(--accent-color)]/90 text-white shadow-sm"
+            : "hover:bg-white/[0.06] text-gray-300"}
         `}
       >
-        {type === 'data' && (
+        {type === "data" && (
           <button
             onClick={(e) => toggleDataFrame(id, e)}
-            className="p-0.5 hover:bg-white/10 rounded text-gray-400 transition-colors"
+            className="p-0.5 hover:bg-white/10 rounded text-gray-400 transition-colors shrink-0"
           >
-            {expandedDataFrames[id] ? <VscChevronDown size={14} /> : <VscChevronRight size={14} />}
+            {isDataFrameExpanded(id) ? <VscChevronDown size={12} /> : <VscChevronRight size={12} />}
           </button>
         )}
         <div
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: isSelected ? 'white' : (type === 'data' ? '#10b981' : (extra?.dataType ? PIN_COLORS[typeof extra.dataType === 'string' ? extra.dataType : dataTypeKind(extra.dataType)] : '#9ca3af')) }}
+          className={`w-2.5 h-2.5 rounded-full shrink-0 ring-1 ${extra?.isGlobal ? "ring-amber-500/30" : "ring-white/10"}`}
+          style={{
+            backgroundColor: isSelected
+              ? "white"
+              : type === "data"
+                ? "#10b981"
+                : extra?.isGlobal
+                  ? "#f59e0b"
+                  : extra?.dataType
+                    ? PIN_COLORS[typeof extra.dataType === "string" ? extra.dataType : safeDataTypeKind(extra.dataType)]
+                    : "#9ca3af",
+          }}
         />
-        <span className="flex-1 text-[12px] font-bold truncate">{name}</span>
-        {/* 为 event/function/macro 添加打开按钮 */}
-        {(type === 'event' || type === 'function' || type === 'macro') && (
+        <span className="flex-1 text-[13px] font-medium truncate">{name}</span>
+        {(type === "event" || type === "function" || type === "macro") && (
           <button
             onClick={(e) => {
               e.stopPropagation();
               openGraph(id, name, type);
             }}
-            className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
+            className={`opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-white/15 transition-all ${isSelected ? "text-white" : "text-gray-400"}`}
             title="Open"
           >
             <VscChevronRight size={12} />
           </button>
         )}
-        {type === 'data' && <VscDatabase size={12} className="opacity-40" />}
-        {type === 'variable' && (
+        {type === "data" && <VscDatabase size={12} className="opacity-40" />}
+        {type === "variable" && !readOnly && (
           <>
             {!extra?.isGlobal ? (
               <button
-                onClick={(e) => { e.stopPropagation(); promoteVariable(id); }}
-                className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  promoteVariable(id);
+                }}
+                className={`opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-white/15 transition-all ${isSelected ? "text-white" : "text-gray-400"}`}
                 title="Promote to global"
               >
                 <VscEye size={12} />
               </button>
             ) : (
               <button
-                onClick={(e) => { e.stopPropagation(); demoteVariable(id); }}
-                className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${isSelected ? 'text-white' : 'text-gray-400'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  demoteVariable(id);
+                }}
+                className={`opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-white/15 transition-all ${isSelected ? "text-white" : "text-gray-400"}`}
                 title="Demote to local"
               >
                 <VscEyeClosed size={12} />
               </button>
             )}
-            <span className={`text-[9px] font-black uppercase px-1 rounded flex items-center gap-1 ${isSelected ? 'bg-white/20' : 'bg-gray-800 text-gray-500'}`}>
-              {extra?.dataType ? (typeof extra.dataType === 'string' ? extra.dataType : dataTypeDisplay(extra.dataType)) : ''}
-              {extra?.dataType && typeof extra.dataType === 'object' && 'kind' in extra.dataType && extra.dataType.kind === 'Array' && (
-                <span className="text-[7px] bg-blue-500/20 text-blue-400 px-0.5 rounded">[]</span>
-              )}
+            <span
+              className={`text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1 ${isSelected ? "bg-white/25" : "bg-white/5 text-gray-500"}`}
+            >
+              {safeDataTypeDisplay(extra?.dataType)}
+              {extra?.dataType &&
+                typeof extra.dataType === "object" &&
+                "kind" in extra.dataType &&
+                (extra.dataType as DataType).kind === "Array" && (
+                  <span className="text-[8px] text-blue-400/80">[]</span>
+                )}
             </span>
           </>
+        )}
+        {type === "variable" && readOnly && (
+          <span
+            className={`text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1 ${isSelected ? "bg-white/25" : "bg-white/5 text-gray-500"}`}
+          >
+            {safeDataTypeDisplay(extra?.dataType)}
+          </span>
         )}
       </SidebarDraggableItem>
     );
@@ -242,103 +366,153 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
-        {/* Header */}
-        <div className="px-3 bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0 select-none border-b border-[#2b2b2b]">
-          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{activeTab}</span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // 阻止事件冒泡到 Sidebar 容器
-              if (activeTab === 'events') addEvent();
-              else if (activeTab === 'functions') addFunction();
-              else if (activeTab === 'macros') addMacro();
-              else if (activeTab === 'variables') {
-                addVariable("New Variable", "Int32", false);
-              }
-              else if (activeTab === 'data') {
-                triggerImportData();
-              }
-            }}
-            className="p-1 text-gray-400 hover:text-[var(--accent-color)] transition-colors"
-          >
-            <VscAdd size={16} />
-          </button>
+        <div className="px-4 py-3 flex items-center shrink-0 select-none border-b border-white/[0.06]">
+          <span className="text-[11px] font-semibold text-gray-400 tracking-wide">
+            {currentTab === "graphs" ? "Graphs" : currentTab === "variables" ? "Variables" : currentTab === "data" ? "Data" : ""}
+          </span>
         </div>
 
-        {/* List Content */}
-        <div
-          ref={listRef}
-          className="flex-1 overflow-y-auto p-1 custom-scrollbar scroll-smooth"
-        >
-          {activeTab === 'events' && (
-            <>
-              {Object.entries(events).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'event'))}
-              {Object.keys(events).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No events</div>}
-            </>
-          )}
-          {activeTab === 'functions' && (
-            <>
-              {Object.entries(functions).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'function'))}
-              {Object.keys(functions).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No functions</div>}
-            </>
-          )}
-          {activeTab === 'macros' && (
-            <>
-              {Object.entries(macros).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'macro'))}
-              {Object.keys(macros).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No macros</div>}
-            </>
-          )}
-          {activeTab === 'data' && (
-            <>
-              {Object.entries(dataframes).map(([id, data]) => (
-                <div key={id}>
-                  {renderItem(id, String((data as { name?: unknown }).name ?? ''), 'data', data)}
-                  {expandedDataFrames[id] && (data as { columns?: unknown[] }).columns && (
-                    <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
-                      {((data as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, idx) => (
-                        <div
-                          key={`${id}-col-${idx}`}
-                          className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded text-[11px] text-gray-400 group/col"
-                        >
-                          <VscListUnordered size={10} className="opacity-40" />
-                          <span className="flex-1 truncate">{col.name}</span>
-                          <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
-                            {col.type.replace("Owned", "")}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+        <div ref={listRef} className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sidebar-scrollbar scroll-smooth">
+          {currentTab === "graphs" && (
+            <div className="space-y-0.5">
+              <CollapsibleSection
+                label="Event"
+                expanded={isSectionExpanded("graphsEvent")}
+                onToggle={() => toggleSection("graphsEvent")}
+                onAdd={addEvent}
+              >
+                {Object.entries(events).map(([id, data]: [string, { name: string }]) =>
+                  renderItem(id, data.name, "event")
+                )}
+                {Object.keys(events).length === 0 && (
+                  <div className="text-[12px] text-gray-500/80 italic py-3 px-2 text-center">No events</div>
+                )}
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                label="Function"
+                expanded={isSectionExpanded("graphsFunction")}
+                onToggle={() => toggleSection("graphsFunction")}
+                onAdd={addFunction}
+              >
+                {Object.entries(functions).map(([id, data]: [string, { name: string }]) =>
+                  renderItem(id, data.name, "function")
+                )}
+                {Object.keys(functions).length === 0 && (
+                  <div className="text-[12px] text-gray-500/80 italic py-3 px-2 text-center">No functions</div>
+                )}
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                label="Macro"
+                expanded={isSectionExpanded("graphsMacro")}
+                onToggle={() => toggleSection("graphsMacro")}
+                onAdd={addMacro}
+              >
+                {Object.entries(macros).map(([id, data]: [string, { name: string }]) =>
+                  renderItem(id, data.name, "macro")
+                )}
+                {Object.keys(macros).length === 0 && (
+                  <div className="text-[12px] text-gray-500/80 italic py-3 px-2 text-center">No macros</div>
+                )}
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                label="Variable"
+                expanded={isSectionExpanded("graphsVariable")}
+                onToggle={() => toggleSection("graphsVariable")}
+                onAdd={() => addVariable("New Variable", "Int32", false)}
+              >
+                {Object.keys(globalVariables).length > 0 &&
+                  Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) =>
+                    renderItem(id, data.name, "variable", { ...data, isGlobal: true })
                   )}
+                {Object.entries(graphScopeVariables).map(([id, data]: [string, { name: string }]) => {
+                  if (id in globalVariables) return null;
+                  return renderItem(id, data.name, "variable", { ...data, isGlobal: false });
+                })}
+                {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
+                  <div className="text-[12px] text-gray-500/80 italic py-3 px-2 text-center">No variables</div>
+                )}
+              </CollapsibleSection>
+            </div>
+          )}
+
+          {currentTab === "variables" && (
+            <div className="space-y-0.5">
+              <CollapsibleSection
+                label="Global"
+                expanded={isSectionExpanded("variablesGlobal")}
+                onToggle={() => toggleSection("variablesGlobal")}
+              >
+                {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
+                  renderItem(id, data.name, "variable", { ...data, isGlobal: true }, true)
+                )}
+                {Object.keys(variablesGlobal).length === 0 && (
+                  <div className="text-[12px] text-gray-500/60 italic py-2 px-2">—</div>
+                )}
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                label="Local"
+                expanded={isSectionExpanded("variablesLocal")}
+                onToggle={() => toggleSection("variablesLocal")}
+              >
+                {localVariablesByGraph.map(({ graphId, graphName, variables }) => (
+                  <CollapsibleSection
+                    key={graphId}
+                    label={graphName}
+                    expanded={isSectionExpanded(`variablesLocal_${graphId}`)}
+                    onToggle={() => toggleSection(`variablesLocal_${graphId}`)}
+                  >
+                    {Object.entries(variables).map(([id, data]: [string, { name: string }]) =>
+                      renderItem(id, data.name, "variable", { ...data, isGlobal: false }, true)
+                    )}
+                  </CollapsibleSection>
+                ))}
+                {localVariablesByGraph.length === 0 && (
+                  <div className="text-[12px] text-gray-500/60 italic py-2 px-2">—</div>
+                )}
+              </CollapsibleSection>
+            </div>
+          )}
+
+          {currentTab === "data" && (
+            <div className="space-y-0.5">
+              <CollapsibleSection
+                label="Data"
+                expanded={isSectionExpanded("dataData")}
+                onToggle={() => toggleSection("dataData")}
+                onAdd={triggerImportData}
+              >
+                {Object.entries(dataframes || {}).map(([id, data]) => (
+                <div key={id}>
+                  {renderItem(id, String((data as { name?: unknown }).name ?? ""), "data", data)}
+                    {isDataFrameExpanded(id) && (data as { columns?: unknown[] }).columns && (
+                      <div className="ml-5 mt-1 pl-2 border-l border-white/[0.06] space-y-0.5">
+                        {((data as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map(
+                          (col, idx) => (
+                            <div
+                              key={`${id}-col-${idx}`}
+                              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/[0.04] text-[12px] text-gray-400 group/col transition-colors"
+                            >
+                              <VscListUnordered size={10} className="opacity-50 shrink-0" />
+                              <span className="flex-1 truncate">{col.name}</span>
+                              <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-500 bg-white/5 px-1.5 py-0.5 rounded">
+                                {col.type.replace("Owned", "")}
+                              </span>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
                 </div>
               ))}
-              {Object.keys(dataframes).length === 0 && <div className="text-[10px] text-gray-400 italic p-2 text-center">No data</div>}
-            </>
-          )}
-          {activeTab === 'variables' && (
-            <>
-              {/* Global */}
-              {Object.keys(globalVariables).length > 0 && (
-                <div className="mb-2">
-                  <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                    Global
-                    <div className="h-px flex-1 bg-white/5" />
-                  </div>
-                  {Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: true }))}
-                </div>
-              )}
-              {/* Local */}
-              <div className="mb-2">
-                {Object.keys(localVariables).length > 0 && (
-                  <div className="px-2 py-1 text-[8px] font-black text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                    Local
-                    <div className="h-px flex-1 bg-white/5" />
-                  </div>
+                {Object.keys(dataframes || {}).length === 0 && (
+                  <div className="text-[12px] text-gray-500/80 italic py-3 px-2 text-center">No data</div>
                 )}
-                {Object.entries(localVariables).map(([id, data]: [string, { name: string }]) => renderItem(id, data.name, 'variable', { ...data, isGlobal: false }))}
-              </div>
-              {Object.keys(localVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
-                <div className="text-[10px] text-gray-400 italic p-2 text-center">No variables</div>
-              )}
-            </>
+              </CollapsibleSection>
+            </div>
           )}
         </div>
       </div>

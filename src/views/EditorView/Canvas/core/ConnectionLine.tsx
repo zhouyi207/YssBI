@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import { useGestureStore } from '@/features/core/gesture';
 import { useViewportStore } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
 
 import { Pin } from "@/shared/types/domain";
@@ -79,7 +80,7 @@ export const ConnectionLine = ({
                     ctx,
                     start.x, start.y,
                     endWorld.x, endWorld.y,
-                    activeStart.ui?.color ?? (currentTheme[`${activeStart.type}Color` as keyof typeof currentTheme] as string) ?? currentTheme.connectionLines,
+                    activeStart.ui?.color ?? getPinTypeColor(activeStart.type ?? "any", currentTheme),
                     2 / viewport.scale,
                     activeStart.direction === "input"
                 );

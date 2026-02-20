@@ -14,4 +14,16 @@ impl TypeVarInference {
     pub fn satisfies_constraints(&self, vt: &DataType) -> bool {
         self.constraints.iter().all(|c| c.satisfies(vt))
     }
+
+    /// 检查类型是否满足约束；当 TypeVar 期望标量时，DataSeries(inner) 可解包为 inner 检查。
+    /// 与类型推断中的 unify 逻辑一致，供连接校验与推断共用。
+    pub fn satisfies_constraints_with_unwrap(&self, vt: &DataType) -> bool {
+        if self.satisfies_constraints(vt) {
+            return true;
+        }
+        if let DataType::DataSeries(inner) = vt {
+            return self.satisfies_constraints(inner);
+        }
+        false
+    }
 }

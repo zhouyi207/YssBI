@@ -15,7 +15,8 @@ pub fn dataframe_to_schema(df: &DataFrame) -> DataSchema {
     }
 }
 
-fn polars_dtype_to_data_type(dtype: &polars::prelude::DataType) -> DataType {
+/// 将 Polars 列类型映射为 DataType（供节点执行器等使用）
+pub fn polars_dtype_to_data_type(dtype: &polars::prelude::DataType) -> DataType {
     match dtype {
         polars::prelude::DataType::Boolean => DataType::Boolean,
         polars::prelude::DataType::Int32 => DataType::Int32,

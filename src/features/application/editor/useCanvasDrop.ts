@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useViewportStore } from "@/features/core/viewport";
+import { useGestureStore } from "@/features/core/gesture";
 import { useVariableStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
@@ -87,6 +88,9 @@ export function useCanvasDrop({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      if (useGestureStore.getState().consumeSuppressContextMenu()) {
+        return;
+      }
       const target = e.target as HTMLElement;
       if (
         target.closest(".menubar-container") ||

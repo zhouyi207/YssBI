@@ -136,12 +136,18 @@ impl GraphRuntime {
         self.graph_instance.get_pin_data_type_by_pin_id(pin_id)
     }
 
+    /// 从 registry 按 node_type 获取完整定义（含 flow_processor、data_evaluator 等）。
+    /// 反序列化后的节点 definition 会丢失 #[serde(skip)] 字段，必须从 registry 补全。
     pub fn get_node_definition_by_node_id(&self, node_id: NodeId) -> Arc<NodeDefinition> {
         let node_instance = self
             .graph_instance
             .get_node_instance_by_node_id(node_id)
             .unwrap();
-        node_instance.definition
+        let node_type = &node_instance.definition.node_type;
+        self.graph_instance
+            .registry()
+            .get(node_type)
+            .unwrap_or_else(|| node_instance.definition)
     }
 
     pub fn get_node_pins(&self, node_id: NodeId) -> Vec<PinInstance> {
@@ -156,7 +162,7 @@ impl GraphRuntime {
         self.graph_instance.get_upstream_by_pin_id(pin_id)
     }
 
-    pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> NodeId {
+    pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> Option<NodeId> {
         self.graph_instance.get_node_id_by_pin_id(pin_id)
     }
 
@@ -197,15 +203,8 @@ impl GraphRuntime {
             None
         });
 
-        // 5. 类型强制转换：根据 pin 的推断类型自动转换值
-        raw_value.map(|v| {
-            if let Some(pin_type) = self.graph_instance.get_pin_data_type_by_pin_id(pin_id) {
-                if pin_type != crate::graph::DataType::Any {
-                    return v.coerce_to(&pin_type);
-                }
-            }
-            v
-        })
+        // 5. 不进行隐式类型转换，类型转换需使用 convert 节点
+        raw_value
     }
 
     // ========================================================================

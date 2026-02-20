@@ -1,6 +1,6 @@
 //! 状态管理模块
 
-use crate::database::dataframe_to_schema;
+use crate::database::{dataframe_to_schema, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
 use crate::log::log_sys;
 use crate::project::{ProjectData, ProjectStore};
@@ -32,12 +32,40 @@ impl ProjectState {
     }
 
     /// 设置 项目数据 并清空 项目存储
+    /// 方案一：从 project_data.databases 重建 project_store.databases，恢复 schema 能力
     pub fn set_data(&self, project_data: ProjectData) {
         log_sys::info!("[ProjectState.set_data] ProjectData: {}", project_data.info());
 
-        *self.project_data.write().unwrap() = project_data;
-        *self.project_store.write().unwrap() = ProjectStore::default();
-        
+        *self.project_data.write().unwrap() = project_data.clone();
+
+        let mut store = ProjectStore::default();
+        for (id, decl) in project_data.databases.iter() {
+            let instance = match decl.engine.build_lazy() {
+                Ok(lazy_frame) => {
+                    log_sys::info!("[ProjectState.set_data] Rebuilt database '{}' (Lazy)", id);
+                    DatabaseInstance {
+                        decl: decl.clone(),
+                        state: DatabaseState::Lazy { lazy_frame },
+                    }
+                }
+                Err(e) => {
+                    log_sys::warn!(
+                        "[ProjectState.set_data] Database '{}' build_lazy failed: {}",
+                        id,
+                        e
+                    );
+                    DatabaseInstance {
+                        decl: decl.clone(),
+                        state: DatabaseState::Failed {
+                            error: e.to_string(),
+                        },
+                    }
+                }
+            };
+            store.databases.insert(id.clone(), instance);
+        }
+        *self.project_store.write().unwrap() = store;
+
         // 恢复所有图的 registry 和 schema provider
         self.restore_graph_registries();
         self.set_graph_schema_providers();

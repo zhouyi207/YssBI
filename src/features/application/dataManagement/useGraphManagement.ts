@@ -118,7 +118,7 @@ export function useGraphManagement(
       fulfillPendingGraph(id, 'event', openGraph, pendingActionsRef);
       
       // 切换到 events 标签页
-      switchSidebarTab('events');
+      switchSidebarTab('graphs');
       
       // 清理过期的 actions
       cleanupExpiredActions();
@@ -231,7 +231,7 @@ export function useGraphManagement(
       });
       
       fulfillPendingGraph(id, 'function', openGraph, pendingActionsRef);
-      switchSidebarTab('functions');
+      switchSidebarTab('graphs');
       cleanupExpiredActions();
       
     } catch (error) {
@@ -339,7 +339,7 @@ export function useGraphManagement(
       });
       
       fulfillPendingGraph(id, 'macro', openGraph, pendingActionsRef);
-      switchSidebarTab('macros');
+      switchSidebarTab('graphs');
       cleanupExpiredActions();
       
     } catch (error) {

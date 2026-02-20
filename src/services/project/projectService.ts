@@ -73,6 +73,12 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
                 uiStyle: node.uiStyle ?? 'default',
                 description: node.description,
                 position: node.position || { x: 0, y: 0 },
+                // 实例参数：刷新后必须保留，否则 get_variable/set_variable 无法从 variable store 响应式读取名称
+                variableId: node.variableId,
+                variableName: node.variableName,
+                variableType: node.variableType,
+                subGraphId: node.subGraphId,
+                dataframeId: node.dataframeId,
             };
         });
         
@@ -170,6 +176,36 @@ export class ProjectService {
     }
 
     /**
+     * 分阶段加载第一步：获取 databases + variables（含 schema）
+     */
+    static async getDatabasesVariables(): Promise<{
+        databases: Record<string, unknown>;
+        variables: Record<string, unknown>;
+    }> {
+        const data = await invoke<{ databases: Record<string, unknown>; variables: Record<string, unknown> }>(
+            "get_project_databases_variables"
+        );
+        return { databases: data.databases || {}, variables: data.variables || {} };
+    }
+
+    /**
+     * 分阶段加载第二步：获取 graphs，含引用校验结果
+     */
+    static async getProjectGraphs(): Promise<{
+        graphs: Record<string, GraphInstanceDTO>;
+        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+    }> {
+        const data = await invoke<{
+            graphs: Record<string, GraphInstanceDTO>;
+            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+        }>("get_project_graphs");
+        return {
+            graphs: data.graphs || {},
+            invalidReferences: data.invalidReferences || {},
+        };
+    }
+
+    /**
      * 获取当前项目路径
      */
     static async getProjectPath(): Promise<string | null> {
@@ -184,9 +220,10 @@ export class ProjectService {
     }
 
     /**
-     * 从文件加载项目到状态管理器 - 使用新的 ProjectData 结构
+     * 从文件加载项目到状态管理器
+     * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 syncFromBackend 同步
      */
-    static async loadProjectToState(path?: string): Promise<{ project: ProjectData; path: string | null } | null> {
+    static async loadProjectToState(path?: string): Promise<{ path: string } | null> {
         try {
             let filePath = path;
             if (!filePath) {
@@ -199,16 +236,8 @@ export class ProjectService {
                 filePath = selected as string;
             }
 
-            const data = await invoke<ProjectDataDTO>("load_project_to_state", { path: filePath });
-            return {
-                project: {
-                    variables: data.variables || {},
-                    graphs: convertGraphMap(data.graphs || {}),
-                    databases: data.databases || {},
-                    metadata: data.metadata || { exportTime: "", appVersion: "" },
-                },
-                path: filePath,
-            };
+            await invoke("load_project", { path: filePath });
+            return { path: filePath };
         } catch (e) {
             console.error("Failed to load project:", e);
             throw e;
@@ -228,46 +257,13 @@ export class ProjectService {
                 if (!selected) return null;
                 filePath = selected;
             }
-            await invoke("save_project_from_state", { path: filePath });
+            await invoke("save_project", { path: filePath });
             return filePath;
         } catch (e) {
             console.error("Failed to save project:", e);
             throw e;
         }
     }
-
-    /**
-     * 设置完整的项目数据（用于批量同步）- 使用新的 ProjectData 结构
-     */
-    static async setProjectData(data: ProjectData, path?: string, emitEvent: boolean = false): Promise<void> {
-        const { dataTypeToBackend } = await import("@/shared/types/dto/dataType");
-        // 转换 variables.dataType 为后端格式（前端 DataType 对象 -> 后端期望的 string | { Array }）
-        const variables = Object.fromEntries(
-            Object.entries(data.variables).map(([id, v]) => {
-                const dt = v.dataType;
-                const dataType = (dt && typeof dt === "object" && "kind" in dt)
-                    ? dataTypeToBackend(dt as import("@/shared/types/domain").DataType)
-                    : dt;
-                return [id, { ...v, dataType }];
-            })
-        );
-        const backendData = {
-            variables,
-            graphs: data.graphs,
-            databases: data.databases,
-            metadata: data.metadata,
-        };
-        console.log('[ProjectService.setProjectData] Sending to backend:', {
-            variablesCount: Object.keys(backendData.variables).length,
-            graphsCount: Object.keys(backendData.graphs).length,
-            databasesCount: Object.keys(backendData.databases || {}).length,
-            emitEvent,
-        });
-        await invoke("set_project_data", { data: backendData, path: path || null, emitEvent });
-        console.log('[ProjectService.setProjectData] Successfully sent to backend');
-    }
-
-
 
     static async updateCanvas(subgraphId: string, canvas: CanvasState): Promise<void> {
         await invoke("update_canvas", { subgraphId, canvas });

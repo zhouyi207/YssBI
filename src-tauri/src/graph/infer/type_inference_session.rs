@@ -68,6 +68,10 @@ impl<'g> TypeInferenceSession<'g> {
             self.ctx
                 .infer_connection(connection.from_pin, connection.to_pin)?;
         }
+        // Convert 节点：不再将 Input 与 Output 统一，二者独立推断
+        // - Input 由上游连接确定
+        // - Output 由下游连接确定
+        // - 二者均可为不同类型（如 Input=Float, Output=Int），由 convert_to_type 在运行时执行转换
         Ok(())
     }
 
@@ -104,7 +108,13 @@ impl<'g> TypeInferenceSession<'g> {
         let mut data_state = self.graph.data_state.write().unwrap();
         let mut resolved = Vec::new();
 
-        for (&pin_id, pin_data) in self.ctx.pin_types.iter() {
+        let pin_ids_with_data: Vec<_> = self
+            .ctx
+            .pin_types
+            .iter()
+            .map(|(&pin_id, pin_data)| (pin_id, pin_data.clone()))
+            .collect();
+        for (pin_id, pin_data) in pin_ids_with_data {
             match self.ctx.resolve_pin_type(pin_id) {
                 Ok(concrete_type) => {
                     data_state.pin_types.insert(pin_id, concrete_type.clone());
@@ -138,7 +148,7 @@ impl<'g> TypeInferenceSession<'g> {
     }
 
     /// 查询某个 pin 的最终类型
-    pub fn resolve_pin(&self, pin_id: PinId) -> Result<DataType, String> {
+    pub fn resolve_pin(&mut self, pin_id: PinId) -> Result<DataType, String> {
         self.ctx.resolve_pin_type(pin_id)
     }
 

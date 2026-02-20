@@ -4,6 +4,7 @@ import { useGraphData, useGraphDataStore } from "@/features/core/dataStore";
 import { useGestureStore } from '@/features/core/gesture';
 import { useExecutionStore } from "@/features/core/execution";
 import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { deserializeGraph } from "@/features/core/dataStore";
@@ -137,7 +138,7 @@ export const EdgesLayer = ({
                         ctx,
                         start.x, start.y,
                         end.x, end.y,
-                        isActive ? '#facc15' : (pin.ui?.color ?? (currentTheme[`${pin.type}Color` as keyof typeof currentTheme] as string) ?? currentTheme.connectionLines),
+                        isActive ? '#facc15' : (pin.ui?.color ?? getPinTypeColor(pin.type ?? "any", currentTheme)),
                         isActive ? 3 / canvas.scale : 2 / canvas.scale
                     );
 

@@ -127,7 +127,10 @@ impl DataType {
 
     /// 是否可迭代（for-in、map 等）
     pub fn is_iterable(&self) -> bool {
-        matches!(self, DataType::Array(_) | DataType::String)
+        matches!(
+            self,
+            DataType::Array(_) | DataType::String | DataType::DataSeries(_)
+        )
     }
 
     /// Array 的元素类型，非 Array 返回 None
@@ -155,11 +158,7 @@ impl DataType {
             return true;
         }
         match (from, self) {
-            // 数值隐式提升
-            (DataType::Int32, DataType::Int64)
-            | (DataType::Int32, DataType::Float64)
-            | (DataType::Int64, DataType::Float64)
-            | (DataType::Float32, DataType::Float64) => true,
+            // 无隐式提升，类型转换需使用 convert 节点
             // 容器类型：内层 Any 接受任意具体类型
             (DataType::Array(from_inner), DataType::Array(to_inner)) => {
                 to_inner.can_accept(from_inner)

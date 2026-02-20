@@ -1,19 +1,91 @@
+use crate::database::{DatabaseInstance, DatabaseState};
 use crate::event::EventProject;
+use crate::graph::GraphId;
 use crate::event::{emit_project_event, Event};
 use crate::execution::Executor;
 use crate::frontend::FrontendError;
 use crate::graph::GraphKind;
 use crate::log::LogLevel;
 use crate::log_app;
-use crate::project::{load_project_from_file, save_project_to_file, ProjectData, ProjectState};
+use crate::project::{load_project_from_file, save_project_to_file, ProjectState};
+use crate::schema::{
+    ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO, GraphsWithValidationDTO,
+    InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
+};
+use polars::prelude::*;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 
 use serde_json::{json, Value};
 
-/// 获取当前项目数据
+fn dtype_to_string(dt: &DataType) -> String {
+    format!("{:?}", dt)
+}
+
+fn name_from_path(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unnamed")
+        .to_string()
+}
+
+/// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
+fn extract_database_schema(instance: &DatabaseInstance) -> Option<(String, Vec<ColumnInfoDTO>, usize, usize)> {
+    let name = match &instance.decl.engine {
+        crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
+        crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
+        crate::database::DatabaseEngine::InMemory { name } => name.clone(),
+        _ => instance.decl.id.clone(),
+    };
+
+    match &instance.state {
+        DatabaseState::Loaded { dataframe } => {
+            let schema = dataframe.schema();
+            let columns: Vec<ColumnInfoDTO> = schema
+                .iter_names()
+                .filter_map(|n| schema.get(n).map(|dt| ColumnInfoDTO {
+                    name: n.to_string(),
+                    dtype: dtype_to_string(dt),
+                }))
+                .collect();
+            let row_count = dataframe.height();
+            let column_count = columns.len();
+            Some((name, columns, row_count, column_count))
+        }
+        DatabaseState::Lazy { lazy_frame } => {
+            let schema = lazy_frame.clone().collect_schema().ok()?;
+            let columns: Vec<ColumnInfoDTO> = schema
+                .iter_names()
+                .filter_map(|n| schema.get(n).map(|dt| ColumnInfoDTO {
+                    name: n.to_string(),
+                    dtype: dtype_to_string(dt),
+                }))
+                .collect();
+            let column_count = columns.len();
+            let row_count = lazy_frame
+                .clone()
+                .select([len()])
+                .collect()
+                .ok()
+                .and_then(|df| {
+                    df.get_columns()
+                        .first()
+                        .and_then(|s| s.u32().ok())
+                        .and_then(|ca| ca.get(0))
+                        .map(|v| v as usize)
+                })
+                .unwrap_or(0);
+            Some((name, columns, row_count, column_count))
+        }
+        DatabaseState::Failed { .. } => None,
+    }
+}
+
+/// 获取当前项目数据（含 database schema，从 project_store 补充）
 #[tauri::command]
-pub fn get_project_data(state: State<ProjectState>) -> crate::schema::ProjectDataDTO {
+pub fn get_project_data(state: State<ProjectState>) -> ProjectDataDTO {
     let data = state.get_data();
 
     log_app!(
@@ -22,47 +94,145 @@ pub fn get_project_data(state: State<ProjectState>) -> crate::schema::ProjectDat
         data.info()
     );
 
-    crate::schema::ProjectDataDTO::from(&data)
+    let mut dto = ProjectDataDTO::from(&data);
+
+    // 从 project_store 补充 database schema 信息
+    let store = state.project_store.read().unwrap();
+    let mut enriched = std::collections::HashMap::new();
+    for (id, decl) in data.databases.iter() {
+        let mut db_dto = DatabaseDeclDTO::from(decl);
+        if let Some(instance) = store.databases.get(id) {
+            if let Some((name, columns, row_count, column_count)) = extract_database_schema(instance) {
+                db_dto.name = Some(name);
+                db_dto.columns = Some(columns);
+                db_dto.row_count = Some(row_count);
+                db_dto.column_count = Some(column_count);
+            }
+        }
+        enriched.insert(id.clone(), db_dto);
+    }
+    dto.databases = enriched;
+
+    dto
 }
 
+/// 分阶段加载第一步：获取 databases + variables（含 schema）
 #[tauri::command]
-pub fn set_project_data(
-    app: AppHandle,
-    state: State<ProjectState>,
-    data: ProjectData,
-    path: Option<String>,
-    emit_event: Option<bool>,
-) -> Result<(), String> {
+pub fn get_project_databases_variables(state: State<ProjectState>) -> DatabasesVariablesDTO {
+    let data = state.get_data();
+
     log_app!(
         LogLevel::Info,
-        "[command.set_project_data] ProjectData: {}",
-        data.info()
+        "[command.get_project_databases_variables] Loading databases + variables"
     );
 
-    state.set_data(data.clone());
-
-    if let Some(p) = path.clone() {
-        log_app!(
-            LogLevel::Info,
-            "[command.set_project_data] Set path to: {}",
-            p
-        );
-        state.set_path(Some(p));
+    let mut databases = std::collections::HashMap::new();
+    let store = state.project_store.read().unwrap();
+    for (id, decl) in data.databases.iter() {
+        let mut db_dto = DatabaseDeclDTO::from(decl);
+        if let Some(instance) = store.databases.get(id) {
+            if let Some((name, columns, row_count, column_count)) = extract_database_schema(instance) {
+                db_dto.name = Some(name);
+                db_dto.columns = Some(columns);
+                db_dto.row_count = Some(row_count);
+                db_dto.column_count = Some(column_count);
+            }
+        }
+        databases.insert(id.clone(), db_dto);
     }
 
-    if emit_event.unwrap_or(false) {
-        log_app!(
-            LogLevel::Info,
-            "[command.set_project_data] Emitting ProjectLoaded event"
-        );
-        emit_project_event(
-            &app,
-            Event::Project(EventProject::ProjectLoaded { data, path }),
-        );
-    }
+    let variables = data
+        .variables
+        .iter()
+        .map(|(k, v)| (k.to_string(), VariableInstanceDTO::from(v)))
+        .collect();
 
-    Ok(())
+    DatabasesVariablesDTO {
+        databases,
+        variables,
+    }
 }
+
+/// 分阶段加载第二步：获取 graphs，并根据已加载的 databases/variables 校验引用
+#[tauri::command]
+pub fn get_project_graphs(state: State<ProjectState>) -> GraphsWithValidationDTO {
+    let data = state.get_data();
+
+    log_app!(
+        LogLevel::Info,
+        "[command.get_project_graphs] Loading graphs with reference validation"
+    );
+
+    let valid_variable_ids: std::collections::HashSet<String> = data
+        .variables
+        .keys()
+        .map(|k| k.to_string())
+        .collect();
+    let valid_dataframe_ids: std::collections::HashSet<String> =
+        data.databases.keys().cloned().collect();
+    let valid_graph_ids: std::collections::HashSet<GraphId> =
+        data.graphs.keys().copied().collect();
+
+    let mut graphs = std::collections::HashMap::new();
+    let mut invalid_references = std::collections::HashMap::new();
+
+    for (graph_id, graph) in data.graphs.iter() {
+        let dto = GraphInstanceDTO::from(graph);
+        graphs.insert(*graph_id, dto);
+
+        let data_state = graph.data_state.read().unwrap();
+        let mut refs = Vec::new();
+        for node in data_state.nodes.values() {
+            let mut inv = InvalidReferenceDTO {
+                node_id: node.id.to_string(),
+                variable_id: None,
+                dataframe_id: None,
+                sub_graph_id: None,
+            };
+            let mut has_invalid = false;
+
+            if let Some(vid) = node.instance_params.variable_id() {
+                if !valid_variable_ids.contains(vid) {
+                    inv.variable_id = Some(vid.to_string());
+                    has_invalid = true;
+                }
+            }
+            if let Some(dfid) = node.instance_params.dataframe_id() {
+                if !valid_dataframe_ids.contains(dfid) {
+                    inv.dataframe_id = Some(dfid.to_string());
+                    has_invalid = true;
+                }
+            }
+            if let Some(sgid) = node.instance_params.sub_graph_id() {
+                let parsed = uuid::Uuid::parse_str(sgid)
+                    .ok()
+                    .map(GraphId::from);
+                if let Some(gid) = parsed {
+                    if !valid_graph_ids.contains(&gid) {
+                        inv.sub_graph_id = Some(sgid.to_string());
+                        has_invalid = true;
+                    }
+                } else {
+                    inv.sub_graph_id = Some(sgid.to_string());
+                    has_invalid = true;
+                }
+            }
+
+            if has_invalid {
+                refs.push(inv);
+            }
+        }
+        if !refs.is_empty() {
+            invalid_references.insert(*graph_id, refs);
+        }
+    }
+
+    GraphsWithValidationDTO {
+        graphs,
+        invalid_references,
+    }
+}
+
 
 /// 获取当前项目路径
 #[tauri::command]
@@ -80,7 +250,7 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
 
 /// 加载项目（从状态管理层）
 #[tauri::command]
-pub fn load_project_to_state(
+pub fn load_project(
     app: AppHandle,
     state: State<ProjectState>,
     path: String,
@@ -112,7 +282,7 @@ pub fn load_project_to_state(
 }
 
 #[tauri::command]
-pub fn save_project_from_state(
+pub fn save_project(
     app: AppHandle,
     state: State<ProjectState>,
     path: String,
@@ -143,29 +313,6 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
     Ok(())
 }
 
-/// @deprecated 使用 save_project_from_state 替代
-#[tauri::command]
-pub fn save_project(_path: String, _data: Value) -> Result<(), String> {
-    Err("Deprecated: use save_project_from_state instead".to_string())
-}
-
-/// @deprecated 使用 load_project_to_state 替代
-#[tauri::command]
-pub fn load_project(_path: String) -> Result<Value, String> {
-    Err("Deprecated: use load_project_to_state instead".to_string())
-}
-
-/// @deprecated 使用 set_project_data 替代
-#[tauri::command]
-pub fn parse_project(_data: Value) -> Result<Value, String> {
-    Err("Deprecated: use set_project_data instead".to_string())
-}
-
-/// @deprecated 使用 set_project_data 替代
-#[tauri::command]
-pub fn serialize_project(_data: Value) -> Result<Value, String> {
-    Err("Deprecated: use get_project_data instead".to_string())
-}
 
 /// 执行项目
 ///

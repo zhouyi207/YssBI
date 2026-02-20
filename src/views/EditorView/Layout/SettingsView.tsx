@@ -290,18 +290,32 @@ export const SettingsView: React.FC = () => {
                                         onChange={(val: string) => updateTheme({ boolColor: val })}
                                     />
                                     <SettingItem
-                                        label="Integer Color"
-                                        description="Color for whole number data type pins."
+                                        label="Int32 Color"
+                                        description="Color for 32-bit integer pins."
                                         type="color"
-                                        value={theme.intColor}
-                                        onChange={(val: string) => updateTheme({ intColor: val })}
+                                        value={theme.int32Color}
+                                        onChange={(val: string) => updateTheme({ int32Color: val })}
                                     />
                                     <SettingItem
-                                        label="Float Color"
-                                        description="Color for decimal number data type pins."
+                                        label="Int64 Color"
+                                        description="Color for 64-bit integer pins."
                                         type="color"
-                                        value={theme.floatColor}
-                                        onChange={(val: string) => updateTheme({ floatColor: val })}
+                                        value={theme.int64Color}
+                                        onChange={(val: string) => updateTheme({ int64Color: val })}
+                                    />
+                                    <SettingItem
+                                        label="Float32 Color"
+                                        description="Color for 32-bit float pins."
+                                        type="color"
+                                        value={theme.float32Color}
+                                        onChange={(val: string) => updateTheme({ float32Color: val })}
+                                    />
+                                    <SettingItem
+                                        label="Float64 Color"
+                                        description="Color for 64-bit float pins."
+                                        type="color"
+                                        value={theme.float64Color}
+                                        onChange={(val: string) => updateTheme({ float64Color: val })}
                                     />
                                     <SettingItem
                                         label="String Color"
@@ -316,6 +330,34 @@ export const SettingsView: React.FC = () => {
                                         type="color"
                                         value={theme.objectColor}
                                         onChange={(val: string) => updateTheme({ objectColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="Any Color"
+                                        description="Color for untyped (Any) pins."
+                                        type="color"
+                                        value={theme.anyColor}
+                                        onChange={(val: string) => updateTheme({ anyColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="DataFrame Color"
+                                        description="Color for DataFrame pins."
+                                        type="color"
+                                        value={theme.dataframeColor}
+                                        onChange={(val: string) => updateTheme({ dataframeColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="DataSeries Color"
+                                        description="Color for DataSeries pins."
+                                        type="color"
+                                        value={theme.dataseriesColor}
+                                        onChange={(val: string) => updateTheme({ dataseriesColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="Array Color"
+                                        description="Color for Array pins."
+                                        type="color"
+                                        value={theme.arrayColor}
+                                        onChange={(val: string) => updateTheme({ arrayColor: val })}
                                     />
                                 </div>
                             </div>

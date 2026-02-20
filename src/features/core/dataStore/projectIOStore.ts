@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
-import { ProjectService } from '@/services/project/projectService';
+import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 
 import type { DatabaseRecord } from './databaseStore';
@@ -57,7 +57,7 @@ function normalizeDatabases(
   const existing = useDatabaseStore.getState().databases;
   const result: Record<string, DatabaseRecord> = {};
   for (const [id, db] of Object.entries(dbs)) {
-    const rec = typeof db === 'object' && db !== null ? { ...db } : { id };
+    const rec: Record<string, unknown> = typeof db === 'object' && db !== null ? { ...db } : { id };
     if (!rec.name) {
       rec.name = nameFromEngine(rec) ?? (existing[id] as Record<string, unknown>)?.name ?? id;
     }
@@ -96,17 +96,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     set({ status: LoadStatus.Loading, error: null });
 
     try {
-      const projectData = await ProjectService.getProjectData();
-      const path = await ProjectService.getProjectPath();
-
-      // 分发到子 store（规范化变量 dataType）
-      useVariableStore.getState().setVariables(normalizeVariables(projectData.variables));
-      useDatabaseStore.getState().setDatabases(normalizeDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>));
-      useGraphMetaStore.getState().setGraphs(toGraphMetaMap(projectData.graphs));
-      useGraphDataStore.getState().hydrateGraphs(projectData.graphs);
-
-      set({ status: LoadStatus.Ready, currentPath: path });
-      console.log('[ProjectIOStore] Project loaded successfully');
+      const result = await get().syncFromBackend();
+      if (result) {
+        console.log('[ProjectIOStore] Project loaded successfully');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ status: LoadStatus.Error, error: errorMessage });
@@ -124,23 +117,42 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   },
 
   syncFromBackend: async () => {
-    if (get().status === LoadStatus.Loading) return null;
-
+    // 不因 Loading 提前返回，避免与 ProjectLoaded 事件 handler 竞态导致 importGraph 误判失败
     set({ status: LoadStatus.Loading, error: null });
 
     try {
-      const projectData = await ProjectService.getProjectState();
       const path = await ProjectService.getProjectPath();
 
-      useVariableStore.getState().setVariables(normalizeVariables(projectData.variables));
-      useDatabaseStore.getState().setDatabases(normalizeDatabases(projectData.databases as unknown as Record<string, DatabaseRecord>));
-      useGraphMetaStore.getState().setGraphs(toGraphMetaMap(projectData.graphs));
-      useGraphDataStore.getState().hydrateGraphs(projectData.graphs);
+      // 分阶段加载：先 databases + variables，再 graphs（根据前者校验引用）
+      const { databases, variables } = await ProjectService.getDatabasesVariables();
+      useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
+      useDatabaseStore.getState().setDatabases(normalizeDatabases(databases as Record<string, DatabaseRecord>));
+
+      const { graphs, invalidReferences } = await ProjectService.getProjectGraphs();
+      const graphMap = Object.fromEntries(
+        Object.entries(graphs).map(([id, dto]) => [id, toFrontendGraph(dto)])
+      );
+      useGraphMetaStore.getState().setGraphs(toGraphMetaMap(graphMap));
+      useGraphDataStore.getState().hydrateGraphs(graphMap);
       useHistoryStore.getState().clear();
 
+      const invalidCount = Object.values(invalidReferences).reduce((s, arr) => s + arr.length, 0);
+      if (invalidCount > 0) {
+        console.warn(
+          '[ProjectIOStore] 发现无效引用:',
+          invalidReferences,
+          `共 ${invalidCount} 处`
+        );
+      }
+
       set({ status: LoadStatus.Ready, currentPath: path });
-      console.log('[ProjectIOStore] Synced from backend');
-      return projectData;
+      console.log('[ProjectIOStore] Synced from backend (staged load)');
+      return {
+        variables,
+        databases,
+        graphs: graphMap,
+        metadata: { exportTime: '', appVersion: '' },
+      } as ProjectData;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ status: LoadStatus.Error, error: errorMessage });

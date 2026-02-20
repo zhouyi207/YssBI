@@ -137,9 +137,10 @@ impl Executor {
             let upstream_info = {
                 let graph = self.graph.lock().unwrap();
                 graph.get_upstream_by_pin_id(pin.id).and_then(|upstream_pin_id| {
-                    let upstream_node_id = graph.get_node_id_by_pin_id(upstream_pin_id);
-                    let upstream_definition = graph.get_node_definition_by_node_id(upstream_node_id);
-                    Some((upstream_node_id, upstream_definition))
+                    graph.get_node_id_by_pin_id(upstream_pin_id).map(|upstream_node_id| {
+                        let upstream_definition = graph.get_node_definition_by_node_id(upstream_node_id);
+                        (upstream_node_id, upstream_definition)
+                    })
                 })
             };
 
@@ -378,12 +379,14 @@ impl Executor {
                 return Ok(false);
             }
 
-            // 收集下游节点信息
+            // 收集下游节点信息（跳过孤儿 pin）
             let downstream_nodes: Vec<_> = downstream_pins
                 .iter()
-                .map(|&pin_id| (pin_id, graph.get_node_id_by_pin_id(pin_id)))
+                .filter_map(|&pin_id| {
+                    graph.get_node_id_by_pin_id(pin_id).map(|node_id| (pin_id, node_id))
+                })
                 .collect();
-            
+
             (downstream_pins, downstream_nodes)
         };
 

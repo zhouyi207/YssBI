@@ -12,6 +12,9 @@ import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 import { clamp } from "@/shared/utils";
 import { deserializeGraph } from "@/features/core/dataStore";
 
+/** 移动超过此阈值（屏幕像素）才视为有效拖拽，抑制 contextmenu */
+const CONTEXT_MENU_MOVE_THRESHOLD_PX = 5;
+
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
     activeTabIdRef: React.RefObject<string | null>;
@@ -55,7 +58,15 @@ export function useCanvasInteraction({
     const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
         // Button 1 (Middle) or Button 2 (Right) or Alt+Left (Button 0) for panning
         if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
-            useGestureStore.getState().setGesture({ type: "pan", lastX: e.clientX, lastY: e.clientY, moved: false, groupId });
+            useGestureStore.getState().setGesture({
+                type: "pan",
+                startX: e.clientX,
+                startY: e.clientY,
+                lastX: e.clientX,
+                lastY: e.clientY,
+                moved: false,
+                groupId,
+            });
             return;
         }
         if (e.button === 0) {
@@ -310,7 +321,23 @@ export function useCanvasInteraction({
             }
 
             useGestureStore.getState().endConnection();
-            useGestureStore.getState().setGesture(null);
+            const threshold = CONTEXT_MENU_MOVE_THRESHOLD_PX;
+            let hadMovement = false;
+            if (g.type === "pan") {
+                const dx = g.lastX - g.startX;
+                const dy = g.lastY - g.startY;
+                hadMovement = Math.sqrt(dx * dx + dy * dy) > threshold;
+            } else if (g.type === "select") {
+                const dx = Math.abs(g.currentX - g.startX);
+                const dy = Math.abs(g.currentY - g.startY);
+                hadMovement = dx > threshold || dy > threshold;
+            } else if (g.type === "drag" && g.dragDelta) {
+                const scale = canvasRef.current?.scale ?? 1;
+                const screenDx = Math.abs(g.dragDelta.x * scale);
+                const screenDy = Math.abs(g.dragDelta.y * scale);
+                hadMovement = screenDx > threshold || screenDy > threshold;
+            }
+            useGestureStore.getState().clearGesture(hadMovement);
         };
 
         window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);

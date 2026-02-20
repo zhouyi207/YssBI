@@ -7,6 +7,15 @@ fn default_true() -> bool {
     true
 }
 
+/// 列信息（供 get_project_data 返回 schema 用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnInfoDTO {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub dtype: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseDeclDTO {
@@ -14,6 +23,15 @@ pub struct DatabaseDeclDTO {
     pub engine: DatabaseEngineDTO,
     pub schema_version: u32,
     pub required: bool,
+    /// 从 project_store 补充的 schema 信息（加载项目后可用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Vec<ColumnInfoDTO>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column_count: Option<usize>,
 }
 
 impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
@@ -23,6 +41,10 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
             engine: (&value.engine).into(),
             schema_version: value.schema_version,
             required: value.required,
+            name: None,
+            columns: None,
+            row_count: None,
+            column_count: None,
         }
     }
 }

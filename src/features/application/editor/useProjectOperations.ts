@@ -43,23 +43,18 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     }
   }, [currentPath, saveGraphAs, syncActiveToCollection]);
 
-  const importGraph = useCallback(async (json?: string) => {
+  const importGraph = useCallback(async () => {
     try {
-      let p: any;
-      let path: string | null = null;
+      const result = await ProjectService.loadProjectToState();
+      if (!result) return; // 用户取消选择文件
 
-      if (json) {
-        // 如果提供了 json，直接使用
-        p = JSON.parse(json);
-        path = null;
-        await ProjectService.setProjectData(p, path || undefined, true);
-      } else {
-        const result = await ProjectService.loadProjectToState();
-        if (!result) return;
-        p = result.project;
-        path = result.path;
+      const projectData = await useProjectIOStore.getState().syncFromBackend();
+      if (!projectData) {
+        uiStore.showToast("加载项目失败", "error", 3000);
+        return;
       }
 
+      // 清空当前 tabs，再打开新项目的第一个 graph
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = layoutStore.activeEditorGroupId || 'default_editor';
       const editorNode = layoutStore.nodes[editorGroupId];
@@ -69,10 +64,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         });
       }
 
-      useProjectIOStore.getState().loadProjectFromData(p, path);
-
-      // 从 graphs 中获取第一个 graph
-      const first = Object.values(p.graphs)[0] as any;
+      const first = Object.values(projectData.graphs)[0] as any;
       if (first) openGraph(first.id, first.name, first.type as any, first);
 
       uiStore.showToast("项目已加载", "success", 2000);

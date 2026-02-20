@@ -66,11 +66,12 @@ pub fn run() {
             get_editor_schema_command,
             // ==================== 项目管理 ====================
             get_project_data,
+            get_project_databases_variables,
+            get_project_graphs,
             get_project_path,
             new_project,
-            load_project_to_state,
-            save_project_from_state,
-            set_project_data,
+            load_project,
+            save_project,
             execute_project,
             // ==================== 设置 ====================
             load_settings,
@@ -115,18 +116,13 @@ pub fn run() {
             rename_subgraph,
             // ==================== Database ====================
             load_database,
-            get_database_meta,
             delete_database,
+            get_database_meta,
             get_database_rows,
             // ==================== 日志 ====================
             get_logs,
             get_log_file_path,
             get_log_count,
-            // ==================== 兼容旧接口（已废弃） ====================
-            save_project,
-            load_project,
-            parse_project,
-            serialize_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

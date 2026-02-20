@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import type { Variable, VariableScope } from '@/shared/types/domain';
-import { dataTypeFromKey, getDefaultValue } from '@/shared/types/domain/dataType';
+import { dataTypeFromKey, getDefaultValue, dataTypeDisplay } from '@/shared/types/domain/dataType';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
-import { useVariableStore, useGraphMetaStore } from '@/features/core/dataStore';
+import { useVariableStore, useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
@@ -65,7 +65,7 @@ export function useVariableManagement() {
       const newVar = await VariableService.getVariable(newVarId);
       useVariableStore.getState().addVariable(newVarId, newVar);
 
-      switchSidebarTab('variables');
+      switchSidebarTab('graphs');
     } catch (e) {
       console.error('Failed to create variable:', e);
     }
@@ -73,6 +73,21 @@ export function useVariableManagement() {
 
   const updateVariable = useCallback(async (id: string, data: Partial<Variable>) => {
     useVariableStore.getState().updateVariable(id, data);
+    // 同步更新所有引用该变量的 get_variable/set_variable 节点的 title 和 variableName
+    const variable = useVariableStore.getState().variables[id];
+    if (variable) {
+      const graphStore = useGraphDataStore.getState();
+      for (const [nodeId, node] of Object.entries(graphStore.nodes)) {
+        if (node.variableId === id) {
+          const prefix = node.nodeType === 'set_variable' ? 'Set ' : 'Get ';
+          graphStore.updateNode(nodeId, {
+            title: prefix + variable.name,
+            variableName: variable.name,
+            variableType: dataTypeDisplay(variable.dataType),
+          });
+        }
+      }
+    }
     try {
       await VariableService.updateVariable(id, data);
     } catch (e) {

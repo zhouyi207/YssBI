@@ -1,9 +1,10 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, Node } from "@/shared/types/domain";
+import { useVariableStore } from "@/features/core/dataStore";
 
 interface DefaultNodeLayoutProps {
-  node: Node;
+  node: Node & { nodeType?: string; variableId?: string };
   activePinId?: string | null;
   subgraphId?: string;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -11,12 +12,28 @@ interface DefaultNodeLayoutProps {
   onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
+/** get_variable/set_variable 节点从 variable store 响应式读取显示名，解决刷新后重命名不更新的问题 */
+function useVariableNodeTitle(
+  nodeType: string | undefined,
+  variableId: string | undefined,
+  fallbackTitle: string
+): string {
+  const variable = useVariableStore((s) =>
+    variableId && (nodeType === "get_variable" || nodeType === "set_variable")
+      ? s.variables[variableId]
+      : null
+  );
+  if (!variable) return fallbackTitle;
+  const prefix = nodeType === "set_variable" ? "Set " : "Get ";
+  return prefix + variable.name;
+}
+
 /**
  * Default Node Layout Component
  * 
  * 职责：
  * - 渲染默认节点布局（标题 + Pins）
- * - 纯展示组件，不包含业务逻辑
+ * - get_variable/set_variable 从 variable store 响应式读取标题，确保刷新后重命名也能更新
  */
 export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
@@ -26,6 +43,11 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
+  const displayTitle = useVariableNodeTitle(
+    node.nodeType,
+    node.variableId,
+    node.title
+  );
   const inputsExec = node.inputs.filter(p => p.type === 'exec');
   const inputsData = node.inputs.filter(p => p.type !== 'exec');
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
@@ -36,7 +58,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold bg-white/5 rounded-t border-b border-black/20 text-[#cccccc]">
         <div className="flex items-center gap-2">
-          <span>{node.title}</span>
+          <span>{displayTitle}</span>
         </div>
         <div className="text-[10px] opacity-40 font-mono uppercase tracking-tighter">
           {node.category}

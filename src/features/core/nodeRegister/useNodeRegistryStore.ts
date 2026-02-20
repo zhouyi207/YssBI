@@ -46,13 +46,7 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
 
             const definitions = new Map<string, NodeDefinition>();
             defs.forEach((def) => {
-                // 使用 nodeType 作为主键（与后端 registry 一致，DTO 已包含 node_type）
-                const fullName = def.nodeType;
-                definitions.set(fullName, def);
-                
-                // 同时使用简单名称作为别名，方便查找
-                // 注意：如果有重名，后面的会覆盖前面的
-                definitions.set(def.name, def);
+                definitions.set(def.nodeType, def);
             });
 
             // 缓存数组，避免每次 getAllDefinitions 都创建新引用

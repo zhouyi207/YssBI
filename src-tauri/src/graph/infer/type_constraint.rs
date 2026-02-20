@@ -20,6 +20,12 @@ pub enum TypeConstraint {
 
     /// 指定类型集合
     OneOf(Vec<DataType>),
+
+    /// 所有子约束均需满足
+    And(Vec<TypeConstraint>),
+
+    /// 任一子约束满足即可
+    Or(Vec<TypeConstraint>),
 }
 
 impl TypeConstraint {
@@ -30,7 +36,13 @@ impl TypeConstraint {
             TypeConstraint::Comparable => vt.is_comparable(),
             TypeConstraint::Iterable => vt.is_iterable(),
             TypeConstraint::Serializable => true, // 所有类型都可序列化
-            TypeConstraint::OneOf(types) => types.contains(vt),
+            TypeConstraint::OneOf(types) => {
+                types.contains(vt)
+                    || vt.series_inner()
+                        .map_or(false, |inner| types.contains(inner))
+            }
+            TypeConstraint::And(constraints) => constraints.iter().all(|c| c.satisfies(vt)),
+            TypeConstraint::Or(constraints) => constraints.iter().any(|c| c.satisfies(vt)),
         }
     }
 }

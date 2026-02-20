@@ -121,7 +121,7 @@ invoke("get_dataframe_rows", { id, offset, limit })
 - **加载项目**：`set_data` 会清空 `project_store`，需在加载后根据 `project_data.databases` 中的 DatabaseDecl 重建 DatabaseInstance 并写入 `project_store`
 
 可选实现方式：
-- 在 `ProjectState::set_data` 或 `load_project_to_state` 后，遍历 `project_data.databases`，为每个 DatabaseDecl 构建 LazyFrame 并插入 `project_store`
+- 在 `ProjectState::set_data` 或 `load_project` 后，遍历 `project_data.databases`，为每个 DatabaseDecl 构建 LazyFrame 并插入 `project_store`
 - 或采用懒加载：首次 `access_database` 时，若 store 中不存在，则从 project_data 构建并插入
 
 ### 阶段 4：可选增强

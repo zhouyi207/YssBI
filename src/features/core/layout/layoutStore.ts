@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
 
@@ -53,7 +53,7 @@ const INITIAL_NODES: LayoutTree = {
         parentId: INITIAL_ROOT_ID,
         pixelSize: 260, // Default width
         minSize: 240,     // Allow collapsing to 0
-        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'events' },
+        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'graphs' },
     },
     'main': {
         id: 'main',
@@ -125,11 +125,24 @@ export const useLayoutStore = create<LayoutState>()(
             if (parent && parent.children) {
                 parent.children = parent.children.filter(childId => childId !== id);
 
-                // 如果父容器变空了（且不是根节点），递归删除父容器
-                if (parent.children.length === 0 && parent.parentId) {
-                    // 这里可以调用自身逻辑，但由于是 immer，直接操作 state 即可
+                // 如果父容器只剩一个子节点，提升该子节点以替代父容器，避免 pixelSize 导致空白
+                if (parent.children.length === 1 && parent.parentId) {
                     const grandParent = state.nodes[parent.parentId];
-                    if (grandParent && grandParent.children) {
+                    if (grandParent?.children) {
+                        const singleChildId = parent.children[0];
+                        const singleChild = state.nodes[singleChildId];
+                        if (singleChild) {
+                            const parentIndex = grandParent.children.indexOf(parent.id);
+                            grandParent.children[parentIndex] = singleChildId;
+                            singleChild.parentId = grandParent.id;
+                            singleChild.size = parent.size ?? 1;
+                            singleChild.pixelSize = undefined; // 清除固定尺寸，让其填满空间
+                            delete state.nodes[parent.id];
+                        }
+                    }
+                } else if (parent.children.length === 0 && parent.parentId) {
+                    const grandParent = state.nodes[parent.parentId];
+                    if (grandParent?.children) {
                         grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
                         delete state.nodes[parent.id];
                     }
@@ -244,6 +257,27 @@ export const useLayoutStore = create<LayoutState>()(
                     const sourceParent = state.nodes[sourceNode.parentId!];
                     if (sourceParent && sourceParent.children) {
                         sourceParent.children = sourceParent.children.filter(id => id !== sourceId);
+                        if (sourceParent.children.length === 1 && sourceParent.parentId) {
+                            const grandParent = state.nodes[sourceParent.parentId];
+                            if (grandParent?.children) {
+                                const singleChildId = sourceParent.children[0];
+                                const singleChild = state.nodes[singleChildId];
+                                if (singleChild) {
+                                    const parentIndex = grandParent.children.indexOf(sourceParent.id);
+                                    grandParent.children[parentIndex] = singleChildId;
+                                    singleChild.parentId = grandParent.id;
+                                    singleChild.size = sourceParent.size ?? 1;
+                                    singleChild.pixelSize = undefined;
+                                    delete state.nodes[sourceParent.id];
+                                }
+                            }
+                        } else if (sourceParent.children.length === 0 && sourceParent.parentId) {
+                            const grandParent = state.nodes[sourceParent.parentId];
+                            if (grandParent?.children) {
+                                grandParent.children = grandParent.children.filter(cid => cid !== sourceParent.id);
+                                delete state.nodes[sourceParent.id];
+                            }
+                        }
                     }
                     delete state.nodes[sourceId];
                     return;
@@ -328,6 +362,27 @@ export const useLayoutStore = create<LayoutState>()(
                         const parent = state.nodes[sourceNode.parentId!];
                         if (parent && parent.children) {
                             parent.children = parent.children.filter(id => id !== sourceNodeId);
+                            if (parent.children.length === 1 && parent.parentId) {
+                                const grandParent = state.nodes[parent.parentId];
+                                if (grandParent?.children) {
+                                    const singleChildId = parent.children[0];
+                                    const singleChild = state.nodes[singleChildId];
+                                    if (singleChild) {
+                                        const parentIndex = grandParent.children.indexOf(parent.id);
+                                        grandParent.children[parentIndex] = singleChildId;
+                                        singleChild.parentId = grandParent.id;
+                                        singleChild.size = parent.size ?? 1;
+                                        singleChild.pixelSize = undefined;
+                                        delete state.nodes[parent.id];
+                                    }
+                                }
+                            } else if (parent.children.length === 0 && parent.parentId) {
+                                const grandParent = state.nodes[parent.parentId];
+                                if (grandParent?.children) {
+                                    grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
+                                    delete state.nodes[parent.id];
+                                }
+                            }
                         }
                         delete state.nodes[sourceNodeId];
 
@@ -386,6 +441,27 @@ export const useLayoutStore = create<LayoutState>()(
                     const parent = state.nodes[sourceNode.parentId!];
                     if (parent && parent.children) {
                         parent.children = parent.children.filter(id => id !== sourceNodeId);
+                        if (parent.children.length === 1 && parent.parentId) {
+                            const grandParent = state.nodes[parent.parentId];
+                            if (grandParent?.children) {
+                                const singleChildId = parent.children[0];
+                                const singleChild = state.nodes[singleChildId];
+                                if (singleChild) {
+                                    const parentIndex = grandParent.children.indexOf(parent.id);
+                                    grandParent.children[parentIndex] = singleChildId;
+                                    singleChild.parentId = grandParent.id;
+                                    singleChild.size = parent.size ?? 1;
+                                    singleChild.pixelSize = undefined;
+                                    delete state.nodes[parent.id];
+                                }
+                            }
+                        } else if (parent.children.length === 0 && parent.parentId) {
+                            const grandParent = state.nodes[parent.parentId];
+                            if (grandParent?.children) {
+                                grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
+                                delete state.nodes[parent.id];
+                            }
+                        }
                     }
                     delete state.nodes[sourceNodeId];
 
@@ -447,9 +523,23 @@ export const useLayoutStore = create<LayoutState>()(
                     if (parent && parent.children) {
                         parent.children = parent.children.filter(id => id !== nodeId);
 
-                        if (parent.children.length === 0 && parent.parentId) {
+                        if (parent.children.length === 1 && parent.parentId) {
                             const grandParent = state.nodes[parent.parentId];
-                            if (grandParent && grandParent.children) {
+                            if (grandParent?.children) {
+                                const singleChildId = parent.children[0];
+                                const singleChild = state.nodes[singleChildId];
+                                if (singleChild) {
+                                    const parentIndex = grandParent.children.indexOf(parent.id);
+                                    grandParent.children[parentIndex] = singleChildId;
+                                    singleChild.parentId = grandParent.id;
+                                    singleChild.size = parent.size ?? 1;
+                                    singleChild.pixelSize = undefined;
+                                    delete state.nodes[parent.id];
+                                }
+                            }
+                        } else if (parent.children.length === 0 && parent.parentId) {
+                            const grandParent = state.nodes[parent.parentId];
+                            if (grandParent?.children) {
                                 grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
                                 delete state.nodes[parent.id];
                             }

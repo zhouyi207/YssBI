@@ -120,6 +120,64 @@
   display: none;
 }
 
+/* Sidebar 悬浮滚动条（与 TabBar 一致，不占据布局空间） */
+.sidebar-scrollbar {
+  overflow-y: auto;
+  overflow-y: overlay; /* 悬浮滚动条，不占布局空间（支持时覆盖上一行） */
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.15s ease;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  position: absolute;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.15s ease;
+  min-height: 30px;
+}
+
+.sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(121, 121, 121, 0.4);
+  background-clip: content-box;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 100, 100, 0.7);
+  background-clip: content-box;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: rgba(191, 191, 191, 0.4);
+  background-clip: content-box;
+}
+
+.sidebar-scrollbar:hover {
+  scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+  display: none;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* Sash Resizing Classes */
 body.col-resize, body.col-resize * {
   cursor: col-resize !important;

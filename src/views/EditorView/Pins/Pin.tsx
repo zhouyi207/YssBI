@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { PinInput } from "./PinInput";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
@@ -60,8 +61,7 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const { theme: appTheme } = useTheme();
   const isConnected = links.length > 0 || (isActive ?? false);
-  const themeColor = appTheme[`${type}Color` as keyof typeof appTheme] as string | undefined;
-  const baseColor = ui?.color ?? themeColor ?? "#CCCCCC";
+  const baseColor = ui?.color ?? getPinTypeColor(type ?? "any", appTheme);
 
   const theme = useMemo(
     () => getPinTheme(type, isConnected, baseColor, containerType),

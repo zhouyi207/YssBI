@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Edge } from "./Edge";
 import { useExecutionStore } from "@/features/core/execution";
 import { useTheme } from "@/features/core/theme/useTheme";
+import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import type { Pin } from "@/shared/types/domain";
 
 interface EdgesOverlayProps {
@@ -66,10 +67,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
 
         const isActive = activeConnections.has(edge.id);
         const isCompleted = completedConnections.has(edge.id);
-        const color = edge.pinColor
-          ?? (theme[`${edge.pinType}Color` as keyof typeof theme] as string)
-          ?? (theme.connectionLines as string)
-          ?? "#999";
+        const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
 
         return (
           <Edge

@@ -39,7 +39,8 @@ export const PinInput: React.FC<PinInputProps> = ({
   });
 
   switch (pinType) {
-    case "int":
+    case "Int32":
+    case "Int64":
       return (
         <input
           type="number"
@@ -61,8 +62,8 @@ export const PinInput: React.FC<PinInputProps> = ({
         />
       );
 
-    case "float":
-    case "number":
+    case "Float32":
+    case "Float64":
       return (
         <input
           type="number"
@@ -84,7 +85,6 @@ export const PinInput: React.FC<PinInputProps> = ({
         />
       );
 
-    case "bool":
     case "boolean":
       return (
         <input

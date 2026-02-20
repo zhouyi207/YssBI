@@ -374,10 +374,9 @@ impl GraphInstance {
         Ok(())
     }
 
-    pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> NodeId {
+    pub fn get_node_id_by_pin_id(&self, pin_id: PinId) -> Option<NodeId> {
         let data_state = self.data_state.read().unwrap();
-        let pin_instance = data_state.pins.get(&pin_id).unwrap();
-        pin_instance.node_id
+        data_state.pins.get(&pin_id).map(|p| p.node_id)
     }
 
     pub fn get_node_instance_by_node_id(&self, node_id: NodeId) -> Option<NodeInstance> {
@@ -538,14 +537,24 @@ impl GraphInstance {
         Ok((from_pin, to_pin, auto_disconnected, change_sets, inferred))
     }
 
+    /// 返回下游连接的 pin 列表，过滤掉不存在的 pin（孤儿连接，如导入后节点/引脚已删除）
     pub fn get_downstream_by_pin_id(&self, pin_id: PinId) -> Vec<PinId> {
         let data_state = self.data_state.read().unwrap();
-        data_state.connections.get_downstream(pin_id)
+        data_state
+            .connections
+            .get_downstream(pin_id)
+            .into_iter()
+            .filter(|id| data_state.pins.contains_key(id))
+            .collect()
     }
 
+    /// 返回上游连接的 pin，若不存在则返回 None（过滤孤儿连接）
     pub fn get_upstream_by_pin_id(&self, pin_id: PinId) -> Option<PinId> {
         let data_state = self.data_state.read().unwrap();
-        data_state.connections.get_upstream(pin_id)
+        data_state
+            .connections
+            .get_upstream(pin_id)
+            .filter(|id| data_state.pins.contains_key(id))
     }
 
     /// 断开连接，自动运行类型推断和动态 pin 重建

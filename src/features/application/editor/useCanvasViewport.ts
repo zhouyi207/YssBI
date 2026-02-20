@@ -8,6 +8,25 @@ const NODE_WIDTH = 300;
 const NODE_HEIGHT = 300;
 const CULLING_PADDING_FACTOR = 200;
 
+/** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
+function segmentIntersectsRect(
+  x1: number, y1: number, x2: number, y2: number,
+  left: number, top: number, right: number, bottom: number
+): boolean {
+  if (x1 >= left && x1 <= right && y1 >= top && y1 <= bottom) return true;
+  if (x2 >= left && x2 <= right && y2 >= top && y2 <= bottom) return true;
+  const dx = x2 - x1, dy = y2 - y1;
+  const t = (p: number, q: number, d: number) => (d === 0 ? (q === p ? 0 : NaN) : (q - p) / d);
+  const ts = [
+    t(x1, left, dx), t(x1, right, dx), t(y1, top, dy), t(y1, bottom, dy)
+  ].filter((v) => !Number.isNaN(v) && v >= 0 && v <= 1);
+  for (const v of ts) {
+    const x = x1 + v * dx, y = y1 + v * dy;
+    if (x >= left && x <= right && y >= top && y <= bottom) return true;
+  }
+  return false;
+}
+
 /**
  * Viewport culling, wheel zoom, pin offsets, and coordinate helpers for Canvas.
  * Extracted from Canvas.tsx - view should only consume this hook.
@@ -54,12 +73,51 @@ export function useCanvasViewport(
         node.position.y < worldViewBottom;
       if (isVisible) visible.add(nid);
     }
+
+    // 扩展可见集：确保边线能正确绘制
+    // 1) 与可见节点有连边的节点
+    // 2) 边线段穿过视口的节点（长边在中间时两端都不可见，但边应显示）
+    const pinToNode = new Map<string, string>();
+    for (const nid of nodeIds) {
+      for (const pid of store.nodePins[nid] ?? []) {
+        pinToNode.set(pid, nid);
+      }
+    }
+    const nodeCenter = (nid: string) => {
+      const node = store.nodes[nid];
+      if (!node?.position) return null;
+      return {
+        x: node.position.x + NODE_WIDTH / 2,
+        y: node.position.y + NODE_HEIGHT / 2,
+      };
+    };
+    for (const conn of Object.values(store.connections)) {
+      const fromNode = pinToNode.get(conn.from);
+      const toNode = pinToNode.get(conn.to);
+      if (!fromNode || !toNode) continue;
+      const addBoth = visible.has(fromNode) || visible.has(toNode) || (() => {
+        const p1 = nodeCenter(fromNode);
+        const p2 = nodeCenter(toNode);
+        if (!p1 || !p2) return false;
+        return segmentIntersectsRect(
+          p1.x, p1.y, p2.x, p2.y,
+          worldViewLeft, worldViewTop, worldViewRight, worldViewBottom
+        );
+      })();
+      if (addBoth) {
+        visible.add(fromNode);
+        visible.add(toNode);
+      }
+    }
+
     setVisibleNodes(visible);
   }, [canvasRef, groupId, activeTabId]);
 
+  // 订阅 viewport 变化，画布平移/缩放时连续更新可见集（而非拖拽结束才更新）
+  const viewport = useViewportStore((state) => state.viewports[groupId] || DEFAULT_VIEWPORT);
   useEffect(() => {
     updateVisibleNodes();
-  }, [scale, nodes, updateVisibleNodes]);
+  }, [scale, nodes, viewport.x, viewport.y, viewport.scale, updateVisibleNodes]);
 
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
@@ -173,7 +231,7 @@ export function useCanvasViewport(
     });
   }, [canvasRef, scale, visibleNodeIds, nodes]);
 
-  // getPinWorldPos: 使用 useMemo 缓存的 Map，O(1) 查找，不再调用 deserializeGraph
+  // getPinWorldPos: 使用 DOM 测量的 pin 偏移，可见集已包含连边节点，故所有需绘边的 pin 均有测量值
   const getPinWorldPos = useCallback(
     (pinId: string) => {
       const nodeId = pinNodeIdMap.get(pinId);

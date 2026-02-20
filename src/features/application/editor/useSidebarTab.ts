@@ -7,7 +7,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
  * 提供统一的 switchSidebarTab 函数访问，避免在多个管理 hooks 中重复传参
  */
 export function useSidebarTab() {
-  const switchSidebarTab = useCallback((tab: 'events' | 'functions' | 'macros' | 'variables' | 'data') => {
+  const switchSidebarTab = useCallback((tab: 'graphs' | 'variables' | 'data') => {
     const layoutStore = useLayoutStore.getState();
     const sidebarNode = layoutStore.nodes['sidebar'];
     if (sidebarNode) {

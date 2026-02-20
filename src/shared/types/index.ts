@@ -44,18 +44,3 @@ export * from './state';
 // ==================== Settings ====================
 // 设置相关类型
 export * from './settings';
-
-// ==================== Backward Compatibility ====================
-// 向后兼容的类型别名
-
-import type { GraphPosition } from './domain';
-
-/**
- * @deprecated 使用 GraphPosition 替代
- */
-export type CanvasState = GraphPosition;
-
-/**
- * @deprecated 使用 @/shared/utils 中的 clamp
- */
-export { clamp } from '../utils/math';

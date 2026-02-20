@@ -7,7 +7,7 @@ import type { GraphInstanceDTO } from './graph';
 import type { VariableInstanceDTO } from './variable';
 import type { DatabaseDecl } from '../domain/database';
 
-/** 项目数据 DTO（get_project_data / load_project_to_state 返回值） */
+/** 项目数据 DTO（get_project_data / load_project 返回值） */
 export interface ProjectDataDTO {
   variables: Record<string, VariableInstanceDTO>;
   graphs: Record<string, GraphInstanceDTO>;

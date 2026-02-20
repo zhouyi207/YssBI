@@ -23,16 +23,20 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--connection-lines", theme.connectionLines);
         root.style.setProperty("--selection-region", theme.selectionRegion);
 
-        // Pin 类型颜色
+        // Pin 类型颜色（保留精度）
         root.style.setProperty("--exec-color", theme.execColor);
-        root.style.setProperty("--int-color", theme.intColor);
-        root.style.setProperty("--float-color", theme.floatColor);
+        root.style.setProperty("--int32-color", theme.int32Color);
+        root.style.setProperty("--int64-color", theme.int64Color);
+        root.style.setProperty("--float32-color", theme.float32Color);
+        root.style.setProperty("--float64-color", theme.float64Color);
         root.style.setProperty("--bool-color", theme.boolColor);
         root.style.setProperty("--string-color", theme.stringColor);
         root.style.setProperty("--date-color", theme.dateColor);
         root.style.setProperty("--datetime-color", theme.datetimeColor);
         root.style.setProperty("--dataframe-color", theme.dataframeColor);
+        root.style.setProperty("--dataseries-color", theme.dataseriesColor);
         root.style.setProperty("--object-color", theme.objectColor);
+        root.style.setProperty("--any-color", theme.anyColor);
         root.style.setProperty("--array-color", theme.arrayColor);
 
         // 添加Plot窗口需要的CSS变量

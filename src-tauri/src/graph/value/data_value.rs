@@ -5,6 +5,72 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
 
+/// DataSeries 值（ID + 可选的元素类型，用于 value_type 精确推断）
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataSeriesValue {
+    pub id: String,
+    pub element_type: Option<DataType>,
+}
+
+impl DataSeriesValue {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            element_type: None,
+        }
+    }
+
+    pub fn with_element_type(id: impl Into<String>, element_type: DataType) -> Self {
+        Self {
+            id: id.into(),
+            element_type: Some(element_type),
+        }
+    }
+}
+
+impl Serialize for DataSeriesValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if self.element_type.is_none() {
+            serializer.serialize_str(&self.id)
+        } else {
+            use serde::ser::SerializeStruct;
+            let mut s = serializer.serialize_struct("DataSeries", 2)?;
+            s.serialize_field("id", &self.id)?;
+            s.serialize_field("elementType", &self.element_type)?;
+            s.end()
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DataSeriesValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Payload {
+            IdOnly(String),
+            Full {
+                id: String,
+                #[serde(rename = "elementType")]
+                element_type: Option<DataType>,
+            },
+        }
+        let p = Payload::deserialize(deserializer)?;
+        match p {
+            Payload::IdOnly(id) => Ok(DataSeriesValue {
+                id,
+                element_type: None,
+            }),
+            Payload::Full { id, element_type } => Ok(DataSeriesValue { id, element_type }),
+        }
+    }
+}
+
 /// 运行时数据值
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DataValue {
@@ -20,7 +86,7 @@ pub enum DataValue {
     Array(Vec<DataValue>),
     Object(HashMap<String, DataValue>),
     DataFrame(String),   // DataFrame ID
-    DataSeries(String),  // DataSeries ID
+    DataSeries(DataSeriesValue),  // DataSeries ID + 可选元素类型
     Null,
 }
 
@@ -44,7 +110,9 @@ impl DataValue {
             DataValue::Object(_) => Some(DataType::Object),
             DataValue::Null => None,
             DataValue::DataFrame(_) => Some(DataType::DataFrame),
-            DataValue::DataSeries(_) => Some(DataType::DataSeries(Box::new(DataType::Any))),
+            DataValue::DataSeries(v) => Some(DataType::DataSeries(Box::new(
+                v.element_type.clone().unwrap_or(DataType::Any),
+            ))),
         }
     }
 
@@ -148,12 +216,33 @@ impl DataValue {
                     DataValue::Float32(n) => n.to_string(),
                     DataValue::Float64(n) => n.to_string(),
                     DataValue::Null => "null".to_string(),
+                    DataValue::DataFrame(id) => format!("DataFrame({})", id),
+                    DataValue::DataSeries(v) => format!("DataSeries({})", v.id),
                     _ => return self.clone(),
                 };
                 DataValue::String(s)
             }
             DataType::Any => self.clone(),
-            _ => self.clone(),
+            DataType::DataFrame => match self {
+                DataValue::DataFrame(_) => self.clone(),
+                _ => self.clone(),
+            },
+            DataType::DataSeries(_) => match self {
+                DataValue::DataSeries(_) => self.clone(), // 引用类型，透传
+                _ => self.clone(),
+            },
+            DataType::Array(target_inner) => match self {
+                DataValue::Array(arr) => DataValue::Array(
+                    arr.iter()
+                        .map(|v| v.coerce_to(target_inner))
+                        .collect(),
+                ),
+                _ => self.clone(),
+            },
+            DataType::Object => match self {
+                DataValue::Object(_) => self.clone(),
+                _ => self.clone(),
+            },
         }
     }
 }
@@ -174,31 +263,11 @@ impl Add for DataValue {
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            // 同类型运算
+            // 仅同类型运算，类型转换需使用 convert 节点
             (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a + b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a + b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a + b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a + b)),
-            
-            // 类型提升：Int32 + Int64 -> Int64
-            (DataValue::Int32(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a as i64 + b)),
-            (DataValue::Int64(a), DataValue::Int32(b)) => Ok(DataValue::Int64(a + b as i64)),
-            
-            // 类型提升：Int32 + Float32 -> Float32
-            (DataValue::Int32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a as f32 + b)),
-            (DataValue::Float32(a), DataValue::Int32(b)) => Ok(DataValue::Float32(a + b as f32)),
-            
-            // 类型提升：Int -> Float64
-            (DataValue::Int32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 + b)),
-            (DataValue::Float64(a), DataValue::Int32(b)) => Ok(DataValue::Float64(a + b as f64)),
-            (DataValue::Int64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 + b)),
-            (DataValue::Float64(a), DataValue::Int64(b)) => Ok(DataValue::Float64(a + b as f64)),
-            
-            // 类型提升：Float32 + Float64 -> Float64
-            (DataValue::Float32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 + b)),
-            (DataValue::Float64(a), DataValue::Float32(b)) => Ok(DataValue::Float64(a + b as f64)),
-            
-            // 字符串拼接
             (DataValue::String(a), DataValue::String(b)) => Ok(DataValue::String(format!("{}{}", a, b))),
             
             (a, b) => Err(format!(
@@ -216,29 +285,11 @@ impl Sub for DataValue {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            // 同类型运算
+            // 仅同类型运算，类型转换需使用 convert 节点
             (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a - b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a - b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a - b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a - b)),
-            
-            // 类型提升：Int32 - Int64 -> Int64
-            (DataValue::Int32(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a as i64 - b)),
-            (DataValue::Int64(a), DataValue::Int32(b)) => Ok(DataValue::Int64(a - b as i64)),
-            
-            // 类型提升：Int32 - Float32 -> Float32
-            (DataValue::Int32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a as f32 - b)),
-            (DataValue::Float32(a), DataValue::Int32(b)) => Ok(DataValue::Float32(a - b as f32)),
-            
-            // 类型提升：Int -> Float64
-            (DataValue::Int32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 - b)),
-            (DataValue::Float64(a), DataValue::Int32(b)) => Ok(DataValue::Float64(a - b as f64)),
-            (DataValue::Int64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 - b)),
-            (DataValue::Float64(a), DataValue::Int64(b)) => Ok(DataValue::Float64(a - b as f64)),
-            
-            // 类型提升：Float32 - Float64 -> Float64
-            (DataValue::Float32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 - b)),
-            (DataValue::Float64(a), DataValue::Float32(b)) => Ok(DataValue::Float64(a - b as f64)),
             
             (a, b) => Err(format!(
                 "Cannot subtract {:?} from {:?}: incompatible types",
@@ -255,29 +306,11 @@ impl Mul for DataValue {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            // 同类型运算
+            // 仅同类型运算，类型转换需使用 convert 节点
             (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a * b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a * b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a * b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a * b)),
-            
-            // 类型提升：Int32 * Int64 -> Int64
-            (DataValue::Int32(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a as i64 * b)),
-            (DataValue::Int64(a), DataValue::Int32(b)) => Ok(DataValue::Int64(a * b as i64)),
-            
-            // 类型提升：Int32 * Float32 -> Float32
-            (DataValue::Int32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a as f32 * b)),
-            (DataValue::Float32(a), DataValue::Int32(b)) => Ok(DataValue::Float32(a * b as f32)),
-            
-            // 类型提升：Int -> Float64
-            (DataValue::Int32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 * b)),
-            (DataValue::Float64(a), DataValue::Int32(b)) => Ok(DataValue::Float64(a * b as f64)),
-            (DataValue::Int64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 * b)),
-            (DataValue::Float64(a), DataValue::Int64(b)) => Ok(DataValue::Float64(a * b as f64)),
-            
-            // 类型提升：Float32 * Float64 -> Float64
-            (DataValue::Float32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 * b)),
-            (DataValue::Float64(a), DataValue::Float32(b)) => Ok(DataValue::Float64(a * b as f64)),
             
             (a, b) => Err(format!(
                 "Cannot multiply {:?} and {:?}: incompatible types",
@@ -307,29 +340,11 @@ impl Div for DataValue {
         }
         
         match (self, rhs) {
-            // 同类型运算
+            // 仅同类型运算，类型转换需使用 convert 节点
             (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a / b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a / b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a / b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a / b)),
-            
-            // 类型提升：Int32 / Int64 -> Int64
-            (DataValue::Int32(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a as i64 / b)),
-            (DataValue::Int64(a), DataValue::Int32(b)) => Ok(DataValue::Int64(a / b as i64)),
-            
-            // 类型提升：Int32 / Float32 -> Float32
-            (DataValue::Int32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a as f32 / b)),
-            (DataValue::Float32(a), DataValue::Int32(b)) => Ok(DataValue::Float32(a / b as f32)),
-            
-            // 类型提升：Int -> Float64
-            (DataValue::Int32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 / b)),
-            (DataValue::Float64(a), DataValue::Int32(b)) => Ok(DataValue::Float64(a / b as f64)),
-            (DataValue::Int64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 / b)),
-            (DataValue::Float64(a), DataValue::Int64(b)) => Ok(DataValue::Float64(a / b as f64)),
-            
-            // 类型提升：Float32 / Float64 -> Float64
-            (DataValue::Float32(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a as f64 / b)),
-            (DataValue::Float64(a), DataValue::Float32(b)) => Ok(DataValue::Float64(a / b as f64)),
             
             (a, b) => Err(format!(
                 "Cannot divide {:?} by {:?}: incompatible types",

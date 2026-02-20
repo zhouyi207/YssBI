@@ -128,11 +128,31 @@ pub fn validate_connection(
             .cloned()
             .unwrap_or(DataType::Any);
 
+        // 基础 can_accept 检查
         if !to_type.can_accept(&from_type) && from_type != DataType::Any {
             return Err(ConnectionError::TypeIncompatible {
                 from: from_type,
                 to: to_type,
             });
+        }
+
+        // 当 to_pin 是带约束的 TypeVar 时（to_type 为 Any 表示未绑定），用约束检查 from_type
+        // 与类型推断共用 satisfies_constraints_with_unwrap，统一类型模型
+        if to_type == DataType::Any && from_type != DataType::Any {
+            if let Some(type_var_id) = in_inst.type_var_id {
+                if let Some(node) = data_state.nodes.get(&in_inst.node_id) {
+                    if let Some(type_var_def) = node.type_var_map.get(&type_var_id) {
+                        if !type_var_def.constraints.is_empty()
+                            && !type_var_def.satisfies_constraints_with_unwrap(&from_type)
+                        {
+                            return Err(ConnectionError::TypeIncompatible {
+                                from: from_type,
+                                to: to_type,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 

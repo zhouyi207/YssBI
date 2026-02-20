@@ -104,6 +104,8 @@ export class Node implements UINode {
 export type EditorGesture =
     | {
         type: "pan";
+        startX: number;
+        startY: number;
         lastX: number;
         lastY: number;
         moved: boolean;

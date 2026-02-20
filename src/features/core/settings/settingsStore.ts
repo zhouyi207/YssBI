@@ -88,6 +88,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
             const settings = await SettingsService.loadSettings();
             set({
                 ...settings,
+                theme: { ...DEFAULT_THEME, ...settings.theme },
                 isLoading: false,
             });
         },

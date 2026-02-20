@@ -1,9 +1,19 @@
-use crate::graph::infer::{TypeVarDefinition, TypeVarKey};
+use crate::graph::infer::{TypeConstraint, TypeVarDefinition, TypeVarKey};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
+
+/// Convert 节点支持转换的标量类型（Input/Output 只能在此集合内）
+const CONVERTIBLE_SCALAR_TYPES: &[DataType] = &[
+    DataType::Boolean,
+    DataType::Int32,
+    DataType::Int64,
+    DataType::Float32,
+    DataType::Float64,
+    DataType::String,
+];
 
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);
@@ -11,19 +21,22 @@ pub fn register(registry: &NodeRegistry) {
 
 /// Convert 节点 - 类型转换
 ///
-/// 输入和输出类型都是类型变量，根据连接推断
-/// 在运行时根据输入和输出的实际类型执行转换
+/// Input 与 Output 独立推断，不互相传播：
+/// - Input 由上游连接确定，Output 保持 Any 但受约束：只能是 Input 可转换到的类型
+/// - Output 由下游连接确定，Input 保持 Any 但受约束：只能是可转换到 Output 的类型
+/// 约束：二者均为 OneOf(Boolean, Int32, Int64, Float32, Float64, String)
 fn register_convert(registry: &NodeRegistry) {
-    // 创建两个独立的类型变量定义
+    let convertible_constraint = TypeConstraint::OneOf(CONVERTIBLE_SCALAR_TYPES.to_vec());
+
     let input_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Input".to_string()),
-        constraints: vec![],
+        constraints: vec![convertible_constraint.clone()],
         bound: None,
     };
-    
+
     let output_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Output".to_string()),
-        constraints: vec![],
+        constraints: vec![convertible_constraint],
         bound: None,
     };
 
@@ -80,8 +93,10 @@ fn register_convert(registry: &NodeRegistry) {
 // ============================================================================
 
 /// 根据目标类型转换值
+/// 当 to_type 为 Any 时（Output 未连接下游），透传输入值
 fn convert_to_type(from_value: DataValue, to_type: &DataType) -> Result<DataValue, String> {
     match to_type {
+        DataType::Any => Ok(from_value),
         DataType::Boolean => convert_to_boolean(from_value),
         DataType::Int32 => convert_to_int32(from_value),
         DataType::Int64 => convert_to_int64(from_value),
@@ -204,7 +219,7 @@ fn convert_to_string_value(value: DataValue) -> Result<DataValue, String> {
         DataValue::Array(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::Object(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::DataFrame(id) => Ok(DataValue::String(format!("DataFrame({})", id))),
-        DataValue::DataSeries(id) => Ok(DataValue::String(format!("DataSeries({})", id))),
+        DataValue::DataSeries(v) => Ok(DataValue::String(format!("DataSeries({})", v.id))),
     }
 }
 

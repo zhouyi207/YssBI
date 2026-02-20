@@ -1,9 +1,10 @@
 //! DataSeries 节点定义
 
+use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole};
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataType, DataValue};
+use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
@@ -53,17 +54,18 @@ fn register_get_dataseries(registry: &NodeRegistry) {
             };
 
             let df = ctx.get_dataframe(&df_id)?;
-            let series = df
+            let col = df
                 .column(&column_name)
-                .map_err(|e| format!("Get DataSeries: {}", e))?
-                .clone()
-                .take_materialized_series();
+                .map_err(|e| format!("Get DataSeries: {}", e))?;
+            let element_type = polars_dtype_to_data_type(col.dtype());
+            let series = col.clone().take_materialized_series();
 
             let series_id = ctx.put_series(series)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataSeries(series_id),
-            )?;
+            let value = DataValue::DataSeries(DataSeriesValue::with_element_type(
+                series_id,
+                element_type,
+            ));
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), value)?;
             Ok(())
         }));
 
@@ -94,7 +96,7 @@ fn register_series_length(registry: &NodeRegistry) {
             .with_data_evaluator(Arc::new(|ctx| {
                 let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
                 let series_id = match &series_value {
-                    DataValue::DataSeries(id) => id.clone(),
+                    DataValue::DataSeries(v) => v.id.clone(),
                     _ => return Err("Series Length: input is not a DataSeries".to_string()),
                 };
 
@@ -135,7 +137,7 @@ fn register_series_sum(registry: &NodeRegistry) {
             .with_data_evaluator(Arc::new(|ctx| {
                 let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
                 let series_id = match &series_value {
-                    DataValue::DataSeries(id) => id.clone(),
+                    DataValue::DataSeries(v) => v.id.clone(),
                     _ => return Err("Series Sum: input is not a DataSeries".to_string()),
                 };
 
@@ -183,7 +185,7 @@ fn register_series_mean(registry: &NodeRegistry) {
             .with_data_evaluator(Arc::new(|ctx| {
                 let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
                 let series_id = match &series_value {
-                    DataValue::DataSeries(id) => id.clone(),
+                    DataValue::DataSeries(v) => v.id.clone(),
                     _ => return Err("Series Mean: input is not a DataSeries".to_string()),
                 };
 

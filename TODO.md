@@ -60,3 +60,10 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 
 - NodeMetaData.supports_dynamic_pins 已存在，但 from_definition 只处理静态 pins
 - 动态添加/删除 pin 的逻辑尚未在此体现，后续扩展时需要额外设计
+
+
+
+
+pin input 需要处理
+
+catelog math 节点应该是 any

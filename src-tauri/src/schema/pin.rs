@@ -4,11 +4,13 @@ use crate::graph::PinInstance;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
 
-/// 默认 Pin 类型颜色（与前端 ThemeSettings 一致）
+/// 默认 Pin 类型颜色（与前端 ThemeSettings 一致，保留精度信息）
 const DEFAULT_COLORS: &[(&str, &str)] = &[
     ("exec", "#ffffff"),
-    ("int", "#35b2b2"),
-    ("float", "#9ecd4d"),
+    ("Int32", "#35b2b2"),
+    ("Int64", "#2d9d9d"),
+    ("Float32", "#9ecd4d"),
+    ("Float64", "#8ebd45"),
     ("bool", "#e06c75"),
     ("string", "#e5c07b"),
     ("date", "#c678dd"),
@@ -19,13 +21,15 @@ const DEFAULT_COLORS: &[(&str, &str)] = &[
     ("array", "#d19a66"),
 ];
 
-/// 将 DataType 映射为前端期望的基础 pin type 字符串（用于颜色）
+/// 将 DataType 映射为前端 pin type 字符串（保留精度：Int32/Int64/Float32/Float64）
 /// 容器类型（Array, DataSeries）会递归到内部类型
 pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
     match dt {
         DataType::Boolean => "bool",
-        DataType::Int32 | DataType::Int64 => "int",
-        DataType::Float32 | DataType::Float64 => "float",
+        DataType::Int32 => "Int32",
+        DataType::Int64 => "Int64",
+        DataType::Float32 => "Float32",
+        DataType::Float64 => "Float64",
         DataType::String => "string",
         DataType::Array(inner) => data_type_to_pin_type(inner),
         DataType::Object => "object",
