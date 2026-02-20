@@ -2,11 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useMemo } from "reac
 import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
-import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-
-const NODE_WIDTH = 300;
-const NODE_HEIGHT = 300;
-const CULLING_PADDING_FACTOR = 200;
+import { DEFAULT_VIEWPORT, NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from "@/app/appConfig/default";
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
 function segmentIntersectsRect(

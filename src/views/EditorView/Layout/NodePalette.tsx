@@ -111,8 +111,8 @@ const TreeCategoryNode = React.memo(function TreeCategoryNode({
 }) {
   const currentPath = path ? `${path}/${node.name}` : node.name;
   const isExpanded = expandedPaths.has(currentPath);
-  const sortedChildren = useMemo(
-    () => Object.values(node.children).sort(TREE_SORT),
+  const sortedEntries = useMemo(
+    () => Object.entries(node.children).sort(([, a], [, b]) => TREE_SORT(a, b)),
     [node.children]
   );
 
@@ -133,17 +133,17 @@ const TreeCategoryNode = React.memo(function TreeCategoryNode({
       </div>
       {isExpanded && (
         <div>
-          {sortedChildren.map((child) =>
+          {sortedEntries.map(([childKey, child]) =>
             child.isLeaf ? (
               <TreeLeafNode
-                key={`${currentPath}/${child.name}`}
+                key={`${currentPath}/${childKey}`}
                 item={child.item}
                 level={level + 1}
                 onSelect={onSelect}
               />
             ) : (
               <TreeCategoryNode
-                key={`${currentPath}/${child.name}`}
+                key={`${currentPath}/${childKey}`}
                 node={child}
                 path={currentPath}
                 level={level + 1}

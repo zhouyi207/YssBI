@@ -11,9 +11,7 @@ import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 
 import { clamp } from "@/shared/utils";
 import { deserializeGraph } from "@/features/core/dataStore";
-
-/** 移动超过此阈值（屏幕像素）才视为有效拖拽，抑制 contextmenu */
-const CONTEXT_MENU_MOVE_THRESHOLD_PX = 5;
+import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from "@/app/appConfig/default";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;

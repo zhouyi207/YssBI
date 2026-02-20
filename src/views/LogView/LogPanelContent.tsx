@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-
-const LOGS_DRAG_TYPE = 'application/x-yssbi-logs-drag';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP, VIRTUALIZE_THRESHOLD } from '@/app/appConfig/default';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useLogStore } from '@/features/core/log/logStore';
@@ -11,6 +10,105 @@ import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'r
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { uiStore } from '@/features/core/ui/UIStore';
+
+interface VirtualizedLogListProps {
+  parentRef: React.RefObject<HTMLDivElement | null>;
+  logs: LogMessage[];
+  getLevelColor: (level: LogLevel) => string;
+  getLevelBgColor: (level: LogLevel) => string;
+  getTypeColor: (type: LogType) => string;
+}
+
+const VirtualizedLogList = ({ parentRef, logs, getLevelColor, getLevelBgColor, getTypeColor }: VirtualizedLogListProps) => {
+  const [scrollReady, setScrollReady] = useState(false);
+  useEffect(() => {
+    if (parentRef.current) {
+      setScrollReady(true);
+      return;
+    }
+    const id = setInterval(() => {
+      if (parentRef.current) {
+        setScrollReady(true);
+        clearInterval(id);
+      }
+    }, 50);
+    return () => clearInterval(id);
+  }, []);
+
+  const virtualizer = useVirtualizer({
+    count: logs.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => LOG_ITEM_HEIGHT + LOG_ITEM_GAP,
+    overscan: 8,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const useVirtual = logs.length > VIRTUALIZE_THRESHOLD;
+
+  if (!useVirtual || !scrollReady || (logs.length > 0 && virtualItems.length === 0)) {
+    return (
+      <div className="space-y-2">
+        {logs.map((log, index) => (
+          <div
+            key={`${log.timestamp}-${index}`}
+            className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${log.level === 'error' ? 'border-red-500' :
+              log.level === 'warn' ? 'border-yellow-500' :
+                log.level === 'info' ? 'border-blue-500' :
+                  log.level === 'debug' ? 'border-gray-500' :
+                    'border-gray-600'
+              }`}
+          >
+            <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
+            <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
+            <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${log.log_type === 'application' ? 'bg-green-500/10' : log.log_type === 'execution' ? 'bg-purple-500/10' : 'bg-cyan-500/10'}`}>
+              {log.log_type === 'application' ? 'APP' : log.log_type === 'execution' ? 'EXEC' : 'SYS'}
+            </span>
+            {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
+            <span className="text-gray-200 break-all text-[11px] leading-relaxed font-mono flex-1 min-w-0">{log.message}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+      {virtualizer.getVirtualItems().map((virtualRow) => {
+        const log = logs[virtualRow.index];
+        if (!log) return null;
+        return (
+          <div
+            key={virtualRow.key}
+            data-index={virtualRow.index}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: `${LOG_ITEM_HEIGHT}px`,
+              marginBottom: `${LOG_ITEM_GAP}px`,
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
+            className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${log.level === 'error' ? 'border-red-500' :
+              log.level === 'warn' ? 'border-yellow-500' :
+                log.level === 'info' ? 'border-blue-500' :
+                  log.level === 'debug' ? 'border-gray-500' :
+                    'border-gray-600'
+              }`}
+          >
+            <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
+            <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
+            <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${log.log_type === 'application' ? 'bg-green-500/10' : log.log_type === 'execution' ? 'bg-purple-500/10' : 'bg-cyan-500/10'}`}>
+              {log.log_type === 'application' ? 'APP' : log.log_type === 'execution' ? 'EXEC' : 'SYS'}
+            </span>
+            {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
+            <span className="text-gray-200 break-all text-[11px] leading-relaxed font-mono flex-1 min-w-0">{log.message}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 export interface LogPanelContentProps {
   variant?: 'embedded' | 'standalone';
@@ -39,6 +137,8 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const loadMoreStateRef = useRef({ hasMore, loading, loadMoreLogs });
+  loadMoreStateRef.current = { hasMore, loading, loadMoreLogs };
 
   useEffect(() => {
     loadLogs(0, 100).then(() => {
@@ -60,8 +160,12 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   }, []);
 
   useEffect(() => {
-    if (autoScroll && logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    const el = logContainerRef.current;
+    if (!autoScroll || !el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const nearBottom = scrollHeight - scrollTop - clientHeight < 80;
+    if (nearBottom) {
+      el.scrollTop = scrollHeight;
     }
   }, [logs, autoScroll]);
 
@@ -81,20 +185,50 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isFilterOpen]);
 
+  useEffect(() => {
+    if (isInitialLoad) return;
+    const el = logContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const { hasMore, loading, loadMoreLogs } = loadMoreStateRef.current;
+      if (el.scrollTop < 150 && hasMore && !loading) {
+        const scrollHeight = el.scrollHeight;
+        const scrollTop = el.scrollTop;
+        loadMoreLogs().then(() => {
+          if (logContainerRef.current) {
+            const newScrollHeight = logContainerRef.current.scrollHeight;
+            const heightDiff = newScrollHeight - scrollHeight;
+            logContainerRef.current.scrollTop = scrollTop + heightDiff;
+          }
+        });
+      }
+    };
+    const id = requestAnimationFrame(() => {
+      el.addEventListener('scroll', onScroll, { passive: true });
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [isInitialLoad]);
+
+  const tryLoadOlder = useCallback(() => {
+    if (!hasMore || loading || !logContainerRef.current) return;
+    const el = logContainerRef.current;
+    const scrollHeight = el.scrollHeight;
+    const scrollTop = el.scrollTop;
+    loadMoreLogs().then(() => {
+      if (logContainerRef.current) {
+        const newScrollHeight = logContainerRef.current.scrollHeight;
+        const heightDiff = newScrollHeight - scrollHeight;
+        logContainerRef.current.scrollTop = scrollTop + heightDiff;
+      }
+    });
+  }, [hasMore, loading, loadMoreLogs]);
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (target.scrollTop < 100 && hasMore && !loading) {
-      const scrollHeight = target.scrollHeight;
-      const scrollTop = target.scrollTop;
-
-      loadMoreLogs().then(() => {
-        if (logContainerRef.current) {
-          const newScrollHeight = logContainerRef.current.scrollHeight;
-          const heightDiff = newScrollHeight - scrollHeight;
-          logContainerRef.current.scrollTop = scrollTop + heightDiff;
-        }
-      });
-    }
+    if (target.scrollTop < 150) tryLoadOlder();
   };
 
   const openInNewWindow = useCallback(async (x?: number, y?: number) => {
@@ -374,12 +508,11 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
         </div>
       </div>
 
-      {/* 日志列表 */}
-      <OverlayScrollbar
+      {/* 日志列表 - 使用原生 overflow 作为滚动容器，确保与 react-virtual 兼容 */}
+      <div
         ref={logContainerRef}
         onScroll={handleScroll}
-        className="flex-1 bg-[var(--workbench-bg)]"
-        direction="vertical"
+        className="flex-1 min-h-0 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
       >
         {isInitialLoad ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
@@ -401,50 +534,25 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             </div>
           </div>
         ) : (
-          <div className="p-3">
+          <>
             {loading && (
-              <div className="text-center py-2 text-xs text-[var(--accent-color)] flex items-center justify-center gap-2">
+              <div className="absolute top-0 left-0 right-0 z-10 py-2 text-center text-xs text-[var(--accent-color)] flex items-center justify-center gap-2 bg-[var(--workbench-bg)]/95 pointer-events-none">
                 <div className="w-3 h-3 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin"></div>
                 加载中...
               </div>
             )}
-            <div className="space-y-1">
-              {filteredLogs.map((log, index) => (
-                <div
-                  key={index}
-                  className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${log.level === 'error' ? 'border-red-500' :
-                    log.level === 'warn' ? 'border-yellow-500' :
-                      log.level === 'info' ? 'border-blue-500' :
-                        log.level === 'debug' ? 'border-gray-500' :
-                          'border-gray-600'
-                    }`}
-                >
-                  <span className="text-gray-500 shrink-0 text-[11px] font-mono">
-                    {log.timestamp.split(' ')[1]}
-                  </span>
-                  <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>
-                    {log.level}
-                  </span>
-                  <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${log.log_type === 'application' ? 'bg-green-500/10' :
-                    log.log_type === 'execution' ? 'bg-purple-500/10' :
-                      'bg-cyan-500/10'
-                    }`}>
-                    {log.log_type === 'application' ? 'APP' : log.log_type === 'execution' ? 'EXEC' : 'SYS'}
-                  </span>
-                  {log.source && (
-                    <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">
-                      [{log.source}]
-                    </span>
-                  )}
-                  <span className="text-gray-200 break-all text-[11px] leading-relaxed font-mono flex-1">
-                    {log.message}
-                  </span>
-                </div>
-              ))}
+            <div className="relative px-3">
+              <VirtualizedLogList
+                parentRef={logContainerRef}
+                logs={filteredLogs}
+                getLevelColor={getLevelColor}
+                getLevelBgColor={getLevelBgColor}
+                getTypeColor={getTypeColor}
+              />
             </div>
-          </div>
+          </>
         )}
-      </OverlayScrollbar>
+      </div>
     </div>
   );
 };

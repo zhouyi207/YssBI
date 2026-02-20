@@ -3,8 +3,7 @@ import { useEditorGroup } from "@/features/application/editor";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
-
-const CLOSE_DELAY_MS = 250;
+import { CLOSE_DELAY_MS } from "@/app/appConfig/default";
 
 interface MenuItem {
   label: string;

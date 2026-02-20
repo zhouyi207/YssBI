@@ -1,4 +1,4 @@
-﻿
+
 import React, { useRef, useEffect } from 'react';
 import { LayoutDirection } from '@/shared/types/ui';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
@@ -138,10 +138,10 @@ export const Sash: React.FC<SashProps> = ({
                 hover:bg-blue-500/10 [&.active]:bg-blue-500/20
             `}
         >
-            {/* Visual Line: Thin (1px or 4px) */}
+            {/* Visual Line: Thin (1px or 4px) - 默认显示灰色便于区分，hover/active 时高亮为蓝色 */}
             <div 
                 className={`
-                    absolute bg-transparent group-hover:bg-blue-500 group-[.active]:bg-blue-500 transition-colors
+                    absolute bg-slate-400/25 group-hover:bg-blue-500 group-[.active]:bg-blue-500 transition-colors
                     ${orientation === 'row' 
                         ? 'left-1/2 -translate-x-1/2 w-[1px] h-full' 
                         : 'top-1/2 -translate-y-1/2 h-[1px] w-full'}

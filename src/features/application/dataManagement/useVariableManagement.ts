@@ -6,6 +6,7 @@ import { useVariableStore, useGraphMetaStore, useGraphDataStore } from '@/featur
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { getUniqueName } from '@/shared/utils';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
 function buildScope(
@@ -51,9 +52,11 @@ export function useVariableManagement() {
 
   const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
     try {
+      const existingVars = Object.values(useVariableStore.getState().variables);
+      const finalName = getUniqueName(name || 'New Variable', existingVars);
       const dataType = dataTypeFromKey(type);
       const variable: Omit<Variable, 'id'> = {
-        name: name || `variable_${Date.now()}`,
+        name: finalName,
         dataType,
         dataValue: dataValueFromRaw(getDefaultValue(dataType), dataType),
         description: '',

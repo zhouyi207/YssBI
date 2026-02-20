@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
-
-const THUMB_MIN_SIZE = 24;
-const TRACK_SIZE = 6;
+import { THUMB_MIN_SIZE, TRACK_SIZE } from "@/app/appConfig/default";
 
 type Direction = "vertical" | "horizontal" | "both";
 
@@ -74,18 +72,28 @@ export const OverlayScrollbar = forwardRef<
 
     updateThumb();
 
-    const ro = new ResizeObserver(updateThumb);
+    let rafId: number | null = null;
+    const throttledUpdate = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateThumb();
+      });
+    };
+
+    const ro = new ResizeObserver(throttledUpdate);
     ro.observe(el);
 
-    const mo = new MutationObserver(updateThumb);
+    const mo = new MutationObserver(throttledUpdate);
     mo.observe(el, { childList: true, subtree: true });
 
-    el.addEventListener("scroll", updateThumb, { passive: true });
+    el.addEventListener("scroll", throttledUpdate, { passive: true });
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       ro.disconnect();
       mo.disconnect();
-      el.removeEventListener("scroll", updateThumb);
+      el.removeEventListener("scroll", throttledUpdate);
     };
   }, [updateThumb]);
 

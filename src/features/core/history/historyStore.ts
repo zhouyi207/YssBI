@@ -15,9 +15,7 @@ import type {
   GraphHistory,
   HistoryEntry,
 } from './types';
-
-const MAX_HISTORY = 50;
-const MERGE_WINDOW_MS = 800;
+import { MAX_HISTORY, MERGE_WINDOW_MS } from '@/app/appConfig/default';
 
 let entryCounter = 0;
 function nextEntryId(): string {

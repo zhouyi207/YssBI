@@ -17,7 +17,7 @@ import {
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarStore } from "@/features/core/sidebar";
-import { PIN_COLORS, TYPE_ICON_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
+import { TYPE_ICON_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 
@@ -25,11 +25,6 @@ function safeDataTypeDisplay(dt: unknown): string {
   if (typeof dt === "string") return dt;
   if (dt && typeof dt === "object" && "kind" in dt) return dataTypeDisplay(dt as DataType);
   return "";
-}
-
-function safeDataTypeKind(dt: unknown): string {
-  if (dt && typeof dt === "object" && "kind" in dt) return (dt as DataType).kind;
-  return "Any";
 }
 
 /**
@@ -158,7 +153,7 @@ const CollapsibleSection = ({
   headerActive?: boolean;
   children: React.ReactNode;
 }) => (
-  <div className="mb-0.5">
+  <div>
     <div
       className={`flex items-center gap-2 py-1 pl-4 pr-2 cursor-pointer group transition-colors duration-150 ease-out ${
         headerActive ? "bg-[var(--sidebar-item-active)]" : "hover:bg-[var(--sidebar-hover)]"
@@ -192,7 +187,7 @@ const CollapsibleSection = ({
       className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
       style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
     >
-      <div className="min-h-0 py-0.5 space-y-0.5">{children}</div>
+      <div className="min-h-0">{children}</div>
     </div>
   </div>
 );
@@ -363,9 +358,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     : type === "variable"
                       ? extra?.isGlobal
                         ? TYPE_ICON_COLORS.variableGlobal
-                        : extra?.dataType
-                          ? PIN_COLORS[typeof extra.dataType === "string" ? extra.dataType : safeDataTypeKind(extra.dataType)]
-                          : TYPE_ICON_COLORS.variable
+                        : TYPE_ICON_COLORS.variable
                       : type === "data"
                         ? TYPE_ICON_COLORS.data
                         : "rgba(156,163,175,0.8)",

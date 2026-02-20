@@ -10,8 +10,7 @@ import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
-
-const EMPTY_CANVAS = { x: 0, y: 0, scale: 1 };
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 /**
  * 从 GraphMetaStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
@@ -106,7 +105,7 @@ export function useGraphData(activeTabId: string | null) {
       nodes: graphNodes,
       pins: graphPins ?? [],
       connections: graphConnections ?? [],
-      canvas: EMPTY_CANVAS,
+      canvas: DEFAULT_VIEWPORT,
     };
     prevRef.current = result;
     return result;

@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectSync } from '@/features/application/initialization';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { Select } from '@/shared/ui';
+import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_CHUNK_SIZE } from '@/app/appConfig/default';
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useDatabaseStore(s => s.databases);
@@ -17,12 +18,10 @@ export const DataViewWindow: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
-  const CHUNK_SIZE = 100;
+  const CHUNK_SIZE = DATA_VIEW_CHUNK_SIZE;
 
-  // 启用项目同步（如果主窗口已启动，会复用同一个监听器）
   useProjectSync();
 
-  // 自动管理选中状态
   useEffect(() => {
     const ids = Object.keys(dataframes);
     if (ids.length > 0) {
@@ -35,7 +34,6 @@ export const DataViewWindow: React.FC = () => {
     }
   }, [dataframes, selectedDfId]);
 
-  // 当选中的 DataFrame 变化时，重置并加载首屏数据
   useEffect(() => {
     if (selectedDfId) {
       loadInitialRows(selectedDfId);
@@ -44,7 +42,6 @@ export const DataViewWindow: React.FC = () => {
     }
   }, [selectedDfId]);
 
-  // 当选中项缺少 name/columns 时，从后端拉取元数据并更新 store
   useEffect(() => {
     if (!selectedDfId) return;
     const df = dataframes[selectedDfId] as Record<string, unknown> | undefined;
@@ -76,7 +73,7 @@ export const DataViewWindow: React.FC = () => {
     }
   };
 
-  const loadMoreRows = async () => {
+  const loadMoreRows = useCallback(async () => {
     if (!selectedDfId || loadingMore) return;
     const currentCount = loadedRows.length;
     const totalCount = (dataframes[selectedDfId]?.rowCount as number) ?? 0;
@@ -92,7 +89,7 @@ export const DataViewWindow: React.FC = () => {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [selectedDfId, loadingMore, loadedRows.length, dataframes]);
 
   const refreshData = async () => {
     if (scrollRef.current) {
@@ -165,10 +162,22 @@ export const DataViewWindow: React.FC = () => {
   };
 
   const selectedDf = selectedDfId ? dataframes[selectedDfId] : null;
+  const columns = ((selectedDf as { columns?: Array<{ name: string; type: string }> })?.columns ?? []);
+  const colSpan = columns.length + 1;
+  const totalRowCount = (selectedDf as { rowCount?: number })?.rowCount ?? 0;
+
+  const virtualizer = useVirtualizer({
+    count: loadedRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => DATA_VIEW_ROW_HEIGHT,
+    overscan: 20,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
 
   return (
     <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-gray-300 overflow-hidden font-sans">
-      {/* 自定义标题栏 - 与主窗口一致 */}
+      {/* 自定义标题栏 */}
       <div
         data-tauri-drag-region
         className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none shrink-0"
@@ -178,7 +187,6 @@ export const DataViewWindow: React.FC = () => {
           <span className="text-white font-bold text-sm tracking-tight">Data Viewer</span>
         </div>
 
-        {/* 窗口控制按钮 */}
         <div className="flex items-center h-full">
           <button
             onClick={handleMinimize}
@@ -244,17 +252,16 @@ export const DataViewWindow: React.FC = () => {
         {selectedDf && (
           <div className="ml-auto flex items-center gap-4 text-[10px] font-mono opacity-50">
             <span>COLUMNS: {(selectedDf as { columnCount?: number }).columnCount ?? 0}</span>
-            <span>ROWS: {(selectedDf as { rowCount?: number }).rowCount ?? 0}</span>
+            <span>ROWS: {totalRowCount}</span>
           </div>
         )}
       </div>
 
       {/* Main Content */}
-      <OverlayScrollbar
+      <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 bg-[var(--workbench-bg)]"
-        direction="both"
+        className="flex-1 min-h-0 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
       >
         {selectedDf ? (
           <div className="min-w-full inline-block align-middle">
@@ -262,7 +269,7 @@ export const DataViewWindow: React.FC = () => {
               <thead className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
                 <tr>
                   <th className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 w-12 text-center">#</th>
-                  {((selectedDf as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, i) => (
+                  {columns.map((col, i) => (
                     <th key={i} className="p-2 text-left border-r border-gray-800 group">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-bold text-gray-300">{col.name}</span>
@@ -272,17 +279,43 @@ export const DataViewWindow: React.FC = () => {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
-                {(loadedRows ?? []).map((row, i) => (
-                  <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="p-2 text-[10px] font-mono text-gray-600 border-r border-gray-800 text-center">{i + 1}</td>
-                    {(Array.isArray(row) ? row : []).map((val, j) => (
-                      <td key={j} className="p-2 text-[11px] text-gray-400 border-r border-gray-800/50 truncate max-w-[200px]">
-                        {val === null ? <span className="italic opacity-30">null</span> : String(val)}
-                      </td>
-                    ))}
+              <tbody>
+                {virtualItems.length > 0 && virtualItems[0].start > 0 && (
+                  <tr aria-hidden>
+                    <td colSpan={colSpan} style={{ height: virtualItems[0].start, padding: 0, border: 'none' }} />
                   </tr>
-                ))}
+                )}
+                {virtualItems.map((virtualRow) => {
+                  const row = loadedRows[virtualRow.index];
+                  if (!row) return null;
+                  return (
+                    <tr
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      className="hover:bg-white/[0.02] transition-colors"
+                      style={{ height: DATA_VIEW_ROW_HEIGHT }}
+                    >
+                      <td className="p-2 text-[10px] font-mono text-gray-600 border-r border-gray-800 text-center">{virtualRow.index + 1}</td>
+                      {(Array.isArray(row) ? row : []).map((val, j) => (
+                        <td key={j} className="p-2 text-[11px] text-gray-400 border-r border-gray-800/50 truncate max-w-[200px]">
+                          {val === null ? <span className="italic opacity-30">null</span> : String(val)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {virtualItems.length > 0 && (
+                  <tr aria-hidden>
+                    <td
+                      colSpan={colSpan}
+                      style={{
+                        height: virtualizer.getTotalSize() - (virtualItems[virtualItems.length - 1]?.end ?? 0),
+                        padding: 0,
+                        border: 'none',
+                      }}
+                    />
+                  </tr>
+                )}
               </tbody>
             </table>
             {loadingMore && (
@@ -290,12 +323,12 @@ export const DataViewWindow: React.FC = () => {
                 Loading more data...
               </div>
             )}
-            {((selectedDf as { rowCount?: number }).rowCount ?? 0) > loadedRows.length && !loadingMore && (
+            {totalRowCount > loadedRows.length && !loadingMore && (
               <div className="p-4 text-center text-xs text-gray-500 italic border-t border-gray-800">
-                Scroll down to load more (showing {loadedRows.length} of {(selectedDf as { rowCount?: number }).rowCount ?? 0})
+                Scroll down to load more (showing {loadedRows.length} of {totalRowCount})
               </div>
             )}
-            {((selectedDf as { rowCount?: number }).rowCount ?? 0) <= loadedRows.length && ((selectedDf as { rowCount?: number }).rowCount ?? 0) > 0 && (
+            {totalRowCount <= loadedRows.length && totalRowCount > 0 && (
               <div className="p-4 text-center text-[9px] text-gray-600 uppercase tracking-widest border-t border-gray-800/30">
                 End of data
               </div>
@@ -309,7 +342,7 @@ export const DataViewWindow: React.FC = () => {
             </span>
           </div>
         )}
-      </OverlayScrollbar>
+      </div>
     </div>
   );
 };
