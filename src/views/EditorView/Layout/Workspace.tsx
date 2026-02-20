@@ -133,9 +133,11 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
         ? overId.replace("canvas-drop-zone-", "")
         : null;
       if (groupId && dragState) {
+        // 将目标 canvas 设为 active group（确保 variable drop menu 等 UI 正确显示）
+        useLayoutStore.getState().setActiveGroup(groupId);
+
         const handler = canvasDropHandlerStore.getHandler(groupId);
         if (handler) {
-          // 使用 drop 时的 modifier 状态（与 useEditorKeyboard 同步）
           const win = window as Window & { _lastAltKey?: boolean; _lastCtrlKey?: boolean };
           handler(dragState, {
             altKey: win._lastAltKey ?? (event.activatorEvent as PointerEvent)?.altKey ?? false,

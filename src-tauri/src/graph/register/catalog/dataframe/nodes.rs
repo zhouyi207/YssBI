@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
     register_get_dataframe(registry);
-    register_get_column(registry);
     register_decompose_dataframe(registry);
 }
 
@@ -29,66 +28,12 @@ fn register_get_dataframe(registry: &NodeRegistry) {
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
             let dataframe_id = params
-                .dataframe_id
-                .as_deref()
+                .dataframe_id()
                 .ok_or("Get DataFrame: dataframe_id not set")?;
 
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Output),
                 DataValue::DataFrame(dataframe_id.to_string()),
-            )?;
-            Ok(())
-        }));
-
-    registry.register(definition);
-}
-
-/// Get Column 节点 - 从数据帧获取列
-/// 输入：DataFrame，输出：列数据（DataSeries 类型）
-/// 需要 column_name 指定列名
-fn register_get_column(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Get Column", vec!["Data".to_string()])
-        .with_node_type("get_column")
-        .with_ui_style("dataframe")
-        .with_description("Get a column from a DataFrame as a DataSeries")
-        .with_pin_generator(Arc::new(|| {
-            Ok(vec![
-                PinDefinition::data_input(
-                    "DataFrame",
-                    DataRole::Input,
-                    PinDataTypeDefinition::concrete(DataType::DataFrame),
-                ),
-                PinDefinition::data_output(
-                    "Column",
-                    DataRole::Output,
-                    PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
-                ),
-            ])
-        }))
-        .with_data_evaluator(Arc::new(|ctx| {
-            let params = ctx.get_instance_params();
-            let column_name = params
-                .column_name
-                .as_deref()
-                .ok_or("Get Column: column_name not set")?;
-
-            let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let df_id = match &df_value {
-                DataValue::DataFrame(id) => id.clone(),
-                _ => return Err("Get Column: input is not a DataFrame reference".to_string()),
-            };
-
-            let df = ctx.get_dataframe(&df_id)?;
-            let series = df
-                .column(column_name)
-                .map_err(|e| format!("Get Column: {}", e))?
-                .clone()
-                .take_materialized_series();
-
-            let series_id = ctx.put_series(series)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataSeries(series_id),
             )?;
             Ok(())
         }));

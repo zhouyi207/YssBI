@@ -15,25 +15,27 @@ import { useEditorLayoutActions } from './useEditorLayoutActions';
 
 export function useEditorActions(overrideGroupId?: string | null) {
   const active = useActiveEditorGroup(overrideGroupId);
-  const activeGroupIdRef = useRef(active.activeGroupId);
+  const editorGroupId = active.activeEditorGroupId;
+  const activeGroupIdRef = useRef(editorGroupId);
   const activeTabIdRef = useRef(active.activeTabId);
-  activeGroupIdRef.current = active.activeGroupId;
+  activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
-  const nodeActions = useEditorNodeActions(activeTabIdRef, active.activeGroupId);
-  const canvasActions = useEditorCanvasActions(active.activeGroupId);
+  const nodeActions = useEditorNodeActions(activeTabIdRef, editorGroupId);
+  const canvasActions = useEditorCanvasActions(editorGroupId);
   const uiActions = useEditorUIActions();
   const layoutActions = useEditorLayoutActions();
 
-  const canvasRef = useRef(useViewportStore.getState().viewports[active.activeGroupId] || DEFAULT_VIEWPORT);
+  const canvasRef = useRef(useViewportStore.getState().viewports[editorGroupId] || DEFAULT_VIEWPORT);
 
   useEffect(() => {
     const unsub = useViewportStore.subscribe((state) => {
-      const currentGroupId = useLayoutStore.getState().activeGroupId;
-      if (currentGroupId && state.viewports[currentGroupId]) {
-        canvasRef.current = state.viewports[currentGroupId];
+      const editorGid = useLayoutStore.getState().activeEditorGroupId;
+      if (editorGid && state.viewports[editorGid]) {
+        canvasRef.current = state.viewports[editorGid];
       }
     });
-    const current = useViewportStore.getState().viewports[useLayoutStore.getState().activeGroupId || ''];
+    const editorGid = useLayoutStore.getState().activeEditorGroupId || '';
+    const current = useViewportStore.getState().viewports[editorGid];
     if (current) canvasRef.current = current;
     return unsub;
   }, []);

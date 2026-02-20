@@ -12,8 +12,6 @@ export interface PaletteItem {
     variableName?: string;
     variableType?: string;
     dataframeId?: string;
-    columnName?: string;
-    columnType?: string;
   };
 }
 

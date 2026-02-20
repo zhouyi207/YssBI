@@ -14,13 +14,12 @@ import type { Pin, Node as DomainNode } from '../domain';
 export interface UINode extends DomainNode {
     position: { x: number; y: number };
     isInternal?: boolean;
+    paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
     variableId?: string;
     variableName?: string;
     variableType?: string;
     subGraphId?: string;
     dataframeId?: string;
-    columnName?: string;
-    columnType?: string;
     centerSymbol?: string;
 }
 
@@ -39,13 +38,12 @@ export class Node implements UINode {
     description?: string;
     position: { x: number; y: number };
     isInternal: boolean;
+    paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
     variableId?: string;
     variableName?: string;
     variableType?: string;
     subGraphId?: string;
     dataframeId?: string;
-    columnName?: string;
-    columnType?: string;
     centerSymbol?: string;
 
     constructor(data: UINode) {
@@ -59,13 +57,12 @@ export class Node implements UINode {
         this.description = data.description;
         this.position = data.position;
         this.isInternal = data.isInternal || false;
+        this.paramsKind = data.paramsKind;
         this.variableId = data.variableId;
         this.variableName = data.variableName;
         this.variableType = data.variableType;
         this.subGraphId = data.subGraphId;
         this.dataframeId = data.dataframeId;
-        this.columnName = data.columnName;
-        this.columnType = data.columnType;
         this.centerSymbol = data.centerSymbol;
     }
 
@@ -89,13 +86,12 @@ export class Node implements UINode {
             description: this.description,
             position: { ...this.position },
             isInternal: this.isInternal,
+            paramsKind: this.paramsKind,
             variableId: this.variableId,
             variableName: this.variableName,
             variableType: this.variableType,
             subGraphId: this.subGraphId,
             dataframeId: this.dataframeId,
-            columnName: this.columnName,
-            columnType: this.columnType,
             centerSymbol: this.centerSymbol,
         });
     }

@@ -165,37 +165,47 @@ impl GraphRuntime {
     /// 2. 运行时值（current_value）
     /// 3. 用户值（user_value）
     /// 4. 默认值（default_value）
+    ///
+    /// 返回前，如果 pin 有已推断的具体类型，自动将值强制转换以保证类型一致。
     pub fn resolve_pin_value(&self, pin_id: PinId) -> Option<DataValue> {
         let pin_instance = self.get_pin_instance_by_pin_id(pin_id)?;
         
         // 1. 检查上游连接值（最高优先级）
-        if let Some(upstream_pin_id) = self.get_upstream_by_pin_id(pin_id) {
-            // 递归解析上游 pin 的值（这样可以处理多层连接和常量节点）
-            if let Some(upstream_value) = self.resolve_pin_value(upstream_pin_id) {
-                return Some(upstream_value);
-            }
-        }
-        
+        let raw_value = if let Some(upstream_pin_id) = self.get_upstream_by_pin_id(pin_id) {
+            self.resolve_pin_value(upstream_pin_id)
+        } else {
+            None
+        };
+
         // 2. 检查运行时值
-        if let Some(pin_runtime_state) = self.pins_runtime_state.get(&pin_id) {
-            if let Some(current_value) = &pin_runtime_state.current_value {
-                return Some(current_value.clone());
-            }
-        }
-        
+        let raw_value = raw_value.or_else(|| {
+            self.pins_runtime_state
+                .get(&pin_id)
+                .and_then(|s| s.current_value.clone())
+        });
+
         // 3. 检查用户值
-        if let Some(user_value) = &pin_instance.user_value {
-            return Some(user_value.clone());
-        }
-        
+        let raw_value = raw_value.or_else(|| pin_instance.user_value.clone());
+
         // 4. 检查默认值
-        if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
-            if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
-                return Some(data_type.default_value());
+        let raw_value = raw_value.or_else(|| {
+            if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
+                if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
+                    return Some(data_type.default_value());
+                }
             }
-        }
-        
-        None
+            None
+        });
+
+        // 5. 类型强制转换：根据 pin 的推断类型自动转换值
+        raw_value.map(|v| {
+            if let Some(pin_type) = self.graph_instance.get_pin_data_type_by_pin_id(pin_id) {
+                if pin_type != crate::graph::DataType::Any {
+                    return v.coerce_to(&pin_type);
+                }
+            }
+            v
+        })
     }
 
     // ========================================================================

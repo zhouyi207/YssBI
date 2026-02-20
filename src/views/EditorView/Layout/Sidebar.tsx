@@ -11,7 +11,7 @@ import {
   VscListUnordered
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { PIN_COLORS, buildSidebarDragData, buildColumnDragData } from "@/features/domain/sidebar";
+import { PIN_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
 import { dataTypeKind, dataTypeDisplay } from "@/shared/types/domain/dataType";
 
 /**
@@ -294,24 +294,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   {renderItem(id, String((data as { name?: unknown }).name ?? ''), 'data', data)}
                   {expandedDataFrames[id] && (data as { columns?: unknown[] }).columns && (
                     <div className="ml-6 mt-1 border-l border-white/10 space-y-0.5">
-                      {((data as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, idx) => {
-                        const columnDragData = buildColumnDragData(id, idx, col);
-
-                        return (
-                          <SidebarDraggableItem
-                            key={`${id}-col-${idx}`}
-                            id={`${id}-col-${idx}`}
-                            dragData={columnDragData}
-                            className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded cursor-grab text-[11px] text-gray-400 group/col"
-                          >
-                            <VscListUnordered size={10} className="opacity-40" />
-                            <span className="flex-1 truncate">{col.name}</span>
-                            <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
-                              {col.type.replace("Owned", "")}
-                            </span>
-                          </SidebarDraggableItem>
-                        );
-                      })}
+                      {((data as { columns?: Array<{ name: string; type: string }> }).columns ?? []).map((col, idx) => (
+                        <div
+                          key={`${id}-col-${idx}`}
+                          className="flex items-center gap-2 p-1 pl-2 hover:bg-white/5 rounded text-[11px] text-gray-400 group/col"
+                        >
+                          <VscListUnordered size={10} className="opacity-40" />
+                          <span className="flex-1 truncate">{col.name}</span>
+                          <span className="text-[8px] opacity-0 group-hover/col:opacity-100 transition-opacity bg-white/5 px-1 rounded uppercase">
+                            {col.type.replace("Owned", "")}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

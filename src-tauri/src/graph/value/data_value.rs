@@ -52,6 +52,12 @@ impl DataValue {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             DataValue::Boolean(b) => Some(*b),
+            DataValue::Int32(n) => Some(*n != 0),
+            DataValue::Int64(n) => Some(*n != 0),
+            DataValue::Float32(n) => Some(*n != 0.0),
+            DataValue::Float64(n) => Some(*n != 0.0),
+            DataValue::String(s) => Some(!s.is_empty()),
+            DataValue::Null => Some(false),
             _ => None,
         }
     }
@@ -59,6 +65,10 @@ impl DataValue {
     pub fn as_i32(&self) -> Option<i32> {
         match self {
             DataValue::Int32(i) => Some(*i),
+            DataValue::Int64(i) => Some(*i as i32),
+            DataValue::Float32(f) => Some(*f as i32),
+            DataValue::Float64(f) => Some(*f as i32),
+            DataValue::Boolean(b) => Some(if *b { 1 } else { 0 }),
             _ => None,
         }
     }
@@ -74,6 +84,10 @@ impl DataValue {
     pub fn as_f32(&self) -> Option<f32> {
         match self {
             DataValue::Float32(f) => Some(*f),
+            DataValue::Float64(f) => Some(*f as f32),
+            DataValue::Int32(i) => Some(*i as f32),
+            DataValue::Int64(i) => Some(*i as f32),
+            DataValue::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
             _ => None,
         }
     }
@@ -92,6 +106,54 @@ impl DataValue {
         match self {
             DataValue::String(s) => Some(s),
             _ => None,
+        }
+    }
+
+    /// 将值强制转换为目标类型。
+    /// 如果转换失败（类型不兼容），返回原值不变。
+    pub fn coerce_to(&self, target: &DataType) -> DataValue {
+        if let Some(my_type) = self.value_type() {
+            if my_type == *target {
+                return self.clone();
+            }
+        }
+
+        match target {
+            DataType::Boolean => self
+                .as_bool()
+                .map(DataValue::Boolean)
+                .unwrap_or_else(|| self.clone()),
+            DataType::Int32 => self
+                .as_i32()
+                .map(DataValue::Int32)
+                .unwrap_or_else(|| self.clone()),
+            DataType::Int64 => self
+                .as_i64()
+                .map(DataValue::Int64)
+                .unwrap_or_else(|| self.clone()),
+            DataType::Float32 => self
+                .as_f32()
+                .map(DataValue::Float32)
+                .unwrap_or_else(|| self.clone()),
+            DataType::Float64 => self
+                .as_f64()
+                .map(DataValue::Float64)
+                .unwrap_or_else(|| self.clone()),
+            DataType::String => {
+                let s = match self {
+                    DataValue::String(s) => return DataValue::String(s.clone()),
+                    DataValue::Boolean(b) => b.to_string(),
+                    DataValue::Int32(n) => n.to_string(),
+                    DataValue::Int64(n) => n.to_string(),
+                    DataValue::Float32(n) => n.to_string(),
+                    DataValue::Float64(n) => n.to_string(),
+                    DataValue::Null => "null".to_string(),
+                    _ => return self.clone(),
+                };
+                DataValue::String(s)
+            }
+            DataType::Any => self.clone(),
+            _ => self.clone(),
         }
     }
 }

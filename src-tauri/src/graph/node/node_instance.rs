@@ -15,45 +15,89 @@ pub struct NodeCreationResult {
     pub pins: Vec<PinInstance>,
 }
 
-/// 节点实例参数（用于 variable、function、macro、dataframe 等需要运行时绑定的节点）
+/// 节点实例参数（Tagged Enum）
 ///
-/// 新增参数只需在此处添加字段，`NodeInstanceDTO` 通过 `#[serde(flatten)]` 自动展开。
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NodeInstanceParams {
-    /// 变量节点：绑定的变量 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variable_id: Option<String>,
-    /// 变量节点：变量名称（用于 UI 显示）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variable_name: Option<String>,
-    /// 变量节点：变量类型（用于 UI 显示）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variable_type: Option<String>,
-    /// 函数/宏调用节点：子图 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_graph_id: Option<String>,
-    /// DataFrame 节点：数据帧 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dataframe_id: Option<String>,
-    /// Get Column 节点：列名
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub column_name: Option<String>,
-    /// Get Column 节点：列类型
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub column_type: Option<String>,
+/// 每种参数化节点类型对应一个变体，编译期保证类型安全。
+/// 通过 `#[serde(tag = "paramsKind")]` + `#[serde(flatten)]` 展开到 DTO JSON 顶层。
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "paramsKind", rename_all = "camelCase")]
+pub enum NodeInstanceParams {
+    /// 无特殊参数的节点
+    #[serde(rename = "none")]
+    None,
+
+    /// 变量节点（get_variable / set_variable）
+    #[serde(rename = "variable")]
+    Variable {
+        variable_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        variable_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        variable_type: Option<String>,
+    },
+
+    /// 函数/宏调用节点（call_function / call_macro）
+    #[serde(rename = "subGraph")]
+    SubGraph {
+        sub_graph_id: String,
+    },
+
+    /// DataFrame 节点（get_dataframe）
+    #[serde(rename = "dataFrame")]
+    DataFrame {
+        dataframe_id: String,
+    },
+}
+
+impl Default for NodeInstanceParams {
+    fn default() -> Self {
+        NodeInstanceParams::None
+    }
 }
 
 impl NodeInstanceParams {
-    /// 所有字段都是 None 时返回 true
     pub fn is_empty(&self) -> bool {
-        self.variable_id.is_none()
-            && self.variable_name.is_none()
-            && self.variable_type.is_none()
-            && self.sub_graph_id.is_none()
-            && self.dataframe_id.is_none()
-            && self.column_name.is_none()
-            && self.column_type.is_none()
+        matches!(self, NodeInstanceParams::None)
+    }
+
+    /// 便捷方法：获取 variable_id（仅 Variable 变体）
+    pub fn variable_id(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::Variable { variable_id, .. } => Some(variable_id),
+            _ => Option::None,
+        }
+    }
+
+    /// 便捷方法：获取 variable_name（仅 Variable 变体）
+    pub fn variable_name(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::Variable { variable_name, .. } => variable_name.as_deref(),
+            _ => Option::None,
+        }
+    }
+
+    /// 便捷方法：获取 variable_type（仅 Variable 变体）
+    pub fn variable_type(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::Variable { variable_type, .. } => variable_type.as_deref(),
+            _ => Option::None,
+        }
+    }
+
+    /// 便捷方法：获取 sub_graph_id（仅 SubGraph 变体）
+    pub fn sub_graph_id(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::SubGraph { sub_graph_id } => Some(sub_graph_id),
+            _ => Option::None,
+        }
+    }
+
+    /// 便捷方法：获取 dataframe_id（仅 DataFrame 变体）
+    pub fn dataframe_id(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::DataFrame { dataframe_id } => Some(dataframe_id),
+            _ => Option::None,
+        }
     }
 }
 

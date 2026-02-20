@@ -14,7 +14,10 @@ export interface NodePositionDTO {
   y: number;
 }
 
-/** 后端 NodeInstanceDTO 对应（camelCase） */
+/** Tagged enum 判别字段 */
+export type ParamsKind = 'none' | 'variable' | 'subGraph' | 'dataFrame';
+
+/** 后端 NodeInstanceDTO 对应（camelCase），instance_params 通过 flatten 展开到顶层 */
 export interface NodeInstanceDTO {
   id: string;
   nodeType: string;
@@ -25,17 +28,16 @@ export interface NodeInstanceDTO {
   uiStyle: string;
   description?: string;
   position: NodePositionDTO;
-  /** 变量节点：绑定的变量 ID */
+  /** 参数类型判别字段 */
+  paramsKind: ParamsKind;
+  /** Variable 变体 */
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  /** 函数/宏调用节点：子图 ID */
+  /** SubGraph 变体 */
   subGraphId?: string;
-  /** DataFrame 节点：数据帧 ID */
+  /** DataFrame 变体 */
   dataframeId?: string;
-  /** Get Column 节点：列名、列类型 */
-  columnName?: string;
-  columnType?: string;
 }
 
 // ==================== Pin DTO ====================

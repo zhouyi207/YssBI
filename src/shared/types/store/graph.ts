@@ -25,16 +25,13 @@ export interface NodeData {
   position: { x: number; y: number };
   /** 以下为 UI 扩展字段 */
   isInternal?: boolean;
+  /** 参数类型判别 */
+  paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
   variableId?: string;
   variableName?: string;
   variableType?: string;
   subGraphId?: string;
-  /** DataFrame 节点：数据帧 ID */
   dataframeId?: string;
-  /** Get Column 节点：列名 */
-  columnName?: string;
-  /** Get Column 节点：列类型 */
-  columnType?: string;
 }
 
 // ==================== PinData ====================
@@ -85,13 +82,12 @@ export interface RuntimeNodeInput {
   uiStyle?: string;
   description?: string;
   isInternal?: boolean;
+  paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
   variableId?: string;
   variableName?: string;
   variableType?: string;
   subGraphId?: string;
   dataframeId?: string;
-  columnName?: string;
-  columnType?: string;
 }
 
 /** 图数据输入（addGraphFromData 等接受 nodes 含 Pin 对象的格式） */

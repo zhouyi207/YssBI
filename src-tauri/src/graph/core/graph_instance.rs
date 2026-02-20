@@ -149,7 +149,7 @@ impl GraphInstance {
         // 根据 instance_params 中的类型信息设置数据 pin 的具体类型
         let variable_data_type = params
             .as_ref()
-            .and_then(|p| p.variable_type.as_deref())
+            .and_then(|p| p.variable_type())
             .and_then(|vt| vt.parse::<DataType>().ok());
 
         {
@@ -628,7 +628,7 @@ impl GraphInstance {
     ) -> Option<DataSchema> {
         match node_type {
             "get_dataframe" => {
-                let df_id = params.dataframe_id.as_deref()?;
+                let df_id = params.dataframe_id()?;
                 let provider = self.schema_provider.as_ref()?;
                 provider(df_id)
             }

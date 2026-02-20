@@ -105,8 +105,6 @@ export function useEditorOperations() {
         if (n.variableType) params.variableType = n.variableType;
         if (n.subGraphId) params.subGraphId = n.subGraphId;
         if (n.dataframeId) params.dataframeId = n.dataframeId;
-        if (n.columnName) params.columnName = n.columnName;
-        if (n.columnType) params.columnType = n.columnType;
 
         return {
           nodeType: n.nodeType,

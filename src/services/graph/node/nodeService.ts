@@ -31,17 +31,16 @@ export class NodeService {
             variableType?: string;
             subGraphId?: string;
             dataframeId?: string;
-            columnName?: string;
-            columnType?: string;
         }
     ): Promise<string> {
         console.log('[NodeService.createNode] Creating node:', { subgraphId, nodeType, x, y, params });
+        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
         const nodeId = await invoke<string>("create_node", { 
             graphId: subgraphId, 
             nodeType: nodeType,
             x: x !== undefined ? x : null,
             y: y !== undefined ? y : null,
-            params: params ?? null,
+            params: taggedParams,
         });
         console.log('[NodeService.createNode] Node created successfully, ID:', nodeId);
         return nodeId;
@@ -62,8 +61,6 @@ export class NodeService {
                 variableType?: string;
                 subGraphId?: string;
                 dataframeId?: string;
-                columnName?: string;
-                columnType?: string;
             };
         }>
     ): Promise<string[]> {
@@ -74,7 +71,7 @@ export class NodeService {
                 nodeType: r.nodeType,
                 x: r.x ?? null,
                 y: r.y ?? null,
-                params: r.params ?? null,
+                params: r.params ? NodeService.buildTaggedParams(r.params) : null,
             })),
         });
     }
@@ -105,6 +102,30 @@ export class NodeService {
     ): Promise<void> {
         if (updates.length === 0) return;
         await invoke("update_node_positions", { graphId, updates });
+    }
+
+    private static buildTaggedParams(params: {
+        variableId?: string;
+        variableName?: string;
+        variableType?: string;
+        subGraphId?: string;
+        dataframeId?: string;
+    }): Record<string, unknown> {
+        if (params.variableId) {
+            return {
+                paramsKind: 'variable',
+                variableId: params.variableId,
+                variableName: params.variableName,
+                variableType: params.variableType,
+            };
+        }
+        if (params.subGraphId) {
+            return { paramsKind: 'subGraph', subGraphId: params.subGraphId };
+        }
+        if (params.dataframeId) {
+            return { paramsKind: 'dataFrame', dataframeId: params.dataframeId };
+        }
+        return { paramsKind: 'none' };
     }
 
 }

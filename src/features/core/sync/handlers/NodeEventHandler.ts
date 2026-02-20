@@ -43,13 +43,12 @@ function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): Nod
         uiStyle: d.uiStyle ?? 'default',
         description: d.description,
         position: d.position ?? { x: 0, y: 0 },
+        paramsKind: d.paramsKind ?? 'none',
         variableId: d.variableId,
         variableName: d.variableName,
         variableType: d.variableType,
         subGraphId: d.subGraphId,
         dataframeId: d.dataframeId,
-        columnName: d.columnName,
-        columnType: d.columnType,
     };
 }
 

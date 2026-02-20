@@ -45,8 +45,6 @@ export function useNodeManagement() {
                 variableType?: string;
                 subGraphId?: string;
                 dataframeId?: string;
-                columnName?: string;
-                columnType?: string;
             }
         ): Promise<void> => {
             if (!activeTabId) {

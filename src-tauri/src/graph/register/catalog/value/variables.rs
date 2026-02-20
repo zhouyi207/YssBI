@@ -27,8 +27,7 @@ fn register_get_variable(registry: &NodeRegistry) {
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
             let variable_id = params
-                .variable_id
-                .as_deref()
+                .variable_id()
                 .ok_or("Get Variable: variable_id not set")?;
 
             let value = ctx.get_variable_value(variable_id)?;
@@ -72,8 +71,7 @@ fn register_set_variable(registry: &NodeRegistry) {
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
             let variable_id = params
-                .variable_id
-                .as_deref()
+                .variable_id()
                 .ok_or("Set Variable: variable_id not set")?;
 
             let value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;

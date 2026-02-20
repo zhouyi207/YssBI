@@ -71,9 +71,8 @@ fn test_dataframe_pipeline_iris_mean() {
             "get_dataframe",
             0.0,
             0.0,
-            Some(NodeInstanceParams {
-                dataframe_id: Some("iris_dataset".to_string()),
-                ..Default::default()
+            Some(NodeInstanceParams::DataFrame {
+                dataframe_id: "iris_dataset".to_string(),
             }),
         )
         .expect("Failed to create Get DataFrame node");

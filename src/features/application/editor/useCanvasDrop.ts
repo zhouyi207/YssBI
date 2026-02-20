@@ -121,19 +121,13 @@ export function useCanvasDrop({
       const x = (screenX - currentCanvas.x) / currentCanvas.scale;
       const y = (screenY - currentCanvas.y) / currentCanvas.scale;
 
-      // DataFrame / Column 拖放
+      // DataFrame 拖放
       if (dragState.template.category === "Data") {
         const nodeType = dragState.template.nodeType;
-        const params = nodeType === "get_column"
-          ? {
-              dataframeId: dragState.template.initialData?.dataframeId,
-              columnName: dragState.template.initialData?.columnName,
-              columnType: dragState.template.initialData?.columnType,
-            }
-          : {
-              dataframeId: dragState.template.variableId,
-              variableName: dragState.template.variableName,
-            };
+        const params = {
+          dataframeId: dragState.template.variableId,
+          variableName: dragState.template.variableName,
+        };
         await createNode(nodeType, { x, y }, params);
         return;
       }

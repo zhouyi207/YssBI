@@ -84,8 +84,7 @@ pub fn update_variable(
             for node in data_state.nodes.values() {
                 let refs_this_var = node
                     .instance_params
-                    .variable_id
-                    .as_deref()
+                    .variable_id()
                     == Some(&var_id_str);
                 if !refs_this_var {
                     continue;
@@ -113,7 +112,7 @@ pub fn update_variable(
             let nodes_to_update: Vec<_> = data_state
                 .nodes
                 .values()
-                .filter(|n| n.instance_params.variable_id.as_deref() == Some(&var_id_str))
+                .filter(|n| n.instance_params.variable_id() == Some(&var_id_str))
                 .map(|n| n.id)
                 .collect();
 
@@ -128,13 +127,18 @@ pub fn update_variable(
                 }
                 for nid in &nodes_to_update {
                     if let Some(node) = data_state.nodes.get_mut(nid) {
-                        if type_changed {
-                            node.instance_params.variable_type =
-                                Some(new_data_type.to_string());
-                        }
-                        if name_changed {
-                            node.instance_params.variable_name =
-                                Some(new_name.clone());
+                        if let crate::graph::NodeInstanceParams::Variable {
+                            ref mut variable_type,
+                            ref mut variable_name,
+                            ..
+                        } = node.instance_params
+                        {
+                            if type_changed {
+                                *variable_type = Some(new_data_type.to_string());
+                            }
+                            if name_changed {
+                                *variable_name = Some(new_name.clone());
+                            }
                         }
                     }
                 }

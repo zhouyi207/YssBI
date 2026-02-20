@@ -14,7 +14,7 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 /// Get DataSeries 节点 - 从 DataFrame 按列名提取一列作为 DataSeries
-/// 通过 instance_params.dataframe_id + column_name 绑定
+/// 列名通过 String 类型的 Pin 输入（可内联编辑或从上游连接动态获取）
 fn register_get_dataseries(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataSeries", vec!["Data".to_string()])
         .with_node_type("get_dataseries")
@@ -27,6 +27,11 @@ fn register_get_dataseries(registry: &NodeRegistry) {
                     DataRole::Input,
                     PinDataTypeDefinition::concrete(DataType::DataFrame),
                 ),
+                PinDefinition::data_input(
+                    "Column Name",
+                    DataRole::Custom("column_name".to_string()),
+                    PinDataTypeDefinition::concrete(DataType::String),
+                ),
                 PinDefinition::data_output(
                     "Series",
                     DataRole::Output,
@@ -35,11 +40,11 @@ fn register_get_dataseries(registry: &NodeRegistry) {
             ])
         }))
         .with_data_evaluator(Arc::new(|ctx| {
-            let params = ctx.get_instance_params();
-            let column_name = params
-                .column_name
-                .as_deref()
-                .ok_or("Get DataSeries: column_name not set")?;
+            let col_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("column_name".to_string())))?;
+            let column_name = match &col_value {
+                DataValue::String(s) => s.clone(),
+                _ => return Err("Get DataSeries: Column Name must be a String".to_string()),
+            };
 
             let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
             let df_id = match &df_value {
@@ -49,7 +54,7 @@ fn register_get_dataseries(registry: &NodeRegistry) {
 
             let df = ctx.get_dataframe(&df_id)?;
             let series = df
-                .column(column_name)
+                .column(&column_name)
                 .map_err(|e| format!("Get DataSeries: {}", e))?
                 .clone()
                 .take_materialized_series();

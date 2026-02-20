@@ -1,2 +1,2 @@
 export { PIN_COLORS } from "./constants";
-export { buildSidebarDragData, buildColumnDragData } from "./hooks/useSidebarDragData";
+export { buildSidebarDragData } from "./hooks/useSidebarDragData";

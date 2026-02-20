@@ -57,22 +57,3 @@ export function buildSidebarDragData(
   return null;
 }
 
-export function buildColumnDragData(
-  dataframeId: string,
-  _columnIndex: number,
-  col: { name: string; type: string }
-) {
-  return {
-    type: "node-template",
-    template: {
-      nodeType: "get_column",
-      category: "Data",
-      title: `Get ${col.name}`,
-      initialData: {
-        columnName: col.name,
-        columnType: col.type,
-        dataframeId,
-      },
-    },
-  };
-}

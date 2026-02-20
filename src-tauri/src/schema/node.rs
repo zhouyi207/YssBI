@@ -27,25 +27,15 @@ impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
         let p = &value.instance_params;
         let title = match value.definition.node_type.as_str() {
-            "get_variable" => p
-                .variable_name
-                .as_deref()
-                .map(|n| format!("Get {}", n))
-                .unwrap_or_else(|| value.definition.name.clone()),
-            "set_variable" => p
-                .variable_name
-                .as_deref()
-                .map(|n| format!("Set {}", n))
-                .unwrap_or_else(|| value.definition.name.clone()),
+            "get_variable" | "set_variable" => {
+                let prefix = if value.definition.node_type == "get_variable" { "Get" } else { "Set" };
+                p.variable_name()
+                    .map(|n| format!("{} {}", prefix, n))
+                    .unwrap_or_else(|| value.definition.name.clone())
+            }
             "get_dataframe" => p
-                .variable_name
-                .as_deref()
-                .map(|n| format!("Get {}", n))
-                .unwrap_or_else(|| value.definition.name.clone()),
-            "get_column" => p
-                .column_name
-                .as_deref()
-                .map(|n| format!("Get {}", n))
+                .dataframe_id()
+                .map(|_| value.definition.name.clone())
                 .unwrap_or_else(|| value.definition.name.clone()),
             _ => value.definition.name.clone(),
         };
