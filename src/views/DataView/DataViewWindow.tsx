@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { DatabaseService } from '@/services/database/databaseService';
 import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectSync } from '@/features/application/initialization';
@@ -249,10 +250,11 @@ export const DataViewWindow: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div
+      <OverlayScrollbar
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
+        className="flex-1 bg-[var(--workbench-bg)]"
+        direction="both"
       >
         {selectedDf ? (
           <div className="min-w-full inline-block align-middle">
@@ -307,7 +309,7 @@ export const DataViewWindow: React.FC = () => {
             </span>
           </div>
         )}
-      </div>
+      </OverlayScrollbar>
     </div>
   );
 };

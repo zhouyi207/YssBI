@@ -8,6 +8,7 @@ import { UIHost } from "@/shared/ui";
 import { useProjectSyncWithEditor } from "@/features/application/initialization";
 import { useEditorGroup } from "@/features/application/editor";
 import { useEditorKeyboard } from "@/features/application/editor";
+import { useMenubar } from "@/features/application/menubar";
 
 
 export const EditorWindow = () => {
@@ -19,6 +20,7 @@ export const EditorWindow = () => {
 
     // 全局键盘快捷键（Ctrl+C/V/Z/Y 等），粘贴时使用鼠标位置
     const editor = useEditorGroup();
+    const { toggleLogPanel } = useMenubar();
     useEditorKeyboard({
         deleteSelected: editor.deleteSelected,
         undo: editor.undo,
@@ -33,6 +35,7 @@ export const EditorWindow = () => {
         closeTab: editor.closeTab,
         setActiveTabId: editor.setActiveTabId,
         splitEditorRight: editor.splitEditorRight,
+        toggleLogPanel,
     });
 
 

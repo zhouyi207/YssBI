@@ -5,6 +5,7 @@ import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import { SettingsService } from "@/services/settings/settingsService";
 import { DEFAULT_WINDOW } from "@/app/appConfig/default";
+import { uiStore } from "@/features/core/ui/UIStore";
 
 /**
  * Menubar logic: window lifecycle, import, split, open windows, etc.
@@ -15,9 +16,11 @@ export function useMenubar() {
   const activeEditorGroupId = useLayoutStore((s) => s.activeEditorGroupId);
   const splitNode = useLayoutStore((s) => s.splitNode);
   const detailNode = useLayoutStore((s) => s.nodes["detail"]);
+  const panelNode = useLayoutStore((s) => s.nodes["panel"]);
   const updateNode = useLayoutStore((s) => s.updateNode);
 
   const isDetailVisible = detailNode?.data?.visible !== false;
+  const isLogPanelVisible = panelNode?.data?.visible !== false;
 
   useEffect(() => {
     const appWindow = getCurrentWindow();
@@ -127,6 +130,12 @@ export function useMenubar() {
     });
   }, [detailNode, isDetailVisible, updateNode]);
 
+  const toggleLogPanel = useCallback(() => {
+    updateNode("panel", {
+      data: { ...panelNode?.data, visible: !isLogPanelVisible },
+    });
+  }, [panelNode, isLogPanelVisible, updateNode]);
+
   const openNewWindow = useCallback(async () => {
     try {
       const label = `window-${Math.random().toString(36).substring(7)}`;
@@ -145,12 +154,14 @@ export function useMenubar() {
   return {
     openSettings,
     isDetailVisible,
+    isLogPanelVisible,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
     handleDataView,
     handleOpenLogs,
     toggleDetail,
+    toggleLogPanel,
     openNewWindow,
   };
 }

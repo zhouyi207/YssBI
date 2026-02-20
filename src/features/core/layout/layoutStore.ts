@@ -38,38 +38,53 @@ export interface LayoutState {
     setAltPressed: (pressed: boolean) => void;
 }
 
-// Initial Layout Structure
+// Initial Layout Structure (VSCode-style: sidebar | center(editor+panel) | detail)
 const INITIAL_ROOT_ID = 'root';
 const INITIAL_NODES: LayoutTree = {
     [INITIAL_ROOT_ID]: {
         id: INITIAL_ROOT_ID,
         type: 'row',
         parentId: null,
-        children: ['sidebar', 'main', 'detail'],
+        children: ['sidebar', 'center', 'detail'],
     },
     'sidebar': {
         id: 'sidebar',
         type: 'component',
         parentId: INITIAL_ROOT_ID,
-        pixelSize: 260, // Default width
-        minSize: 240,     // Allow collapsing to 0
+        pixelSize: 260,
+        minSize: 240,
         data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'graphs' },
     },
-    'main': {
-        id: 'main',
-        type: 'row',
+    'center': {
+        id: 'center',
+        type: 'col',
         parentId: INITIAL_ROOT_ID,
+        children: ['editor_area', 'panel'],
+        size: 1,
+    },
+    'editor_area': {
+        id: 'editor_area',
+        type: 'row',
+        parentId: 'center',
         children: ['default_editor'],
-        size: 1, // Flex grow
+        size: 1,
     },
     'default_editor': {
         id: 'default_editor',
         type: 'component',
-        parentId: 'main',
+        parentId: 'editor_area',
         data: {
             component: 'GraphEditor',
             tabs: []
         },
+    },
+    'panel': {
+        id: 'panel',
+        type: 'component',
+        parentId: 'center',
+        pixelSize: 200,
+        minSize: 80,
+        data: { component: 'LogPanel', visible: true, title: 'Logs', isFixed: true },
     },
     'detail': {
         id: 'detail',

@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -86,6 +86,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   getFilteredLogs: () => {
     const { logs, filter } = get();
+    if (!Array.isArray(logs) || !filter?.levels || !filter?.types) return [];
     return logs.filter((log) => {
       // 过滤级别
       if (!filter.levels.has(log.level)) return false;
@@ -106,21 +107,27 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
   
   // 加载日志（从文件）
+  // 后端 get_logs 返回 Vec<LogMessage>（数组），非 { logs, total, has_more }
   loadLogs: async (offset: number, limit: number) => {
     set({ loading: true });
     try {
-      const response = await invoke<{
-        logs: LogMessage[];
-        total: number;
-        offset: number;
-        limit: number;
-        has_more: boolean;
-      }>('get_logs', { offset, limit });
-      
+      const response = await invoke<unknown>('get_logs', { offset, limit });
+      const logs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      let total = logs.length;
+      let hasMore = logs.length >= limit;
+      try {
+        const count = await invoke<number>('get_log_count');
+        if (typeof count === 'number') {
+          total = count;
+          hasMore = offset + logs.length < total;
+        }
+      } catch {
+        // get_log_count 失败时使用默认值
+      }
       set({
-        logs: response.logs,
-        total: response.total,
-        hasMore: response.has_more,
+        logs,
+        total,
+        hasMore,
         loading: false,
       });
     } catch (error) {
@@ -136,22 +143,24 @@ export const useLogStore = create<LogStore>((set, get) => ({
     
     set({ loading: true });
     try {
-      // offset 是从末尾开始的偏移量，当前已加载的数量就是 offset
-      const offset = logs.length;
-      
-      const response = await invoke<{
-        logs: LogMessage[];
-        total: number;
-        offset: number;
-        limit: number;
-        has_more: boolean;
-      }>('get_logs', { offset, limit: 50 });
-      
+      const offset = Array.isArray(logs) ? logs.length : 0;
+      const response = await invoke<unknown>('get_logs', { offset, limit: 50 });
+      const newLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      let total = offset + newLogs.length;
+      let hasMoreResult = newLogs.length >= 50;
+      try {
+        const count = await invoke<number>('get_log_count');
+        if (typeof count === 'number') {
+          total = count;
+          hasMoreResult = offset + newLogs.length < total;
+        }
+      } catch {
+        // 使用默认值
+      }
       set((state) => ({
-        // 将新加载的日志插入到列表开头（因为它们是更早的日志）
-        logs: [...response.logs, ...state.logs],
-        total: response.total,
-        hasMore: response.has_more,
+        logs: [...newLogs, ...(Array.isArray(state.logs) ? state.logs : [])],
+        total,
+        hasMore: hasMoreResult,
         loading: false,
       }));
     } catch (error) {

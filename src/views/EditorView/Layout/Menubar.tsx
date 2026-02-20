@@ -1,8 +1,10 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEditorGroup } from "@/features/application/editor";
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
+
+const CLOSE_DELAY_MS = 250;
 
 interface MenuItem {
   label: string;
@@ -11,23 +13,64 @@ interface MenuItem {
   type?: 'item' | 'separator';
 }
 
-const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
-  const [isOpen, setIsOpen] = useState(false);
+interface MenuButtonProps {
+  id: string;
+  label: string;
+  items: MenuItem[];
+  activeMenuId: string | null;
+  setActiveMenuId: (id: string | null) => void;
+}
+
+const MenuButton = ({ id, label, items, activeMenuId, setActiveMenuId }: MenuButtonProps) => {
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isOpen = activeMenuId === id;
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null;
+      setActiveMenuId((prev) => (prev === id ? null : prev));
+    }, CLOSE_DELAY_MS);
+  }, [id, setActiveMenuId, clearCloseTimer]);
+
+  const handleEnter = useCallback(() => {
+    clearCloseTimer();
+    setActiveMenuId(id);
+  }, [id, setActiveMenuId, clearCloseTimer]);
+
+  const handleItemClick = useCallback(
+    (item: MenuItem) => {
+      if (item.onClick) {
+        item.onClick();
+        setActiveMenuId(null);
+      }
+    },
+    [setActiveMenuId]
+  );
+
+  useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
 
   return (
     <div className="relative group">
       <button
-        onMouseEnter={() => setIsOpen(true)}
-        onMouseLeave={() => setIsOpen(false)}
+        onMouseEnter={handleEnter}
+        onMouseLeave={scheduleClose}
         className="px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-[var(--sidebar-bg)] rounded transition-colors"
       >
         {label}
       </button>
       {isOpen && (
         <div
-          onMouseEnter={() => setIsOpen(true)}
-          onMouseLeave={() => setIsOpen(false)}
-          className="absolute left-0 top-full min-w-[180px] w-max bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-2xl py-1 z-50 backdrop-blur-sm"
+          onMouseEnter={handleEnter}
+          onMouseLeave={scheduleClose}
+          className="absolute left-0 top-full -mt-px min-w-[180px] w-max bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-2xl py-1 z-[200] backdrop-blur-sm"
         >
           {items.map((item, i) => {
             if (item.type === 'separator' || item.label === '-') {
@@ -39,12 +82,7 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
             return (
               <div
                 key={i}
-                onClick={() => {
-                  if (item.onClick) {
-                    item.onClick();
-                    setIsOpen(false);
-                  }
-                }}
+                onClick={() => handleItemClick(item)}
                 className={`px-3 py-1.5 text-[11px] flex items-center justify-between transition-colors whitespace-nowrap gap-10 ${!isDisabled
                   ? "text-gray-300 hover:bg-[var(--accent-color)] hover:text-white cursor-pointer"
                   : "text-gray-600 cursor-default"
@@ -66,6 +104,8 @@ const MenuButton = ({ label, items }: { label: string; items: MenuItem[] }) => {
 };
 
 export function Menubar() {
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   const {
     saveGraphAs,
     importGraph,
@@ -87,12 +127,14 @@ export function Menubar() {
   const {
     openSettings,
     isDetailVisible,
+    isLogPanelVisible,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
     handleDataView,
     handleOpenLogs,
     toggleDetail,
+    toggleLogPanel,
     openNewWindow,
   } = useMenubar();
 
@@ -132,7 +174,8 @@ export function Menubar() {
     { label: "Split Editor Right", onClick: handleSplitRight },
     { label: "Split Editor Down", onClick: handleSplitDown },
     { label: "-" },
-    { label: "Logs", onClick: handleOpenLogs },
+    { label: isLogPanelVisible ? "Hide Logs" : "Show Logs", shortcut: "Ctrl+`", onClick: toggleLogPanel },
+    { label: "Open Logs in New Window", onClick: handleOpenLogs },
     { label: "-" },
     { label: "Reset Layout" },
     { label: "Zoom In", shortcut: "Ctrl++" },
@@ -154,7 +197,7 @@ export function Menubar() {
 
   return (
     <div
-      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none"
+      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-[200] shadow-xl select-none"
       onWheel={(e) => e.stopPropagation()}
       data-tauri-drag-region
     >
@@ -170,12 +213,12 @@ export function Menubar() {
 
       {/* Center Left: Menus */}
       <div className="flex items-center gap-1">
-        <MenuButton label="File" items={fileItems} />
-        <MenuButton label="Edit" items={editItems} />
-        <MenuButton label="Data" items={dataItems} />
-        <MenuButton label="Window" items={windowItems} />
-        <MenuButton label="Tools" items={toolItems} />
-        <MenuButton label="Help" items={helpItems} />
+        <MenuButton id="file" label="File" items={fileItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
+        <MenuButton id="edit" label="Edit" items={editItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
+        <MenuButton id="data" label="Data" items={dataItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
+        <MenuButton id="window" label="Window" items={windowItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
+        <MenuButton id="tools" label="Tools" items={toolItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
+        <MenuButton id="help" label="Help" items={helpItems} activeMenuId={activeMenuId} setActiveMenuId={setActiveMenuId} />
       </div>
 
       <div className="flex-1 min-w-[20px]" data-tauri-drag-region />

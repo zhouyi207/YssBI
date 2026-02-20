@@ -1,6 +1,7 @@
-﻿import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
@@ -18,7 +19,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     splitNode, 
     removeNode, 
     setActiveGroup, 
-    isActiveGroup, 
     isAltPressed, 
     isDragging 
   } = useLayoutStore(useShallow(s => ({
@@ -26,7 +26,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     splitNode: s.splitNode,
     removeNode: s.removeNode,
     setActiveGroup: s.setActiveGroup,
-    isActiveGroup: s.activeGroupId === layoutNodeId,
     isAltPressed: s.isAltPressed,
     isDragging: s.isDragging,
   })));
@@ -125,52 +124,63 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   return (
     <div 
       ref={setDropRef}
-      className={`flex items-center border-b h-9 w-full shrink-0 select-none overflow-hidden ${isActiveGroup ? 'bg-[var(--workbench-bg)] border-[#3e3e3e]' : 'bg-[#252526] border-transparent'}`}
+      className="flex items-center border-b w-full shrink-0 select-none overflow-hidden bg-[var(--workbench-bg)] border-[#3e3e3e]"
+      style={{ height: 'var(--titlebar-height)' }}
     >
-      <div 
-        ref={containerRef} 
-        className={`relative flex-1 flex items-start h-full ${isDragging ? 'overflow-hidden' : 'tab-scrollbar'}`}
-      >
-        {tabs.map((tab, index) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            index={index}
-            layoutNodeId={layoutNodeId}
-            isActive={activeTabId === tab.id}
-            isActiveGroup={isActiveGroup}
-            onClick={() => handleTabClick(tab.id)}
-            onClose={(e) => handleCloseTab(tab.id, e)}
-            onDragOver={(index) => setDropIndicatorIndex(index)}
-          />
-        ))}
-        
-        {/* 拖动插入位置指示器（Sash） */}
-        {dropIndicatorIndex !== null && isDragging && (
-          <div 
-            className="absolute top-0 bottom-0 w-0.5 bg-[var(--accent-color)] z-50 pointer-events-none"
-            style={{
-              left: (() => {
-                const container = containerRef.current;
-                if (!container) return 0;
-                const tabElement = container.children[dropIndicatorIndex] as HTMLElement;
-                if (!tabElement) {
-                  // 如果是最后位置，放在最后一个标签的右边
-                  const lastTab = container.children[tabs.length - 1] as HTMLElement;
-                  if (lastTab) {
-                    return lastTab.offsetLeft + lastTab.offsetWidth;
-                  }
-                  return 0;
-                }
-                return tabElement.offsetLeft;
-              })()
-            }}
-          />
+      <div className="relative flex-1 flex items-start h-full min-w-0">
+        {isDragging ? (
+          <div ref={containerRef} className="absolute inset-0 overflow-hidden flex items-start">
+            {tabs.map((tab, index) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                index={index}
+                layoutNodeId={layoutNodeId}
+                isActive={activeTabId === tab.id}
+                onClick={() => handleTabClick(tab.id)}
+                onClose={(e) => handleCloseTab(tab.id, e)}
+                onDragOver={(index) => setDropIndicatorIndex(index)}
+              />
+            ))}
+            {dropIndicatorIndex !== null && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-[var(--accent-color)] z-50 pointer-events-none"
+                style={{
+                  left: (() => {
+                    const container = containerRef.current;
+                    if (!container) return 0;
+                    const tabElement = container.children[dropIndicatorIndex] as HTMLElement;
+                    if (!tabElement) {
+                      const lastTab = container.children[tabs.length - 1] as HTMLElement;
+                      if (lastTab) return lastTab.offsetLeft + lastTab.offsetWidth;
+                      return 0;
+                    }
+                    return tabElement.offsetLeft;
+                  })(),
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <OverlayScrollbar ref={containerRef} direction="horizontal" className="flex-1 flex items-start h-full">
+            {tabs.map((tab, index) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                index={index}
+                layoutNodeId={layoutNodeId}
+                isActive={activeTabId === tab.id}
+                onClick={() => handleTabClick(tab.id)}
+                onClose={(e) => handleCloseTab(tab.id, e)}
+                onDragOver={(index) => setDropIndicatorIndex(index)}
+              />
+            ))}
+          </OverlayScrollbar>
         )}
       </div>
 
       {/* Group Action Buttons */}
-      <div className={`flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full ${isActiveGroup ? 'bg-[var(--workbench-bg)]' : 'bg-[#252526]'}`}>
+      <div className="flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full bg-[var(--workbench-bg)]">
         <button
           onPointerDown={(e) => {
             // 使用 PointerDown 代替 Click，消除点击抬起的延迟感
@@ -206,13 +216,12 @@ interface TabItemProps {
     index: number;
     layoutNodeId: string;
     isActive: boolean;
-    isActiveGroup: boolean;
     onClick: () => void;
     onClose: (e: React.MouseEvent) => void;
     onDragOver: (index: number) => void;
 }
 
-const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, isActive, isActiveGroup, onClick, onClose, onDragOver }) => {
+const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, isActive, onClick, onClose, onDragOver }) => {
     const tabRef = React.useRef<HTMLDivElement>(null);
     
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -256,9 +265,11 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
     const style = transform ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
         zIndex: 100,
-        opacity: isDragging ? 0.5 : 1
+        opacity: isDragging ? 0.5 : 1,
+        height: 'var(--titlebar-height)',
     } : {
-        opacity: isDragging ? 0.5 : 1
+        opacity: isDragging ? 0.5 : 1,
+        height: 'var(--titlebar-height)',
     };
 
     return (
@@ -270,16 +281,14 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             data-tab-id={tab.id}
             onClick={onClick}
             className={`
-                relative flex items-center gap-2 px-3 h-9 border-r border-[#2b2b2b] cursor-pointer shrink-0
-                ${isActive 
-                    ? (isActiveGroup ? "bg-[var(--sidebar-bg)] text-white" : "bg-[var(--sidebar-bg)]/60 text-gray-300") 
-                    : "text-gray-500 hover:bg-white/5"}
+                relative flex items-center gap-2 px-3 border-r border-[#2b2b2b] cursor-pointer shrink-0
+                ${isActive ? "bg-[var(--sidebar-bg)] text-white" : "text-gray-500 hover:bg-white/5"}
                 ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}
             `}
         >
             {/* Active Top Border */}
             {isActive && (
-                <div className={`absolute top-0 left-0 right-0 h-[2px] ${isActiveGroup ? 'bg-[var(--accent-color)]' : 'bg-gray-500'}`} />
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--accent-color)]" />
             )}
             
             <span className={`text-xs truncate max-w-[120px]`}>

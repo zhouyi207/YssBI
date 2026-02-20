@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { Select } from "@/shared/ui";
+import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 
 export const SettingsView: React.FC = () => {
     const theme = useSettingsStore((s) => s.theme);
@@ -384,7 +385,8 @@ export const SettingsView: React.FC = () => {
 
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Sidebar Navigation */}
-                <aside className="w-64 border-r border-[#2b2b2b] bg-[#1e1e1e] pt-4 overflow-y-auto shrink-0">
+                <aside className="w-64 border-r border-[#2b2b2b] bg-[#1e1e1e] shrink-0 flex flex-col min-h-0">
+                    <OverlayScrollbar className="flex-1 pt-4 min-h-0" direction="vertical">
                     <nav className="px-4 space-y-0.5">
                         {sections.map(section => (
                             <button
@@ -401,13 +403,16 @@ export const SettingsView: React.FC = () => {
                             </button>
                         ))}
                     </nav>
+                    </OverlayScrollbar>
                 </aside>
 
                 {/* Main Content Area */}
-                <main className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                <main className="flex-1 min-h-0 flex flex-col">
+                    <OverlayScrollbar className="flex-1 min-h-0" direction="vertical">
                     <div className="max-w-4xl px-12 py-8">
                         {renderContent()}
                     </div>
+                    </OverlayScrollbar>
                 </main>
             </div>
 
@@ -422,13 +427,6 @@ export const SettingsView: React.FC = () => {
                 </button>
             </div>
 
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                .custom-scrollbar::-webkit-scrollbar { width: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #333333; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444444; }
-            `}} />
         </div>
     );
 };

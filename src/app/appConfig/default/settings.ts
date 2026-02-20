@@ -2,7 +2,7 @@ import { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, Win
 
 export const DEFAULT_THEME: ThemeSettings = {
     workbenchBackground: "#121212",
-    sidebarBackground: "#181818",
+    sidebarBackground: "#252526",
     accentColor: "#0078d4",
     gridLines: "#252525",
     nodeBase: "#2d2d2d",

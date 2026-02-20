@@ -89,6 +89,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
             set({
                 ...settings,
                 theme: { ...DEFAULT_THEME, ...settings.theme },
+                appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance },
                 isLoading: false,
             });
         },

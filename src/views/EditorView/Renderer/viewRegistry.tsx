@@ -3,6 +3,7 @@ import { GraphEditor } from "../Canvas/core/GraphEditor";
 import { SettingsView } from "../Layout/SettingsView";
 import Sidebar from "../Layout/Sidebar";
 import { Detail } from "../Layout/Detail";
+import { LogPanel } from "@/views/LogView/LogPanel";
 
 /**
  * 视图注册表类
@@ -47,3 +48,6 @@ viewRegistry.register('Sidebar', Sidebar);
 
 // 4. 属性详情栏 (Properties)
 viewRegistry.register('Detail', Detail);
+
+// 5. 日志面板 (Logs - VSCode-style panel at bottom)
+viewRegistry.register('LogPanel', LogPanel);

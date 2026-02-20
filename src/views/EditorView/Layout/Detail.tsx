@@ -1,6 +1,7 @@
 import { forwardRef, useMemo } from "react";
 import { useEditorGroup } from "@/features/application/editor";
 import { Select } from "@/shared/ui";
+import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from "@/shared/types/domain/dataType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
 import { uiStore } from "@/features/core/ui/UIStore";
@@ -149,14 +150,14 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       className="right-sidebar-container bg-[var(--sidebar-bg)] flex flex-col h-full w-full overflow-hidden select-none"
       onWheel={(e) => e.stopPropagation()}
     >
-      <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center h-9 shrink-0">
+      <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
           Details {selectedData ? `: ${selectedData.name}` : ''}
         </span>
       </div>
 
       {selectedData ? (
-        <div className="flex-1 overflow-y-auto pb-4">
+        <OverlayScrollbar className="flex-1 pb-4" direction="vertical">
           <table className="w-full text-[11px] border-collapse text-[#cccccc]">
             <tbody>
               <tr className="border-b border-[#2b2b2b]">
@@ -240,7 +241,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                   {selectedData.columns && selectedData.columns.length > 0 && (
                     <tr className="border-b border-[#2b2b2b]">
                       <td colSpan={2} className="p-0">
-                        <div className="max-h-40 overflow-y-auto bg-black/20">
+                        <OverlayScrollbar className="max-h-40 bg-black/20" direction="vertical">
                           <table className="w-full text-[9px]">
                             <thead>
                               <tr className="text-gray-500 border-b border-[#2b2b2b]">
@@ -257,7 +258,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                               ))}
                             </tbody>
                           </table>
-                        </div>
+                        </OverlayScrollbar>
                       </td>
                     </tr>
                   )}
@@ -295,7 +296,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
               Delete {selectedItemType}
             </button>
           </div>
-        </div>
+        </OverlayScrollbar>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center p-4 text-center opacity-30 group">
           <svg className="w-12 h-12 mb-2 text-gray-300 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">

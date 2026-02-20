@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { OverlayScrollbar } from "./OverlayScrollbar";
 
 interface Option {
     label: string;
@@ -55,7 +56,7 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
 
             {isOpen && (
                 <div className="absolute z-[1000] w-full mt-0.5 bg-[#252526] border border-[#454545] shadow-2xl rounded overflow-hidden">
-                    <div className="max-h-60 overflow-y-auto py-1 select-dropdown-scrollbar">
+                    <OverlayScrollbar className="max-h-60 py-1" direction="vertical">
                         {formattedOptions.map((option) => (
                             <div
                                 key={option.value}
@@ -69,16 +70,9 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
                                 {option.label}
                             </div>
                         ))}
-                    </div>
+                    </OverlayScrollbar>
                 </div>
             )}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                .select-dropdown-scrollbar::-webkit-scrollbar { width: 10px; }
-                .select-dropdown-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .select-dropdown-scrollbar::-webkit-scrollbar-thumb { background: #333333; }
-                .select-dropdown-scrollbar::-webkit-scrollbar-thumb:hover { background: #444444; }
-            `}} />
         </div>
     );
 };

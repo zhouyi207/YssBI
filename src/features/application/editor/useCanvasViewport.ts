@@ -150,7 +150,7 @@ export function useCanvasViewport(
       e.preventDefault();
       const factor = 0.001;
       const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
-      const nextScale = Math.min(Math.max(currentCanvas.scale * (1 - e.deltaY * factor), 0.2), 4);
+      const nextScale = Math.min(Math.max(currentCanvas.scale * (1 - e.deltaY * factor), 0.2), 1.2);
 
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;

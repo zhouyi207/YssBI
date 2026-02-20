@@ -17,6 +17,7 @@ interface UseEditorKeyboardProps {
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null, targetGroupId?: string) => void;
   splitEditorRight: (groupId: string) => void;
+  toggleLogPanel?: () => void;
 }
 
 /**
@@ -37,6 +38,7 @@ export function useEditorKeyboard({
   closeTab,
   setActiveTabId,
   splitEditorRight,
+  toggleLogPanel,
 }: UseEditorKeyboardProps) {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
@@ -80,7 +82,7 @@ export function useEditorKeyboard({
       if (isInput) {
         // Only allow specific global shortcuts in input fields
         const allowedInInput =
-          (isControlKey && ["s", "z", "y", "n", "o", "w"].includes(e.key.toLowerCase())) ||
+          (isControlKey && ["s", "z", "y", "n", "o", "w", "`"].includes(e.key.toLowerCase())) ||
           (isControlKey && e.key === "Tab");
 
         if (!allowedInInput) return;
@@ -138,6 +140,9 @@ export function useEditorKeyboard({
         e.preventDefault();
         const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
         if (gid) splitEditorRight(gid);
+      } else if (isControlKey && e.key === "`") {
+        e.preventDefault();
+        toggleLogPanel?.();
       }
     };
 
@@ -178,5 +183,6 @@ export function useEditorKeyboard({
     closeTab,
     setActiveTabId,
     splitEditorRight,
+    toggleLogPanel,
   ]);
 }

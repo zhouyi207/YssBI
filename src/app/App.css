@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+:root {
+  --titlebar-height: 36px;
+}
+
 @keyframes slideInRight {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
@@ -120,18 +124,33 @@
   display: none;
 }
 
-/* Sidebar 悬浮滚动条（与 TabBar 一致，不占据布局空间） */
+/* OverlayScrollbar：隐藏原生滚动条 */
+.overlay-scrollbar-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+/* Sidebar 原生滚动条（已由 OverlayScrollbar 替代，保留备用） */
 .sidebar-scrollbar {
-  overflow-y: auto;
-  overflow-y: overlay; /* 悬浮滚动条，不占布局空间（支持时覆盖上一行） */
   overflow-x: hidden;
+  overflow-y: overlay; /* 悬浮滚动条，不占布局空间（Chromium 114 前支持） */
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.15s ease;
+  transition: scrollbar-color 0.15s ease-out;
+}
+/* 不支持 overlay 时：隐藏原生滚动条，内容全宽，仍可用滚轮滚动 */
+@supports not (overflow: overlay) {
+  .sidebar-scrollbar {
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .sidebar-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .sidebar-scrollbar::-webkit-scrollbar {
-  width: 10px;
+  width: 6px;
   position: absolute;
 }
 
@@ -141,30 +160,38 @@
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 5px;
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   background-clip: content-box;
-  transition: background-color 0.15s ease;
-  min-height: 30px;
+  transition: background-color 0.15s ease-out;
+  min-height: 24px;
 }
 
 .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(121, 121, 121, 0.4);
+  background-color: rgba(255, 255, 255, 0.08);
   background-clip: content-box;
 }
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(100, 100, 100, 0.7);
+  background-color: rgba(255, 255, 255, 0.12);
   background-clip: content-box;
 }
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb:active {
-  background-color: rgba(191, 191, 191, 0.4);
+  background-color: rgba(255, 255, 255, 0.15);
   background-clip: content-box;
 }
 
 .sidebar-scrollbar:hover {
-  scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+/* Sidebar: developer-tool aesthetic, dark, high density */
+.sidebar-container {
+  --sidebar-section-bg: rgba(255, 255, 255, 0.03);
+  --sidebar-section-active: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-item-active: rgba(255, 255, 255, 0.07);
+  --sidebar-divider: rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-scrollbar::-webkit-scrollbar-corner {

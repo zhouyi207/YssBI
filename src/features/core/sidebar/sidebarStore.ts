@@ -28,13 +28,20 @@ function saveToStorage(key: string, value: unknown) {
   }
 }
 
+/** 堆叠列表：同一 group 内仅一个 section 可展开 */
+const SECTION_GROUPS: Record<string, string[]> = {
+  graphs: ["graphsEvent", "graphsFunction", "graphsMacro", "graphsVariable"],
+  variables: ["variablesGlobal", "variablesLocal"],
+  data: ["dataData"],
+};
+
 const DEFAULT_SECTIONS: Record<string, boolean> = {
   graphsEvent: true,
-  graphsFunction: true,
-  graphsMacro: true,
-  graphsVariable: true,
+  graphsFunction: false,
+  graphsMacro: false,
+  graphsVariable: false,
   variablesGlobal: true,
-  variablesLocal: true,
+  variablesLocal: false,
   dataData: true,
 };
 
@@ -53,7 +60,19 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
 
   toggleSection: (key: string) => {
     set((state) => {
-      const next = { ...state.expandedSections, [key]: !(state.expandedSections[key] ?? true) };
+      const current = state.expandedSections[key] ?? false;
+      const next = { ...state.expandedSections };
+
+      const group = Object.values(SECTION_GROUPS).find((g) => g.includes(key));
+      if (group) {
+        if (current) {
+          next[key] = false;
+        } else {
+          group.forEach((k) => { next[k] = k === key; });
+        }
+      } else {
+        next[key] = !current;
+      }
       saveToStorage(SECTIONS_KEY, next);
       return { expandedSections: next };
     });

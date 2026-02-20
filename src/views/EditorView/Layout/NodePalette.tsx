@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
+import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
 import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
@@ -352,7 +353,7 @@ export function NodePalette({
         />
       </div>
 
-      <div className="max-h-96 overflow-y-auto py-1 custom-scrollbar">
+      <OverlayScrollbar className="max-h-96 py-1" direction="vertical">
         {query ? (
           filteredTree?.tree ? (
             sortedChildren.map((child) =>
@@ -400,7 +401,7 @@ export function NodePalette({
             )
           )
         )}
-      </div>
+      </OverlayScrollbar>
     </div>
   );
 }
