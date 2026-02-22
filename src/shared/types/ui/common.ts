@@ -53,6 +53,8 @@ export enum LogType {
     Application = "application",
     Execution = "execution",
     System = "system",
+    Graph = "graph",
+    Data = "data",
 }
 
 /**

@@ -7,6 +7,7 @@ import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { ConnectionService } from "@/services";
 import { findAutoConnectPinIndex } from "@/shared/utils/pinCompatibility";
 import type { Pin } from "@/shared/types/domain/pin";
+import { logger } from '@/utils/appLogger';
 
 export interface PaletteItem {
   nodeType: string;
@@ -119,7 +120,7 @@ export function useCanvasOverlayHandlers({
             }
           }
         } catch (err) {
-          console.warn('[AutoConnect] Failed to auto-connect:', err);
+          logger.graph.warn(`Failed to auto-connect: ${err instanceof Error ? err.message : String(err)}`, 'CanvasOverlay');
         }
       }
 
@@ -144,7 +145,7 @@ export function useCanvasOverlayHandlers({
     async (menu: VariableDropMenu) => {
       const varId = menu.variableId;
       if (!(varId in variables) && !(varId in Variables)) {
-        console.warn("Variable no longer exists.");
+        logger.graph.warn('Variable no longer exists', 'CanvasOverlay');
         setVariableDropMenu(null);
         return;
       }
@@ -162,7 +163,7 @@ export function useCanvasOverlayHandlers({
     async (menu: VariableDropMenu) => {
       const varId = menu.variableId;
       if (!(varId in variables) && !(varId in Variables)) {
-        console.warn("Variable no longer exists.");
+        logger.graph.warn('Variable no longer exists', 'CanvasOverlay');
         setVariableDropMenu(null);
         return;
       }

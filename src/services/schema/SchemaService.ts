@@ -1,15 +1,16 @@
 import { NodeDefinition, NodeDefinitionDTO } from "@/shared/types";
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from '@/utils/appLogger';
 
 export class SchemaService {
     static async getNodeDefinition(): Promise<NodeDefinition[]> {
-        console.log("[SchemaService.getNodeDefinition] Calling backend...");
+        logger.sys.debug('Calling backend...', 'SchemaService.getNodeDefinition');
         try {
             const node_definition_list = await invoke<NodeDefinitionDTO[]>("get_node_definitions");
-            console.info("[SchemaService.getNodeDefinition] Success! Received nodes len: ", node_definition_list.length);
+            logger.sys.info('Success! Received nodes len: ' + node_definition_list.length, 'SchemaService.getNodeDefinition');
             return node_definition_list;
         } catch (error) {
-            console.error("[SchemaService.getNodeDefinition] Failed to get node definitions:", error);
+            logger.sys.error('Failed to get node definitions: ' + (error instanceof Error ? error.message : String(error)), 'SchemaService.getNodeDefinition');
             throw error;
         }
     }

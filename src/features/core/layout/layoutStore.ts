@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
+import { logger } from '@/utils/appLogger';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).slice(2, 11);
@@ -250,7 +251,7 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         moveNode: (sourceId, targetId, position) => set((state) => {
-            console.log('Moving node', sourceId, 'to', targetId, position);
+            logger.sys.trace('Moving node ' + sourceId + ' to ' + targetId + ' ' + position, 'LayoutStore');
             const sourceNode = state.nodes[sourceId];
             const targetNode = state.nodes[targetId];
             if (!sourceNode || !targetNode || sourceId === targetId) return;

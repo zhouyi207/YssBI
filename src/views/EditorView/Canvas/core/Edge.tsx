@@ -13,6 +13,8 @@ interface EdgeProps {
   isCompleted?: boolean;
   /** 是否为错误下游（红色虚线 + 发光） */
   isError?: boolean;
+  /** 执行仍在进行中（启用流动动画） */
+  isRunning?: boolean;
 }
 
 export function drawEdge(
@@ -53,6 +55,7 @@ export const Edge = React.memo<EdgeProps>(({
   startIsInput = false,
   isCompleted = false,
   isError = false,
+  isRunning = false,
 }) => {
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);
@@ -68,6 +71,7 @@ export const Edge = React.memo<EdgeProps>(({
 
   const strokeColor = isError ? "#ef4444" : isCompleted ? "#10b981" : color;
   const strokeW = (isError || isCompleted) ? thickness + 1 : thickness;
+  const animate = isRunning && (isCompleted || isError);
 
   return (
     <g>
@@ -81,7 +85,38 @@ export const Edge = React.memo<EdgeProps>(({
         className="pointer-events-none"
       />
 
-      {isCompleted && !isError && (
+      {animate && (
+        <>
+          {/* 流动虚线 */}
+          <path
+            d={pathData}
+            fill="none"
+            stroke={isError ? "#fca5a5" : "#6ee7b7"}
+            strokeWidth={thickness + 2}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              strokeDasharray: "14 26",
+              animation: "edgeFlow 1.2s linear infinite",
+            }}
+          />
+          {/* 脉动发光 */}
+          <path
+            d={pathData}
+            fill="none"
+            stroke={isError ? "rgba(239, 68, 68, 0.5)" : "rgba(16, 185, 129, 0.5)"}
+            strokeWidth={thickness + 8}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              filter: "blur(5px)",
+              animation: "edgeGlow 1.6s ease-in-out infinite",
+            }}
+          />
+        </>
+      )}
+
+      {!animate && isCompleted && !isError && (
         <path
           d={pathData}
           fill="none"
@@ -93,7 +128,7 @@ export const Edge = React.memo<EdgeProps>(({
         />
       )}
 
-      {isError && (
+      {!animate && isError && (
         <path
           d={pathData}
           fill="none"

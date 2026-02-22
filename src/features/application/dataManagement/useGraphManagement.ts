@@ -4,6 +4,7 @@ import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/c
 import { GraphService } from '@/services/graph/graphService';
 import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { logger } from '@/utils/appLogger';
 
 /** 兜底：若 EventCreated 未到达，用 get_graph 拉取并打开（解决监听器竞态导致的超时） */
 async function fulfillPendingGraph(
@@ -22,7 +23,7 @@ async function fulfillPendingGraph(
     useGraphDataStore.getState().addGraphFromData(id, graph as any);
     openGraph(id, graph.name, graphType, graph);
   } catch (e) {
-    console.warn(`[useGraphManagement] Fallback get_graph for ${id} failed:`, e);
+    logger.graph.warn(`Fallback get_graph for ${id} failed: ${e instanceof Error ? e.message : String(e)}`, 'GraphManagement');
   }
 }
 
@@ -60,7 +61,7 @@ export function useGraphManagement(
     
     for (const [id, action] of pendingActionsRef.current.entries()) {
       if (now - action.timestamp > EXPIRY_TIME) {
-        console.warn(`[useGraphManagement] Cleaning up expired action for ${id}`);
+        logger.graph.warn(`Cleaning up expired action for ${id}`, 'GraphManagement');
         clearTimeout(action.timeout);
         pendingActionsRef.current.delete(id);
       }
@@ -69,7 +70,7 @@ export function useGraphManagement(
 
   // Events
   const addEvent = useCallback(async (name?: string) => {
-    console.log("[useGraphManagement] addEvent called with name:", name);
+    logger.graph.debug(`addEvent called with name: ${name}`, 'GraphManagement');
     
     const metaStore = useGraphMetaStore.getState();
     const events: Record<string, Graph> = {};
@@ -82,19 +83,19 @@ export function useGraphManagement(
     
     const finalName = getUniqueName(name || "New Event", Object.values(events));
     
-    console.log("[useGraphManagement] Creating event:", { name: finalName });
+    logger.graph.debug(`Creating event: ${finalName}`, 'GraphManagement');
     
     try {
       // 调用后端 API 创建 Event，获取 ID
       const id = await GraphService.createEvent(finalName);
       
-      console.log("[useGraphManagement] Event creation request sent, ID:", id);
+      logger.graph.info(`Event creation request sent, ID: ${id}`, 'GraphManagement');
       
       // 设置超时
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          console.warn(`[useGraphManagement] Timeout waiting for EventCreated event for ${id}`);
+          logger.graph.warn(`Timeout waiting for EventCreated event for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Event 超时: ${action.name}`, 'error');
         }
@@ -105,7 +106,7 @@ export function useGraphManagement(
         callback: () => {
           const graph = getGraphById(id);
           if (graph) {
-            console.log("[useGraphManagement] Opening newly created event:", id);
+            logger.graph.debug(`Opening newly created event: ${id}`, 'GraphManagement');
             openGraph(id, graph.name, "event", graph);
           }
         },
@@ -124,7 +125,7 @@ export function useGraphManagement(
       cleanupExpiredActions();
       
     } catch (error) {
-      console.error("[useGraphManagement] Failed to create event:", error);
+      logger.graph.error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Event 失败: ${error}`, 'error');
       throw error;
     }
@@ -132,7 +133,7 @@ export function useGraphManagement(
 
   // 处理 Event 创建事件的回调
   const handleEventCreated = useCallback((id: string, data: any) => {
-    console.log("[useGraphManagement] handleEventCreated:", id, data);
+    logger.graph.debug(`handleEventCreated: ${id}`, 'GraphManagement');
     const action = pendingActionsRef.current.get(id);
     if (action) {
       clearTimeout(action.timeout);
@@ -143,7 +144,7 @@ export function useGraphManagement(
 
   // 处理 Event 创建失败事件的回调
   const handleEventCreatedFailed = useCallback((name: string, error: string) => {
-    console.error("[useGraphManagement] handleEventCreatedFailed:", name, error);
+    logger.graph.error(`handleEventCreatedFailed: ${name} - ${error}`, 'GraphManagement');
     
     // 查找对应的 pending action（通过名称）
     for (const [id, action] of pendingActionsRef.current.entries()) {
@@ -169,7 +170,7 @@ export function useGraphManagement(
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
     } catch (error) {
-      console.error("[useGraphManagement] Failed to update event:", error);
+      logger.graph.error(`Failed to update event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);
@@ -181,14 +182,14 @@ export function useGraphManagement(
       useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
-      console.error("[useGraphManagement] Failed to delete event:", error);
+      logger.graph.error(`Failed to delete event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, [closeTab]);
 
   // Functions
   const addFunction = useCallback(async (name?: string) => {
-    console.log("[useGraphManagement] addFunction called with name:", name);
+    logger.graph.debug(`addFunction called with name: ${name}`, 'GraphManagement');
     
     const metaStore = useGraphMetaStore.getState();
     const functions: Record<string, Graph> = {};
@@ -201,17 +202,17 @@ export function useGraphManagement(
     
     const finalName = getUniqueName(name || "New Function", Object.values(functions));
     
-    console.log("[useGraphManagement] Creating function:", { name: finalName });
+    logger.graph.debug(`Creating function: ${finalName}`, 'GraphManagement');
     
     try {
       const id = await GraphService.createFunction(finalName);
       
-      console.log("[useGraphManagement] Function creation request sent, ID:", id);
+      logger.graph.info(`Function creation request sent, ID: ${id}`, 'GraphManagement');
       
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          console.warn(`[useGraphManagement] Timeout waiting for FunctionCreated event for ${id}`);
+          logger.graph.warn(`Timeout waiting for FunctionCreated event for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Function 超时: ${action.name}`, 'error');
         }
@@ -221,7 +222,7 @@ export function useGraphManagement(
         callback: () => {
           const graph = getGraphById(id);
           if (graph) {
-            console.log("[useGraphManagement] Opening newly created function:", id);
+            logger.graph.debug(`Opening newly created function: ${id}`, 'GraphManagement');
             openGraph(id, graph.name, "function", graph);
           }
         },
@@ -235,14 +236,14 @@ export function useGraphManagement(
       cleanupExpiredActions();
       
     } catch (error) {
-      console.error("[useGraphManagement] Failed to create function:", error);
+      logger.graph.error(`Failed to create function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Function 失败: ${error}`, 'error');
       throw error;
     }
   }, [openGraph, switchSidebarTab, showToast, cleanupExpiredActions]);
 
   const handleFunctionCreated = useCallback((id: string, data: any) => {
-    console.log("[useGraphManagement] handleFunctionCreated:", id, data);
+    logger.graph.debug(`handleFunctionCreated: ${id}`, 'GraphManagement');
     const action = pendingActionsRef.current.get(id);
     if (action) {
       clearTimeout(action.timeout);
@@ -252,7 +253,7 @@ export function useGraphManagement(
   }, []);
 
   const handleFunctionCreatedFailed = useCallback((name: string, error: string) => {
-    console.error("[useGraphManagement] handleFunctionCreatedFailed:", name, error);
+    logger.graph.error(`handleFunctionCreatedFailed: ${name} - ${error}`, 'GraphManagement');
     
     for (const [id, action] of pendingActionsRef.current.entries()) {
       if (action.name === name) {
@@ -277,7 +278,7 @@ export function useGraphManagement(
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
     } catch (error) {
-      console.error("[useGraphManagement] Failed to update function:", error);
+      logger.graph.error(`Failed to update function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);
@@ -289,14 +290,14 @@ export function useGraphManagement(
       useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
-      console.error("[useGraphManagement] Failed to delete function:", error);
+      logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, [closeTab]);
 
   // Macros
   const addMacro = useCallback(async (name?: string) => {
-    console.log("[useGraphManagement] addMacro called with name:", name);
+    logger.graph.debug(`addMacro called with name: ${name}`, 'GraphManagement');
     
     const metaStore = useGraphMetaStore.getState();
     const macros: Record<string, Graph> = {};
@@ -309,17 +310,17 @@ export function useGraphManagement(
     
     const finalName = getUniqueName(name || "New Macro", Object.values(macros));
     
-    console.log("[useGraphManagement] Creating macro:", { name: finalName });
+    logger.graph.debug(`Creating macro: ${finalName}`, 'GraphManagement');
     
     try {
       const id = await GraphService.createMacro(finalName);
       
-      console.log("[useGraphManagement] Macro creation request sent, ID:", id);
+      logger.graph.info(`Macro creation request sent, ID: ${id}`, 'GraphManagement');
       
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          console.warn(`[useGraphManagement] Timeout waiting for MacroCreated event for ${id}`);
+          logger.graph.warn(`Timeout waiting for MacroCreated event for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Macro 超时: ${action.name}`, 'error');
         }
@@ -329,7 +330,7 @@ export function useGraphManagement(
         callback: () => {
           const graph = getGraphById(id);
           if (graph) {
-            console.log("[useGraphManagement] Opening newly created macro:", id);
+            logger.graph.debug(`Opening newly created macro: ${id}`, 'GraphManagement');
             openGraph(id, graph.name, "macro", graph);
           }
         },
@@ -343,14 +344,14 @@ export function useGraphManagement(
       cleanupExpiredActions();
       
     } catch (error) {
-      console.error("[useGraphManagement] Failed to create macro:", error);
+      logger.graph.error(`Failed to create macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Macro 失败: ${error}`, 'error');
       throw error;
     }
   }, [openGraph, switchSidebarTab, showToast, cleanupExpiredActions]);
 
   const handleMacroCreated = useCallback((id: string, data: any) => {
-    console.log("[useGraphManagement] handleMacroCreated:", id, data);
+    logger.graph.debug(`handleMacroCreated: ${id}`, 'GraphManagement');
     const action = pendingActionsRef.current.get(id);
     if (action) {
       clearTimeout(action.timeout);
@@ -360,7 +361,7 @@ export function useGraphManagement(
   }, []);
 
   const handleMacroCreatedFailed = useCallback((name: string, error: string) => {
-    console.error("[useGraphManagement] handleMacroCreatedFailed:", name, error);
+    logger.graph.error(`handleMacroCreatedFailed: ${name} - ${error}`, 'GraphManagement');
     
     for (const [id, action] of pendingActionsRef.current.entries()) {
       if (action.name === name) {
@@ -385,7 +386,7 @@ export function useGraphManagement(
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
     } catch (error) {
-      console.error("[useGraphManagement] Failed to update macro:", error);
+      logger.graph.error(`Failed to update macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);
@@ -397,7 +398,7 @@ export function useGraphManagement(
       useGraphMetaStore.getState().deleteGraph(id);
       closeTab(id);
     } catch (error) {
-      console.error("[useGraphManagement] Failed to delete macro:", error);
+      logger.graph.error(`Failed to delete macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, [closeTab]);
@@ -426,17 +427,17 @@ export function useGraphManagement(
     
     // Nodes：NodeCreatedHandler 已直接更新 Store，此处仅做可选 UI 扩展（如选中新节点）
     handleNodeCreated: useCallback((graphId: string, nodeId: string, data: any) => {
-      console.log("[useGraphManagement] handleNodeCreated:", graphId, nodeId, data);
+      logger.graph.debug(`handleNodeCreated: graphId=${graphId}, nodeId=${nodeId}`, 'GraphManagement');
       // 不再重复 addNode，NodeCreatedHandler 已更新 Store
     }, []),
     
     handleNodeDeleted: useCallback((graphId: string, nodeId: string) => {
-      console.log("[useGraphManagement] handleNodeDeleted:", graphId, nodeId);
+      logger.graph.debug(`handleNodeDeleted: graphId=${graphId}, nodeId=${nodeId}`, 'GraphManagement');
       
       // 更新 dataStore（持久化）
       useGraphDataStore.getState().deleteNode(nodeId);
       
-      console.log("[useGraphManagement] Node removed from ProjectStore");
+      logger.graph.debug('Node removed from ProjectStore', 'GraphManagement');
       
       // TODO: 如果该 Graph 当前正在编辑，也需要更新 EditorStore
     }, []),

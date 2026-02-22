@@ -1,5 +1,6 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
+import { logger } from '@/utils/appLogger';
 
 /**
  * Graph Service - 管理 Event、Function、Macro 的创建、删除、更新和查询
@@ -15,10 +16,10 @@ export class GraphService {
     static async createEvent(graphName: string): Promise<string> {
         try {
             const id = await invoke<string>("create_event", { graphName });
-            console.log(`[GraphService.createEvent] Event '${graphName}' created with ID: ${id}`);
+            logger.graph.info(`Event '${graphName}' created with ID: ${id}`, 'GraphService');
             return id;
         } catch (error) {
-            console.error("[GraphService.createEvent] Error creating event:", error);
+            logger.graph.error(`Error creating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -31,10 +32,10 @@ export class GraphService {
     static async createFunction(graphName: string): Promise<string> {
         try {
             const id = await invoke<string>("create_function", { graphName });
-            console.log(`[GraphService.createFunction] Function '${graphName}' created with ID: ${id}`);
+            logger.graph.info(`Function '${graphName}' created with ID: ${id}`, 'GraphService');
             return id;
         } catch (error) {
-            console.error("[GraphService.createFunction] Error creating function:", error);
+            logger.graph.error(`Error creating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -47,10 +48,10 @@ export class GraphService {
     static async createMacro(graphName: string): Promise<string> {
         try {
             const id = await invoke<string>("create_macro", { graphName });
-            console.log(`[GraphService.createMacro] Macro '${graphName}' created with ID: ${id}`);
+            logger.graph.info(`Macro '${graphName}' created with ID: ${id}`, 'GraphService');
             return id;
         } catch (error) {
-            console.error("[GraphService.createMacro] Error creating macro:", error);
+            logger.graph.error(`Error creating macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -62,9 +63,9 @@ export class GraphService {
     static async removeGraph(graphId: string): Promise<void> {
         try {
             await invoke("remove_graph", { graphId });
-            console.log(`[GraphService.removeGraph] Graph '${graphId}' removed successfully`);
+            logger.graph.info(`Graph '${graphId}' removed successfully`, 'GraphService');
         } catch (error) {
-            console.error("[GraphService.removeGraph] Error removing graph:", error);
+            logger.graph.error(`Error removing graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -77,9 +78,9 @@ export class GraphService {
     static async updateEvent(id: string, event: Graph): Promise<void> {
         try {
             await invoke("update_event", { id, event });
-            console.log(`[GraphService.updateEvent] Event '${id}' updated successfully`);
+            logger.graph.info(`Event '${id}' updated successfully`, 'GraphService');
         } catch (error) {
-            console.error("[GraphService.updateEvent] Error updating event:", error);
+            logger.graph.error(`Error updating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -92,9 +93,9 @@ export class GraphService {
     static async updateFunction(id: string, functionData: Graph): Promise<void> {
         try {
             await invoke("update_function", { id, function: functionData });
-            console.log(`[GraphService.updateFunction] Function '${id}' updated successfully`);
+            logger.graph.info(`Function '${id}' updated successfully`, 'GraphService');
         } catch (error) {
-            console.error("[GraphService.updateFunction] Error updating function:", error);
+            logger.graph.error(`Error updating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -107,9 +108,9 @@ export class GraphService {
     static async updateMacro(id: string, macroData: Graph): Promise<void> {
         try {
             await invoke("update_macro", { id, macroData });
-            console.log(`[GraphService.updateMacro] Macro '${id}' updated successfully`);
+            logger.graph.info(`Macro '${id}' updated successfully`, 'GraphService');
         } catch (error) {
-            console.error("[GraphService.updateMacro] Error updating macro:", error);
+            logger.graph.error(`Error updating macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -122,10 +123,10 @@ export class GraphService {
     static async getGraph(graphId: string): Promise<Graph> {
         try {
             const graph = await invoke<Graph>("get_graph", { graphId });
-            console.log(`[GraphService.getGraph] Graph '${graphId}' retrieved successfully`);
+            logger.graph.info(`Graph '${graphId}' retrieved successfully`, 'GraphService');
             return graph;
         } catch (error) {
-            console.error("[GraphService.getGraph] Error getting graph:", error);
+            logger.graph.error(`Error getting graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }

@@ -5,6 +5,7 @@ import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/feat
 
 interface NodeContainerProps {
   node: Node;
+  graphId?: string;
   selected?: boolean;
   dragDelta?: { x: number; y: number };
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
@@ -13,6 +14,7 @@ interface NodeContainerProps {
 
 export const NodeContainer = React.memo<NodeContainerProps>(({
   node,
+  graphId,
   selected,
   dragDelta,
   onPointerDown,
@@ -22,7 +24,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   const dy = dragDelta ? dragDelta.y : 0;
   const posX = node.position.x + dx;
   const posY = node.position.y + dy;
-  const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id);
+  const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id, graphId);
 
   const className = getNodeClassName({
     selected,

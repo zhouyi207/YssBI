@@ -15,6 +15,7 @@ import {
     DEFAULT_PROJECT,
 } from "@/app/appConfig/default";
 import { SettingsService } from "@/services/settings";
+import { logger } from '@/utils/appLogger';
 
 interface SettingsStore {
     theme: ThemeSettings;
@@ -71,7 +72,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const scheduleSave = () => {
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
-            saveImmediately().catch(console.error);
+            saveImmediately().catch((e) => logger.app.error(String(e), 'Settings'));
         }, 500);
     };
 

@@ -129,6 +129,7 @@ export default function Canvas() {
 
         <TransformContainer groupId={groupId}>
           <EdgesOverlay
+            graphId={activeTabId ?? ""}
             nodes={nodes}
             getPinWorldPos={getPinWorldPos}
           />

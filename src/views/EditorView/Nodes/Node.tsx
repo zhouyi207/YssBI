@@ -42,6 +42,7 @@ export const Node = React.memo<NodeProps>((props) => {
   return (
     <NodeContainer
       node={node}
+      graphId={props.subgraphId}
       selected={selected}
       dragDelta={dragDelta}
       onPointerDown={onPointerDown}

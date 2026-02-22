@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogPanelContent } from './LogPanelContent';
+import { logger } from '@/utils/appLogger';
 
 export const LogWindow = () => {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -10,7 +11,7 @@ export const LogWindow = () => {
 
     const initWindow = async () => {
       const currentWindow = getCurrentWindow();
-      await currentWindow.show().catch(console.error);
+      await currentWindow.show().catch((e) => logger.app.error(String(e), 'LogWindow'));
 
       const maximized = await currentWindow.isMaximized();
       setIsMaximized(maximized);

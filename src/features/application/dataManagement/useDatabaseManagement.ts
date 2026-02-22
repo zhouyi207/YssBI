@@ -5,6 +5,7 @@ import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { getUniqueName } from '@/shared/utils';
+import { logger } from '@/utils/appLogger';
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
 export function triggerImportData() {
@@ -32,7 +33,7 @@ export function triggerImportData() {
             uiStore.showToast(`CSV 数据导入成功: ${result.rowCount} 行`, 'success');
           }
         } catch (error) {
-          console.error('Failed to import CSV:', error);
+          logger.data.error('Failed to import CSV: ' + String(error), 'DatabaseManagement');
           uiStore.showToast(`CSV 导入失败: ${error}`, 'error');
         }
       } else {
@@ -55,7 +56,7 @@ export function useDatabaseManagement() {
     useDatabaseStore.getState().deleteDatabase(id);
     if (selectedItemId === id) setSelectedInfo(null, null);
     DatabaseService.deleteDatabase(id).catch((e) =>
-      console.warn('[useDatabaseManagement] deleteDatabase backend failed:', e)
+      logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement')
     );
   }, [selectedItemId, setSelectedInfo]);
 

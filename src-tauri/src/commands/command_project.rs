@@ -7,6 +7,7 @@ use crate::frontend::FrontendError;
 use crate::graph::GraphKind;
 use crate::log::LogLevel;
 use crate::log_app;
+use crate::log_exec;
 use crate::project::{load_project_from_file, save_project_to_file, ProjectState};
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO, GraphsWithValidationDTO,
@@ -314,23 +315,37 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 }
 
 
-/// 执行项目
-///
-/// 遍历所有 Event 图，从 event_begin 节点开始执行。
-/// 若图中无 event_begin 节点则跳过该图。
+/// 执行指定的 Event 图。
+/// 若传入 graph_id 则只执行该图，否则执行所有 Event 图。
 #[tauri::command]
 pub fn execute_project(
     state: State<ProjectState>,
     on_event: Channel<ExecutionEvent>,
+    graph_id: Option<String>,
 ) -> Result<Value, String> {
     let project_data = state.get_data();
+
+    let target_graph_id: Option<GraphId> = graph_id
+        .as_deref()
+        .map(|s| {
+            uuid::Uuid::parse_str(s)
+                .map(GraphId::from)
+                .map_err(|e| format!("Invalid graph_id '{}': {}", s, e))
+        })
+        .transpose()?;
 
     let mut all_logs = Vec::new();
     let mut executed_count = 0;
 
-    for (_graph_id, graph) in project_data.graphs.iter() {
+    for (gid, graph) in project_data.graphs.iter() {
         if graph.kind != GraphKind::Event {
             continue;
+        }
+
+        if let Some(ref target) = target_graph_id {
+            if gid != target {
+                continue;
+            }
         }
 
         let event_begin_nodes: Vec<_> = {
@@ -344,7 +359,7 @@ pub fn execute_project(
         };
 
         if event_begin_nodes.is_empty() {
-            log_app!(
+            log_exec!(
                 LogLevel::Info,
                 "[execute_project] Graph '{}' has no event_begin node, skipping",
                 graph.name
@@ -353,7 +368,7 @@ pub fn execute_project(
         }
 
         let entry_node = event_begin_nodes[0];
-        log_app!(
+        log_exec!(
             LogLevel::Info,
             "[execute_project] Starting graph '{}' from event_begin node {:?}",
             graph.name,
@@ -371,7 +386,7 @@ pub fn execute_project(
 
         for line in executor.logs() {
             all_logs.push(line.clone());
-            log_app!(LogLevel::Info, "[Execute] {}", line);
+            log_exec!(LogLevel::Info, "[Execute] {}", line);
         }
         executed_count += 1;
     }

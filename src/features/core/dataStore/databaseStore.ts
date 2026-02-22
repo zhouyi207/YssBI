@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
+import { logger } from '@/utils/appLogger';
 
 /** 数据库/数据帧记录（支持 DatabaseDecl 及 DataFrame 等扩展字段） */
 export type DatabaseRecord = Record<string, unknown>;
@@ -29,7 +30,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
   addDatabase: (id, db) =>
     set((state) => {
       if (state.databases[id]) {
-        console.warn(`[DatabaseStore] addDatabase: id "${id}" already exists`);
+        logger.data.warn(`addDatabase: id "${id}" already exists`, 'DatabaseStore');
         return state;
       }
 
@@ -45,7 +46,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
     set((state) => {
       const prev = state.databases[id];
       if (!prev) {
-        console.warn(`[DatabaseStore] updateDatabase: id "${id}" not found`);
+        logger.data.warn(`updateDatabase: id "${id}" not found`, 'DatabaseStore');
         return state;
       }
 
@@ -63,7 +64,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
   deleteDatabase: (id) =>
     set((state) => {
       if (!state.databases[id]) {
-        console.warn(`[DatabaseStore] deleteDatabase: id "${id}" not found`);
+        logger.data.warn(`deleteDatabase: id "${id}" not found`, 'DatabaseStore');
         return state;
       }
 

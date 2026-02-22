@@ -1,5 +1,6 @@
 import { ConnectionService } from '@/services';
 import type { CommandHandler } from '../types';
+import { logger } from '@/utils/appLogger';
 
 export interface DisconnectPinArgs {
   pinId: string;
@@ -26,7 +27,7 @@ export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, DisconnectP
       try {
         await ConnectionService.connectPins(graphId, conn.fromPin, conn.toPin);
       } catch (e) {
-        console.warn('[DisconnectPin.undo] Failed to reconnect:', conn, e);
+        logger.graph.warn(`Failed to reconnect: fromPin=${conn.fromPin}, toPin=${conn.toPin} - ${e instanceof Error ? e.message : String(e)}`, 'DisconnectPin');
       }
     }
   },

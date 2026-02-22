@@ -12,8 +12,8 @@ interface EditorStore {
   setContextMenu: (menu: ContextMenuState | null) => void;
 
   selectedItemId: string | null;
-  selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null;
-  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | null) => void;
+  selectedItemType: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | 'log' | null;
+  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'macro' | 'data' | 'setting' | 'log' | null) => void;
 
   pendingConnection: Pin | null;
   setPendingConnection: (pin: Pin | null) => void;

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from '@/utils/appLogger';
 
 export interface CreateNodeResult {
     nodeId: string;
@@ -38,7 +39,7 @@ export class NodeService {
             dataframeId?: string;
         }
     ): Promise<CreateNodeResult> {
-        console.log('[NodeService.createNode] Creating node:', { subgraphId, nodeType, x, y, params });
+        logger.graph.debug(`Creating node: subgraphId=${subgraphId}, nodeType=${nodeType}, x=${x}, y=${y}`, 'NodeService');
         const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
         const result = await invoke<CreateNodeResult>("create_node", { 
             graphId: subgraphId, 
@@ -47,7 +48,7 @@ export class NodeService {
             y: y !== undefined ? y : null,
             params: taggedParams,
         });
-        console.log('[NodeService.createNode] Node created successfully, ID:', result.nodeId);
+        logger.graph.info(`Node created successfully, ID: ${result.nodeId}`, 'NodeService');
         return result;
     }
 

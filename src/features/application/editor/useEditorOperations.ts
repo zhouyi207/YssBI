@@ -10,6 +10,7 @@ import type { GraphHistory } from '@/features/core/history';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { logger } from '@/utils/appLogger';
 
 
 /**
@@ -155,7 +156,7 @@ export function useEditorOperations() {
       await executeCommand(tid, 'Composite', { snapshot });
       await new Promise(r => setTimeout(r, 50));
     } catch (e) {
-      console.error('[useEditorOperations] Failed to paste nodes:', e);
+      logger.graph.error(`Failed to paste nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("粘贴失败", "error", 2000);
     }
   }, [clipboard]);
@@ -180,7 +181,7 @@ export function useEditorOperations() {
     try {
       await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
     } catch (e) {
-      console.error('[useEditorOperations] Failed to delete nodes:', e);
+      logger.graph.error(`Failed to delete nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("删除失败", "error", 2000);
     }
   }, [setSelectedNodeIds]);

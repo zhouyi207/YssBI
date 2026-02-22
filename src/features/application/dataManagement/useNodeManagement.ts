@@ -3,6 +3,7 @@ import { NodeService } from '@/services';
 import { Node as DomainNode } from '@/shared/types/domain';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { executeCommand } from '@/features/core/history';
+import { logger } from '@/utils/appLogger';
 
 /**
  * Node Management Hook (CQRS Pattern)
@@ -49,7 +50,7 @@ export function useNodeManagement() {
             }
         ): Promise<{ nodeId: string; pinIds: string[] } | undefined> => {
             if (!activeTabId) {
-                console.warn('[useNodeManagement] Cannot create node: no active tab');
+                logger.graph.warn('Cannot create node: no active tab', 'NodeManagement');
                 return undefined;
             }
 
@@ -63,7 +64,7 @@ export function useNodeManagement() {
                 const result = context as { nodeId: string; pinIds: string[] } | undefined;
                 return result;
             } catch (error) {
-                console.error('[useNodeManagement] Failed to create node:', error);
+                logger.graph.error(`Failed to create node: ${error instanceof Error ? error.message : String(error)}`, 'NodeManagement');
                 throw error;
             }
         },
@@ -82,7 +83,7 @@ export function useNodeManagement() {
             positions?: Array<{ x: number; y: number }>
         ): Promise<string[]> => {
             if (!activeTabId || nodeTypes.length === 0) {
-                console.warn('[useNodeManagement] Cannot create nodes: no active tab or empty node types');
+                logger.graph.warn('Cannot create nodes: no active tab or empty node types', 'NodeManagement');
                 return [];
             }
 
@@ -97,7 +98,7 @@ export function useNodeManagement() {
                 return nodeIds;
 
             } catch (error) {
-                console.error('[useNodeManagement] Failed to create nodes:', error);
+                logger.graph.error(`Failed to create nodes: ${error instanceof Error ? error.message : String(error)}`, 'NodeManagement');
                 return [];
             }
         },
@@ -112,7 +113,7 @@ export function useNodeManagement() {
     const deleteNode = useCallback(
         async (nodeId: string): Promise<boolean> => {
             if (!activeTabId) {
-                console.warn('[useNodeManagement] Cannot delete node: no active tab');
+                logger.graph.warn('Cannot delete node: no active tab', 'NodeManagement');
                 return false;
             }
 
@@ -123,7 +124,7 @@ export function useNodeManagement() {
                 return true;
 
             } catch (error) {
-                console.error('[useNodeManagement] Failed to delete node:', error);
+                logger.graph.error(`Failed to delete node: ${error instanceof Error ? error.message : String(error)}`, 'NodeManagement');
                 return false;
             }
         },
@@ -138,7 +139,7 @@ export function useNodeManagement() {
     const deleteNodes = useCallback(
         async (nodeIds: string[]): Promise<string[]> => {
             if (!activeTabId || nodeIds.length === 0) {
-                console.warn('[useNodeManagement] Cannot delete nodes: no active tab or empty node IDs');
+                logger.graph.warn('Cannot delete nodes: no active tab or empty node IDs', 'NodeManagement');
                 return [];
             }
 
@@ -154,17 +155,14 @@ export function useNodeManagement() {
                     if (result.status === 'fulfilled') {
                         deletedIds.push(nodeIds[index]);
                     } else {
-                        console.error(
-                            `[useNodeManagement] Failed to delete node: ${nodeIds[index]}`,
-                            result.reason
-                        );
+                        logger.graph.error(`Failed to delete node: ${nodeIds[index]} - ${String(result.reason)}`, 'NodeManagement');
                     }
                 });
 
                 return deletedIds;
 
             } catch (error) {
-                console.error('[useNodeManagement] Failed to delete nodes:', error);
+                logger.graph.error(`Failed to delete nodes: ${error instanceof Error ? error.message : String(error)}`, 'NodeManagement');
                 return [];
             }
         },

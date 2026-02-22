@@ -5,6 +5,7 @@ import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
+import { logger } from '@/utils/appLogger';
 
 /**
  * Project Operations Hook
@@ -17,7 +18,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
   const syncActiveToCollection = useCallback(() => {
     // TODO: 如果需要，实现新的同步逻辑
-    console.log('[ProjectOperations] syncActiveToCollection called (no-op in new architecture)');
+    logger.app.debug('syncActiveToCollection called (no-op in new architecture)', 'ProjectOperations');
   }, []);
 
   const saveGraphAs = useCallback(async () => {
@@ -29,7 +30,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         uiStore.showToast("项目已保存", "success", 2000);
       }
     } catch (e) {
-      console.error(e);
+      logger.app.error(String(e), 'ProjectOperations');
     }
   }, [syncActiveToCollection, setCurrentPath]);
 
@@ -40,7 +41,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       await ProjectService.saveProjectFromState(currentPath);
       uiStore.showToast("项目已保存", "success", 2000);
     } catch (e) {
-      console.error(e);
+      logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast("保存失败", "error", 2000);
     }
   }, [currentPath, saveGraphAs, syncActiveToCollection]);
@@ -71,88 +72,54 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {
-      console.error(e);
+      logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast("加载项目失败", "error", 3000);
     }
   }, [openGraph]);
 
-  const executeGraph = useCallback(async () => {
+  const executeGraph = useCallback(async (targetGraphId?: string) => {
     try {
       syncActiveToCollection();
 
-      const layoutStore = useLayoutStore.getState();
-      const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
-      const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
-      const currentTabId = editorNode?.data?.activeTabId;
+      const graphId = targetGraphId ?? (() => {
+        const layoutStore = useLayoutStore.getState();
+        const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+        const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
+        return editorNode?.data?.activeTabId as string | undefined;
+      })();
 
-      if (!currentTabId) {
+      if (!graphId) {
         uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
         return;
       }
 
-      const currentGraph = getGraphById(currentTabId);
+      const currentGraph = getGraphById(graphId);
       
       if (!currentGraph || currentGraph.type !== 'event') {
         uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
         return;
       }
 
-      console.log(`[Execute] 执行当前 Event: ${currentGraph.name} (${currentTabId})`);
+      logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphId})`);
 
       const recording: RecordedEvent[] = [];
-      const { applyEvent, setRecording } = useExecutionStore.getState();
+      const { applyEvent, setRecording, startExecution } = useExecutionStore.getState();
+      startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
-        applyEvent(event);
+        applyEvent(graphId, event);
         recording.push({ event, timestamp: Date.now() });
-      });
+      }, graphId);
 
-      setRecording(recording);
+      setRecording(graphId, recording);
 
       if (res.logs.length > 0) {
-        console.log("[Execute] 执行日志:");
-        res.logs.forEach((line: string) => console.log("  ", line));
+        logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
       }
       
       uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
     } catch (e) {
-      console.error("执行失败:", e);
-      uiStore.showToast(`执行失败: ${e}`, "error", 5000);
-    }
-  }, [syncActiveToCollection]);
-
-  const executeAllEvents = useCallback(async () => {
-    try {
-      syncActiveToCollection();
-      const snapshot = useProjectIOStore.getState().exportSnapshot();
-      const events = Object.values(snapshot.graphs).filter((g: any) => g?.type === 'event');
-      const eventCount = events.length;
-      
-      if (eventCount === 0) {
-        uiStore.showToast("没有可执行的 Event", "warning", 3000);
-        return;
-      }
-
-      console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
-
-      const recording: RecordedEvent[] = [];
-      const { applyEvent, setRecording } = useExecutionStore.getState();
-
-      const res = await ProjectService.executeProject((event: ExecutionEvent) => {
-        applyEvent(event);
-        recording.push({ event, timestamp: Date.now() });
-      });
-
-      setRecording(recording);
-
-      if (res.logs.length > 0) {
-        console.log("[Execute] 执行日志:");
-        res.logs.forEach((line: string) => console.log("  ", line));
-      }
-
-      uiStore.showToast(`执行完成: 共执行 ${res.executedGraphs} 个 Events`, "success", 2000);
-    } catch (e) {
-      console.error("执行失败:", e);
+      logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
       uiStore.showToast(`执行失败: ${e}`, "error", 5000);
     }
   }, [syncActiveToCollection]);
@@ -162,6 +129,5 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     saveGraphAs,
     importGraph,
     executeGraph,
-    executeAllEvents,
   };
 }

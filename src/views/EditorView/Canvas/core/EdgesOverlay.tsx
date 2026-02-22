@@ -6,6 +6,7 @@ import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import type { Pin } from "@/shared/types/domain";
 
 interface EdgesOverlayProps {
+  graphId: string;
   nodes: Array<{
     id: string;
     outputs: Pin[];
@@ -22,10 +23,13 @@ interface EdgeData {
   pinColor?: string;
 }
 
-export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldPos }) => {
+export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, nodes, getPinWorldPos }) => {
   const { theme } = useTheme();
-  const completedConnections = useExecutionStore((s) => s.completedConnections);
-  const nodeStates = useExecutionStore((s) => s.nodeStates);
+  const graphState = useExecutionStore((s) => s.graphs[graphId]);
+  const status = graphState?.status ?? "idle";
+  const completedConnections = graphState?.completedConnections;
+  const nodeStates = graphState?.nodeStates;
+  const isRunning = status === "running";
 
   const edges = useMemo<EdgeData[]>(() => {
     const result: EdgeData[] = [];
@@ -53,13 +57,17 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
       className="absolute pointer-events-none"
       style={{ overflow: "visible", left: 0, top: 0, width: 1, height: 1, zIndex: 0 }}
     >
+      <style>{`
+        @keyframes edgeFlow { to { stroke-dashoffset: -40; } }
+        @keyframes edgeGlow { 0%,100% { opacity: .3; } 50% { opacity: .7; } }
+      `}</style>
       {edges.map((edge) => {
         const start = getPinWorldPos(edge.fromPinId);
         const end = getPinWorldPos(edge.toPinId);
         if (!start || !end) return null;
 
-        const isCompleted = completedConnections.has(edge.id);
-        const sourceState = nodeStates.get(edge.sourceNodeId);
+        const isCompleted = completedConnections?.has(edge.id) ?? false;
+        const sourceState = nodeStates?.get(edge.sourceNodeId);
         const isError = sourceState?.status === "error";
         const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
 
@@ -74,6 +82,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
             thickness={2}
             isCompleted={isCompleted}
             isError={isError}
+            isRunning={isRunning}
           />
         );
       })}

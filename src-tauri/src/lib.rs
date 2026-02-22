@@ -121,6 +121,7 @@ pub fn run() {
             get_database_meta,
             get_database_rows,
             // ==================== 日志 ====================
+            frontend_log,
             get_logs,
             get_log_file_path,
             get_log_count,

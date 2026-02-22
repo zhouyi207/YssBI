@@ -7,6 +7,7 @@ import { useProjectSync } from '@/features/application/initialization';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { Select } from '@/shared/ui';
 import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_CHUNK_SIZE } from '@/app/appConfig/default';
+import { logger } from '@/utils/appLogger';
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useDatabaseStore(s => s.databases);
@@ -58,7 +59,7 @@ export const DataViewWindow: React.FC = () => {
           columnCount: meta.columnCount,
         });
       })
-      .catch((e) => console.warn('[DataViewWindow] getDatabaseMeta failed:', e));
+      .catch((e) => logger.data.warn('getDatabaseMeta failed: ' + String(e), 'DataViewWindow'));
   }, [selectedDfId, dataframes]);
 
   const loadInitialRows = async (id: string) => {
@@ -67,7 +68,7 @@ export const DataViewWindow: React.FC = () => {
       const rows = await DatabaseService.getDatabaseRows(id, 0, CHUNK_SIZE);
       setLoadedRows(rows);
     } catch (e) {
-      console.error('Failed to load initial rows:', e);
+      logger.data.error('Failed to load initial rows: ' + String(e), 'DataViewWindow');
     } finally {
       setLoading(false);
     }
@@ -85,7 +86,7 @@ export const DataViewWindow: React.FC = () => {
       const newRows = await DatabaseService.getDatabaseRows(selectedDfId, currentCount, CHUNK_SIZE);
       setLoadedRows(prev => [...prev, ...newRows]);
     } catch (e) {
-      console.error('Failed to load more rows:', e);
+      logger.data.error('Failed to load more rows: ' + String(e), 'DataViewWindow');
     } finally {
       setLoadingMore(false);
     }
@@ -109,7 +110,7 @@ export const DataViewWindow: React.FC = () => {
         }, 0);
       }
     } catch (e) {
-      console.error('Failed to fetch dataframes:', e);
+      logger.data.error('Failed to fetch dataframes: ' + String(e), 'DataViewWindow');
     } finally {
       setLoading(false);
     }
@@ -123,7 +124,7 @@ export const DataViewWindow: React.FC = () => {
   };
 
   useEffect(() => {
-    getCurrentWindow().show().catch(console.error);
+    getCurrentWindow().show().catch((e) => logger.app.error(String(e), 'DataViewWindow'));
     refreshData();
 
     const setupListeners = async () => {

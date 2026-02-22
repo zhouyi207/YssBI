@@ -1,6 +1,7 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { NodeService } from '@/services';
 import type { CommandHandler } from '../types';
+import { logger } from '@/utils/appLogger';
 
 export interface MoveNodesArgs {
   nodeIds: string[];
@@ -39,7 +40,7 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
       const positions = updates.map((u) => ({ nodeId: u.nodeId, x: u.newX, y: u.newY }));
       store.batchUpdateNodePositions(positions);
       NodeService.updateNodePositions(graphId, positions).catch((e) =>
-        console.warn('[MoveNodes] updateNodePositions failed:', e),
+        logger.graph.warn(`updateNodePositions failed: ${e instanceof Error ? e.message : String(e)}`, 'MoveNodes'),
       );
     }
 

@@ -1,23 +1,7 @@
 import { create } from 'zustand';
-import type { ExecutionState, ExecutionEvent, RecordedEvent } from '@/shared/types/ui';
+import type { ExecutionState, GraphExecutionState, ExecutionEvent, RecordedEvent } from '@/shared/types/ui';
 
-interface ExecutionStore extends ExecutionState {
-  startExecution: () => void;
-  completeExecution: () => void;
-  setCurrentNode: (nodeId: string | null) => void;
-  markNodeExecuting: (nodeId: string) => void;
-  markNodeCompleted: (nodeId: string) => void;
-  markNodeError: (nodeId: string, error?: string) => void;
-  markConnectionCompleted: (fromPinId: string, toPinId: string) => void;
-  markConnectionError: (fromPinId: string, toPinId: string) => void;
-  setRecording: (recording: RecordedEvent[]) => void;
-  setPlaying: (playing: boolean) => void;
-  resetVisuals: () => void;
-  reset: () => void;
-  applyEvent: (event: ExecutionEvent) => void;
-}
-
-const initialState: ExecutionState = {
+const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
   currentNodeId: null,
   executedNodes: new Set(),
@@ -25,119 +9,155 @@ const initialState: ExecutionState = {
   completedConnections: new Set(),
   errorConnections: new Set(),
   recording: [],
-  isPlaying: false,
-};
+  graphDirty: false,
+});
+
+interface ExecutionStore extends ExecutionState {
+  /** 获取指定图的执行状态（不存在时返回空状态） */
+  getGraph: (graphId: string) => GraphExecutionState;
+
+  startExecution: (graphId: string) => void;
+  completeExecution: (graphId: string) => void;
+  markNodeExecuting: (graphId: string, nodeId: string) => void;
+  markNodeCompleted: (graphId: string, nodeId: string) => void;
+  markNodeError: (graphId: string, nodeId: string, error?: string) => void;
+  markConnectionCompleted: (graphId: string, fromPinId: string, toPinId: string) => void;
+  setRecording: (graphId: string, recording: RecordedEvent[]) => void;
+  setPlaying: (playing: boolean, graphId?: string) => void;
+  markGraphDirty: (graphId: string) => void;
+  resetGraphVisuals: (graphId: string) => void;
+  applyEvent: (graphId: string, event: ExecutionEvent) => void;
+}
+
+function updateGraph(
+  state: ExecutionState,
+  graphId: string,
+  patch: Partial<GraphExecutionState>,
+): { graphs: Record<string, GraphExecutionState> } {
+  const prev = state.graphs[graphId] ?? emptyGraphState();
+  return {
+    graphs: {
+      ...state.graphs,
+      [graphId]: { ...prev, ...patch },
+    },
+  };
+}
 
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
-  ...initialState,
+  graphs: {},
+  playbackGraphId: null,
+  isPlaying: false,
 
-  startExecution: () => set({
+  getGraph: (graphId) => get().graphs[graphId] ?? emptyGraphState(),
+
+  startExecution: (graphId) => set((state) => updateGraph(state, graphId, {
     status: "running",
     currentNodeId: null,
     executedNodes: new Set(),
     nodeStates: new Map(),
     completedConnections: new Set(),
     errorConnections: new Set(),
-    recording: [],
-  }),
+    graphDirty: false,
+  })),
 
-  completeExecution: () => set({
+  completeExecution: (graphId) => set((state) => updateGraph(state, graphId, {
     status: "completed",
     currentNodeId: null,
+  })),
+
+  markNodeExecuting: (graphId, nodeId) => set((state) => {
+    const g = state.graphs[graphId] ?? emptyGraphState();
+    const newNodeStates = new Map(g.nodeStates);
+    newNodeStates.set(nodeId, { nodeId, status: "executing", timestamp: Date.now() });
+    return updateGraph(state, graphId, { currentNodeId: nodeId, nodeStates: newNodeStates });
   }),
 
-  setCurrentNode: (nodeId) => set({ currentNodeId: nodeId }),
-
-  markNodeExecuting: (nodeId) => set((state) => {
-    const newNodeStates = new Map(state.nodeStates);
-    newNodeStates.set(nodeId, {
-      nodeId,
-      status: "executing",
-      timestamp: Date.now(),
-    });
-    return {
-      currentNodeId: nodeId,
-      nodeStates: newNodeStates,
-    };
-  }),
-
-  markNodeCompleted: (nodeId) => set((state) => {
-    const newNodeStates = new Map(state.nodeStates);
-    newNodeStates.set(nodeId, {
-      nodeId,
-      status: "completed",
-      timestamp: Date.now(),
-    });
-    const newExecutedNodes = new Set(state.executedNodes);
+  markNodeCompleted: (graphId, nodeId) => set((state) => {
+    const g = state.graphs[graphId] ?? emptyGraphState();
+    const newNodeStates = new Map(g.nodeStates);
+    newNodeStates.set(nodeId, { nodeId, status: "completed", timestamp: Date.now() });
+    const newExecutedNodes = new Set(g.executedNodes);
     newExecutedNodes.add(nodeId);
+    return updateGraph(state, graphId, { nodeStates: newNodeStates, executedNodes: newExecutedNodes });
+  }),
+
+  markNodeError: (graphId, nodeId) => set((state) => {
+    const g = state.graphs[graphId] ?? emptyGraphState();
+    const newNodeStates = new Map(g.nodeStates);
+    newNodeStates.set(nodeId, { nodeId, status: "error", timestamp: Date.now() });
+    return updateGraph(state, graphId, { status: "error", currentNodeId: null, nodeStates: newNodeStates });
+  }),
+
+  markConnectionCompleted: (graphId, fromPinId, toPinId) => set((state) => {
+    const g = state.graphs[graphId] ?? emptyGraphState();
+    const next = new Set(g.completedConnections);
+    next.add(`${fromPinId}->${toPinId}`);
+    return updateGraph(state, graphId, { completedConnections: next });
+  }),
+
+  setRecording: (graphId, recording) => set((state) => updateGraph(state, graphId, { recording })),
+
+  setPlaying: (playing, graphId) => set({
+    isPlaying: playing,
+    playbackGraphId: playing ? (graphId ?? get().playbackGraphId) : get().playbackGraphId,
+  }),
+
+  markGraphDirty: (graphId) => set((state) => {
+    const g = state.graphs[graphId];
+    if (!g || (g.status === "idle" && !(state.isPlaying && state.playbackGraphId === graphId))) return state;
+    const stop = state.playbackGraphId === graphId;
     return {
-      nodeStates: newNodeStates,
-      executedNodes: newExecutedNodes,
+      ...updateGraph(state, graphId, {
+        graphDirty: true,
+        status: "idle",
+        currentNodeId: null,
+        executedNodes: new Set(),
+        nodeStates: new Map(),
+        completedConnections: new Set(),
+        errorConnections: new Set(),
+        recording: [],
+      }),
+      isPlaying: stop ? false : state.isPlaying,
+      playbackGraphId: stop ? null : state.playbackGraphId,
     };
   }),
 
-  markNodeError: (nodeId, _error) => set((state) => {
-    const newNodeStates = new Map(state.nodeStates);
-    newNodeStates.set(nodeId, {
-      nodeId,
-      status: "error",
-      timestamp: Date.now(),
-    });
+  resetGraphVisuals: (graphId) => set((state) => {
+    const stop = state.playbackGraphId === graphId;
     return {
-      status: "error",
-      currentNodeId: null,
-      nodeStates: newNodeStates,
+      ...updateGraph(state, graphId, {
+        status: "idle",
+        currentNodeId: null,
+        executedNodes: new Set(),
+        nodeStates: new Map(),
+        completedConnections: new Set(),
+        errorConnections: new Set(),
+      }),
+      isPlaying: stop ? false : state.isPlaying,
+      playbackGraphId: stop ? null : state.playbackGraphId,
     };
   }),
 
-  markConnectionCompleted: (fromPinId, toPinId) => set((state) => {
-    const next = new Set(state.completedConnections);
-    next.add(`${fromPinId}->${toPinId}`);
-    return { completedConnections: next };
-  }),
-
-  markConnectionError: (fromPinId, toPinId) => set((state) => {
-    const next = new Set(state.errorConnections);
-    next.add(`${fromPinId}->${toPinId}`);
-    return { errorConnections: next };
-  }),
-
-  setRecording: (recording) => set({ recording }),
-
-  setPlaying: (playing) => set({ isPlaying: playing }),
-
-  resetVisuals: () => set({
-    status: "idle",
-    currentNodeId: null,
-    executedNodes: new Set(),
-    nodeStates: new Map(),
-    completedConnections: new Set(),
-    errorConnections: new Set(),
-    isPlaying: false,
-  }),
-
-  reset: () => set({ ...initialState }),
-
-  applyEvent: (event: ExecutionEvent) => {
+  applyEvent: (graphId, event) => {
     const store = get();
     switch (event.event) {
       case 'executionStart':
-        store.startExecution();
+        store.startExecution(graphId);
         break;
       case 'executionComplete':
-        store.completeExecution();
+        store.completeExecution(graphId);
         break;
       case 'nodeStart':
-        store.markNodeExecuting(event.data.nodeId);
+        store.markNodeExecuting(graphId, event.data.nodeId);
         break;
       case 'nodeComplete':
-        store.markNodeCompleted(event.data.nodeId);
+        store.markNodeCompleted(graphId, event.data.nodeId);
         break;
       case 'nodeError':
-        store.markNodeError(event.data.nodeId, event.data.error);
+        store.markNodeError(graphId, event.data.nodeId, event.data.error);
         break;
       case 'connectionActive':
-        store.markConnectionCompleted(event.data.fromPinId, event.data.toPinId);
+        store.markConnectionCompleted(graphId, event.data.fromPinId, event.data.toPinId);
         break;
     }
   },

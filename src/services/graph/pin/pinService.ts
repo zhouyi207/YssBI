@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DataValueBackend } from "@/shared/types/dto/dataValue";
+import { logger } from '@/utils/appLogger';
 
 /**
  * Pin 服务 - 封装所有 Pin 相关的后端调用
@@ -18,19 +19,14 @@ export class PinService {
         pinId: string,
         value: DataValueBackend | { Null: null }
     ): Promise<void> {
-        console.log('[PinService.updatePinUserValue] Updating pin value:', {
-            subgraphId,
-            nodeId,
-            pinId,
-            value
-        });
+        logger.graph.trace(`Updating pin value: subgraphId=${subgraphId}, nodeId=${nodeId}, pinId=${pinId}`, 'PinService');
         await invoke("update_pin_user_value", {
             subgraphId,
             nodeId,
             pinId,
             value
         });
-        console.log('[PinService.updatePinUserValue] Pin value updated successfully');
+        logger.graph.debug('Pin value updated successfully', 'PinService');
     }
 
     /**
@@ -44,17 +40,13 @@ export class PinService {
         nodeId: string,
         pinId: string
     ): Promise<void> {
-        console.log('[PinService.clearPinUserValue] Clearing pin value:', {
-            subgraphId,
-            nodeId,
-            pinId
-        });
+        logger.graph.trace(`Clearing pin value: subgraphId=${subgraphId}, nodeId=${nodeId}, pinId=${pinId}`, 'PinService');
         await invoke("clear_pin_user_value", {
             subgraphId,
             nodeId,
             pinId
         });
-        console.log('[PinService.clearPinUserValue] Pin value cleared successfully');
+        logger.graph.debug('Pin value cleared successfully', 'PinService');
     }
 
     /**
@@ -69,17 +61,13 @@ export class PinService {
         nodeId: string,
         pinId: string
     ): Promise<any> {
-        console.log('[PinService.getPinValue] Getting pin value:', {
-            subgraphId,
-            nodeId,
-            pinId
-        });
+        logger.graph.trace(`Getting pin value: subgraphId=${subgraphId}, nodeId=${nodeId}, pinId=${pinId}`, 'PinService');
         const value = await invoke("get_pin_value", {
             subgraphId,
             nodeId,
             pinId
         });
-        console.log('[PinService.getPinValue] Got pin value:', value);
+        logger.graph.debug(`Got pin value for pinId=${pinId}`, 'PinService');
         return value;
     }
 }

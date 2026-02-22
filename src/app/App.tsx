@@ -1,4 +1,4 @@
-import "@/utils/logger";
+import "@/utils/appLogger";
 import "./App.css";
 
 import { PlotWindow } from "@/views/PlotView/PlotWindow";

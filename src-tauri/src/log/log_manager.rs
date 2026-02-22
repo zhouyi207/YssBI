@@ -141,6 +141,34 @@ impl LogManager {
         self.emit_log(log);
     }
 
+    /// 发送图编辑日志
+    pub fn log_graph(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string(),
+            level,
+            log_type: LogType::Graph,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
+    /// 发送数据操作日志
+    pub fn log_data(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string(),
+            level,
+            log_type: LogType::Data,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
     /// 获取当前日志文件路径
     pub fn get_log_file_path(&self) -> Option<PathBuf> {
         self.log_file_path.lock().unwrap().clone()
@@ -235,6 +263,26 @@ macro_rules! log_sys {
     ($level:expr, $($arg:tt)*) => {
         if let Some(manager) = $crate::log::get_log_manager() {
             manager.log_system($level, format!($($arg)*), None);
+        }
+    };
+}
+
+/// 便捷宏：发送图编辑日志
+#[macro_export]
+macro_rules! log_graph {
+    ($level:expr, $($arg:tt)*) => {
+        if let Some(manager) = $crate::log::get_log_manager() {
+            manager.log_graph($level, format!($($arg)*), None);
+        }
+    };
+}
+
+/// 便捷宏：发送数据操作日志
+#[macro_export]
+macro_rules! log_data {
+    ($level:expr, $($arg:tt)*) => {
+        if let Some(manager) = $crate::log::get_log_manager() {
+            manager.log_data($level, format!($($arg)*), None);
         }
     };
 }

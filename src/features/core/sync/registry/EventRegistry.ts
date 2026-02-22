@@ -2,6 +2,7 @@
 
 import { EventHandler, EventCallbacks } from '../types';
 import { parseEvent, isValidEventType } from '../utils/eventParser';
+import { logger } from '@/utils/appLogger';
 
 /**
  * 事件注册中心
@@ -21,7 +22,7 @@ export class EventRegistry {
      */
     register(handler: EventHandler): void {
         if (this.handlers.has(handler.eventType)) {
-            console.warn(`[EventRegistry] Handler for '${handler.eventType}' already registered, overwriting...`);
+            logger.sys.warn(`Handler for '${handler.eventType}' already registered, overwriting...`, 'EventRegistry');
         }
         this.handlers.set(handler.eventType, handler);
     }
@@ -40,21 +41,21 @@ export class EventRegistry {
         const parsed = parseEvent(event);
         
         if (!isValidEventType(parsed.type)) {
-            console.warn(`[EventRegistry] Unknown event type: ${parsed.type}`);
+            logger.sys.warn(`Unknown event type: ${parsed.type}`, 'EventRegistry');
             return;
         }
 
         const handler = this.handlers.get(parsed.type);
         
         if (!handler) {
-            console.warn(`[EventRegistry] No handler registered for event type: ${parsed.type}`);
+            logger.sys.warn(`No handler registered for event type: ${parsed.type}`, 'EventRegistry');
             return;
         }
 
         try {
             handler.handle(parsed.payload, this.callbacks);
         } catch (error) {
-            console.error(`[EventRegistry] Error handling event '${parsed.type}':`, error);
+            logger.sys.error(`Error handling event '${parsed.type}': ${error instanceof Error ? error.message : String(error)}`, 'EventRegistry');
         }
     }
 

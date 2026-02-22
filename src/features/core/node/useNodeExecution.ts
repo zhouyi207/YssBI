@@ -2,14 +2,22 @@ import { useExecutionStore } from '@/features/core/execution';
 
 /**
  * Node Execution Hook
- * 
- * 粒度化选择器：只提取本节点的执行状态，
- * 其他节点状态变化不会触发本组件 re-render
+ *
+ * 按 graphId 粒度化选择器：只提取本节点在指定图中的执行状态
  */
-export function useNodeExecution(nodeId: string) {
-  const isExecuting = useExecutionStore((state) => state.currentNodeId === nodeId);
-  const isCompleted = useExecutionStore((state) => state.executedNodes.has(nodeId));
-  const nodeState = useExecutionStore((state) => state.nodeStates.get(nodeId) ?? null);
+export function useNodeExecution(nodeId: string, graphId?: string) {
+  const isExecuting = useExecutionStore((state) => {
+    if (!graphId) return false;
+    return state.graphs[graphId]?.currentNodeId === nodeId;
+  });
+  const isCompleted = useExecutionStore((state) => {
+    if (!graphId) return false;
+    return state.graphs[graphId]?.executedNodes.has(nodeId) ?? false;
+  });
+  const nodeState = useExecutionStore((state) => {
+    if (!graphId) return null;
+    return state.graphs[graphId]?.nodeStates.get(nodeId) ?? null;
+  });
   const hasError = nodeState?.status === "error";
 
   return {

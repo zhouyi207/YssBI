@@ -1,15 +1,21 @@
-import React, { useState } from "react";
+import React from "react";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
-import { useExecutionPlayback } from "@/features/core/execution";
+import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
 
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { HUD } from "./HUD";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
-import { VscRunAll, VscChevronDown, VscDebugRestart } from "react-icons/vsc";
-import { VscDebugPause } from "react-icons/vsc";
+import {
+  VscDebugStart,
+  VscDebugPause,
+  VscDebugStop,
+  VscDebugRestart,
+  VscPlay,
+  VscRunAll,
+} from "react-icons/vsc";
 
 export default function CanvasOverlays({
     canvasRef,
@@ -34,12 +40,10 @@ export default function CanvasOverlays({
         activeGroupId,
         groupId,
         executeGraph,
-        executeAllEvents,
         setCanvas,
     } = useEditorGroup();
 
     const { createNode } = useNodeManagement();
-    const [showExecuteMenu, setShowExecuteMenu] = useState(false);
 
     const gesture = useGestureStore((state) => state.gesture);
 
@@ -63,98 +67,92 @@ export default function CanvasOverlays({
         setCanvas,
     });
 
-    const { stop, togglePlayPause, isPlaying, hasRecording } = useExecutionPlayback();
+    const tabId = activeTabId ?? "";
+    const { stop, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } = useExecutionPlayback(tabId);
+    const graphStatus = useExecutionStore((s) => s.graphs[tabId]?.status ?? "idle");
+
+    const playbackActive = isPlaying || isPaused;
+    const isThisGraphRunning = graphStatus === "running";
+    const canReplay = hasRecording && !graphDirty && !isThisGraphRunning;
 
     const onPaletteSelect = (item: PaletteItem) =>
         contextMenu && handleNodePaletteSelect(item, contextMenu);
+
+    const isEventTab = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type === "event";
 
     return (
         <>
             <HUD />
 
-            {/* ================= FAB (Floating Action Button) for Execution ================= */}
-            {tabs.find((t: LayoutTab) => t.id === activeTabId)?.type === "event" && (
-                <div className="absolute top-4 right-4 z-40">
-                    <div className="relative">
-                        <div className="flex items-center gap-2">
-                            {/* 回放按钮 */}
-                            {hasRecording && (
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={togglePlayPause}
-                                        className={`flex items-center gap-1.5 px-4 py-2.5 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 ${
-                                            isPlaying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
-                                        }`}
-                                        title={isPlaying ? "暂停回放" : "回放执行"}
-                                    >
-                                        {isPlaying ? <VscDebugPause size={16} /> : <VscDebugRestart size={16} />}
-                                        <span>{isPlaying ? "暂停" : "回放"}</span>
-                                    </button>
-                                    {isPlaying && (
-                                        <button
-                                            onClick={stop}
-                                            className="flex items-center px-2 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-red-700"
-                                            title="停止回放"
-                                        >
-                                            <span className="w-3 h-3 bg-white rounded-sm" />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+            {isEventTab && (
+                <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
+                    {/* Debug — 预留，始终禁用 */}
+                    <button
+                        disabled
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-secondary)] opacity-40 cursor-not-allowed"
+                        title="调试（即将推出）"
+                    >
+                        <VscDebugStart size={14} />
+                    </button>
 
-                            <div className="flex items-center gap-1">
-                                {/* 主执行按钮 */}
-                                <button
-                                    onClick={() => executeGraph()}
-                                    className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
-                                >
-                                    <VscRunAll size={18} />
-                                    <span>执行当前</span>
-                                </button>
-                                {/* 下拉按钮 */}
-                                <button
-                                    onClick={() => setShowExecuteMenu(!showExecuteMenu)}
-                                    className="flex items-center px-2 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-green-700"
-                                >
-                                    <VscChevronDown size={14} />
-                                </button>
-                            </div>
+                    <div className="w-px h-5 bg-[var(--border-color)]" />
+
+                    {/* Replay */}
+                    {!playbackActive ? (
+                        <button
+                            onClick={() => canReplay && togglePlayPause()}
+                            disabled={!canReplay}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                                canReplay
+                                    ? 'text-blue-400 hover:bg-blue-500/15 hover:text-blue-300'
+                                    : 'text-[var(--text-secondary)] opacity-40 cursor-not-allowed'
+                            }`}
+                            title={
+                                graphDirty ? "图结构已更改，无法回放" :
+                                !hasRecording ? "无录制数据" :
+                                "回放执行"
+                            }
+                        >
+                            <VscDebugRestart size={14} />
+                        </button>
+                    ) : (
+                        <div className="flex items-center">
+                            <button
+                                onClick={togglePlayPause}
+                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-l text-xs font-medium transition-colors ${
+                                    isPlaying
+                                        ? 'text-amber-400 hover:bg-amber-500/15'
+                                        : 'text-blue-400 hover:bg-blue-500/15'
+                                }`}
+                                title={isPlaying ? "暂停回放" : "继续回放"}
+                            >
+                                {isPlaying ? <VscDebugPause size={14} /> : <VscPlay size={14} />}
+                            </button>
+                            <button
+                                onClick={stop}
+                                className="flex items-center px-2 py-1.5 rounded-r text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors"
+                                title="停止回放"
+                            >
+                                <VscDebugStop size={14} />
+                            </button>
                         </div>
+                    )}
 
-                        {/* 下拉菜单 */}
-                        {showExecuteMenu && (
-                            <>
-                                {/* 点击遮罩关闭菜单 */}
-                                <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => setShowExecuteMenu(false)}
-                                />
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-lg shadow-xl z-50 overflow-hidden">
-                                    <button
-                                        onClick={() => {
-                                            executeGraph();
-                                            setShowExecuteMenu(false);
-                                        }}
-                                        className="w-full px-4 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--hover-bg)] flex items-center gap-2"
-                                    >
-                                        <VscRunAll size={16} />
-                                        <span>执行当前 Event</span>
-                                    </button>
-                                    <div className="h-px bg-[var(--border-color)]" />
-                                    <button
-                                        onClick={() => {
-                                            executeAllEvents();
-                                            setShowExecuteMenu(false);
-                                        }}
-                                        className="w-full px-4 py-2.5 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--hover-bg)] flex items-center gap-2"
-                                    >
-                                        <VscRunAll size={16} />
-                                        <span>执行所有 Events</span>
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                    <div className="w-px h-5 bg-[var(--border-color)]" />
+
+                    {/* Execute */}
+                    <button
+                        onClick={() => !isThisGraphRunning && executeGraph(tabId)}
+                        disabled={isThisGraphRunning}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                            isThisGraphRunning
+                                ? 'text-green-400 opacity-60 cursor-not-allowed'
+                                : 'text-green-400 hover:bg-green-500/15 hover:text-green-300'
+                        }`}
+                        title={isThisGraphRunning ? "执行中…" : "执行当前 Event"}
+                    >
+                        <VscRunAll size={14} />
+                    </button>
                 </div>
             )}
 

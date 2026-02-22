@@ -3,6 +3,7 @@ import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
 import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
+import { logger } from '@/utils/appLogger';
 
 import type { DatabaseRecord } from './databaseStore';
 import { useVariableStore } from './variableStore';
@@ -98,12 +99,12 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     try {
       const result = await get().syncFromBackend();
       if (result) {
-        console.log('[ProjectIOStore] Project loaded successfully');
+        logger.sys.info('Project loaded successfully', 'ProjectIOStore');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ status: LoadStatus.Error, error: errorMessage });
-      console.error('[ProjectIOStore] Failed to load project:', errorMessage);
+      logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
     }
   },
 
@@ -138,15 +139,11 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
       const invalidCount = Object.values(invalidReferences).reduce((s, arr) => s + arr.length, 0);
       if (invalidCount > 0) {
-        console.warn(
-          '[ProjectIOStore] 发现无效引用:',
-          invalidReferences,
-          `共 ${invalidCount} 处`
-        );
+        logger.sys.warn(`发现无效引用: ${JSON.stringify(invalidReferences)}, 共 ${invalidCount} 处`, 'ProjectIOStore');
       }
 
       set({ status: LoadStatus.Ready, currentPath: path });
-      console.log('[ProjectIOStore] Synced from backend (staged load)');
+      logger.sys.debug('Synced from backend (staged load)', 'ProjectIOStore');
       return {
         variables,
         databases,
@@ -156,7 +153,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ status: LoadStatus.Error, error: errorMessage });
-      console.error('[ProjectIOStore] Failed to sync:', errorMessage);
+      logger.sys.error('Failed to sync: ' + errorMessage, 'ProjectIOStore');
       return null;
     }
   },

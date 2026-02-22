@@ -3,6 +3,7 @@ import { Graph } from '@/shared/types/domain';
 import { getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
+import { logger } from '@/utils/appLogger';
 
 /**
  * Tab Management Hook
@@ -31,7 +32,7 @@ export function useTabManagement() {
     initialData?: Graph,
     targetGroupId?: string
   ) => {
-    console.log('[useTabManagement.handleSetActiveTabId] Called with:', { newId, forceType, initialData, targetGroupId });
+    logger.graph.trace(`handleSetActiveTabId called: newId=${newId}, forceType=${forceType}, targetGroupId=${targetGroupId}`, 'TabManagement');
     
     setActiveTabId(newId, targetGroupId);
     if (!newId) return;
@@ -39,7 +40,7 @@ export function useTabManagement() {
     const tabSource = initialData || getGraphById(newId);
     const type = forceType || (tabSource as any)?.type;
     
-    console.log('[useTabManagement.handleSetActiveTabId] Final type:', type, 'tabSource:', tabSource);
+    logger.graph.trace(`handleSetActiveTabId final type: ${type}`, 'TabManagement');
     
     if (type) setSelectedInfo(newId, type as any);
   }, [setActiveTabId, setSelectedInfo]);
@@ -50,12 +51,12 @@ export function useTabManagement() {
     type: "event" | "function" | "macro",
     initialData?: Graph
   ) => {
-    console.log('[useTabManagement.openGraph] Called with:', { id, name, type, initialData });
+    logger.graph.trace(`openGraph called: id=${id}, name=${name}, type=${type}`, 'TabManagement');
     
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
     
-    console.log('[useTabManagement.openGraph] Target group:', targetGroupId);
+    logger.graph.trace(`openGraph target group: ${targetGroupId}`, 'TabManagement');
 
     layoutStore.addTab(targetGroupId, {
       id,
@@ -64,10 +65,10 @@ export function useTabManagement() {
       type
     });
 
-    console.log('[useTabManagement.openGraph] Tab added, setting active group');
+    logger.graph.trace('Tab added, setting active group', 'TabManagement');
     layoutStore.setActiveGroup(targetGroupId);
     
-    console.log('[useTabManagement.openGraph] Calling handleSetActiveTabId');
+    logger.graph.trace('Calling handleSetActiveTabId', 'TabManagement');
     handleSetActiveTabId(id, type, initialData, targetGroupId);
   }, [handleSetActiveTabId]);
 

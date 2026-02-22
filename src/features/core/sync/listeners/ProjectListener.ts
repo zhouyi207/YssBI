@@ -4,6 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { EventRegistry } from '../registry/EventRegistry';
 import { createEventHandlers } from '../handlers';
 import { EventCallbacks } from '../types';
+import { logger } from '@/utils/appLogger';
 
 /**
  * 项目事件监听器
@@ -23,18 +24,18 @@ export class ProjectListener {
      */
     async start(): Promise<void> {
         if (this.unlisten) {
-            console.log('[ProjectListener] Already listening');
+            logger.sys.debug('Already listening', 'ProjectListener');
             return;
         }
 
-        console.log('[ProjectListener] Starting project event listener...');
+        logger.sys.debug('Starting project event listener...', 'ProjectListener');
 
         this.unlisten = await listen('project-event', (event) => {
-            console.log('[ProjectListener] Received event:', event.payload);
+            logger.sys.trace('Received event: ' + JSON.stringify(event.payload), 'ProjectListener');
             this.registry.dispatch(event.payload);
         });
 
-        console.log('[ProjectListener] ✓ Project event listener started');
+        logger.sys.info('Project event listener started', 'ProjectListener');
     }
 
     /**
@@ -44,7 +45,7 @@ export class ProjectListener {
         if (this.unlisten) {
             this.unlisten();
             this.unlisten = null;
-            console.log('[ProjectListener] Project event listener stopped');
+            logger.sys.info('Project event listener stopped', 'ProjectListener');
         }
     }
 

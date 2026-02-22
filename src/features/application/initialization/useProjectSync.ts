@@ -6,6 +6,7 @@ import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener'
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
 import { useEditor } from '@/features/application/editor';
 import type { EventCallbacks } from '@/features/core/sync/types';
+import { logger } from '@/utils/appLogger';
 
 const LISTENER_KEY = 'project-listener';
 
@@ -25,7 +26,7 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
       const listener = await SingletonManager.getInstance(
         LISTENER_KEY,
         async () => {
-          console.log('[useProjectSync] Creating new listener instance');
+          logger.sys.debug('Creating new listener instance', 'useProjectSync');
           const newListener = new ProjectListener(callbacks);
           await newListener.start();
           return newListener;

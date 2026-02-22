@@ -5,6 +5,34 @@ import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from "@/shared/types/domain/dataType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
 import { uiStore } from "@/features/core/ui/UIStore";
+import { useLogStore } from "@/features/core/log/logStore";
+import { LogLevel, LogType } from "@/shared/types/ui";
+
+const LOG_TYPE_LABELS: Record<string, string> = {
+  application: 'APP', execution: 'EXEC', system: 'SYS', graph: 'GRAPH', data: 'DATA',
+};
+
+const getLevelColor = (level: LogLevel) => {
+  switch (level) {
+    case 'error': return 'text-red-400';
+    case 'warn': return 'text-yellow-400';
+    case 'info': return 'text-blue-400';
+    case 'debug': return 'text-gray-400';
+    case 'trace': return 'text-gray-500';
+    default: return 'text-gray-400';
+  }
+};
+
+const getTypeColor = (type: LogType) => {
+  switch (type) {
+    case 'application': return 'text-green-400';
+    case 'execution': return 'text-purple-400';
+    case 'system': return 'text-cyan-400';
+    case 'graph': return 'text-orange-400';
+    case 'data': return 'text-pink-400';
+    default: return 'text-gray-400';
+  }
+};
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) => {
   const {
@@ -27,6 +55,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     updateDataFrame,
     deleteDataFrame
   } = useEditorGroup();
+
+  const selectedLog = useLogStore((s) => s.selectedLog);
 
 
   // Find the selected item's data
@@ -152,11 +182,48 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     >
       <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-          Details {selectedData ? `: ${selectedData.name}` : ''}
+          Details {selectedItemType === 'log' ? ': Log' : selectedData ? `: ${selectedData.name}` : ''}
         </span>
       </div>
 
-      {selectedData ? (
+      {selectedItemType === 'log' && selectedLog ? (
+        <OverlayScrollbar className="flex-1 pb-4" direction="vertical">
+          <table className="w-full text-[11px] border-collapse text-[#cccccc]">
+            <tbody>
+              <tr className="border-b border-[#2b2b2b]">
+                <td className="p-2 font-bold text-gray-400 bg-white/5 w-20">Time</td>
+                <td className="p-2 font-mono text-gray-300">{selectedLog.timestamp}</td>
+              </tr>
+              <tr className="border-b border-[#2b2b2b]">
+                <td className="p-2 font-bold text-gray-400 bg-white/5">Level</td>
+                <td className="p-2">
+                  <span className={`${getLevelColor(selectedLog.level)} font-bold uppercase`}>{selectedLog.level}</span>
+                </td>
+              </tr>
+              <tr className="border-b border-[#2b2b2b]">
+                <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
+                <td className="p-2">
+                  <span className={`${getTypeColor(selectedLog.log_type)} font-semibold`}>
+                    {LOG_TYPE_LABELS[selectedLog.log_type] ?? selectedLog.log_type.toUpperCase()}
+                  </span>
+                </td>
+              </tr>
+              {selectedLog.source && (
+                <tr className="border-b border-[#2b2b2b]">
+                  <td className="p-2 font-bold text-gray-400 bg-white/5">Source</td>
+                  <td className="p-2 text-cyan-400 font-mono">{selectedLog.source}</td>
+                </tr>
+              )}
+              <tr className="border-b border-[#2b2b2b]">
+                <td className="p-2 font-bold text-gray-400 bg-white/5 align-top">Message</td>
+                <td className="p-2">
+                  <pre className="text-[11px] font-mono text-gray-200 whitespace-pre-wrap break-all leading-relaxed">{selectedLog.message}</pre>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </OverlayScrollbar>
+      ) : selectedData ? (
         <OverlayScrollbar className="flex-1 pb-4" direction="vertical">
           <table className="w-full text-[11px] border-collapse text-[#cccccc]">
             <tbody>

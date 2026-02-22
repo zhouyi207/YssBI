@@ -10,6 +10,7 @@ import {
   ConnectionData,
   RuntimeNodeInput,
 } from '@/shared/types';
+import { logger } from '@/utils/appLogger';
 
 interface GraphDataStore {
   // ======================
@@ -88,7 +89,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
   addNode: (graphId, node) =>
     set((state) => {
       if (state.nodes[node.id]) {
-        console.warn(`[GraphDataStore] Node "${node.id}" already exists`);
+        logger.graph.warn(`Node "${node.id}" already exists`, 'GraphDataStore');
         return state;
       }
 
@@ -112,7 +113,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const prev = state.nodes[nodeId];
       if (!prev) {
-        console.warn(`[GraphDataStore] updateNode: Node "${nodeId}" not found`);
+        logger.graph.warn(`updateNode: Node "${nodeId}" not found`, 'GraphDataStore');
         return state;
       }
 
@@ -146,7 +147,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const node = state.nodes[nodeId];
       if (!node) {
-        console.warn(`[GraphDataStore] deleteNode: Node "${nodeId}" not found`);
+        logger.graph.warn(`deleteNode: Node "${nodeId}" not found`, 'GraphDataStore');
         return state;
       }
 
@@ -288,7 +289,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
   addPin: (nodeId, pin) =>
     set((state) => {
       if (state.pins[pin.id]) {
-        console.warn(`[GraphDataStore] Pin "${pin.id}" already exists`);
+        logger.graph.warn(`Pin "${pin.id}" already exists`, 'GraphDataStore');
         return state;
       }
 
@@ -312,7 +313,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const prev = state.pins[pinId];
       if (!prev) {
-        console.warn(`[GraphDataStore] updatePin: Pin "${pinId}" not found`);
+        logger.graph.warn(`updatePin: Pin "${pinId}" not found`, 'GraphDataStore');
         return state;
       }
 
@@ -331,7 +332,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const pin = state.pins[pinId];
       if (!pin) {
-        console.warn(`[GraphDataStore] deletePin: Pin "${pinId}" not found`);
+        logger.graph.warn(`deletePin: Pin "${pinId}" not found`, 'GraphDataStore');
         return state;
       }
 
@@ -456,9 +457,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const conn = state.connections[connectionId];
       if (!conn) {
-        console.warn(
-          `[GraphDataStore] disconnect: Connection "${connectionId}" not found`
-        );
+        logger.graph.warn(`disconnect: Connection "${connectionId}" not found`, 'GraphDataStore');
         return state;
       }
 

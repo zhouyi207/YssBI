@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { AppSettings } from "@/shared/types/settings";
 import { DEFAULT_SETTINGS } from "@/app/appConfig/default";
+import { logger } from '@/utils/appLogger';
 
 
 export class SettingsService {
@@ -13,10 +14,10 @@ export class SettingsService {
         try {
             const settings = await invoke<AppSettings>("load_settings");
             this.settingsCache = settings;
-            console.info("[SettingsService.loadSettings] Settings loaded successfully via backend");
+            logger.app.info('Settings loaded successfully via backend', 'SettingsService');
             return settings;
         } catch (error) {
-            console.error("[SettingsService.loadSettings] Error loading settings via backend:", error);
+            logger.app.error(`Error loading settings via backend: ${error instanceof Error ? error.message : String(error)}`, 'SettingsService');
             this.settingsCache = { ...DEFAULT_SETTINGS };
             return this.settingsCache;
         }
@@ -29,9 +30,9 @@ export class SettingsService {
         try {
             await invoke("save_settings", { settings });
             this.settingsCache = settings;
-            console.log("[SettingsService] Settings saved successfully via backend");
+            logger.app.debug('Settings saved successfully via backend', 'SettingsService');
         } catch (error) {
-            console.error("[SettingsService] Error saving settings via backend:", error);
+            logger.app.error(`Error saving settings via backend: ${error instanceof Error ? error.message : String(error)}`, 'SettingsService');
             throw error;
         }
     }

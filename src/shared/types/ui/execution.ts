@@ -1,7 +1,7 @@
 /**
  * UI Types - Execution
  *
- * Tauri Channel 传输的执行事件 + 前端执行状态
+ * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
@@ -30,15 +30,23 @@ export interface NodeExecutionState {
   timestamp: number;
 }
 
-export interface ExecutionState {
+/** 单张图的执行状态 */
+export interface GraphExecutionState {
   status: ExecutionStatus;
   currentNodeId: string | null;
   executedNodes: Set<string>;
   nodeStates: Map<string, NodeExecutionState>;
   completedConnections: Set<string>;
   errorConnections: Set<string>;
-  /** 执行录制（用于回放） */
   recording: RecordedEvent[];
-  /** 是否正在回放 */
+  graphDirty: boolean;
+}
+
+/** 全局执行状态 */
+export interface ExecutionState {
+  /** 按 graphId 存储的执行状态 */
+  graphs: Record<string, GraphExecutionState>;
+  /** 当前正在回放的 graphId */
+  playbackGraphId: string | null;
   isPlaying: boolean;
 }

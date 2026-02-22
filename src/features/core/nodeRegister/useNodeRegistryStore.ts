@@ -5,6 +5,7 @@ import { SchemaService } from "@/services/schema";
 import { NodeDefinition } from "@/shared/types/domain";
 import { NodeDefinitionMap, NodeRegistryState } from "@/shared/types/state";
 import { LoadStatus } from "@/shared/types/ui";
+import { logger } from '@/utils/appLogger';
 
 interface NodeRegistryStore extends NodeRegistryState {
     definitions: NodeDefinitionMap;
@@ -32,12 +33,12 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
 
         // 幂等保护
         if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
-            console.log('[NodeRegistry] Already loading or loaded, skipping...');
+            logger.sys.debug('Already loading or loaded, skipping...', 'NodeRegistry');
             return;
         }
 
         const startTime = performance.now();
-        console.log('[NodeRegistry] Loading node definitions from backend...');
+        logger.sys.debug('Loading node definitions from backend...', 'NodeRegistry');
 
         set({ status: LoadStatus.Loading, error: null });
 
@@ -59,13 +60,10 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
             });
 
             const duration = performance.now() - startTime;
-            console.log('[NodeRegistry] ✓ Node definitions loaded successfully', {
-                nodeTypes: definitions.size,
-                duration: `${duration.toFixed(0)}ms`,
-            });
+            logger.sys.info(`Node definitions loaded successfully, nodeTypes: ${definitions.size}, duration: ${duration.toFixed(0)}ms`, 'NodeRegistry');
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            console.error('[NodeRegistry] ✗ Failed to load node definitions:', errorMessage);
+            logger.sys.error('Failed to load node definitions: ' + errorMessage, 'NodeRegistry');
             
             set({
                 status: LoadStatus.Error,

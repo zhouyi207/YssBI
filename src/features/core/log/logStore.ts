@@ -8,19 +8,19 @@ interface LogStore {
   total: number;
   hasMore: boolean;
   loading: boolean;
+  selectedLog: LogMessage | null;
   
-  // Actions
   addLog: (log: LogMessage) => void;
   setLogs: (logs: LogMessage[]) => void;
   appendLogs: (logs: LogMessage[]) => void;
   clearLogs: () => void;
+  setSelectedLog: (log: LogMessage | null) => void;
   setFilter: (filter: Partial<LogFilter>) => void;
   toggleLevel: (level: LogLevel) => void;
   toggleType: (type: LogType) => void;
   setSearchText: (text: string) => void;
   getFilteredLogs: () => LogMessage[];
   
-  // 懒加载相关
   loadLogs: (offset: number, limit: number) => Promise<void>;
   loadMoreLogs: () => Promise<void>;
   refreshLogs: () => Promise<void>;
@@ -28,7 +28,7 @@ interface LogStore {
 
 const initialFilter: LogFilter = {
   levels: new Set(['trace', 'debug', 'info', 'warn', 'error'] as LogLevel[]),
-  types: new Set(['application', 'execution', 'system'] as LogType[]),
+  types: new Set(['application', 'execution', 'system', 'graph', 'data'] as LogType[]),
   searchText: '',
 };
 
@@ -38,6 +38,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   total: 0,
   hasMore: false,
   loading: false,
+  selectedLog: null,
 
   addLog: (log) => set((state) => ({
     logs: [...state.logs, log],
@@ -50,7 +51,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
     logs: [...state.logs, ...logs],
   })),
 
-  clearLogs: () => set({ logs: [], total: 0, hasMore: false }),
+  clearLogs: () => set({ logs: [], total: 0, hasMore: false, selectedLog: null }),
+
+  setSelectedLog: (log) => set({ selectedLog: log }),
 
   setFilter: (newFilter) => set((state) => ({
     filter: { ...state.filter, ...newFilter },
@@ -88,55 +91,46 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const { logs, filter } = get();
     if (!Array.isArray(logs) || !filter?.levels || !filter?.types) return [];
     return logs.filter((log) => {
-      // 过滤级别
       if (!filter.levels.has(log.level)) return false;
-      
-      // 过滤类型
       if (!filter.types.has(log.log_type)) return false;
-      
-      // 过滤搜索文本
       if (filter.searchText) {
         const searchLower = filter.searchText.toLowerCase();
         const matchMessage = log.message.toLowerCase().includes(searchLower);
         const matchSource = log.source?.toLowerCase().includes(searchLower);
         if (!matchMessage && !matchSource) return false;
       }
-      
       return true;
     });
   },
   
-  // 加载日志（从文件）
-  // 后端 get_logs 返回 Vec<LogMessage>（数组），非 { logs, total, has_more }
   loadLogs: async (offset: number, limit: number) => {
     set({ loading: true });
     try {
       const response = await invoke<unknown>('get_logs', { offset, limit });
-      const logs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
-      let total = logs.length;
-      let hasMore = logs.length >= limit;
+      const fileLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      let total = fileLogs.length;
+      let hasMore = fileLogs.length >= limit;
       try {
         const count = await invoke<number>('get_log_count');
         if (typeof count === 'number') {
           total = count;
-          hasMore = offset + logs.length < total;
+          hasMore = offset + fileLogs.length < total;
         }
       } catch {
-        // get_log_count 失败时使用默认值
+        // ignore
       }
       set({
-        logs,
+        logs: fileLogs,
         total,
         hasMore,
         loading: false,
       });
     } catch (error) {
-      console.error('Failed to load logs:', error);
+      console.error('[LogStore] Failed to load logs:', error);
       set({ loading: false });
     }
   },
   
-  // 加载更多日志
   loadMoreLogs: async () => {
     const { logs, hasMore, loading } = get();
     if (!hasMore || loading) return;
@@ -145,34 +139,37 @@ export const useLogStore = create<LogStore>((set, get) => ({
     try {
       const offset = Array.isArray(logs) ? logs.length : 0;
       const response = await invoke<unknown>('get_logs', { offset, limit: 50 });
-      const newLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
-      let total = offset + newLogs.length;
-      let hasMoreResult = newLogs.length >= 50;
+      const olderLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      let total = offset + olderLogs.length;
+      let hasMoreResult = olderLogs.length >= 50;
       try {
         const count = await invoke<number>('get_log_count');
         if (typeof count === 'number') {
           total = count;
-          hasMoreResult = offset + newLogs.length < total;
+          hasMoreResult = offset + olderLogs.length < total;
         }
       } catch {
-        // 使用默认值
+        // ignore
       }
       set((state) => ({
-        logs: [...newLogs, ...(Array.isArray(state.logs) ? state.logs : [])],
+        logs: [...olderLogs, ...(Array.isArray(state.logs) ? state.logs : [])],
         total,
         hasMore: hasMoreResult,
         loading: false,
       }));
     } catch (error) {
-      console.error('Failed to load more logs:', error);
+      console.error('[LogStore] Failed to load more logs:', error);
       set({ loading: false });
     }
   },
   
-  // 刷新日志（重新加载）
   refreshLogs: async () => {
-    const { logs } = get();
-    const currentCount = logs.length;
-    await get().loadLogs(0, Math.max(currentCount, 50));
+    try {
+      const count = await invoke<number>('get_log_count');
+      const limit = typeof count === 'number' ? count : 200;
+      await get().loadLogs(0, limit);
+    } catch {
+      await get().loadLogs(0, 200);
+    }
   },
 }));

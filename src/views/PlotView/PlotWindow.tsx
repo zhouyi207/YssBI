@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { logger } from '@/utils/appLogger';
 
 /**
  * Plot 窗口组件
@@ -15,7 +16,7 @@ export const PlotWindow: React.FC = () => {
 
     const initializeWindow = async () => {
       try {
-        console.log('[PlotWindow] Initializing plot window...');
+        logger.sys.debug('Initializing plot window...', 'PlotWindow');
         
         // 立即设置为ready
         if (mounted) {
@@ -47,7 +48,7 @@ export const PlotWindow: React.FC = () => {
                     setIsMaximized(maximized);
                   }
                 } catch (e) {
-                  console.warn('[PlotWindow] Failed to check maximized state on resize:', e);
+                  logger.sys.warn('Failed to check maximized state on resize: ' + String(e), 'PlotWindow');
                 }
               }, 100);
             });
@@ -59,14 +60,14 @@ export const PlotWindow: React.FC = () => {
               };
             }
 
-            console.log('[PlotWindow] Plot window initialized successfully');
+            logger.sys.debug('Plot window initialized successfully', 'PlotWindow');
           } catch (e) {
-            console.warn('[PlotWindow] Failed to setup window listeners:', e);
+            logger.sys.warn('Failed to setup window listeners: ' + String(e), 'PlotWindow');
           }
         }, 100);
 
       } catch (e) {
-        console.error('[PlotWindow] Failed to initialize window:', e);
+        logger.sys.error('Failed to initialize window: ' + String(e), 'PlotWindow');
         if (mounted) {
           setIsReady(true);
         }
@@ -88,7 +89,7 @@ export const PlotWindow: React.FC = () => {
       const currentWindow = getCurrentWindow();
       await currentWindow.minimize();
     } catch (e) {
-      console.error('Failed to minimize window:', e);
+      logger.app.error('Failed to minimize window: ' + String(e), 'PlotWindow');
     }
   };
 
@@ -97,7 +98,7 @@ export const PlotWindow: React.FC = () => {
       const currentWindow = getCurrentWindow();
       await currentWindow.toggleMaximize();
     } catch (e) {
-      console.error('Failed to maximize window:', e);
+      logger.app.error('Failed to maximize window: ' + String(e), 'PlotWindow');
     }
   };
 
@@ -106,7 +107,7 @@ export const PlotWindow: React.FC = () => {
       const currentWindow = getCurrentWindow();
       await currentWindow.close();
     } catch (e) {
-      console.error('Failed to close window:', e);
+      logger.app.error('Failed to close window: ' + String(e), 'PlotWindow');
     }
   };
 

@@ -7,6 +7,7 @@ import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore'
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { getUniqueName } from '@/shared/utils';
+import { logger } from '@/utils/appLogger';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
 function buildScope(
@@ -70,7 +71,7 @@ export function useVariableManagement() {
 
       switchSidebarTab('graphs');
     } catch (e) {
-      console.error('Failed to create variable:', e);
+      logger.data.error('Failed to create variable: ' + String(e), 'VariableManagement');
     }
   }, [activeTabId, graphType, switchSidebarTab]);
 
@@ -94,7 +95,7 @@ export function useVariableManagement() {
     try {
       await VariableService.updateVariable(id, data);
     } catch (e) {
-      console.error('[useVariableManagement] Failed to update variable in backend:', e);
+      logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableManagement');
     }
   }, []);
 
@@ -104,12 +105,12 @@ export function useVariableManagement() {
 
   const promoteVariable = useCallback((_id: string) => {
     // No-op in new architecture - all variables are in project store
-    console.log('[useVariableManagement] promoteVariable is no-op in new architecture');
+    logger.data.debug('promoteVariable is no-op in new architecture', 'VariableManagement');
   }, []);
 
   const demoteVariable = useCallback((_id: string) => {
     // No-op in new architecture - all variables are in project store
-    console.log('[useVariableManagement] demoteVariable is no-op in new architecture');
+    logger.data.debug('demoteVariable is no-op in new architecture', 'VariableManagement');
   }, []);
 
   return {

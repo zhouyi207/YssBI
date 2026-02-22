@@ -4,6 +4,7 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useVariableStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { logger } from '@/utils/appLogger';
 
 export interface VariableDropMenu {
   x: number;
@@ -142,7 +143,7 @@ export function useCanvasDrop({
           !variables[dragState.template.variableId] &&
           !allVariables[dragState.template.variableId]
         ) {
-          console.warn("Variable no longer exists. Aborting drop.");
+          logger.graph.warn('Variable no longer exists. Aborting drop', 'CanvasDrop');
           return;
         }
 

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { LoadStatus } from "@/shared/types/ui";
 import { SchemaState } from "@/shared/types/state";
+import { logger } from '@/utils/appLogger';
 
 interface SchemaStore extends SchemaState {
   // Schema 数据
@@ -25,12 +26,12 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
 
     // 幂等保护
     if (status === LoadStatus.Loading || status === LoadStatus.Ready) {
-      console.log('[Schema] Already loading or loaded, skipping...');
+      logger.sys.debug('Already loading or loaded, skipping...', 'Schema');
       return;
     }
 
     const startTime = performance.now();
-    console.log('[Schema] Loading schema from backend...');
+    logger.sys.debug('Loading schema from backend...', 'Schema');
 
     set({ status: LoadStatus.Loading, error: null });
 
@@ -42,12 +43,10 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
       });
 
       const duration = performance.now() - startTime;
-      console.log('[Schema] ✓ Schema loaded successfully', {
-        duration: `${duration.toFixed(0)}ms`,
-      });
+      logger.sys.info(`Schema loaded successfully, duration: ${duration.toFixed(0)}ms`, 'Schema');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('[Schema] ✗ Failed to load schema:', errorMessage);
+      logger.sys.error('Failed to load schema: ' + errorMessage, 'Schema');
 
       set({
         status: LoadStatus.Error,

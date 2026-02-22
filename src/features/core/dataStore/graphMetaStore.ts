@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { GraphId, NodeId } from '@/shared/types';
+import { logger } from '@/utils/appLogger';
 
 export interface GraphMeta {
   id: GraphId;
@@ -40,7 +41,7 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
   // ==========================
   addGraph: (meta) => set((state) => {
     if (state.graphs[meta.id]) {
-      console.warn(`[GraphMetaStore] addGraph: Graph "${meta.id}" already exists`);
+      logger.data.warn(`addGraph: Graph "${meta.id}" already exists`, 'GraphMetaStore');
       return state;
     }
 
@@ -53,7 +54,7 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
   updateGraph: (id, patch) => set((state) => {
     const prev = state.graphs[id];
     if (!prev) {
-      console.warn(`[GraphMetaStore] updateGraph: Graph "${id}" not found`);
+      logger.data.warn(`updateGraph: Graph "${id}" not found`, 'GraphMetaStore');
       return state;
     }
 
@@ -64,7 +65,7 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
 
   deleteGraph: (id) => set((state) => {
     if (!state.graphs[id]) {
-      console.warn(`[GraphMetaStore] deleteGraph: Graph "${id}" not found`);
+      logger.data.warn(`deleteGraph: Graph "${id}" not found`, 'GraphMetaStore');
       return state;
     }
 

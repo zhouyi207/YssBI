@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { executeCommand } from "@/features/core/history";
+import { logger } from '@/utils/appLogger';
 
 /**
  * Get default value for a pin type.
@@ -73,7 +74,7 @@ export function usePinInput({
           { mergeKey: `pin-value-${pinId}` },
         );
       } catch (error) {
-        console.error("[PinInput] Failed to update pin value:", error);
+        logger.graph.error(`Failed to update pin value: ${error instanceof Error ? error.message : String(error)}`, 'PinInput');
       }
     },
     [subgraphId, nodeId, pinId, pinType, value]

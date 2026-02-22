@@ -4,6 +4,7 @@ import { LoadStatus } from '@/shared/types/ui';
 import { useSchemaStore } from '@/features/core/schema';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { initProjectSync } from '@/features/core/dataStore';
+import { logger } from '@/utils/appLogger';
 
 
 export function useAppInitialization(): InitializationState {
@@ -34,13 +35,13 @@ export function useAppInitialization(): InitializationState {
 
         // 检查是否有错误
         if (schemaError) {
-            console.error('[AppInit] ✗ Initialization failed: Schema error ', schemaError);
+            logger.sys.error('Initialization failed: Schema error ' + schemaError, 'AppInit');
             setState({ status: LoadStatus.Error, error: `Schema: ${schemaError}` });
             return;
         }
 
         if (registryError) {
-            console.error('[AppInit] ✗ Initialization failed: NodeRegistry error ', registryError);
+            logger.sys.error('Initialization failed: NodeRegistry error ' + registryError, 'AppInit');
             setState({ status: LoadStatus.Error, error: `NodeRegistry: ${registryError}` });
             return;
         }
@@ -66,7 +67,7 @@ export function useAppInitialization(): InitializationState {
                 setState({ status: LoadStatus.Ready, error: null });
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                console.error('[AppInit] ✗ Failed to sync project:', errorMessage);
+                logger.sys.error('Failed to sync project: ' + errorMessage, 'AppInit');
                 setState({
                     status: LoadStatus.Error,
                     error: `Project sync: ${errorMessage}`,

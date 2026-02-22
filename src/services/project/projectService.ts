@@ -3,6 +3,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
+import { logger } from '@/utils/appLogger';
 
 type CanvasState = GraphPosition;
 
@@ -10,7 +11,7 @@ type CanvasState = GraphPosition;
  * 将后端 Graph 数据转换为前端格式（供 connectPins 等复用）
  */
 export function toFrontendGraph(data: GraphInstanceDTO): Graph {
-    console.log('[toFrontendGraph] Input data:', data);
+    logger.app.trace(`[toFrontendGraph] Input data: ${JSON.stringify(data)}`, 'ProjectService');
     
     // 后端返回的结构（GraphInstanceDTO）：{ id, name, type, nodes: [], pins: [], connections: {...}, canvas }
     
@@ -107,12 +108,7 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
         }
     }
     
-    console.log('[toFrontendGraph] Converted:', {
-        nodesCount: nodes.length,
-        pinsCount: pins.length,
-        connectionsCount: connectionsArray.length,
-        sampleNode: nodes[0]
-    });
+    logger.app.trace(`[toFrontendGraph] Converted: nodes=${nodes.length}, pins=${pins.length}, connections=${connectionsArray.length}`, 'ProjectService');
     
     const rawType = data.type ?? 'event';
     const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function" | "macro";
@@ -147,9 +143,9 @@ export class ProjectService {
      * 获取当前项目状态 - 使用新的 ProjectData 结构
      */
     static async getProjectState(): Promise<ProjectData> {
-        console.log('[ProjectService.getProjectState] Invoking get_project_data...');
+        logger.app.debug('Invoking get_project_data...', 'ProjectService');
         const data = await invoke<ProjectDataDTO>("get_project_data");
-        console.log('[ProjectService.getProjectState] Raw backend data:', JSON.stringify(data));
+        logger.app.trace(`Raw backend data: ${JSON.stringify(data)}`, 'ProjectService');
         
         // 新格式：直接使用 variables, graphs, databases
         const result: ProjectData = {
@@ -159,12 +155,7 @@ export class ProjectService {
             metadata: data.metadata || { exportTime: "", appVersion: "" },
         };
         
-        console.log('[ProjectService.getProjectState] Converted data:', {
-            variablesCount: Object.keys(result.variables).length,
-            graphsCount: Object.keys(result.graphs).length,
-            databasesCount: Object.keys(result.databases).length,
-            graphs: result.graphs
-        });
+        logger.app.debug(`Converted data: variables=${Object.keys(result.variables).length}, graphs=${Object.keys(result.graphs).length}, databases=${Object.keys(result.databases).length}`, 'ProjectService');
         
         return result;
     }
@@ -240,7 +231,7 @@ export class ProjectService {
             await invoke("load_project", { path: filePath });
             return { path: filePath };
         } catch (e) {
-            console.error("Failed to load project:", e);
+            logger.app.error(`Failed to load project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
             throw e;
         }
     }
@@ -261,7 +252,7 @@ export class ProjectService {
             await invoke("save_project", { path: filePath });
             return filePath;
         } catch (e) {
-            console.error("Failed to save project:", e);
+            logger.app.error(`Failed to save project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
             throw e;
         }
     }
@@ -289,20 +280,20 @@ export class ProjectService {
     }
 
     /**
-     * 执行项目（从 event_begin 节点开始执行所有 Event 图）
-     * 通过 Tauri Channel 流式接收执行事件
+     * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
+     * @param graphId 要执行的 graph ID，传 undefined 则执行所有 Event 图
      */
     static async executeProject(
         onEvent?: (event: ExecutionEvent) => void,
+        graphId?: string,
     ): Promise<{ executedGraphs: number; logs: string[] }> {
         const channel = new Channel<ExecutionEvent>();
         channel.onmessage = (msg) => {
-            console.log('[Channel] event:', msg);
             onEvent?.(msg);
         };
         const res = await invoke<{ executedGraphs: number; logs: string[] }>(
             "execute_project",
-            { onEvent: channel },
+            { onEvent: channel, graphId: graphId ?? null },
         );
         return res;
     }

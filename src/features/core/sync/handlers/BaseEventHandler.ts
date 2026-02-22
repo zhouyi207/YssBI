@@ -1,6 +1,7 @@
 // src/features/core/sync/handlers/BaseEventHandler.ts
 
 import { EventHandler, EventCallbacks } from '../types';
+import { logger } from '@/utils/appLogger';
 
 export abstract class BaseEventHandler<T = any> implements EventHandler<T> {
     abstract eventType: string;
@@ -10,10 +11,10 @@ export abstract class BaseEventHandler<T = any> implements EventHandler<T> {
     abstract handle(payload: T, callbacks?: EventCallbacks): void;
     
     protected log(message: string, ...args: any[]): void {
-        console.log(`[${this.constructor.name}] ${message}`, ...args);
+        logger.sys.debug(message + (args.length ? ' ' + args.map(String).join(' ') : ''), this.constructor.name);
     }
     
     protected error(message: string, ...args: any[]): void {
-        console.error(`[${this.constructor.name}] ${message}`, ...args);
+        logger.sys.error(message + (args.length ? ' ' + args.map(String).join(' ') : ''), this.constructor.name);
     }
 }

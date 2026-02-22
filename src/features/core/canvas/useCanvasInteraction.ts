@@ -8,6 +8,7 @@ import { executeCommand } from "@/features/core/history";
 import { Node } from '@/shared/types/ui';
 import { Pin, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
+import { logger } from '@/utils/appLogger';
 
 import { clamp } from "@/shared/utils";
 import { deserializeGraph } from "@/features/core/dataStore";
@@ -49,7 +50,7 @@ export function useCanvasInteraction({
         try {
             await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });
         } catch (error) {
-            console.error('[useCanvasInteraction] Failed to connect pins:', error);
+            logger.graph.error(`Failed to connect pins: ${error instanceof Error ? error.message : String(error)}`, 'CanvasInteraction');
         }
     }, [activeTabIdRef]);
 
@@ -109,7 +110,7 @@ export function useCanvasInteraction({
             try {
                 await executeCommand(tid, 'DisconnectPin', { pinId });
             } catch (error) {
-                console.error('[useCanvasInteraction] Failed to disconnect pin:', error);
+                logger.graph.error(`Failed to disconnect pin: ${error instanceof Error ? error.message : String(error)}`, 'CanvasInteraction');
             }
             return;
         }
@@ -312,7 +313,7 @@ export function useCanvasInteraction({
                             { nodeIds: dragIds, delta },
                             { mergeKey: `move-${[...dragIds].sort().join(',')}` },
                         ).catch((e) =>
-                            console.warn("[useCanvasInteraction] MoveNodes command failed:", e)
+                            logger.graph.warn(`MoveNodes command failed: ${e instanceof Error ? e.message : String(e)}`, 'CanvasInteraction')
                         );
                     }
                 }

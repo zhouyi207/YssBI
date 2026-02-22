@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useExecutionStore } from './useExecutionStore';
 
 const DELAYS: Record<string, number> = {
@@ -10,102 +10,92 @@ const DELAYS: Record<string, number> = {
   executionComplete: 100,
 };
 
-/**
- * 执行回放引擎
- *
- * 从录制的事件数组中按顺序重放事件，每个事件之间插入可控延迟
- */
-export function useExecutionPlayback() {
-  const recording = useExecutionStore((s) => s.recording);
-  const isPlaying = useExecutionStore((s) => s.isPlaying);
+export function useExecutionPlayback(graphId: string) {
+  const graphState = useExecutionStore((s) => s.graphs[graphId]);
+  const recording = graphState?.recording ?? [];
+  const isPlaying = useExecutionStore((s) => s.isPlaying && s.playbackGraphId === graphId);
   const hasRecording = recording.length > 0;
+  const graphDirty = graphState?.graphDirty ?? false;
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indexRef = useRef(0);
+  const [isPaused, setIsPaused] = useState(false);
   const pausedRef = useRef(false);
 
-  const play = useCallback(() => {
-    const { resetVisuals, applyEvent, setPlaying } = useExecutionStore.getState();
-    const rec = useExecutionStore.getState().recording;
-    if (rec.length === 0) return;
-
-    resetVisuals();
-    setPlaying(true);
-    indexRef.current = 0;
-    pausedRef.current = false;
-
-    const step = () => {
-      if (pausedRef.current) return;
-
-      const idx = indexRef.current;
-      if (idx >= rec.length) {
-        setPlaying(false);
-        return;
-      }
-
-      const entry = rec[idx];
-      applyEvent(entry.event);
-      indexRef.current = idx + 1;
-
-      const delay = DELAYS[entry.event.event] ?? 200;
-      timerRef.current = setTimeout(step, delay);
-    };
-
-    step();
-  }, []);
-
-  const pause = useCallback(() => {
-    pausedRef.current = true;
+  const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   }, []);
+
+  const scheduleSteps = useCallback((rec: typeof recording) => {
+    const { applyEvent, setPlaying } = useExecutionStore.getState();
+
+    const step = () => {
+      if (pausedRef.current) return;
+      const idx = indexRef.current;
+      if (idx >= rec.length) {
+        setPlaying(false);
+        return;
+      }
+      const entry = rec[idx];
+      applyEvent(graphId, entry.event);
+      indexRef.current = idx + 1;
+      const delay = DELAYS[entry.event.event] ?? 200;
+      timerRef.current = setTimeout(step, delay);
+    };
+
+    step();
+  }, [graphId]);
+
+  const play = useCallback(() => {
+    const store = useExecutionStore.getState();
+    const rec = store.graphs[graphId]?.recording ?? [];
+    if (rec.length === 0) return;
+
+    store.resetGraphVisuals(graphId);
+    store.setPlaying(true, graphId);
+    setIsPaused(false);
+    pausedRef.current = false;
+    indexRef.current = 0;
+
+    scheduleSteps(rec);
+  }, [graphId, scheduleSteps]);
+
+  const pause = useCallback(() => {
+    pausedRef.current = true;
+    setIsPaused(true);
+    clearTimer();
+  }, [clearTimer]);
 
   const resume = useCallback(() => {
     if (!pausedRef.current) return;
     pausedRef.current = false;
-    const { applyEvent, setPlaying } = useExecutionStore.getState();
-    const rec = useExecutionStore.getState().recording;
+    setIsPaused(false);
 
-    setPlaying(true);
-
-    const step = () => {
-      if (pausedRef.current) return;
-      const idx = indexRef.current;
-      if (idx >= rec.length) {
-        setPlaying(false);
-        return;
-      }
-      const entry = rec[idx];
-      applyEvent(entry.event);
-      indexRef.current = idx + 1;
-      const delay = DELAYS[entry.event.event] ?? 200;
-      timerRef.current = setTimeout(step, delay);
-    };
-
-    step();
-  }, []);
+    const store = useExecutionStore.getState();
+    const rec = store.graphs[graphId]?.recording ?? [];
+    store.setPlaying(true, graphId);
+    scheduleSteps(rec);
+  }, [graphId, scheduleSteps]);
 
   const stop = useCallback(() => {
     pausedRef.current = false;
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    const { resetVisuals } = useExecutionStore.getState();
-    resetVisuals();
-  }, []);
+    setIsPaused(false);
+    clearTimer();
+    useExecutionStore.getState().resetGraphVisuals(graphId);
+  }, [graphId, clearTimer]);
 
   const togglePlayPause = useCallback(() => {
     if (pausedRef.current) {
       resume();
-    } else if (useExecutionStore.getState().isPlaying) {
+    } else if (useExecutionStore.getState().isPlaying && useExecutionStore.getState().playbackGraphId === graphId) {
       pause();
     } else {
       play();
     }
-  }, [play, pause, resume]);
+  }, [graphId, play, pause, resume]);
 
   return {
     play,
@@ -114,6 +104,8 @@ export function useExecutionPlayback() {
     stop,
     togglePlayPause,
     isPlaying,
+    isPaused,
     hasRecording,
+    graphDirty,
   };
 }

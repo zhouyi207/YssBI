@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { VariableId, Variable } from '@/shared/types';
+import { logger } from '@/utils/appLogger';
 
 interface VariableStore {
   variables: Record<VariableId, Variable>;
@@ -21,7 +22,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
   addVariable: (id, v) =>
     set((state) => {
       if (state.variables[id]) {
-        console.warn(`[VariableStore] addVariable: Variable "${id}" already exists`);
+        logger.data.warn(`addVariable: Variable "${id}" already exists`, 'VariableStore');
         return state;
       }
       return { variables: { ...state.variables, [id]: v } };
@@ -31,7 +32,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
     set((state) => {
       const prev = state.variables[id];
       if (!prev) {
-        console.warn(`[VariableStore] updateVariable: Variable "${id}" not found`);
+        logger.data.warn(`updateVariable: Variable "${id}" not found`, 'VariableStore');
         return state;
       }
       return {
@@ -42,7 +43,7 @@ export const useVariableStore = create<VariableStore>((set) => ({
   deleteVariable: (id) =>
     set((state) => {
       if (!state.variables[id]) {
-        console.warn(`[VariableStore] deleteVariable: Variable "${id}" not found`);
+        logger.data.warn(`deleteVariable: Variable "${id}" not found`, 'VariableStore');
         return state;
       }
       const nextVars = { ...state.variables };

@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { getCommandHandler } from './commands';
+import { notifyStructuralChange } from './structuralChange';
 import type {
   CommandType,
   ExecuteOptions,
@@ -16,6 +17,7 @@ import type {
   HistoryEntry,
 } from './types';
 import { MAX_HISTORY, MERGE_WINDOW_MS } from '@/app/appConfig/default';
+import { logger } from '@/utils/appLogger';
 
 let entryCounter = 0;
 function nextEntryId(): string {
@@ -120,8 +122,9 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     try {
       const handler = getCommandHandler(entry.commandType);
       await handler.undo(graphId, entry.context);
+      notifyStructuralChange(entry.commandType, graphId);
     } catch (e) {
-      console.error(`[HistoryStore.undo] Failed for ${entry.commandType}:`, e);
+      logger.graph.error(`Undo failed for ${entry.commandType}: ${e instanceof Error ? e.message : String(e)}`, 'HistoryStore');
     }
 
     return true;
@@ -149,8 +152,9 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     try {
       const handler = getCommandHandler(entry.commandType);
       await handler.redo(graphId, entry.context);
+      notifyStructuralChange(entry.commandType, graphId);
     } catch (e) {
-      console.error(`[HistoryStore.redo] Failed for ${entry.commandType}:`, e);
+      logger.graph.error(`Redo failed for ${entry.commandType}: ${e instanceof Error ? e.message : String(e)}`, 'HistoryStore');
     }
 
     return true;

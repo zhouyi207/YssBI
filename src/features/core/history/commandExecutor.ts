@@ -7,6 +7,7 @@
 
 import { useHistoryStore } from './historyStore';
 import { getCommandHandler } from './commands';
+import { notifyStructuralChange } from './structuralChange';
 import type { CommandType, ExecuteOptions } from './types';
 
 /**
@@ -26,5 +27,6 @@ export async function executeCommand<TArgs = unknown>(
   const handler = getCommandHandler(type);
   const context = await handler.execute(graphId, args);
   useHistoryStore.getState().push(graphId, type, context, options);
+  notifyStructuralChange(type, graphId);
   return context;
 }

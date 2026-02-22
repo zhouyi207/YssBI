@@ -8,6 +8,7 @@ import type {
   DeserializeGraphInput,
 } from "@/shared/types/store/serialization";
 import { useNodeRegistryStore } from "../nodeRegister";
+import { logger } from '@/utils/appLogger';
 
 /**
  * 将单个子图（Event, Function, Macro）序列化
@@ -198,7 +199,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
     const targetPin = connection.toPin ?? connection.to;
 
     if (!sourcePin || !targetPin) {
-      console.warn('[deserializeGraph] Invalid connection:', connection);
+      logger.graph.warn(`Invalid connection: ${JSON.stringify(connection)}`, 'Serialization');
       continue;
     }
 

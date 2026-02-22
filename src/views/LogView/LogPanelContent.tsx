@@ -5,21 +5,71 @@ import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP, VIRTUALIZE_THRESHOLD } f
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useLogStore } from '@/features/core/log/logStore';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { logger } from '@/utils/appLogger';
 
-interface VirtualizedLogListProps {
-  parentRef: React.RefObject<HTMLDivElement | null>;
-  logs: LogMessage[];
+const TYPE_LABELS: Record<string, string> = {
+  application: 'APP', execution: 'EXEC', system: 'SYS', graph: 'GRAPH', data: 'DATA',
+};
+const TYPE_BG: Record<string, string> = {
+  application: 'bg-green-500/10', execution: 'bg-purple-500/10', system: 'bg-cyan-500/10',
+  graph: 'bg-orange-500/10', data: 'bg-pink-500/10',
+};
+
+// ─── Log Item Row ───
+
+interface LogItemProps {
+  log: LogMessage;
+  isSelected: boolean;
+  onClick: () => void;
   getLevelColor: (level: LogLevel) => string;
   getLevelBgColor: (level: LogLevel) => string;
   getTypeColor: (type: LogType) => string;
 }
 
-const VirtualizedLogList = ({ parentRef, logs, getLevelColor, getLevelBgColor, getTypeColor }: VirtualizedLogListProps) => {
+const LogItem = ({ log, isSelected, onClick, getLevelColor, getLevelBgColor, getTypeColor }: LogItemProps) => {
+  const borderColor = log.level === 'error' ? 'border-red-500'
+    : log.level === 'warn' ? 'border-yellow-500'
+    : log.level === 'info' ? 'border-blue-500'
+    : log.level === 'debug' ? 'border-gray-500'
+    : 'border-gray-600';
+
+  return (
+    <div
+      onClick={onClick}
+      className={`flex gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors border-l-2 ${borderColor} ${getLevelBgColor(log.level)} ${
+        isSelected ? 'ring-1 ring-[var(--accent-color)] bg-[var(--accent-color)]/10' : 'hover:bg-[var(--sidebar-bg)]'
+      }`}
+    >
+      <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
+      <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
+      <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${TYPE_BG[log.log_type] ?? 'bg-gray-500/10'}`}>
+        {TYPE_LABELS[log.log_type] ?? log.log_type.toUpperCase()}
+      </span>
+      {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
+      <span className="text-gray-200 text-[11px] leading-relaxed font-mono flex-1 min-w-0 truncate">{log.message}</span>
+    </div>
+  );
+};
+
+// ─── Virtualized Log List ───
+
+interface VirtualizedLogListProps {
+  parentRef: React.RefObject<HTMLDivElement | null>;
+  logs: LogMessage[];
+  selectedIndex: number | null;
+  onSelect: (index: number) => void;
+  getLevelColor: (level: LogLevel) => string;
+  getLevelBgColor: (level: LogLevel) => string;
+  getTypeColor: (type: LogType) => string;
+}
+
+const VirtualizedLogList = ({ parentRef, logs, selectedIndex, onSelect, getLevelColor, getLevelBgColor, getTypeColor }: VirtualizedLogListProps) => {
   const [scrollReady, setScrollReady] = useState(false);
   useEffect(() => {
     if (parentRef.current) {
@@ -47,25 +97,17 @@ const VirtualizedLogList = ({ parentRef, logs, getLevelColor, getLevelBgColor, g
 
   if (!useVirtual || !scrollReady || (logs.length > 0 && virtualItems.length === 0)) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-1">
         {logs.map((log, index) => (
-          <div
+          <LogItem
             key={`${log.timestamp}-${index}`}
-            className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${log.level === 'error' ? 'border-red-500' :
-              log.level === 'warn' ? 'border-yellow-500' :
-                log.level === 'info' ? 'border-blue-500' :
-                  log.level === 'debug' ? 'border-gray-500' :
-                    'border-gray-600'
-              }`}
-          >
-            <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
-            <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
-            <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${log.log_type === 'application' ? 'bg-green-500/10' : log.log_type === 'execution' ? 'bg-purple-500/10' : 'bg-cyan-500/10'}`}>
-              {log.log_type === 'application' ? 'APP' : log.log_type === 'execution' ? 'EXEC' : 'SYS'}
-            </span>
-            {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
-            <span className="text-gray-200 break-all text-[11px] leading-relaxed font-mono flex-1 min-w-0">{log.message}</span>
-          </div>
+            log={log}
+            isSelected={selectedIndex === index}
+            onClick={() => onSelect(index)}
+            getLevelColor={getLevelColor}
+            getLevelBgColor={getLevelBgColor}
+            getTypeColor={getTypeColor}
+          />
         ))}
       </div>
     );
@@ -89,26 +131,23 @@ const VirtualizedLogList = ({ parentRef, logs, getLevelColor, getLevelBgColor, g
               marginBottom: `${LOG_ITEM_GAP}px`,
               transform: `translateY(${virtualRow.start}px)`,
             }}
-            className={`flex gap-3 px-3 py-2 rounded-md hover:bg-[var(--sidebar-bg)] transition-colors ${getLevelBgColor(log.level)} border-l-2 ${log.level === 'error' ? 'border-red-500' :
-              log.level === 'warn' ? 'border-yellow-500' :
-                log.level === 'info' ? 'border-blue-500' :
-                  log.level === 'debug' ? 'border-gray-500' :
-                    'border-gray-600'
-              }`}
           >
-            <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
-            <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
-            <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${log.log_type === 'application' ? 'bg-green-500/10' : log.log_type === 'execution' ? 'bg-purple-500/10' : 'bg-cyan-500/10'}`}>
-              {log.log_type === 'application' ? 'APP' : log.log_type === 'execution' ? 'EXEC' : 'SYS'}
-            </span>
-            {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
-            <span className="text-gray-200 break-all text-[11px] leading-relaxed font-mono flex-1 min-w-0">{log.message}</span>
+            <LogItem
+              log={log}
+              isSelected={selectedIndex === virtualRow.index}
+              onClick={() => onSelect(virtualRow.index)}
+              getLevelColor={getLevelColor}
+              getLevelBgColor={getLevelBgColor}
+              getTypeColor={getTypeColor}
+            />
           </div>
         );
       })}
     </div>
   );
 };
+
+// ─── Main Component ───
 
 export interface LogPanelContentProps {
   variant?: 'embedded' | 'standalone';
@@ -130,6 +169,8 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const loading = useLogStore((s) => s.loading);
   const hasMore = useLogStore((s) => s.hasMore);
   const total = useLogStore((s) => s.total);
+  const selectedLog = useLogStore((s) => s.selectedLog);
+  const setSelectedLog = useLogStore((s) => s.setSelectedLog);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -248,7 +289,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       }
       new WebviewWindow(label, opts);
     } catch (error) {
-      console.error('Failed to open logs window:', error);
+      logger.app.error('Failed to open logs window: ' + String(error), 'LogPanel');
       uiStore.showToast('无法打开日志窗口', 'error');
     }
   }, []);
@@ -273,15 +314,13 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     const last = lastDragPosRef.current;
     lastDragPosRef.current = null;
     if (!droppedOnOurWindowRef.current) {
-      // 在窗口外释放：droppedOnOurWindowRef 为 false 即表示未在本窗口内 drop，直接创建新窗口
-      // 优先用 dragend 的 screenX/screenY（部分环境会提供释放位置），否则用最后 dragover 位置
       const sx = e.screenX ?? 0;
       const sy = e.screenY ?? 0;
       const pos = (sx !== 0 || sy !== 0) ? { x: sx, y: sy } : (last ?? { x: 100, y: 100 });
       try {
         openInNewWindow(pos.x, pos.y);
       } catch (err) {
-        console.error('Failed to open logs window:', err);
+        logger.app.error('Failed to open logs window: ' + String(err), 'LogPanel');
       }
     }
   }, [variant, openInNewWindow]);
@@ -324,6 +363,16 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const filteredLogs = getFilteredLogs() ?? [];
   const safeLogs = logs ?? [];
 
+  const handleSelectLog = useCallback((index: number) => {
+    const log = filteredLogs[index] ?? null;
+    setSelectedLog(log);
+    useEditorStore.getState().setSelectedInfo('log', 'log');
+  }, [filteredLogs, setSelectedLog]);
+
+  const selectedIndex = selectedLog
+    ? filteredLogs.findIndex((l) => l === selectedLog)
+    : null;
+
   const getLevelColor = (level: LogLevel) => {
     switch (level) {
       case 'error': return 'text-red-400';
@@ -351,13 +400,15 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       case 'application': return 'text-green-400';
       case 'execution': return 'text-purple-400';
       case 'system': return 'text-cyan-400';
+      case 'graph': return 'text-orange-400';
+      case 'data': return 'text-pink-400';
       default: return 'text-gray-400';
     }
   };
 
   return (
     <div className={`flex flex-col h-full bg-[var(--workbench-bg)] text-white overflow-hidden ${className}`}>
-      {/* 拖拽预览图 - 供 setDragImage 使用，由系统渲染，可在窗口外显示 */}
+      {/* 拖拽预览图 */}
       {variant === 'embedded' &&
         createPortal(
           <div
@@ -472,7 +523,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                 <div>
                   <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">类型</div>
                   <div className="flex flex-wrap gap-2">
-                    {(['application', 'execution', 'system'] as LogType[]).map((type) => (
+                    {(['application', 'execution', 'system', 'graph', 'data'] as LogType[]).map((type) => (
                       <button
                         key={type}
                         onClick={() => toggleType(type)}
@@ -481,7 +532,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                           : 'bg-[var(--sidebar-bg)] text-gray-500 border border-transparent hover:border-gray-600'
                           }`}
                       >
-                        {type === 'application' ? '应用' : type === 'execution' ? '执行' : '系统'}
+                        {TYPE_LABELS[type] ?? type}
                       </button>
                     ))}
                   </div>
@@ -507,7 +558,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
         </div>
       </div>
 
-      {/* 日志列表 - 使用原生 overflow 作为滚动容器，确保与 react-virtual 兼容 */}
+      {/* 日志列表 */}
       <div
         ref={logContainerRef}
         onScroll={handleScroll}
@@ -540,10 +591,12 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                 加载中...
               </div>
             )}
-            <div className="relative px-3">
+            <div className="relative px-3 py-1">
               <VirtualizedLogList
                 parentRef={logContainerRef}
                 logs={filteredLogs}
+                selectedIndex={selectedIndex !== -1 ? selectedIndex : null}
+                onSelect={handleSelectLog}
                 getLevelColor={getLevelColor}
                 getLevelBgColor={getLevelBgColor}
                 getTypeColor={getTypeColor}
@@ -552,6 +605,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
           </>
         )}
       </div>
+
     </div>
   );
 };

@@ -8,6 +8,7 @@ import { LoadStatus } from '@/shared/types/ui';
 import { useSchemaStore } from '@/features/core/schema';
 import { SchemaService } from '@/services/schema';
 import type { NodeDefinition } from '@/shared/types/domain';
+import { logger } from '@/utils/appLogger';
 
 export interface EditorInitState {
   isInitialized: boolean;
@@ -48,12 +49,12 @@ export function useEditorInit(): EditorInitState {
           nodeDefinitions: nodeDefs,
         });
 
-        console.log('[EditorInit] Initialization complete', { nodeDefinitions: nodeDefs.length });
+        logger.sys.info('Initialization complete, nodeDefinitions: ' + nodeDefs.length, 'EditorInit');
       } catch (err) {
         if (cancelled) return;
 
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('[EditorInit] Initialization failed:', errorMessage);
+        logger.sys.error('Initialization failed: ' + errorMessage, 'EditorInit');
 
         setState({
           isInitialized: false,
