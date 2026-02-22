@@ -23,6 +23,8 @@ const PIN_TYPE_TO_THEME_KEY: Record<string, keyof ThemeSettings> = {
   datetime: "datetimeColor",
   any: "anyColor",
   Any: "anyColor",
+  struct: "structColor",
+  Struct: "structColor",
 };
 
 /** 获取 pin 类型对应的主题颜色键 */

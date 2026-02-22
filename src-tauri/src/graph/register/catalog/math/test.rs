@@ -64,7 +64,7 @@ mod tests {
         // 从 runtime 获取计算结果
         let result_value = {
             let runtime = graph_runtime.lock().unwrap();
-            runtime.get_pin_data_value_by_pin_id(result_pin.id)
+            runtime.get_pin_data_value_by_pin_id(result_pin.id).unwrap()
         };
 
         if let DataValue::Float64(val) = result_value {
@@ -123,7 +123,7 @@ mod tests {
         // 从 runtime 获取计算结果
         let result_value = {
             let runtime = graph_runtime.lock().unwrap();
-            runtime.get_pin_data_value_by_pin_id(result_pin.id)
+            runtime.get_pin_data_value_by_pin_id(result_pin.id).unwrap()
         };
 
         if let DataValue::Float64(val) = result_value {
@@ -182,7 +182,7 @@ mod tests {
         // 从 runtime 获取计算结果
         let result_value = {
             let runtime = graph_runtime.lock().unwrap();
-            runtime.get_pin_data_value_by_pin_id(result_pin.id)
+            runtime.get_pin_data_value_by_pin_id(result_pin.id).unwrap()
         };
 
         if let DataValue::Float64(val) = result_value {
@@ -241,7 +241,7 @@ mod tests {
         // 从 runtime 获取计算结果
         let result_value = {
             let runtime = graph_runtime.lock().unwrap();
-            runtime.get_pin_data_value_by_pin_id(result_pin.id)
+            runtime.get_pin_data_value_by_pin_id(result_pin.id).unwrap()
         };
 
         if let DataValue::Float64(val) = result_value {

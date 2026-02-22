@@ -26,4 +26,23 @@ impl TypeVarInference {
         }
         false
     }
+
+    /// 带上下文的约束检查（含 DataSeries 解包）
+    pub fn satisfies_constraints_with_resolver<F>(&self, vt: &DataType, resolver: &F) -> bool
+    where
+        F: Fn(&super::TypeVarKey) -> Option<DataType>,
+    {
+        let check = |t: &DataType| -> bool {
+            self.constraints
+                .iter()
+                .all(|c| c.satisfies_with_resolver(t, resolver))
+        };
+        if check(vt) {
+            return true;
+        }
+        if let DataType::DataSeries(inner) = vt {
+            return check(inner);
+        }
+        false
+    }
 }

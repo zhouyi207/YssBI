@@ -1,18 +1,20 @@
-﻿import { create } from 'zustand';
-import { ExecutionState } from '@/shared/types/ui';
+import { create } from 'zustand';
+import type { ExecutionState, ExecutionEvent, RecordedEvent } from '@/shared/types/ui';
 
 interface ExecutionStore extends ExecutionState {
-  // Actions
   startExecution: () => void;
   completeExecution: () => void;
   setCurrentNode: (nodeId: string | null) => void;
   markNodeExecuting: (nodeId: string) => void;
   markNodeCompleted: (nodeId: string) => void;
   markNodeError: (nodeId: string, error?: string) => void;
-  addActiveConnection: (fromPinId: string, toPinId: string) => void;
-  removeActiveConnection: (fromPinId: string, toPinId: string) => void;
   markConnectionCompleted: (fromPinId: string, toPinId: string) => void;
+  markConnectionError: (fromPinId: string, toPinId: string) => void;
+  setRecording: (recording: RecordedEvent[]) => void;
+  setPlaying: (playing: boolean) => void;
+  resetVisuals: () => void;
   reset: () => void;
+  applyEvent: (event: ExecutionEvent) => void;
 }
 
 const initialState: ExecutionState = {
@@ -20,11 +22,13 @@ const initialState: ExecutionState = {
   currentNodeId: null,
   executedNodes: new Set(),
   nodeStates: new Map(),
-  activeConnections: new Set(),
   completedConnections: new Set(),
+  errorConnections: new Set(),
+  recording: [],
+  isPlaying: false,
 };
 
-export const useExecutionStore = create<ExecutionStore>((set) => ({
+export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   ...initialState,
 
   startExecution: () => set({
@@ -32,15 +36,15 @@ export const useExecutionStore = create<ExecutionStore>((set) => ({
     currentNodeId: null,
     executedNodes: new Set(),
     nodeStates: new Map(),
-    activeConnections: new Set(),
     completedConnections: new Set(),
+    errorConnections: new Set(),
+    recording: [],
   }),
 
-  completeExecution: () => set((_state) => ({
+  completeExecution: () => set({
     status: "completed",
     currentNodeId: null,
-    activeConnections: new Set(),
-  })),
+  }),
 
   setCurrentNode: (nodeId) => set({ currentNodeId: nodeId }),
 
@@ -86,23 +90,55 @@ export const useExecutionStore = create<ExecutionStore>((set) => ({
     };
   }),
 
-  addActiveConnection: (fromPinId, toPinId) => set((state) => {
-    const newActiveConnections = new Set(state.activeConnections);
-    newActiveConnections.add(`${fromPinId}->${toPinId}`);
-    return { activeConnections: newActiveConnections };
-  }),
-
-  removeActiveConnection: (fromPinId, toPinId) => set((state) => {
-    const newActiveConnections = new Set(state.activeConnections);
-    newActiveConnections.delete(`${fromPinId}->${toPinId}`);
-    return { activeConnections: newActiveConnections };
-  }),
-
   markConnectionCompleted: (fromPinId, toPinId) => set((state) => {
-    const newCompletedConnections = new Set(state.completedConnections);
-    newCompletedConnections.add(`${fromPinId}->${toPinId}`);
-    return { completedConnections: newCompletedConnections };
+    const next = new Set(state.completedConnections);
+    next.add(`${fromPinId}->${toPinId}`);
+    return { completedConnections: next };
   }),
 
-  reset: () => set(initialState),
+  markConnectionError: (fromPinId, toPinId) => set((state) => {
+    const next = new Set(state.errorConnections);
+    next.add(`${fromPinId}->${toPinId}`);
+    return { errorConnections: next };
+  }),
+
+  setRecording: (recording) => set({ recording }),
+
+  setPlaying: (playing) => set({ isPlaying: playing }),
+
+  resetVisuals: () => set({
+    status: "idle",
+    currentNodeId: null,
+    executedNodes: new Set(),
+    nodeStates: new Map(),
+    completedConnections: new Set(),
+    errorConnections: new Set(),
+    isPlaying: false,
+  }),
+
+  reset: () => set({ ...initialState }),
+
+  applyEvent: (event: ExecutionEvent) => {
+    const store = get();
+    switch (event.event) {
+      case 'executionStart':
+        store.startExecution();
+        break;
+      case 'executionComplete':
+        store.completeExecution();
+        break;
+      case 'nodeStart':
+        store.markNodeExecuting(event.data.nodeId);
+        break;
+      case 'nodeComplete':
+        store.markNodeCompleted(event.data.nodeId);
+        break;
+      case 'nodeError':
+        store.markNodeError(event.data.nodeId, event.data.error);
+        break;
+      case 'connectionActive':
+        store.markConnectionCompleted(event.data.fromPinId, event.data.toPinId);
+        break;
+    }
+  },
 }));

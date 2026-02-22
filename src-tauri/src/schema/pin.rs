@@ -36,6 +36,7 @@ pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
         DataType::Any => "any",
         DataType::DataFrame => "dataframe",
         DataType::DataSeries(inner) => data_type_to_pin_type(inner),
+        DataType::Struct(_) => "struct",
     }
 }
 

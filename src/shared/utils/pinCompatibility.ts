@@ -21,6 +21,9 @@ function canAcceptDataType(target: DataType, source: DataType): boolean {
     if (target.kind === 'DataSeries' && source.kind === 'DataSeries') {
       return canAcceptDataType(target.inner, source.inner);
     }
+    if (target.kind === 'Struct' && source.kind === 'Struct') {
+      return target.inner === source.inner;
+    }
     return true;
   }
   if (target.kind === 'Any' || source.kind === 'Any') return true;

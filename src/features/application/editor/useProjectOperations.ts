@@ -3,6 +3,8 @@ import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { useExecutionStore } from '@/features/core/execution';
+import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 
 /**
  * Project Operations Hook
@@ -97,10 +99,19 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       console.log(`[Execute] 执行当前 Event: ${currentGraph.name} (${currentTabId})`);
 
-      const res = await ProjectService.executeProject();
+      const recording: RecordedEvent[] = [];
+      const { applyEvent, setRecording } = useExecutionStore.getState();
+
+      const res = await ProjectService.executeProject((event: ExecutionEvent) => {
+        applyEvent(event);
+        recording.push({ event, timestamp: Date.now() });
+      });
+
+      setRecording(recording);
+
       if (res.logs.length > 0) {
         console.log("[Execute] 执行日志:");
-        res.logs.forEach((line) => console.log("  ", line));
+        res.logs.forEach((line: string) => console.log("  ", line));
       }
       
       uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
@@ -124,10 +135,19 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       console.log(`[Execute] 执行所有 Events (共 ${eventCount} 个)`);
 
-      const res = await ProjectService.executeProject();
+      const recording: RecordedEvent[] = [];
+      const { applyEvent, setRecording } = useExecutionStore.getState();
+
+      const res = await ProjectService.executeProject((event: ExecutionEvent) => {
+        applyEvent(event);
+        recording.push({ event, timestamp: Date.now() });
+      });
+
+      setRecording(recording);
+
       if (res.logs.length > 0) {
         console.log("[Execute] 执行日志:");
-        res.logs.forEach((line) => console.log("  ", line));
+        res.logs.forEach((line: string) => console.log("  ", line));
       }
 
       uiStore.showToast(`执行完成: 共执行 ${res.executedGraphs} 个 Events`, "success", 2000);

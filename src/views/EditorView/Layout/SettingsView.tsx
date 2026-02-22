@@ -360,6 +360,13 @@ export const SettingsView: React.FC = () => {
                                         value={theme.arrayColor}
                                         onChange={(val: string) => updateTheme({ arrayColor: val })}
                                     />
+                                    <SettingItem
+                                        label="Struct Color"
+                                        description="Color for user-defined Struct type pins."
+                                        type="color"
+                                        value={theme.structColor}
+                                        onChange={(val: string) => updateTheme({ structColor: val })}
+                                    />
                                 </div>
                             </div>
                         </div>

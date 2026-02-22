@@ -4,10 +4,27 @@
 //! 全部通过后返回已确定方向的 `ValidatedConnection`。
 
 use crate::graph::core::GraphDataState;
+use crate::graph::infer::TypeVarKey;
+use crate::graph::node::NodeInstance;
 use crate::graph::pin::{PinDirection, PinKind};
 use crate::graph::value::DataType;
 use crate::graph::PinId;
 use std::fmt;
+
+/// 构建 TypeVarKey → 已绑定 DataType 的解析器（供 ConvertibleTo/From 约束使用）
+fn build_type_var_resolver<'a>(
+    node: &'a NodeInstance,
+    data_state: &'a GraphDataState,
+) -> impl Fn(&TypeVarKey) -> Option<DataType> + 'a {
+    move |key: &TypeVarKey| {
+        for (&var_id, var_def) in &node.type_var_map {
+            if var_def.id == *key {
+                return data_state.type_var_bindings.get(&var_id).cloned();
+            }
+        }
+        None
+    }
+}
 
 /// 验证通过后的连接描述（方向已确定）
 #[derive(Debug, Clone)]
@@ -137,18 +154,41 @@ pub fn validate_connection(
         }
 
         // 当 to_pin 是带约束的 TypeVar 时（to_type 为 Any 表示未绑定），用约束检查 from_type
-        // 与类型推断共用 satisfies_constraints_with_unwrap，统一类型模型
         if to_type == DataType::Any && from_type != DataType::Any {
             if let Some(type_var_id) = in_inst.type_var_id {
                 if let Some(node) = data_state.nodes.get(&in_inst.node_id) {
                     if let Some(type_var_def) = node.type_var_map.get(&type_var_id) {
-                        if !type_var_def.constraints.is_empty()
-                            && !type_var_def.satisfies_constraints_with_unwrap(&from_type)
-                        {
-                            return Err(ConnectionError::TypeIncompatible {
-                                from: from_type,
-                                to: to_type,
-                            });
+                        if !type_var_def.constraints.is_empty() {
+                            let resolver = build_type_var_resolver(node, data_state);
+                            if !type_var_def
+                                .satisfies_constraints_with_resolver(&from_type, &resolver)
+                            {
+                                return Err(ConnectionError::TypeIncompatible {
+                                    from: from_type,
+                                    to: to_type,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 对称检查：当 from_pin 是带约束的 TypeVar（from_type 为 Any），用约束检查 to_type
+        if from_type == DataType::Any && to_type != DataType::Any {
+            if let Some(type_var_id) = out_inst.type_var_id {
+                if let Some(node) = data_state.nodes.get(&out_inst.node_id) {
+                    if let Some(type_var_def) = node.type_var_map.get(&type_var_id) {
+                        if !type_var_def.constraints.is_empty() {
+                            let resolver = build_type_var_resolver(node, data_state);
+                            if !type_var_def
+                                .satisfies_constraints_with_resolver(&to_type, &resolver)
+                            {
+                                return Err(ConnectionError::TypeIncompatible {
+                                    from: from_type,
+                                    to: to_type,
+                                });
+                            }
                         }
                     }
                 }

@@ -22,6 +22,11 @@ impl StandardizeTransform1D {
         self.data = Some(StandardizeStats1D { mean, std });
     }
 
+    pub fn fit_transform(&mut self, data: &Array1<f64>) -> Array1<f64> {
+        self.fit(data);
+        self.transform(data)
+    }
+
     pub fn transform(&self, data: &Array1<f64>) -> Array1<f64> {
         if let Some(stats) = &self.data {
             data.mapv(|x| (x - stats.mean) / stats.std)

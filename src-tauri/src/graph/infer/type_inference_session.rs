@@ -1,6 +1,7 @@
-use super::TypeInferenceContext;
+use super::{TypeInferenceContext, TypeVarKey};
 use crate::graph::pin::PinDataTypeInference;
-use crate::graph::{DataType, GraphInstance, PinId};
+use crate::graph::{DataType, GraphInstance, PinId, TypeVarId};
+use std::collections::HashMap;
 
 /// 一次推断会话
 pub struct TypeInferenceSession<'g> {
@@ -22,8 +23,9 @@ impl<'g> TypeInferenceSession<'g> {
     pub fn register_all(&mut self) {
         let data_state = self.graph.data_state.read().unwrap();
         
-        // 1. 先注册所有节点的类型变量
+        // 1. 先注册所有节点的类型变量 + 兄弟映射
         for node_instance in data_state.nodes.values() {
+            let mut sibling_map: HashMap<TypeVarKey, TypeVarId> = HashMap::new();
             for (&type_var_id, type_var_def) in &node_instance.type_var_map {
                 let type_var_inference = super::TypeVarInference {
                     id: type_var_id,
@@ -31,6 +33,10 @@ impl<'g> TypeInferenceSession<'g> {
                     bound: type_var_def.bound.clone(),
                 };
                 self.ctx.register_type_var(type_var_inference);
+                sibling_map.insert(type_var_def.id.clone(), type_var_id);
+            }
+            if sibling_map.len() > 1 {
+                self.ctx.register_sibling_map(sibling_map);
             }
         }
         

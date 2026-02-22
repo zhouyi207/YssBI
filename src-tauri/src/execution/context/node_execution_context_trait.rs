@@ -3,6 +3,7 @@ use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::PinRole;
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::{DataFrame, Series};
+use std::any::Any;
 use std::sync::Arc;
 
 /// Node 执行上下文
@@ -71,6 +72,16 @@ pub trait NodeExecutionContextTrait {
 
     /// 写入变量值
     fn set_variable_value(&mut self, variable_id: &str, value: DataValue) -> Result<(), String>;
+
+    // ====================================================================
+    // 通用句柄存储（Struct 类型）
+    // ====================================================================
+
+    /// 存入不透明对象，返回句柄 ID
+    fn put_handle(&mut self, value: Box<dyn Any + Send + Sync>) -> String;
+
+    /// 按 ID 获取句柄（返回 Arc，可安全跨 Mutex 传递）
+    fn get_handle(&self, id: &str) -> Result<Arc<dyn Any + Send + Sync>, String>;
 
     // ====================================================================
     // 日志

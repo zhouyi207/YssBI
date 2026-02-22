@@ -22,6 +22,7 @@ export const DEFAULT_THEME: ThemeSettings = {
     objectColor: "#abb2bf",
     anyColor: "#858585",
     arrayColor: "#d19a66",
+    structColor: "#b07cd8",
 };
 
 export const DEFAULT_EDITOR: EditorSettings = {

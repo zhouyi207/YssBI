@@ -19,13 +19,6 @@
   to { transform: scale(1); opacity: 1; }
 }
 
-/* 🆕 连接线流动动画 */
-@keyframes dash {
-  to {
-    stroke-dashoffset: -20;
-  }
-}
-
 .animate-slide-in {
   animation: slideInRight 0.3s ease-out forwards;
 }

@@ -23,6 +23,12 @@ pub enum DataType {
     DataFrame,
     DataSeries(Box<DataType>),
 
+    /// 用户定义的不透明结构体类型（句柄传递）
+    ///
+    /// type key 标识具体类型（如 "StandardizeTransform1D"），
+    /// 运行时值为句柄 ID，实际对象存于 ExecutionDataStore。
+    Struct(std::string::String),
+
     // 特殊类型
     Any,
 }
@@ -40,6 +46,7 @@ impl fmt::Display for DataType {
             DataType::Object => write!(f, "Object"),
             DataType::DataFrame => write!(f, "DataFrame"),
             DataType::DataSeries(inner) => write!(f, "DataSeries<{}>", inner),
+            DataType::Struct(key) => write!(f, "Struct<{}>", key),
             DataType::Any => write!(f, "Any"),
         }
     }
@@ -69,6 +76,9 @@ impl FromStr for DataType {
                     let inner = inner.parse()?;
                     return Ok(DataType::DataSeries(Box::new(inner)));
                 }
+                if let Some(key) = s.strip_prefix("Struct<").and_then(|s| s.strip_suffix('>')) {
+                    return Ok(DataType::Struct(key.to_string()));
+                }
                 Err(format!("Unknown DataType: {}", s))
             }
         }
@@ -87,7 +97,7 @@ impl DataType {
             DataType::String => DataValue::String(String::new()),
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),
-            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) => DataValue::Null,
+            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => DataValue::Null,
         }
     }
 
@@ -149,6 +159,23 @@ impl DataType {
         }
     }
 
+    /// Convert 节点使用：判断 from 能否通过类型转换变为 to
+    pub fn can_convert(from: &DataType, to: &DataType) -> bool {
+        if from == to {
+            return true;
+        }
+        match to {
+            DataType::Any => true,
+            DataType::String => true,
+            DataType::Boolean
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::Float32
+            | DataType::Float64 => from.is_primitive(),
+            _ => false,
+        }
+    }
+
     /// 检查 from 类型的值是否可以赋给本类型
     pub fn can_accept(&self, from: &DataType) -> bool {
         if from == self {
@@ -166,6 +193,7 @@ impl DataType {
             (DataType::DataSeries(from_inner), DataType::DataSeries(to_inner)) => {
                 to_inner.can_accept(from_inner)
             }
+            (DataType::Struct(from_key), DataType::Struct(to_key)) => from_key == to_key,
             _ => false,
         }
     }

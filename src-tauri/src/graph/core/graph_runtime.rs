@@ -91,45 +91,46 @@ impl GraphRuntime {
         self.graph_instance.get_pin_instances_by_node_id(node_id)
     }
 
-    pub fn get_pin_data_value_by_pin_role(&self, node_id: NodeId, role: &PinRole) -> DataValue {
+    pub fn get_pin_data_value_by_pin_role(&self, node_id: NodeId, role: &PinRole) -> Result<DataValue, String> {
         let pin_instance = self
             .graph_instance
             .get_pin_instance_by_pin_role(node_id, role)
-            .unwrap();
-        assert_eq!(pin_instance.is_data(), true);
+            .ok_or_else(|| format!("Pin with role {:?} not found on node {:?}", role, node_id))?;
 
-        // 使用 resolve_pin_value 按优先级获取值
+        if !pin_instance.is_data() {
+            return Err(format!("Pin {:?} is not a data pin", pin_instance.id));
+        }
+
         self.resolve_pin_value(pin_instance.id)
-            .unwrap_or_else(|| panic!("No value available for pin {:?}", pin_instance.id))
+            .ok_or_else(|| format!("No value available for pin {:?}", pin_instance.id))
     }
 
-    pub fn get_pin_data_value_by_pin_id(&self, pin_id: PinId) -> DataValue {
-        // 使用 resolve_pin_value 按优先级获取值
+    pub fn get_pin_data_value_by_pin_id(&self, pin_id: PinId) -> Result<DataValue, String> {
         self.resolve_pin_value(pin_id)
-            .unwrap_or_else(|| panic!("No value available for pin {:?}", pin_id))
+            .ok_or_else(|| format!("No value available for pin {:?}", pin_id))
     }
 
     pub fn get_pin_datas_value_by_pin_role(
         &self,
         node_id: NodeId,
         role: &PinRole,
-    ) -> Vec<DataValue> {
+    ) -> Result<Vec<DataValue>, String> {
         let pin_instances = self
             .graph_instance
             .get_pin_instances_by_pin_role(node_id, role);
 
         let mut user_values = vec![];
         for pin_instance in pin_instances {
-            assert_eq!(pin_instance.is_data(), true);
-            let id = pin_instance.id;
-            if let Some(pin_runtime_state) = self.pins_runtime_state.get(&id) {
-                user_values.push(pin_runtime_state.current_value.clone().unwrap());
-            } else {
-                user_values.push(pin_instance.user_value.unwrap());
+            if !pin_instance.is_data() {
+                return Err(format!("Pin {:?} is not a data pin", pin_instance.id));
             }
+            let id = pin_instance.id;
+            let value = self.resolve_pin_value(id)
+                .ok_or_else(|| format!("No value available for pin {:?}", id))?;
+            user_values.push(value);
         }
 
-        user_values
+        Ok(user_values)
     }
 
     pub fn get_pin_data_type_by_pin_role(&self, pin_id: PinId) -> Option<DataType> {
@@ -261,6 +262,21 @@ impl GraphRuntime {
     /// 存入中间 Series，返回引用 ID
     pub fn put_series(&mut self, s: Series) -> String {
         self.data_store.put_series(s)
+    }
+
+    /// 存入不透明对象，返回句柄 ID
+    pub fn put_handle<T: std::any::Any + Send + Sync + 'static>(&mut self, value: T) -> String {
+        self.data_store.put_handle(value)
+    }
+
+    /// 存入已装箱的不透明对象
+    pub fn put_handle_boxed(&mut self, value: Box<dyn std::any::Any + Send + Sync>) -> String {
+        self.data_store.put_handle_boxed(value)
+    }
+
+    /// 按 ID 获取句柄（Arc 包装，可安全跨锁传递）
+    pub fn get_handle(&self, id: &str) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        self.data_store.get_handle(id)
     }
 
     // ========================================================================

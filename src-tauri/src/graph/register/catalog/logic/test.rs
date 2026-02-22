@@ -72,7 +72,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id);
+        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
 
         assert_eq!(result_value, DataValue::Boolean(true), "42 == 42 should be true");
     }
@@ -129,7 +129,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id);
+        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
 
         assert_eq!(result_value, DataValue::Boolean(false), "10 == 20 should be false");
     }
@@ -192,7 +192,7 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id);
+        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
 
         assert_eq!(
             result_value,

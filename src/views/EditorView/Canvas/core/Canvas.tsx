@@ -4,8 +4,6 @@ import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/app
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/dataManagement";
-import { useExecutionVisualization } from "@/features/core/execution";
-
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
 import { EdgesOverlay } from "./EdgesOverlay";
@@ -29,8 +27,6 @@ const selectActivePin = (state: { gesture: any }) => {
 const dragDeltaEq = (a: any, b: any) => a?.x === b?.x && a?.y === b?.y;
 
 export default function Canvas() {
-  useExecutionVisualization();
-
   const {
     nodes,
     setCanvas,

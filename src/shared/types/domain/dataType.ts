@@ -18,7 +18,8 @@ export type DataType =
   | { kind: 'Any' }
   | { kind: 'DataFrame' }
   | { kind: 'Array'; inner: DataType }
-  | { kind: 'DataSeries'; inner: DataType };
+  | { kind: 'DataSeries'; inner: DataType }
+  | { kind: 'Struct'; inner: string };
 
 /** 获取 DataType 的 kind 字符串 */
 export function dataTypeKind(dt: DataType): string {
@@ -33,17 +34,23 @@ export function dataTypeDisplay(dt: DataType): string {
   if (dt.kind === 'DataSeries') {
     return `DataSeries<${dataTypeDisplay(dt.inner)}>`;
   }
+  if (dt.kind === 'Struct') {
+    return `Struct<${dt.inner}>`;
+  }
   return dt.kind;
 }
 
 /** 从 kind 字符串创建 DataType */
-export function dataTypeFromKey(key: string, inner?: DataType): DataType {
+export function dataTypeFromKey(key: string, inner?: DataType | string): DataType {
   const k = key as DataType['kind'];
   if (k === 'Array') {
-    return { kind: 'Array', inner: inner ?? { kind: 'Any' } };
+    return { kind: 'Array', inner: (inner as DataType) ?? { kind: 'Any' } };
   }
   if (k === 'DataSeries') {
-    return { kind: 'DataSeries', inner: inner ?? { kind: 'Any' } };
+    return { kind: 'DataSeries', inner: (inner as DataType) ?? { kind: 'Any' } };
+  }
+  if (k === 'Struct') {
+    return { kind: 'Struct', inner: (inner as string) ?? '' };
   }
   return { kind: k };
 }

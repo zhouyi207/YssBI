@@ -5,31 +5,20 @@ use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 
-const CONVERTIBLE_SCALAR_TYPES: &[DataType] = &[
-    DataType::Boolean,
-    DataType::Int32,
-    DataType::Int64,
-    DataType::Float32,
-    DataType::Float64,
-    DataType::String,
-];
-
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);
 }
 
 fn register_convert(registry: &NodeRegistry) {
-    let convertible_constraint = TypeConstraint::OneOf(CONVERTIBLE_SCALAR_TYPES.to_vec());
-
     let input_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Input".to_string()),
-        constraints: vec![convertible_constraint.clone()],
+        constraints: vec![TypeConstraint::ConvertibleTo(TypeVarKey("T_Output".to_string()))],
         bound: None,
     };
 
     let output_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Output".to_string()),
-        constraints: vec![convertible_constraint],
+        constraints: vec![TypeConstraint::ConvertibleFrom(TypeVarKey("T_Input".to_string()))],
         bound: None,
     };
 
@@ -160,6 +149,7 @@ fn convert_to_string_value(value: DataValue) -> Result<DataValue, String> {
         DataValue::Object(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::DataFrame(id) => Ok(DataValue::String(format!("DataFrame({})", id))),
         DataValue::DataSeries(v) => Ok(DataValue::String(format!("DataSeries({})", v.id))),
+        DataValue::Struct { type_key, handle_id } => Ok(DataValue::String(format!("Struct<{}>({})", type_key, handle_id))),
     }
 }
 

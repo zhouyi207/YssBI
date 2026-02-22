@@ -28,16 +28,16 @@ export function getNodeClassName({
     return `${baseClasses} border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30`;
   }
   
-  if (isExecuting) {
-    return `${baseClasses} border-yellow-400 ring-2 ring-yellow-400/50 z-30 animate-pulse`;
-  }
-  
   if (hasError) {
     return `${baseClasses} border-red-500 ring-2 ring-red-500/50 z-30`;
   }
-  
+
+  if (isExecuting) {
+    return `${baseClasses} border-yellow-400 ring-2 ring-yellow-400/50 z-30 animate-pulse`;
+  }
+
   if (isCompleted) {
-    return `${baseClasses} border-green-500/50 z-20`;
+    return `${baseClasses} border-green-500 ring-1 ring-green-500/30 z-20`;
   }
   
   return `${baseClasses} border-[#2b2b2b] z-10`;
@@ -60,7 +60,7 @@ export function getNodeBackgroundStyle({
   }
   
   if (isCompleted) {
-    return "linear-gradient(135deg, var(--node-base) 0%, rgba(34, 197, 94, 0.05) 100%)";
+    return "linear-gradient(135deg, var(--node-base) 0%, rgba(34, 197, 94, 0.12) 100%)";
   }
   
   return "var(--node-base)";

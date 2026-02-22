@@ -1,5 +1,6 @@
 import { save, open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
+import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 
@@ -289,10 +290,20 @@ export class ProjectService {
 
     /**
      * 执行项目（从 event_begin 节点开始执行所有 Event 图）
-     * @returns { executedGraphs, logs }
+     * 通过 Tauri Channel 流式接收执行事件
      */
-    static async executeProject(): Promise<{ executedGraphs: number; logs: string[] }> {
-        const res = await invoke<{ executedGraphs: number; logs: string[] }>("execute_project");
+    static async executeProject(
+        onEvent?: (event: ExecutionEvent) => void,
+    ): Promise<{ executedGraphs: number; logs: string[] }> {
+        const channel = new Channel<ExecutionEvent>();
+        channel.onmessage = (msg) => {
+            console.log('[Channel] event:', msg);
+            onEvent?.(msg);
+        };
+        const res = await invoke<{ executedGraphs: number; logs: string[] }>(
+            "execute_project",
+            { onEvent: channel },
+        );
         return res;
     }
 

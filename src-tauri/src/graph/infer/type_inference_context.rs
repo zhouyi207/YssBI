@@ -1,6 +1,6 @@
 //! 类型推断系统
 
-use crate::graph::infer::TypeVarInference;
+use crate::graph::infer::{TypeVarInference, TypeVarKey};
 use crate::graph::pin::PinDataTypeInference;
 use crate::graph::pin::PinId;
 use crate::graph::value::DataType;
@@ -23,6 +23,10 @@ pub struct TypeInferenceContext {
 
     /// TypeVar 等价类（Union-Find parent）
     pub var_alias: HashMap<TypeVarId, TypeVarId>,
+
+    /// 同一节点内的 TypeVarKey → TypeVarId 映射，按 TypeVarId 索引
+    /// 用于 ConvertibleTo/ConvertibleFrom 约束在推断时解析兄弟 TypeVar
+    pub type_var_siblings: HashMap<TypeVarId, HashMap<TypeVarKey, TypeVarId>>,
 }
 
 impl TypeInferenceContext {
@@ -32,6 +36,7 @@ impl TypeInferenceContext {
             pin_types: HashMap::new(),
             bindings: HashMap::new(),
             var_alias: HashMap::new(),
+            type_var_siblings: HashMap::new(),
         }
     }
 
@@ -40,6 +45,7 @@ impl TypeInferenceContext {
         self.bindings.clear();
         self.pin_types.clear();
         self.var_alias.clear();
+        self.type_var_siblings.clear();
     }
 
     fn find_root(&mut self, var: TypeVarId) -> TypeVarId {
@@ -68,6 +74,14 @@ impl TypeInferenceContext {
     /// 注册类型变量定义
     pub fn register_type_var(&mut self, type_var: TypeVarInference) {
         self.type_vars.insert(type_var.id, type_var);
+    }
+
+    /// 注册同一节点内所有 TypeVar 的 Key→Id 映射
+    pub fn register_sibling_map(&mut self, siblings: HashMap<TypeVarKey, TypeVarId>) {
+        let ids: Vec<TypeVarId> = siblings.values().copied().collect();
+        for id in ids {
+            self.type_var_siblings.insert(id, siblings.clone());
+        }
     }
 
     /// 注册 Pin 的类型描述
@@ -221,11 +235,26 @@ impl TypeInferenceContext {
                 let def = self
                     .type_vars
                     .get(&root)
-                    .ok_or_else(|| format!("TypeVar {:?} not defined", root))?;
+                    .ok_or_else(|| format!("TypeVar {:?} not defined", root))?
+                    .clone();
 
-                // 当 TypeVar 期望标量时，DataSeries(inner) 可解包为 inner 进行约束检查
-                // 绑定类型使用实际连接的类型（如 DataSeries<float>），UI 显示与实际一致
-                if !def.satisfies_constraints_with_unwrap(&vt) {
+                let has_dependent = def.constraints.iter().any(|c| {
+                    matches!(
+                        c,
+                        crate::graph::infer::TypeConstraint::ConvertibleTo(_)
+                            | crate::graph::infer::TypeConstraint::ConvertibleFrom(_)
+                    )
+                });
+
+                if has_dependent {
+                    let resolver = self.build_resolver(root);
+                    if !def.satisfies_constraints_with_resolver(&vt, &resolver) {
+                        return Err(format!(
+                            "Type {:?} does not satisfy constraints of {:?}",
+                            vt, root
+                        ));
+                    }
+                } else if !def.satisfies_constraints_with_unwrap(&vt) {
                     return Err(format!(
                         "Type {:?} does not satisfy constraints of {:?}",
                         vt, root
@@ -332,6 +361,24 @@ impl TypeInferenceContext {
             }
             _ => false,
         }
+    }
+
+    /// 为指定 TypeVarId 构建 TypeVarKey → 已绑定类型 的解析器
+    fn build_resolver(&mut self, var_id: TypeVarId) -> Box<dyn Fn(&TypeVarKey) -> Option<DataType>> {
+        let siblings = self.type_var_siblings.get(&var_id).cloned().unwrap_or_default();
+        let mut resolved: HashMap<TypeVarKey, Option<DataType>> = HashMap::new();
+        for (key, &sibling_id) in &siblings {
+            let root = self.find_root(sibling_id);
+            let bound = self
+                .bindings
+                .get(&root)
+                .cloned()
+                .or_else(|| self.type_vars.get(&root).and_then(|d| d.bound.clone()));
+            resolved.insert(key.clone(), bound);
+        }
+        Box::new(move |key: &TypeVarKey| -> Option<DataType> {
+            resolved.get(key).and_then(|v| v.clone())
+        })
     }
 
     fn get_pin_type(&self, pin_id: PinId) -> Result<&PinDataTypeInference, String> {

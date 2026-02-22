@@ -309,18 +309,17 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     };
   }, [variant]);
 
-  const panelNode = useLayoutStore((s) => s.nodes['panel']);
-  const updateNode = useLayoutStore((s) => s.updateNode);
-
   const handleClose = useCallback(() => {
     if (variant === 'embedded') {
+      const { nodes, updateNode } = useLayoutStore.getState();
+      const panelNode = nodes['panel'];
       updateNode('panel', {
         data: { ...panelNode?.data, visible: false },
       });
     } else {
       getCurrentWindow().close();
     }
-  }, [variant, panelNode?.data, updateNode]);
+  }, [variant]);
 
   const filteredLogs = getFilteredLogs() ?? [];
   const safeLogs = logs ?? [];

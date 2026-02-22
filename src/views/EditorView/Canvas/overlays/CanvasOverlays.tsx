@@ -2,12 +2,14 @@ import React, { useState } from "react";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
+import { useExecutionPlayback } from "@/features/core/execution";
 
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { HUD } from "./HUD";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
-import { VscRunAll, VscChevronDown } from "react-icons/vsc";
+import { VscRunAll, VscChevronDown, VscDebugRestart } from "react-icons/vsc";
+import { VscDebugPause } from "react-icons/vsc";
 
 export default function CanvasOverlays({
     canvasRef,
@@ -61,6 +63,8 @@ export default function CanvasOverlays({
         setCanvas,
     });
 
+    const { stop, togglePlayPause, isPlaying, hasRecording } = useExecutionPlayback();
+
     const onPaletteSelect = (item: PaletteItem) =>
         contextMenu && handleNodePaletteSelect(item, contextMenu);
 
@@ -72,22 +76,49 @@ export default function CanvasOverlays({
             {tabs.find((t: LayoutTab) => t.id === activeTabId)?.type === "event" && (
                 <div className="absolute top-4 right-4 z-40">
                     <div className="relative">
-                        <div className="flex items-center gap-1">
-                            {/* 主执行按钮 */}
-                            <button
-                                onClick={() => executeGraph()}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
-                            >
-                                <VscRunAll size={18} />
-                                <span>执行当前</span>
-                            </button>
-                            {/* 下拉按钮 */}
-                            <button
-                                onClick={() => setShowExecuteMenu(!showExecuteMenu)}
-                                className="flex items-center px-2 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-green-700"
-                            >
-                                <VscChevronDown size={14} />
-                            </button>
+                        <div className="flex items-center gap-2">
+                            {/* 回放按钮 */}
+                            {hasRecording && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={togglePlayPause}
+                                        className={`flex items-center gap-1.5 px-4 py-2.5 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 ${
+                                            isPlaying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
+                                        }`}
+                                        title={isPlaying ? "暂停回放" : "回放执行"}
+                                    >
+                                        {isPlaying ? <VscDebugPause size={16} /> : <VscDebugRestart size={16} />}
+                                        <span>{isPlaying ? "暂停" : "回放"}</span>
+                                    </button>
+                                    {isPlaying && (
+                                        <button
+                                            onClick={stop}
+                                            className="flex items-center px-2 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-red-700"
+                                            title="停止回放"
+                                        >
+                                            <span className="w-3 h-3 bg-white rounded-sm" />
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-1">
+                                {/* 主执行按钮 */}
+                                <button
+                                    onClick={() => executeGraph()}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-l-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20"
+                                >
+                                    <VscRunAll size={18} />
+                                    <span>执行当前</span>
+                                </button>
+                                {/* 下拉按钮 */}
+                                <button
+                                    onClick={() => setShowExecuteMenu(!showExecuteMenu)}
+                                    className="flex items-center px-2 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-r-full shadow-lg transition-all active:scale-95 text-xs font-bold ring-4 ring-black/20 border-l border-green-700"
+                                >
+                                    <VscChevronDown size={14} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* 下拉菜单 */}

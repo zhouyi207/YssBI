@@ -38,6 +38,7 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--object-color", theme.objectColor);
         root.style.setProperty("--any-color", theme.anyColor);
         root.style.setProperty("--array-color", theme.arrayColor);
+        root.style.setProperty("--struct-color", theme.structColor);
 
         // 添加Plot窗口需要的CSS变量
         root.style.setProperty("--titlebar-bg", theme.sidebarBackground);

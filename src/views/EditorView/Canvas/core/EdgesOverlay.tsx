@@ -17,22 +17,15 @@ interface EdgeData {
   id: string;
   fromPinId: string;
   toPinId: string;
+  sourceNodeId: string;
   pinType: string;
   pinColor?: string;
 }
 
-/**
- * SVG 边渲染层 — 与节点共享 TransformContainer 的坐标空间
- *
- * 优势：
- * - 和 Node/Pin 使用同一个 CSS transform，天然同步
- * - React 驱动的声明式渲染，每条边独立 memo
- * - 无需手动应用 viewport 变换
- */
 export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldPos }) => {
   const { theme } = useTheme();
-  const activeConnections = useExecutionStore((s) => s.activeConnections);
   const completedConnections = useExecutionStore((s) => s.completedConnections);
+  const nodeStates = useExecutionStore((s) => s.nodeStates);
 
   const edges = useMemo<EdgeData[]>(() => {
     const result: EdgeData[] = [];
@@ -45,6 +38,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
             id: `${pin.id}->${targetId}`,
             fromPinId: pin.id,
             toPinId: targetId,
+            sourceNodeId: node.id,
             pinType: pin.type ?? "any",
             pinColor: pin.ui?.color,
           });
@@ -59,14 +53,14 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
       className="absolute pointer-events-none"
       style={{ overflow: "visible", left: 0, top: 0, width: 1, height: 1, zIndex: 0 }}
     >
-      <style>{`@keyframes dash { to { stroke-dashoffset: -20; } }`}</style>
       {edges.map((edge) => {
         const start = getPinWorldPos(edge.fromPinId);
         const end = getPinWorldPos(edge.toPinId);
         if (!start || !end) return null;
 
-        const isActive = activeConnections.has(edge.id);
         const isCompleted = completedConnections.has(edge.id);
+        const sourceState = nodeStates.get(edge.sourceNodeId);
+        const isError = sourceState?.status === "error";
         const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
 
         return (
@@ -76,9 +70,10 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ nodes, getPinWorldP
             y1={start.y}
             x2={end.x}
             y2={end.y}
-            color={isActive ? "#facc15" : isCompleted ? "#10b981" : color}
+            color={color}
             thickness={2}
-            isActive={isActive}
+            isCompleted={isCompleted}
+            isError={isError}
           />
         );
       })}

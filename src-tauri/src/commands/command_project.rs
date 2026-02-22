@@ -2,7 +2,7 @@ use crate::database::{DatabaseInstance, DatabaseState};
 use crate::event::EventProject;
 use crate::graph::GraphId;
 use crate::event::{emit_project_event, Event};
-use crate::execution::Executor;
+use crate::execution::{Executor, ExecutionEvent};
 use crate::frontend::FrontendError;
 use crate::graph::GraphKind;
 use crate::log::LogLevel;
@@ -15,7 +15,7 @@ use crate::schema::{
 use polars::prelude::*;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, ipc::Channel};
 
 use serde_json::{json, Value};
 
@@ -319,7 +319,10 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 /// 遍历所有 Event 图，从 event_begin 节点开始执行。
 /// 若图中无 event_begin 节点则跳过该图。
 #[tauri::command]
-pub fn execute_project(state: State<ProjectState>) -> Result<Value, String> {
+pub fn execute_project(
+    state: State<ProjectState>,
+    on_event: Channel<ExecutionEvent>,
+) -> Result<Value, String> {
     let project_data = state.get_data();
 
     let mut all_logs = Vec::new();
@@ -363,7 +366,7 @@ pub fn execute_project(state: State<ProjectState>) -> Result<Value, String> {
             Arc::clone(&state.project_store),
         );
 
-        let mut executor = Executor::new(Arc::new(Mutex::new(runtime)));
+        let mut executor = Executor::new(Arc::new(Mutex::new(runtime)), on_event.clone());
         executor.start(entry_node)?;
 
         for line in executor.logs() {

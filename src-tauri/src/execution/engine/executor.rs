@@ -4,14 +4,17 @@
 //! 它解释节点返回的 ExecutionEffect 并管理 continuation 栈
 
 use super::execution_effect::{ExecutionEffect, ResumeToken};
+use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
 use crate::execution::NodeExecutionContext;
 use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
+use crate::log_exec;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tauri::ipc::Channel;
 
 /// 执行器
 ///
@@ -20,6 +23,7 @@ use std::sync::{Arc, Mutex};
 /// - 管理执行栈
 /// - 调度节点执行
 /// - 处理暂停/恢复
+/// - 通过 Channel 流式发送执行事件给前端
 pub struct Executor {
     /// 执行栈
     stack: ExecutionStack,
@@ -32,16 +36,27 @@ pub struct Executor {
 
     /// 执行日志
     logs: Vec<String>,
+
+    /// 前端事件通道
+    channel: Channel<ExecutionEvent>,
 }
 
 impl Executor {
     /// 创建新的执行器
-    pub fn new(graph: Arc<Mutex<GraphRuntime>>) -> Self {
+    pub fn new(graph: Arc<Mutex<GraphRuntime>>, channel: Channel<ExecutionEvent>) -> Self {
         Self {
             stack: ExecutionStack::new(),
             suspended_frames: HashMap::new(),
             graph,
             logs: Vec::new(),
+            channel,
+        }
+    }
+
+    /// 发送执行事件到前端
+    fn emit(&self, event: ExecutionEvent) {
+        if let Err(e) = self.channel.send(event) {
+            eprintln!("[Executor] Channel send failed: {}", e);
         }
     }
 
@@ -57,31 +72,45 @@ impl Executor {
         self.run()
     }
 
-    /// 主执行循环
-    ///
-    /// 核心算法：
-    /// 1. 从栈顶取出一帧
-    /// 2. 执行该帧的节点
-    /// 3. 根据返回的 ExecutionEffect 更新栈
-    /// 4. 重复直到栈为空
+    /// 主执行循环（错误容错）
     fn run(&mut self) -> Result<(), String> {
+        self.emit(ExecutionEvent::ExecutionStart);
+        let mut has_error = false;
+
         while !self.stack.is_empty() {
-            // 取出栈顶帧
             let mut frame = self.stack.pop().ok_or("Stack is empty")?;
             self.log(format!("Executing frame {:?}", frame.id));
-
-            // 更新帧状态
             frame.state = FrameState::Running;
 
-            // 执行节点
-            let effect = self.execute_node(&frame)?;
-            self.log(format!("Node returned effect: {:?}", effect));
+            let node_id_str = frame.node_id.to_string();
 
-            // 解释执行效果
-            self.interpret_effect(effect, frame)?;
+            self.emit(ExecutionEvent::NodeStart {
+                node_id: node_id_str.clone(),
+            });
+
+            match self.execute_node(&frame) {
+                Ok(effect) => {
+                    self.log(format!("Node returned effect: {:?}", effect));
+                    self.emit(ExecutionEvent::NodeComplete {
+                        node_id: node_id_str,
+                    });
+                    self.interpret_effect(effect, frame)?;
+                }
+                Err(err) => {
+                    has_error = true;
+                    self.log(format!("Node {:?} failed: {}", frame.node_id, err));
+                    log_exec!(crate::log::LogLevel::Error, "Node {} failed: {}", node_id_str, err);
+                    self.emit(ExecutionEvent::NodeError {
+                        node_id: node_id_str,
+                        error: err,
+                    });
+                    self.handle_frame_completion(frame)?;
+                }
+            }
         }
 
         self.log("Execution completed".to_string());
+        self.emit(ExecutionEvent::ExecutionComplete { has_error });
         Ok(())
     }
 
@@ -121,49 +150,71 @@ impl Executor {
 
     /// 递归执行所有上游的纯数据节点
     fn execute_upstream_data_nodes(&mut self, node_id: NodeId) -> Result<(), String> {
-        // 获取节点的所有输入 pins
         let pins = {
             let graph = self.graph.lock().unwrap();
             graph.get_node_pins(node_id)
         };
 
         for pin in pins {
-            // 只处理输入 data pins
             if !pin.is_input() || !pin.is_data() {
                 continue;
             }
 
-            // 检查是否有上游连接
             let upstream_info = {
                 let graph = self.graph.lock().unwrap();
-                graph.get_upstream_by_pin_id(pin.id).and_then(|upstream_pin_id| {
-                    graph.get_node_id_by_pin_id(upstream_pin_id).map(|upstream_node_id| {
-                        let upstream_definition = graph.get_node_definition_by_node_id(upstream_node_id);
-                        (upstream_node_id, upstream_definition)
+                graph
+                    .get_upstream_by_pin_id(pin.id)
+                    .and_then(|upstream_pin_id| {
+                        graph.get_node_id_by_pin_id(upstream_pin_id).map(
+                            |upstream_node_id| {
+                                let upstream_definition =
+                                    graph.get_node_definition_by_node_id(upstream_node_id);
+                                (upstream_node_id, upstream_pin_id, upstream_definition)
+                            },
+                        )
                     })
-                })
             };
 
-            if let Some((upstream_node_id, upstream_definition)) = upstream_info {
-                // 检查上游节点是否是纯数据节点（没有 flow_processor）
+            if let Some((upstream_node_id, upstream_pin_id, upstream_definition)) = upstream_info {
                 if upstream_definition.flow_processor.is_none()
                     && upstream_definition.data_evaluator.is_some()
                 {
-                    // 递归执行上游节点的上游
                     self.execute_upstream_data_nodes(upstream_node_id)?;
 
-                    // 执行上游节点的 data_evaluator
-                    let mut ctx = NodeExecutionContext::new(
-                        self.graph.clone(),
-                        upstream_node_id,
-                    );
+                    let upstream_node_id_str = upstream_node_id.to_string();
+                    self.emit(ExecutionEvent::NodeStart {
+                        node_id: upstream_node_id_str.clone(),
+                    });
 
-                    if let Some(evaluator) = &upstream_definition.data_evaluator {
-                        evaluator(&mut ctx)?;
-                    }
+                    let mut ctx =
+                        NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
 
-                    // 收集日志
+                    let eval_result = if let Some(evaluator) = &upstream_definition.data_evaluator {
+                        evaluator(&mut ctx)
+                    } else {
+                        Ok(())
+                    };
+
                     self.logs.extend(ctx.logs);
+
+                    match eval_result {
+                        Ok(()) => {
+                            self.emit(ExecutionEvent::NodeComplete {
+                                node_id: upstream_node_id_str,
+                            });
+                            self.emit(ExecutionEvent::ConnectionActive {
+                                from_pin_id: upstream_pin_id.to_string(),
+                                to_pin_id: pin.id.to_string(),
+                            });
+                        }
+                        Err(err) => {
+                            self.emit(ExecutionEvent::NodeError {
+                                node_id: upstream_node_id_str,
+                                error: err.clone(),
+                            });
+                            return Err(err);
+                        }
+                    }
                 }
             }
         }
@@ -185,10 +236,8 @@ impl Executor {
 
             ExecutionEffect::TriggerOutput(role) => {
                 self.log(format!("Triggering output {:?}", role));
-                // 触发输出
                 self.trigger_output_from_node_and_check(frame.node_id, role, Some(frame.id))?;
 
-                // 节点执行完成，处理 completion（如果它是某个 Sequence 的子节点，需要通知 Parent）
                 self.log(format!("Frame {:?} completed (after trigger)", frame.id));
                 self.handle_frame_completion(frame)?;
             }
@@ -206,7 +255,6 @@ impl Executor {
                 self.log(format!("Triggering sequence of {} outputs", roles.len()));
                 self.trigger_sequence(frame.clone(), roles)?;
 
-                // 节点执行完成
                 self.log(format!("Frame {:?} completed (after sequence)", frame.id));
                 self.handle_frame_completion(frame)?;
             }
@@ -233,19 +281,13 @@ impl Executor {
     }
 
     /// 处理帧完成
-    ///
-    /// 当一个帧完成时：
-    /// 1. 检查是否有父帧
-    /// 2. 如果有父帧且父帧在等待子流程完成，恢复父帧
     fn handle_frame_completion(&mut self, frame: ExecutionFrame) -> Result<(), String> {
         if let Some(parent_id) = frame.parent_frame {
             self.log(format!("Frame {:?} has parent {:?}", frame.id, parent_id));
 
-            // 检查父帧是否还有其他子流程在执行
             if !self.stack.has_active_children(parent_id) {
                 self.log(format!("All children of {:?} completed", parent_id));
 
-                // 检查父帧状态
                 let is_waiting = self
                     .stack
                     .get_frame(parent_id)
@@ -253,11 +295,9 @@ impl Executor {
                     .unwrap_or(false);
 
                 if is_waiting {
-                    // 移除此帧以恢复执行（避免在栈中重复）
                     if let Some(mut parent_frame) = self.stack.remove(parent_id) {
                         self.log(format!("Resuming parent frame {:?}", parent_id));
 
-                        // 检查是否有剩余的 continuation
                         if !parent_frame.remaining_continuations.is_empty() {
                             let current = parent_frame.remaining_continuations.remove(0);
                             let remaining =
@@ -270,7 +310,6 @@ impl Executor {
                             ));
                             self.trigger_and_continue(parent_frame, current, remaining)?;
                         } else {
-                            // 没有剩余 continuation，父帧完成
                             self.log(format!(
                                 "Parent frame {:?} finished all continuations",
                                 parent_id
@@ -311,13 +350,10 @@ impl Executor {
         let frame_id = frame.id;
         let node_id = frame.node_id;
 
-        // 循环处理所有没有下游连接的输出
         let mut current_role = current;
         loop {
-            // 记录插入位置（当前栈顶，即子帧应该在的位置的下方）
             let insert_index = self.stack.len();
 
-            // 触发当前输出
             let has_downstream = self.trigger_output_from_node_and_check(
                 node_id,
                 current_role.clone(),
@@ -325,24 +361,18 @@ impl Executor {
             )?;
 
             if has_downstream {
-                // 有下游连接：保存剩余的 continuation，将帧压回栈等待子流程完成
                 frame.remaining_continuations = remaining;
                 frame.state = FrameState::WaitingForChild;
-
-                // 关键修正：必须将父帧插入到新创建的子帧 *下方*
-                // 这样栈顶才是子帧，执行器才会先执行子帧
                 self.stack.insert_at(insert_index, frame);
                 return Ok(());
             }
 
-            // 没有下游连接：立即处理下一个 continuation
             self.log(format!(
                 "No downstream for {:?}, processing next continuation immediately",
                 current_role
             ));
 
             if remaining.is_empty() {
-                // 没有剩余的 continuation，帧完成
                 self.log(format!(
                     "Frame {:?} completed (no more continuations)",
                     frame_id
@@ -351,43 +381,44 @@ impl Executor {
                 return Ok(());
             }
 
-            // 取出下一个 continuation 并继续循环
             current_role = remaining.remove(0);
         }
     }
 
-    /// 触发输出并返回是否有下游连接
+    /// 触发输出并返回是否有下游连接，同时发送 ConnectionActive 事件
     fn trigger_output_from_node_and_check(
         &mut self,
         node_id: NodeId,
         role: ExecRole,
         parent_frame: Option<FrameId>,
     ) -> Result<bool, String> {
-        // 查找输出 Pin
         let pin_role = PinRole::Exec(role);
-        
-        let (downstream_pins, downstream_nodes) = {
+
+        let (output_pin_id, downstream_pins, downstream_nodes) = {
             let graph = self.graph.lock().unwrap();
             let output_pin = graph
                 .get_pin_instance_by_pin_role(node_id, &pin_role)
-                .ok_or_else(|| format!("Output pin {:?} not found on node {:?}", pin_role, node_id))?;
+                .ok_or_else(|| {
+                    format!("Output pin {:?} not found on node {:?}", pin_role, node_id)
+                })?;
 
-            // 查找下游连接
-            let downstream_pins = graph.get_downstream_by_pin_id(output_pin.id);
-            
+            let output_pin_id = output_pin.id;
+            let downstream_pins = graph.get_downstream_by_pin_id(output_pin_id);
+
             if downstream_pins.is_empty() {
                 return Ok(false);
             }
 
-            // 收集下游节点信息（跳过孤儿 pin）
             let downstream_nodes: Vec<_> = downstream_pins
                 .iter()
                 .filter_map(|&pin_id| {
-                    graph.get_node_id_by_pin_id(pin_id).map(|node_id| (pin_id, node_id))
+                    graph
+                        .get_node_id_by_pin_id(pin_id)
+                        .map(|node_id| (pin_id, node_id))
                 })
                 .collect();
 
-            (downstream_pins, downstream_nodes)
+            (output_pin_id, downstream_pins, downstream_nodes)
         };
 
         if downstream_pins.is_empty() {
@@ -395,16 +426,20 @@ impl Executor {
             return Ok(false);
         }
 
-        // 为每个下游节点创建新帧
-        for (downstream_pin_id, downstream_node) in downstream_nodes {
+        for (downstream_pin_id, downstream_node) in &downstream_nodes {
             self.log(format!(
                 "Creating frame for downstream node {:?}",
                 downstream_node
             ));
 
+            self.emit(ExecutionEvent::ConnectionActive {
+                from_pin_id: output_pin_id.to_string(),
+                to_pin_id: downstream_pin_id.to_string(),
+            });
+
             let frame_id =
                 self.stack
-                    .push_new(downstream_node, Some(downstream_pin_id), parent_frame);
+                    .push_new(*downstream_node, Some(*downstream_pin_id), parent_frame);
 
             self.log(format!("Created frame {:?}", frame_id));
         }
@@ -418,7 +453,6 @@ impl Executor {
         frame: ExecutionFrame,
         roles: Vec<ExecRole>,
     ) -> Result<(), String> {
-        // 逆序压栈，使得第一个输出最后执行
         for role in roles.into_iter().rev() {
             self.trigger_output(frame.clone(), role)?;
         }
@@ -434,11 +468,7 @@ impl Executor {
     ) -> Result<(), String> {
         frame.state = FrameState::Suspended;
         let frame_id = frame.id;
-
-        // 保存帧到暂停队列
         self.suspended_frames.insert(resume_token, frame_id);
-
-        // 注意：不将帧压回栈，它会在恢复时重新压入
         Ok(())
     }
 
@@ -448,10 +478,6 @@ impl Executor {
             .suspended_frames
             .remove(&token)
             .ok_or_else(|| format!("Resume token {:?} not found", token))?;
-
-        // 将帧重新压入栈
-        // TODO: 需要从某处恢复帧的状态
-        // 这里需要一个帧存储机制
 
         self.log(format!("Resumed frame {:?}", frame_id));
         Ok(())
@@ -466,10 +492,8 @@ impl Executor {
         should_continue: bool,
     ) -> Result<(), String> {
         if should_continue {
-            // 继续循环：触发 body
             self.trigger_output(frame, body)?;
         } else {
-            // 循环完成：触发 completed
             self.trigger_output(frame, completed)?;
         }
         Ok(())

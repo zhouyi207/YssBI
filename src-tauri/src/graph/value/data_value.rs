@@ -87,6 +87,18 @@ pub enum DataValue {
     Object(HashMap<String, DataValue>),
     DataFrame(String),   // DataFrame ID
     DataSeries(DataSeriesValue),  // DataSeries ID + 可选元素类型
+
+    /// 用户定义结构体的不透明句柄
+    ///
+    /// `type_key`: 类型标识（如 "StandardizeTransform1D"）
+    /// `handle_id`: 执行期数据缓存中的引用 ID
+    Struct {
+        #[serde(rename = "typeKey")]
+        type_key: String,
+        #[serde(rename = "handleId")]
+        handle_id: String,
+    },
+
     Null,
 }
 
@@ -109,6 +121,7 @@ impl DataValue {
             }
             DataValue::Object(_) => Some(DataType::Object),
             DataValue::Null => None,
+            DataValue::Struct { type_key, .. } => Some(DataType::Struct(type_key.clone())),
             DataValue::DataFrame(_) => Some(DataType::DataFrame),
             DataValue::DataSeries(v) => Some(DataType::DataSeries(Box::new(
                 v.element_type.clone().unwrap_or(DataType::Any),
@@ -170,6 +183,22 @@ impl DataValue {
         }
     }
 
+    /// 创建一个 Struct 句柄值
+    pub fn new_struct(type_key: impl Into<String>, handle_id: impl Into<String>) -> Self {
+        DataValue::Struct {
+            type_key: type_key.into(),
+            handle_id: handle_id.into(),
+        }
+    }
+
+    /// 获取 Struct 句柄 ID（仅 Struct 变体）
+    pub fn as_handle_id(&self) -> Option<&str> {
+        match self {
+            DataValue::Struct { handle_id, .. } => Some(handle_id),
+            _ => None,
+        }
+    }
+
     pub fn as_string(&self) -> Option<&str> {
         match self {
             DataValue::String(s) => Some(s),
@@ -218,6 +247,7 @@ impl DataValue {
                     DataValue::Null => "null".to_string(),
                     DataValue::DataFrame(id) => format!("DataFrame({})", id),
                     DataValue::DataSeries(v) => format!("DataSeries({})", v.id),
+                    DataValue::Struct { type_key, handle_id } => format!("Struct<{}>({})", type_key, handle_id),
                     _ => return self.clone(),
                 };
                 DataValue::String(s)
@@ -243,6 +273,7 @@ impl DataValue {
                 DataValue::Object(_) => self.clone(),
                 _ => self.clone(),
             },
+            DataType::Struct(_) => self.clone(),
         }
     }
 }

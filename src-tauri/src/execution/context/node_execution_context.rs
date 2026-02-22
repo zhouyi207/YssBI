@@ -5,6 +5,7 @@ use crate::graph::node::{NodeId, NodeInstanceParams};
 use crate::graph::pin::{PinId, PinRole};
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::{DataFrame, Series};
+use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 /// 具体的执行上下文实现
@@ -35,7 +36,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             return Err(format!("Pin {:?} is not an input", role));
         }
 
-        let data_value = graph.get_pin_data_value_by_pin_id(pin_instance.id);
+        let data_value = graph.get_pin_data_value_by_pin_id(pin_instance.id)?;
         Ok(data_value)
     }
 
@@ -53,7 +54,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             if !pin.is_input() {
                 continue;
             }
-            values.push(graph.get_pin_data_value_by_pin_id(pin.id));
+            values.push(graph.get_pin_data_value_by_pin_id(pin.id)?);
         }
 
         Ok(values)
@@ -70,7 +71,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 continue;
             }
             if pin.definition.role.matches_family(pattern) {
-                values.push(graph.get_pin_data_value_by_pin_id(pin.id));
+                values.push(graph.get_pin_data_value_by_pin_id(pin.id)?);
             }
         }
 
@@ -189,6 +190,21 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     fn set_variable_value(&mut self, variable_id: &str, value: DataValue) -> Result<(), String> {
         let graph = self.graph.lock().unwrap();
         graph.set_variable_value(variable_id, value)
+    }
+
+    // ====================================================================
+    // 通用句柄存储
+    // ====================================================================
+
+    fn put_handle(&mut self, value: Box<dyn Any + Send + Sync>) -> String {
+        let mut graph = self.graph.lock().unwrap();
+        graph.put_handle_boxed(value)
+    }
+
+    fn get_handle(&self, id: &str) -> Result<Arc<dyn Any + Send + Sync>, String> {
+        let graph = self.graph.lock().unwrap();
+        graph.get_handle(id)
+            .ok_or_else(|| format!("Handle '{}' not found", id))
     }
 
     // ====================================================================

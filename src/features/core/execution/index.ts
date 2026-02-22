@@ -1,2 +1,2 @@
 export * from './useExecutionStore';
-export { useExecutionVisualization } from './useExecutionVisualization';
+export { useExecutionPlayback } from './useExecutionPlayback';

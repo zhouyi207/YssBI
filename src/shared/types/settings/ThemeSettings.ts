@@ -21,4 +21,5 @@ export interface ThemeSettings {
     objectColor: string;
     anyColor: string;
     arrayColor: string;
+    structColor: string;
 }

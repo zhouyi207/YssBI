@@ -26,9 +26,11 @@ export interface PinProps extends PinModel {
 const getPinTheme = (type: string, isConnected: boolean, baseColor: string, containerType?: string) => {
   const isExec = type === "exec";
   const isDataFrame = type === "dataframe";
+  const isStruct = type === "struct";
   return {
     isExec,
     isDataFrame,
+    isStruct,
     containerType,
     fill: isConnected
       ? baseColor
@@ -146,6 +148,14 @@ export const Pin: React.FC<PinProps> = (props) => {
               stroke={theme.stroke}
               strokeWidth={theme.strokeWidth}
               strokeLinejoin="miter"
+            />
+          ) : theme.isStruct ? (
+            <polygon
+              points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+              fill={theme.fill}
+              stroke={theme.stroke}
+              strokeWidth={theme.strokeWidth}
+              strokeLinejoin="round"
             />
           ) : (
             <circle
