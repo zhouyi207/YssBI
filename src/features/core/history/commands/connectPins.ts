@@ -6,15 +6,20 @@ export interface ConnectPinsArgs {
   pinB: string;
 }
 
+interface AutoDisconnectedEntry {
+  fromPin: string;
+  toPin: string;
+}
+
 export interface ConnectPinsContext {
   pinA: string;
   pinB: string;
-  /** Actual direction determined by backend */
   fromPin: string;
   toPin: string;
-  /** Connection auto-disconnected from input pin (if any) */
+  /** @deprecated use autoDisconnectedList */
   autoDisconnectedFrom: string | null;
   autoDisconnectedTo: string | null;
+  autoDisconnectedList: AutoDisconnectedEntry[];
 }
 
 export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsContext> = {
@@ -28,6 +33,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
       toPin: result.toPin,
       autoDisconnectedFrom: result.autoDisconnectedFrom,
       autoDisconnectedTo: result.autoDisconnectedTo,
+      autoDisconnectedList: result.autoDisconnected,
     };
   },
 
@@ -35,12 +41,9 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
     const connectionId = `${context.fromPin}->${context.toPin}`;
     await ConnectionService.deleteConnection(graphId, connectionId);
 
-    if (context.autoDisconnectedFrom && context.autoDisconnectedTo) {
-      await ConnectionService.connectPins(
-        graphId,
-        context.autoDisconnectedFrom,
-        context.autoDisconnectedTo,
-      );
+    const toRestore = context.autoDisconnectedList ?? [];
+    for (const entry of toRestore) {
+      await ConnectionService.connectPins(graphId, entry.fromPin, entry.toPin);
     }
   },
 

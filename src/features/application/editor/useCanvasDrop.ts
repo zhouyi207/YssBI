@@ -26,7 +26,7 @@ interface UseCanvasDropParams {
   setNodes: (updater: (prev: any[]) => any[]) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
-  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<void>;
+  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
 }
 
 /**

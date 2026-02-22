@@ -1,0 +1,10 @@
+[package]
+name = "yss-sci"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ndarray.workspace = true
+ndarray-stats.workspace = true
+faer = "0.24.0"
+statrs = "0.17"

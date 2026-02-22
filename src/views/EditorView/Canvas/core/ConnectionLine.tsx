@@ -29,12 +29,17 @@ export const ConnectionLine = ({
     const themeRef = useRef(theme);
     const pendingConnectionRef = useRef(pendingConnection);
     const menuPosRef = useRef(menuPos);
+    const renderRef = useRef<() => void>(() => {});
 
     useEffect(() => { getPinWorldPosRef.current = getPinWorldPos; }, [getPinWorldPos]);
     useEffect(() => { getCanvasLocalPointRef.current = getCanvasLocalPoint; }, [getCanvasLocalPoint]);
     useEffect(() => { themeRef.current = theme; }, [theme]);
     useEffect(() => { pendingConnectionRef.current = pendingConnection; }, [pendingConnection]);
     useEffect(() => { menuPosRef.current = menuPos; }, [menuPos]);
+
+    useEffect(() => {
+        renderRef.current();
+    }, [pendingConnection, menuPos]);
 
     useEffect(() => {
         const render = () => {
@@ -89,6 +94,7 @@ export const ConnectionLine = ({
             ctx.restore();
         };
 
+        renderRef.current = render;
         const unsubGesture = useGestureStore.subscribe(render);
         const unsubViewport = useViewportStore.subscribe(render);
         render();

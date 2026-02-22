@@ -599,7 +599,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       const toPinId = (p: string | PinData): string =>
         typeof p === 'object' && p?.id ? p.id : String(p);
 
-      (graph.nodes || []).forEach((node: { id: string; nodeType?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; paramsKind?: string; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string; dataframeId?: string }) => {
+      (graph.nodes || []).forEach((node: { id: string; nodeType?: string; uiStyle?: string; inputs?: (string | PinData)[]; outputs?: (string | PinData)[]; category?: string[]; title?: string; position?: { x: number; y: number }; description?: string; isInternal?: boolean; paramsKind?: string; variableId?: string; variableName?: string; variableType?: string; subGraphId?: string; dataframeId?: string; dataframeName?: string }) => {
         const inputIds = (node.inputs ?? []).map(toPinId).filter(Boolean);
         const outputIds = (node.outputs ?? []).map(toPinId).filter(Boolean);
         const allPinIds = [...inputIds, ...outputIds];
@@ -623,6 +623,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
           variableType: node.variableType,
           subGraphId: node.subGraphId,
           dataframeId: node.dataframeId,
+          dataframeName: node.dataframeName,
         };
         nodeIds.push(node.id);
         nextNodePins[node.id] = allPinIds;

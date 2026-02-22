@@ -1,10 +1,10 @@
 import React from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, Node } from "@/shared/types/domain";
-import { useVariableStore } from "@/features/core/dataStore";
+import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 
 interface DefaultNodeLayoutProps {
-  node: Node & { nodeType?: string; variableId?: string };
+  node: Node & { nodeType?: string; variableId?: string; dataframeId?: string };
   activePinId?: string | null;
   subgraphId?: string;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -12,7 +12,7 @@ interface DefaultNodeLayoutProps {
   onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
-/** get_variable/set_variable 节点从 variable store 响应式读取显示名，解决刷新后重命名不更新的问题 */
+/** get_variable/set_variable 节点从 variable store 响应式读取显示名 */
 function useVariableNodeTitle(
   nodeType: string | undefined,
   variableId: string | undefined,
@@ -26,6 +26,22 @@ function useVariableNodeTitle(
   if (!variable) return fallbackTitle;
   const prefix = nodeType === "set_variable" ? "Set " : "Get ";
   return prefix + variable.name;
+}
+
+/** get_dataframe 节点从 database store 响应式读取显示名 */
+function useDataframeNodeTitle(
+  nodeType: string | undefined,
+  dataframeId: string | undefined,
+  fallbackTitle: string
+): string {
+  const db = useDatabaseStore((s) =>
+    dataframeId && nodeType === "get_dataframe"
+      ? s.databases[dataframeId]
+      : null
+  );
+  if (!db) return fallbackTitle;
+  const name = (db as Record<string, unknown>).name as string | undefined;
+  return name ? `Get ${name}` : fallbackTitle;
 }
 
 /**
@@ -43,10 +59,15 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const displayTitle = useVariableNodeTitle(
+  const varTitle = useVariableNodeTitle(
     node.nodeType,
     node.variableId,
     node.title
+  );
+  const displayTitle = useDataframeNodeTitle(
+    node.nodeType,
+    node.dataframeId,
+    varTitle
   );
   const inputsExec = node.inputs.filter(p => p.type === 'exec');
   const inputsData = node.inputs.filter(p => p.type !== 'exec');

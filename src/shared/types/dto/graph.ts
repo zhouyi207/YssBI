@@ -38,6 +38,7 @@ export interface NodeInstanceDTO {
   subGraphId?: string;
   /** DataFrame 变体 */
   dataframeId?: string;
+  dataframeName?: string;
 }
 
 // ==================== Pin DTO ====================

@@ -7,6 +7,17 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+numbers = [
+    ".",
+    "yssbi_lib",
+]
+
+[workspace.dependencies]
+ndarray = { version = "0.16", features = ["serde"] }
+ndarray-stats = "0.7.0"
+
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -18,7 +29,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-yss-math = { path = "./math" }
+yss-sci = { path = "./sci" }
 
 
 serde = { version = "1", features = ["derive"] }
@@ -30,6 +41,9 @@ tauri-plugin-dialog = "2.6.0"
 tauri-plugin-fs = "2.4.5"
 tauri-plugin-log = "2"
 
+ndarray.workspace = true
+ndarray-stats.workspace = true
+
 chrono = "0.4.43"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 polars = { version = "0.52.0", features = ["lazy", "parquet", "csv", "json", "dtype-full"] }
@@ -37,3 +51,10 @@ crossbeam = "0.8.4"
 thiserror = "2.0.18"
 dashmap = "6.1.0"
 atomic_enum = "0.3.0"
+
+
+# [profile.release]
+# opt-level = "z"      # 优化体积而非速度
+# lto = true           # Link-Time Optimization
+# strip = true         # 去除调试符号
+# codegen-units = 1    # 更好的优化

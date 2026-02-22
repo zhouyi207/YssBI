@@ -47,19 +47,21 @@ export function useNodeManagement() {
                 subGraphId?: string;
                 dataframeId?: string;
             }
-        ): Promise<void> => {
+        ): Promise<{ nodeId: string; pinIds: string[] } | undefined> => {
             if (!activeTabId) {
                 console.warn('[useNodeManagement] Cannot create node: no active tab');
-                return;
+                return undefined;
             }
 
             try {
-                await executeCommand(activeTabId, 'CreateNode', {
+                const context = await executeCommand(activeTabId, 'CreateNode', {
                     nodeType,
                     x: position.x,
                     y: position.y,
                     params,
                 });
+                const result = context as { nodeId: string; pinIds: string[] } | undefined;
+                return result;
             } catch (error) {
                 console.error('[useNodeManagement] Failed to create node:', error);
                 throw error;

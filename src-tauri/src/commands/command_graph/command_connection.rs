@@ -73,6 +73,14 @@ pub struct ConnectPinsResult {
     pub to_pin: String,
     pub auto_disconnected_from: Option<String>,
     pub auto_disconnected_to: Option<String>,
+    pub auto_disconnected: Vec<AutoDisconnected>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoDisconnected {
+    pub from_pin: String,
+    pub to_pin: String,
 }
 
 /// DisconnectPin 返回值
@@ -116,22 +124,20 @@ pub fn connect_pins(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (from_pin, to_pin, auto_disconnected, change_sets, inferred) =
+    let (from_pin, to_pin, auto_disconnected_list, change_sets, inferred) =
         graph.connect(id_a, id_b)?;
 
-    // 先发送被自动断开的旧连接事件
-    if let Some((old_from, old_to)) = auto_disconnected {
+    for (old_from, old_to) in &auto_disconnected_list {
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionDeleted {
                 graph_id,
-                from_pin: old_from,
-                to_pin: old_to,
+                from_pin: *old_from,
+                to_pin: *old_to,
             }),
         );
     }
 
-    // 发送新连接创建事件
     emit_project_event(
         &app,
         Event::Connection(EventConnection::ConnectionCreated {
@@ -144,15 +150,18 @@ pub fn connect_pins(
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
 
-    let (ad_from, ad_to) = match auto_disconnected {
-        Some((f, t)) => (Some(f.to_string()), Some(t.to_string())),
-        None => (None, None),
-    };
+    let (ad_from, ad_to) = auto_disconnected_list.first()
+        .map(|(f, t)| (Some(f.to_string()), Some(t.to_string())))
+        .unwrap_or((None, None));
+    let auto_disconnected = auto_disconnected_list.iter()
+        .map(|(f, t)| AutoDisconnected { from_pin: f.to_string(), to_pin: t.to_string() })
+        .collect();
     Ok(ConnectPinsResult {
         from_pin: from_pin.to_string(),
         to_pin: to_pin.to_string(),
         auto_disconnected_from: ad_from,
         auto_disconnected_to: ad_to,
+        auto_disconnected,
     })
 }
 

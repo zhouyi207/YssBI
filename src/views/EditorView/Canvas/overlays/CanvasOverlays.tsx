@@ -53,6 +53,7 @@ export default function CanvasOverlays({
         macros,
         variables,
         Variables,
+        pendingConnection,
         setContextMenu,
         setPendingConnection,
         setVariableDropMenu,

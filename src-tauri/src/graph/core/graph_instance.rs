@@ -94,9 +94,9 @@ impl GraphInstance {
     /// 设置节点注册表（用于反序列化后恢复）
     ///
     /// Re-attaches the full `NodeDefinition` (with function pointers like
-    /// `pin_generator` and `pin_resolver`) from the registry to each existing
-    /// node, because those fields are `#[serde(skip)]` and lost during
-    /// deserialization.
+    /// `pin_resolver`, `flow_processor`, `data_evaluator`) from the registry
+    /// to each existing node, because those fields are `#[serde(skip)]` and
+    /// lost during deserialization.
     pub fn set_registry(&mut self, registry: Arc<NodeRegistry>) {
         {
             let mut data_state = self.data_state.write().unwrap();
@@ -587,18 +587,22 @@ impl GraphInstance {
     /// 验证链：存在性 → 同 Pin → 同节点 → 方向推断 → Kind 兼容
     ///        → 重复连接 → 类型兼容 → 环路检测
     ///
-    /// 返回 (已确定方向的 from/to, 被自动断开的旧连接, 动态 pin 变更集, 推断出的 pin 类型)
+    /// Exec output pin 限制为最多 1 条出边（自动断开旧连接），
+    /// Data output pin 可以有多条出边。
+    ///
+    /// 返回 (已确定方向的 from/to, 被自动断开的旧连接列表, 动态 pin 变更集, 推断出的 pin 类型)
     pub fn connect(
         &self,
         pin_a: PinId,
         pin_b: PinId,
-    ) -> Result<(PinId, PinId, Option<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+    ) -> Result<(PinId, PinId, Vec<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
         use crate::graph::connection::connection_validator::validate_connection;
+        use crate::graph::pin::PinKind;
 
         let from_node_id;
         let to_node_id;
-        let auto_disconnected;
-        let auto_disconnected_from_node_id;
+        let mut auto_disconnected: Vec<(PinId, PinId)> = Vec::new();
+        let mut auto_disconnected_node_ids: Vec<NodeId> = Vec::new();
         let from_pin;
         let to_pin;
         {
@@ -611,19 +615,40 @@ impl GraphInstance {
             from_node_id = data_state.pins.get(&from_pin).map(|p| p.node_id);
             to_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
 
-            // Look up the old from_pin's node BEFORE auto-disconnect removes it
-            auto_disconnected_from_node_id = data_state.connections
-                .get_upstream(to_pin)
-                .and_then(|old_from| data_state.pins.get(&old_from).map(|p| p.node_id));
+            // Exec output: enforce single outgoing connection
+            let is_exec = data_state.pins.get(&from_pin)
+                .map(|p| p.definition.kind == PinKind::Exec)
+                .unwrap_or(false);
 
-            auto_disconnected = data_state.connections.connect(from_pin, to_pin);
+            if is_exec {
+                let old_targets = data_state.connections.get_downstream(from_pin);
+                for old_to in old_targets {
+                    if let Some(node_id) = data_state.pins.get(&old_to).map(|p| p.node_id) {
+                        auto_disconnected_node_ids.push(node_id);
+                    }
+                    data_state.connections.disconnect(from_pin, old_to);
+                    auto_disconnected.push((from_pin, old_to));
+                }
+            }
+
+            // Input pin auto-disconnect (existing behavior)
+            if let Some(old_from) = data_state.connections.get_upstream(to_pin) {
+                if let Some(node_id) = data_state.pins.get(&old_from).map(|p| p.node_id) {
+                    auto_disconnected_node_ids.push(node_id);
+                }
+            }
+            if let Some(pair) = data_state.connections.connect(from_pin, to_pin) {
+                auto_disconnected.push(pair);
+            }
         }
 
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut change_sets = Vec::new();
         let mut resolved = std::collections::HashSet::new();
-        for node_id in [to_node_id, from_node_id, auto_disconnected_from_node_id].into_iter().flatten() {
+        for node_id in [to_node_id, from_node_id].into_iter().flatten()
+            .chain(auto_disconnected_node_ids.into_iter())
+        {
             if resolved.insert(node_id) {
                 if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
                     change_sets.push(cs);
@@ -763,12 +788,8 @@ impl GraphInstance {
         let new_pin_defs = resolver(&ctx)?;
 
         // 识别哪些是"静态 pins"（不应被替换）和"动态 pins"（应被替换）
-        // 静态 pins = 由 pin_generator 生成的初始 pins
-        let static_pin_defs = if let Some(gen) = &definition.pin_generator {
-            gen()?
-        } else {
-            Vec::new()
-        };
+        // 静态 pins = 由 pin_slots 中 Fixed/Repeatable 生成的初始 pins
+        let static_pin_defs = definition.generate_initial_pins().unwrap_or_default();
 
         // 从 new_pin_defs 中移除与 static_pin_defs 名称+方向完全匹配的（它们保留不变）
         // 剩余的是动态部分

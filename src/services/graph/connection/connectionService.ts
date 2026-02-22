@@ -1,10 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface AutoDisconnected {
+    fromPin: string;
+    toPin: string;
+}
+
 export interface ConnectPinsResult {
     fromPin: string;
     toPin: string;
     autoDisconnectedFrom: string | null;
     autoDisconnectedTo: string | null;
+    autoDisconnected: AutoDisconnected[];
 }
 
 export interface RemovedConnection {

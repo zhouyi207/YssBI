@@ -111,6 +111,19 @@ impl PinRole {
         self.family() == other.family()
     }
 
+    /// 创建同家族但不同索引的角色
+    ///
+    /// 仅对可索引的角色有效（Operands, Inputs, Outputs, Steps）
+    pub fn with_index(&self, index: usize) -> Option<PinRole> {
+        match self {
+            PinRole::Data(DataRole::Operands(_)) => Some(PinRole::Data(DataRole::Operands(index))),
+            PinRole::Data(DataRole::Inputs(_)) => Some(PinRole::Data(DataRole::Inputs(index))),
+            PinRole::Data(DataRole::Outputs(_)) => Some(PinRole::Data(DataRole::Outputs(index))),
+            PinRole::Exec(ExecRole::Steps(_)) => Some(PinRole::Exec(ExecRole::Steps(index))),
+            _ => None,
+        }
+    }
+
     /// 检查角色是否匹配指定的家族模式
     /// 例如：Operands(1) 和 Operands(2) 都匹配 Operands(_)
     pub fn matches_family(&self, pattern: &PinRole) -> bool {

@@ -55,6 +55,8 @@ pub enum NodeInstanceParams {
     DataFrame {
         #[serde(rename = "dataframeId")]
         dataframe_id: String,
+        #[serde(rename = "dataframeName", skip_serializing_if = "Option::is_none")]
+        dataframe_name: Option<String>,
     },
 }
 
@@ -104,7 +106,15 @@ impl NodeInstanceParams {
     /// 便捷方法：获取 dataframe_id（仅 DataFrame 变体）
     pub fn dataframe_id(&self) -> Option<&str> {
         match self {
-            NodeInstanceParams::DataFrame { dataframe_id } => Some(dataframe_id),
+            NodeInstanceParams::DataFrame { dataframe_id, .. } => Some(dataframe_id),
+            _ => Option::None,
+        }
+    }
+
+    /// 便捷方法：获取 dataframe_name（仅 DataFrame 变体）
+    pub fn dataframe_name(&self) -> Option<&str> {
+        match self {
+            NodeInstanceParams::DataFrame { dataframe_name, .. } => dataframe_name.as_deref(),
             _ => Option::None,
         }
     }
@@ -150,10 +160,7 @@ impl NodeInstance {
         }
 
         // ---------- 创建 PinInstance ----------
-        let pin_defs = (definition
-            .pin_generator
-            .as_ref()
-            .ok_or("pin_generator missing")?)()?;
+        let pin_defs = definition.generate_initial_pins()?;
 
         let pin_instances: Vec<PinInstance> = pin_defs
             .iter()
@@ -210,10 +217,7 @@ impl NodeInstance {
             type_var_map_reverse.insert(type_var, type_var_id);
         }
 
-        let pin_defs = (definition
-            .pin_generator
-            .as_ref()
-            .ok_or("pin_generator missing")?)()?;
+        let pin_defs = definition.generate_initial_pins()?;
 
         if pin_ids.len() != pin_defs.len() {
             return Err(format!(
@@ -274,10 +278,7 @@ impl NodeInstance {
             type_var_map_reverse.insert(type_var, type_var_id);
         }
 
-        let pin_defs = (definition
-            .pin_generator
-            .as_ref()
-            .ok_or("pin_generator missing")?)()?;
+        let pin_defs = definition.generate_initial_pins()?;
 
         let pin_instances: Vec<PinInstance> = pin_defs
             .iter()

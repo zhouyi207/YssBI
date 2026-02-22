@@ -80,6 +80,7 @@ export function serializeGraph(
       variableName: node.variableName,
       subGraphId: node.subGraphId,
       dataframeId: node.dataframeId,
+      dataframeName: node.dataframeName,
       inputs: node.inputs.map(toSerializedPin),
       outputs: node.outputs.map(toSerializedPin),
     })),
@@ -154,6 +155,8 @@ export function deserializeGraph(data: DeserializeGraphInput): {
         variableId: n.variableId,
         variableType: n.variableType,
         variableName: n.variableName,
+        dataframeId: n.dataframeId,
+        dataframeName: n.dataframeName,
       };
     } else {
       node = {
@@ -171,6 +174,8 @@ export function deserializeGraph(data: DeserializeGraphInput): {
         variableId: n.variableId,
         variableType: n.variableType,
         variableName: n.variableName,
+        dataframeId: n.dataframeId,
+        dataframeName: n.dataframeName,
       };
     }
 

@@ -3,6 +3,10 @@ import { getGraphById } from "@/features/core/dataStore";
 import { useViewportStore } from "@/features/core/viewport";
 import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
+import { useNodeRegistryStore } from "@/features/core/nodeRegister";
+import { ConnectionService } from "@/services";
+import { findAutoConnectPinIndex } from "@/shared/utils/pinCompatibility";
+import type { Pin } from "@/shared/types/domain/pin";
 
 export interface PaletteItem {
   nodeType: string;
@@ -24,10 +28,6 @@ export interface VariableDropMenu {
   containerType?: string;
 }
 
-/**
- * Node palette select and variable drop menu handlers.
- * Extracted from CanvasOverlays.tsx - view should only consume this hook.
- */
 export function useCanvasOverlayHandlers({
   canvasRef,
   groupId,
@@ -36,6 +36,7 @@ export function useCanvasOverlayHandlers({
   macros,
   variables,
   Variables,
+  pendingConnection,
   setContextMenu,
   setPendingConnection,
   setVariableDropMenu,
@@ -49,10 +50,11 @@ export function useCanvasOverlayHandlers({
   macros: Record<string, any>;
   variables: Record<string, any>;
   Variables: Record<string, any>;
+  pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
   setVariableDropMenu: (menu: VariableDropMenu | null) => void;
-  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<void>;
+  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
   setCanvas: (updater: any, targetGroupId?: string) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
@@ -67,7 +69,6 @@ export function useCanvasOverlayHandlers({
         "macro_outputs",
       ];
 
-      // Internal 节点：已存在则平移画布到该节点，不重复创建
       if (internalNodeTypes.includes(item.nodeType)) {
         const graphData = getGraphById(activeTabId || "");
         const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
@@ -91,14 +92,12 @@ export function useCanvasOverlayHandlers({
         }
       }
 
-      // 计算画布坐标
       const rect = canvasRef.current.getBoundingClientRect();
       const currentCanvas =
         useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      // call_function / call_macro 需要验证子图存在
       if (item.nodeType === "call_function" || item.nodeType === "call_macro") {
         const subId = item.overrides?.subGraphId;
         if (!subId) { setContextMenu(null); setPendingConnection(null); return; }
@@ -106,8 +105,24 @@ export function useCanvasOverlayHandlers({
         if (!subData) { setContextMenu(null); setPendingConnection(null); return; }
       }
 
-      // CQRS：直接发送 nodeType + position + params 给后端
-      await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
+      const sourcePinForConnect = pendingConnection;
+
+      const result = await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
+
+      if (sourcePinForConnect && result && activeTabId) {
+        try {
+          const definition = useNodeRegistryStore.getState().getDefinition(item.nodeType);
+          if (definition?.pinSlots) {
+            const matchIdx = findAutoConnectPinIndex(definition.pinSlots, sourcePinForConnect);
+            if (matchIdx >= 0 && matchIdx < result.pinIds.length) {
+              await ConnectionService.connectPins(activeTabId, sourcePinForConnect.id, result.pinIds[matchIdx]);
+            }
+          }
+        } catch (err) {
+          console.warn('[AutoConnect] Failed to auto-connect:', err);
+        }
+      }
+
       setContextMenu(null);
       setPendingConnection(null);
     },
@@ -117,6 +132,7 @@ export function useCanvasOverlayHandlers({
       activeTabId,
       functions,
       macros,
+      pendingConnection,
       createNode,
       setContextMenu,
       setPendingConnection,

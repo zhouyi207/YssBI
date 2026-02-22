@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
 import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType";
+import { isNodeCompatibleWithPin } from "@/shared/utils/pinCompatibility";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 /** PaletteItem overrides 扩展类型 */
@@ -34,12 +35,17 @@ interface TreeLeaf {
 
 type TreeNode = TreeCategory | TreeLeaf;
 
+type FlatRow =
+  | { type: 'category'; level: number; node: TreeCategory; path: string }
+  | { type: 'leaf'; level: number; item: PaletteItem };
+
+const ROW_HEIGHT = 30;
+
 const TREE_SORT = (a: TreeNode, b: TreeNode) => {
   if (a.isLeaf !== b.isLeaf) return a.isLeaf ? 1 : -1;
   return a.name.localeCompare(b.name);
 };
 
-/** 从 items 构建树结构，返回 tree 与 allPaths */
 function buildTreeFromItems(items: PaletteItem[]): { tree: TreeCategory; allPaths: Set<string>; sortedChildren: TreeNode[] } {
   const tree: TreeCategory = { name: "Root", isLeaf: false, children: {} };
   const allPaths = new Set<string>();
@@ -63,103 +69,27 @@ function buildTreeFromItems(items: PaletteItem[]): { tree: TreeCategory; allPath
   return { tree, allPaths, sortedChildren };
 }
 
-/** 叶子节点 - memo 避免父级重渲染时重复渲染 */
-const TreeLeafNode = React.memo(function TreeLeafNode({
-  item,
-  level,
-  onSelect,
-}: {
-  item: PaletteItem;
-  level: number;
-  onSelect: (item: PaletteItem) => void;
-}) {
-  if (!item?.nodeType) return null;
-  const paddingLeft = (level + 1) * 12 + 12;
-  return (
-    <div
-      className="px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer group flex items-center gap-2 transition-colors"
-      style={{ paddingLeft }}
-      onClick={() => onSelect(item)}
-    >
-      {item.nodeType.includes("variable") ? (
-        <VscSymbolVariable className="text-blue-400 shrink-0" size={14} />
-      ) : item.nodeType.includes("call") ? (
-        <VscSymbolMethod className="text-purple-400 shrink-0" size={14} />
-      ) : (
-        <VscSymbolProperty className="text-[var(--accent-color)] shrink-0" size={14} />
-      )}
-      <span className="text-xs truncate">{item.title}</span>
-    </div>
-  );
-});
+function flattenTree(
+  children: TreeNode[],
+  expandedPaths: Set<string>,
+  parentPath: string,
+  level: number,
+  out: FlatRow[],
+) {
+  const sorted = [...children].sort(TREE_SORT);
+  for (const child of sorted) {
+    if (child.isLeaf) {
+      out.push({ type: 'leaf', level, item: child.item });
+    } else {
+      const path = parentPath ? `${parentPath}/${child.name}` : child.name;
+      out.push({ type: 'category', level, node: child, path });
+      if (expandedPaths.has(path)) {
+        flattenTree(Object.values(child.children), expandedPaths, path, level + 1, out);
+      }
+    }
+  }
+}
 
-/** 分类节点 - memo */
-const TreeCategoryNode = React.memo(function TreeCategoryNode({
-  node,
-  path,
-  level,
-  expandedPaths,
-  onToggle,
-  onSelect,
-}: {
-  node: TreeCategory;
-  path: string;
-  level: number;
-  expandedPaths: Set<string>;
-  onToggle: (path: string) => void;
-  onSelect: (item: PaletteItem) => void;
-}) {
-  const currentPath = path ? `${path}/${node.name}` : node.name;
-  const isExpanded = expandedPaths.has(currentPath);
-  const sortedEntries = useMemo(
-    () => Object.entries(node.children).sort(([, a], [, b]) => TREE_SORT(a, b)),
-    [node.children]
-  );
-
-  return (
-    <div>
-      <div
-        className="px-2 py-1.5 hover:bg-[#252526] cursor-pointer flex items-center gap-1 transition-colors text-gray-300 font-bold"
-        style={{ paddingLeft: level * 12 + 8 }}
-        onClick={() => onToggle(currentPath)}
-      >
-        {isExpanded ? (
-          <VscChevronDown size={14} className="text-gray-500" />
-        ) : (
-          <VscChevronRight size={14} className="text-gray-500" />
-        )}
-        <VscCircuitBoard className="text-gray-500 shrink-0" size={14} />
-        <span className="text-[11px] uppercase tracking-wider truncate">{node.name}</span>
-      </div>
-      {isExpanded && (
-        <div>
-          {sortedEntries.map(([childKey, child]) =>
-            child.isLeaf ? (
-              <TreeLeafNode
-                key={`${currentPath}/${childKey}`}
-                item={child.item}
-                level={level + 1}
-                onSelect={onSelect}
-              />
-            ) : (
-              <TreeCategoryNode
-                key={`${currentPath}/${childKey}`}
-                node={child}
-                path={currentPath}
-                level={level + 1}
-                expandedPaths={expandedPaths}
-                onToggle={onToggle}
-                onSelect={onSelect}
-              />
-            )
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-/** 防抖 hook */
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -198,7 +128,6 @@ export function NodePalette({
   const definitions = useNodeRegistryStore((s) => s.definitionsArray);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
-  // 稳定依赖：用字符串避免 Object.keys 每次返回新数组引用
   const variableKeysStr = useMemo(
     () => Object.keys(variables).sort().join(","),
     [variables]
@@ -219,18 +148,11 @@ export function NodePalette({
   const allItems = useMemo(() => {
     const items: PaletteItem[] = [];
 
-    definitions.forEach((node: any) => {
+    definitions.forEach((node) => {
       if (["get_variable", "set_variable", "call_function", "call_macro"].includes(node.name)) return;
 
       if (filterPin) {
-        const targetDirection = filterPin.direction === "input" ? "outputs" : "inputs";
-        const pins = (node as any)[targetDirection] || [];
-        if (pins.length > 0) {
-          const hasCompatiblePin = pins.some(
-            (p: any) => p.type === filterPin.type || p.type === "any" || filterPin.type === "any"
-          );
-          if (!hasCompatiblePin) return;
-        }
+        if (!isNodeCompatibleWithPin(node, filterPin)) return;
       }
 
       items.push({ nodeType: node.nodeType, title: node.name, category: node.category || [] });
@@ -306,7 +228,7 @@ export function NodePalette({
         item.title.toLowerCase().includes(q) ||
         item.category.some((c) => c.toLowerCase().includes(q))
     );
-    if (matchingItems.length === 0) return { tree: null, allPaths: new Set<string>(), sortedChildren: [] };
+    if (matchingItems.length === 0) return { tree: null, allPaths: new Set<string>(), sortedChildren: [] as TreeNode[] };
     return buildTreeFromItems(matchingItems);
   }, [allItems, query]);
 
@@ -333,8 +255,24 @@ export function NodePalette({
     });
   }, []);
 
-  const sortedRootChildren = root.sortedChildren;
-  const sortedChildren = query && filteredTree ? filteredTree.sortedChildren : sortedRootChildren;
+  const activeChildren = query && filteredTree ? filteredTree.sortedChildren : root.sortedChildren;
+
+  const flatRows = useMemo(() => {
+    const rows: FlatRow[] = [];
+    flattenTree(activeChildren, expandedPaths, '', 0, rows);
+    return rows;
+  }, [activeChildren, expandedPaths]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 15,
+  });
+
+  const noResults = query && (!filteredTree || !filteredTree.tree);
 
   return (
     <div
@@ -353,55 +291,107 @@ export function NodePalette({
         />
       </div>
 
-      <OverlayScrollbar className="max-h-96 py-1" direction="vertical">
-        {query ? (
-          filteredTree?.tree ? (
-            sortedChildren.map((child) =>
-              child.isLeaf ? (
-                <TreeLeafNode
-                  key={`leaf-${child.name}-${(child as TreeLeaf).item.nodeType}-${(child as TreeLeaf).item.overrides?.variableId ?? (child as TreeLeaf).item.overrides?.subGraphId ?? ""}`}
-                  item={child.item}
-                  level={0}
-                  onSelect={onSelect}
-                />
-              ) : (
-                <TreeCategoryNode
-                  key={`cat-${child.name}`}
-                  node={child}
-                  path=""
-                  level={0}
-                  expandedPaths={expandedPaths}
-                  onToggle={toggleExpand}
-                  onSelect={onSelect}
-                />
-              )
-            )
-          ) : (
-            <div className="px-4 py-8 text-center text-xs text-gray-600 italic">No matches found</div>
-          )
-        ) : (
-          sortedRootChildren.map((child) =>
-            child.isLeaf ? (
-              <TreeLeafNode
-                key={`leaf-${child.name}-${(child as TreeLeaf).item.nodeType}-${(child as TreeLeaf).item.overrides?.variableId ?? (child as TreeLeaf).item.overrides?.subGraphId ?? ""}`}
-                item={child.item}
-                level={0}
-                onSelect={onSelect}
-              />
-            ) : (
-              <TreeCategoryNode
-                key={`cat-${child.name}`}
-                node={child}
-                path=""
-                level={0}
-                expandedPaths={expandedPaths}
-                onToggle={toggleExpand}
-                onSelect={onSelect}
-              />
-            )
-          )
-        )}
-      </OverlayScrollbar>
+      {noResults ? (
+        <div className="px-4 py-8 text-center text-xs text-gray-600 italic">No matches found</div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="max-h-96 overflow-y-auto py-1"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#555 transparent' }}
+        >
+          <div
+            style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+          >
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const row = flatRows[vItem.index];
+              return (
+                <div
+                  key={vItem.key}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${vItem.size}px`,
+                    transform: `translateY(${vItem.start}px)`,
+                  }}
+                >
+                  {row.type === 'leaf' ? (
+                    <LeafRow item={row.item} level={row.level} onSelect={onSelect} />
+                  ) : (
+                    <CategoryRow
+                      node={row.node}
+                      path={row.path}
+                      level={row.level}
+                      expanded={expandedPaths.has(row.path)}
+                      onToggle={toggleExpand}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const LeafRow = React.memo(function LeafRow({
+  item,
+  level,
+  onSelect,
+}: {
+  item: PaletteItem;
+  level: number;
+  onSelect: (item: PaletteItem) => void;
+}) {
+  if (!item?.nodeType) return null;
+  const paddingLeft = (level + 1) * 12 + 12;
+  return (
+    <div
+      className="px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 transition-colors h-full"
+      style={{ paddingLeft }}
+      onClick={() => onSelect(item)}
+    >
+      {item.nodeType.includes("variable") ? (
+        <VscSymbolVariable className="text-blue-400 shrink-0" size={14} />
+      ) : item.nodeType.includes("call") ? (
+        <VscSymbolMethod className="text-purple-400 shrink-0" size={14} />
+      ) : (
+        <VscSymbolProperty className="text-[var(--accent-color)] shrink-0" size={14} />
+      )}
+      <span className="text-xs truncate">{item.title}</span>
+    </div>
+  );
+});
+
+const CategoryRow = React.memo(function CategoryRow({
+  node,
+  path,
+  level,
+  expanded,
+  onToggle,
+}: {
+  node: TreeCategory;
+  path: string;
+  level: number;
+  expanded: boolean;
+  onToggle: (path: string) => void;
+}) {
+  return (
+    <div
+      className="px-2 py-1.5 hover:bg-[#252526] cursor-pointer flex items-center gap-1 transition-colors text-gray-300 font-bold h-full"
+      style={{ paddingLeft: level * 12 + 8 }}
+      onClick={() => onToggle(path)}
+    >
+      {expanded ? (
+        <VscChevronDown size={14} className="text-gray-500" />
+      ) : (
+        <VscChevronRight size={14} className="text-gray-500" />
+      )}
+      <VscCircuitBoard className="text-gray-500 shrink-0" size={14} />
+      <span className="text-[11px] uppercase tracking-wider truncate">{node.name}</span>
+    </div>
+  );
+});

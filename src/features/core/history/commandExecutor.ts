@@ -22,8 +22,9 @@ export async function executeCommand<TArgs = unknown>(
   type: CommandType,
   args: TArgs,
   options?: ExecuteOptions,
-): Promise<void> {
+): Promise<unknown> {
   const handler = getCommandHandler(type);
   const context = await handler.execute(graphId, args);
   useHistoryStore.getState().push(graphId, type, context, options);
+  return context;
 }
