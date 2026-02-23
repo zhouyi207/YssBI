@@ -23,7 +23,7 @@ export function buildSidebarDragData(
     return {
       type: "node-template",
       template: {
-        nodeType: "get_variable",
+        nodeType: "Variables:Get Variable",
         category: "Variable",
         variableId: id,
         variableName: name,
@@ -36,7 +36,7 @@ export function buildSidebarDragData(
     return {
       type: "node-template",
       template: {
-        nodeType: `call_${type}`,
+        nodeType: type === "function" ? "Functions:Call Function" : "Macros:Call Macro",
         category: type === "function" ? "Functions" : "Macros",
         subGraphId: id,
         subName: name,
@@ -47,7 +47,7 @@ export function buildSidebarDragData(
     return {
       type: "node-template",
       template: {
-        nodeType: "get_dataframe",
+        nodeType: "Data:Get DataFrame",
         category: "Data",
         variableId: id,
         variableName: name,

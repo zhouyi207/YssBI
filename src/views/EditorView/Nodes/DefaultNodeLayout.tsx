@@ -19,12 +19,12 @@ function useVariableNodeTitle(
   fallbackTitle: string
 ): string {
   const variable = useVariableStore((s) =>
-    variableId && (nodeType === "get_variable" || nodeType === "set_variable")
+    variableId && (nodeType === "Variables:Get Variable" || nodeType === "Variables:Set Variable")
       ? s.variables[variableId]
       : null
   );
   if (!variable) return fallbackTitle;
-  const prefix = nodeType === "set_variable" ? "Set " : "Get ";
+  const prefix = nodeType === "Variables:Set Variable" ? "Set " : "Get ";
   return prefix + variable.name;
 }
 
@@ -35,7 +35,7 @@ function useDataframeNodeTitle(
   fallbackTitle: string
 ): string {
   const db = useDatabaseStore((s) =>
-    dataframeId && nodeType === "get_dataframe"
+    dataframeId && nodeType === "Data:Get DataFrame"
       ? s.databases[dataframeId]
       : null
   );
@@ -69,6 +69,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
     node.dataframeId,
     varTitle
   );
+  const isConstantNode = node.category?.[1] === "Constants";
   const inputsExec = node.inputs.filter(p => p.type === 'exec');
   const inputsData = node.inputs.filter(p => p.type !== 'exec');
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
@@ -147,6 +148,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                 onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
+                forceShowInput={isConstantNode}
               />
             ))}
           </div>

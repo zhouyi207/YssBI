@@ -9,7 +9,7 @@
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
 use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
-use crate::graph::pin::{PinId, PinInstance, PinKind, PinRole, PinDirection};
+use crate::graph::pin::{PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
 use crate::graph::{DataType, GraphId};
@@ -919,12 +919,232 @@ impl GraphInstance {
         node_type: &str,
     ) -> Option<DataSchema> {
         match node_type {
-            "get_dataframe" => {
+            "Data:Get DataFrame" => {
                 let df_id = params.dataframe_id()?;
                 let provider = self.schema_provider.as_ref()?;
                 provider(df_id)
             }
             _ => None,
         }
+    }
+}
+
+/// Repeatable Pin 增删
+impl GraphInstance {
+    /// 向节点的某个 Repeatable 槽位追加一个新 pin
+    ///
+    /// `slot_index` 是节点定义 `pin_slots` 数组中的索引，必须指向一个 Repeatable 槽位。
+    /// 返回包含新增 pin 信息的 `PinChangeSet`。
+    pub fn add_repeatable_pin(
+        &self,
+        node_id: NodeId,
+        slot_index: usize,
+    ) -> Result<PinChangeSet, String> {
+        let definition;
+        {
+            let data_state = self.data_state.read().unwrap();
+            let node = data_state
+                .nodes
+                .get(&node_id)
+                .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+            definition = node.definition.clone();
+        }
+
+        let slot = definition
+            .pin_slots
+            .get(slot_index)
+            .ok_or_else(|| format!("Slot index {} out of range", slot_index))?;
+
+        let template_role = match slot {
+            PinSlot::Repeatable { template, .. } => &template.role,
+            _ => return Err(format!("Slot index {} is not a Repeatable slot", slot_index)),
+        };
+
+        let family_pins = self.get_pin_instances_by_pin_role_family(node_id, template_role);
+        let current_count = family_pins.len();
+
+        if let PinSlot::Repeatable { max_count, .. } = slot {
+            if let Some(max) = max_count {
+                if current_count >= *max {
+                    return Err(format!(
+                        "Repeatable slot already at max count ({})",
+                        max
+                    ));
+                }
+            }
+        }
+
+        let new_index = current_count;
+        let pin_def = slot
+            .generate_pin_at_index(new_index)
+            .ok_or_else(|| "Failed to generate pin definition".to_string())?;
+
+        let order = {
+            let data_state = self.data_state.read().unwrap();
+            let node = data_state.nodes.get(&node_id).unwrap();
+            node.pin_ids.len() as i32
+        };
+
+        let new_pin = PinInstance::from_definition(&pin_def, node_id, order);
+        let new_pin_id = new_pin.id;
+
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            data_state.connections.register_pin(new_pin_id, node_id);
+            data_state.pins.insert(new_pin_id, new_pin.clone());
+            if let Some(node) = data_state.nodes.get_mut(&node_id) {
+                node.pin_ids.push(new_pin_id);
+            }
+        }
+
+        let _ = self.infer_types();
+
+        Ok(PinChangeSet {
+            node_id,
+            removed_pin_ids: vec![],
+            added_pins: vec![new_pin],
+            removed_connections: vec![],
+        })
+    }
+
+    /// 从节点移除一个 Repeatable 槽位的 pin
+    ///
+    /// 验证 pin 属于某个 Repeatable 槽位且当前数量 > min_count，
+    /// 然后断开连接、移除 pin，并重新索引剩余的同族 pin。
+    /// 返回包含移除信息的 `PinChangeSet` 以及被移除 pin 在槽位中的索引（用于 undo）。
+    pub fn remove_repeatable_pin(
+        &self,
+        node_id: NodeId,
+        pin_id: PinId,
+    ) -> Result<(PinChangeSet, usize), String> {
+        let definition;
+        let pin_role;
+        {
+            let data_state = self.data_state.read().unwrap();
+            let node = data_state
+                .nodes
+                .get(&node_id)
+                .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+            definition = node.definition.clone();
+
+            let pin = data_state
+                .pins
+                .get(&pin_id)
+                .ok_or_else(|| format!("Pin {:?} not found", pin_id))?;
+            if pin.node_id != node_id {
+                return Err("Pin does not belong to the specified node".to_string());
+            }
+            pin_role = pin.definition.role.clone();
+        }
+
+        let (slot_index, slot) = definition
+            .pin_slots
+            .iter()
+            .enumerate()
+            .find(|(_, s)| {
+                s.repeatable_template_role()
+                    .map(|tmpl_role| pin_role.matches_family(tmpl_role))
+                    .unwrap_or(false)
+            })
+            .ok_or_else(|| "Pin does not belong to any Repeatable slot".to_string())?;
+
+        let template_role = slot.repeatable_template_role().unwrap();
+        let min_count = slot.repeatable_min_count().unwrap_or(0);
+
+        let family_pins = self.get_pin_instances_by_pin_role_family(node_id, template_role);
+        let current_count = family_pins.len();
+
+        if current_count <= min_count {
+            return Err(format!(
+                "Cannot remove pin: already at minimum count ({})",
+                min_count
+            ));
+        }
+
+        let pin_index_in_family = family_pins
+            .iter()
+            .position(|p| p.id == pin_id)
+            .ok_or_else(|| "Pin not found in family".to_string())?;
+
+        // Collect connections that will be removed
+        let mut removed_connections = Vec::new();
+        {
+            let data_state = self.data_state.read().unwrap();
+            let downstream = data_state.connections.get_downstream(pin_id);
+            for to_pin in &downstream {
+                removed_connections.push((pin_id, *to_pin));
+            }
+            if let Some(from_pin) = data_state.connections.get_upstream(pin_id) {
+                removed_connections.push((from_pin, pin_id));
+            }
+        }
+
+        // Remove the pin
+        {
+            let mut data_state = self.data_state.write().unwrap();
+            data_state.connections.disconnect_all(pin_id);
+            data_state.pins.remove(&pin_id);
+            data_state.pin_types.remove(&pin_id);
+            if let Some(node) = data_state.nodes.get_mut(&node_id) {
+                node.pin_ids.retain(|id| *id != pin_id);
+            }
+        }
+
+        // Re-index remaining pins in the same family
+        self.reindex_repeatable_pins(node_id, slot_index)?;
+
+        let _ = self.infer_types();
+
+        Ok((
+            PinChangeSet {
+                node_id,
+                removed_pin_ids: vec![pin_id],
+                added_pins: vec![],
+                removed_connections,
+            },
+            pin_index_in_family,
+        ))
+    }
+
+    /// Re-index all pins belonging to a Repeatable slot so their roles and names
+    /// are contiguous (Operands(0), Operands(1), ...; A, B, C, ...).
+    fn reindex_repeatable_pins(
+        &self,
+        node_id: NodeId,
+        slot_index: usize,
+    ) -> Result<(), String> {
+        let definition;
+        {
+            let data_state = self.data_state.read().unwrap();
+            let node = data_state
+                .nodes
+                .get(&node_id)
+                .ok_or_else(|| format!("Node {:?} not found", node_id))?;
+            definition = node.definition.clone();
+        }
+
+        let slot = definition
+            .pin_slots
+            .get(slot_index)
+            .ok_or_else(|| format!("Slot index {} out of range", slot_index))?;
+
+        let template_role = match slot.repeatable_template_role() {
+            Some(r) => r.clone(),
+            None => return Ok(()),
+        };
+
+        let family_pins = self.get_pin_instances_by_pin_role_family(node_id, &template_role);
+
+        let mut data_state = self.data_state.write().unwrap();
+        for (i, fpin) in family_pins.iter().enumerate() {
+            if let Some(pin) = data_state.pins.get_mut(&fpin.id) {
+                if let Some(pin_def) = slot.generate_pin_at_index(i) {
+                    pin.definition.role = pin_def.role;
+                    pin.definition.name = pin_def.name;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

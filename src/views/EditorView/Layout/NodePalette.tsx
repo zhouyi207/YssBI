@@ -149,7 +149,7 @@ export function NodePalette({
     const items: PaletteItem[] = [];
 
     definitions.forEach((node) => {
-      if (["get_variable", "set_variable", "call_function", "call_macro"].includes(node.name)) return;
+      if (["Variables:Get Variable", "Variables:Set Variable", "Functions:Call Function", "Macros:Call Macro"].includes(node.nodeType)) return;
 
       if (filterPin) {
         if (!isNodeCompatibleWithPin(node, filterPin)) return;
@@ -172,7 +172,7 @@ export function NodePalette({
       }
       if (getCompatible) {
         items.push({
-          nodeType: "get_variable",
+          nodeType: "Variables:Get Variable",
           title: `Get ${varName}`,
           category: ["Variables"],
           overrides: { title: `Get ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) },
@@ -186,7 +186,7 @@ export function NodePalette({
       }
       if (setCompatible) {
         items.push({
-          nodeType: "set_variable",
+          nodeType: "Variables:Set Variable",
           title: `Set ${varName}`,
           category: ["Variables"],
           overrides: { title: `Set ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) },
@@ -205,7 +205,7 @@ export function NodePalette({
           if (!hasCompatible && filterPin.type !== "exec") return;
         }
         items.push({
-          nodeType: type === "function" ? "call_function" : "call_macro",
+          nodeType: type === "function" ? "Functions:Call Function" : "Macros:Call Macro",
           title: `${type === "function" ? "Call" : "Macro"} ${sub.name}`,
           category: type === "function" ? ["Functions"] : ["Macros"],
           overrides: { subGraphId: sub.id, title: sub.name },
@@ -354,9 +354,9 @@ const LeafRow = React.memo(function LeafRow({
       style={{ paddingLeft }}
       onClick={() => onSelect(item)}
     >
-      {item.nodeType.includes("variable") ? (
+      {item.nodeType.includes("Variable") ? (
         <VscSymbolVariable className="text-blue-400 shrink-0" size={14} />
-      ) : item.nodeType.includes("call") ? (
+      ) : item.nodeType.includes("Call") ? (
         <VscSymbolMethod className="text-purple-400 shrink-0" size={14} />
       ) : (
         <VscSymbolProperty className="text-[var(--accent-color)] shrink-0" size={14} />

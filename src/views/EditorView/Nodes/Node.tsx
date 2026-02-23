@@ -14,6 +14,7 @@ export interface NodeProps {
   activePinId?: string | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
+  onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;

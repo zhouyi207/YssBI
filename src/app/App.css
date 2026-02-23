@@ -198,6 +198,16 @@
   display: none;
 }
 
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Sash Resizing Classes */
 body.col-resize, body.col-resize * {
   cursor: col-resize !important;

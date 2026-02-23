@@ -110,7 +110,7 @@ impl std::fmt::Debug for NodeDefinition {
 impl NodeDefinition {
     pub fn new(name: impl Into<String>, category: Vec<String>) -> Self {
         let name = name.into();
-        let node_type = category.join(":");
+        let node_type = format!("{}:{}", category.join(":"), &name);
 
         Self {
             name,
@@ -123,11 +123,6 @@ impl NodeDefinition {
             pin_resolver: None,
             metadata: NodeMetaData::default(),
         }
-    }
-
-    pub fn with_node_type(mut self, node_type: impl Into<String>) -> Self {
-        self.node_type = node_type.into();
-        self
     }
 
     pub fn with_type_vars(mut self, type_vars: Vec<TypeVarDefinition>) -> Self {

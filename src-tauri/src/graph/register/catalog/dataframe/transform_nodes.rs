@@ -16,7 +16,6 @@ pub fn register(registry: &NodeRegistry) {
 fn register_standardize_series(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Standardize Series", vec!["Data".to_string(), "Transform".to_string()])
-            .with_node_type("standardize_series")
             .with_ui_style("dataframe")
             .with_description("Standardize a numeric DataSeries (z-score normalization) and output the fitted transform")
             .with_pin_slots(vec![
@@ -77,7 +76,6 @@ fn register_inverse_standardize_series(registry: &NodeRegistry) {
         "Inverse Standardize Series",
         vec!["Data".to_string(), "Transform".to_string()],
     )
-    .with_node_type("inverse_standardize_series")
     .with_ui_style("dataframe")
     .with_description("Reverse a standardization using a previously fitted transform")
     .with_pin_slots(vec![

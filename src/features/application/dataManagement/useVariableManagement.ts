@@ -83,7 +83,7 @@ export function useVariableManagement() {
       const graphStore = useGraphDataStore.getState();
       for (const [nodeId, node] of Object.entries(graphStore.nodes)) {
         if (node.variableId === id) {
-          const prefix = node.nodeType === 'set_variable' ? 'Set ' : 'Get ';
+          const prefix = node.nodeType === 'Variables:Set Variable' ? 'Set ' : 'Get ';
           graphStore.updateNode(nodeId, {
             title: prefix + variable.name,
             variableName: variable.name,

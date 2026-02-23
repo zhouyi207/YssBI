@@ -24,13 +24,13 @@ impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
         let p = &value.instance_params;
         let title = match value.definition.node_type.as_str() {
-            "get_variable" | "set_variable" => {
-                let prefix = if value.definition.node_type == "get_variable" { "Get" } else { "Set" };
+            "Variables:Get Variable" | "Variables:Set Variable" => {
+                let prefix = if value.definition.node_type == "Variables:Get Variable" { "Get" } else { "Set" };
                 p.variable_name()
                     .map(|n| format!("{} {}", prefix, n))
                     .unwrap_or_else(|| value.definition.name.clone())
             }
-            "get_dataframe" => p
+            "Data:Get DataFrame" => p
                 .dataframe_name()
                 .map(|n| format!("Get {}", n))
                 .unwrap_or_else(|| value.definition.name.clone()),

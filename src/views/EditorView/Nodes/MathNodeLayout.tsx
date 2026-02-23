@@ -1,14 +1,16 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { Node } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
+import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 
 interface MathNodeLayoutProps {
   node: Node;
   activePinId?: string | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
+  onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   onPinValueChange?: (pinId: string, value: unknown) => void;
@@ -26,6 +28,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   activePinId,
   subgraphId,
   onAddInput,
+  onRemovePin,
   onPinClick,
   onPinPointerDown,
   onPinValueChange,
@@ -36,6 +39,16 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   const inputsData = node.inputs.filter(p => p.type !== 'exec');
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
+
+  const repeatableMinCount = useMemo(() => {
+    const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
+    if (!def) return 2;
+    const repeatableSlot = def.pinSlots.find(s => s.slotKind === 'repeatable');
+    if (repeatableSlot && repeatableSlot.slotKind === 'repeatable') {
+      return repeatableSlot.minCount;
+    }
+    return 2;
+  }, [node.nodeType]);
 
   return (
     <div className="relative flex flex-col min-h-full">
@@ -93,6 +106,8 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
+              removable={onRemovePin != null && inputsData.length > repeatableMinCount}
+              onRemovePin={onRemovePin ? (pinId) => onRemovePin(node.id, pinId) : undefined}
             />
           ))}
           {onAddInput && (

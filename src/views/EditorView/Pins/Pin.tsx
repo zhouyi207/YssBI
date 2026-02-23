@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { PinInput } from "./PinInput";
+import { PinContextMenu } from "./PinContextMenu";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 
@@ -15,12 +16,17 @@ function toDisplayValue(v: unknown): unknown {
   return v;
 }
 
+const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int32", "Int64", "Float32", "Float64", "string"]);
+
 export interface PinProps extends PinModel {
   subgraphId?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
   onValueChange?: (pinId: string, value: unknown) => void;
+  removable?: boolean;
+  onRemovePin?: (pinId: string) => void;
+  forceShowInput?: boolean;
 }
 
 const getPinTheme = (type: string, isConnected: boolean, baseColor: string, containerType?: string) => {
@@ -57,8 +63,11 @@ export const Pin: React.FC<PinProps> = (props) => {
     isActive,
     containerType,
     defaultValue,
-    userValue,  // 🆕 添加 userValue
+    userValue,
     onValueChange,
+    removable,
+    onRemovePin,
+    forceShowInput,
   } = props;
 
   const { theme: appTheme } = useTheme();
@@ -70,12 +79,23 @@ export const Pin: React.FC<PinProps> = (props) => {
     [type, isConnected, baseColor, containerType]
   );
 
-  // 判断是否显示输入控件
-  // 条件：输入 Pin、数据类型（非 exec）、未连接、有 subgraphId
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!removable || !onRemovePin) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    },
+    [removable, onRemovePin]
+  );
+
   const showInput =
-    direction === "input" &&
-    type !== "exec" &&
-    !isConnected &&
+    (!isConnected || forceShowInput === true) &&
+    PRIMITIVE_PIN_TYPES.has(type) &&
+    !containerType &&
+    (direction === "input" || forceShowInput === true) &&
     subgraphId &&
     nodeId;
 
@@ -89,7 +109,8 @@ export const Pin: React.FC<PinProps> = (props) => {
         }
       `}
       data-pin-id={id}
-      title={`${name} (${type})`} // 添加 tooltip 显示类型信息
+      title={`${name} (${type})`}
+      onContextMenu={handleContextMenu}
       onPointerDown={(e) => {
         if (onPinPointerDown) {
           e.stopPropagation();
@@ -191,18 +212,24 @@ export const Pin: React.FC<PinProps> = (props) => {
         {name}
       </span>
 
-      {/* 输入控件 - 仅在未连接的输入数据 Pin 上显示 */}
       {showInput && (
-        <div className="ml-1">
-          <PinInput
-            pinId={id}
-            nodeId={nodeId}
-            subgraphId={subgraphId}
-            pinType={type}
-            value={toDisplayValue(userValue ?? defaultValue)}
-            onValueChange={(value) => onValueChange?.(id, value)}
-          />
-        </div>
+        <PinInput
+          pinId={id}
+          nodeId={nodeId}
+          subgraphId={subgraphId}
+          pinType={type}
+          value={toDisplayValue(userValue ?? defaultValue)}
+          onValueChange={(value) => onValueChange?.(id, value)}
+        />
+      )}
+
+      {contextMenu && onRemovePin && (
+        <PinContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onRemove={() => onRemovePin(id)}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

@@ -14,7 +14,6 @@ pub fn register(registry: &NodeRegistry) {
 
 fn register_get_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataFrame", vec!["Data".to_string()])
-        .with_node_type("get_dataframe")
         .with_ui_style("dataframe")
         .with_description("Get a DataFrame by ID")
         .with_pin_slots(vec![
@@ -36,7 +35,6 @@ fn register_get_dataframe(registry: &NodeRegistry) {
 
 fn register_decompose_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Decompose DataFrame", vec!["Data".to_string()])
-        .with_node_type("decompose_dataframe")
         .with_ui_style("dataframe")
         .with_description("Decompose a DataFrame into individual columns")
         .with_pin_slots(vec![

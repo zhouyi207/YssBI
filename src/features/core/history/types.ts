@@ -13,7 +13,9 @@ export type CommandType =
   | 'DisconnectPin'
   | 'CreateNode'
   | 'DeleteNodes'
-  | 'Composite';
+  | 'Composite'
+  | 'AddRepeatablePin'
+  | 'RemoveRepeatablePin';
 
 /**
  * Each CommandHandler encapsulates one editor action.

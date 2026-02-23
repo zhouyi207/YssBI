@@ -4,6 +4,7 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useVariableStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { executeCommand } from "@/features/core/history";
 import { logger } from '@/utils/appLogger';
 
 export interface VariableDropMenu {
@@ -63,27 +64,19 @@ export function useCanvasDrop({
   }, [setContextMenu, setPendingConnection]);
 
   const handleNodeAddInput = useCallback(
-    (id: string) => {
-      setNodes((prev) =>
-        prev.map((node) => {
-          if (node.id === id) {
-            const newNode = node.clone();
-            const newIndex = newNode.inputs.length;
-            newNode.addInput({
-              id: `pending_${id}_input_${newIndex}`,
-              nodeId: id,
-              name: String.fromCharCode(65 + newIndex),
-              type: "int",
-              direction: "input",
-              links: [],
-            });
-            return newNode;
-          }
-          return node;
-        })
-      );
+    (nodeId: string) => {
+      if (!_graphId) return;
+      executeCommand(_graphId, 'AddRepeatablePin', { nodeId, slotIndex: 0 });
     },
-    [setNodes]
+    [_graphId]
+  );
+
+  const handleNodeRemovePin = useCallback(
+    (nodeId: string, pinId: string) => {
+      if (!_graphId) return;
+      executeCommand(_graphId, 'RemoveRepeatablePin', { nodeId, pinId });
+    },
+    [_graphId]
   );
 
   const handleContextMenu = useCallback(
@@ -153,21 +146,20 @@ export function useCanvasDrop({
           variableType: dragState.template.variableType,
         };
 
-        let spawnType: "get_variable" | "set_variable" | null = null;
-        if (event.altKey) spawnType = "set_variable";
-        else if (event.ctrlKey) spawnType = "get_variable";
+        let spawnType: "Variables:Get Variable" | "Variables:Set Variable" | null = null;
+        if (event.altKey) spawnType = "Variables:Set Variable";
+        else if (event.ctrlKey) spawnType = "Variables:Get Variable";
 
         if (spawnType) {
           await createNode(spawnType, { x, y }, varParams);
           return;
         }
 
-        // 拖放到 pin 上时自动创建 get_variable
         const elements = document.elementsFromPoint(dragState.x, dragState.y);
         const pinEl = elements.find((e) => e.closest("[data-pin-id]"))?.closest("[data-pin-id]");
         const targetPinId = pinEl?.getAttribute("data-pin-id");
         if (targetPinId) {
-          await createNode("get_variable", { x, y }, varParams);
+          await createNode("Variables:Get Variable", { x, y }, varParams);
           return;
         }
 
@@ -187,12 +179,12 @@ export function useCanvasDrop({
 
       // Function / Macro 拖放
       if (
-        dragState.template.nodeType === "call_function" ||
-        dragState.template.nodeType === "call_macro"
+        dragState.template.nodeType === "Functions:Call Function" ||
+        dragState.template.nodeType === "Macros:Call Macro"
       ) {
         const nodeType = dragState.template.nodeType;
         const subId = dragState.template.subGraphId;
-        const subData = nodeType === "call_function" ? functions[subId] : macros[subId];
+        const subData = nodeType === "Functions:Call Function" ? functions[subId] : macros[subId];
         if (!subData) return;
 
         await createNode(nodeType, { x, y }, { subGraphId: subId });
@@ -222,6 +214,7 @@ export function useCanvasDrop({
     variableDropMenu,
     setVariableDropMenu,
     handleNodeAddInput,
+    handleNodeRemovePin,
     handleContextMenu,
   };
 }

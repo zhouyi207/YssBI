@@ -353,7 +353,7 @@ pub fn execute_project(
             data_state
                 .nodes
                 .iter()
-                .filter(|(_, n)| n.definition.node_type == "event_begin")
+                .filter(|(_, n)| n.definition.node_type == "Event:Event Begin")
                 .map(|(id, _)| *id)
                 .collect()
         };

@@ -11,7 +11,6 @@ pub fn register(registry: &NodeRegistry) {
 
 fn register_call_function(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Call Function", vec!["Functions".to_string()])
-        .with_node_type("call_function")
         .with_ui_style("function")
         .with_description("Call a function subgraph")
         .with_pin_slots(vec![
@@ -23,7 +22,6 @@ fn register_call_function(registry: &NodeRegistry) {
 
 fn register_call_macro(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Call Macro", vec!["Macros".to_string()])
-        .with_node_type("call_macro")
         .with_ui_style("macro")
         .with_description("Call a macro subgraph")
         .with_pin_slots(vec![

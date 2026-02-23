@@ -159,6 +159,49 @@ impl PinSlot {
     pub fn is_dynamic(&self) -> bool {
         !matches!(self, PinSlot::Fixed { .. })
     }
+
+    /// 为 Repeatable 槽位生成指定索引的单个 pin 定义
+    ///
+    /// 仅对 `PinSlot::Repeatable` 有效，其他变体返回 None。
+    pub fn generate_pin_at_index(&self, index: usize) -> Option<PinDefinition> {
+        match self {
+            PinSlot::Repeatable {
+                template,
+                name_prefix,
+                max_count,
+                ..
+            } => {
+                if let Some(max) = max_count {
+                    if index >= *max {
+                        return None;
+                    }
+                }
+                let mut pin = template.clone();
+                if let Some(new_role) = template.role.with_index(index) {
+                    pin.role = new_role;
+                }
+                pin.name = generate_slot_name(name_prefix, index);
+                Some(pin)
+            }
+            _ => None,
+        }
+    }
+
+    /// 获取 Repeatable 槽位的模板角色（用于 family 匹配）
+    pub fn repeatable_template_role(&self) -> Option<&PinRole> {
+        match self {
+            PinSlot::Repeatable { template, .. } => Some(&template.role),
+            _ => None,
+        }
+    }
+
+    /// 获取 Repeatable 槽位的最小 pin 数量
+    pub fn repeatable_min_count(&self) -> Option<usize> {
+        match self {
+            PinSlot::Repeatable { min_count, .. } => Some(*min_count),
+            _ => None,
+        }
+    }
 }
 
 /// pin 类型能力描述（用于前端过滤兼容节点）

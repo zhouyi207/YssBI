@@ -83,6 +83,7 @@ export default function Canvas() {
     variableDropMenu,
     setVariableDropMenu,
     handleNodeAddInput,
+    handleNodeRemovePin,
     handleContextMenu,
   } = useCanvasDrop({
     canvasRef: ref,
@@ -150,6 +151,7 @@ export default function Canvas() {
                   subgraphId={activeTabId || undefined}
                   onPointerDown={onNodePointerDown}
                   onAddInput={handleNodeAddInput}
+                  onRemovePin={handleNodeRemovePin}
                   onPinClick={handlePinClick}
                   onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
                   onPinValueChange={handlePinValueChange}

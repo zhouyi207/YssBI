@@ -99,10 +99,10 @@ export function useCanvasOverlayHandlers({
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      if (item.nodeType === "call_function" || item.nodeType === "call_macro") {
+      if (item.nodeType === "Functions:Call Function" || item.nodeType === "Macros:Call Macro") {
         const subId = item.overrides?.subGraphId;
         if (!subId) { setContextMenu(null); setPendingConnection(null); return; }
-        const subData = item.nodeType === "call_function" ? functions[subId] : macros[subId];
+        const subData = item.nodeType === "Functions:Call Function" ? functions[subId] : macros[subId];
         if (!subData) { setContextMenu(null); setPendingConnection(null); return; }
       }
 
@@ -149,7 +149,7 @@ export function useCanvasOverlayHandlers({
         setVariableDropMenu(null);
         return;
       }
-      await createNode("get_variable", { x: menu.worldX, y: menu.worldY }, {
+      await createNode("Variables:Get Variable", { x: menu.worldX, y: menu.worldY }, {
         variableId: menu.variableId,
         variableName: menu.variableName,
         variableType: menu.variableType,
@@ -167,7 +167,7 @@ export function useCanvasOverlayHandlers({
         setVariableDropMenu(null);
         return;
       }
-      await createNode("set_variable", { x: menu.worldX, y: menu.worldY }, {
+      await createNode("Variables:Set Variable", { x: menu.worldX, y: menu.worldY }, {
         variableId: menu.variableId,
         variableName: menu.variableName,
         variableType: menu.variableType,

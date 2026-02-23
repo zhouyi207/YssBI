@@ -6,6 +6,7 @@ import { disconnectPinCommand } from './disconnectPin';
 import { createNodeCommand } from './createNode';
 import { deleteNodesCommand } from './deleteNodes';
 import { batchCreateCommand } from './composite';
+import { addRepeatablePinCommand, removeRepeatablePinCommand } from './repeatablePin';
 
 export const commandRegistry: Record<string, CommandHandler<any, any>> = {
   MoveNodes: moveNodesCommand,
@@ -15,6 +16,8 @@ export const commandRegistry: Record<string, CommandHandler<any, any>> = {
   CreateNode: createNodeCommand,
   DeleteNodes: deleteNodesCommand,
   Composite: batchCreateCommand,
+  AddRepeatablePin: addRepeatablePinCommand,
+  RemoveRepeatablePin: removeRepeatablePinCommand,
 };
 
 export function getCommandHandler(type: CommandType): CommandHandler<any, any> {
@@ -32,3 +35,4 @@ export type { DisconnectPinArgs, DisconnectPinContext } from './disconnectPin';
 export type { CreateNodeArgs, CreateNodeContext } from './createNode';
 export type { DeleteNodesArgs, DeleteNodesContext } from './deleteNodes';
 export type { BatchCreateArgs, BatchCreateContext } from './composite';
+export type { AddRepeatablePinArgs, AddRepeatablePinContext, RemoveRepeatablePinArgs, RemoveRepeatablePinContext } from './repeatablePin';

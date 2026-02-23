@@ -16,7 +16,6 @@ pub fn register(registry: &NodeRegistry) {
 
 fn register_get_dataseries(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataSeries", vec!["Data".to_string()])
-        .with_node_type("get_dataseries")
         .with_ui_style("dataframe")
         .with_description("Get a DataSeries from a DataFrame by column name")
         .with_pin_slots(vec![
@@ -55,7 +54,6 @@ fn register_get_dataseries(registry: &NodeRegistry) {
 
 fn register_series_length(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Series Length", vec!["Data".to_string(), "Series".to_string()])
-        .with_node_type("series_length")
         .with_ui_style("dataframe")
         .with_description("Get the number of elements in a DataSeries")
         .with_pin_slots(vec![
@@ -82,7 +80,6 @@ fn register_series_length(registry: &NodeRegistry) {
 
 fn register_series_sum(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Series Sum", vec!["Data".to_string(), "Series".to_string()])
-        .with_node_type("series_sum")
         .with_ui_style("dataframe")
         .with_description("Calculate the sum of a numeric DataSeries")
         .with_pin_slots(vec![
@@ -110,7 +107,6 @@ fn register_series_sum(registry: &NodeRegistry) {
 
 fn register_series_mean(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Series Mean", vec!["Data".to_string(), "Series".to_string()])
-        .with_node_type("series_mean")
         .with_ui_style("dataframe")
         .with_description("Calculate the mean of a numeric DataSeries")
         .with_pin_slots(vec![

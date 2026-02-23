@@ -3,6 +3,7 @@ import type { CommandType } from './types';
 
 const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   'CreateNode', 'DeleteNodes', 'ConnectPins', 'DisconnectPin', 'Composite',
+  'AddRepeatablePin', 'RemoveRepeatablePin',
 ]);
 
 export function notifyStructuralChange(type: CommandType, graphId: string) {

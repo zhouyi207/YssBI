@@ -38,7 +38,7 @@ export class VariableUpdatedHandler extends BaseEventHandler<VariableUpdatedPayl
     const allNodes = graphStore.nodes;
     for (const [nodeId, node] of Object.entries(allNodes)) {
       if (node.variableId === payload.variableId) {
-        const prefix = node.nodeType === 'set_variable' ? 'Set ' : 'Get ';
+        const prefix = node.nodeType === 'Variables:Set Variable' ? 'Set ' : 'Get ';
         graphStore.updateNode(nodeId, {
           title: prefix + variable.name,
           variableName: variable.name,

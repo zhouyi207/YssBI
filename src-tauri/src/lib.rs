@@ -109,6 +109,8 @@ pub fn run() {
             // ==================== Pin ====================
             update_pin_user_value,
             clear_pin_user_value,
+            add_repeatable_pin,
+            remove_repeatable_pin,
             // ==================== History ====================
             sync_graph_state,
             // ==================== 子图管理 ====================

@@ -70,4 +70,52 @@ export class PinService {
         logger.graph.debug(`Got pin value for pinId=${pinId}`, 'PinService');
         return value;
     }
+
+    /**
+     * 向节点的 Repeatable 槽位追加一个新 Pin
+     */
+    static async addRepeatablePin(
+        subgraphId: string,
+        nodeId: string,
+        slotIndex: number
+    ): Promise<AddRepeatablePinResult> {
+        logger.graph.trace(`Adding repeatable pin: subgraphId=${subgraphId}, nodeId=${nodeId}, slotIndex=${slotIndex}`, 'PinService');
+        const result = await invoke<AddRepeatablePinResult>("add_repeatable_pin", {
+            subgraphId,
+            nodeId,
+            slotIndex,
+        });
+        logger.graph.debug(`Repeatable pin added: pinId=${result.pinId}`, 'PinService');
+        return result;
+    }
+
+    /**
+     * 从节点移除一个 Repeatable 槽位的 Pin
+     */
+    static async removeRepeatablePin(
+        subgraphId: string,
+        nodeId: string,
+        pinId: string
+    ): Promise<RemoveRepeatablePinResult> {
+        logger.graph.trace(`Removing repeatable pin: subgraphId=${subgraphId}, nodeId=${nodeId}, pinId=${pinId}`, 'PinService');
+        const result = await invoke<RemoveRepeatablePinResult>("remove_repeatable_pin", {
+            subgraphId,
+            nodeId,
+            pinId,
+        });
+        logger.graph.debug(`Repeatable pin removed: pinId=${pinId}`, 'PinService');
+        return result;
+    }
+}
+
+export interface AddRepeatablePinResult {
+    pinId: string;
+    pin: import("@/shared/types").PinData;
+}
+
+export interface RemoveRepeatablePinResult {
+    removedPinId: string;
+    slotIndex: number;
+    pinIndex: number;
+    removedConnections: [string, string][];
 }

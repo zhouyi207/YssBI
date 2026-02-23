@@ -12,7 +12,6 @@ pub fn register(registry: &NodeRegistry) {
 
 fn register_get_variable(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get Variable", vec!["Variables".to_string()])
-        .with_node_type("get_variable")
         .with_ui_style("variable")
         .with_description("Read the value of a variable")
         .with_pin_slots(vec![
@@ -30,7 +29,6 @@ fn register_get_variable(registry: &NodeRegistry) {
 
 fn register_set_variable(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Set Variable", vec!["Variables".to_string()])
-        .with_node_type("set_variable")
         .with_ui_style("variable")
         .with_description("Write a value to a variable")
         .with_pin_slots(vec![

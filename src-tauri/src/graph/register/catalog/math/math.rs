@@ -31,9 +31,11 @@ fn register_add(registry: &NodeRegistry) {
             )),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
-            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
-            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
-            let result = (a + b)?;
+            let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
+            let result = operands
+                .into_iter()
+                .reduce(|acc, v| (acc.clone() + v).unwrap_or(acc))
+                .ok_or_else(|| "Add: no operands".to_string())?;
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
             Ok(())
         }));

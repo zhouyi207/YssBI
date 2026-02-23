@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -186,6 +186,31 @@ export function useCanvasViewport(
     return map;
   }, [nodes]);
 
+  const [nodeResizeVersion, setNodeResizeVersion] = useState(0);
+  const resizeRafRef = useRef(0);
+
+  useEffect(() => {
+    const root = canvasRef.current;
+    if (!root) return;
+
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = requestAnimationFrame(() => {
+        setNodeResizeVersion((v) => v + 1);
+      });
+    });
+
+    visibleNodeIds.forEach((nodeId) => {
+      const el = root.querySelector(`[data-node-id="${nodeId}"]`);
+      if (el) observer.observe(el);
+    });
+
+    return () => {
+      cancelAnimationFrame(resizeRafRef.current);
+      observer.disconnect();
+    };
+  }, [canvasRef, visibleNodeIds]);
+
   useLayoutEffect(() => {
     const root = canvasRef.current;
     if (!root) return;
@@ -225,7 +250,7 @@ export function useCanvasViewport(
       }
       return nextOffsets;
     });
-  }, [canvasRef, scale, visibleNodeIds, nodes]);
+  }, [canvasRef, scale, visibleNodeIds, nodes, nodeResizeVersion]);
 
   // getPinWorldPos: 使用 DOM 测量的 pin 偏移，可见集已包含连边节点，故所有需绘边的 pin 均有测量值
   const getPinWorldPos = useCallback(
