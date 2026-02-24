@@ -7882,6 +7882,7 @@ dependencies = [
  "faer",
  "ndarray",
  "ndarray-stats",
+ "num-traits",
  "statrs",
 ]
 
