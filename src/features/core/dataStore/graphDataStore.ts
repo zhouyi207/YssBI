@@ -52,6 +52,8 @@ interface GraphDataStore {
     removePinIds: PinId[];
     addPins: Array<{ nodeId: NodeId; pin: PinData }>;
   }): void;
+  /** 按后端提供的顺序重排节点的 pin 列表 */
+  reorderNodePins(nodeId: NodeId, pinOrder: PinId[]): void;
 
   // ======================
   // Connection
@@ -424,6 +426,18 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         connections: nextConnections,
         nodePins: nextNodePins,
         pinConnections: nextPinConnections,
+      };
+    }),
+
+  reorderNodePins: (nodeId, pinOrder) =>
+    set((state) => {
+      const current = state.nodePins[nodeId];
+      if (!current) return state;
+      const currentSet = new Set(current);
+      const ordered = pinOrder.filter((pid) => currentSet.has(pid));
+      if (ordered.length !== current.length) return state;
+      return {
+        nodePins: { ...state.nodePins, [nodeId]: ordered },
       };
     }),
 

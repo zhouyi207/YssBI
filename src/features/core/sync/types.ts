@@ -110,6 +110,7 @@ export interface NodePinsUpdatedPayload {
     removedPinIds: string[];
     addedPins: PinInstanceDTO[];
     removedConnections: Array<[string, string]>;
+    pinOrder?: string[];
 }
 
 /** 类型推断后 pin 的解析类型变化事件 */

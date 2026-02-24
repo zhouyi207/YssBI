@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGestureStore } from "@/features/core/gesture";
-import { useVariableStore } from "@/features/core/dataStore";
+import { useVariableStore, useGraphDataStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
+import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { logger } from '@/utils/appLogger';
 
 export interface VariableDropMenu {
@@ -66,7 +67,15 @@ export function useCanvasDrop({
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
       if (!_graphId) return;
-      executeCommand(_graphId, 'AddRepeatablePin', { nodeId, slotIndex: 0 });
+      const nodeData = useGraphDataStore.getState().nodes[nodeId];
+      const nodeType = nodeData?.nodeType;
+      let slotIndex = 0;
+      if (nodeType) {
+        const def = useNodeRegistryStore.getState().getDefinition(nodeType);
+        const idx = def?.pinSlots.findIndex(s => s.slotKind === 'repeatable') ?? -1;
+        if (idx >= 0) slotIndex = idx;
+      }
+      executeCommand(_graphId, 'AddRepeatablePin', { nodeId, slotIndex });
     },
     [_graphId]
   );

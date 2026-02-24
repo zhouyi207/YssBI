@@ -3,7 +3,7 @@ import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { PinInput } from "./PinInput";
-import { PinContextMenu } from "./PinContextMenu";
+import { PinContextMenu } from "../ContextMenu";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 
@@ -83,12 +83,11 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!removable || !onRemovePin) return;
       e.preventDefault();
       e.stopPropagation();
       setContextMenu({ x: e.clientX, y: e.clientY });
     },
-    [removable, onRemovePin]
+    []
   );
 
   const showInput =
@@ -223,11 +222,11 @@ export const Pin: React.FC<PinProps> = (props) => {
         />
       )}
 
-      {contextMenu && onRemovePin && (
+      {contextMenu && (
         <PinContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onRemove={() => onRemovePin(id)}
+          position={contextMenu}
+          removable={removable && !!onRemovePin}
+          onRemove={() => onRemovePin?.(id)}
           onClose={() => setContextMenu(null)}
         />
       )}

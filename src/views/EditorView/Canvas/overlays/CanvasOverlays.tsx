@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
@@ -174,7 +175,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Node Palette ================= */}
-            {activeGroupId === groupId && contextMenu?.visible && (
+            {activeGroupId === groupId && contextMenu?.visible && createPortal(
                 <div className="menu-container">
                     <NodePalette
                         x={contextMenu.x}
@@ -186,11 +187,12 @@ export default function CanvasOverlays({
                         functions={functions}
                         macros={macros}
                     />
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ================= Variable Drop Menu ================= */}
-            {activeGroupId === groupId && variableDropMenu && (
+            {activeGroupId === groupId && variableDropMenu && createPortal(
                 <div
                     className="fixed z-50 bg-gray-800 text-white rounded shadow-lg overflow-hidden border border-gray-700 py-1 menu-container"
                     style={{ left: variableDropMenu.x, top: variableDropMenu.y }}
@@ -210,7 +212,8 @@ export default function CanvasOverlays({
                         <div className="w-2 h-2 rounded-full bg-orange-400" />
                         Set {variableDropMenu.variableName}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );

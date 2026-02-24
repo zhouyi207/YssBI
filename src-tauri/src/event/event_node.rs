@@ -47,6 +47,9 @@ pub enum EventNode {
         added_pins: Vec<PinInstanceDTO>,
         /// 被断开的连接 (from_pin, to_pin)
         removed_connections: Vec<(PinId, PinId)>,
+        /// 变更后节点的完整 pin 顺序（用于前端重排）
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pin_order: Option<Vec<PinId>>,
     },
     /// 类型推断后 pin 的解析类型发生变化
     #[serde(rename_all = "camelCase")]

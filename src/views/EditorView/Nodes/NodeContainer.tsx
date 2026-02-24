@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { Node } from "@/shared/types/ui";
 import { useNodeExecution } from "@/features/core/node";
 import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
+import { NodeContextMenu } from "../ContextMenu";
 
 interface NodeContainerProps {
   node: Node;
@@ -25,6 +26,14 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   const posX = node.position.x + dx;
   const posY = node.position.y + dy;
   const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id, graphId);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const className = getNodeClassName({
     selected,
@@ -55,6 +64,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
         MozOsxFontSmoothing: "grayscale",
       }}
       onPointerDown={(e) => onPointerDown?.(node.id, e)}
+      onContextMenu={handleContextMenu}
     >
       {children}
 
@@ -66,6 +76,14 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
       )}
       {isCompleted && !isExecuting && (
         <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-green-500 rounded-full shadow-lg shadow-green-500/40" />
+      )}
+
+      {contextMenu && (
+        <NodeContextMenu
+          position={contextMenu}
+          nodeTitle={node.title}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

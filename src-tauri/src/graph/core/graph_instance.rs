@@ -992,8 +992,18 @@ impl GraphInstance {
             let mut data_state = self.data_state.write().unwrap();
             data_state.connections.register_pin(new_pin_id, node_id);
             data_state.pins.insert(new_pin_id, new_pin.clone());
+
+            let insert_pos = data_state.nodes.get(&node_id).map(|node| {
+                node.pin_ids.iter().rposition(|pid| {
+                    data_state.pins.get(pid)
+                        .map(|p| p.definition.role.matches_family(template_role))
+                        .unwrap_or(false)
+                }).map(|pos| pos + 1)
+                .unwrap_or(node.pin_ids.len())
+            });
+
             if let Some(node) = data_state.nodes.get_mut(&node_id) {
-                node.pin_ids.push(new_pin_id);
+                node.pin_ids.insert(insert_pos.unwrap_or(node.pin_ids.len()), new_pin_id);
             }
         }
 

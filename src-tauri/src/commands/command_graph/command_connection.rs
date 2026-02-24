@@ -27,6 +27,9 @@ pub fn emit_pin_change_events(
 
         let removed_pin_ids: Vec<PinId> = cs.removed_pin_ids;
 
+        let pin_order = graph.get_node_instance(cs.node_id)
+            .map(|node| node.pin_ids.clone());
+
         emit_project_event(
             app,
             Event::Node(EventNode::NodePinsUpdated {
@@ -35,6 +38,7 @@ pub fn emit_pin_change_events(
                 removed_pin_ids,
                 added_pins: added_dtos,
                 removed_connections: cs.removed_connections,
+                pin_order,
             }),
         );
     }
