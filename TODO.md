@@ -13,6 +13,8 @@ function, macro 功能添加（感觉没必要区分 function 和 macro ）
 
 pin input 需要处理 还有常数节点
 
+不如纯 data 节点在连接的时候就进行计算就好了
+
 存储 graph canvas position
 
 catelog math 节点应该是 any

@@ -320,10 +320,12 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 #[tauri::command]
 pub fn execute_project(
     state: State<ProjectState>,
+    window_store: State<crate::execution::WindowDataStore>,
     on_event: Channel<ExecutionEvent>,
     graph_id: Option<String>,
 ) -> Result<Value, String> {
     let project_data = state.get_data();
+    let window_store = window_store.inner().clone();
 
     let target_graph_id: Option<GraphId> = graph_id
         .as_deref()
@@ -381,7 +383,11 @@ pub fn execute_project(
             Arc::clone(&state.project_store),
         );
 
-        let mut executor = Executor::new(Arc::new(Mutex::new(runtime)), on_event.clone());
+        let mut executor = Executor::new(
+            Arc::new(Mutex::new(runtime)),
+            on_event.clone(),
+            window_store.clone(),
+        );
         executor.start(entry_node)?;
 
         for line in executor.logs() {
@@ -395,4 +401,13 @@ pub fn execute_project(
         "executedGraphs": executed_count,
         "logs": all_logs,
     }))
+}
+
+/// 新窗口通过 key 拉取数据（非破坏性读取，兼容 React Strict Mode）
+#[tauri::command]
+pub fn get_window_data(
+    state: State<crate::execution::WindowDataStore>,
+    key: String,
+) -> Result<Option<String>, String> {
+    Ok(state.get(&key))
 }

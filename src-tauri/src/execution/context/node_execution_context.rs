@@ -8,11 +8,18 @@ use polars::prelude::{DataFrame, Series};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
+/// 窗口打开请求
+pub struct WindowAction {
+    pub window_type: String,
+    pub data: String,
+}
+
 /// 具体的执行上下文实现
 pub struct NodeExecutionContext {
     pub node_id: NodeId,
     pub graph: Arc<Mutex<GraphRuntime>>,
     pub logs: Vec<String>,
+    pub window_actions: Vec<WindowAction>,
 }
 
 impl NodeExecutionContext {
@@ -21,6 +28,7 @@ impl NodeExecutionContext {
             node_id,
             graph,
             logs: Vec::new(),
+            window_actions: Vec::new(),
         }
     }
 }
@@ -210,6 +218,13 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     // ====================================================================
     // 日志
     // ====================================================================
+
+    fn open_window(&mut self, window_type: String, data: String) {
+        self.window_actions.push(WindowAction {
+            window_type,
+            data,
+        });
+    }
 
     fn log(&mut self, message: String) {
         self.logs.push(message);

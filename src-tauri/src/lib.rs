@@ -55,6 +55,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 注册全局状态管理器
         .manage(project::ProjectState::new())
+        .manage(execution::WindowDataStore::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
@@ -73,6 +74,7 @@ pub fn run() {
             load_project,
             save_project,
             execute_project,
+            get_window_data,
             // ==================== 设置 ====================
             load_settings,
             save_settings,

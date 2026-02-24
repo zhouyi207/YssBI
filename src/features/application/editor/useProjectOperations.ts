@@ -4,6 +4,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import { logger } from '@/utils/appLogger';
 
@@ -77,6 +78,22 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     }
   }, [openGraph]);
 
+  const handleOpenWindow = useCallback((windowType: string, dataKey: string) => {
+    try {
+      const label = `${windowType}-${Math.random().toString(36).substring(2, 10)}`;
+      new WebviewWindow(label, {
+        url: `index.html#/info?key=${dataKey}`,
+        title: 'OLS Regression Results',
+        width: 960,
+        height: 800,
+        decorations: false,
+        visible: false,
+      });
+    } catch (e) {
+      logger.exec.error(`Failed to open window: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
   const executeGraph = useCallback(async (targetGraphId?: string) => {
     try {
       syncActiveToCollection();
@@ -107,6 +124,10 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
+        if (event.event === 'openWindow') {
+          handleOpenWindow(event.data.windowType, event.data.dataKey);
+          return;
+        }
         applyEvent(graphId, event);
         recording.push({ event, timestamp: Date.now() });
       }, graphId);

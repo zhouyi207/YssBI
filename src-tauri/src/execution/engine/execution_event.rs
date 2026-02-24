@@ -38,4 +38,11 @@ pub enum ExecutionEvent {
         from_pin_id: String,
         to_pin_id: String,
     },
+
+    /// 请求前端打开新窗口（只传 key，大数据留在后端由新窗口拉取）
+    #[serde(rename_all = "camelCase")]
+    OpenWindow {
+        window_type: String,
+        data_key: String,
+    },
 }

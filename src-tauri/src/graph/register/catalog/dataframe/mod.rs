@@ -3,6 +3,7 @@
 mod nodes;
 mod series_nodes;
 mod transform_nodes;
+mod info_nodes;
 
 use crate::graph::register::NodeRegistry;
 
@@ -10,4 +11,5 @@ pub fn register(registry: &NodeRegistry) {
     nodes::register(registry);
     series_nodes::register(registry);
     transform_nodes::register(registry);
+    info_nodes::register(registry);
 }

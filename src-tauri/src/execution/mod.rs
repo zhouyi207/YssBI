@@ -10,7 +10,9 @@
 pub mod engine;
 pub mod context;
 pub mod data_store;
+pub mod window_data_store;
 
 pub use engine::*;
 pub use context::*;
 pub use data_store::*;
+pub use window_data_store::*;

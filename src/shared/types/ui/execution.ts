@@ -12,7 +12,8 @@ export type ExecutionEvent =
   | { event: 'nodeStart'; data: { nodeId: string } }
   | { event: 'nodeComplete'; data: { nodeId: string } }
   | { event: 'nodeError'; data: { nodeId: string; error: string } }
-  | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } };
+  | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
+  | { event: 'openWindow'; data: { windowType: string; dataKey: string } };
 
 /** 带时间戳的录制事件 */
 export interface RecordedEvent {

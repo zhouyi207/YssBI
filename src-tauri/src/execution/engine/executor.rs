@@ -14,6 +14,7 @@ use crate::graph::pin::{ExecRole, PinRole};
 use crate::log_exec;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use crate::execution::WindowDataStore;
 use tauri::ipc::Channel;
 
 /// 执行器
@@ -39,17 +40,25 @@ pub struct Executor {
 
     /// 前端事件通道
     channel: Channel<ExecutionEvent>,
+
+    /// 窗口数据存储（节点产生的数据暂存于此，前端新窗口通过 command 拉取）
+    window_data_store: WindowDataStore,
 }
 
 impl Executor {
     /// 创建新的执行器
-    pub fn new(graph: Arc<Mutex<GraphRuntime>>, channel: Channel<ExecutionEvent>) -> Self {
+    pub fn new(
+        graph: Arc<Mutex<GraphRuntime>>,
+        channel: Channel<ExecutionEvent>,
+        window_data_store: WindowDataStore,
+    ) -> Self {
         Self {
             stack: ExecutionStack::new(),
             suspended_frames: HashMap::new(),
             graph,
             logs: Vec::new(),
             channel,
+            window_data_store,
         }
     }
 
@@ -144,6 +153,15 @@ impl Executor {
 
         // 收集日志
         self.logs.extend(ctx.logs);
+
+        for action in ctx.window_actions {
+            let data_key = format!("win_{}", uuid::Uuid::new_v4().simple());
+            self.window_data_store.insert(data_key.clone(), action.data);
+            self.emit(ExecutionEvent::OpenWindow {
+                window_type: action.window_type,
+                data_key,
+            });
+        }
 
         result
     }

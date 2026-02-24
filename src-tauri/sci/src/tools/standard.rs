@@ -1,3 +1,5 @@
+use ndarray::{Array1, Array2};
+
 pub struct StandardizeStats1D {
     mean: f64,
     std: f64,
