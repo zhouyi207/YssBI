@@ -8,7 +8,7 @@ use statrs::{
 };
 
 pub struct OLSConfig {
-    constant: bool,
+    pub constant: bool,
 }
 
 pub struct OLS {
@@ -88,17 +88,17 @@ impl OLS {
         } else {
             y.iter().map(|v| v.pow(2)).sum::<f64>()
         };
-        let ss_model = (y.as_ref() - y_hat.as_ref()).iter().map(|v| v.pow(2)).sum::<f64>();
-        let ss_residual = ss_total - ss_model;
+        let ss_residual = (y.as_ref() - y_hat.as_ref()).iter().map(|v| v.pow(2)).sum::<f64>();
+        let ss_model = ss_total - ss_residual;
 
-        let r2 = 1.0 - ss_model / ss_total;
+        let r2 = 1.0 - ss_residual / ss_total;
 
         let ms_model = ss_model / df_model as f64;
         let ms_residual = ss_residual / df_redidual as f64;
-        let ms_total = ss_model / df_model as f64;
-        let r2_adjusted = 1.0 - ms_model / ms_total;
+        let ms_total = ss_total / df_total as f64;
+        let r2_adjusted = 1.0 - ms_residual / ms_total;
 
-        let f = ((ss_total - ss_model) / df_model as f64) / (ss_model / df_redidual as f64);
+        let f = ms_model / ms_residual;
 
         let dist = FisherSnedecor::new(df_model as f64, df_redidual as f64).unwrap();
         let f_p_value = 1.0 - dist.cdf(f);

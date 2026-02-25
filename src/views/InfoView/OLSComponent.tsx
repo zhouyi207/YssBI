@@ -1,21 +1,22 @@
 import React, { useMemo } from 'react';
 
 interface ModelBasicInfo {
-  dep_variable: string;
-  r_squared: number;
   model_type: string;
-  adj_r_squared: number;
   method: string;
+  num_observation: number;
+  r_squared: number;
+  adj_r_squared: number;
   f_statistic: number;
-  date: string;
   prob_f_statistic: number;
-  time: string;
-  log_likelihood: number;
-  no_observations: number;
-  aic: number;
-  df_residuals: number;
-  bic: number;
   df_model: number;
+  df_residual: number;
+  df_total: number;
+  ss_model: number;
+  ss_residual: number;
+  ss_total: number;
+  ms_model: number;
+  ms_residual: number;
+  ms_total: number;
   covariance_type: string;
 }
 
@@ -31,14 +32,7 @@ interface Coefficient {
 }
 
 interface DiagnosticInfo {
-  omnibus: number;
-  durbin_watson: number;
-  prob_omnibus: number;
-  jarque_bera_jb: number;
-  skew: number;
-  prob_jb: number;
-  kurtosis: number;
-  cond_no: string;
+  cond_no: number;
 }
 
 export interface OLSResultData {
@@ -95,6 +89,15 @@ function SectionHeader({ title, icon }: { title: string; icon: React.ReactNode }
   );
 }
 
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
+      <span className="text-gray-500 text-xs">{label}</span>
+      <span className="text-white text-xs font-mono font-medium">{children}</span>
+    </div>
+  );
+}
+
 export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
   const { model_basic_info: info, coefficients, diagnostic_info: diag } = data;
 
@@ -111,7 +114,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         <div className="flex items-center gap-3 flex-wrap">
           <RSquaredBadge value={info.r_squared} />
           <span className="text-xs text-gray-500">
-            {info.method} &middot; {info.date} {info.time}
+            {info.method} &middot; n={info.num_observation}
           </span>
         </div>
       </div>
@@ -127,60 +130,67 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       />
 
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50 mb-2">
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Dep. Variable</span>
-          <span className="text-white text-xs font-mono font-medium">{info.dep_variable}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Model</span>
-          <span className="text-white text-xs font-mono font-medium">{info.model_type}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">R-squared</span>
-          <span className="text-white text-xs font-mono font-medium">{info.r_squared.toFixed(3)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Adj. R-squared</span>
-          <span className="text-white text-xs font-mono font-medium">{info.adj_r_squared.toFixed(3)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">F-statistic</span>
-          <span className="text-white text-xs font-mono font-medium">{info.f_statistic.toFixed(3)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Prob (F-statistic)</span>
-          <span className={`text-xs font-mono font-medium ${info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-gray-400'}`}>
+        <InfoRow label="Model">{info.model_type}</InfoRow>
+        <InfoRow label="Method">{info.method}</InfoRow>
+        <InfoRow label="R-squared">{info.r_squared.toFixed(4)}</InfoRow>
+        <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
+        <InfoRow label="F-statistic">{formatNum(info.f_statistic)}</InfoRow>
+        <InfoRow label="Prob (F-statistic)">
+          <span className={info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
             {formatNum(info.prob_f_statistic)}
           </span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Log-Likelihood</span>
-          <span className="text-white text-xs font-mono font-medium">{info.log_likelihood.toFixed(3)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">No. Observations</span>
-          <span className="text-white text-xs font-mono font-medium">{info.no_observations}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">AIC</span>
-          <span className="text-white text-xs font-mono font-medium">{info.aic.toFixed(1)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">BIC</span>
-          <span className="text-white text-xs font-mono font-medium">{info.bic.toFixed(1)}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Df Residuals</span>
-          <span className="text-white text-xs font-mono font-medium">{info.df_residuals}</span>
-        </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Df Model</span>
-          <span className="text-white text-xs font-mono font-medium">{info.df_model}</span>
-        </div>
+        </InfoRow>
+        <InfoRow label="No. Observations">{info.num_observation}</InfoRow>
+        <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
+        <InfoRow label="Df Model">{info.df_model}</InfoRow>
+        <InfoRow label="Df Residual">{info.df_residual}</InfoRow>
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-gray-500 text-xs">Covariance Type</span>
-          <span className="text-white text-xs font-mono font-medium">{info.covariance_type}</span>
+          <span className="text-gray-500 text-xs">Df Total</span>
+          <span className="text-white text-xs font-mono font-medium">{info.df_total}</span>
         </div>
+      </div>
+
+      {/* Sum of Squares & Mean Squares */}
+      <SectionHeader
+        title="ANOVA"
+        icon={
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M3 6h18M3 18h18" />
+          </svg>
+        }
+      />
+
+      <div className="rounded-lg border border-gray-800/50 overflow-hidden mb-2">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-[#1a1d23]">
+              <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Source</th>
+              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">SS</th>
+              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">df</th>
+              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">MS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="bg-[#13151a] border-t border-gray-800/30">
+              <td className="px-4 py-2.5 font-mono text-white">Model</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(info.ss_model)}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{info.df_model}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(info.ms_model)}</td>
+            </tr>
+            <tr className="bg-[#15171d] border-t border-gray-800/30">
+              <td className="px-4 py-2.5 font-mono text-white">Residual</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(info.ss_residual)}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{info.df_residual}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(info.ms_residual)}</td>
+            </tr>
+            <tr className="bg-[#13151a] border-t border-gray-800/30">
+              <td className="px-4 py-2.5 font-mono text-white font-semibold">Total</td>
+              <td className="text-right px-3 py-2.5 font-mono text-white font-semibold">{formatNum(info.ss_total)}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-white font-semibold">{info.df_total}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-white font-semibold">{formatNum(info.ms_total)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* Coefficients Section */}
@@ -267,7 +277,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       {/* Diagnostic Section */}
       <SectionHeader
-        title="Diagnostic Tests"
+        title="Diagnostics"
         icon={
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -275,13 +285,12 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Omnibus" value={diag.omnibus.toFixed(3)} sub={`Prob = ${diag.prob_omnibus.toFixed(3)}`} />
-        <StatCard label="Durbin-Watson" value={diag.durbin_watson.toFixed(3)} sub={diag.durbin_watson > 1.5 && diag.durbin_watson < 2.5 ? 'No autocorrelation' : 'Possible autocorrelation'} />
-        <StatCard label="Jarque-Bera" value={diag.jarque_bera_jb.toFixed(3)} sub={`Prob = ${diag.prob_jb.toFixed(3)}`} />
-        <StatCard label="Skew" value={diag.skew.toFixed(3)} sub={Math.abs(diag.skew) < 0.5 ? 'Approximately symmetric' : 'Skewed'} />
-        <StatCard label="Kurtosis" value={diag.kurtosis.toFixed(3)} sub={Math.abs(diag.kurtosis - 3) < 1 ? 'Near normal' : 'Non-normal tails'} />
-        <StatCard label="Condition No." value={diag.cond_no} sub={parseFloat(diag.cond_no) > 1000 ? 'Possible multicollinearity' : 'Acceptable'} />
+      <div className="grid grid-cols-1 gap-3">
+        <StatCard
+          label="Condition Number"
+          value={formatNum(diag.cond_no)}
+          sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
+        />
       </div>
     </div>
   );

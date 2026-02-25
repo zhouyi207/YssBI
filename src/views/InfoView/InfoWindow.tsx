@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
 
 function getDataKeyFromHash(): string | null {
@@ -158,7 +159,7 @@ export const InfoWindow: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <OverlayScrollbar className="flex-1 min-h-0" direction="vertical">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
             <svg className="w-12 h-12 text-red-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -173,7 +174,7 @@ export const InfoWindow: React.FC = () => {
             <div className="w-5 h-5 border-2 border-gray-600 border-t-[var(--accent-color)] rounded-full animate-spin" />
           </div>
         )}
-      </div>
+      </OverlayScrollbar>
     </div>
   );
 };
