@@ -9,3 +9,6 @@ ndarray-stats.workspace = true
 faer = "0.24.0"
 statrs = "0.17"
 num-traits = "0.2.19"
+
+[dev-dependencies]
+csv = "1.3"

@@ -1,3 +1,4 @@
+pub mod diagnostics;
 pub mod regression;
 pub mod tools;
 pub mod types;
