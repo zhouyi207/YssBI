@@ -23,6 +23,8 @@ const PIN_TYPE_TO_THEME_KEY: Record<string, keyof ThemeSettings> = {
   datetime: "datetimeColor",
   any: "anyColor",
   Any: "anyColor",
+  oneof: "oneofColor",
+  OneOf: "oneofColor",
   struct: "structColor",
   Struct: "structColor",
 };

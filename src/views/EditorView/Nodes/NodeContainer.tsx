@@ -9,6 +9,7 @@ interface NodeContainerProps {
   graphId?: string;
   selected?: boolean;
   dragDelta?: { x: number; y: number };
+  dimmed?: boolean;
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
   children: React.ReactNode;
 }
@@ -18,6 +19,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   graphId,
   selected,
   dragDelta,
+  dimmed,
   onPointerDown,
   children,
 }) => {
@@ -59,7 +61,8 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
         ...minSize,
         transform: `translate3d(${posX}px, ${posY}px, 0)`,
         background,
-        transition: "border-color 200ms, box-shadow 200ms, background 200ms",
+        opacity: dimmed ? 0.35 : undefined,
+        transition: "border-color 200ms, box-shadow 200ms, background 200ms, opacity 150ms",
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",
       }}

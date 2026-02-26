@@ -340,6 +340,13 @@ export const SettingsView: React.FC = () => {
                                         onChange={(val: string) => updateTheme({ anyColor: val })}
                                     />
                                     <SettingItem
+                                        label="OneOf Color"
+                                        description="Color for union type (OneOf) pins, e.g. Float64 | String."
+                                        type="color"
+                                        value={theme.oneofColor}
+                                        onChange={(val: string) => updateTheme({ oneofColor: val })}
+                                    />
+                                    <SettingItem
                                         label="DataFrame Color"
                                         description="Color for DataFrame pins."
                                         type="color"

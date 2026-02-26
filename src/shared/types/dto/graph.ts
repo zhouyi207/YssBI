@@ -60,6 +60,8 @@ export interface PinInstanceDTO {
   defaultValue?: unknown;
   userValue?: unknown;
   containerType?: string;
+  typeDisplay?: string;
+  optional?: boolean;
   ui?: PinUIDTO;
 }
 

@@ -19,7 +19,8 @@ fn register_add(registry: &NodeRegistry) {
         .with_description("Add two numbers together")
         .with_pin_slots(vec![
             PinSlot::repeatable(
-                PinDefinition::data_input("", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64)),
+                PinDefinition::data_input("", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
                 "",
                 2,
                 None,
@@ -48,12 +49,14 @@ fn register_subtract(registry: &NodeRegistry) {
         .with_ui_style("math")
         .with_description("Subtract B from A")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output(
                 "Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Float64),
             )),
@@ -74,12 +77,14 @@ fn register_multiply(registry: &NodeRegistry) {
         .with_ui_style("math")
         .with_description("Multiply two numbers")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output(
                 "Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Float64),
             )),
@@ -100,12 +105,14 @@ fn register_divide(registry: &NodeRegistry) {
         .with_ui_style("math")
         .with_description("Divide A by B")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64),
-            )),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output(
                 "Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Float64),
             )),

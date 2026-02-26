@@ -101,6 +101,7 @@ pub fn update_variable(
                                     pin_type: data_type_to_pin_type(new_data_type).to_string(),
                                     container_type: data_type_to_container(new_data_type)
                                         .map(|s| s.to_string()),
+                                    type_display: Some(new_data_type.to_string()),
                                 });
                             }
                         }

@@ -1,13 +1,15 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { Node } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
+import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 interface MathNodeLayoutProps {
   node: Node;
   activePinId?: string | null;
+  activePin?: PinModel | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
@@ -26,6 +28,7 @@ interface MathNodeLayoutProps {
 export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   node,
   activePinId,
+  activePin,
   subgraphId,
   onAddInput,
   onRemovePin,
@@ -39,6 +42,13 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   const inputsData = node.inputs.filter(p => p.type !== 'exec');
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
+
+  const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
+    if (!activePin) return "normal";
+    if (pin.id === activePin.id) return "highlighted";
+    if (isPinCompatible(pin, activePin)) return "highlighted";
+    return "dimmed";
+  }, [activePin]);
 
   const repeatableMinCount = useMemo(() => {
     const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
@@ -71,6 +81,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 {...pin}
                 subgraphId={subgraphId}
                 isActive={activePinId === pin.id}
+                pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
@@ -85,6 +96,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 {...pin}
                 subgraphId={subgraphId}
                 isActive={activePinId === pin.id}
+                pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
                 onPinPointerDown={onPinPointerDown}
                 onValueChange={onPinValueChange}
@@ -103,6 +115,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               {...pin}
               subgraphId={subgraphId}
               isActive={activePinId === pin.id}
+              pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
@@ -131,6 +144,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               {...pin}
               subgraphId={subgraphId}
               isActive={activePinId === pin.id}
+              pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}

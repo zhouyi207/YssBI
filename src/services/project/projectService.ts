@@ -33,6 +33,8 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
                     direction: pin.direction,
                     links: [],
                     containerType: pin.containerType,
+                    typeDisplay: pin.typeDisplay,
+                    optional: pin.optional ?? false,
                     defaultValue: pin.defaultValue,
                     userValue: pin.userValue,
                     ui: pin.ui ? { x: pin.ui.x, y: pin.ui.y, color: pin.ui.color } : undefined,

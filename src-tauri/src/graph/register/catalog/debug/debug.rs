@@ -17,9 +17,10 @@ fn register_print(registry: &NodeRegistry) {
         .with_description("Print a string to the console")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Message", DataRole::Inputs(0), PinDataTypeDefinition::concrete(DataType::String),
-            )),
+            PinSlot::fixed(
+                PinDefinition::data_input("Message", DataRole::Inputs(0), PinDataTypeDefinition::concrete(DataType::String))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
         .with_flow_processor(Arc::new(|ctx| {

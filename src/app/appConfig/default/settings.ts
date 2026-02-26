@@ -21,6 +21,7 @@ export const DEFAULT_THEME: ThemeSettings = {
     dataseriesColor: "#56b6c2",
     objectColor: "#abb2bf",
     anyColor: "#858585",
+    oneofColor: "#7aabc4",
     arrayColor: "#d19a66",
     structColor: "#b07cd8",
 };

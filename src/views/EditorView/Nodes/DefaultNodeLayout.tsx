@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, Node } from "@/shared/types/domain";
 import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
+import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 interface DefaultNodeLayoutProps {
   node: Node & { nodeType?: string; variableId?: string; dataframeId?: string };
   activePinId?: string | null;
+  activePin?: PinModel | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
@@ -57,6 +59,7 @@ function useDataframeNodeTitle(
 export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
   activePinId,
+  activePin,
   subgraphId,
   onAddInput,
   onRemovePin,
@@ -104,6 +107,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
 
   const hasRepeatable = repeatableInfo != null;
 
+  const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
+    if (!activePin) return "normal";
+    if (pin.id === activePin.id) return "highlighted";
+    if (isPinCompatible(pin, activePin)) return "highlighted";
+    return "dimmed";
+  }, [activePin]);
+
   return (
     <>
       {/* Header */}
@@ -122,31 +132,39 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
         {(inputsExec.length > 0 || outputsExec.length > 0) && (
           <div className="flex gap-2 px-2 pt-2 whitespace-nowrap items-start">
             <div className="flex flex-col gap-1 flex-1">
-              {inputsExec.map((pin) => (
-                <Pin
-                  key={pin.id}
-                  {...pin}
-                  subgraphId={subgraphId}
-                  isActive={activePinId === pin.id}
-                  onPinClick={onPinClick}
-                  onPinPointerDown={onPinPointerDown}
-                  onValueChange={onPinValueChange}
-                />
-              ))}
+              {inputsExec.map((pin) => {
+                const ds = getPinDragState(pin);
+                return (
+                  <Pin
+                    key={pin.id}
+                    {...pin}
+                    subgraphId={subgraphId}
+                    isActive={activePinId === pin.id}
+                    pinDragState={ds}
+                    onPinClick={onPinClick}
+                    onPinPointerDown={onPinPointerDown}
+                    onValueChange={onPinValueChange}
+                  />
+                );
+              })}
             </div>
             <div className="flex-1" />
             <div className="flex flex-col gap-1 flex-1 items-end">
-              {outputsExec.map((pin) => (
-                <Pin
-                  key={pin.id}
-                  {...pin}
-                  subgraphId={subgraphId}
-                  isActive={activePinId === pin.id}
-                  onPinClick={onPinClick}
-                  onPinPointerDown={onPinPointerDown}
-                  onValueChange={onPinValueChange}
-                />
-              ))}
+              {outputsExec.map((pin) => {
+                const ds = getPinDragState(pin);
+                return (
+                  <Pin
+                    key={pin.id}
+                    {...pin}
+                    subgraphId={subgraphId}
+                    isActive={activePinId === pin.id}
+                    pinDragState={ds}
+                    onPinClick={onPinClick}
+                    onPinPointerDown={onPinPointerDown}
+                    onValueChange={onPinValueChange}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -156,12 +174,14 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           <div className="flex flex-col gap-1 flex-1">
             {inputsData.map((pin) => {
               const isRepeatable = isRepeatablePin(pin);
+              const ds = getPinDragState(pin);
               return (
                 <Pin
                   key={pin.id}
                   {...pin}
                   subgraphId={subgraphId}
                   isActive={activePinId === pin.id}
+                  pinDragState={ds}
                   onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
@@ -173,18 +193,22 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           </div>
           <div className="flex-1" />
           <div className="flex flex-col gap-1 flex-1 items-end">
-            {outputsData.map((pin) => (
-              <Pin
-                key={pin.id}
-                {...pin}
-                subgraphId={subgraphId}
-                isActive={activePinId === pin.id}
-                onPinClick={onPinClick}
-                onPinPointerDown={onPinPointerDown}
-                onValueChange={onPinValueChange}
-                forceShowInput={isConstantNode}
-              />
-            ))}
+            {outputsData.map((pin) => {
+              const ds = getPinDragState(pin);
+              return (
+                <Pin
+                  key={pin.id}
+                  {...pin}
+                  subgraphId={subgraphId}
+                  isActive={activePinId === pin.id}
+                  pinDragState={ds}
+                  onPinClick={onPinClick}
+                  onPinPointerDown={onPinPointerDown}
+                  onValueChange={onPinValueChange}
+                  forceShowInput={isConstantNode}
+                />
+              );
+            })}
           </div>
         </div>
 

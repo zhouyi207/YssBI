@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { getGraphById } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
@@ -9,6 +9,7 @@ import { Node } from '@/shared/types/ui';
 import { Pin, GraphPosition } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 import { logger } from '@/utils/appLogger';
+import { ProjectService } from "@/services/project/projectService";
 
 import { clamp } from "@/shared/utils";
 import { deserializeGraph } from "@/features/core/dataStore";
@@ -42,6 +43,19 @@ export function useCanvasInteraction({
     const setContextMenu = useEditorStore((s) => s.setContextMenu);
     const pendingConnection = useEditorStore((s) => s.pendingConnection);
     const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
+
+    const wheelSaveTimerRef = useRef<number | null>(null);
+
+    const persistViewport = useCallback((groupId?: string) => {
+        const gid = groupId || activeGroupIdRef.current;
+        const lNode = useLayoutStore.getState().nodes[gid];
+        const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
+        if (!tid) return;
+        const viewport = useViewportStore.getState().viewports[gid];
+        if (viewport) {
+            ProjectService.updateCanvas(tid, viewport).catch(() => {});
+        }
+    }, [activeGroupIdRef, activeTabIdRef]);
 
     const connectPins = useCallback(async (a: string, b: string) => {
         const tid = activeTabIdRef.current;
@@ -149,7 +163,13 @@ export function useCanvasInteraction({
             e.preventDefault(); const delta = -e.deltaY; const factor = Math.pow(1.1, delta / 100);
             setCanvas((prev: GraphPosition) => ({ ...prev, scale: clamp(prev.scale * factor, 0.1, 5) }), targetGroupId);
         } else { setCanvas((prev: GraphPosition) => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }), targetGroupId); }
-    }, [setCanvas]);
+
+        if (wheelSaveTimerRef.current !== null) clearTimeout(wheelSaveTimerRef.current);
+        wheelSaveTimerRef.current = window.setTimeout(() => {
+            wheelSaveTimerRef.current = null;
+            persistViewport(targetGroupId);
+        }, 300);
+    }, [setCanvas, persistViewport]);
 
     // Global Pointer Events (Move/Up) - 仅当 enabled 时注册，避免 Sidebar 等组件重复监听
     useEffect(() => {
@@ -267,6 +287,8 @@ export function useCanvasInteraction({
             if (g.type === "pan") {
                 if (!g.moved && e.button === 2) {
                     setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
+                } else if (g.moved) {
+                    persistViewport(g.groupId);
                 }
             }
             else if (g.type === "select") {
@@ -344,8 +366,9 @@ export function useCanvasInteraction({
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
             if (rAFId) cancelAnimationFrame(rAFId);
+            if (wheelSaveTimerRef.current !== null) clearTimeout(wheelSaveTimerRef.current);
         };
-    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, setSelectedNodeIds]);
+    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, setSelectedNodeIds, persistViewport]);
 
     return {
         contextMenu,

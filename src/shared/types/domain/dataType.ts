@@ -19,7 +19,8 @@ export type DataType =
   | { kind: 'DataFrame' }
   | { kind: 'Array'; inner: DataType }
   | { kind: 'DataSeries'; inner: DataType }
-  | { kind: 'Struct'; inner: string };
+  | { kind: 'Struct'; inner: string }
+  | { kind: 'OneOf'; inner: DataType[] };
 
 /** 获取 DataType 的 kind 字符串 */
 export function dataTypeKind(dt: DataType): string {
@@ -37,6 +38,9 @@ export function dataTypeDisplay(dt: DataType): string {
   if (dt.kind === 'Struct') {
     return `Struct<${dt.inner}>`;
   }
+  if (dt.kind === 'OneOf') {
+    return dt.inner.map(dataTypeDisplay).join(' | ');
+  }
   return dt.kind;
 }
 
@@ -52,11 +56,17 @@ export function dataTypeFromKey(key: string, inner?: DataType | string): DataTyp
   if (k === 'Struct') {
     return { kind: 'Struct', inner: (inner as string) ?? '' };
   }
+  if (k === 'OneOf') {
+    return { kind: 'OneOf', inner: Array.isArray(inner) ? inner : [] };
+  }
   return { kind: k };
 }
 
 /** 检查数据类型是否为基础类型 */
 export function isPrimitiveType(dataType: DataType): boolean {
+  if (dataType.kind === 'OneOf') {
+    return dataType.inner.length > 0 && dataType.inner.every(isPrimitiveType);
+  }
   return ['Boolean', 'Int32', 'Int64', 'Float32', 'Float64', 'String'].includes(
     dataType.kind
   );
@@ -64,6 +74,9 @@ export function isPrimitiveType(dataType: DataType): boolean {
 
 /** 检查数据类型是否为复杂类型 */
 export function isComplexType(dataType: DataType): boolean {
+  if (dataType.kind === 'OneOf') {
+    return dataType.inner.length > 0 && dataType.inner.every(isComplexType);
+  }
   return ['DataFrame', 'DataSeries', 'Object', 'Array'].includes(dataType.kind);
 }
 
@@ -123,8 +136,10 @@ export function dataTypeFromPinType(pinType: string): DataType {
       return { kind: 'Array', inner: { kind: 'Any' } };
     case 'dataseries':
       return { kind: 'DataSeries', inner: { kind: 'Any' } };
+    case 'oneof':
     case 'any':
+      return { kind: 'Any' };
     default:
-      return { kind: 'String' }; // 文本输入默认按 String 处理
+      return { kind: 'String' };
   }
 }

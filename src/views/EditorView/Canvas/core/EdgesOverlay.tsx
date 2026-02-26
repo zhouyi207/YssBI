@@ -12,6 +12,7 @@ interface EdgesOverlayProps {
     outputs: Pin[];
   }>;
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
+  dimmed?: boolean;
 }
 
 interface EdgeData {
@@ -23,7 +24,7 @@ interface EdgeData {
   pinColor?: string;
 }
 
-export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, nodes, getPinWorldPos }) => {
+export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, nodes, getPinWorldPos, dimmed }) => {
   const { theme } = useTheme();
   const graphState = useExecutionStore((s) => s.graphs[graphId]);
   const status = graphState?.status ?? "idle";
@@ -83,6 +84,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, nodes, get
             isCompleted={isCompleted}
             isError={isError}
             isRunning={isRunning}
+            dimmed={dimmed}
           />
         );
       })}

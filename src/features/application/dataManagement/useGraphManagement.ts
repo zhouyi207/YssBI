@@ -6,27 +6,6 @@ import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { logger } from '@/utils/appLogger';
 
-/** 兜底：若 EventCreated 未到达，用 get_graph 拉取并打开（解决监听器竞态导致的超时） */
-async function fulfillPendingGraph(
-  id: string,
-  graphType: 'event' | 'function' | 'macro',
-  openGraph: (id: string, name: string, type: string, data?: any) => void,
-  pendingActionsRef: React.RefObject<Map<string, { callback: () => void; timeout: NodeJS.Timeout }>>
-) {
-  try {
-    const graph = await GraphService.getGraph(id);
-    const action = pendingActionsRef.current.get(id);
-    if (!action) return; // 事件已处理
-    clearTimeout(action.timeout);
-    pendingActionsRef.current.delete(id);
-    useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: graphType, entryNodeId: (graph as any).entryNodeId });
-    useGraphDataStore.getState().addGraphFromData(id, graph as any);
-    openGraph(id, graph.name, graphType, graph);
-  } catch (e) {
-    logger.graph.warn(`Fallback get_graph for ${id} failed: ${e instanceof Error ? e.message : String(e)}`, 'GraphManagement');
-  }
-}
-
 interface PendingAction {
     callback: () => void;
     timestamp: number;
@@ -91,15 +70,14 @@ export function useGraphManagement(
       
       logger.graph.info(`Event creation request sent, ID: ${id}`, 'GraphManagement');
       
-      // 设置超时
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          logger.graph.warn(`Timeout waiting for EventCreated event for ${id}`, 'GraphManagement');
+          logger.graph.warn(`EventCreated event not received for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Event 超时: ${action.name}`, 'error');
         }
-      }, 10000); // 10 秒超时
+      }, 10000);
       
       // 注册待处理操作：当后端事件到达时打开这个 event
       pendingActionsRef.current.set(id, {
@@ -114,9 +92,6 @@ export function useGraphManagement(
         timeout: timeoutId,
         name: finalName,
       });
-      
-      // 兜底：若 EventCreated 未到达（监听器竞态等），用 get_graph 拉取并打开
-      fulfillPendingGraph(id, 'event', openGraph, pendingActionsRef);
       
       // 切换到 events 标签页
       switchSidebarTab('graphs');
@@ -212,7 +187,7 @@ export function useGraphManagement(
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          logger.graph.warn(`Timeout waiting for FunctionCreated event for ${id}`, 'GraphManagement');
+          logger.graph.warn(`FunctionCreated event not received for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Function 超时: ${action.name}`, 'error');
         }
@@ -230,8 +205,6 @@ export function useGraphManagement(
         timeout: timeoutId,
         name: finalName,
       });
-      
-      fulfillPendingGraph(id, 'function', openGraph, pendingActionsRef);
       switchSidebarTab('graphs');
       cleanupExpiredActions();
       
@@ -320,7 +293,7 @@ export function useGraphManagement(
       const timeoutId = setTimeout(() => {
         const action = pendingActionsRef.current.get(id);
         if (action) {
-          logger.graph.warn(`Timeout waiting for MacroCreated event for ${id}`, 'GraphManagement');
+          logger.graph.warn(`MacroCreated event not received for ${id}`, 'GraphManagement');
           pendingActionsRef.current.delete(id);
           showToast?.(`创建 Macro 超时: ${action.name}`, 'error');
         }
@@ -338,8 +311,6 @@ export function useGraphManagement(
         timeout: timeoutId,
         name: finalName,
       });
-      
-      fulfillPendingGraph(id, 'macro', openGraph, pendingActionsRef);
       switchSidebarTab('graphs');
       cleanupExpiredActions();
       

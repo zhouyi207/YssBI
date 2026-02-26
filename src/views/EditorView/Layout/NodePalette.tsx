@@ -168,7 +168,7 @@ export function NodePalette({
       let getCompatible = true;
       if (filterPin) {
         if (filterPin.direction === "output") getCompatible = false;
-        else getCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any";
+        else getCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any" || filterPin.type === "oneof";
       }
       if (getCompatible) {
         items.push({
@@ -182,7 +182,7 @@ export function NodePalette({
       let setCompatible = true;
       if (filterPin) {
         if (filterPin.direction === "input") setCompatible = false;
-        else setCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any";
+        else setCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any" || filterPin.type === "oneof";
       }
       if (setCompatible) {
         items.push({
@@ -200,7 +200,7 @@ export function NodePalette({
         if (filterPin) {
           const targetPins = filterPin.direction === "input" ? sub.outputs : sub.inputs;
           const hasCompatible = (targetPins || []).some(
-            (p: any) => p.type === filterPin.type || p.type === "any" || filterPin.type === "any"
+            (p: any) => p.type === filterPin.type || p.type === "any" || p.type === "oneof" || filterPin.type === "any" || filterPin.type === "oneof"
           );
           if (!hasCompatible && filterPin.type !== "exec") return;
         }

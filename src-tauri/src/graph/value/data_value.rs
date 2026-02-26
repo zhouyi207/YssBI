@@ -5,11 +5,34 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
 
-/// DataSeries 值（ID + 可选的元素类型，用于 value_type 精确推断）
+/// 分类变量的语义角色
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CategoricalRole {
+    /// 普通分类变量（如性别、地区）
+    General,
+    /// 个体/实体标识（面板数据固定效应）
+    Individual,
+    /// 时间周期标识（面板数据固定效应，公式中用 t 表示）
+    Time,
+}
+
+/// 哑变量编码元信息（附加在 String 类型 DataSeries 上，供 OLS 等节点消费）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DummyInfo {
+    /// 要剔除的参考类别；None 表示剔除第一个 unique 值
+    pub drop_category: Option<String>,
+    /// 语义角色
+    pub role: CategoricalRole,
+}
+
+/// DataSeries 值（ID + 可选的元素类型 + 可选的哑变量元信息）
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataSeriesValue {
     pub id: String,
     pub element_type: Option<DataType>,
+    pub dummy_info: Option<DummyInfo>,
 }
 
 impl DataSeriesValue {
@@ -17,6 +40,7 @@ impl DataSeriesValue {
         Self {
             id: id.into(),
             element_type: None,
+            dummy_info: None,
         }
     }
 
@@ -24,7 +48,13 @@ impl DataSeriesValue {
         Self {
             id: id.into(),
             element_type: Some(element_type),
+            dummy_info: None,
         }
+    }
+
+    pub fn with_dummy_info(mut self, dummy_info: DummyInfo) -> Self {
+        self.dummy_info = Some(dummy_info);
+        self
     }
 }
 
@@ -33,13 +63,21 @@ impl Serialize for DataSeriesValue {
     where
         S: serde::Serializer,
     {
-        if self.element_type.is_none() {
+        if self.element_type.is_none() && self.dummy_info.is_none() {
             serializer.serialize_str(&self.id)
         } else {
             use serde::ser::SerializeStruct;
-            let mut s = serializer.serialize_struct("DataSeries", 2)?;
+            let field_count = 1
+                + self.element_type.is_some() as usize
+                + self.dummy_info.is_some() as usize;
+            let mut s = serializer.serialize_struct("DataSeries", field_count)?;
             s.serialize_field("id", &self.id)?;
-            s.serialize_field("elementType", &self.element_type)?;
+            if self.element_type.is_some() {
+                s.serialize_field("elementType", &self.element_type)?;
+            }
+            if self.dummy_info.is_some() {
+                s.serialize_field("dummyInfo", &self.dummy_info)?;
+            }
             s.end()
         }
     }
@@ -58,6 +96,8 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
                 id: String,
                 #[serde(rename = "elementType")]
                 element_type: Option<DataType>,
+                #[serde(rename = "dummyInfo")]
+                dummy_info: Option<DummyInfo>,
             },
         }
         let p = Payload::deserialize(deserializer)?;
@@ -65,8 +105,13 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
             Payload::IdOnly(id) => Ok(DataSeriesValue {
                 id,
                 element_type: None,
+                dummy_info: None,
             }),
-            Payload::Full { id, element_type } => Ok(DataSeriesValue { id, element_type }),
+            Payload::Full { id, element_type, dummy_info } => Ok(DataSeriesValue {
+                id,
+                element_type,
+                dummy_info,
+            }),
         }
     }
 }
@@ -274,6 +319,7 @@ impl DataValue {
                 _ => self.clone(),
             },
             DataType::Struct(_) => self.clone(),
+            DataType::OneOf(_) => self.clone(),
         }
     }
 }

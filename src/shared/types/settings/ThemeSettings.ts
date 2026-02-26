@@ -20,6 +20,7 @@ export interface ThemeSettings {
     dataseriesColor: string;
     objectColor: string;
     anyColor: string;
+    oneofColor: string;
     arrayColor: string;
     structColor: string;
 }

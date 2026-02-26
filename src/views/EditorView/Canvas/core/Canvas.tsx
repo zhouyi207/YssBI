@@ -104,6 +104,8 @@ export default function Canvas() {
     return null;
   }, [gesturePinData, pendingConnection, contextMenu]);
 
+  const isDraggingPin = activePin != null;
+
   const handlePinClick = useCallback(() => {}, []);
   const handlePinValueChange = useCallback(() => {}, []);
 
@@ -133,6 +135,7 @@ export default function Canvas() {
             graphId={activeTabId ?? ""}
             nodes={nodes}
             getPinWorldPos={getPinWorldPos}
+            dimmed={isDraggingPin}
           />
           {nodes
             .filter((n: { id: string }) => visibleNodeIds.has(n.id))
@@ -148,6 +151,7 @@ export default function Canvas() {
                   selected={isSelected}
                   dragDelta={isDragging ? (dragDelta ?? undefined) : undefined}
                   activePinId={activePin?.id}
+                  activePin={activePin}
                   subgraphId={activeTabId || undefined}
                   onPointerDown={onNodePointerDown}
                   onAddInput={handleNodeAddInput}

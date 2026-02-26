@@ -18,9 +18,10 @@ fn register_if_else(registry: &NodeRegistry) {
         .with_description("Branch execution based on condition")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Condition", DataRole::Condition, PinDataTypeDefinition::concrete(DataType::Boolean),
-            )),
+            PinSlot::fixed(
+                PinDefinition::data_input("Condition", DataRole::Condition, PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::exec_output("True", ExecRole::ExecTrue)),
             PinSlot::fixed(PinDefinition::exec_output("False", ExecRole::ExecFalse)),
         ])

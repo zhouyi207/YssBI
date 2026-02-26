@@ -59,6 +59,7 @@ pub fn emit_inferred_types(
             pin_id,
             pin_type: data_type_to_pin_type(&dt).to_string(),
             container_type: data_type_to_container(&dt).map(|s| s.to_string()),
+            type_display: Some(dt.to_string()),
         })
         .collect();
     emit_project_event(

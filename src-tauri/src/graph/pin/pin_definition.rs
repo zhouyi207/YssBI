@@ -74,6 +74,10 @@ pub struct PinDefinition {
     /// 类型描述（仅 Data Pin）
     pub data_type: Option<PinDataTypeDefinition>,
 
+    /// 是否可选（true = 无需连接也可运行，false = 必须连接）
+    #[serde(default)]
+    pub optional: bool,
+
     /// UI / 编辑器相关元数据
     pub meta_data: PinMetaData,
 }
@@ -91,6 +95,7 @@ impl PinDefinition {
             kind: PinKind::Data,
             role: PinRole::Data(role),
             data_type: Some(data_type),
+            optional: false,
             meta_data: PinMetaData::default(),
         }
     }
@@ -107,6 +112,7 @@ impl PinDefinition {
             kind: PinKind::Data,
             role: PinRole::Data(role),
             data_type: Some(data_type),
+            optional: false,
             meta_data: PinMetaData::default(),
         }
     }
@@ -119,6 +125,7 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             data_type: None,
+            optional: false,
             meta_data: PinMetaData::default(),
         }
     }
@@ -131,8 +138,15 @@ impl PinDefinition {
             kind: PinKind::Exec,
             role: PinRole::Exec(role),
             data_type: None,
+            optional: false,
             meta_data: PinMetaData::default(),
         }
+    }
+
+    /// 标记为可选（无需连接也可运行）
+    pub fn with_optional(mut self, optional: bool) -> Self {
+        self.optional = optional;
+        self
     }
 
     /// 设置 Widget

@@ -22,6 +22,7 @@ interface ModelBasicInfo {
 
 interface Coefficient {
   variable: string;
+  category?: string;
   coef: number;
   std_err: number;
   t_value: number;
@@ -103,6 +104,11 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
   const significantCount = useMemo(
     () => coefficients.filter((c) => c.is_significant).length,
+    [coefficients]
+  );
+
+  const hasCategorical = useMemo(
+    () => coefficients.some((c) => c.category != null),
     [coefficients]
   );
 
@@ -208,6 +214,9 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           <thead>
             <tr className="bg-[#1a1d23]">
               <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
+              {hasCategorical && (
+                <th className="text-left px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Category</th>
+              )}
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Coef</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Std Err</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">t</th>
@@ -219,7 +228,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           <tbody>
             {coefficients.map((coeff, idx) => (
               <tr
-                key={coeff.variable}
+                key={`${coeff.variable}-${coeff.category ?? idx}`}
                 className={`
                   border-t border-gray-800/30 transition-colors hover:bg-[#1e2128]
                   ${idx % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'}
@@ -233,6 +242,17 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
                     </span>
                   </div>
                 </td>
+                {hasCategorical && (
+                  <td className="px-3 py-2.5">
+                    {coeff.category != null ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                        {coeff.category}
+                      </span>
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
+                  </td>
+                )}
                 <td className="text-right px-3 py-2.5 font-mono text-white">
                   {formatNum(coeff.coef)}
                 </td>
@@ -301,14 +321,17 @@ function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] }) {
 
   return (
     <div className="rounded-lg border border-gray-800/50 bg-[#13151a] p-4 space-y-2">
-      {coefficients.map((coeff) => {
+      {coefficients.map((coeff, idx) => {
         const pct = (Math.abs(coeff.coef) / maxAbs) * 100;
         const isPositive = coeff.coef >= 0;
+        const label = coeff.category != null
+          ? `${coeff.variable}[${coeff.category}]`
+          : coeff.variable;
 
         return (
-          <div key={coeff.variable} className="flex items-center gap-3">
-            <span className="text-xs font-mono text-gray-400 w-24 text-right shrink-0 truncate" title={coeff.variable}>
-              {coeff.variable}
+          <div key={`${coeff.variable}-${coeff.category ?? idx}`} className="flex items-center gap-3">
+            <span className="text-xs font-mono text-gray-400 w-28 text-right shrink-0 truncate" title={label}>
+              {label}
             </span>
             <div className="flex-1 flex items-center h-5">
               <div className="w-1/2 flex justify-end">

@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { Node as NodeModel } from "@/shared/types/ui";
 import { NodeContainer } from "./NodeContainer";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 import { MathNodeLayout } from "./MathNodeLayout";
+import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 export interface NodeProps {
   id: string;
@@ -12,6 +13,7 @@ export interface NodeProps {
   selected?: boolean;
   dragDelta?: { x: number; y: number };
   activePinId?: string | null;
+  activePin?: PinModel | null;
   subgraphId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
@@ -36,9 +38,16 @@ export interface NodeProps {
  * - 提高可测试性和可维护性
  */
 export const Node = React.memo<NodeProps>((props) => {
-  const { node, onPointerDown, selected, dragDelta } = props;
+  const { node, onPointerDown, selected, dragDelta, activePin } = props;
 
   if (!node) return null;
+
+  const nodeDimmed = useMemo(() => {
+    if (!activePin) return false;
+    if (activePin.nodeId === node.id) return false;
+    const allPins = [...node.inputs, ...node.outputs];
+    return !allPins.some(pin => isPinCompatible(pin, activePin));
+  }, [activePin, node]);
 
   return (
     <NodeContainer
@@ -47,6 +56,7 @@ export const Node = React.memo<NodeProps>((props) => {
       selected={selected}
       dragDelta={dragDelta}
       onPointerDown={onPointerDown}
+      dimmed={nodeDimmed}
     >
       {node.uiStyle === "math" ? (
         <MathNodeLayout {...props} />
@@ -62,6 +72,7 @@ export const Node = React.memo<NodeProps>((props) => {
   return (
     prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
+    prev.activePin === next.activePin &&
     prev.node === next.node &&
     prev.scale === next.scale &&
     dragDeltaSame

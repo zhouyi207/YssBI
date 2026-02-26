@@ -50,5 +50,7 @@ export interface Pin {
     defaultValue?: unknown;     // 默认值（数据针脚）
     userValue?: unknown;        // 用户设置的值（覆盖默认值）
     containerType?: string;     // 容器类型: "array" | "dataseries"，决定 pin 形状
+    typeDisplay?: string;       // 完整类型描述（如 DataSeries<Float64 | String>），用于 tooltip
+    optional?: boolean;         // 是否可选（true = 无需连接也可运行）
     ui?: PinUI;                 // UI 配置
 }

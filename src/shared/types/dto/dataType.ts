@@ -12,7 +12,8 @@ import { dataTypeFromKey } from '../domain/dataType';
 export type DataTypeBackendFormat =
   | { kind: string }
   | { kind: 'Array'; inner: DataTypeBackendFormat }
-  | { kind: 'DataSeries'; inner: DataTypeBackendFormat };
+  | { kind: 'DataSeries'; inner: DataTypeBackendFormat }
+  | { kind: 'OneOf'; inner: DataTypeBackendFormat[] };
 
 /** 转为后端期望的格式 */
 export function dataTypeToBackend(dt: DataType): DataTypeBackendFormat {
@@ -21,6 +22,9 @@ export function dataTypeToBackend(dt: DataType): DataTypeBackendFormat {
   }
   if (dt.kind === 'DataSeries') {
     return { kind: 'DataSeries', inner: dataTypeToBackend(dt.inner) };
+  }
+  if (dt.kind === 'OneOf') {
+    return { kind: 'OneOf', inner: dt.inner.map(dataTypeToBackend) };
   }
   return { kind: dt.kind };
 }
@@ -39,7 +43,10 @@ export function dataTypeFromBackend(
     if (v.kind === 'DataSeries' && v.inner) {
       return { kind: 'DataSeries', inner: dataTypeFromBackend(v.inner) };
     }
-    if (v.kind && v.kind !== 'Array' && v.kind !== 'DataSeries') {
+    if (v.kind === 'OneOf' && Array.isArray(v.inner)) {
+      return { kind: 'OneOf', inner: (v.inner as DataTypeBackendFormat[]).map(dataTypeFromBackend) };
+    }
+    if (v.kind && v.kind !== 'Array' && v.kind !== 'DataSeries' && v.kind !== 'OneOf') {
       return dataTypeFromKey(v.kind);
     }
     if ('Array' in v && v.Array) {

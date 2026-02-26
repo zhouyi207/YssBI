@@ -19,8 +19,14 @@ fn register_equal(registry: &NodeRegistry) {
         .with_ui_style("logic")
         .with_description("Check if two values are equal")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))),
-            PinSlot::fixed(PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output("Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Boolean))),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
@@ -38,8 +44,14 @@ fn register_not_equal(registry: &NodeRegistry) {
         .with_ui_style("logic")
         .with_description("Check if two values are not equal")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))),
-            PinSlot::fixed(PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Float64))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output("Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Boolean))),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
@@ -57,8 +69,14 @@ fn register_and(registry: &NodeRegistry) {
         .with_ui_style("logic")
         .with_description("Logical AND operation")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Boolean))),
-            PinSlot::fixed(PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Boolean))),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output("Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Boolean))),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
@@ -75,8 +93,14 @@ fn register_or(registry: &NodeRegistry) {
         .with_ui_style("logic")
         .with_description("Logical OR operation")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Boolean))),
-            PinSlot::fixed(PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Boolean))),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
+            PinSlot::fixed(
+                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output("Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Boolean))),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
@@ -93,12 +117,15 @@ fn register_not(registry: &NodeRegistry) {
         .with_ui_style("logic")
         .with_description("Logical NOT operation")
         .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input("Input", DataRole::Input, PinDataTypeDefinition::concrete(DataType::Boolean))),
+            PinSlot::fixed(
+                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(DataType::Boolean))
+                    .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output("Result", DataRole::Result, PinDataTypeDefinition::concrete(DataType::Boolean))),
         ])
         .with_data_evaluator(Arc::new(|ctx| {
-            let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?.as_bool().ok_or("Input must be a boolean")?;
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), DataValue::Boolean(!input))?;
+            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?.as_bool().ok_or("A must be a boolean")?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), DataValue::Boolean(!a))?;
             Ok(())
         }));
     registry.register(definition);

@@ -69,4 +69,7 @@ pub struct InferredPinType {
     /// 容器类型（用于形状），如 "array", "dataseries"，基础类型为 None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_type: Option<String>,
+    /// 完整类型描述字符串（用于 tooltip），如 "DataSeries<Float64 | String>"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_display: Option<String>,
 }

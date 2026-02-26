@@ -228,4 +228,11 @@ body.layout-sash-dragging canvas {
   pointer-events: none !important;
 }
 
-
+/* Pin required — flowing stroke animation */
+@keyframes pin-flow {
+  to { stroke-dashoffset: -30; }
+}
+.pin-flow-stroke {
+  animation: pin-flow 1.2s linear infinite;
+  pointer-events: none;
+}

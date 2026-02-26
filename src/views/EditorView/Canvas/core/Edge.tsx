@@ -15,6 +15,8 @@ interface EdgeProps {
   isError?: boolean;
   /** 执行仍在进行中（启用流动动画） */
   isRunning?: boolean;
+  /** 拖拽连接时整体半透明 */
+  dimmed?: boolean;
 }
 
 export function drawEdge(
@@ -56,6 +58,7 @@ export const Edge = React.memo<EdgeProps>(({
   isCompleted = false,
   isError = false,
   isRunning = false,
+  dimmed = false,
 }) => {
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);
@@ -74,7 +77,7 @@ export const Edge = React.memo<EdgeProps>(({
   const animate = isRunning && (isCompleted || isError);
 
   return (
-    <g>
+    <g style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}>
       <path
         d={pathData}
         fill="none"

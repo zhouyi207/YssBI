@@ -1,14 +1,6 @@
-//! 信息展示节点
+//! 信息展示相关的数据结构
 
-use crate::execution::ExecutionEffect;
-use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{
-    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
-};
-use crate::graph::register::NodeRegistry;
-use crate::graph::value::DataType;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OLSResult {
@@ -42,6 +34,8 @@ pub struct ModelBasicInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Coefficient {
     pub variable: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     pub coef: f64,
     pub std_err: f64,
     pub t_value: f64,
@@ -56,48 +50,4 @@ pub struct Coefficient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
-}
-
-pub fn register(registry: &NodeRegistry) {
-    register_ols_summary(registry);
-}
-
-fn register_ols_summary(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
-        "OLS Summary",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Display OLS regression results in a new window")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
-        PinSlot::fixed(PinDefinition::data_input(
-            "OLS Result",
-            DataRole::Custom("ols_result".to_string()),
-            PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
-        )),
-        PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
-    ])
-    .with_flow_processor(Arc::new(|ctx| {
-        let input_value =
-            ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("ols_result".to_string())))?;
-
-        let handle_id = input_value
-            .as_handle_id()
-            .ok_or("OLS Summary: input is not a Struct handle")?
-            .to_string();
-
-        let handle = ctx.get_handle(&handle_id)?;
-        let ols_result = handle
-            .downcast_ref::<OLSResult>()
-            .ok_or("OLS Summary: handle is not an OLSResult")?;
-
-        let json_data = serde_json::to_string(ols_result)
-            .map_err(|e| format!("OLS Summary: failed to serialize: {}", e))?;
-
-        ctx.open_window("ols_summary".to_string(), json_data);
-
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
-    registry.register(definition);
 }

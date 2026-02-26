@@ -150,6 +150,7 @@ impl TypeInferenceContext {
     }
 
     /// 当 target 容器内部为 Any 而 source 有具体类型时，返回细化后的类型
+    /// 当 target 容器内部为 OneOf 且 source 匹配其中一个成员时，细化为该成员
     fn refine_inner_any(target: &DataType, source: &DataType) -> Option<DataType> {
         match (target, source) {
             (DataType::DataSeries(t_inner), DataType::DataSeries(s_inner))
@@ -161,6 +162,33 @@ impl TypeInferenceContext {
                 if **t_inner == DataType::Any && **s_inner != DataType::Any =>
             {
                 Some(DataType::Array(s_inner.clone()))
+            }
+            // DataSeries<OneOf([A, B])> + DataSeries<A> → 细化目标为 DataSeries<A>
+            (DataType::DataSeries(t_inner), DataType::DataSeries(s_inner))
+                if matches!(t_inner.as_ref(), DataType::OneOf(_)) && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
+            {
+                if let DataType::OneOf(members) = t_inner.as_ref() {
+                    if members.iter().any(|m| m.can_accept(s_inner)) {
+                        Some(DataType::DataSeries(s_inner.clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            (DataType::Array(t_inner), DataType::Array(s_inner))
+                if matches!(t_inner.as_ref(), DataType::OneOf(_)) && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
+            {
+                if let DataType::OneOf(members) = t_inner.as_ref() {
+                    if members.iter().any(|m| m.can_accept(s_inner)) {
+                        Some(DataType::Array(s_inner.clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -346,7 +374,7 @@ impl TypeInferenceContext {
         }
     }
 
-    /// 值类型兼容性（递归处理容器类型）
+    /// 值类型兼容性（递归处理容器类型和 OneOf）
     fn is_value_type_compatible(&self, from: &DataType, to: &DataType) -> bool {
         if from == to {
             return true;
@@ -355,6 +383,8 @@ impl TypeInferenceContext {
             return true;
         }
         match (from, to) {
+            (_, DataType::OneOf(targets)) => targets.iter().any(|t| self.is_value_type_compatible(from, t)),
+            (DataType::OneOf(sources), _) => sources.iter().any(|s| self.is_value_type_compatible(s, to)),
             (DataType::Array(a), DataType::Array(b)) => self.is_value_type_compatible(a, b),
             (DataType::DataSeries(a), DataType::DataSeries(b)) => {
                 self.is_value_type_compatible(a, b)

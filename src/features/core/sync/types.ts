@@ -116,7 +116,7 @@ export interface NodePinsUpdatedPayload {
 /** 类型推断后 pin 的解析类型变化事件 */
 export interface PinTypesInferredPayload {
     graphId: string;
-    pinTypes: Array<{ pinId: string; pinType: string; containerType?: string }>;
+    pinTypes: Array<{ pinId: string; pinType: string; containerType?: string; typeDisplay?: string }>;
 }
 
 // ==================== Connection 事件 Payload ====================

@@ -75,7 +75,7 @@ impl OLS {
         let xty = x.transpose() * y.as_ref();
         let xtx_inv = xtx
             .llt(Side::Lower)
-            .unwrap()
+            .unwrap()// 在这里如果不是满秩，会报错 因此需要修复一下 todo
             .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
         let betas = xtx_inv.as_ref() * xty;
         let y_hat = x.as_ref() * betas.as_ref();

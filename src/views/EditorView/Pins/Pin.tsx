@@ -18,11 +18,14 @@ function toDisplayValue(v: unknown): unknown {
 
 const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int32", "Int64", "Float32", "Float64", "string"]);
 
+export type PinDragState = "normal" | "highlighted" | "dimmed";
+
 export interface PinProps extends PinModel {
   subgraphId?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
+  pinDragState?: PinDragState;
   onValueChange?: (pinId: string, value: unknown) => void;
   removable?: boolean;
   onRemovePin?: (pinId: string) => void;
@@ -61,7 +64,10 @@ export const Pin: React.FC<PinProps> = (props) => {
     onPinClick,
     onPinPointerDown,
     isActive,
+    pinDragState = "normal",
     containerType,
+    typeDisplay,
+    optional,
     defaultValue,
     userValue,
     onValueChange,
@@ -90,6 +96,8 @@ export const Pin: React.FC<PinProps> = (props) => {
     []
   );
 
+  const shouldPulse = !optional && !isConnected && direction === "input" && type !== "exec";
+
   const showInput =
     (!isConnected || forceShowInput === true) &&
     PRIMITIVE_PIN_TYPES.has(type) &&
@@ -97,6 +105,13 @@ export const Pin: React.FC<PinProps> = (props) => {
     (direction === "input" || forceShowInput === true) &&
     subgraphId &&
     nodeId;
+
+  const dragStyle: React.CSSProperties | undefined =
+    pinDragState === "dimmed"
+      ? { opacity: 0.25, transition: "opacity 150ms, filter 150ms" }
+      : pinDragState === "highlighted"
+        ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
+        : undefined;
 
   return (
     <div
@@ -107,8 +122,9 @@ export const Pin: React.FC<PinProps> = (props) => {
           : "flex-row-reverse justify-end"
         }
       `}
+      style={dragStyle}
       data-pin-id={id}
-      title={`${name} (${type})`}
+      title={`${name} (${typeDisplay ?? type})`}
       onContextMenu={handleContextMenu}
       onPointerDown={(e) => {
         if (onPinPointerDown) {
@@ -137,55 +153,137 @@ export const Pin: React.FC<PinProps> = (props) => {
           style={{ display: "block" }}
         >
           {theme.isExec ? (
-            <path
-              d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-              fill={theme.fill}
-              stroke={theme.stroke}
-              strokeWidth={theme.strokeWidth}
-              strokeLinejoin="miter"
-            />
+            <>
+              <path
+                d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
+                fill={theme.fill}
+                stroke={theme.stroke}
+                strokeWidth={theme.strokeWidth}
+                strokeLinejoin="miter"
+              />
+              {shouldPulse && (
+                <path
+                  d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeLinejoin="miter"
+                  strokeDasharray="6 24"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
           ) : theme.isDataFrame ? (
-            <g>
-              <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={theme.fill} stroke={theme.stroke} strokeWidth={theme.strokeWidth} />
-              <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={theme.stroke} strokeWidth="0.8" />
-              <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={theme.stroke} strokeWidth="0.8" />
-            </g>
+            <>
+              <g>
+                <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={theme.fill} stroke={theme.stroke} strokeWidth={theme.strokeWidth} />
+                <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={theme.stroke} strokeWidth="0.8" />
+                <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={theme.stroke} strokeWidth="0.8" />
+              </g>
+              {shouldPulse && (
+                <rect
+                  x="1.5" y="1.5" width="9" height="9" rx="1"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeDasharray="8 28"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
           ) : theme.containerType === "array" ? (
-            <rect
-              x="2"
-              y="2"
-              width="8"
-              height="8"
-              rx="1.5"
-              fill={theme.fill}
-              stroke={theme.stroke}
-              strokeWidth={theme.strokeWidth}
-            />
+            <>
+              <rect
+                x="2" y="2" width="8" height="8" rx="1.5"
+                fill={theme.fill}
+                stroke={theme.stroke}
+                strokeWidth={theme.strokeWidth}
+              />
+              {shouldPulse && (
+                <rect
+                  x="2" y="2" width="8" height="8" rx="1.5"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeDasharray="7 25"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
           ) : theme.containerType === "dataseries" ? (
-            <polygon
-              points="6,1 11,6 6,11 1,6"
-              fill={theme.fill}
-              stroke={theme.stroke}
-              strokeWidth={theme.strokeWidth}
-              strokeLinejoin="miter"
-            />
+            <>
+              <polygon
+                points="6,1 11,6 6,11 1,6"
+                fill={theme.fill}
+                stroke={theme.stroke}
+                strokeWidth={theme.strokeWidth}
+                strokeLinejoin="miter"
+              />
+              {shouldPulse && (
+                <polygon
+                  points="6,1 11,6 6,11 1,6"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeLinejoin="miter"
+                  strokeDasharray="7 21"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
           ) : theme.isStruct ? (
-            <polygon
-              points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
-              fill={theme.fill}
-              stroke={theme.stroke}
-              strokeWidth={theme.strokeWidth}
-              strokeLinejoin="round"
-            />
+            <>
+              <polygon
+                points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+                fill={theme.fill}
+                stroke={theme.stroke}
+                strokeWidth={theme.strokeWidth}
+                strokeLinejoin="round"
+              />
+              {shouldPulse && (
+                <polygon
+                  points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeLinejoin="round"
+                  strokeDasharray="8 25"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
           ) : (
-            <circle
-              cx="6"
-              cy="6"
-              r="4.5"
-              fill={theme.fill}
-              stroke={theme.stroke}
-              strokeWidth={theme.strokeWidth}
-            />
+            <>
+              <circle
+                cx="6" cy="6" r="4.5"
+                fill={theme.fill}
+                stroke={theme.stroke}
+                strokeWidth={theme.strokeWidth}
+              />
+              {shouldPulse && (
+                <circle
+                  cx="6" cy="6" r="4.5"
+                  fill="none"
+                  stroke={baseColor}
+                  strokeWidth={2.5}
+                  strokeDasharray="7 21"
+                  className="pin-flow-stroke"
+                  filter="url(#pinGlow)"
+                />
+              )}
+            </>
+          )}
+          {shouldPulse && (
+            <defs>
+              <filter id="pinGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" />
+              </filter>
+            </defs>
           )}
           {isConnected && (
             <circle

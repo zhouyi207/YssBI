@@ -18,6 +18,7 @@ const DEFAULT_COLORS: &[(&str, &str)] = &[
     ("dataframe", "#61afef"),
     ("dataseries", "#56b6c2"),
     ("object", "#abb2bf"),
+    ("oneof", "#7aabc4"),
     ("array", "#d19a66"),
 ];
 
@@ -37,6 +38,7 @@ pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
         DataType::DataFrame => "dataframe",
         DataType::DataSeries(inner) => data_type_to_pin_type(inner),
         DataType::Struct(_) => "struct",
+        DataType::OneOf(_) => "oneof",
     }
 }
 
@@ -77,6 +79,10 @@ pub struct PinUIDTO {
     pub color: Option<String>,
 }
 
+fn is_false(v: &bool) -> bool {
+    !v
+}
+
 /// Pin instance DTO - 对应前端 Pin 类型
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +100,10 @@ pub struct PinInstanceDTO {
     pub user_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_display: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub optional: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui: Option<PinUIDTO>,
 }
@@ -123,6 +133,7 @@ impl PinInstanceDTO {
         };
 
         let container_type = dt.as_ref().and_then(|d| data_type_to_container(d).map(|s| s.to_string()));
+        let type_display = dt.as_ref().map(|d| d.to_string());
 
         Self {
             id: pin.id,
@@ -134,6 +145,8 @@ impl PinInstanceDTO {
             default_value: None,
             user_value: pin.user_value.clone(),
             container_type,
+            type_display,
+            optional: pin.definition.optional,
             ui: None,
         }
     }
