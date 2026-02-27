@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP, VIRTUALIZE_THRESHOLD } from '@/app/appConfig/default';
+import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useLogStore } from '@/features/core/log/logStore';
@@ -10,6 +10,7 @@ import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
@@ -53,96 +54,6 @@ const LogItem = ({ log, isSelected, onClick, getLevelColor, getLevelBgColor, get
       </span>
       {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
       <span className="text-gray-200 text-[11px] leading-relaxed font-mono flex-1 min-w-0 truncate">{log.message}</span>
-    </div>
-  );
-};
-
-// ─── Virtualized Log List ───
-
-interface VirtualizedLogListProps {
-  parentRef: React.RefObject<HTMLDivElement | null>;
-  logs: LogMessage[];
-  selectedIndex: number | null;
-  onSelect: (index: number) => void;
-  getLevelColor: (level: LogLevel) => string;
-  getLevelBgColor: (level: LogLevel) => string;
-  getTypeColor: (type: LogType) => string;
-}
-
-const VirtualizedLogList = ({ parentRef, logs, selectedIndex, onSelect, getLevelColor, getLevelBgColor, getTypeColor }: VirtualizedLogListProps) => {
-  const [scrollReady, setScrollReady] = useState(false);
-  useEffect(() => {
-    if (parentRef.current) {
-      setScrollReady(true);
-      return;
-    }
-    const id = setInterval(() => {
-      if (parentRef.current) {
-        setScrollReady(true);
-        clearInterval(id);
-      }
-    }, 50);
-    return () => clearInterval(id);
-  }, []);
-
-  const virtualizer = useVirtualizer({
-    count: logs.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => LOG_ITEM_HEIGHT + LOG_ITEM_GAP,
-    overscan: 8,
-  });
-
-  const virtualItems = virtualizer.getVirtualItems();
-  const useVirtual = logs.length > VIRTUALIZE_THRESHOLD;
-
-  if (!useVirtual || !scrollReady || (logs.length > 0 && virtualItems.length === 0)) {
-    return (
-      <div className="space-y-1">
-        {logs.map((log, index) => (
-          <LogItem
-            key={`${log.timestamp}-${index}`}
-            log={log}
-            isSelected={selectedIndex === index}
-            onClick={() => onSelect(index)}
-            getLevelColor={getLevelColor}
-            getLevelBgColor={getLevelBgColor}
-            getTypeColor={getTypeColor}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
-      {virtualizer.getVirtualItems().map((virtualRow) => {
-        const log = logs[virtualRow.index];
-        if (!log) return null;
-        return (
-          <div
-            key={virtualRow.key}
-            data-index={virtualRow.index}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: `${LOG_ITEM_HEIGHT}px`,
-              marginBottom: `${LOG_ITEM_GAP}px`,
-              transform: `translateY(${virtualRow.start}px)`,
-            }}
-          >
-            <LogItem
-              log={log}
-              isSelected={selectedIndex === virtualRow.index}
-              onClick={() => onSelect(virtualRow.index)}
-              getLevelColor={getLevelColor}
-              getLevelBgColor={getLevelBgColor}
-              getTypeColor={getTypeColor}
-            />
-          </div>
-        );
-      })}
     </div>
   );
 };
@@ -373,6 +284,13 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     ? filteredLogs.findIndex((l) => l === selectedLog)
     : null;
 
+  const virtualizer = useVirtualizer({
+    count: filteredLogs.length,
+    getScrollElement: () => logContainerRef.current,
+    estimateSize: () => LOG_ITEM_HEIGHT + LOG_ITEM_GAP,
+    overscan: 8,
+  });
+
   const getLevelColor = (level: LogLevel) => {
     switch (level) {
       case 'error': return 'text-red-400';
@@ -489,7 +407,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
               createPortal(
                 <div
                   ref={filterPopoverRef}
-                  className="fixed z-[9999] w-[280px] p-3 rounded-lg shadow-2xl border border-gray-700 bg-[var(--workbench-bg)] space-y-3"
+                  className="fixed z-[200] w-[280px] p-3 rounded-lg shadow-2xl border border-gray-700 bg-[var(--workbench-bg)] space-y-3"
                   style={{ top: popoverPosition.top, left: popoverPosition.left }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -559,10 +477,11 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       </div>
 
       {/* 日志列表 */}
-      <div
+      <OverlayScrollbar
         ref={logContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
+        direction="vertical"
+        className="flex-1 min-h-0 bg-[var(--workbench-bg)]"
       >
         {isInitialLoad ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
@@ -592,19 +511,39 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
               </div>
             )}
             <div className="relative px-3 py-1">
-              <VirtualizedLogList
-                parentRef={logContainerRef}
-                logs={filteredLogs}
-                selectedIndex={selectedIndex !== -1 ? selectedIndex : null}
-                onSelect={handleSelectLog}
-                getLevelColor={getLevelColor}
-                getLevelBgColor={getLevelBgColor}
-                getTypeColor={getTypeColor}
-              />
+              <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const log = filteredLogs[virtualRow.index];
+                  if (!log) return null;
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: LOG_ITEM_HEIGHT,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <LogItem
+                        log={log}
+                        isSelected={selectedIndex === virtualRow.index}
+                        onClick={() => handleSelectLog(virtualRow.index)}
+                        getLevelColor={getLevelColor}
+                        getLevelBgColor={getLevelBgColor}
+                        getTypeColor={getTypeColor}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </>
         )}
-      </div>
+      </OverlayScrollbar>
 
     </div>
   );

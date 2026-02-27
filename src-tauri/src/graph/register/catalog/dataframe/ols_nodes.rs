@@ -107,6 +107,10 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         _ => return Err("OLS: Endog input is not a DataSeries".to_string()),
     };
     let endog_series = ctx.get_series(&endog_id)?;
+    let endog_name = {
+        let raw = endog_series.name().to_string();
+        if raw.is_empty() { "y".to_string() } else { raw }
+    };
     let endog_f64 = endog_series
         .f64()
         .map_err(|e| format!("OLS: cannot cast Endog to Float64: {}", e))?;
@@ -279,11 +283,27 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     // ---- Run OLS regression ----
     let sci_config = OLSConfig { constant: has_constant };
     let ols = OLS {
-        endog,
-        exog,
+        endog: endog.clone(),
+        exog: exog.clone(),
         config: sci_config,
     };
-    let result = ols.fit();
+    let result = ols.fit()?;
+
+    // ---- Compute fitted values & residuals ----
+    let fitted_values: Vec<f64> = (0..n)
+        .map(|i| {
+            exog.row(i)
+                .iter()
+                .zip(result.betas.iter())
+                .map(|(x, b)| x * b)
+                .sum()
+        })
+        .collect();
+    let residuals: Vec<f64> = endog
+        .iter()
+        .zip(fitted_values.iter())
+        .map(|(y, yhat)| y - yhat)
+        .collect();
 
     // ---- Build coefficient table ----
     let num_coeff = result.betas.len();
@@ -308,6 +328,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
 
     let ols_result = OLSResult {
         title: "OLS Regression Results".to_string(),
+        endog_name: endog_name,
         model_basic_info: ModelBasicInfo {
             model_type: "OLS".to_string(),
             method: "Least Squares".to_string(),
@@ -330,6 +351,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
+            fitted_values,
+            residuals,
         },
     };
 

@@ -6,6 +6,7 @@ import { VscDatabase, VscRefresh } from 'react-icons/vsc';
 import { useProjectSync } from '@/features/application/initialization';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { Select } from '@/shared/ui';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_CHUNK_SIZE } from '@/app/appConfig/default';
 import { logger } from '@/utils/appLogger';
 
@@ -259,10 +260,11 @@ export const DataViewWindow: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div
+      <OverlayScrollbar
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-auto bg-[var(--workbench-bg)] custom-scrollbar"
+        direction="both"
+        className="flex-1 min-h-0 bg-[var(--workbench-bg)]"
       >
         {selectedDf ? (
           <div className="min-w-full inline-block align-middle">
@@ -343,7 +345,7 @@ export const DataViewWindow: React.FC = () => {
             </span>
           </div>
         )}
-      </div>
+      </OverlayScrollbar>
     </div>
   );
 };

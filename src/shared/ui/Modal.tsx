@@ -2,7 +2,7 @@ import { DialogOptions } from "@/shared/types/ui";
 
 export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: () => void }) => {
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-[400px] overflow-hidden animate-zoom-in">
         <div className="px-6 py-4 border-b border-gray-800 bg-gray-800/50">
           <h3 className="text-lg font-bold text-white">{options.title}</h3>

@@ -55,7 +55,7 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
             </div>
 
             {isOpen && (
-                <div className="absolute z-[1000] w-full mt-0.5 bg-[#252526] border border-[#454545] shadow-2xl rounded overflow-hidden">
+                <div className="absolute z-50 w-full mt-0.5 bg-[#252526] border border-[#454545] shadow-2xl rounded overflow-hidden">
                     <OverlayScrollbar className="max-h-60 py-1" direction="vertical">
                         {formattedOptions.map((option) => (
                             <div

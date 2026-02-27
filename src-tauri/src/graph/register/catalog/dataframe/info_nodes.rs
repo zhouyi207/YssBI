@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OLSResult {
     pub title: String,
+    pub endog_name: String,
     pub model_basic_info: ModelBasicInfo,
     pub coefficients: Vec<Coefficient>,
     pub diagnostic_info: DiagnosticInfo,
@@ -50,4 +51,8 @@ pub struct Coefficient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub fitted_values: Vec<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub residuals: Vec<f64>,
 }

@@ -92,7 +92,11 @@ const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
 const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDivElement | null) => void }) => {
     const node = useLayoutStore((state) => state.nodes[nodeId]);
 
-    if (!node || node.data?.visible === false) return null;
+    if (!node) return null;
+
+    if (node.data?.visible === false) {
+        return <div ref={setRef} className="relative" style={{ flex: '0 0 0px' }} />;
+    }
 
     const style = node.pixelSize !== undefined
         ? { flex: `0 0 ${node.pixelSize}px` }

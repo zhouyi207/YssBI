@@ -12,7 +12,7 @@ export const DropIndicator: React.FC<DropIndicatorProps> = ({ position, visible,
     // 保持组件挂载以允许 CSS 过渡动画
     return (
         <div
-            className="fixed pointer-events-none z-[100] bg-[var(--accent-color)]/30 border-2 border-[var(--accent-color)] transition-all duration-200 ease-out"
+            className="fixed pointer-events-none z-50 bg-[var(--accent-color)]/30 border-2 border-[var(--accent-color)] transition-all duration-200 ease-out"
             style={{
                 ...position,
                 opacity: visible ? 1 : 0,

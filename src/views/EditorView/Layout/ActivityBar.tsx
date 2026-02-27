@@ -17,7 +17,10 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 
 export function ActivityBar() {
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const activeTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null;
+  const isSidebarVisible = sidebarNode?.data?.visible !== false;
+  const activeTab = isSidebarVisible
+    ? (sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null)
+    : null;
 
   const activityBarRef = useRef<HTMLDivElement>(null);
   const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
@@ -26,27 +29,17 @@ export function ActivityBar() {
   const previousSizeRef = useRef(260);
 
   const toggleTab = (tab: "graphs" | "variables" | "data" | "commands") => {
-    let newTab: "graphs" | "variables" | "data" | "commands" | null = tab;
-    let visible = true;
-
     if (activeTab === tab) {
-      newTab = null;
-      visible = false;
-    }
-
-    if (visible) {
-      const currentSize = sidebarNode?.pixelSize || 0;
-      const sizeToRestore = currentSize > 50 ? currentSize : previousSizeRef.current;
-
+      if (sidebarNode?.pixelSize) previousSizeRef.current = sidebarNode.pixelSize;
       updateNode("sidebar", {
-        pixelSize: sizeToRestore,
-        data: { ...sidebarNode?.data, visible: true, currentTab: newTab },
+        data: { ...sidebarNode?.data, visible: false },
       });
     } else {
-      if (sidebarNode?.pixelSize) previousSizeRef.current = sidebarNode.pixelSize;
-
+      const currentSize = sidebarNode?.pixelSize || 0;
+      const sizeToRestore = currentSize > 50 ? currentSize : previousSizeRef.current;
       updateNode("sidebar", {
-        data: { ...sidebarNode?.data, visible: false, currentTab: null },
+        pixelSize: sizeToRestore,
+        data: { ...sidebarNode?.data, visible: true, currentTab: tab },
       });
     }
   };

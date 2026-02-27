@@ -1,4 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { Suspense, useMemo } from 'react';
+
+const FormulaBlock = React.lazy(() => import('./FormulaBlock'));
+const ResidualPlot = React.lazy(() => import('./ResidualPlot'));
 
 interface ModelBasicInfo {
   model_type: string;
@@ -20,7 +23,7 @@ interface ModelBasicInfo {
   covariance_type: string;
 }
 
-interface Coefficient {
+export interface Coefficient {
   variable: string;
   category?: string;
   coef: number;
@@ -34,10 +37,13 @@ interface Coefficient {
 
 interface DiagnosticInfo {
   cond_no: number;
+  fitted_values?: number[];
+  residuals?: number[];
 }
 
 export interface OLSResultData {
   title: string;
+  endog_name?: string;
   model_basic_info: ModelBasicInfo;
   coefficients: Coefficient[];
   diagnostic_info: DiagnosticInfo;
@@ -124,6 +130,19 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           </span>
         </div>
       </div>
+
+      {/* Equation Section */}
+      <SectionHeader
+        title="Equation"
+        icon={
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.745 3A23.933 23.933 0 003 12c0 3.183.62 6.22 1.745 9M19.5 3c.967 2.78 1.5 5.817 1.5 9s-.533 6.22-1.5 9M8.25 8.885l1.444-.89a.75.75 0 011.105.402l2.402 7.206a.75.75 0 001.104.401l1.445-.889" />
+          </svg>
+        }
+      />
+      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+        <FormulaBlock endogName={data.endog_name || 'y'} coefficients={coefficients} />
+      </Suspense>
 
       {/* Model Info Section */}
       <SectionHeader
@@ -305,13 +324,22 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-3 mb-4">
         <StatCard
           label="Condition Number"
           value={formatNum(diag.cond_no)}
           sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
         />
       </div>
+
+      {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
+        <>
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Residuals vs Fitted</div>
+          <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+            <ResidualPlot fitted={diag.fitted_values} residuals={diag.residuals} />
+          </Suspense>
+        </>
+      )}
     </div>
   );
 };

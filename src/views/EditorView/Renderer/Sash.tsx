@@ -83,11 +83,20 @@ export const Sash: React.FC<SashProps> = ({
             const currentPos = orientation === 'row' ? e.clientX : e.clientY;
             const delta = currentPos - startPos.current;
 
-            const { nodes, resizeNode } = useLayoutStore.getState();
+            const { nodes, resizeNode, updateNode } = useLayoutStore.getState();
             const beforeNode = nodes[beforeNodeId];
             const afterNode = nodes[afterNodeId];
 
-            // 实时更新 Store，触发 React 重新渲染
+            if (beforeNode?.data?.visible === false) {
+                const restored = { ...beforeNode.data, visible: true };
+                if (!restored.currentTab && restored.component === 'Sidebar') restored.currentTab = 'graphs';
+                updateNode(beforeNodeId, { data: restored });
+            }
+            if (afterNode?.data?.visible === false) {
+                const restored = { ...afterNode.data, visible: true };
+                updateNode(afterNodeId, { data: restored });
+            }
+
             if (beforeNode?.pixelSize !== undefined) {
                 const newSize = Math.max(beforeNode.minSize ?? 0, startSizes.current.before + delta);
                 resizeNode(beforeNodeId, newSize);
@@ -95,8 +104,6 @@ export const Sash: React.FC<SashProps> = ({
                 const newSize = Math.max(afterNode.minSize ?? 0, startSizes.current.after - delta);
                 resizeNode(afterNodeId, newSize);
             } else {
-                // 如果两个节点都是 flex 模式（都没有 pixelSize），
-                // 则将前一个节点转换为 pixelSize 模式，使其在调节时能够保持固定尺寸
                 const newSize = Math.max(beforeNode?.minSize ?? 0, startSizes.current.before + delta);
                 resizeNode(beforeNodeId, newSize);
             }
@@ -131,7 +138,7 @@ export const Sash: React.FC<SashProps> = ({
         <div
             ref={sashRef}
             className={`
-                relative z-[100] transition-colors duration-150 group
+                relative z-30 transition-colors duration-150 group
                 ${orientation === 'row' 
                     ? 'w-2 h-full cursor-col-resize -mx-1' 
                     : 'h-2 w-full cursor-row-resize -my-1'}

@@ -52,7 +52,7 @@ export const EditorWindow = () => {
         <>
             <div className="flex flex-col w-full h-screen">
                 <Menubar />
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 overflow-hidden isolate">
                     <ActivityBar />
                     <Workspace nodeId={rootId} />
                 </div>

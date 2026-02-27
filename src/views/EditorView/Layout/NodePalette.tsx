@@ -4,6 +4,7 @@ import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
 import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType";
 import { isNodeCompatibleWithPin } from "@/shared/utils/pinCompatibility";
+import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 
 /** PaletteItem overrides 扩展类型 */
@@ -294,11 +295,7 @@ export function NodePalette({
       {noResults ? (
         <div className="px-4 py-8 text-center text-xs text-gray-600 italic">No matches found</div>
       ) : (
-        <div
-          ref={scrollRef}
-          className="max-h-96 overflow-y-auto py-1"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#555 transparent' }}
-        >
+        <OverlayScrollbar ref={scrollRef} direction="vertical" className="max-h-96 py-1">
           <div
             style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
           >
@@ -331,7 +328,7 @@ export function NodePalette({
               );
             })}
           </div>
-        </div>
+        </OverlayScrollbar>
       )}
     </div>
   );

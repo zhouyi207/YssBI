@@ -1,0 +1,194 @@
+import React, { useMemo, useState } from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import type { Coefficient } from './OLSComponent';
+
+function formatNum(value: number, decimals = 4): string {
+  if (Math.abs(value) < 0.0001 && value !== 0) {
+    return value.toExponential(3);
+  }
+  return value.toFixed(decimals);
+}
+
+function escapeLatex(s: string): string {
+  return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);
+}
+
+type EquationMode = 'expanded' | 'symbolic';
+
+interface VariableMapping {
+  symbol: string;
+  variable: string;
+  category?: string;
+  coef: number;
+}
+
+function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): string {
+  const lhs = `\\text{${escapeLatex(endogName)}}`;
+  const terms: string[] = [];
+
+  for (const c of coefficients) {
+    const coefStr = formatNum(c.coef);
+    if (c.variable === 'const') {
+      terms.push(coefStr);
+      continue;
+    }
+    const absCoef = formatNum(Math.abs(c.coef));
+    const sign = c.coef >= 0 ? '+' : '-';
+    let varLabel: string;
+    if (c.category != null) {
+      varLabel = `\\mathbb{1}(\\text{${escapeLatex(c.variable)}} = \\text{${escapeLatex(c.category)}})`;
+    } else {
+      varLabel = `\\text{${escapeLatex(c.variable)}}`;
+    }
+
+    if (terms.length === 0) {
+      terms.push(`${coefStr} \\cdot ${varLabel}`);
+    } else {
+      terms.push(`${sign} ${absCoef} \\cdot ${varLabel}`);
+    }
+  }
+
+  return `${lhs} = ${terms.join(' ')} + \\varepsilon`;
+}
+
+function buildSymbolicData(endogName: string, coefficients: Coefficient[]) {
+  const mappings: VariableMapping[] = [];
+  const terms: string[] = [];
+  let xi = 1;
+
+  mappings.push({ symbol: 'y', variable: endogName, coef: NaN });
+
+  for (const c of coefficients) {
+    if (c.variable === 'const') {
+      mappings.push({ symbol: '\\beta_0', variable: 'const', coef: c.coef });
+      terms.push('\\beta_0');
+      continue;
+    }
+    const sym = `x_{${xi}}`;
+    const beta = `\\beta_{${xi}}`;
+    mappings.push({ symbol: sym, variable: c.variable, category: c.category, coef: c.coef });
+    terms.push(`${beta} ${sym}`);
+    xi++;
+  }
+
+  const latex = `y = ${terms.join(' + ')} + \\varepsilon`;
+  return { latex, mappings };
+}
+
+function renderKatex(latex: string, displayMode = true): string | null {
+  try {
+    return katex.renderToString(latex, { displayMode, throwOnError: false });
+  } catch {
+    return null;
+  }
+}
+
+function renderInlineKatex(latex: string): string | null {
+  return renderKatex(latex, false);
+}
+
+const FormulaBlock: React.FC<{ endogName: string; coefficients: Coefficient[] }> = ({ endogName, coefficients }) => {
+  const [mode, setMode] = useState<EquationMode>('symbolic');
+
+  const expandedHtml = useMemo(
+    () => renderKatex(buildExpandedLatex(endogName, coefficients)),
+    [endogName, coefficients]
+  );
+
+  const { symbolicHtml, mappings } = useMemo(() => {
+    const { latex, mappings } = buildSymbolicData(endogName, coefficients);
+    return { symbolicHtml: renderKatex(latex), mappings };
+  }, [endogName, coefficients]);
+
+  const hasCat = useMemo(() => mappings.some((m) => m.category != null), [mappings]);
+
+  return (
+    <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+      {/* Toggle */}
+      <div className="flex items-center justify-end px-4 pt-3 pb-0">
+        <div className="inline-flex rounded-md bg-[#1a1d23] border border-gray-800/50 text-[11px]">
+          <button
+            onClick={() => setMode('symbolic')}
+            className={`px-3 py-1 rounded-l-md transition-colors ${
+              mode === 'symbolic'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-gray-800/50'
+                : 'text-gray-500 hover:text-gray-300 border-r border-gray-800/50'
+            }`}
+          >
+            Symbolic
+          </button>
+          <button
+            onClick={() => setMode('expanded')}
+            className={`px-3 py-1 rounded-r-md transition-colors ${
+              mode === 'expanded'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Expanded
+          </button>
+        </div>
+      </div>
+
+      {/* Formula */}
+      <OverlayScrollbar direction="horizontal">
+        <div
+          className="px-6 py-4 w-max min-w-full [&_.katex]:text-gray-200"
+          dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
+        />
+      </OverlayScrollbar>
+
+      {/* Mapping table (symbolic mode only) */}
+      {mode === 'symbolic' && (
+        <div className="border-t border-gray-800/40 px-4 pb-4 pt-3">
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="text-left px-3 py-1.5 font-medium w-20">Symbol</th>
+                <th className="text-left px-3 py-1.5 font-medium">Variable</th>
+                {hasCat && <th className="text-left px-3 py-1.5 font-medium">Category</th>}
+                <th className="text-right px-3 py-1.5 font-medium w-28">Coefficient</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappings.map((m, idx) => {
+                const symHtml = renderInlineKatex(m.symbol);
+                return (
+                  <tr key={idx} className={`border-t border-gray-800/20 ${idx % 2 === 0 ? 'bg-[#15171d]/50' : ''}`}>
+                    <td className="px-3 py-1.5">
+                      {symHtml ? (
+                        <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+                      ) : (
+                        <span className="font-mono text-[var(--accent-color)]">{m.symbol}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-gray-300">{m.variable}</td>
+                    {hasCat && (
+                      <td className="px-3 py-1.5">
+                        {m.category != null ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                            {m.category}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">—</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="text-right px-3 py-1.5 font-mono text-gray-400">
+                      {isNaN(m.coef) ? '—' : formatNum(m.coef)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default FormulaBlock;

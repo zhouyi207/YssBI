@@ -53,7 +53,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[9999] bg-[#252526] rounded-md shadow-xl border border-[#454545] py-1 min-w-[180px]"
+      className="fixed z-[200] bg-[#252526] rounded-md shadow-xl border border-[#454545] py-1 min-w-[180px]"
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >

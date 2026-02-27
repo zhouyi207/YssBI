@@ -13,7 +13,7 @@ export const UIHost = () => {
   return (
     <>
       {/* Toast */}
-      <div className="fixed bottom-6 right-6 z-[2000] flex flex-col gap-3">
+      <div className="fixed bottom-6 right-6 z-[600] flex flex-col gap-3">
         {messages.map(m => (
           <Toast
             key={m.id}

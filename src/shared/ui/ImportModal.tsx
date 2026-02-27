@@ -11,7 +11,7 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-2xl w-[420px] overflow-hidden animate-zoom-in">
         <div className="px-6 py-4 border-b border-gray-800 bg-[#252526] flex justify-between items-center">
           <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">

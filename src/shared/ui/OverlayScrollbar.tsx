@@ -3,6 +3,67 @@ import { THUMB_MIN_SIZE, TRACK_SIZE } from "@/app/appConfig/default";
 
 type Direction = "vertical" | "horizontal" | "both";
 
+const ARROW_HEIGHT = TRACK_SIZE * 2;
+const SCROLL_STEP = 40;
+const SCROLL_INTERVAL = 50;
+const SCROLL_INITIAL_DELAY = 300;
+
+const THUMB_COLOR = "rgba(255,255,255,0.24)";
+const ARROW_STROKE = "rgba(255,255,255,0.45)";
+
+function ArrowButton({
+  direction,
+  onScroll,
+  size,
+}: {
+  direction: "up" | "down" | "left" | "right";
+  onScroll: () => void;
+  size: number;
+}) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopScroll = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+  }, []);
+
+  const startScroll = useCallback(() => {
+    onScroll();
+    timerRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(onScroll, SCROLL_INTERVAL);
+    }, SCROLL_INITIAL_DELAY);
+  }, [onScroll]);
+
+  useEffect(() => stopScroll, [stopScroll]);
+
+  const isVertical = direction === "up" || direction === "down";
+  const w = isVertical ? size : ARROW_HEIGHT;
+  const h = isVertical ? ARROW_HEIGHT : size;
+
+  let d: string;
+  switch (direction) {
+    case "up":    d = `M${size * 0.15} ${ARROW_HEIGHT * 0.65} L${size * 0.5} ${ARROW_HEIGHT * 0.35} L${size * 0.85} ${ARROW_HEIGHT * 0.65}`; break;
+    case "down":  d = `M${size * 0.15} ${ARROW_HEIGHT * 0.35} L${size * 0.5} ${ARROW_HEIGHT * 0.65} L${size * 0.85} ${ARROW_HEIGHT * 0.35}`; break;
+    case "left":  d = `M${ARROW_HEIGHT * 0.65} ${size * 0.15} L${ARROW_HEIGHT * 0.35} ${size * 0.5} L${ARROW_HEIGHT * 0.65} ${size * 0.85}`; break;
+    case "right": d = `M${ARROW_HEIGHT * 0.35} ${size * 0.15} L${ARROW_HEIGHT * 0.65} ${size * 0.5} L${ARROW_HEIGHT * 0.35} ${size * 0.85}`; break;
+  }
+
+  return (
+    <div
+      className="shrink-0 flex items-center justify-center cursor-pointer transition-opacity duration-100 hover:opacity-100 opacity-60"
+      style={{ width: w, height: h }}
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); startScroll(); }}
+      onMouseUp={stopScroll}
+      onMouseLeave={stopScroll}
+    >
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+        <path d={d} stroke={ARROW_STROKE} fill="none" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
 /**
  * 自定义悬浮滚动条：不占布局空间，悬浮在内容边缘。
  * 隐藏原生滚动条，通过 JS 实现同步的 overlay 滚动条。
@@ -16,6 +77,7 @@ export const OverlayScrollbar = forwardRef<
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   }
 >(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll }, ref) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [thumbStyle, setThumbStyle] = useState<{
     v?: { height: number; top: number };
@@ -29,7 +91,8 @@ export const OverlayScrollbar = forwardRef<
 
   const updateThumb = useCallback(() => {
     const el = viewportRef.current;
-    if (!el) return;
+    const container = containerRef.current;
+    if (!el || !container) return;
 
     const next: typeof thumbStyle = {};
     const visible: typeof isVisible = {};
@@ -39,7 +102,7 @@ export const OverlayScrollbar = forwardRef<
       const maxScroll = scrollHeight - clientHeight;
       if (maxScroll > 0) {
         visible.v = true;
-        const trackHeight = clientHeight;
+        const trackHeight = container.clientHeight - ARROW_HEIGHT * 2;
         const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
         const thumbTop = (scrollTop / maxScroll) * (trackHeight - thumbHeight);
         next.v = { height: thumbHeight, top: thumbTop };
@@ -53,7 +116,7 @@ export const OverlayScrollbar = forwardRef<
       const maxScroll = scrollWidth - clientWidth;
       if (maxScroll > 0) {
         visible.h = true;
-        const trackWidth = clientWidth;
+        const trackWidth = container.clientWidth - ARROW_HEIGHT * 2;
         const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
         const thumbLeft = (scrollLeft / maxScroll) * (trackWidth - thumbWidth);
         next.h = { width: thumbWidth, left: thumbLeft };
@@ -99,6 +162,18 @@ export const OverlayScrollbar = forwardRef<
 
   const overflowX = direction === "horizontal" ? "auto" : "hidden";
   const overflowY = direction === "vertical" ? "auto" : direction === "both" ? "auto" : "hidden";
+
+  const scrollV = useCallback((delta: number) => {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, el.scrollTop + delta));
+  }, []);
+
+  const scrollH = useCallback((delta: number) => {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + delta));
+  }, []);
 
   const handleTrackClickV = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -155,14 +230,15 @@ export const OverlayScrollbar = forwardRef<
 
     const onMouseMove = (moveE: MouseEvent) => {
       const el = viewportRef.current;
-      if (!el) return;
+      const container = containerRef.current;
+      if (!el || !container) return;
 
       const deltaY = moveE.clientY - dragStart.current.y;
       dragStart.current = { x: moveE.clientX, y: moveE.clientY };
 
       const { scrollHeight, clientHeight } = el;
       const maxScroll = scrollHeight - clientHeight;
-      const trackHeight = clientHeight;
+      const trackHeight = container.clientHeight - ARROW_HEIGHT * 2;
       const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
       const trackThumbSpace = trackHeight - thumbHeight;
 
@@ -188,14 +264,15 @@ export const OverlayScrollbar = forwardRef<
 
     const onMouseMove = (moveE: MouseEvent) => {
       const el = viewportRef.current;
-      if (!el) return;
+      const container = containerRef.current;
+      if (!el || !container) return;
 
       const deltaX = moveE.clientX - dragStart.current.x;
       dragStart.current = { x: moveE.clientX, y: moveE.clientY };
 
       const { scrollWidth, clientWidth } = el;
       const maxScroll = scrollWidth - clientWidth;
-      const trackWidth = clientWidth;
+      const trackWidth = container.clientWidth - ARROW_HEIGHT * 2;
       const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
       const trackThumbSpace = trackWidth - thumbWidth;
 
@@ -219,13 +296,14 @@ export const OverlayScrollbar = forwardRef<
 
   return (
     <div
-      className={`relative h-full min-h-0 w-full ${className}`}
+      ref={containerRef}
+      className={`relative flex flex-col min-h-0 w-full ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
         ref={viewportRef}
-        className={`overlay-scrollbar-viewport h-full w-full overscroll-contain ${
+        className={`overlay-scrollbar-viewport flex-1 min-h-0 w-full overscroll-contain ${
           direction === "horizontal" ? "flex flex-row items-start" : ""
         }`}
         style={{
@@ -239,14 +317,14 @@ export const OverlayScrollbar = forwardRef<
         {children}
       </div>
 
+      {/* Vertical scrollbar */}
       {(direction === "vertical" || direction === "both") && isVisible.v && (
         <div
-          className={`absolute top-0 right-0 bottom-0 w-6 flex justify-end transition-opacity duration-150 ease-out ${
-            showV ? "pointer-events-auto" : "pointer-events-none"
-          }`}
+          className="absolute top-0 right-0 bottom-0 w-6 flex justify-end pointer-events-none transition-opacity duration-150 ease-out"
           style={{ paddingRight: 2 }}
         >
-          <div className="flex flex-col" style={{ opacity: showV ? 1 : 0, width: TRACK_SIZE }}>
+          <div className={`flex flex-col h-full ${showV ? "pointer-events-auto" : ""}`} style={{ opacity: showV ? 1 : 0, width: TRACK_SIZE }}>
+            <ArrowButton direction="up" size={TRACK_SIZE} onScroll={() => scrollV(-SCROLL_STEP)} />
             <div
               className="flex-1 min-h-0 relative cursor-pointer"
               onClick={handleTrackClickV}
@@ -254,29 +332,30 @@ export const OverlayScrollbar = forwardRef<
             >
               {thumbStyle.v && (
                 <div
-                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/20"
+                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/40"
                   style={{
                     top: thumbStyle.v.top,
                     height: thumbStyle.v.height,
                     width: TRACK_SIZE,
-                    backgroundColor: "rgba(255,255,255,0.08)",
+                    backgroundColor: THUMB_COLOR,
                   }}
                   onMouseDown={handleThumbMouseDownV}
                 />
               )}
             </div>
+            <ArrowButton direction="down" size={TRACK_SIZE} onScroll={() => scrollV(SCROLL_STEP)} />
           </div>
         </div>
       )}
 
+      {/* Horizontal scrollbar */}
       {(direction === "horizontal" || direction === "both") && isVisible.h && (
         <div
-          className={`absolute bottom-0 left-0 h-6 flex items-end transition-opacity duration-150 ease-out ${
-            showH ? "pointer-events-auto" : "pointer-events-none"
-          }`}
+          className="absolute bottom-0 left-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out"
           style={{ paddingBottom: 2, right: direction === "both" ? TRACK_SIZE + 4 : 0 }}
         >
-          <div className="flex flex-row w-full" style={{ opacity: showH ? 1 : 0, height: TRACK_SIZE }}>
+          <div className={`flex flex-row w-full ${showH ? "pointer-events-auto" : ""}`} style={{ opacity: showH ? 1 : 0, height: TRACK_SIZE }}>
+            <ArrowButton direction="left" size={TRACK_SIZE} onScroll={() => scrollH(-SCROLL_STEP)} />
             <div
               className="flex-1 min-w-0 relative cursor-pointer"
               onClick={handleTrackClickH}
@@ -284,17 +363,18 @@ export const OverlayScrollbar = forwardRef<
             >
               {thumbStyle.h && (
                 <div
-                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/20"
+                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/40"
                   style={{
                     left: thumbStyle.h.left,
                     width: thumbStyle.h.width,
                     height: TRACK_SIZE,
-                    backgroundColor: "rgba(255,255,255,0.08)",
+                    backgroundColor: THUMB_COLOR,
                   }}
                   onMouseDown={handleThumbMouseDownH}
                 />
               )}
             </div>
+            <ArrowButton direction="right" size={TRACK_SIZE} onScroll={() => scrollH(SCROLL_STEP)} />
           </div>
         </div>
       )}

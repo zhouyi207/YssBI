@@ -53,7 +53,7 @@ pub struct OLSResult {
 }
 
 impl OLS {
-    pub fn fit(&self) -> OLSResult {
+    pub fn fit(&self) -> Result<OLSResult, String> {
         let y = self.endog.view().into_faer_col().to_owned();
         let x = self.exog.view().into_faer().to_owned();
 
@@ -75,7 +75,7 @@ impl OLS {
         let xty = x.transpose() * y.as_ref();
         let xtx_inv = xtx
             .llt(Side::Lower)
-            .unwrap()// 在这里如果不是满秩，会报错 因此需要修复一下 todo
+            .map_err(|_| "OLS: X'X matrix is not positive definite (likely rank-deficient or has multicollinearity). Check your input variables.".to_string())?
             .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
         let betas = xtx_inv.as_ref() * xty;
         let y_hat = x.as_ref() * betas.as_ref();
@@ -134,22 +134,22 @@ impl OLS {
         let ci_lower = betas.as_ref() - t_cirt * std_err.as_ref();
         let ci_upper = betas.as_ref() + t_cirt * std_err.as_ref();
 
-        OLSResult {
+        Ok(OLSResult {
             num_observation: num_obversion,
-            ss_model: ss_model,
-            ss_residual: ss_residual,
-            ss_total: ss_total,
-            df_model: df_model,
+            ss_model,
+            ss_residual,
+            ss_total,
+            df_model,
             df_residual: df_redidual,
-            df_total: df_total,
-            ms_model: ms_model,
-            ms_residual: ms_residual,
-            ms_total: ms_total,
-            covariance_type: covariance_type,
-            r2: r2,
-            r2_adjusted: r2_adjusted,
+            df_total,
+            ms_model,
+            ms_residual,
+            ms_total,
+            covariance_type,
+            r2,
+            r2_adjusted,
             fvalue: f,
-            f_p_value: f_p_value,
+            f_p_value,
             model: OLSModel {
                 params: betas.as_ref().into_ndarray().to_owned(),
             },
@@ -159,8 +159,8 @@ impl OLS {
             pvalues: Array1::from_vec(p_values),
             conf_int_left: ci_lower.as_ref().into_ndarray().to_owned(),
             conf_int_right: ci_upper.as_ref().into_ndarray().to_owned(),
-            cond_no: cond_no,
-        }
+            cond_no,
+        })
     }
 }
 
@@ -203,7 +203,7 @@ mod tests {
 
         let ols_config = OLSConfig { constant: true};
         let ols = OLS { endog, exog, config: ols_config};
-        let result = ols.fit();
+        let result = ols.fit().unwrap();
 
         // 打印结果
         println!("回归系数 (betas): {:?}", result.betas);

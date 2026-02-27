@@ -69,7 +69,7 @@ const MenuButton = ({ id, label, items, activeMenuId, setActiveMenuId }: MenuBut
         <div
           onMouseEnter={handleEnter}
           onMouseLeave={scheduleClose}
-          className="absolute left-0 top-full -mt-px min-w-[180px] w-max bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-2xl py-1 z-[200] backdrop-blur-sm"
+          className="absolute left-0 top-full -mt-px min-w-[180px] w-max bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-2xl py-1 z-10 backdrop-blur-sm"
         >
           {items.map((item, i) => {
             if (item.type === 'separator' || item.label === '-') {
@@ -196,7 +196,7 @@ export function Menubar() {
 
   return (
     <div
-      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-[200] shadow-xl select-none"
+      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center relative z-[100] shadow-xl select-none"
       onWheel={(e) => e.stopPropagation()}
       data-tauri-drag-region
     >
