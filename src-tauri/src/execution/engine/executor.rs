@@ -3,19 +3,19 @@
 //! 执行器是唯一负责调度执行顺序的组件
 //! 它解释节点返回的 ExecutionEffect 并管理 continuation 栈
 
+use super::event_emitter::EventEmitter;
 use super::execution_effect::{ExecutionEffect, ResumeToken};
 use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
 use crate::execution::NodeExecutionContext;
+use crate::execution::WindowDataStore;
 use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
 use crate::log_exec;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use crate::execution::WindowDataStore;
-use tauri::ipc::Channel;
 
 /// 执行器
 ///
@@ -24,8 +24,8 @@ use tauri::ipc::Channel;
 /// - 管理执行栈
 /// - 调度节点执行
 /// - 处理暂停/恢复
-/// - 通过 Channel 流式发送执行事件给前端
-pub struct Executor {
+/// - 通过 EventEmitter 流式发送执行事件给前端
+pub struct Executor<E: EventEmitter> {
     /// 执行栈
     stack: ExecutionStack,
 
@@ -38,18 +38,18 @@ pub struct Executor {
     /// 执行日志
     logs: Vec<String>,
 
-    /// 前端事件通道
-    channel: Channel<ExecutionEvent>,
+    /// 事件发送器
+    emitter: E,
 
     /// 窗口数据存储（节点产生的数据暂存于此，前端新窗口通过 command 拉取）
     window_data_store: WindowDataStore,
 }
 
-impl Executor {
+impl<E: EventEmitter> Executor<E> {
     /// 创建新的执行器
     pub fn new(
         graph: Arc<Mutex<GraphRuntime>>,
-        channel: Channel<ExecutionEvent>,
+        emitter: E,
         window_data_store: WindowDataStore,
     ) -> Self {
         Self {
@@ -57,16 +57,14 @@ impl Executor {
             suspended_frames: HashMap::new(),
             graph,
             logs: Vec::new(),
-            channel,
+            emitter,
             window_data_store,
         }
     }
 
-    /// 发送执行事件到前端
+    /// 发送执行事件
     fn emit(&self, event: ExecutionEvent) {
-        if let Err(e) = self.channel.send(event) {
-            eprintln!("[Executor] Channel send failed: {}", e);
-        }
+        self.emitter.emit(event);
     }
 
     /// 开始执行（从指定节点开始）

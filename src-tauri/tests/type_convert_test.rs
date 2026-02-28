@@ -1,5 +1,6 @@
+mod common;
+
 use std::sync::Arc;
-use yssbi_lib::execution::Executor;
 use yssbi_lib::graph::{
     core::GraphInstance,
     pin::{DataRole, PinRole},
@@ -188,7 +189,7 @@ fn test_multiple_type_conversions() {
     // 执行所有 print 节点
     use yssbi_lib::graph::core::GraphRuntime;
     let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-    let mut executor = Executor::new(runtime);
+    let mut executor = common::executor_for_test(runtime);
 
     println!("\n--- Executing Boolean conversion ---");
     let result = executor.start(print_bool);

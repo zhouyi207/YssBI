@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::execution::Executor;
+    use crate::execution::{Executor, NoopEmitter, WindowDataStore};
     use crate::graph::{
         GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
@@ -8,6 +8,11 @@ mod tests {
         value::DataValue,
     };
     use std::sync::{Arc, Mutex};
+
+    /// 创建用于测试的执行器（无需 Tauri Channel）
+    fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitter> {
+        Executor::new(graph, NoopEmitter, WindowDataStore::new())
+    }
 
     /// 创建测试用的注册表
     fn create_test_registry() -> Arc<NodeRegistry> {
@@ -44,7 +49,7 @@ mod tests {
 
         // 创建 GraphRuntime 并使用 Executor 执行
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(graph_runtime);
+        let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print_node);
 
         assert!(
@@ -76,7 +81,7 @@ mod tests {
 
         // 创建 GraphRuntime 并使用 Executor 执行
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(graph_runtime);
+        let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print_node);
 
         assert!(
@@ -176,7 +181,7 @@ mod tests {
 
         // 创建 GraphRuntime 并使用 Executor 执行
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(graph_runtime);
+        let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print1_node);
 
         assert!(

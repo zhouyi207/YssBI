@@ -2,7 +2,7 @@ use crate::database::{DatabaseInstance, DatabaseState};
 use crate::event::EventProject;
 use crate::graph::GraphId;
 use crate::event::{emit_project_event, Event};
-use crate::execution::{Executor, ExecutionEvent};
+use crate::execution::{ChannelEventEmitter, Executor, ExecutionEvent};
 use crate::frontend::FrontendError;
 use crate::graph::GraphKind;
 use crate::log::LogLevel;
@@ -385,7 +385,7 @@ pub fn execute_project(
 
         let mut executor = Executor::new(
             Arc::new(Mutex::new(runtime)),
-            on_event.clone(),
+            ChannelEventEmitter(on_event.clone()),
             window_store.clone(),
         );
         executor.start(entry_node)?;

@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::execution::ExecutionEffect;
+    use crate::execution::{ExecutionEffect, Executor, NoopEmitter, WindowDataStore};
     use crate::graph::{
         GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
     };
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     /// 创建测试用的注册表
     fn create_test_registry() -> Arc<NodeRegistry> {
@@ -28,6 +28,11 @@ mod tests {
             }
             _ => panic!("Expected TriggerOutput, got {:?}", effect),
         }
+    }
+
+    /// 创建用于测试的执行器（无需 Tauri Channel）
+    fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitter> {
+        Executor::new(graph, NoopEmitter, WindowDataStore::new())
     }
 
     /// 辅助函数：检查 ExecutionEffect 是否是 sequence
@@ -254,7 +259,6 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence exec input
         // 验证：Executor 自动执行整个链路，最终触发 sequence
 
-        use crate::execution::Executor;
 
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
@@ -327,7 +331,7 @@ mod tests {
 
         // === 使用 Executor 自动执行 ===
         let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(runtime);
+        let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -351,7 +355,6 @@ mod tests {
         // branch1 (condition=true) -> false output -> branch2 exec input (不会执行)
         // 验证：只有 sequence1 会被执行
 
-        use crate::execution::Executor;
 
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
@@ -414,7 +417,7 @@ mod tests {
 
         // === 使用 Executor 自动执行 ===
         let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(runtime);
+        let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -445,7 +448,6 @@ mod tests {
         // branch2 (condition=true) -> false output -> sequence exec input
         // 验证：branch1 走 false 分支，branch2 走 true 分支（不会触发 sequence）
 
-        use crate::execution::Executor;
 
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
@@ -520,7 +522,7 @@ mod tests {
 
         // === 使用 Executor 自动执行 ===
         let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(runtime);
+        let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -564,7 +566,6 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence exec input
         // 验证：branch1 走 false 分支，branch2 也走 false 分支，最终触发 sequence
 
-        use crate::execution::Executor;
 
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
@@ -637,7 +638,7 @@ mod tests {
 
         // === 使用 Executor 自动执行 ===
         let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(runtime);
+        let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());
@@ -667,7 +668,6 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence2 exec input (不会执行)
         // 验证：只有 sequence1 会被触发
 
-        use crate::execution::Executor;
 
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
@@ -760,7 +760,7 @@ mod tests {
 
         // === 使用 Executor 自动执行 ===
         let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut executor = Executor::new(runtime);
+        let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
         assert!(result.is_ok(), "Executor failed: {:?}", result.err());

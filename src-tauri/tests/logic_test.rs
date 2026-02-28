@@ -1,11 +1,12 @@
+mod common;
+
+use std::sync::Arc;
 use yssbi_lib::graph::{
     core::GraphInstance,
     pin::{DataRole, ExecRole, PinRole},
     register::NodeRegistry,
     value::DataValue,
 };
-use yssbi_lib::execution::Executor;
-use std::sync::Arc;
 
 /// 创建测试用的注册表
 fn create_test_registry() -> Arc<NodeRegistry> {
@@ -360,7 +361,7 @@ fn test_complex_node_graph() {
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
     let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-    let mut executor = Executor::new(runtime);
+    let mut executor = common::executor_for_test(runtime);
     let result = executor.start(seq1_node);
 
     assert!(
@@ -577,7 +578,7 @@ fn test_nested_sequence_tree() {
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
     let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-    let mut executor = Executor::new(runtime);
+    let mut executor = common::executor_for_test(runtime);
     let result = executor.start(root_seq);
 
     assert!(

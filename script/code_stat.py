@@ -75,6 +75,8 @@ def analyze_project(root: str):
 
 
 def print_report(stats):
+    total_files = total_lines = total_code = total_comment = total_blank = 0
+
     for ext, s in sorted(stats.items()):
         print(f"\nLanguage: {ext}")
         print(f"  Files        : {s['files']}")
@@ -82,6 +84,19 @@ def print_report(stats):
         print(f"  Code lines   : {s['code']}")
         print(f"  Comment lines: {s['comment']}")
         print(f"  Blank lines  : {s['blank']}")
+        total_files += s["files"]
+        total_lines += s["total"]
+        total_code += s["code"]
+        total_comment += s["comment"]
+        total_blank += s["blank"]
+
+    print(f"\n{'='*40}")
+    print("Totals")
+    print(f"  Files        : {total_files}")
+    print(f"  Total lines  : {total_lines}")
+    print(f"  Code lines   : {total_code}")
+    print(f"  Comment lines: {total_comment}")
+    print(f"  Blank lines  : {total_blank}")
 
 
 def parse_root_from_argv():

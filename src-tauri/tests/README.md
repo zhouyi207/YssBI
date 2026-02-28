@@ -170,7 +170,10 @@ fn create_test_registry() -> Arc<NodeRegistry>
 
 5. **执行图**
    ```rust
-   let mut executor = Executor::new(graph.clone());
+   mod common;
+   use yssbi_lib::graph::core::GraphRuntime;
+   let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+   let mut executor = common::executor_for_test(runtime);
    let result = executor.start(start_node);
    assert!(result.is_ok());
    ```
