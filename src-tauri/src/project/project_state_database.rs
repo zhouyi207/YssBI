@@ -15,6 +15,18 @@ impl ProjectState {
         db.access(access)
     }
 
+    pub fn with_database_mut<F, R>(&self, id: &str, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
+    {
+        let mut store = self.project_store.write().unwrap();
+        let db = store
+            .databases
+            .get_mut(id)
+            .ok_or_else(|| "Database not found".to_string())?;
+        f(db)
+    }
+
     /// 添加数据库到 project_store 和 project_data
     pub fn add_database(&self, instance: DatabaseInstance) {
         let decl = instance.decl.clone();

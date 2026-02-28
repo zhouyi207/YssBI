@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ColumnStats } from "@/features/core/dataStore/columnStatsStore";
 import { ColumnDistribution } from "@/features/core/dataStore/columnDistributionStore";
 import { DatasetOverview } from "@/features/core/dataStore/datasetOverviewStore";
+import { EditState } from "@/features/core/dataStore/editStateStore";
 
 /** CSV 引擎配置（与后端 DatabaseEngineDTO::Csv 对应） */
 export interface CsvEngineSpec {
@@ -80,5 +81,53 @@ export class DatabaseService {
 
     static async getDatasetOverview(id: string): Promise<DatasetOverview> {
         return await invoke("get_dataset_overview", { id });
+    }
+
+    static async editCell(id: string, row: number, colName: string, value: unknown): Promise<EditState> {
+        return await invoke("edit_cell", { id, row, colName, value });
+    }
+
+    static async addRow(id: string, index?: number): Promise<EditState> {
+        return await invoke("add_row", { id, index: index ?? null });
+    }
+
+    static async deleteRows(id: string, indices: number[]): Promise<EditState> {
+        return await invoke("delete_rows", { id, indices });
+    }
+
+    static async addColumn(id: string, name: string, dtype: string): Promise<EditState> {
+        return await invoke("add_column", { id, name, dtype });
+    }
+
+    static async deleteColumn(id: string, name: string): Promise<EditState> {
+        return await invoke("delete_column", { id, name });
+    }
+
+    static async castColumn(id: string, colName: string, newDtype: string, force = false): Promise<EditState> {
+        return await invoke("cast_column", { id, colName, newDtype, force });
+    }
+
+    static async renameColumn(id: string, oldName: string, newName: string): Promise<EditState> {
+        return await invoke("rename_column", { id, oldName, newName });
+    }
+
+    static async undoEdit(id: string): Promise<EditState> {
+        return await invoke("undo_edit", { id });
+    }
+
+    static async redoEdit(id: string): Promise<EditState> {
+        return await invoke("redo_edit", { id });
+    }
+
+    static async resetDatabase(id: string): Promise<EditState> {
+        return await invoke("reset_database", { id });
+    }
+
+    static async exportDatabase(id: string, path: string, format: string): Promise<void> {
+        await invoke("export_database", { id, path, format });
+    }
+
+    static async getEditState(id: string): Promise<EditState> {
+        return await invoke("get_edit_state", { id });
     }
 }

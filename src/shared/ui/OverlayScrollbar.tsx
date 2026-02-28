@@ -77,8 +77,10 @@ export const OverlayScrollbar = forwardRef<
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
     /** 垂直滚动条顶部偏移（如 sticky 表头高度），使滚动条从表头下方开始 */
     scrollbarOffsetTop?: number;
+    /** 水平滚动条左侧偏移（如行号列宽度），使滚动条从行号列右侧开始 */
+    scrollbarOffsetLeft?: number;
   }
->(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll, scrollbarOffsetTop = 0 }, ref) {
+>(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll, scrollbarOffsetTop = 0, scrollbarOffsetLeft = 0 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [thumbStyle, setThumbStyle] = useState<{
@@ -119,7 +121,8 @@ export const OverlayScrollbar = forwardRef<
       const maxScroll = scrollWidth - clientWidth;
       if (maxScroll > 0) {
         visible.h = true;
-        const trackWidth = container.clientWidth - ARROW_HEIGHT * 2;
+        const rightReserved = direction === "both" ? TRACK_SIZE + 4 : 0;
+        const trackWidth = container.clientWidth - scrollbarOffsetLeft - rightReserved - ARROW_HEIGHT * 2;
         const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
         const thumbLeft = (scrollLeft / maxScroll) * (trackWidth - thumbWidth);
         next.h = { width: thumbWidth, left: thumbLeft };
@@ -130,7 +133,7 @@ export const OverlayScrollbar = forwardRef<
 
     setThumbStyle(next);
     setIsVisible(visible);
-  }, [direction, scrollbarOffsetTop]);
+  }, [direction, scrollbarOffsetTop, scrollbarOffsetLeft]);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -276,7 +279,8 @@ export const OverlayScrollbar = forwardRef<
 
       const { scrollWidth, clientWidth } = el;
       const maxScroll = scrollWidth - clientWidth;
-      const trackWidth = container.clientWidth - ARROW_HEIGHT * 2;
+      const rightReserved = direction === "both" ? TRACK_SIZE + 4 : 0;
+      const trackWidth = container.clientWidth - scrollbarOffsetLeft - rightReserved - ARROW_HEIGHT * 2;
       const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
       const trackThumbSpace = trackWidth - thumbWidth;
 
@@ -293,7 +297,7 @@ export const OverlayScrollbar = forwardRef<
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, []);
+  }, [direction, scrollbarOffsetLeft]);
 
   const showV = isVisible.v && isHovered;
   const showH = isVisible.h && isHovered;
@@ -352,11 +356,11 @@ export const OverlayScrollbar = forwardRef<
         </div>
       )}
 
-      {/* Horizontal scrollbar - z-20 确保高于 sticky 表头 */}
+      {/* Horizontal scrollbar - 从 scrollbarOffsetLeft 开始，避开行号列 */}
       {(direction === "horizontal" || direction === "both") && isVisible.h && (
         <div
-          className="absolute bottom-0 left-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out z-20"
-          style={{ paddingBottom: 2, right: direction === "both" ? TRACK_SIZE + 4 : 0 }}
+          className="absolute bottom-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out z-20"
+          style={{ left: scrollbarOffsetLeft, paddingBottom: 2, right: direction === "both" ? TRACK_SIZE + 4 : 0 }}
         >
           <div className={`flex flex-row w-full ${showH ? "pointer-events-auto" : ""}`} style={{ opacity: showH ? 1 : 0, height: TRACK_SIZE }}>
             <ArrowButton direction="left" size={TRACK_SIZE} onScroll={() => scrollH(-SCROLL_STEP)} />

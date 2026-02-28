@@ -26,6 +26,7 @@ fn test_read_iris_csv() {
         engine: engine.clone(),
         schema_version: 1,
         required: true,
+        name: Some("iris".to_string()),
     };
 
     println!("\n创建数据库声明:");

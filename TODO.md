@@ -18,10 +18,19 @@
 - [x] 在这里添加了两个库 @types/d3 d3 ~~ols summary view 中再添加一个残差图呗，就简单的 scatter 图就好了使用 d3 吧，拓展性太强了比 chartjs 要好很多~~
 - [x] 修复了测试报错情况，~~测试目前由于 execution::new() 修改了导致测试报错~~
 - [x] 获取 unique name 迁移到后端，~~在快速创建的时候，可能由于后端的数据并没有反应到前端，导致前端数据不及时从而创建两个相同的 event~~
+- [x] 给 dataviewWindow 添加了 column stats 和 overview ，并使用了直方图和条形图进行处理
+- [x] 后端依旧使用 path 作为 title，已修复， ~~editorviewer 导入 database 后 title 和 dataviewer 不同步~~
+- [x] 给 editorviewer 的 data sidebar 中的 database 添加一个 eye 图标，点击就可以打开 data viewer
+- [x] 修复 dataviewer 数据表格的显示问题，可以显示足够多的列，使用 react-virtual 行也虚拟化了 ~~无法显示足够多的列~~
+
 
 # TODOLIST
 
 复制粘贴节点以及项目的保存不够完善
+
+直方图有问题，其显示将 null 值当作了 0 在图中处理，正常应该忽略
+
+打开 dataviewer 后，在 editorviewer 中导入数据，dataviewer 并没有更新；
 
 类型推断系统不够完善
 

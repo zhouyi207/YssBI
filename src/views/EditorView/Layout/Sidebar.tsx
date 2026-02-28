@@ -1,4 +1,5 @@
-import { forwardRef, useContext, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useDraggable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
@@ -24,6 +25,28 @@ import { useSidebarStore } from "@/features/core/sidebar";
 import { PIN_COLORS, TYPE_ICON_COLORS, buildSidebarDragData } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import { logger } from "@/utils/appLogger";
+import { uiStore } from "@/features/core/ui/UIStore";
+
+async function openDataViewWindow(databaseId?: string): Promise<void> {
+  try {
+    const label = `dataview-${Math.random().toString(36).substring(7)}`;
+    const url = databaseId
+      ? `index.html?database=${encodeURIComponent(databaseId)}#/dataview`
+      : "index.html#/dataview";
+    new WebviewWindow(label, {
+      url,
+      title: "Data Viewer",
+      width: 1000,
+      height: 600,
+      decorations: false,
+      visible: false,
+    });
+  } catch (error) {
+    logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, "Sidebar");
+    uiStore.showToast("无法打开数据视图窗口", "error");
+  }
+}
 
 function safeDataTypeDisplay(dt: unknown): string {
   if (typeof dt === "string") return dt;
@@ -605,6 +628,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                               </span>
                               <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
                             </SidebarDraggableItem>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDataViewWindow(id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] text-gray-500 transition-colors shrink-0"
+                              title="在 Data Viewer 中查看"
+                            >
+                              <VscEye size={12} />
+                            </button>
                           </div>
                         }
                       >

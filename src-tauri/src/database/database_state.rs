@@ -1,13 +1,15 @@
 use polars::prelude::*;
 use std::sync::Arc;
+use yss_sci::database::EditHistory;
 
 pub enum DatabaseState {
-    /// 尚未真正加载，仅有 Lazy 执行计划
     Lazy { lazy_frame: LazyFrame },
 
-    /// 已经 collect 进内存（节点执行结果 / 显式加载）
-    Loaded { dataframe: Arc<DataFrame> },
+    Loaded {
+        dataframe: Arc<DataFrame>,
+        original: Arc<DataFrame>,
+        history: EditHistory,
+    },
 
-    /// 加载失败（避免反复 IO）
     Failed { error: String },
 }

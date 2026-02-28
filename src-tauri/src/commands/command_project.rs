@@ -33,16 +33,19 @@ fn name_from_path(path: &str) -> String {
 }
 
 /// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
+/// 优先使用 decl.name（后端 unique name），否则从 path 推导
 fn extract_database_schema(instance: &DatabaseInstance) -> Option<(String, Vec<ColumnInfoDTO>, usize, usize)> {
-    let name = match &instance.decl.engine {
-        crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
-        crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
-        crate::database::DatabaseEngine::InMemory { name } => name.clone(),
-        _ => instance.decl.id.clone(),
-    };
+    let name = instance.decl.name.clone().unwrap_or_else(|| {
+        match &instance.decl.engine {
+            crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
+            crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
+            crate::database::DatabaseEngine::InMemory { name } => name.clone(),
+            _ => instance.decl.id.clone(),
+        }
+    });
 
     match &instance.state {
-        DatabaseState::Loaded { dataframe } => {
+        DatabaseState::Loaded { dataframe, .. } => {
             let schema = dataframe.schema();
             let columns: Vec<ColumnInfoDTO> = schema
                 .iter_names()
