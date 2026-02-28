@@ -75,8 +75,10 @@ export const OverlayScrollbar = forwardRef<
     className?: string;
     direction?: Direction;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+    /** 垂直滚动条顶部偏移（如 sticky 表头高度），使滚动条从表头下方开始 */
+    scrollbarOffsetTop?: number;
   }
->(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll }, ref) {
+>(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll, scrollbarOffsetTop = 0 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [thumbStyle, setThumbStyle] = useState<{
@@ -102,7 +104,8 @@ export const OverlayScrollbar = forwardRef<
       const maxScroll = scrollHeight - clientHeight;
       if (maxScroll > 0) {
         visible.v = true;
-        const trackHeight = container.clientHeight - ARROW_HEIGHT * 2;
+        const vHeight = container.clientHeight - scrollbarOffsetTop;
+        const trackHeight = vHeight - ARROW_HEIGHT * 2;
         const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
         const thumbTop = (scrollTop / maxScroll) * (trackHeight - thumbHeight);
         next.v = { height: thumbHeight, top: thumbTop };
@@ -127,7 +130,7 @@ export const OverlayScrollbar = forwardRef<
 
     setThumbStyle(next);
     setIsVisible(visible);
-  }, [direction]);
+  }, [direction, scrollbarOffsetTop]);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -238,7 +241,8 @@ export const OverlayScrollbar = forwardRef<
 
       const { scrollHeight, clientHeight } = el;
       const maxScroll = scrollHeight - clientHeight;
-      const trackHeight = container.clientHeight - ARROW_HEIGHT * 2;
+      const vHeight = container.clientHeight - scrollbarOffsetTop;
+      const trackHeight = vHeight - ARROW_HEIGHT * 2;
       const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
       const trackThumbSpace = trackHeight - thumbHeight;
 
@@ -255,7 +259,7 @@ export const OverlayScrollbar = forwardRef<
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, []);
+  }, [scrollbarOffsetTop]);
 
   const handleThumbMouseDownH = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -317,11 +321,11 @@ export const OverlayScrollbar = forwardRef<
         {children}
       </div>
 
-      {/* Vertical scrollbar */}
+      {/* Vertical scrollbar - 从 scrollbarOffsetTop 开始，避开 sticky 表头 */}
       {(direction === "vertical" || direction === "both") && isVisible.v && (
         <div
-          className="absolute top-0 right-0 bottom-0 w-6 flex justify-end pointer-events-none transition-opacity duration-150 ease-out"
-          style={{ paddingRight: 2 }}
+          className="absolute right-0 bottom-0 w-6 flex justify-end pointer-events-none transition-opacity duration-150 ease-out z-20"
+          style={{ top: scrollbarOffsetTop, paddingRight: 2 }}
         >
           <div className={`flex flex-col h-full ${showV ? "pointer-events-auto" : ""}`} style={{ opacity: showV ? 1 : 0, width: TRACK_SIZE }}>
             <ArrowButton direction="up" size={TRACK_SIZE} onScroll={() => scrollV(-SCROLL_STEP)} />
@@ -348,10 +352,10 @@ export const OverlayScrollbar = forwardRef<
         </div>
       )}
 
-      {/* Horizontal scrollbar */}
+      {/* Horizontal scrollbar - z-20 确保高于 sticky 表头 */}
       {(direction === "horizontal" || direction === "both") && isVisible.h && (
         <div
-          className="absolute bottom-0 left-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out"
+          className="absolute bottom-0 left-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out z-20"
           style={{ paddingBottom: 2, right: direction === "both" ? TRACK_SIZE + 4 : 0 }}
         >
           <div className={`flex flex-row w-full ${showH ? "pointer-events-auto" : ""}`} style={{ opacity: showH ? 1 : 0, height: TRACK_SIZE }}>

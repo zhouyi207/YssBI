@@ -2,9 +2,14 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { DatabaseService } from '@/services/database/databaseService';
-import { VscDatabase, VscRefresh } from 'react-icons/vsc';
+import { VscDatabase, VscRefresh, VscSymbolNumeric } from 'react-icons/vsc';
 import { useProjectSync } from '@/features/application/initialization';
-import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
+import { useDatabaseStore, useColumnStatsStore, useColumnDistributionStore, useDatasetOverviewStore, initProjectSync } from '@/features/core/dataStore';
+import type { ColumnStats, NumericColumnStats, StringColumnStats } from '@/features/core/dataStore/columnStatsStore';
+import type { ColumnDistribution, NumericDistribution, StringDistribution } from '@/features/core/dataStore/columnDistributionStore';
+import type { DatasetOverview } from '@/features/core/dataStore/datasetOverviewStore';
+import Histogram from '@/views/PlotView/Histogram';
+import BarChart from '@/views/PlotView/BarChart';
 import { Select } from '@/shared/ui';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_CHUNK_SIZE } from '@/app/appConfig/default';
@@ -12,13 +17,19 @@ import { logger } from '@/utils/appLogger';
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useDatabaseStore(s => s.databases);
+  const statsByDatabase = useColumnStatsStore(s => s.statsByDatabase);
+  const distByDatabase = useColumnDistributionStore(s => s.distByDatabase);
+  const overviewByDatabase = useDatasetOverviewStore(s => s.overviewByDatabase);
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loadedRows, setLoadedRows] = useState<any[][]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
+  const headerRef = useRef<HTMLTableSectionElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const CHUNK_SIZE = DATA_VIEW_CHUNK_SIZE;
 
@@ -39,6 +50,7 @@ export const DataViewWindow: React.FC = () => {
   useEffect(() => {
     if (selectedDfId) {
       loadInitialRows(selectedDfId);
+      loadColumnStats(selectedDfId);
     } else {
       setLoadedRows([]);
     }
@@ -75,6 +87,24 @@ export const DataViewWindow: React.FC = () => {
     }
   };
 
+  const loadColumnStats = async (id: string) => {
+    setStatsLoading(true);
+    try {
+      const [stats, dists, overview] = await Promise.all([
+        DatabaseService.getColumnStats(id),
+        DatabaseService.getColumnDistribution(id),
+        DatabaseService.getDatasetOverview(id),
+      ]);
+      useColumnStatsStore.getState().setAllStats(id, stats);
+      useColumnDistributionStore.getState().setAllDistributions(id, dists);
+      useDatasetOverviewStore.getState().setOverview(id, overview);
+    } catch (e) {
+      logger.data.error('Failed to load column stats: ' + String(e), 'DataViewWindow');
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   const loadMoreRows = useCallback(async () => {
     if (!selectedDfId || loadingMore) return;
     const currentCount = loadedRows.length;
@@ -103,6 +133,7 @@ export const DataViewWindow: React.FC = () => {
       if (selectedDfId) {
         const rows = await DatabaseService.getDatabaseRows(selectedDfId, 0, Math.max(loadedRows.length, CHUNK_SIZE));
         setLoadedRows(rows);
+        loadColumnStats(selectedDfId);
 
         setTimeout(() => {
           if (scrollRef.current) {
@@ -123,6 +154,18 @@ export const DataViewWindow: React.FC = () => {
       loadMoreRows();
     }
   };
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) {
+      setHeaderHeight(0);
+      return;
+    }
+    setHeaderHeight(el.offsetHeight);
+    const ro = new ResizeObserver(() => setHeaderHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [selectedDfId]);
 
   useEffect(() => {
     getCurrentWindow().show().catch((e) => logger.app.error(String(e), 'DataViewWindow'));
@@ -176,6 +219,194 @@ export const DataViewWindow: React.FC = () => {
   });
 
   const virtualItems = virtualizer.getVirtualItems();
+
+  const fmtNum = (v: number | null | undefined, digits = 4) =>
+    v == null ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(digits);
+
+  const columnStatsMap = selectedDfId ? statsByDatabase[selectedDfId] : undefined;
+  const columnDistMap = selectedDfId ? distByDatabase[selectedDfId] : undefined;
+
+  const currentOverview: DatasetOverview | undefined = selectedDfId ? overviewByDatabase[selectedDfId] : undefined;
+
+  const fmtMemory = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const fmtPercent = (v: number): string => `${(v * 100).toFixed(2)}%`;
+
+  const StatRow: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
+    <>
+      <div className="text-gray-500">{label}</div>
+      <div className="font-mono text-gray-400 text-right">{value}</div>
+    </>
+  );
+
+  const OverviewSection: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
+    <div className="flex-1 min-w-0 rounded border border-gray-800 bg-[var(--workbench-bg)]/50 overflow-hidden">
+      <div className="flex items-center gap-1.5 px-2.5 py-1 border-b border-gray-800/50">
+        {icon}
+        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{title}</span>
+      </div>
+      <div className="px-2.5 py-2">{children}</div>
+    </div>
+  );
+
+  const RightPanel: React.FC = () => (
+    <div className="w-[520px] shrink-0 flex flex-col border-l border-gray-800 bg-[var(--sidebar-bg)] h-full overflow-hidden">
+      {/* 上方：Overview */}
+      {currentOverview && (() => {
+        const { sizeShape, schemaOverview, dataCompleteness } = currentOverview;
+        return (
+          <div className="shrink-0 border-b border-gray-800">
+            <div className="h-8 flex items-center gap-2 px-3 border-b border-gray-800 shrink-0">
+              <svg className="w-3.5 h-3.5 text-[var(--accent-color)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="2" width="12" height="12" rx="1" />
+                <line x1="2" y1="6" x2="14" y2="6" />
+                <line x1="2" y1="10" x2="14" y2="10" />
+                <line x1="6" y1="2" x2="6" y2="14" />
+              </svg>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Overview</span>
+              {statsLoading && <span className="text-[9px] text-[var(--accent-color)] animate-pulse ml-auto">loading…</span>}
+            </div>
+            <div className="p-2.5 flex gap-2">
+              <OverviewSection
+                title="Size & Shape"
+                icon={<svg className="w-2.5 h-2.5 text-[var(--accent-color)]/70" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="1" width="14" height="14" rx="1" /><line x1="8" y1="1" x2="8" y2="15" /><line x1="1" y1="8" x2="15" y2="8" /></svg>}
+              >
+                <div className="grid grid-cols-2 gap-x-1.5 gap-y-1 text-[9px]">
+                  <StatRow label="n_rows" value={sizeShape.nRows.toLocaleString()} />
+                  <StatRow label="n_columns" value={sizeShape.nColumns} />
+                  <StatRow label="memory" value={fmtMemory(sizeShape.memorySize)} />
+                  <StatRow label="duplicated" value={sizeShape.duplicatedRows.toLocaleString()} />
+                </div>
+              </OverviewSection>
+
+              <OverviewSection
+                title="Schema"
+                icon={<svg className="w-2.5 h-2.5 text-[var(--accent-color)]/70" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 2v12M12 2v12M1 5h14M1 11h14" /></svg>}
+              >
+                <div className="grid grid-cols-2 gap-x-1.5 gap-y-1 text-[9px]">
+                  <StatRow label="numeric" value={schemaOverview.numericCols} />
+                  <StatRow label="categorical" value={schemaOverview.categoricalCols} />
+                  <StatRow label="string" value={schemaOverview.stringCols} />
+                  <StatRow label="datetime" value={schemaOverview.datetimeCols} />
+                  <StatRow label="bool" value={schemaOverview.boolCols} />
+                </div>
+              </OverviewSection>
+
+              <OverviewSection
+                title="Completeness"
+                icon={<svg className="w-2.5 h-2.5 text-[var(--accent-color)]/70" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6" /><path d="M8 5v4l2.5 1.5" /></svg>}
+              >
+                <div className="grid grid-cols-2 gap-x-1.5 gap-y-1 text-[9px]">
+                  <StatRow label="nulls" value={dataCompleteness.totalNulls.toLocaleString()} />
+                  <StatRow label="null_ratio" value={fmtPercent(dataCompleteness.nullRatio)} />
+                  <StatRow label="null_cols" value={dataCompleteness.colsWithNulls} />
+                  <StatRow label="null_rows" value={dataCompleteness.rowsWithNulls.toLocaleString()} />
+                </div>
+              </OverviewSection>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 下方：Column Stats */}
+      <div className="h-7 flex items-center gap-2 px-3 border-b border-gray-800 shrink-0">
+        <VscSymbolNumeric className="text-[var(--accent-color)]" size={13} />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Column Stats</span>
+        {statsLoading && <span className="text-[9px] text-[var(--accent-color)] animate-pulse ml-auto">loading…</span>}
+      </div>
+      <OverlayScrollbar className="flex-1 min-h-0">
+        <div className="p-2.5 space-y-3">
+          {columns.map((col, i) => {
+            const stat: ColumnStats | undefined = columnStatsMap?.[col.name];
+            const dist: ColumnDistribution | undefined = columnDistMap?.[col.name];
+            return (
+              <div
+                key={i}
+                className="rounded border border-gray-800 bg-[var(--workbench-bg)]/50 p-2.5 space-y-1.5"
+              >
+                <div className="flex items-center gap-2 pb-1.5 border-b border-gray-800/50">
+                  <span className="text-[11px] font-bold text-gray-300 truncate flex-1">{col.name}</span>
+                  <span className="text-[9px] font-mono text-[var(--accent-color)]/70">{col.type}</span>
+                </div>
+                {!stat ? (
+                  <div className="text-[10px] text-gray-600 italic py-1">
+                    {statsLoading ? 'computing…' : 'no data'}
+                  </div>
+                ) : (
+                  <div className="flex gap-3 items-stretch">
+                    <div className="w-36 shrink-0">
+                      {stat.kind === 'string' ? (
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+                          <div className="text-gray-500">count</div>
+                          <div className="font-mono text-gray-400 text-right">{stat.count}</div>
+                          <div className="text-gray-500">null_count</div>
+                          <div className="font-mono text-gray-400 text-right">{stat.nullCount}</div>
+                          <div className="text-gray-500">empty_count</div>
+                          <div className="font-mono text-gray-400 text-right">{(stat as StringColumnStats).emptyCount}</div>
+                          <div className="text-gray-500">valid_ratio</div>
+                          <div className="font-mono text-gray-400 text-right">{fmtNum((stat as StringColumnStats).validRatio, 2)}</div>
+                          <div className="text-gray-500">unique</div>
+                          <div className="font-mono text-gray-400 text-right">{(stat as StringColumnStats).unique}</div>
+                          <div className="text-gray-500">mode</div>
+                          <div className="font-mono text-gray-400 text-right truncate" title={(stat as StringColumnStats).mode ?? ''}>{(stat as StringColumnStats).mode ?? '—'}</div>
+                          <div className="text-gray-500">mode_count</div>
+                          <div className="font-mono text-gray-400 text-right">{(stat as StringColumnStats).modeCount}</div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+                          <div className="text-gray-500">count</div>
+                          <div className="font-mono text-gray-400 text-right">{stat.count}</div>
+                          <div className="text-gray-500">null_count</div>
+                          <div className="font-mono text-gray-400 text-right">{stat.nullCount}</div>
+                          <div className="text-gray-500">min</div>
+                          <div className="font-mono text-gray-400 text-right truncate">{fmtNum((stat as NumericColumnStats).min)}</div>
+                          <div className="text-gray-500">max</div>
+                          <div className="font-mono text-gray-400 text-right truncate">{fmtNum((stat as NumericColumnStats).max)}</div>
+                          <div className="text-gray-500">mean</div>
+                          <div className="font-mono text-gray-400 text-right">{fmtNum((stat as NumericColumnStats).mean)}</div>
+                          <div className="text-gray-500">median</div>
+                          <div className="font-mono text-gray-400 text-right">{fmtNum((stat as NumericColumnStats).median)}</div>
+                          <div className="text-gray-500">std</div>
+                          <div className="font-mono text-gray-400 text-right">{fmtNum((stat as NumericColumnStats).std)}</div>
+                          <div className="text-gray-500">variance</div>
+                          <div className="font-mono text-gray-400 text-right">{fmtNum((stat as NumericColumnStats).variance)}</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 min-h-0">
+                      {dist ? (
+                        dist.kind === 'numeric' ? (
+                          <Histogram
+                            data={(dist as NumericDistribution).bins}
+                            compact
+                          />
+                        ) : (
+                          <BarChart
+                            data={(dist as StringDistribution).categories}
+                            horizontal
+                            compact
+                          />
+                        )
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-[10px] text-gray-600 italic border border-gray-800/30 rounded">
+                          {statsLoading ? 'loading…' : '—'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </OverlayScrollbar>
+    </div>
+  );
 
   return (
     <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-gray-300 overflow-hidden font-sans">
@@ -259,17 +490,19 @@ export const DataViewWindow: React.FC = () => {
         )}
       </div>
 
-      {/* Main Content */}
-      <OverlayScrollbar
-        ref={scrollRef}
-        onScroll={handleScroll}
-        direction="both"
-        className="flex-1 min-h-0 bg-[var(--workbench-bg)]"
-      >
+      {/* Main Content: 左侧表格 + 右侧列统计 */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <OverlayScrollbar
+          ref={scrollRef}
+          onScroll={handleScroll}
+          direction="both"
+          className="flex-1 min-h-0 bg-[var(--workbench-bg)]"
+          scrollbarOffsetTop={headerHeight}
+        >
         {selectedDf ? (
           <div className="min-w-full inline-block align-middle">
             <table className="min-w-full border-collapse">
-              <thead className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
+              <thead ref={headerRef} className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
                 <tr>
                   <th className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 w-12 text-center">#</th>
                   {columns.map((col, i) => (
@@ -346,6 +579,9 @@ export const DataViewWindow: React.FC = () => {
           </div>
         )}
       </OverlayScrollbar>
+
+        {selectedDf && columns.length > 0 && <RightPanel />}
+      </div>
     </div>
   );
 };

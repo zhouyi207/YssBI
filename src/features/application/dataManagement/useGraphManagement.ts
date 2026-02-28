@@ -2,7 +2,6 @@ import { useCallback, useRef } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
-import { getUniqueName } from '@/shared/utils';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { logger } from '@/utils/appLogger';
 
@@ -47,58 +46,42 @@ export function useGraphManagement(
     }
   }, []);
 
+  /** 创建后是否自动打开（WatermarkView/Menubar 为 true，Sidebar 为 false） */
+  type AddGraphOptions = { openAfterCreate?: boolean };
+
   // Events
-  const addEvent = useCallback(async (name?: string) => {
-    logger.graph.debug(`addEvent called with name: ${name}`, 'GraphManagement');
-    
-    const metaStore = useGraphMetaStore.getState();
-    const events: Record<string, Graph> = {};
-    for (const [id, meta] of Object.entries(metaStore.graphs)) {
-      if (meta.type === 'event') {
-        const g = getGraphById(id);
-        if (g) events[id] = g as unknown as Graph;
-      }
-    }
-    
-    const finalName = getUniqueName(name || "New Event", Object.values(events));
-    
-    logger.graph.debug(`Creating event: ${finalName}`, 'GraphManagement');
-    
+  const addEvent = useCallback(async (name?: string, options?: AddGraphOptions) => {
+    const openAfterCreate = options?.openAfterCreate ?? false;
+
+    logger.graph.debug(`addEvent called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
+
+    const baseName = name || "New Event";
+    logger.graph.debug(`Creating event: ${baseName}`, 'GraphManagement');
+
     try {
-      // 调用后端 API 创建 Event，获取 ID
-      const id = await GraphService.createEvent(finalName);
-      
+      const id = await GraphService.createEvent(baseName);
+
       logger.graph.info(`Event creation request sent, ID: ${id}`, 'GraphManagement');
-      
-      const timeoutId = setTimeout(() => {
-        const action = pendingActionsRef.current.get(id);
-        if (action) {
-          logger.graph.warn(`EventCreated event not received for ${id}`, 'GraphManagement');
-          pendingActionsRef.current.delete(id);
-          showToast?.(`创建 Event 超时: ${action.name}`, 'error');
-        }
-      }, 10000);
-      
-      // 注册待处理操作：当后端事件到达时打开这个 event
-      pendingActionsRef.current.set(id, {
-        callback: () => {
-          const graph = getGraphById(id);
-          if (graph) {
-            logger.graph.debug(`Opening newly created event: ${id}`, 'GraphManagement');
-            openGraph(id, graph.name, "event", graph);
-          }
-        },
-        timestamp: Date.now(),
-        timeout: timeoutId,
-        name: finalName,
-      });
-      
-      // 切换到 events 标签页
+
+      if (openAfterCreate) {
+        // 方案 A：创建成功后立即用 get_graph 拉取数据并打开，不依赖事件
+        const graph = await GraphService.getGraph(id);
+        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'event', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(id, {
+          ...graph,
+          nodes: graph.nodes ?? [],
+          pins: graph.pins ?? [],
+          connections: graph.connections ?? { connections: [] },
+          canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
+        } as any);
+        logger.graph.debug(`Opening newly created event: ${id}`, 'GraphManagement');
+        openGraph(id, graph.name, "event", graph);
+      } else {
+        // Sidebar：不注册打开回调，事件到达后仅由 EventCreatedHandler 加入 store，不自动打开 tab
+      }
+
       switchSidebarTab('graphs');
-      
-      // 清理过期的 actions
       cleanupExpiredActions();
-      
     } catch (error) {
       logger.graph.error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Event 失败: ${error}`, 'error');
@@ -163,51 +146,35 @@ export function useGraphManagement(
   }, [closeTab]);
 
   // Functions
-  const addFunction = useCallback(async (name?: string) => {
-    logger.graph.debug(`addFunction called with name: ${name}`, 'GraphManagement');
-    
-    const metaStore = useGraphMetaStore.getState();
-    const functions: Record<string, Graph> = {};
-    for (const [id, meta] of Object.entries(metaStore.graphs)) {
-      if (meta.type === 'function') {
-        const g = getGraphById(id);
-        if (g) functions[id] = g as unknown as Graph;
-      }
-    }
-    
-    const finalName = getUniqueName(name || "New Function", Object.values(functions));
-    
-    logger.graph.debug(`Creating function: ${finalName}`, 'GraphManagement');
-    
+  const addFunction = useCallback(async (name?: string, options?: AddGraphOptions) => {
+    const openAfterCreate = options?.openAfterCreate ?? false;
+
+    logger.graph.debug(`addFunction called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
+
+    const baseName = name || "New Function";
+    logger.graph.debug(`Creating function: ${baseName}`, 'GraphManagement');
+
     try {
-      const id = await GraphService.createFunction(finalName);
-      
+      const id = await GraphService.createFunction(baseName);
+
       logger.graph.info(`Function creation request sent, ID: ${id}`, 'GraphManagement');
-      
-      const timeoutId = setTimeout(() => {
-        const action = pendingActionsRef.current.get(id);
-        if (action) {
-          logger.graph.warn(`FunctionCreated event not received for ${id}`, 'GraphManagement');
-          pendingActionsRef.current.delete(id);
-          showToast?.(`创建 Function 超时: ${action.name}`, 'error');
-        }
-      }, 10000);
-      
-      pendingActionsRef.current.set(id, {
-        callback: () => {
-          const graph = getGraphById(id);
-          if (graph) {
-            logger.graph.debug(`Opening newly created function: ${id}`, 'GraphManagement');
-            openGraph(id, graph.name, "function", graph);
-          }
-        },
-        timestamp: Date.now(),
-        timeout: timeoutId,
-        name: finalName,
-      });
+
+      if (openAfterCreate) {
+        const graph = await GraphService.getGraph(id);
+        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'function', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(id, {
+          ...graph,
+          nodes: graph.nodes ?? [],
+          pins: graph.pins ?? [],
+          connections: graph.connections ?? { connections: [] },
+          canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
+        } as any);
+        logger.graph.debug(`Opening newly created function: ${id}`, 'GraphManagement');
+        openGraph(id, graph.name, "function", graph);
+      }
+
       switchSidebarTab('graphs');
       cleanupExpiredActions();
-      
     } catch (error) {
       logger.graph.error(`Failed to create function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Function 失败: ${error}`, 'error');
@@ -269,51 +236,35 @@ export function useGraphManagement(
   }, [closeTab]);
 
   // Macros
-  const addMacro = useCallback(async (name?: string) => {
-    logger.graph.debug(`addMacro called with name: ${name}`, 'GraphManagement');
-    
-    const metaStore = useGraphMetaStore.getState();
-    const macros: Record<string, Graph> = {};
-    for (const [id, meta] of Object.entries(metaStore.graphs)) {
-      if (meta.type === 'macro') {
-        const g = getGraphById(id);
-        if (g) macros[id] = g as unknown as Graph;
-      }
-    }
-    
-    const finalName = getUniqueName(name || "New Macro", Object.values(macros));
-    
-    logger.graph.debug(`Creating macro: ${finalName}`, 'GraphManagement');
-    
+  const addMacro = useCallback(async (name?: string, options?: AddGraphOptions) => {
+    const openAfterCreate = options?.openAfterCreate ?? false;
+
+    logger.graph.debug(`addMacro called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
+
+    const baseName = name || "New Macro";
+    logger.graph.debug(`Creating macro: ${baseName}`, 'GraphManagement');
+
     try {
-      const id = await GraphService.createMacro(finalName);
-      
+      const id = await GraphService.createMacro(baseName);
+
       logger.graph.info(`Macro creation request sent, ID: ${id}`, 'GraphManagement');
-      
-      const timeoutId = setTimeout(() => {
-        const action = pendingActionsRef.current.get(id);
-        if (action) {
-          logger.graph.warn(`MacroCreated event not received for ${id}`, 'GraphManagement');
-          pendingActionsRef.current.delete(id);
-          showToast?.(`创建 Macro 超时: ${action.name}`, 'error');
-        }
-      }, 10000);
-      
-      pendingActionsRef.current.set(id, {
-        callback: () => {
-          const graph = getGraphById(id);
-          if (graph) {
-            logger.graph.debug(`Opening newly created macro: ${id}`, 'GraphManagement');
-            openGraph(id, graph.name, "macro", graph);
-          }
-        },
-        timestamp: Date.now(),
-        timeout: timeoutId,
-        name: finalName,
-      });
+
+      if (openAfterCreate) {
+        const graph = await GraphService.getGraph(id);
+        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'macro', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
+        useGraphDataStore.getState().addGraphFromData(id, {
+          ...graph,
+          nodes: graph.nodes ?? [],
+          pins: graph.pins ?? [],
+          connections: graph.connections ?? { connections: [] },
+          canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
+        } as any);
+        logger.graph.debug(`Opening newly created macro: ${id}`, 'GraphManagement');
+        openGraph(id, graph.name, "macro", graph);
+      }
+
       switchSidebarTab('graphs');
       cleanupExpiredActions();
-      
     } catch (error) {
       logger.graph.error(`Failed to create macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       showToast?.(`创建 Macro 失败: ${error}`, 'error');

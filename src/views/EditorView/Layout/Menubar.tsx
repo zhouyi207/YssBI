@@ -138,9 +138,9 @@ export function Menubar() {
   } = useMenubar();
 
   const fileItems: MenuItem[] = [
-    { label: "New Event Graph", shortcut: "Ctrl+N", onClick: () => addEvent() },
-    { label: "New Function", onClick: () => addFunction() },
-    { label: "New Macro", onClick: () => addMacro() },
+    { label: "New Event Graph", shortcut: "Ctrl+N", onClick: () => addEvent(undefined, { openAfterCreate: true }) },
+    { label: "New Function", onClick: () => addFunction(undefined, { openAfterCreate: true }) },
+    { label: "New Macro", onClick: () => addMacro(undefined, { openAfterCreate: true }) },
     { label: "-" },
     { label: "Open Project...", shortcut: "Ctrl+O", onClick: () => importGraph() },
     { label: "-" },

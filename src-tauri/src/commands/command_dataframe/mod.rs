@@ -1,5 +1,5 @@
-use crate::database::{DatabaseDecl, DatabaseInstance, DatabaseState};
-use crate::project::ProjectState;
+use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
+use crate::project::{unique_name, ProjectState};
 use crate::schema::DatabaseEngineDTO;
 use polars::prelude::*;
 use serde::Serialize;
@@ -84,10 +84,28 @@ pub fn load_database(
     };
 
     let id = format!("db-{}", Uuid::new_v4());
-    let name = match &engine {
+    let base_name = match &engine {
         DatabaseEngineDTO::Csv { path, .. } => name_from_path(path),
         DatabaseEngineDTO::Parquet { path, .. } => name_from_path(path),
         _ => id.clone(),
+    };
+
+    let name = {
+        let store = state.project_store.read().unwrap();
+        let existing: Vec<String> = store
+            .databases
+            .values()
+            .map(|db| {
+                match &db.decl.engine {
+                    DatabaseEngine::Csv { path, .. } | DatabaseEngine::Parquet { path, .. } => {
+                        name_from_path(path)
+                    }
+                    DatabaseEngine::InMemory { name } => name.clone(),
+                    _ => db.decl.id.clone(),
+                }
+            })
+            .collect();
+        unique_name::unique_name(&base_name, existing.iter().map(|s| s.as_str()))
     };
 
     let decl = DatabaseDecl {
@@ -218,6 +236,48 @@ pub fn get_database_rows(
         .collect();
 
     serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_column_stats(
+    state: State<ProjectState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let view = state
+        .access_database(&id, crate::database::DatabaseAccess::Execution)
+        .map_err(|e| format!("Failed to access database: {}", e))?;
+
+    let stats = yss_sci::database::compute_all_column_stats(&view.dataframe);
+
+    serde_json::to_value(stats).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_column_distribution(
+    state: State<ProjectState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let view = state
+        .access_database(&id, crate::database::DatabaseAccess::Execution)
+        .map_err(|e| format!("Failed to access database: {}", e))?;
+
+    let dists = yss_sci::database::compute_all_column_distributions(&view.dataframe);
+
+    serde_json::to_value(dists).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_dataset_overview(
+    state: State<ProjectState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let view = state
+        .access_database(&id, crate::database::DatabaseAccess::Execution)
+        .map_err(|e| format!("Failed to access database: {}", e))?;
+
+    let overview = yss_sci::database::compute_dataset_overview(&view.dataframe);
+
+    serde_json::to_value(overview).map_err(|e| e.to_string())
 }
 
 fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {

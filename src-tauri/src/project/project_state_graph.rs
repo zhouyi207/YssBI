@@ -1,14 +1,26 @@
+use super::unique_name;
 use super::ProjectState;
 use crate::graph::{GraphInstance, GraphId, GraphKind};
 use std::sync::Arc;
 
 impl ProjectState {
     pub fn add_graph(&self, graph_name: &str, graph_kind: GraphKind) -> GraphInstance {
+        let unique_graph_name = {
+            let project_data = self.project_data.read().unwrap();
+            let existing: Vec<&str> = project_data
+                .graphs
+                .values()
+                .filter(|g| g.kind == graph_kind)
+                .map(|g| g.name.as_str())
+                .collect();
+            unique_name::unique_name(graph_name, existing)
+        };
+
         let graph_register = {
             let store = self.project_store.read().unwrap();
             Arc::clone(&store.node_register)
         };
-        let mut graph_data = GraphInstance::new(graph_name, graph_kind, graph_register);
+        let mut graph_data = GraphInstance::new(&unique_graph_name, graph_kind, graph_register);
         graph_data.set_schema_provider(self.build_schema_provider());
         let graph_id = graph_data.id;
         self.project_data

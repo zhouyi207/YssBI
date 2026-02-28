@@ -4,7 +4,6 @@ import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
-import { getUniqueName } from '@/shared/utils';
 import { logger } from '@/utils/appLogger';
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
@@ -27,9 +26,7 @@ export function triggerImportData() {
                 inferSchemaLength: 1000,
               },
             });
-            const existingDbs = Object.values(useDatabaseStore.getState().databases) as Array<{ name: string }>;
-            const uniqueName = getUniqueName(result.name, existingDbs);
-            useDatabaseStore.getState().addDatabase(result.id, { ...result, name: uniqueName });
+            useDatabaseStore.getState().addDatabase(result.id, { ...result });
             uiStore.showToast(`CSV 数据导入成功: ${result.rowCount} 行`, 'success');
           }
         } catch (error) {

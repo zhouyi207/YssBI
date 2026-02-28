@@ -124,6 +124,9 @@ pub fn run() {
             delete_database,
             get_database_meta,
             get_database_rows,
+            get_column_stats,
+            get_column_distribution,
+            get_dataset_overview,
             // ==================== 日志 ====================
             frontend_log,
             get_logs,

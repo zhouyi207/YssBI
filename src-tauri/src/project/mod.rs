@@ -1,6 +1,7 @@
 //! 项目管理模块
 
 pub mod project_data;
+pub mod unique_name;
 pub mod project_error;
 pub mod project_metadata;
 pub mod project_store;

@@ -16,13 +16,15 @@
 - [x] ~~ols 只返回 ols model, 而 ols_summary 返回 ols result, ols result 包含了 ols~~
 - [x] 在这里添加了四个库 katex react-markdown rehype-katex remark-math @types/katex ~~ols summary view 可以添加一个公式~~
 - [x] 在这里添加了两个库 @types/d3 d3 ~~ols summary view 中再添加一个残差图呗，就简单的 scatter 图就好了使用 d3 吧，拓展性太强了比 chartjs 要好很多~~
-
+- [x] 修复了测试报错情况，~~测试目前由于 execution::new() 修改了导致测试报错~~
+- [x] 获取 unique name 迁移到后端，~~在快速创建的时候，可能由于后端的数据并没有反应到前端，导致前端数据不及时从而创建两个相同的 event~~
 
 # TODOLIST
 
 复制粘贴节点以及项目的保存不够完善
 
 类型推断系统不够完善
+
 type infer 使用 dirty 的形式推测，不要每次都推测全量类型
 
 function, macro 功能添加（感觉没必要区分 function 和 macro ）
@@ -33,14 +35,13 @@ ols 节点的 evaltor 逻辑有巨大的优化空间
 
 执行动画有一点bug，节点在获取数据执行其他节点的时候本身状态并没有执行完毕但是ui上显示执行完毕了
 
+node 的 tooltip 功能，可以查看节点的信息
 
 为了解决 dummy 问题，例如个体效应和时间效应的哑变量问题，可能需要在 dataseries 中添加额外信息进而去提出多出来的哑变量：计划做一个 add dummy info 节点，下方有个下拉列表或者文本框选择需要设置 dummy 的信息，仅对 dataseries 为 string 的信息管用。
 
 面板数据，可能需要对 dataframe 数据类型也加上 info，来表示个体信息和时间信息 dataseries
 
 未来可视化需要加上地图，地图应该使用下载的方式下载到数据库中，下载完毕后才能使用；
-
-
 
 settingview.tsx 中，要注意区分，首先 dataframe 是必须要设置形状和颜色的，然后 array, dataseries 等复合类型应该是控制形状，基础类型控制颜色，同时基础类型应该是相同的形状，any 和 受限制的 any 应该是颜色，应该区分 all any, base any, part any
 
@@ -53,13 +54,9 @@ dataframe 抽样方法，是在 ols 配置还是 dataframe 层面配置呢
 参数网格 -》 数据变换（异常值检验，对数变换等等操作） -》 检验结果 -》 存储
 
 
-
-
 ols_summary 打开 ols_result_viewer 并返回 ols_result, 这里面存储了一些统计模型信息可以使用节点进行提取；这些节点应该是使用类似于函数或者其他功能的注册的方式而不是定义，不然后续结构体太多了这里会爆炸
 
 ols model 可以引申出一个新的节点 predict，这个节点可以使用 endog, exog 两个玩意获得拟合值，然后真实值 - 拟合值可以得到残差。这是基本操作不应该删除
-
-
 
 catelog math 节点应该是 any
 

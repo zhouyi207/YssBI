@@ -14,21 +14,21 @@ export const WatermarkView = () => {
       </div>
       {/* Shortcut Hints */}
       <div className="flex flex-col gap-4 items-start text-gray-500 text-sm font-medium">
-        <div className="flex items-center gap-12 justify-between w-full min-w-[340px] hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addEvent()}>
+        <div className="flex items-center gap-12 justify-between w-full min-w-[340px] hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addEvent(undefined, { openAfterCreate: true })}>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
             <span>新建 Event Graph</span>
           </div>
           <span className="text-[10px] text-gray-600 italic">Core logic</span>
         </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addFunction()}>
+        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addFunction(undefined, { openAfterCreate: true })}>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
             <span>新建 Function</span>
           </div>
           <span className="text-[10px] text-gray-600 italic">Reusable routine</span>
         </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addMacro()}>
+        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addMacro(undefined, { openAfterCreate: true })}>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
             <span>新建 Macro</span>

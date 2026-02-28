@@ -1,3 +1,4 @@
+use super::unique_name;
 use super::ProjectState;
 use crate::graph::value::{DataType, DataValue};
 use crate::variable::VariableId;
@@ -13,9 +14,15 @@ impl ProjectState {
         scope: VariableScope,
         tags: Vec<String>,
     ) -> VariableInstance {
+        let unique_var_name = {
+            let project_data = self.project_data.read().unwrap();
+            let existing: Vec<&str> = project_data.variables.values().map(|v| v.name.as_str()).collect();
+            unique_name::unique_name(name, existing)
+        };
+
         let variable_instance = VariableInstance {
             id: VariableId::new(),
-            name: name.to_string(),
+            name: unique_var_name,
             data_type: data_type,
             data_value: data_value,
             description: description.to_string(),

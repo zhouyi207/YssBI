@@ -7905,6 +7905,9 @@ dependencies = [
  "ndarray",
  "ndarray-stats",
  "num-traits",
+ "polars",
+ "serde",
+ "serde_json",
  "statrs",
 ]
 
@@ -7919,6 +7922,7 @@ dependencies = [
  "ndarray",
  "ndarray-stats",
  "polars",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

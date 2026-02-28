@@ -13,7 +13,7 @@ interface UseEditorKeyboardProps {
   saveGraph: () => void;
   saveGraphAs: () => void;
   importGraph: () => void;
-  addEvent: () => void;
+  addEvent: (name?: string, options?: { openAfterCreate?: boolean }) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null, targetGroupId?: string) => void;
   splitEditorRight: (groupId: string) => void;
@@ -111,7 +111,7 @@ export function useEditorKeyboard({
         importGraph();
       } else if (isControlKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        addEvent();
+        addEvent(undefined, { openAfterCreate: true });
       } else if (isControlKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
         const layoutStore = useLayoutStore.getState();
