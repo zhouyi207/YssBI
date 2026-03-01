@@ -1,3 +1,4 @@
+use num_traits::{Float, One};
 use polars::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -92,10 +93,16 @@ fn build_histogram(ca: &Float64Chunked, num_bins: usize) -> Vec<HistogramBin> {
         return vec![];
     }
 
-    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
-    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min = values
+        .iter()
+        .cloned()
+        .fold(f64::infinity(), f64::min);
+    let max = values
+        .iter()
+        .cloned()
+        .fold(f64::neg_infinity(), f64::max);
 
-    if (max - min).abs() < f64::EPSILON {
+    if (max - min).abs() < f64::epsilon() {
         return vec![HistogramBin {
             label: format!("{:.2}", min),
             count: values.len(),
@@ -111,7 +118,7 @@ fn build_histogram(ca: &Float64Chunked, num_bins: usize) -> Vec<HistogramBin> {
         counts[idx] += 1;
     }
 
-    let precision = if bin_width >= 1.0 { 1 } else { 2 };
+    let precision = if bin_width >= f64::one() { 1 } else { 2 };
 
     counts
         .into_iter()

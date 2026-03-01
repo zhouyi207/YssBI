@@ -9,9 +9,13 @@ use std::str::FromStr;
 pub enum DataType {
     // 基础类型
     Boolean,
+    
+    // 为数据库展示预留的类型
     Int32,
-    Int64,
     Float32,
+
+    // 系统核心类型
+    Int64,
     Float64,
     String,
 
@@ -166,8 +170,8 @@ impl DataType {
             DataType::Boolean => DataValue::Boolean(false),
             DataType::Int32 => DataValue::Int32(0),
             DataType::Int64 => DataValue::Int64(0),
-            DataType::Float32 => DataValue::Float32(0.0),
-            DataType::Float64 => DataValue::Float64(0.0),
+            DataType::Float32 => DataValue::Float32(num_traits::Zero::zero()),
+            DataType::Float64 => DataValue::Float64(num_traits::Zero::zero()),
             DataType::String => DataValue::String(String::new()),
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),

@@ -3,6 +3,7 @@ use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
+use num_traits::{One, Zero};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
@@ -68,8 +69,8 @@ fn convert_to_boolean(value: DataValue) -> Result<DataValue, String> {
         DataValue::Boolean(b) => Ok(DataValue::Boolean(b)),
         DataValue::Int32(i) => Ok(DataValue::Boolean(i != 0)),
         DataValue::Int64(i) => Ok(DataValue::Boolean(i != 0)),
-        DataValue::Float32(f) => Ok(DataValue::Boolean(f != 0.0)),
-        DataValue::Float64(f) => Ok(DataValue::Boolean(f != 0.0)),
+        DataValue::Float32(f) => Ok(DataValue::Boolean(!f.is_zero())),
+        DataValue::Float64(f) => Ok(DataValue::Boolean(!f.is_zero())),
         DataValue::String(s) => parse_boolean(&s)
             .map(DataValue::Boolean)
             .ok_or_else(|| format!("Cannot convert string '{}' to Boolean", s)),
@@ -80,7 +81,7 @@ fn convert_to_boolean(value: DataValue) -> Result<DataValue, String> {
 
 fn convert_to_int32(value: DataValue) -> Result<DataValue, String> {
     match value {
-        DataValue::Boolean(b) => Ok(DataValue::Int32(if b { 1 } else { 0 })),
+        DataValue::Boolean(b) => Ok(DataValue::Int32(if b { i32::one() } else { i32::zero() })),
         DataValue::Int32(i) => Ok(DataValue::Int32(i)),
         DataValue::Int64(i) => {
             if i >= i32::MIN as i64 && i <= i32::MAX as i64 {
@@ -92,46 +93,46 @@ fn convert_to_int32(value: DataValue) -> Result<DataValue, String> {
         DataValue::Float32(f) => Ok(DataValue::Int32(f as i32)),
         DataValue::Float64(f) => Ok(DataValue::Int32(f as i32)),
         DataValue::String(s) => s.parse::<i32>().map(DataValue::Int32).map_err(|_| format!("Cannot parse string '{}' as Int32", s)),
-        DataValue::Null => Ok(DataValue::Int32(0)),
+        DataValue::Null => Ok(DataValue::Int32(i32::zero())),
         _ => Err(format!("Cannot convert {:?} to Int32", value.value_type())),
     }
 }
 
 fn convert_to_int64(value: DataValue) -> Result<DataValue, String> {
     match value {
-        DataValue::Boolean(b) => Ok(DataValue::Int64(if b { 1 } else { 0 })),
+        DataValue::Boolean(b) => Ok(DataValue::Int64(if b { i64::one() } else { i64::zero() })),
         DataValue::Int32(i) => Ok(DataValue::Int64(i as i64)),
         DataValue::Int64(i) => Ok(DataValue::Int64(i)),
         DataValue::Float32(f) => Ok(DataValue::Int64(f as i64)),
         DataValue::Float64(f) => Ok(DataValue::Int64(f as i64)),
         DataValue::String(s) => s.parse::<i64>().map(DataValue::Int64).map_err(|_| format!("Cannot parse string '{}' as Int64", s)),
-        DataValue::Null => Ok(DataValue::Int64(0)),
+        DataValue::Null => Ok(DataValue::Int64(i64::zero())),
         _ => Err(format!("Cannot convert {:?} to Int64", value.value_type())),
     }
 }
 
 fn convert_to_float32(value: DataValue) -> Result<DataValue, String> {
     match value {
-        DataValue::Boolean(b) => Ok(DataValue::Float32(if b { 1.0 } else { 0.0 })),
+        DataValue::Boolean(b) => Ok(DataValue::Float32(if b { f32::one() } else { f32::zero() })),
         DataValue::Int32(i) => Ok(DataValue::Float32(i as f32)),
         DataValue::Int64(i) => Ok(DataValue::Float32(i as f32)),
         DataValue::Float32(f) => Ok(DataValue::Float32(f)),
         DataValue::Float64(f) => Ok(DataValue::Float32(f as f32)),
         DataValue::String(s) => s.parse::<f32>().map(DataValue::Float32).map_err(|_| format!("Cannot parse string '{}' as Float32", s)),
-        DataValue::Null => Ok(DataValue::Float32(0.0)),
+        DataValue::Null => Ok(DataValue::Float32(f32::zero())),
         _ => Err(format!("Cannot convert {:?} to Float32", value.value_type())),
     }
 }
 
 fn convert_to_float64(value: DataValue) -> Result<DataValue, String> {
     match value {
-        DataValue::Boolean(b) => Ok(DataValue::Float64(if b { 1.0 } else { 0.0 })),
+        DataValue::Boolean(b) => Ok(DataValue::Float64(if b { f64::one() } else { f64::zero() })),
         DataValue::Int32(i) => Ok(DataValue::Float64(i as f64)),
         DataValue::Int64(i) => Ok(DataValue::Float64(i as f64)),
         DataValue::Float32(f) => Ok(DataValue::Float64(f as f64)),
         DataValue::Float64(f) => Ok(DataValue::Float64(f)),
         DataValue::String(s) => s.parse::<f64>().map(DataValue::Float64).map_err(|_| format!("Cannot parse string '{}' as Float64", s)),
-        DataValue::Null => Ok(DataValue::Float64(0.0)),
+        DataValue::Null => Ok(DataValue::Float64(f64::zero())),
         _ => Err(format!("Cannot convert {:?} to Float64", value.value_type())),
     }
 }

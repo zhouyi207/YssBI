@@ -4,24 +4,6 @@ use crate::graph::PinInstance;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
 
-/// 默认 Pin 类型颜色（与前端 ThemeSettings 一致，保留精度信息）
-const DEFAULT_COLORS: &[(&str, &str)] = &[
-    ("exec", "#ffffff"),
-    ("Int32", "#35b2b2"),
-    ("Int64", "#2d9d9d"),
-    ("Float32", "#9ecd4d"),
-    ("Float64", "#8ebd45"),
-    ("bool", "#e06c75"),
-    ("string", "#e5c07b"),
-    ("date", "#c678dd"),
-    ("datetime", "#c678dd"),
-    ("dataframe", "#61afef"),
-    ("dataseries", "#56b6c2"),
-    ("object", "#abb2bf"),
-    ("oneof", "#7aabc4"),
-    ("array", "#d19a66"),
-];
-
 /// 将 DataType 映射为前端 pin type 字符串（保留精度：Int32/Int64/Float32/Float64）
 /// 容器类型（Array, DataSeries）会递归到内部类型
 pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
@@ -49,14 +31,6 @@ pub fn data_type_to_container(dt: &DataType) -> Option<&'static str> {
         DataType::DataSeries(_) => Some("dataseries"),
         _ => None,
     }
-}
-
-/// 根据 pin type 获取颜色
-fn pin_type_to_color(pin_type: &str) -> Option<&'static str> {
-    DEFAULT_COLORS
-        .iter()
-        .find(|(t, _)| *t == pin_type)
-        .map(|(_, c)| *c)
 }
 
 /// 从 PinDataTypeDefinition 提取 DataType（仅 Concrete 类型）

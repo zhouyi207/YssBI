@@ -51,6 +51,7 @@ crossbeam = "0.8.4"
 thiserror = "2.0.18"
 dashmap = "6.1.0"
 atomic_enum = "0.3.0"
+num-traits = "0.2"
 regex = "1"
 
 # [profile.release]

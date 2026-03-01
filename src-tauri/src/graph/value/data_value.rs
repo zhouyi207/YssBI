@@ -1,6 +1,7 @@
 //! 数据值表示
 
 use super::DataType;
+use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::{Add, Sub, Mul, Div};
@@ -180,8 +181,8 @@ impl DataValue {
             DataValue::Boolean(b) => Some(*b),
             DataValue::Int32(n) => Some(*n != 0),
             DataValue::Int64(n) => Some(*n != 0),
-            DataValue::Float32(n) => Some(*n != 0.0),
-            DataValue::Float64(n) => Some(*n != 0.0),
+            DataValue::Float32(n) => Some(!n.is_zero()),
+            DataValue::Float64(n) => Some(!n.is_zero()),
             DataValue::String(s) => Some(!s.is_empty()),
             DataValue::Null => Some(false),
             _ => None,
@@ -194,7 +195,7 @@ impl DataValue {
             DataValue::Int64(i) => Some(*i as i32),
             DataValue::Float32(f) => Some(*f as i32),
             DataValue::Float64(f) => Some(*f as i32),
-            DataValue::Boolean(b) => Some(if *b { 1 } else { 0 }),
+            DataValue::Boolean(b) => Some(if *b { i32::one() } else { i32::zero() }),
             _ => None,
         }
     }
@@ -213,7 +214,7 @@ impl DataValue {
             DataValue::Float64(f) => Some(*f as f32),
             DataValue::Int32(i) => Some(*i as f32),
             DataValue::Int64(i) => Some(*i as f32),
-            DataValue::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
+            DataValue::Boolean(b) => Some(if *b { f32::one() } else { f32::zero() }),
             _ => None,
         }
     }
@@ -403,12 +404,11 @@ impl Div for DataValue {
     type Output = Result<DataValue, String>;
 
     fn div(self, rhs: Self) -> Self::Output {
-        // 检查除零
         let is_zero = match &rhs {
-            DataValue::Int32(v) => *v == 0,
-            DataValue::Int64(v) => *v == 0,
-            DataValue::Float32(v) => *v == 0.0,
-            DataValue::Float64(v) => *v == 0.0,
+            DataValue::Int32(v) => v.is_zero(),
+            DataValue::Int64(v) => v.is_zero(),
+            DataValue::Float32(v) => v.is_zero(),
+            DataValue::Float64(v) => v.is_zero(),
             _ => false,
         };
         

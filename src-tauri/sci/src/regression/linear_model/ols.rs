@@ -1,7 +1,7 @@
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
-use num_traits::Pow;
+use num_traits::{One, Pow, Signed, Zero};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
@@ -124,7 +124,7 @@ impl OLS {
             .map(|(b, se)| b / se)
             .collect();
 
-        let t_dist = StudentsT::new(0.0, 1.0, df_redidual as f64).unwrap();
+        let t_dist = StudentsT::new(f64::zero(), f64::one(), df_redidual as f64).unwrap();
         let p_values = t_values
             .iter()
             .map(|t| 2.0 * (1.0 - t_dist.cdf(t.abs())))

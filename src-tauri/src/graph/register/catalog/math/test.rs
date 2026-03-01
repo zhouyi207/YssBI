@@ -8,6 +8,8 @@ mod tests {
     };
     use std::sync::{Arc, Mutex};
 
+    const FLOAT_TOL: f64 = 1e-4;
+
     /// 创建测试用的注册表
     fn create_test_registry() -> Arc<NodeRegistry> {
         let registry = Arc::new(NodeRegistry::new());
@@ -68,7 +70,7 @@ mod tests {
         };
 
         if let DataValue::Float64(val) = result_value {
-            assert!((val - 6.0).abs() < 0.0001, "Expected 6.0, got {}", val);
+            assert!((val - 6.0).abs() < FLOAT_TOL, "Expected 6.0, got {}", val);
         } else {
             panic!("Expected Float64, got {:?}", result_value);
         }
@@ -127,7 +129,7 @@ mod tests {
         };
 
         if let DataValue::Float64(val) = result_value {
-            assert!((val - 7.0).abs() < 0.0001, "Expected 7.0, got {}", val);
+            assert!((val - 7.0).abs() < FLOAT_TOL, "Expected 7.0, got {}", val);
         } else {
             panic!("Expected Float64, got {:?}", result_value);
         }
@@ -186,7 +188,7 @@ mod tests {
         };
 
         if let DataValue::Float64(val) = result_value {
-            assert!((val - 10.0).abs() < 0.0001, "Expected 10.0, got {}", val);
+            assert!((val - 10.0).abs() < FLOAT_TOL, "Expected 10.0, got {}", val);
         } else {
             panic!("Expected Float64, got {:?}", result_value);
         }
@@ -245,7 +247,7 @@ mod tests {
         };
 
         if let DataValue::Float64(val) = result_value {
-            assert!((val - 5.0).abs() < 0.0001, "Expected 5.0, got {}", val);
+            assert!((val - 5.0).abs() < FLOAT_TOL, "Expected 5.0, got {}", val);
         } else {
             panic!("Expected Float64, got {:?}", result_value);
         }

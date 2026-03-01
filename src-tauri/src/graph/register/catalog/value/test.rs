@@ -109,7 +109,8 @@ mod tests {
             .expect("Failed to get value");
 
         if let DataValue::Float64(val) = value {
-            assert!((val - 3.14).abs() < 0.0001);
+            const TOL: f64 = 1e-4;
+            assert!((val - 3.14).abs() < TOL);
         } else {
             panic!("Expected Float64");
         }
