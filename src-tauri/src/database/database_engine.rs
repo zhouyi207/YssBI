@@ -1,6 +1,6 @@
 use polars::error::{PolarsError, PolarsResult};
 use polars::prelude::LazyFileListReader;
-use polars::prelude::{col, LazyCsvReader, LazyFrame, PlPath};
+use polars::prelude::{col, IntoLazy, LazyCsvReader, LazyFrame, PlPath};
 use std::path::PathBuf;
 
 use super::DatabaseEngineSql;
@@ -17,16 +17,23 @@ pub enum DatabaseEngine {
         infer_schema_length: Option<usize>,
     },
 
-    /// SQLite（本地文件）
+    /// SQLite（本地文件），table 为选中的表名
     Sql {
         engine: DatabaseEngineSql,
         connection_string: String,
+        table: String,
     },
 
     /// Parquet file
     Parquet {
         path: String,
         columns: Option<Vec<String>>,
+    },
+
+    /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
+    Excel {
+        path: String,
+        sheet: String,
     },
 
     /// In-memory DataFrame (not serializable, runtime only)
@@ -64,9 +71,16 @@ impl DatabaseEngine {
                 Ok(reader)
             }
 
-            DatabaseEngine::Sql { .. } => {
-                // SQL → LazyFrame（可能是 Arrow / DataFusion）
-                todo!()
+            DatabaseEngine::Sql { engine, connection_string, table } => {
+                let df = super::sql_reader::read_table_to_dataframe(engine, connection_string, table)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))?;
+                Ok(df.lazy())
+            }
+
+            DatabaseEngine::Excel { path, sheet } => {
+                let df = super::excel_reader::read_sheet_to_dataframe(path, sheet)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))?;
+                Ok(df.lazy())
             }
 
             DatabaseEngine::InMemory { .. } => Err(PolarsError::ComputeError(

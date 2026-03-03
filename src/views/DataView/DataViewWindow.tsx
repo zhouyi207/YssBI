@@ -4,6 +4,7 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
 import { useDatabaseStore, useColumnStatsStore, useColumnDistributionStore, useDatasetOverviewStore } from '@/features/core/dataStore';
 import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard } from '@/features/application/dataView';
+import { DATA_VIEW_ROW_HEIGHT } from '@/app/appConfig/default';
 import { TitleBar, Toolbar } from './Layout';
 import { DataTable } from './Table';
 import { TableContextMenu } from './ContextMenu';
@@ -120,11 +121,12 @@ export const DataViewWindow: React.FC = () => {
     return () => window.removeEventListener('click', dismiss);
   }, []);
 
-  // Scroll handler for infinite loading
+  // Scroll handler for infinite loading（固定总高度下：当可见行接近已加载末尾时触发加载）
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const t = e.currentTarget;
-    if (t.scrollHeight - t.scrollTop - t.clientHeight < 100) dataLoader.loadMoreRows();
-  }, [dataLoader.loadMoreRows]);
+    const lastVisibleRow = Math.floor((t.scrollTop + t.clientHeight) / DATA_VIEW_ROW_HEIGHT);
+    if (lastVisibleRow >= dataLoader.loadedRows.length - 20) dataLoader.loadMoreRows();
+  }, [dataLoader.loadMoreRows, dataLoader.loadedRows.length]);
 
   // Context menu handler
   const handleContextMenu = useCallback((e: React.MouseEvent, target: { type: 'cell' | 'header' | 'row'; rowIndex?: number; colIndex?: number; colName?: string }) => {

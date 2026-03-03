@@ -87,6 +87,8 @@ pub fn load_database(
     let base_name = match &engine {
         DatabaseEngineDTO::Csv { path, .. } => name_from_path(path),
         DatabaseEngineDTO::Parquet { path, .. } => name_from_path(path),
+        DatabaseEngineDTO::Sql { table, .. } => table.clone(),
+        DatabaseEngineDTO::Excel { sheet, .. } => sheet.clone(),
         _ => id.clone(),
     };
 
@@ -100,6 +102,8 @@ pub fn load_database(
                     DatabaseEngine::Csv { path, .. } | DatabaseEngine::Parquet { path, .. } => {
                         name_from_path(path)
                     }
+                    DatabaseEngine::Sql { table, .. } => table.clone(),
+                    DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
                     DatabaseEngine::InMemory { name } => name.clone(),
                     _ => db.decl.id.clone(),
                 }
@@ -135,6 +139,33 @@ pub fn load_database(
 }
 
 #[tauri::command]
+pub fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, String> {
+    use crate::database::DatabaseEngineSql;
+    crate::database::sql_reader::list_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, &db_path)
+}
+
+#[tauri::command]
+pub fn list_sql_tables(
+    engine: String,
+    connection_string: String,
+) -> Result<Vec<String>, String> {
+    use crate::database::DatabaseEngineSql;
+    let engine_enum = match engine.as_str() {
+        "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
+        "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
+            charset: "utf8mb4".to_string(),
+        },
+        _ => return Err(format!("Unsupported SQL engine: {}", engine)),
+    };
+    crate::database::sql_reader::list_tables(&engine_enum, &connection_string)
+}
+
+#[tauri::command]
+pub fn list_excel_sheets(file_path: String) -> Result<Vec<String>, String> {
+    crate::database::excel_reader::list_sheets(&file_path)
+}
+
+#[tauri::command]
 pub fn get_database_meta(
     state: State<ProjectState>,
     id: String,
@@ -162,6 +193,8 @@ pub fn get_database_meta(
             match &db.decl.engine {
                 crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
                 crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
+                crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
+                crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
                 crate::database::DatabaseEngine::InMemory { name } => name.clone(),
                 _ => id.clone(),
             }

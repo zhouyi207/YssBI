@@ -1,6 +1,9 @@
 pub mod database_access;
 pub mod database_decl;
 pub mod database_engine;
+pub mod excel_reader;
+pub mod sql_reader;
+pub mod sqlite_reader;
 pub mod database_engine_sql;
 pub mod database_error;
 pub mod database_instance;

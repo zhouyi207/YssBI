@@ -18,10 +18,24 @@ export interface ParquetEngineSpec {
     columns?: string[];
 }
 
+/** SQL 引擎配置（选表方案），支持 SQLite / PostgreSQL / MySQL */
+export type SqlEngineSpec =
+    | { engine: { sqlite: { autoCreate: boolean } }; connectionString: string; table: string }
+    | { engine: { postgres: { ssl?: boolean } }; connectionString: string; table: string }
+    | { engine: { mysql: { charset?: string } }; connectionString: string; table: string };
+
+/** Excel 引擎配置（选 Sheet 方案） */
+export interface ExcelEngineSpec {
+    path: string;
+    sheet: string;
+}
+
 /** 加载数据库的引擎配置（与后端 DatabaseEngineDTO 对应） */
 export type LoadDatabaseEngineSpec =
     | { csv: CsvEngineSpec }
-    | { parquet: ParquetEngineSpec };
+    | { parquet: ParquetEngineSpec }
+    | { sql: SqlEngineSpec }
+    | { excel: ExcelEngineSpec };
 
 /** 加载结果（与后端 LoadDatabaseResult 对应） */
 export interface LoadDatabaseResult {
@@ -49,6 +63,29 @@ export class DatabaseService {
      */
     static async getDatabaseMeta(id: string): Promise<LoadDatabaseResult> {
         return await invoke("get_database_meta", { id });
+    }
+
+    /**
+     * 列出 SQLite 数据库中的表
+     */
+    static async listSqliteTables(dbPath: string): Promise<string[]> {
+        return await invoke("list_sqlite_tables", { dbPath });
+    }
+
+    /**
+     * 列出 PostgreSQL / MySQL / MariaDB 数据库中的表
+     * @param engine 引擎类型：postgres|postgresql|mysql|mariadb
+     * @param connectionString 连接字符串，如 postgres://user:pass@host:5432/db 或 mysql://...
+     */
+    static async listSqlTables(engine: string, connectionString: string): Promise<string[]> {
+        return await invoke("list_sql_tables", { engine, connectionString });
+    }
+
+    /**
+     * 列出 Excel 文件中的 Sheet
+     */
+    static async listExcelSheets(filePath: string): Promise<string[]> {
+        return await invoke("list_excel_sheets", { filePath });
     }
 
     /**

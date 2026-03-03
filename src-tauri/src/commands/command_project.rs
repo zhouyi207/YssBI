@@ -39,6 +39,8 @@ fn extract_database_schema(instance: &DatabaseInstance) -> Option<(String, Vec<C
         match &instance.decl.engine {
             crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
             crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
+            crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
+            crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
             crate::database::DatabaseEngine::InMemory { name } => name.clone(),
             _ => instance.decl.id.clone(),
         }

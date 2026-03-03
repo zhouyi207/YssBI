@@ -16,6 +16,42 @@ export interface DialogOptions {
     onConfirm: () => void;
 }
 
+/** 导入数据源类型：文件类、SQL 数据库类、其他 */
+export type ImportDataSourceType =
+    | "csv"
+    | "xlsx"
+    | "sqlite"
+    | "postgres"
+    | "mysql"
+    | "mariadb"
+    | "api";
+
 export interface ImportDialogOptions {
-    onSelect: (type: "csv" | "xlsx" | "sql" | "api") => void;
+    onSelect: (type: ImportDataSourceType) => void;
+}
+
+export interface SqliteTableSelectDialogOptions {
+    dbPath: string;
+    tables: string[];
+    onSelect: (table: string) => void;
+}
+
+export interface ExcelSheetSelectDialogOptions {
+    filePath: string;
+    sheets: string[];
+    onSelect: (sheet: string) => void;
+}
+
+/** PostgreSQL / MySQL / MariaDB 连接配置弹窗 */
+export interface SqlConnectionDialogOptions {
+    engine: "postgres" | "mysql" | "mariadb";
+    onConnect: (connectionString: string) => void;
+}
+
+/** PostgreSQL / MySQL / MariaDB 选表弹窗（复用表选择 UI） */
+export interface SqlRemoteTableSelectDialogOptions {
+    connectionString: string;
+    engine: "postgres" | "mysql" | "mariadb";
+    tables: string[];
+    onSelect: (table: string) => void;
 }

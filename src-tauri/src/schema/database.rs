@@ -52,10 +52,12 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineDTO {
-    /// SQLite（本地文件）
+    /// SQLite（本地文件），table 为选中的表名
     Sql {
         engine: DatabaseEngineSqlDTO,
+        #[serde(rename = "connectionString", alias = "connection_string")]
         connection_string: String,
+        table: String,
     },
 
     /// CSV file
@@ -75,6 +77,12 @@ pub enum DatabaseEngineDTO {
         columns: Option<Vec<String>>,
     },
 
+    /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
+    Excel {
+        path: String,
+        sheet: String,
+    },
+
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
     InMemory { name: String },
@@ -83,10 +91,11 @@ pub enum DatabaseEngineDTO {
 impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
     fn from(value: &crate::database::DatabaseEngine) -> Self {
         match value {
-            crate::database::DatabaseEngine::Sql { engine, connection_string } => {
+            crate::database::DatabaseEngine::Sql { engine, connection_string, table } => {
                 DatabaseEngineDTO::Sql {
                     engine: engine.into(),
                     connection_string: connection_string.clone(),
+                    table: table.clone(),
                 }
             }
             crate::database::DatabaseEngine::Csv { path, delimiter, has_header, infer_schema_length } => {
@@ -103,6 +112,12 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
                     columns: columns.clone(),
                 }
             }
+            crate::database::DatabaseEngine::Excel { path, sheet } => {
+                DatabaseEngineDTO::Excel {
+                    path: path.clone(),
+                    sheet: sheet.clone(),
+                }
+            }
             crate::database::DatabaseEngine::InMemory { name } => {
                 DatabaseEngineDTO::InMemory {
                     name: name.clone(),
@@ -115,7 +130,10 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineSqlDTO {
-    Sqlite { auto_create: bool },
+    Sqlite {
+        #[serde(default, rename = "autoCreate", alias = "auto_create")]
+        auto_create: bool,
+    },
     Postgres { ssl: bool },
     Mysql { charset: String },
 }
@@ -173,14 +191,19 @@ impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
             DatabaseEngineDTO::Parquet { path, columns } => {
                 Ok(crate::database::DatabaseEngine::Parquet { path, columns })
             }
+            DatabaseEngineDTO::Excel { path, sheet } => {
+                Ok(crate::database::DatabaseEngine::Excel { path, sheet })
+            }
             DatabaseEngineDTO::Sql {
                 engine,
                 connection_string,
+                table,
             } => {
                 let engine = crate::database::DatabaseEngineSql::try_from(engine)?;
                 Ok(crate::database::DatabaseEngine::Sql {
                     engine,
                     connection_string,
+                    table,
                 })
             }
             DatabaseEngineDTO::InMemory { name } => {

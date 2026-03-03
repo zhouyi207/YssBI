@@ -121,6 +121,9 @@ pub fn run() {
             rename_subgraph,
             // ==================== Database ====================
             load_database,
+            list_sqlite_tables,
+            list_sql_tables,
+            list_excel_sheets,
             delete_database,
             get_database_meta,
             get_database_rows,

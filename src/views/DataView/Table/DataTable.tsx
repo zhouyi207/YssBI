@@ -73,15 +73,17 @@ export const DataTable: React.FC<DataTableProps> = ({
     return () => ro.disconnect();
   }, [columns.length, onHeaderHeightChange]);
 
+  /** 固定总高度：有 totalRowCount 时用其作为虚拟化数量，避免懒加载时高度变化 */
+  const virtualRowCount = totalRowCount > 0 ? totalRowCount : loadedRows.length;
   const rowVirtualizer = useVirtualizer({
-    count: loadedRows.length,
+    count: virtualRowCount,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => DATA_VIEW_ROW_HEIGHT,
     overscan: 20,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const totalTableHeight = loadedRows.length * DATA_VIEW_ROW_HEIGHT;
+  const totalTableHeight = virtualRowCount * DATA_VIEW_ROW_HEIGHT;
   const hasData = columns.length > 0;
   /** 显示列数：至少 20 列，不足时用空列填充 */
   const displayColumnCount = Math.max(columns.length, DATA_VIEW_MIN_COLUMNS);
@@ -174,15 +176,15 @@ export const DataTable: React.FC<DataTableProps> = ({
             )}
             {virtualRows.map((virtualRow) => {
               const row = loadedRows[virtualRow.index];
-              if (!row) return null;
+              const hasData = row !== undefined;
               const ri = virtualRow.index;
+              const rowData = hasData && Array.isArray(row) ? row : [];
               const rowSelected = selection && (() => {
                 const { r0, r1 } = selectionBounds(selection);
                 return ri >= r0 && ri <= r1;
               })();
               const rowActive = activeCell?.row === ri;
               const rowHovered = hoveredCell !== null && hoveredCell.row === ri;
-              const rowData = Array.isArray(row) ? row : [];
               return (
                 <tr
                   key={virtualRow.key}
@@ -197,8 +199,8 @@ export const DataTable: React.FC<DataTableProps> = ({
                       minWidth: DATA_VIEW_ROW_NUM_WIDTH,
                       ...((rowSelected || rowActive) ? { background: 'color-mix(in srgb, var(--accent-color) 10%, var(--sidebar-bg))' } : {}),
                     }}
-                    onClick={(e) => onRowHeaderClick(ri, e)}
-                    onContextMenu={(e) => onContextMenu(e, { type: 'row', rowIndex: ri })}
+                    onClick={hasData ? (e) => onRowHeaderClick(ri, e) : undefined}
+                    onContextMenu={hasData ? (e) => onContextMenu(e, { type: 'row', rowIndex: ri }) : undefined}
                     onMouseEnter={() => setHoveredCell({ row: ri, col: -1 })}
                   >
                     {ri + 1}
@@ -214,13 +216,15 @@ export const DataTable: React.FC<DataTableProps> = ({
                       <td
                         key={j}
                         className={`p-0 text-[11px] text-gray-400 border-r border-gray-800/50 min-w-[80px] ${isSel ? 'bg-[var(--accent-color)]/8' : ''} ${isActive && !isEditingThis ? 'ring-1 ring-inset ring-[var(--accent-color)]/60' : ''} ${colHovered && !isSel ? 'bg-white/[0.02]' : ''}`}
-                        onMouseDown={isPlaceholder ? undefined : (e) => onCellMouseDown(ri, j, e)}
-                        onMouseEnter={isPlaceholder ? undefined : () => { setHoveredCell({ row: ri, col: j }); onCellMouseEnter(ri, j); }}
-                        onDoubleClick={isPlaceholder ? undefined : () => onStartEdit(ri, j)}
-                        onContextMenu={isPlaceholder ? undefined : (e) => onContextMenu(e, { type: 'cell', rowIndex: ri, colIndex: j, colName: columns[j]?.name })}
+                        onMouseDown={isPlaceholder || !hasData ? undefined : (e) => onCellMouseDown(ri, j, e)}
+                        onMouseEnter={isPlaceholder || !hasData ? undefined : () => { setHoveredCell({ row: ri, col: j }); onCellMouseEnter(ri, j); }}
+                        onDoubleClick={isPlaceholder || !hasData ? undefined : () => onStartEdit(ri, j)}
+                        onContextMenu={isPlaceholder || !hasData ? undefined : (e) => onContextMenu(e, { type: 'cell', rowIndex: ri, colIndex: j, colName: columns[j]?.name })}
                       >
                         {isPlaceholder ? (
                           <div className="px-2 py-1.5 cursor-default select-none">&nbsp;</div>
+                        ) : !hasData ? (
+                          <div className="px-2 py-1.5 truncate cursor-default select-none text-gray-600">…</div>
                         ) : isEditingThis ? (
                           <input
                             ref={editInputRef}
@@ -262,17 +266,6 @@ export const DataTable: React.FC<DataTableProps> = ({
             )}
           </tbody>
         </table>
-        {loadingMore && (
-          <div className="p-4 text-center text-xs text-[var(--accent-color)] animate-pulse font-medium">Loading more data...</div>
-        )}
-        {totalRowCount > loadedRows.length && !loadingMore && (
-          <div className="p-4 text-center text-xs text-gray-500 italic border-t border-gray-800">
-            Scroll down to load more (showing {loadedRows.length} of {totalRowCount})
-          </div>
-        )}
-        {totalRowCount <= loadedRows.length && totalRowCount > 0 && (
-          <div className="p-4 text-center text-[9px] text-gray-600 uppercase tracking-widest border-t border-gray-800/30">End of data</div>
-        )}
       </div>
     </OverlayScrollbar>
     {/* 固定在左上角的独立角格，不随滚动移动 */}

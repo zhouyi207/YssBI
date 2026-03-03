@@ -4,6 +4,10 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { Toast } from "./Toast";
 import { Modal } from "./Modal";
 import { ImportModal } from "./ImportModal";
+import { SqliteTableSelectModal } from "./SqliteTableSelectModal";
+import { ExcelSheetSelectModal } from "./ExcelSheetSelectModal";
+import { SqlConnectionModal } from "./SqlConnectionModal";
+import { SqlRemoteTableSelectModal } from "./SqlRemoteTableSelectModal";
 
 export const UIHost = () => {
   const messages = useUIStore((s) => s.messages);
@@ -33,6 +37,34 @@ export const UIHost = () => {
 
       {top?.type === "import" && (
         <ImportModal
+          options={top.options}
+          onClose={() => uiStore.closeModal(top.id)}
+        />
+      )}
+
+      {top?.type === "sqliteTableSelect" && (
+        <SqliteTableSelectModal
+          options={top.options}
+          onClose={() => uiStore.closeModal(top.id)}
+        />
+      )}
+
+      {top?.type === "excelSheetSelect" && (
+        <ExcelSheetSelectModal
+          options={top.options}
+          onClose={() => uiStore.closeModal(top.id)}
+        />
+      )}
+
+      {top?.type === "sqlConnection" && (
+        <SqlConnectionModal
+          options={top.options}
+          onClose={() => uiStore.closeModal(top.id)}
+        />
+      )}
+
+      {top?.type === "sqlRemoteTableSelect" && (
+        <SqlRemoteTableSelectModal
           options={top.options}
           onClose={() => uiStore.closeModal(top.id)}
         />

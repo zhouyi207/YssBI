@@ -1,8 +1,21 @@
-import { Message, MessageType, DialogOptions, ImportDialogOptions } from "@/shared/types/ui";
+import {
+    Message,
+    MessageType,
+    DialogOptions,
+    ImportDialogOptions,
+    SqliteTableSelectDialogOptions,
+    ExcelSheetSelectDialogOptions,
+    SqlConnectionDialogOptions,
+    SqlRemoteTableSelectDialogOptions,
+} from "@/shared/types/ui";
 
 type UIModal =
-  | { id: string; type: "confirm"; options: DialogOptions }
-  | { id: string; type: "import"; options: ImportDialogOptions };
+    | { id: string; type: "confirm"; options: DialogOptions }
+    | { id: string; type: "import"; options: ImportDialogOptions }
+    | { id: string; type: "sqliteTableSelect"; options: SqliteTableSelectDialogOptions }
+    | { id: string; type: "excelSheetSelect"; options: ExcelSheetSelectDialogOptions }
+    | { id: string; type: "sqlConnection"; options: SqlConnectionDialogOptions }
+    | { id: string; type: "sqlRemoteTableSelect"; options: SqlRemoteTableSelectDialogOptions };
 
 type UIState = {
   messages: Message[];
@@ -82,6 +95,66 @@ class UIStore {
         {
           id: crypto.randomUUID(),
           type: "import",
+          options,
+        },
+      ],
+    };
+    this.emit();
+  }
+
+  showSqliteTableSelectDialog(options: SqliteTableSelectDialogOptions) {
+    this.state = {
+      ...this.state,
+      modals: [
+        ...this.state.modals,
+        {
+          id: crypto.randomUUID(),
+          type: "sqliteTableSelect",
+          options,
+        },
+      ],
+    };
+    this.emit();
+  }
+
+  showExcelSheetSelectDialog(options: ExcelSheetSelectDialogOptions) {
+    this.state = {
+      ...this.state,
+      modals: [
+        ...this.state.modals,
+        {
+          id: crypto.randomUUID(),
+          type: "excelSheetSelect",
+          options,
+        },
+      ],
+    };
+    this.emit();
+  }
+
+  showSqlConnectionDialog(options: SqlConnectionDialogOptions) {
+    this.state = {
+      ...this.state,
+      modals: [
+        ...this.state.modals,
+        {
+          id: crypto.randomUUID(),
+          type: "sqlConnection",
+          options,
+        },
+      ],
+    };
+    this.emit();
+  }
+
+  showSqlRemoteTableSelectDialog(options: SqlRemoteTableSelectDialogOptions) {
+    this.state = {
+      ...this.state,
+      modals: [
+        ...this.state.modals,
+        {
+          id: crypto.randomUUID(),
+          type: "sqlRemoteTableSelect",
           options,
         },
       ],
