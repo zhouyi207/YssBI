@@ -8,13 +8,16 @@ const ResidualPlot: React.FC<{ fitted: number[]; residuals: number[] }> = ({ fit
   );
 
   return (
-    <Scatter
-      data={data}
-      xLabel="Fitted Values"
-      yLabel="Residuals"
-      symmetricY
-      zeroLine
-    />
+    <div className="w-full min-h-[280px]">
+      <Scatter
+        data={data}
+        xLabel="Fitted Values"
+        yLabel="Residuals"
+        height={280}
+        symmetricY
+        zeroLine
+      />
+    </div>
   );
 };
 

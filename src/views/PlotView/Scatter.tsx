@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent } from 'd3';
 
 export interface ScatterPoint {
@@ -16,7 +16,7 @@ export interface ScatterProps {
   color?: string;
   /** 散点半径，默认 3 */
   radius?: number;
-  /** 图表高度，默认 280 */
+  /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
   margin?: { top: number; right: number; bottom: number; left: number };
@@ -35,22 +35,35 @@ const Scatter: React.FC<ScatterProps> = ({
   yLabel,
   color = DEFAULT_COLOR,
   radius = 3,
-  height = 280,
+  height: heightProp,
   margin = DEFAULT_MARGIN,
   symmetricY = false,
   zeroLine = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      setSize({ width: container.clientWidth, height: container.clientHeight });
+    });
+    ro.observe(container);
+    setSize({ width: container.clientWidth, height: container.clientHeight });
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
 
     const container = containerRef.current;
-    if (!container || data.length === 0) return;
+    if (!container || data.length === 0 || size.width === 0 || size.height === 0) return;
 
-    const width = container.clientWidth;
+    const width = size.width;
+    const height = heightProp ?? size.height;
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
@@ -141,10 +154,10 @@ const Scatter: React.FC<ScatterProps> = ({
       .attr('stroke', color)
       .attr('stroke-opacity', 0.3)
       .attr('stroke-width', 1);
-  }, [data, xLabel, yLabel, color, radius, height, margin, symmetricY, zeroLine]);
+  }, [data, xLabel, yLabel, color, radius, heightProp, margin, symmetricY, zeroLine, size]);
 
   return (
-    <div ref={containerRef} className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
       <svg ref={svgRef} />
     </div>
   );

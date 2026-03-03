@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
 
 export interface BarDatum {
@@ -36,18 +36,30 @@ const BarChart: React.FC<BarChartProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
 
   const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      setSize({ width: container.clientWidth, height: container.clientHeight });
+    });
+    ro.observe(container);
+    setSize({ width: container.clientWidth, height: container.clientHeight });
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
 
     const container = containerRef.current;
-    if (!container || data.length === 0) return;
+    if (!container || data.length === 0 || size.width === 0 || (size.height === 0 && !heightProp)) return;
 
-    const width = container.clientWidth;
-    const height = heightProp || container.clientHeight || 280;
+    const width = size.width;
+    const height = heightProp ?? size.height || 280;
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
     if (w <= 0 || h <= 0) return;
@@ -203,11 +215,11 @@ const BarChart: React.FC<BarChartProps> = ({
           .text(yLabel);
       }
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, horizontal, compact]);
+  }, [data, xLabel, yLabel, color, heightProp, margin, horizontal, compact, size]);
 
   return (
-    <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'h-full' : ''}`}>
-      <svg ref={svgRef} className={!heightProp ? 'w-full h-full' : ''} />
+    <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`}>
+      <svg ref={svgRef} />
       {compact && (
         <div
           ref={tooltipRef}

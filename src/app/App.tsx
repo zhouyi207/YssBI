@@ -11,7 +11,7 @@ const InfoWindow = React.lazy(() => import("@/views/InfoView/InfoWindow").then(m
 const EditorWindow = React.lazy(() => import("@/views/EditorView/EditorWindow").then(m => ({ default: m.EditorWindow })));
 
 const hash = window.location.hash;
-const isPlotWindow = hash === "#/plot";
+const isPlotWindow = hash.startsWith("#/plot");
 const isDataViewWindow = hash === "#/dataview";
 const isLogsWindow = hash === "#/logs";
 const isInfoWindow = hash.startsWith("#/info");

@@ -81,9 +81,12 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   const handleOpenWindow = useCallback((windowType: string, dataKey: string) => {
     try {
       const label = `${windowType}-${Math.random().toString(36).substring(2, 10)}`;
+      const isPlot = windowType === 'scatter' || windowType === 'plot';
+      const url = isPlot ? `index.html#/plot?key=${dataKey}` : `index.html#/info?key=${dataKey}`;
+      const title = isPlot ? 'Scatter Plot' : 'OLS Regression Results';
       new WebviewWindow(label, {
-        url: `index.html#/info?key=${dataKey}`,
-        title: 'OLS Regression Results',
+        url,
+        title,
         width: 960,
         height: 800,
         decorations: false,

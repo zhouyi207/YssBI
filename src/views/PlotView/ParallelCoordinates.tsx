@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scalePoint, line, extent } from 'd3';
 
 export interface ParallelAxis {
@@ -30,17 +30,28 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      setSize({ width: container.clientWidth, height: container.clientHeight });
+    });
+    ro.observe(container);
+    setSize({ width: container.clientWidth, height: container.clientHeight });
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
     svg.selectAll('*').remove();
 
     const container = containerRef.current;
-    if (!container || axes.length === 0 || rows.length === 0) return;
+    if (!container || axes.length === 0 || rows.length === 0 || size.width === 0 || size.height === 0) return;
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    if (width <= 0 || height <= 0) return;
+    const width = size.width;
+    const height = size.height;
 
     const w = width - MARGIN.left - MARGIN.right;
     const h = height - MARGIN.top - MARGIN.bottom;
@@ -93,7 +104,8 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
         const sc = yScales[i] as unknown as ReturnType<typeof scaleLinear>;
         const ticks = sc.ticks ? sc.ticks(4) : [];
         ticks.forEach((t: number) => {
-          const y = sc(t)!;
+          const y = sc(t) as number | undefined;
+          if (y == null) return;
           g.append('text')
             .attr('x', x - 4).attr('y', y + 3)
             .attr('text-anchor', 'end')
@@ -153,10 +165,10 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
           tooltip.style('opacity', '0');
         });
     });
-  }, [axes, rows, color, maxLines]);
+  }, [axes, rows, color, maxLines, size]);
 
   return (
-    <div ref={containerRef} className="relative h-full w-full rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
       <svg ref={svgRef} className="w-full h-full" />
       <div
         ref={tooltipRef}
