@@ -132,7 +132,7 @@ impl TypeInferenceContext {
         };
         self.unify(&a, &b)?;
 
-        // 细化容器类型中的 Any 内部类型
+        // 细化容器类型中的 Any 内部类型，以及顶层 OneOf（如 +-/* 运算节点的 pin）
         if let (PinDataTypeInference::Concrete(from_dt), PinDataTypeInference::Concrete(to_dt)) =
             (&a, &b)
         {
@@ -141,6 +141,15 @@ impl TypeInferenceContext {
                     .insert(to, PinDataTypeInference::Concrete(refined));
             }
             if let Some(refined) = Self::refine_inner_any(from_dt, to_dt) {
+                self.pin_types
+                    .insert(from, PinDataTypeInference::Concrete(refined));
+            }
+            // 顶层 OneOf 细化：当 target 为 OneOf 且 source 匹配其中一个成员时，细化为 source（如 Add 的 A 连接 Float64 后显示 Float64）
+            if let Some(refined) = Self::refine_oneof(to_dt, from_dt) {
+                self.pin_types
+                    .insert(to, PinDataTypeInference::Concrete(refined));
+            }
+            if let Some(refined) = Self::refine_oneof(from_dt, to_dt) {
                 self.pin_types
                     .insert(from, PinDataTypeInference::Concrete(refined));
             }
@@ -186,6 +195,21 @@ impl TypeInferenceContext {
                     } else {
                         None
                     }
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// 顶层 OneOf 细化：当 target 为 OneOf 且 source 为具体类型且匹配其中一个成员时，返回 source
+    /// 用于 +-/* 等运算节点：连接 Float64 后 pin 显示 Float64 而非 OneOf(Float64|DataSeries|...)
+    fn refine_oneof(target: &DataType, source: &DataType) -> Option<DataType> {
+        match (target, source) {
+            (DataType::OneOf(members), _) if !matches!(source, DataType::OneOf(_) | DataType::Any) => {
+                if members.iter().any(|m| m.can_accept(source)) {
+                    Some(source.clone())
                 } else {
                     None
                 }

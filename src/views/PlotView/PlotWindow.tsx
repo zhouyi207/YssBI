@@ -3,17 +3,39 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '@/utils/appLogger';
 import Scatter, { type ScatterPoint } from '@/views/PlotView/Scatter';
+import ECDF, { type ECDFPoint } from '@/views/PlotView/ECDF';
+import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
+import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
+import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
 
-interface ScatterPlotData {
-  data: ScatterPoint[];
+interface ScatterEcdfData {
+  data: { x: number; y: number }[];
   x_label?: string;
   y_label?: string;
+}
+
+interface HistogramData {
+  data: HistogramBin[];
+  x_label?: string;
+  y_label?: string;
+}
+
+interface CorrelationData {
+  labels: string[];
+  matrix: number[][];
+  p_matrix?: number[][];
 }
 
 function getDataKeyFromHash(): string | null {
   const hash = window.location.hash;
   const match = hash.match(/[?&]key=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getPlotTypeFromHash(): string {
+  const hash = window.location.hash;
+  const match = hash.match(/[?&]type=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : 'scatter';
 }
 
 /**
@@ -23,7 +45,10 @@ function getDataKeyFromHash(): string | null {
 export const PlotWindow: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [scatterData, setScatterData] = useState<ScatterPlotData | null>(null);
+  const [scatterEcdfData, setScatterEcdfData] = useState<ScatterEcdfData | null>(null);
+  const [histogramData, setHistogramData] = useState<HistogramData | null>(null);
+  const [correlationData, setCorrelationData] = useState<CorrelationData | null>(null);
+  const [plotType, setPlotType] = useState<string>(() => getPlotTypeFromHash());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,16 +60,42 @@ export const PlotWindow: React.FC = () => {
         logger.sys.debug('Initializing plot window...', 'PlotWindow');
         const currentWindow = getCurrentWindow();
         const dataKey = getDataKeyFromHash();
+        setPlotType(getPlotTypeFromHash());
 
         if (dataKey) {
           const json = await invoke<string | null>('get_window_data', { key: dataKey });
           if (mounted && json) {
             try {
-              const parsed = JSON.parse(json) as ScatterPlotData;
-              if (parsed.data && Array.isArray(parsed.data)) {
-                setScatterData(parsed);
+              const parsed = JSON.parse(json);
+              const ptype = getPlotTypeFromHash();
+              if (ptype === 'correlation') {
+                if (parsed.labels && Array.isArray(parsed.labels) && parsed.matrix && Array.isArray(parsed.matrix)) {
+                  setCorrelationData({
+                    labels: parsed.labels,
+                    matrix: parsed.matrix,
+                    p_matrix: parsed.p_matrix,
+                  });
+                  setScatterEcdfData(null);
+                  setHistogramData(null);
+                } else {
+                  setError('Invalid correlation data format');
+                }
+              } else if (ptype === 'histogram') {
+                if (parsed.data && Array.isArray(parsed.data) && parsed.data.every((d: any) => d && typeof d.label === 'string' && typeof d.count === 'number')) {
+                  setHistogramData(parsed);
+                  setScatterEcdfData(null);
+                  setCorrelationData(null);
+                } else {
+                  setError('Invalid histogram data format');
+                }
               } else {
-                setError('Invalid scatter data format');
+                if (parsed.data && Array.isArray(parsed.data)) {
+                  setScatterEcdfData(parsed);
+                  setHistogramData(null);
+                  setCorrelationData(null);
+                } else {
+                  setError('Invalid plot data format');
+                }
               }
             } catch (e) {
               setError(`Failed to parse data: ${e instanceof Error ? e.message : String(e)}`);
@@ -181,13 +232,43 @@ export const PlotWindow: React.FC = () => {
             </svg>
             <span className="text-sm">{error}</span>
           </div>
-        ) : scatterData ? (
+        ) : histogramData ? (
           <div className="flex-1 min-h-0 w-full">
-            <Scatter
-              data={scatterData.data}
-              xLabel={scatterData.x_label}
-              yLabel={scatterData.y_label}
+            <Histogram
+              data={histogramData.data}
+              xLabel={histogramData.x_label}
+              yLabel={histogramData.y_label}
             />
+          </div>
+        ) : correlationData ? (
+          <div className="flex-1 min-h-0 w-full">
+            <CorrelationPlot
+              labels={correlationData.labels}
+              matrix={correlationData.matrix}
+              pMatrix={correlationData.p_matrix}
+            />
+          </div>
+        ) : scatterEcdfData ? (
+          <div className="flex-1 min-h-0 w-full">
+            {plotType === 'ecdf' ? (
+              <ECDF
+                data={scatterEcdfData.data as ECDFPoint[]}
+                xLabel={scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.y_label}
+              />
+            ) : plotType === 'kde' ? (
+              <KDE
+                data={scatterEcdfData.data as KDEPoint[]}
+                xLabel={scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.y_label}
+              />
+            ) : (
+              <Scatter
+                data={scatterEcdfData.data as ScatterPoint[]}
+                xLabel={scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.y_label}
+              />
+            )}
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-center">
@@ -197,7 +278,7 @@ export const PlotWindow: React.FC = () => {
               </svg>
             </div>
             <h2 className="text-2xl font-bold mb-2 text-white">Plot 窗口已就绪</h2>
-            <p className="mb-4 text-gray-400">从 Scatter 节点执行后将在此显示散点图</p>
+            <p className="mb-4 text-gray-400">从 Scatter、ECDF、KDE、Histogram 或 Correlation Plot 节点执行后将在此显示图表</p>
           </div>
         )}
       </div>

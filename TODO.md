@@ -23,8 +23,23 @@
 - [x] 给 editorviewer 的 data sidebar 中的 database 添加一个 eye 图标，点击就可以打开 data viewer
 - [x] 修复 dataviewer 数据表格的显示问题，可以显示足够多的列，使用 react-virtual 行也虚拟化了 ~~无法显示足够多的列~~
 
+## 2026.03.03
+
+- [x] 添加 plot 支持
+- [x] 添加 随机分布 支持 ~~随机分布的随机样本，设置数量出现随机样本~~
+- [x] 添加对 dataseries 运算符的支持 ~~catelog math 节点应该是 any~~
 
 # TODOLIST
+
+OneOf 还是使用 Restriction + TypeVar 来做类型推断之类的东西？
+
+oneof 类型连接其中一个类型的 pin 的时候，会变成该类型；（这个效果是好还是不好？很难知道）
+
+我觉得 plot 可以学习 seaborn 来进行参数选择和绘制
+
+catelog 中的 plot（尤其） 和 distribution 中的内容需要大量重构
+
+同时 plot 可以使用数据节点，然后数据节点需要使用 plot 的 show 节点才可以展示，然后 show 节点可以结合多张图的数据节点，在新的窗口中配置如何结合的信息。
 
 复制粘贴节点以及项目的保存不够完善
 
@@ -58,16 +73,11 @@ settingview.tsx 中，要注意区分，首先 dataframe 是必须要设置形�
 
 dataframe 抽样方法，是在 ols 配置还是 dataframe 层面配置呢
 
-随机分布的随机样本，设置数量出现随机样本
-
 参数网格 -》 数据变换（异常值检验，对数变换等等操作） -》 检验结果 -》 存储
-
 
 ols_summary 打开 ols_result_viewer 并返回 ols_result, 这里面存储了一些统计模型信息可以使用节点进行提取；这些节点应该是使用类似于函数或者其他功能的注册的方式而不是定义，不然后续结构体太多了这里会爆炸
 
 ols model 可以引申出一个新的节点 predict，这个节点可以使用 endog, exog 两个玩意获得拟合值，然后真实值 - 拟合值可以得到残差。这是基本操作不应该删除
-
-catelog math 节点应该是 any
 
 deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感觉好卡
 

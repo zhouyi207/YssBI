@@ -197,6 +197,17 @@ impl<E: EventEmitter> Executor<E> {
                 {
                     self.execute_upstream_data_nodes(upstream_node_id)?;
 
+                    // 若上游输出 pin 已有有效值（同一执行内已被其他路径求值），则跳过，避免重复执行
+                    // 仅检查 pins_runtime_state，不包含 resolve 的 default_value，否则 OneOf(Float64,DataSeries)
+                    // 等类型的 default 会误判为已求值，导致 Add 等节点被跳过、Endog 收到 Float64
+                    let already_has_value = {
+                        let graph = self.graph.lock().unwrap();
+                        graph.pin_has_executed_value(upstream_pin_id)
+                    };
+                    if already_has_value {
+                        continue;
+                    }
+
                     let upstream_node_id_str = upstream_node_id.to_string();
                     self.emit(ExecutionEvent::NodeStart {
                         node_id: upstream_node_id_str.clone(),

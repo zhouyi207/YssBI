@@ -167,6 +167,17 @@ impl GraphRuntime {
         self.graph_instance.get_node_id_by_pin_id(pin_id)
     }
 
+    /// 检查 pin 是否已有由节点执行写入的运行时值（用于执行器缓存判断）。
+    /// 仅检查 pins_runtime_state.current_value，不包含 resolve 链中的 default/user 值，
+    /// 避免 OneOf 等类型的 default_value（如 Float64）被误判为“已求值”而跳过节点执行。
+    pub fn pin_has_executed_value(&self, pin_id: PinId) -> bool {
+        self.pins_runtime_state
+            .get(&pin_id)
+            .and_then(|s| s.current_value.as_ref())
+            .map(|v| !matches!(v, DataValue::Null))
+            .unwrap_or(false)
+    }
+
     /// 按优先级解析 pin 的值：
     /// 1. 上游连接值（如果有连接且上游有值）
     /// 2. 运行时值（current_value）

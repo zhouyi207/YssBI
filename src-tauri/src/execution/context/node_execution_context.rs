@@ -157,6 +157,15 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             .ok_or_else(|| format!("Pin {:?} has no resolved type", role))
     }
 
+    fn get_resolved_value_by_role(&self, role: &PinRole) -> Result<DataValue, String> {
+        let graph = self.graph.lock().unwrap();
+        let pin = graph
+            .get_pin_instance_by_pin_role(self.node_id, role)
+            .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
+
+        graph.get_pin_data_value_by_pin_id(pin.id)
+    }
+
     // ====================================================================
     // 节点实例参数
     // ====================================================================

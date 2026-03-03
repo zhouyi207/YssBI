@@ -8,7 +8,7 @@ import { useExecutionStore } from '@/features/core/execution';
 export function useNodeExecution(nodeId: string, graphId?: string) {
   const isExecuting = useExecutionStore((state) => {
     if (!graphId) return false;
-    return state.graphs[graphId]?.currentNodeId === nodeId;
+    return state.graphs[graphId]?.nodeStates.get(nodeId)?.status === "executing";
   });
   const isCompleted = useExecutionStore((state) => {
     if (!graphId) return false;

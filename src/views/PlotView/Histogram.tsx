@@ -57,7 +57,7 @@ const Histogram: React.FC<HistogramProps> = ({
     if (!container || data.length === 0 || size.width === 0 || (size.height === 0 && !heightProp)) return;
 
     const width = size.width;
-    const height = heightProp ?? size.height || 280;
+    const height = heightProp ?? (size.height || 280);
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
     if (w <= 0 || h <= 0) return;

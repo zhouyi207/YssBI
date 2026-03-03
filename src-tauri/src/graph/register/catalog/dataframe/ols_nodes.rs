@@ -104,7 +104,31 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     )?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
-        _ => return Err("OLS: Endog input is not a DataSeries".to_string()),
+        other => {
+            let got = match other {
+                DataValue::Null => "Null (unconnected or upstream not executed)",
+                DataValue::Boolean(_) => "Boolean",
+                DataValue::Int32(_) => "Int32",
+                DataValue::Int64(_) => "Int64",
+                DataValue::Float32(_) => "Float32",
+                DataValue::Float64(_) => "Float64",
+                DataValue::String(_) => "String",
+                DataValue::Array(_) => "Array",
+                DataValue::Object(_) => "Object",
+                DataValue::DataFrame(_) => "DataFrame",
+                DataValue::Struct { type_key, .. } => {
+                    return Err(format!(
+                        "OLS: Endog input is not a DataSeries (got Struct<{}>). Check that Endog is connected to Add/DataSeries output, not Config.",
+                        type_key
+                    ));
+                }
+                DataValue::DataSeries(_) => unreachable!(),
+            };
+            return Err(format!(
+                "OLS: Endog input is not a DataSeries (got {}). Ensure Endog is connected to a DataSeries output (e.g. Add result).",
+                got
+            ));
+        }
     };
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {

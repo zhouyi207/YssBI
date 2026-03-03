@@ -44,6 +44,11 @@ pub trait NodeExecutionContextTrait {
     /// 用于在运行时获取 Pin 的实际类型（经过类型推断后）
     fn get_pin_type_by_role(&self, role: &PinRole) -> Result<DataType, String>;
 
+    /// 通过角色获取 Pin 的已解析值（含 user_value、default 等）
+    ///
+    /// 用于常数节点等仅输出、无输入的节点，获取输出 pin 的 user_value 或默认值
+    fn get_resolved_value_by_role(&self, role: &PinRole) -> Result<DataValue, String>;
+
     // ====================================================================
     // 节点实例参数
     // ====================================================================

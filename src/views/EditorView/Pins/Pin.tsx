@@ -106,10 +106,11 @@ export const Pin: React.FC<PinProps> = (props) => {
     subgraphId &&
     nodeId;
 
+  const effectivePinDragState = contextMenu ? "highlighted" : pinDragState;
   const dragStyle: React.CSSProperties | undefined =
-    pinDragState === "dimmed"
+    effectivePinDragState === "dimmed"
       ? { opacity: 0.25, transition: "opacity 150ms, filter 150ms" }
-      : pinDragState === "highlighted"
+      : effectivePinDragState === "highlighted"
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
@@ -137,8 +138,9 @@ export const Pin: React.FC<PinProps> = (props) => {
       {/* Pin Icon Container - 扩大交互区域 */}
       <div
         className={`
-          relative w-6 h-6 flex items-center justify-center cursor-crosshair shrink-0 z-20 pin-circle
+          relative w-6 h-6 flex items-center justify-center cursor-crosshair shrink-0 z-20 pin-circle rounded-full
           ${direction === "input" ? "mr-1" : "ml-1"}
+          ${contextMenu ? "ring-2 ring-[var(--accent-color)]/60" : ""}
         `}
         onClick={(e) => {
           e.stopPropagation();
@@ -297,13 +299,17 @@ export const Pin: React.FC<PinProps> = (props) => {
         </svg>
       </div>
 
-      {/* Label - 增加 hover 效果 */}
+      {/* Label - 增加 hover 效果，右键菜单打开时高亮 */}
       <span
         className={`
           text-[10px] font-bold select-none uppercase tracking-wider px-1 z-10 pointer-events-none
           transition-colors
-          ${isConnected ? "text-gray-900" : "text-gray-500"}
-          group-hover:text-black
+          ${contextMenu
+            ? "text-[var(--accent-color)]"
+            : isConnected
+              ? "text-gray-900"
+              : "text-gray-500"}
+          ${!contextMenu ? "group-hover:text-black" : ""}
         `}
       >
         {name}

@@ -8,6 +8,7 @@ pub mod value;
 pub mod dataframe;
 pub mod event;
 pub mod plot;
+pub mod distribution;
 
 use super::NodeRegistry;
 
@@ -21,4 +22,5 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     dataframe::register(registry);
     event::register(registry);
     plot::register(registry);
+    distribution::register(registry);
 }

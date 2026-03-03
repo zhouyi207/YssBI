@@ -38,7 +38,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   }, []);
 
   const className = getNodeClassName({
-    selected,
+    selected: selected || !!contextMenu,
     isExecuting,
     hasError,
     isCompleted,
