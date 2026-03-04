@@ -110,7 +110,7 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
                 .collect();
             let columns: Vec<polars::prelude::Column> =
                 series.into_iter().map(polars::prelude::Column::from).collect();
-            return DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
+            return DataFrame::new(0, columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
         }
 
         let column_count = rows[0].len();
@@ -147,6 +147,7 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
 
         let columns: Vec<polars::prelude::Column> =
             series.into_iter().map(polars::prelude::Column::from).collect();
-        DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
+        let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
+        DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
     })
 }

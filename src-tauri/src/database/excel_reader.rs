@@ -39,7 +39,7 @@ pub fn read_sheet_to_dataframe(file_path: &str, sheet_name: &str) -> Result<Data
     let (height, width) = range.get_size();
     if height == 0 || width == 0 {
         let columns: Vec<polars::prelude::Column> = Vec::new();
-        return DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
+        return DataFrame::new(0, columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
     }
 
     let mut rows = range.rows();
@@ -74,5 +74,6 @@ pub fn read_sheet_to_dataframe(file_path: &str, sheet_name: &str) -> Result<Data
         .collect();
 
     let columns: Vec<polars::prelude::Column> = series.into_iter().map(polars::prelude::Column::from).collect();
-    DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
+    let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
+    DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
 }

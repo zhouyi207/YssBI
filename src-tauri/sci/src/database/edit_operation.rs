@@ -204,10 +204,10 @@ pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
 fn set_cell(df: &mut DataFrame, row: usize, col: &str, val: &serde_json::Value) -> Result<(), String> {
     let col_idx = df.get_column_index(col)
         .ok_or_else(|| format!("Column '{}' not found", col))?;
-    let dtype = df.get_columns()[col_idx].dtype().clone();
+    let dtype = df.columns()[col_idx].dtype().clone();
     let av = json_to_anyvalue(val, &dtype)?;
 
-    let series = df.get_columns()[col_idx].as_materialized_series();
+    let series = df.columns()[col_idx].as_materialized_series();
     let mut new_vec: Vec<AnyValue<'static>> = Vec::with_capacity(series.len());
     for i in 0..series.len() {
         if i == row {
@@ -291,13 +291,13 @@ pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), Str
             let height = df.height();
             let idx = (*index).min(height);
 
-            let null_row: Vec<Column> = df.get_columns().iter().map(|c| {
+            let null_row: Vec<Column> = df.columns().iter().map(|c| {
                 let s = Series::new_null(c.name().clone(), 1);
                 let casted = s.cast(c.dtype()).unwrap_or(s);
                 Column::from(casted)
             }).collect();
 
-            let null_df = DataFrame::new(null_row).map_err(|e| e.to_string())?;
+            let null_df = DataFrame::new(1, null_row).map_err(|e: polars::prelude::PolarsError| e.to_string())?;
 
             let top = df.slice(0, idx);
             let bottom = df.slice(idx as i64, height - idx);
@@ -358,7 +358,7 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             apply_operation(df, &add_op)?;
             for (col_idx, val) in data.iter().enumerate() {
                 if col_idx < df.width() {
-                    let col_name = df.get_columns()[col_idx].name().to_string();
+                    let col_name = df.columns()[col_idx].name().to_string();
                     set_cell(df, *index, &col_name, val)?;
                 }
             }
@@ -405,7 +405,7 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
                 .iter()
                 .map(|v| json_to_anyvalue(v, &dt).unwrap_or(AnyValue::Null))
                 .collect();
-            let name = df.get_columns()[col_idx].name().clone();
+            let name = df.columns()[col_idx].name().clone();
             let s = Series::from_any_values(name, &values, false)
                 .map_err(|e| e.to_string())?;
             df.replace_column(col_idx, Column::from(s))
@@ -428,7 +428,7 @@ pub fn cast_column(
         .get_column_index(col_name)
         .ok_or_else(|| format!("Column '{}' not found", col_name))?;
     let series = df
-        .get_columns()[col_idx]
+        .columns()[col_idx]
         .as_materialized_series();
     let target_dtype = dtype_from_string(new_dtype_str);
 
@@ -447,7 +447,7 @@ pub fn cast_column(
 }
 
 pub fn capture_row_data(df: &DataFrame, row: usize) -> Vec<serde_json::Value> {
-    df.get_columns()
+    df.columns()
         .iter()
         .map(|c| {
             c.get(row)

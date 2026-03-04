@@ -5,7 +5,7 @@ use polars::prelude::DataFrame;
 pub fn dataframe_to_schema(df: &DataFrame) -> DataSchema {
     DataSchema {
         columns: df
-            .get_columns()
+            .columns()
             .iter()
             .map(|col| ColumnSchema {
                 name: col.name().to_string(),

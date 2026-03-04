@@ -79,7 +79,7 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
             };
 
             let df = ctx.get_dataframe(&df_id)?;
-            for col in df.get_columns() {
+            for col in df.columns() {
                 let col_name = col.name().to_string();
                 let series = col.clone().take_materialized_series();
                 let series_id = ctx.put_series(series)?;

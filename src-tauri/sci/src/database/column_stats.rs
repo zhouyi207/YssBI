@@ -170,7 +170,7 @@ fn find_mode_string(ca: &StringChunked) -> (Option<String>, usize) {
 }
 
 pub fn compute_all_column_stats(df: &DataFrame) -> Vec<ColumnStats> {
-    df.get_columns()
+    df.columns()
         .iter()
         .map(|col| compute_column_stats(col))
         .collect()

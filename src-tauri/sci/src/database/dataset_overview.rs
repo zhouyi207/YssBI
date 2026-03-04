@@ -101,18 +101,18 @@ pub fn compute_dataset_overview(df: &DataFrame) -> DatasetOverview {
         }
     }
 
-    let total_nulls: usize = df.get_columns().iter().map(|c| c.null_count()).sum();
+    let total_nulls: usize = df.columns().iter().map(|c| c.null_count()).sum();
     let total_cells = n_rows * n_columns;
     let null_ratio = if total_cells > 0 {
         total_nulls as f64 / total_cells as f64
     } else {
         0.0
     };
-    let cols_with_nulls = df.get_columns().iter().filter(|c| c.null_count() > 0).count();
+    let cols_with_nulls = df.columns().iter().filter(|c| c.null_count() > 0).count();
 
     let rows_with_nulls = {
         let mut has_null = BooleanChunked::new(PlSmallStr::from_static("_"), vec![false; n_rows]);
-        for col in df.get_columns() {
+        for col in df.columns() {
             let is_null = col.is_null();
             has_null = has_null | is_null;
         }

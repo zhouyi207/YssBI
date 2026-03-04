@@ -76,7 +76,7 @@ fn extract_database_schema(instance: &DatabaseInstance) -> Option<(String, Vec<C
                 .collect()
                 .ok()
                 .and_then(|df| {
-                    df.get_columns()
+                    df.columns()
                         .first()
                         .and_then(|s| s.u32().ok())
                         .and_then(|ca| ca.get(0))

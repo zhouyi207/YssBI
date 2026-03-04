@@ -75,7 +75,7 @@ pub fn load_database(
             .collect()
             .map_err(|e| format!("Failed to get row count: {}", e))?;
         count_df
-            .get_columns()
+            .columns()
             .first()
             .and_then(|s| s.u32().ok())
             .and_then(|ca| ca.get(0))
@@ -209,7 +209,7 @@ pub fn get_database_meta(
                     .collect()
                     .map_err(|e| format!("Failed to get row count: {}", e))?;
                 count_df
-                    .get_columns()
+                    .columns()
                     .first()
                     .and_then(|s| s.u32().ok())
                     .and_then(|ca| ca.get(0))
@@ -259,7 +259,7 @@ pub fn get_database_rows(
     let result: Vec<Vec<serde_json::Value>> = (0..sliced.height())
         .map(|row_idx| {
             sliced
-                .get_columns()
+                .columns()
                 .iter()
                 .map(|s| {
                     match s.get(row_idx) {

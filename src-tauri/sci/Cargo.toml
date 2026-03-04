@@ -6,10 +6,10 @@ edition = "2024"
 [dependencies]
 ndarray.workspace = true
 ndarray-stats.workspace = true
+polars.workspace = true
 faer = "0.24.0"
 statrs = "0.17"
 num-traits = "0.2.19"
-polars = { version = "0.52.0", features = ["lazy", "dtype-full", "csv", "parquet"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

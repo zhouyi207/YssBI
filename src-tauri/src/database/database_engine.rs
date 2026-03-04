@@ -1,7 +1,6 @@
 use polars::error::{PolarsError, PolarsResult};
 use polars::prelude::LazyFileListReader;
-use polars::prelude::{col, IntoLazy, LazyCsvReader, LazyFrame, PlPath};
-use std::path::PathBuf;
+use polars::prelude::{col, IntoLazy, LazyCsvReader, LazyFrame, PlRefPath};
 
 use super::DatabaseEngineSql;
 use serde::{Deserialize, Serialize};
@@ -50,8 +49,7 @@ impl DatabaseEngine {
                 has_header,
                 infer_schema_length,
             } => {
-                let path = PathBuf::from(path);
-                let pl_path = PlPath::Local(path.into());
+                let pl_path = PlRefPath::new(path.as_str());
 
                 LazyCsvReader::new(pl_path)
                     .with_separator(*delimiter as u8)
@@ -61,8 +59,7 @@ impl DatabaseEngine {
             }
 
             DatabaseEngine::Parquet { path, columns } => {
-                let path = PathBuf::from(path);
-                let pl_path = PlPath::Local(path.into());
+                let pl_path = PlRefPath::new(path.as_str());
 
                 let mut reader = LazyFrame::scan_parquet(pl_path, Default::default())?;
                 if let Some(cols) = columns {

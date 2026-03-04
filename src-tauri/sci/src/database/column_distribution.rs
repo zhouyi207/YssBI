@@ -170,7 +170,7 @@ fn compute_string_distribution(col: &Column, name: String) -> ColumnDistribution
 }
 
 pub fn compute_all_column_distributions(df: &DataFrame) -> Vec<ColumnDistribution> {
-    df.get_columns()
+    df.columns()
         .iter()
         .map(|col| compute_column_distribution(col))
         .collect()

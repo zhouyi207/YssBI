@@ -181,7 +181,7 @@ pub fn read_mysql_table_to_dataframe(
 fn build_dataframe_from_pg_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<DataFrame, String> {
     if rows.is_empty() {
         let columns: Vec<polars::prelude::Column> = Vec::new();
-        return DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
+        return DataFrame::new(0, columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
     }
 
     let column_count = rows[0].len();
@@ -208,7 +208,7 @@ fn build_dataframe_from_pg_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Data
 fn build_dataframe_from_mysql_rows(rows: Vec<sqlx::mysql::MySqlRow>) -> Result<DataFrame, String> {
     if rows.is_empty() {
         let columns: Vec<polars::prelude::Column> = Vec::new();
-        return DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
+        return DataFrame::new(0, columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
     }
 
     let column_count = rows[0].len();
@@ -248,7 +248,8 @@ fn build_dataframe(
 
     let columns: Vec<polars::prelude::Column> =
         series.into_iter().map(polars::prelude::Column::from).collect();
-    DataFrame::new(columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
+    let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
+    DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
 }
 
 /// 根据引擎类型列出表

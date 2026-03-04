@@ -15,6 +15,7 @@ numbers = [
 
 [workspace.dependencies]
 ndarray = { version = "0.17.2", features = ["serde"] }
+polars = { version = "0.53.0", features = ["lazy", "parquet", "csv", "json", "dtype-full", "timezones"] }
 ndarray-stats = "0.7.0"
 
 
@@ -43,10 +44,10 @@ tauri-plugin-log = "2"
 
 ndarray.workspace = true
 ndarray-stats.workspace = true
+polars.workspace = true
 
-chrono = "0.4.43"
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
-polars = { version = "0.52.0", features = ["lazy", "parquet", "csv", "json", "dtype-full"] }
+chrono = "0.4.41"
 crossbeam = "0.8.4"
 thiserror = "2.0.18"
 dashmap = "6.1.0"

@@ -83,7 +83,7 @@ impl DatabaseInstance {
         let df = Arc::make_mut(dataframe);
         let col_idx = df.get_column_index(col_name)
             .ok_or_else(|| format!("Column '{}' not found", col_name))?;
-        let old_value = df.get_columns()[col_idx]
+        let old_value = df.columns()[col_idx]
             .get(row)
             .map(|v| anyvalue_to_json(v))
             .unwrap_or(serde_json::Value::Null);
@@ -217,7 +217,7 @@ impl DatabaseInstance {
         let col_idx = df
             .get_column_index(col_name)
             .ok_or_else(|| format!("Column '{}' not found", col_name))?;
-        let old_dtype = dtype_to_string(df.get_columns()[col_idx].dtype());
+        let old_dtype = dtype_to_string(df.columns()[col_idx].dtype());
 
         sci_cast_column(df, col_name, new_dtype, force)?;
 
