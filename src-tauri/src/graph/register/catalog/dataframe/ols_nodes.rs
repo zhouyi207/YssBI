@@ -6,8 +6,9 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{CategoricalRole, DataType, DataValue};
+use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
+use polars::prelude::Series;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::linear_model::{OLSConfig, OLS};
@@ -451,6 +452,16 @@ fn register_ols(registry: &NodeRegistry) {
         DataRole::Custom("ols_model".to_string()),
         PinDataTypeDefinition::concrete(DataType::Struct("OLSModel".to_string())),
     )));
+    slots.push(PinSlot::fixed(PinDefinition::data_output(
+        "Fitted",
+        DataRole::Custom("ols_fitted".to_string()),
+        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+    )));
+    slots.push(PinSlot::fixed(PinDefinition::data_output(
+        "Residuals",
+        DataRole::Custom("ols_residuals".to_string()),
+        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+    )));
     slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
 
     let definition = NodeDefinition::new(
@@ -467,6 +478,22 @@ fn register_ols(registry: &NodeRegistry) {
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Custom("ols_model".to_string())),
             DataValue::new_struct("OLSModel", model_handle_id),
+        )?;
+
+        let fitted_series = Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
+            .with_name("fitted".into());
+        let fitted_id = ctx.put_series(fitted_series)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
+        )?;
+
+        let residuals_series = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
+            .with_name("residuals".into());
+        let residuals_id = ctx.put_series(residuals_series)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(residuals_id, DataType::Float64)),
         )?;
 
         ctx.log("OLS: regression completed".to_string());

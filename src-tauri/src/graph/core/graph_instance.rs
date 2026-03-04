@@ -8,7 +8,7 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
+use crate::graph::node::{ColumnSchema, DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
 use crate::graph::pin::{PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
@@ -644,11 +644,18 @@ impl GraphInstance {
 
         let inferred = self.infer_types().unwrap_or_default();
 
+        let mut to_resolve: Vec<NodeId> = [to_node_id, from_node_id]
+            .into_iter()
+            .flatten()
+            .chain(auto_disconnected_node_ids.into_iter())
+            .collect();
+        if let Some(nid) = to_node_id {
+            to_resolve.extend(self.get_downstream_resolve_nodes(nid));
+        }
+
         let mut change_sets = Vec::new();
         let mut resolved = std::collections::HashSet::new();
-        for node_id in [to_node_id, from_node_id].into_iter().flatten()
-            .chain(auto_disconnected_node_ids.into_iter())
-        {
+        for node_id in to_resolve {
             if resolved.insert(node_id) {
                 if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
                     change_sets.push(cs);
@@ -694,8 +701,13 @@ impl GraphInstance {
 
         let inferred = self.infer_types().unwrap_or_default();
 
+        let mut to_resolve: Vec<NodeId> = [from_node_id, to_node_id].into_iter().flatten().collect();
+        if let Some(nid) = to_node_id {
+            to_resolve.extend(self.get_downstream_resolve_nodes(nid));
+        }
+
         let mut change_sets = Vec::new();
-        for node_id in [from_node_id, to_node_id].into_iter().flatten() {
+        for node_id in to_resolve {
             if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
                 change_sets.push(cs);
             }
@@ -731,8 +743,14 @@ impl GraphInstance {
 
         let inferred = self.infer_types().unwrap_or_default();
 
+        let affected: Vec<NodeId> = affected_node_ids.into_iter().collect();
+        let mut to_resolve = affected.clone();
+        for nid in &affected {
+            to_resolve.extend(self.get_downstream_resolve_nodes(*nid));
+        }
+
         let mut change_sets = Vec::new();
-        for node_id in affected_node_ids {
+        for node_id in to_resolve {
             if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
                 change_sets.push(cs);
             }
@@ -888,11 +906,18 @@ impl GraphInstance {
                         if let Some(upstream_pin) = data_state.pins.get(&upstream_pin_id) {
                             // 获取上游节点的 instance_params（如 dataframe_id）
                             if let Some(upstream_node) = data_state.nodes.get(&upstream_pin.node_id) {
-                                // 尝试从上游节点的 instance_params 中提取 schema
+                                // 1. 从 instance_params 提取（如 Get DataFrame）
                                 let schema = self.extract_schema_from_params(
                                     &upstream_node.instance_params,
                                     &upstream_node.definition.node_type,
                                 );
+                                let schema = schema.or_else(|| {
+                                    // 2. 从上游节点的 Inputs 连接拓扑提取（约定：如 OLS 的 Exog）
+                                    self.extract_schema_from_node_input_connections(
+                                        &data_state,
+                                        upstream_pin.node_id,
+                                    )
+                                });
                                 if let Some(s) = schema {
                                     input_schemas.insert(pin.definition.role.clone(), s);
                                 }
@@ -910,9 +935,6 @@ impl GraphInstance {
     }
 
     /// 从上游节点的 instance_params 提取 DataSchema
-    ///
-    /// 通过节点类型和 instance_params 中的 dataframe_id，
-    /// 使用 schema_provider 查询实际的 DataFrame 列结构。
     fn extract_schema_from_params(
         &self,
         params: &NodeInstanceParams,
@@ -926,6 +948,93 @@ impl GraphInstance {
             }
             _ => None,
         }
+    }
+
+    /// 从节点 Inputs 连接拓扑提取 schema（约定：如 OLS Exog → Model）
+    fn extract_schema_from_node_input_connections(
+        &self,
+        data_state: &GraphDataState,
+        node_id: NodeId,
+    ) -> Option<DataSchema> {
+        use crate::graph::pin::DataRole as DR;
+
+        let node = data_state.nodes.get(&node_id)?;
+        let mut input_pins: Vec<_> = node
+            .pin_ids
+            .iter()
+            .filter_map(|&pid| data_state.pins.get(&pid))
+            .filter(|p| {
+                p.is_input()
+                    && p.is_data()
+                    && matches!(&p.definition.role, PinRole::Data(DR::Inputs(_)))
+            })
+            .collect();
+
+        input_pins.sort_by(|a, b| {
+            let ia = match &a.definition.role {
+                PinRole::Data(DR::Inputs(i)) => *i,
+                _ => 0,
+            };
+            let ib = match &b.definition.role {
+                PinRole::Data(DR::Inputs(i)) => *i,
+                _ => 0,
+            };
+            ia.cmp(&ib)
+        });
+
+        let mut columns = Vec::new();
+        for input_pin in input_pins {
+            let upstream_pin_id = data_state.connections.get_upstream(input_pin.id)?;
+            let upstream_pin = data_state.pins.get(&upstream_pin_id)?;
+
+            let name = upstream_pin.definition.name.clone();
+            let data_type = data_state
+                .pin_types
+                .get(&upstream_pin_id)
+                .and_then(|dt| dt.series_inner().cloned())
+                .or_else(|| {
+                    upstream_pin.definition.data_type.as_ref().and_then(|pdt| {
+                        if let crate::graph::pin::PinDataTypeDefinition::Concrete(dt) = pdt {
+                            dt.series_inner().cloned()
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .unwrap_or(DataType::Float64);
+
+            columns.push(ColumnSchema { name, data_type });
+        }
+
+        if columns.is_empty() {
+            return None;
+        }
+        Some(DataSchema { columns })
+    }
+
+    /// 节点输入变化时，获取需额外解析的下游节点（消费该节点所有 output 的节点）
+    fn get_downstream_resolve_nodes(&self, node_id: NodeId) -> Vec<NodeId> {
+        let data_state = self.data_state.read().unwrap();
+        let node = match data_state.nodes.get(&node_id) {
+            Some(n) => n,
+            None => return vec![],
+        };
+
+        let mut downstream = Vec::new();
+        for &pin_id in &node.pin_ids {
+            let pin = match data_state.pins.get(&pin_id) {
+                Some(p) => p,
+                None => continue,
+            };
+            if pin.is_output() {
+                for to_pid in data_state.connections.get_downstream(pin_id) {
+                    if let Some(p) = data_state.pins.get(&to_pid) {
+                        downstream.push(p.node_id);
+                    }
+                }
+            }
+        }
+        downstream
     }
 }
 

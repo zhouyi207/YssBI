@@ -27,7 +27,14 @@
 
 - [x] 添加 plot 支持
 - [x] 添加 随机分布 支持 ~~随机分布的随机样本，设置数量出现随机样本~~
-- [x] 添加对 dataseries 运算符的支持 ~~catelog math 节点应该是 any~~
+- [x] 添加对 dataseries 运算符的支持（蒙特卡洛模拟） ~~catelog math 节点应该是 any~~
+
+## 2026.03.04
+
+- [x] 添加假设检验 ast 转化公式文本
+- [x] 动态节点生成 pin，~~动态节点生成 pin 应该怎么操作？使用了一个很蠢的方法调用 extract_schema_from_node_input_connections 函数完成~~
+- [ ]
+
 
 # TODOLIST
 
