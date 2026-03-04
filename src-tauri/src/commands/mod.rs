@@ -4,6 +4,7 @@ pub mod command_settings;
 pub mod command_graph;
 pub mod command_variable;
 pub mod command_dataframe;
+pub mod command_hypothesis;
 pub mod command_log;
 
 pub use command_project::*;
@@ -12,4 +13,5 @@ pub use command_settings::*;
 pub use command_graph::*;
 pub use command_variable::*;
 pub use command_dataframe::*;
+pub use command_hypothesis::*;
 pub use command_log::*;

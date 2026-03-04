@@ -48,6 +48,9 @@ pub struct OLSResult {
     pub conf_int_left: Array1<f64>,  // 置信区间左侧
     pub conf_int_right: Array1<f64>, // 置信区间右侧
 
+    /// 参数协方差矩阵 (k×k)，用于 Wald 假设检验
+    pub cov_beta: Array2<f64>,
+
     // 矩阵是否病态（多重共线性）
     pub cond_no: f64,
 }
@@ -159,6 +162,7 @@ impl OLS {
             pvalues: Array1::from_vec(p_values),
             conf_int_left: ci_lower.as_ref().into_ndarray().to_owned(),
             conf_int_right: ci_upper.as_ref().into_ndarray().to_owned(),
+            cov_beta: cov_beta.as_ref().into_ndarray().to_owned(),
             cond_no,
         })
     }

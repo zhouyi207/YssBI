@@ -378,6 +378,10 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             fitted_values,
             residuals,
         },
+        betas: result.betas.to_vec(),
+        cov_beta: (0..result.cov_beta.nrows())
+            .map(|i| result.cov_beta.row(i).iter().cloned().collect())
+            .collect(),
     };
 
     let ols_model = OLSModel {

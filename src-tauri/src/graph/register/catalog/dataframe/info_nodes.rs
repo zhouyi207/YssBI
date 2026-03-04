@@ -9,6 +9,10 @@ pub struct OLSResult {
     pub model_basic_info: ModelBasicInfo,
     pub coefficients: Vec<Coefficient>,
     pub diagnostic_info: DiagnosticInfo,
+    /// 参数估计 (与 coefficients 的 coef 一致)，用于假设检验
+    pub betas: Vec<f64>,
+    /// 参数协方差矩阵 (k×k)，行优先，用于假设检验
+    pub cov_beta: Vec<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

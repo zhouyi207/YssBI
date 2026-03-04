@@ -2,6 +2,7 @@
 //!
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
+pub mod ast;
 pub mod commands;
 pub mod database;
 pub mod editor;
@@ -143,6 +144,8 @@ pub fn run() {
             reset_database,
             export_database,
             get_edit_state,
+            // ==================== 假设检验 ====================
+            hypothesis_test,
             // ==================== 日志 ====================
             frontend_log,
             get_logs,

@@ -1,6 +1,7 @@
 export * from "./project";
 export * from "./settings";
 export * from "./schema";
+export * from "./stats";
 export { NodeService } from "./graph/node/nodeService";
 export { ConnectionService } from "./graph/connection/connectionService";
 export { PinService } from "./graph/pin/pinService";
