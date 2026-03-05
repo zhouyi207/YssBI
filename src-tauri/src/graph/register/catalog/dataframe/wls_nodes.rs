@@ -14,7 +14,7 @@ use std::sync::Arc;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
 
-use super::info_nodes::{BreuschPaganTest, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult};
+use super::info_nodes::{BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
 use super::ols_nodes::{OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
 /// Re-export OLSModel for Predict compatibility (WLS outputs same structure)
@@ -378,22 +378,68 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         });
     }
 
-    let bp_test = if has_constant {
-        // WLS: BP 检验应在加权后的残差上进行，检验加权是否消除了异方差
-        let sqrt_weights = weights.mapv(|w| w.sqrt());
-        let exog_whitened: Array2<f64> = Array2::from_shape_fn((n, exog.ncols()), |(i, j)| exog[[i, j]] * sqrt_weights[i]);
-        let endog_whitened: Array1<f64> = Array1::from_shape_fn(n, |i| endog[i] * sqrt_weights[i]);
-        let betas_arr = Array1::from(result.betas.to_vec());
-        let fitted_whitened: Array1<f64> = exog_whitened.dot(&betas_arr);
-        let residuals_whitened = &endog_whitened - &fitted_whitened;
+    let bp_tests = if has_constant {
+        // WLS: 与 Stata regress [aweight=w] 后 estat hettest 一致
+        // Stata 归一化 aweight: w = (N/sum(v))*v；使用原始残差、X、拟合值；加权辅助回归
+        let residuals_arr = Array1::from(residuals.clone());
+        let fitted_arr = Array1::from(fitted_values.clone());
+        let sum_w: f64 = weights.iter().sum();
+        let w_norm: Array1<f64> = if sum_w > 0.0 {
+            Array1::from_shape_fn(n, |i| weights[i] * n as f64 / sum_w)
+        } else {
+            weights.clone()
+        };
 
-        diagnostics::breusch_pagan(&exog_whitened, &residuals_whitened)
-            .ok()
-            .map(|r| BreuschPaganTest {
-                lm_stat: r.lm_stat,
-                df: r.df,
-                p_value: r.p_value,
-            })
+        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs_weighted(&exog, &residuals_arr, &w_norm).ok();
+        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs_weighted(&exog, &residuals_arr, &w_norm).ok();
+        let r_stata = diagnostics::breusch_pagan_stata_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
+        let r_koenker = diagnostics::breusch_pagan_koenker_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
+        Some(BreuschPaganTests {
+            stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+        })
+    } else {
+        None
+    };
+
+    let im_test = if has_constant {
+        let residuals_arr = Array1::from(residuals.clone());
+        let sum_w: f64 = weights.iter().sum();
+        let w_norm: Array1<f64> = if sum_w > 0.0 {
+            Array1::from_shape_fn(n, |i| weights[i] * n as f64 / sum_w)
+        } else {
+            weights.clone()
+        };
+        match diagnostics::im_test_weighted(&exog, &residuals_arr, &w_norm) {
+            Ok(r) => {
+                let im = ImTest {
+                    heteroskedasticity: ImTestComponent {
+                        chi2: r.heteroskedasticity.chi2,
+                        df: r.heteroskedasticity.df,
+                        p_value: r.heteroskedasticity.p_value,
+                    },
+                    skewness: ImTestComponent {
+                        chi2: r.skewness.chi2,
+                        df: r.skewness.df,
+                        p_value: r.skewness.p_value,
+                    },
+                    kurtosis: ImTestComponent {
+                        chi2: r.kurtosis.chi2,
+                        df: r.kurtosis.df,
+                        p_value: r.kurtosis.p_value,
+                    },
+                    total: ImTestComponent {
+                        chi2: r.total.chi2,
+                        df: r.total.df,
+                        p_value: r.total.p_value,
+                    },
+                };
+                Some(im)
+            }
+            Err(_) => None,
+        }
     } else {
         None
     };
@@ -423,7 +469,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
-            bp_test,
+            bp_tests,
+            im_test,
             fitted_values,
             residuals,
         },

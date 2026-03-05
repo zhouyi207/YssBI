@@ -45,9 +45,33 @@ interface BreuschPaganTest {
   p_value: number;
 }
 
+/** 四种 BP 变体（对应 Stata estat hettest） */
+interface BreuschPaganTests {
+  stata?: BreuschPaganTest;
+  koenker?: BreuschPaganTest;
+  stata_rhs?: BreuschPaganTest;
+  koenker_rhs?: BreuschPaganTest;
+}
+
+/** IM-test 各分量的 chi² 检验结果 */
+interface ImTestComponent {
+  chi2: number;
+  df: number;
+  p_value: number;
+}
+
+/** Cameron & Trivedi (1990) IM-test 分解（estat imtest） */
+interface ImTest {
+  heteroskedasticity: ImTestComponent;
+  skewness: ImTestComponent;
+  kurtosis: ImTestComponent;
+  total: ImTestComponent;
+}
+
 interface DiagnosticInfo {
   cond_no: number;
-  bp_test?: BreuschPaganTest;
+  bp_tests?: BreuschPaganTests;
+  im_test?: ImTest;
   fitted_values?: number[];
   residuals?: number[];
 }
@@ -97,6 +121,57 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
       <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">{label}</div>
       <div className="text-white font-mono text-sm font-medium">{value}</div>
       {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+const BP_VARIANTS: { key: keyof BreuschPaganTests; label: string }[] = [
+  { key: 'stata', label: 'estat hettest' },
+  { key: 'koenker', label: 'estat hettest, iid' },
+  { key: 'stata_rhs', label: 'estat hettest, rhs' },
+  { key: 'koenker_rhs', label: 'estat hettest, rhs iid' },
+];
+
+/** 统一的 chi² 检验卡片（BP 四种变体 / IM-test 分解） */
+interface Chi2TestCard {
+  label: string;
+  chi2: number;
+  df: number;
+  p_value: number;
+}
+
+function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {cards.map((c) => {
+        const reject = c.p_value < 0.05;
+        return (
+          <div
+            key={c.label}
+            className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors"
+          >
+            <div className="text-[11px] text-gray-500 font-mono mb-2">{c.label}</div>
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+              <span className="text-gray-400">
+                chi2 = <span className="font-mono text-white">{formatNum(c.chi2)}</span>
+              </span>
+              <span className="text-gray-400">
+                df = <span className="font-mono text-gray-300">{c.df}</span>
+              </span>
+              <span className="text-gray-400">
+                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(c.p_value)}</span>
+              </span>
+            </div>
+            <div className="mt-1.5 text-[10px]">
+              {reject ? (
+                <span className="text-amber-400">拒绝 H0</span>
+              ) : (
+                <span className="text-gray-500">不拒绝 H0</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -348,18 +423,39 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           value={formatNum(diag.cond_no)}
           sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
         />
-        {diag.bp_test && (
-          <StatCard
-            label="Breusch-Pagan (Heteroscedasticity)"
-            value={`LM = ${formatNum(diag.bp_test.lm_stat)} (df = ${diag.bp_test.df}), p = ${formatNum(diag.bp_test.p_value)}`}
-            sub={
-              diag.bp_test.p_value < 0.05
-                ? 'Reject H0: heteroscedasticity detected'
-                : 'Cannot reject H0: homoscedasticity'
-            }
-          />
-        )}
       </div>
+
+      {diag.bp_tests && (
+        <div className="mb-4">
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">
+            Breusch-Pagan (Heteroscedasticity) — Stata estat hettest 四种变体
+          </div>
+          <Chi2TestCards
+            cards={BP_VARIANTS.filter(({ key }) => diag.bp_tests![key]).map(({ key, label }) => ({
+              label,
+              chi2: diag.bp_tests![key]!.lm_stat,
+              df: diag.bp_tests![key]!.df,
+              p_value: diag.bp_tests![key]!.p_value,
+            }))}
+          />
+        </div>
+      )}
+
+      {diag.im_test ? (
+        <div className="mb-4">
+          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">
+            Cameron & Trivedi&apos;s decomposition of IM-test — Stata estat imtest
+          </div>
+          <Chi2TestCards
+            cards={[
+              { label: 'Heteroskedasticity', ...diag.im_test.heteroskedasticity },
+              { label: 'Skewness', ...diag.im_test.skewness },
+              { label: 'Kurtosis', ...diag.im_test.kurtosis },
+              { label: 'Total', ...diag.im_test.total },
+            ]}
+          />
+        </div>
+      ) : null}
 
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
         <>

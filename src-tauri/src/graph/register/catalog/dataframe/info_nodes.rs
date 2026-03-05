@@ -52,7 +52,7 @@ pub struct Coefficient {
     pub is_significant: bool,
 }
 
-/// Breusch-Pagan 异方差检验结果
+/// Breusch-Pagan 异方差检验结果（单变体）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BreuschPaganTest {
     pub lm_stat: f64,
@@ -60,11 +60,43 @@ pub struct BreuschPaganTest {
     pub p_value: f64,
 }
 
+/// Breusch-Pagan 四种变体（对应 Stata estat hettest）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BreuschPaganTests {
+    /// estat hettest（z=拟合值，原始 BP）
+    pub stata: Option<BreuschPaganTest>,
+    /// estat hettest, iid（z=拟合值，Koenker）
+    pub koenker: Option<BreuschPaganTest>,
+    /// estat hettest, rhs（z=RHS，原始 BP）
+    pub stata_rhs: Option<BreuschPaganTest>,
+    /// estat hettest, rhs iid（z=RHS，Koenker）
+    pub koenker_rhs: Option<BreuschPaganTest>,
+}
+
+/// IM-test 各分量的 chi² 检验结果（chi2, df, p）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImTestComponent {
+    pub chi2: f64,
+    pub df: usize,
+    pub p_value: f64,
+}
+
+/// Cameron & Trivedi (1990) IM-test 分解（estat imtest）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImTest {
+    pub heteroskedasticity: ImTestComponent,
+    pub skewness: ImTestComponent,
+    pub kurtosis: ImTestComponent,
+    pub total: ImTestComponent,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub bp_test: Option<BreuschPaganTest>,
+    pub bp_tests: Option<BreuschPaganTests>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub im_test: Option<ImTest>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub fitted_values: Vec<f64>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

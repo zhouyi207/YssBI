@@ -16,7 +16,7 @@ use std::sync::Arc;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{GLS, GLSConfig};
 
-use super::info_nodes::{BreuschPaganTest, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult};
+use super::info_nodes::{BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
 use super::ols_nodes::VariableSpec;
 
 /// Re-export OLSModel for Predict compatibility (GLS outputs same structure)
@@ -400,15 +400,53 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         });
     }
 
-    let bp_test = if has_constant {
+    let bp_tests = if has_constant {
         let residuals_arr = Array1::from(residuals.clone());
-        diagnostics::breusch_pagan(&exog, &residuals_arr)
-            .ok()
-            .map(|r| BreuschPaganTest {
-                lm_stat: r.lm_stat,
-                df: r.df,
-                p_value: r.p_value,
-            })
+        let fitted_arr = Array1::from(fitted_values.clone());
+        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs(&exog, &residuals_arr).ok();
+        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs(&exog, &residuals_arr).ok();
+        let r_stata = diagnostics::breusch_pagan_stata(&residuals_arr, &fitted_arr).ok();
+        let r_koenker = diagnostics::breusch_pagan_koenker(&residuals_arr, &fitted_arr).ok();
+        Some(BreuschPaganTests {
+            stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+        })
+    } else {
+        None
+    };
+
+    let im_test = if has_constant {
+        let residuals_arr = Array1::from(residuals.clone());
+        match diagnostics::im_test(&exog, &residuals_arr) {
+            Ok(r) => {
+                let im = ImTest {
+                    heteroskedasticity: ImTestComponent {
+                        chi2: r.heteroskedasticity.chi2,
+                        df: r.heteroskedasticity.df,
+                        p_value: r.heteroskedasticity.p_value,
+                    },
+                    skewness: ImTestComponent {
+                        chi2: r.skewness.chi2,
+                        df: r.skewness.df,
+                        p_value: r.skewness.p_value,
+                    },
+                    kurtosis: ImTestComponent {
+                        chi2: r.kurtosis.chi2,
+                        df: r.kurtosis.df,
+                        p_value: r.kurtosis.p_value,
+                    },
+                    total: ImTestComponent {
+                        chi2: r.total.chi2,
+                        df: r.total.df,
+                        p_value: r.total.p_value,
+                    },
+                };
+                Some(im)
+            }
+            Err(_) => None,
+        }
     } else {
         None
     };
@@ -438,7 +476,8 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
-            bp_test,
+            bp_tests,
+            im_test,
             fitted_values,
             residuals,
         },
