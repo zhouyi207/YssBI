@@ -11,21 +11,70 @@ use ndarray::{Array1, Array2};
 use polars::prelude::Series;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{OLSConfig, OLS};
 
-use super::info_nodes::{Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult};
+use super::info_nodes::{BreuschPaganTest, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult};
 
 // ======================== 结构体 ========================
+
+/// VCE (Variance-Covariance Estimator) 内部表示，用于 OLSConfigure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum OLSCovarianceConfig {
+    FixedScale { scale: f64 },
+    Cluster { cluster_id: Vec<usize> },
+    HAC { kernel: String, bandwidth: Option<i64> },
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OLSConfigure {
     pub constant: bool,
+    pub cov_type: String,
+    pub cov_config: Option<OLSCovarianceConfig>,
 }
 
 impl Default for OLSConfigure {
     fn default() -> Self {
-        Self { constant: true }
+        Self {
+            constant: true,
+            cov_type: "nonrobust".to_string(),
+            cov_config: None,
+        }
     }
+}
+
+/// VCE 简单类型（无参）的 unit struct，用于 OneOf 和常量节点
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VCENonRobust;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VCEHC0;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VCEHC1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VCEHC2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VCEHC3;
+
+/// 各 Config 节点输出的结构体（用于 downcast）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OLSFixedScaleConfig {
+    pub scale: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OLSClusterConfig {
+    pub cluster_id: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OLSHACConfig {
+    pub kernel: String,
+    pub bandwidth: Option<i64>,
 }
 
 /// 变量规格：记录每个输入变量在拟合时的处理方式（供预测复用）
@@ -97,6 +146,7 @@ fn ols_input_slots() -> Vec<PinSlot> {
 }
 
 use crate::execution::context::NodeExecutionContextTrait;
+use std::collections::HashMap;
 
 fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitResult, String> {
     // ---- Extract endog ----
@@ -306,7 +356,24 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         .map_err(|e| format!("OLS: failed to build exog matrix: {}", e))?;
 
     // ---- Run OLS regression ----
-    let sci_config = OLSConfig { constant: has_constant };
+    let cov_params = config.cov_config.as_ref().map(|c| match c {
+        OLSCovarianceConfig::FixedScale { scale } => yss_sci::regression::linear_model::CovParams::FixedScale {
+            scale: *scale,
+        },
+        OLSCovarianceConfig::Cluster { cluster_id } => yss_sci::regression::linear_model::CovParams::Cluster {
+            cluster_id: cluster_id.clone(),
+        },
+        OLSCovarianceConfig::HAC { kernel, bandwidth } => yss_sci::regression::linear_model::CovParams::HAC {
+            kernel: kernel.clone(),
+            bandwidth: *bandwidth,
+        },
+    });
+
+    let sci_config = OLSConfig {
+        constant: has_constant,
+        cov_type: config.cov_type.clone(),
+        cov_params,
+    };
     let ols = OLS {
         endog: endog.clone(),
         exog: exog.clone(),
@@ -351,6 +418,19 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         });
     }
 
+    let bp_test = if has_constant {
+        let residuals_arr = Array1::from(residuals.clone());
+        diagnostics::breusch_pagan(&exog, &residuals_arr)
+            .ok()
+            .map(|r| BreuschPaganTest {
+                lm_stat: r.lm_stat,
+                df: r.df,
+                p_value: r.p_value,
+            })
+    } else {
+        None
+    };
+
     let ols_result = OLSResult {
         title: "OLS Regression Results".to_string(),
         endog_name: endog_name,
@@ -376,6 +456,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
+            bp_test,
             fitted_values,
             residuals,
         },
@@ -396,27 +477,278 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
 
 // ======================== 注册入口 ========================
 
+/// VCE pin 可接受的 OneOf 类型（拖动时自动筛选兼容节点）
+fn vce_one_of_type() -> DataType {
+    DataType::one_of(vec![
+        DataType::Struct("VCENonRobust".to_string()),
+        DataType::Struct("VCEHC0".to_string()),
+        DataType::Struct("VCEHC1".to_string()),
+        DataType::Struct("VCEHC2".to_string()),
+        DataType::Struct("VCEHC3".to_string()),
+        DataType::Struct("OLSFixedScaleConfig".to_string()),
+        DataType::Struct("OLSClusterConfig".to_string()),
+        DataType::Struct("OLSHACConfig".to_string()),
+    ])
+}
+
 pub fn register(registry: &NodeRegistry) {
+    register_ols_vce_constants(registry);
     register_ols_configure(registry);
+    register_ols_fixed_scale_config(registry);
+    register_ols_cluster_config(registry);
+    register_ols_hac_config(registry);
     register_ols(registry);
     register_ols_summary(registry);
 }
 
-// ======================== OLS Configure 节点 ========================
+// ======================== VCE 常量节点（简单类型） ========================
 
-fn register_ols_configure(registry: &NodeRegistry) {
+fn register_ols_vce_constants(registry: &NodeRegistry) {
+    let vce_constants = [
+        ("NonRobust", "VCENonRobust"),
+        ("HC0", "VCEHC0"),
+        ("HC1", "VCEHC1"),
+        ("HC2", "VCEHC2"),
+        ("HC3", "VCEHC3"),
+    ];
+    for (name, struct_key) in vce_constants {
+        let struct_key = struct_key.to_string();
+        let definition = NodeDefinition::new(
+            format!("VCE: {}", name),
+            vec!["Data".to_string(), "Statistics".to_string()],
+        )
+        .with_ui_style("dataframe")
+        .with_description(format!("VCE constant — {}", name))
+        .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
+            "VCE",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Struct(struct_key.clone())),
+        ))])
+        .with_data_evaluator(Arc::new(move |ctx| {
+            let config: Box<dyn std::any::Any + Send + Sync> = match struct_key.as_str() {
+                "VCENonRobust" => Box::new(VCENonRobust),
+                "VCEHC0" => Box::new(VCEHC0),
+                "VCEHC1" => Box::new(VCEHC1),
+                "VCEHC2" => Box::new(VCEHC2),
+                "VCEHC3" => Box::new(VCEHC3),
+                _ => return Err("Unknown VCE type".to_string()),
+            };
+            let handle_id = ctx.put_handle(config);
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Result),
+                DataValue::new_struct(struct_key.clone(), handle_id),
+            )?;
+            Ok(())
+        }));
+        registry.register(definition);
+    }
+}
+
+// ======================== OLS Fixed Scale Config 节点 ========================
+
+fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
-        "OLS Configure",
+        "OLS Fixed Scale Config",
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("OLS regression configuration — input pins compose the output Config")
+    .with_description("Fixed scale covariance config — user-specified scale for cov_type 'fixed scale'")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Scale",
+            DataRole::Custom("scale".to_string()),
+            PinDataTypeDefinition::concrete(DataType::Float64),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Config",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Struct("OLSFixedScaleConfig".to_string())),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let scale_val = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("scale".to_string())))?;
+        let scale = scale_val
+            .as_f64()
+            .ok_or("OLS Fixed Scale Config: Scale must be Float64".to_string())?;
+        if scale <= 0.0 {
+            return Err("OLS Fixed Scale Config: Scale must be positive".to_string());
+        }
+        let config = OLSFixedScaleConfig { scale };
+        let handle_id = ctx.put_handle(Box::new(config));
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Result),
+            DataValue::new_struct("OLSFixedScaleConfig", handle_id),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
+}
+
+/// 将 DataSeries 转为 group 索引 Vec<usize>（0-based，按首次出现顺序编号）
+fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &str) -> Result<Vec<usize>, String> {
+    let series = ctx.get_series(series_id)?;
+    let n = series.len();
+
+    let mut indices = Vec::with_capacity(n);
+    let mut value_to_idx: HashMap<String, usize> = HashMap::new();
+    let mut next_idx = 0usize;
+
+    if series.dtype() == &polars::prelude::DataType::String {
+        let ca = series.str().map_err(|e| e.to_string())?;
+        for opt in ca.into_iter() {
+            let s = opt.ok_or("Config: series contains null")?.to_string();
+            let idx = *value_to_idx.entry(s).or_insert_with(|| {
+                let i = next_idx;
+                next_idx += 1;
+                i
+            });
+            indices.push(idx);
+        }
+    } else if series.dtype() == &polars::prelude::DataType::Int64 {
+        let ca = series.i64().map_err(|e| e.to_string())?;
+        for opt in ca.into_iter() {
+            let v = opt.ok_or("Config: series contains null")?;
+            let s = v.to_string();
+            let idx = *value_to_idx.entry(s).or_insert_with(|| {
+                let i = next_idx;
+                next_idx += 1;
+                i
+            });
+            indices.push(idx);
+        }
+    } else {
+        return Err("Config: Cluster/Entity/Time/Group ID must be String or Int64 DataSeries".to_string());
+    }
+
+    Ok(indices)
+}
+
+// ======================== OLS Cluster Config 节点 ========================
+
+fn register_ols_cluster_config(registry: &NodeRegistry) {
+    let ds_type = DataType::DataSeries(Box::new(DataType::one_of(vec![
+        DataType::String,
+        DataType::Int64,
+    ])));
+    let definition = NodeDefinition::new(
+        "OLS Cluster Config",
+        vec!["Data".to_string(), "Statistics".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("Cluster-robust covariance config — connect Cluster ID (group labels) for cov_type 'cluster'")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Cluster ID",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(ds_type),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Config",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Struct("OLSClusterConfig".to_string())),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let ds_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &ds_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            _ => return Err("OLS Cluster Config: Cluster ID must be a DataSeries".to_string()),
+        };
+        let cluster_id = series_to_group_indices(ctx, &series_id)?;
+        let config = OLSClusterConfig { cluster_id };
+        let handle_id = ctx.put_handle(Box::new(config));
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Result),
+            DataValue::new_struct("OLSClusterConfig", handle_id),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
+}
+
+// ======================== OLS HAC Config 节点 ========================
+
+fn register_ols_hac_config(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new(
+        "OLS HAC Config",
+        vec!["Data".to_string(), "Statistics".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("HAC (Heteroscedasticity and Autocorrelation Consistent) covariance config for cov_type 'HAC'")
+    .with_pin_slots(vec![
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Kernel",
+                DataRole::Custom("kernel".to_string()),
+                PinDataTypeDefinition::concrete(DataType::String),
+            )
+            .with_optional(true)
+            .with_metadata(true, "dropdown")
+            .with_widget_options(vec![
+                "Bartlett".to_string(),
+                "Parzen".to_string(),
+                "Quadratic Spectral".to_string(),
+            ]),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Bandwidth",
+                DataRole::Custom("bandwidth".to_string()),
+                PinDataTypeDefinition::concrete(DataType::Int64),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Config",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Struct("OLSHACConfig".to_string())),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let kernel = ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("kernel".to_string())))
+            .ok()
+            .and_then(|v| v.as_string().map(|s| s.to_string()))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Bartlett".to_string());
+        let bandwidth = ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("bandwidth".to_string())))
+            .ok()
+            .and_then(|v| v.as_i64());
+        let config = OLSHACConfig { kernel, bandwidth };
+        let handle_id = ctx.put_handle(Box::new(config));
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Result),
+            DataValue::new_struct("OLSHACConfig", handle_id),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
+}
+
+// ======================== OLS & WLS Configure 节点 ========================
+
+fn register_ols_configure(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new(
+        "OLS & WLS Configure",
+        vec!["Data".to_string(), "Statistics".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("OLS & WLS regression configuration — input pins compose the output Config")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
                 "Constant",
                 DataRole::Custom("constant".to_string()),
                 PinDataTypeDefinition::concrete(DataType::Boolean),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "VCE",
+                DataRole::Custom("vce".to_string()),
+                PinDataTypeDefinition::concrete(vce_one_of_type()),
             )
             .with_optional(true),
         ),
@@ -430,9 +762,55 @@ fn register_ols_configure(registry: &NodeRegistry) {
         let constant = ctx
             .get_input_by_role(&PinRole::Data(DataRole::Custom("constant".to_string())))?
             .as_bool()
-            .ok_or("OLS Configure: Constant must be a boolean")?;
+            .ok_or("OLS & WLS Configure: Constant must be a boolean")?;
 
-        let config = OLSConfigure { constant };
+        let (cov_type, cov_config) = ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("vce".to_string())))
+            .ok()
+            .and_then(|v| v.as_handle_id().map(|s| s.to_string()))
+            .and_then(|id| ctx.get_handle(&id).ok())
+            .and_then(|h| {
+                Some(if h.downcast_ref::<VCENonRobust>().is_some() {
+                    ("nonrobust".to_string(), None)
+                } else if h.downcast_ref::<VCEHC0>().is_some() {
+                    ("HC0".to_string(), None)
+                } else if h.downcast_ref::<VCEHC1>().is_some() {
+                    ("HC1".to_string(), None)
+                } else if h.downcast_ref::<VCEHC2>().is_some() {
+                    ("HC2".to_string(), None)
+                } else if h.downcast_ref::<VCEHC3>().is_some() {
+                    ("HC3".to_string(), None)
+                } else if let Some(c) = h.downcast_ref::<OLSFixedScaleConfig>() {
+                    (
+                        "fixed scale".to_string(),
+                        Some(OLSCovarianceConfig::FixedScale { scale: c.scale }),
+                    )
+                } else if let Some(c) = h.downcast_ref::<OLSClusterConfig>() {
+                    (
+                        "cluster".to_string(),
+                        Some(OLSCovarianceConfig::Cluster {
+                            cluster_id: c.cluster_id.clone(),
+                        }),
+                    )
+                } else if let Some(c) = h.downcast_ref::<OLSHACConfig>() {
+                    (
+                        "HAC".to_string(),
+                        Some(OLSCovarianceConfig::HAC {
+                            kernel: c.kernel.clone(),
+                            bandwidth: c.bandwidth,
+                        }),
+                    )
+                } else {
+                    return None;
+                })
+            })
+            .unwrap_or_else(|| ("nonrobust".to_string(), None));
+
+        let config = OLSConfigure {
+            constant,
+            cov_type,
+            cov_config,
+        };
         let handle_id = ctx.put_handle(Box::new(config));
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Result),

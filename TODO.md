@@ -33,10 +33,28 @@
 
 - [x] 添加假设检验 ast 转化公式文本
 - [x] 动态节点生成 pin，~~动态节点生成 pin 应该怎么操作？使用了一个很蠢的方法调用 extract_schema_from_node_input_connections 函数完成~~
-- [ ]
+
+## 2026.03.05
+
+- [x] 添加 vce 配置的实现
+- [x] 添加 wls, gls 的实现
+
 
 
 # TODOLIST
+
+现在节点分类特别混乱
+
+gls 的 data input pin 中我认为可以设置为 matrix，这就意味着需要在值系统中添加并定义 matrix 类型，目前是 dataframe
+
+wls 和 gls 的 predict 节点有问题，目前 wls 报错：Node 6b7c0693-8d92-4c76-a253-6d49333221ab failed: Predict: Model input is not connected or invalid
+
+
+HAC、hac-panel、hac-groupsum 的协方差计算尚未实现，当前会返回 "cov_type '...' not yet implemented"。
+
+目前使用 fixed scale 并没有提供 scale pin ，同时在 ols configure vce 可接受的结构体中删除掉 hac-panel 和 hac-groupsum
+
+对了 schema 中关于 vce 的要删除，暂时没有用到
 
 OneOf 还是使用 Restriction + TypeVar 来做类型推断之类的东西？
 
@@ -183,3 +201,47 @@ OLSModel (新结构，拟合产物)
 5. 输出 `DataSeries<Float64>`
 
 ---
+
+BP 检验
+
+
+我已将 `breusch_pagan` 改为使用**原始 Breusch-Pagan 公式**，以与 Stata 的 `estat hettest` 一致。
+
+## 修改说明
+
+**原实现（Koenker 形式）：**
+- 辅助回归：\(u^2\) 对 \(X\)
+- LM = \(n \times R^2\)
+- 与 R、Python statsmodels、Wooldridge 一致，但与 Stata 不同
+
+**现实现（原始 BP，与 Stata 一致）：**
+1. \(\hat{\sigma}^2 = \sum u_i^2 / n\)
+2. \(g_i = u_i^2 / \hat{\sigma}^2\)
+3. 辅助回归：\(g\) 对 \(X\)
+4. LM = \(\frac{1}{2} \cdot (TSS - RSS)\)，其中 TSS = \(\sum(g_i - 1)^2\)（因 \(\bar{g} = 1\)）
+
+自由度仍为 \(k-1\)，LM 仍服从 \(\chi^2(k-1)\)。
+
+## 代码变更摘要
+
+```diff
+- let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
+- let u_sq_col = u_sq.view().into_faer_col().to_owned();
++ let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
++ let sigma2 = u_sq.iter().sum::<f64>() / n as f64;
++ let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
++ let g_col = g.view().into_faer_col().to_owned();
+...
+- let xtu = x_faer.as_ref().transpose() * u_sq_col.as_ref();
++ let xtg = x_faer.as_ref().transpose() * g_col.as_ref();
+...
+- let u_sq_hat = x_faer.as_ref() * gamma.as_ref();
+- let ss_tot = ... (u_sq centered)
+- let ss_res = ... (u_sq - u_sq_hat)
+- let lm_stat = n as f64 * r2_aux;
++ let g_hat = x_faer.as_ref() * gamma.as_ref();
++ let tss = Σ(g_i - 1)², rss = Σ(g_i - ĝ_i)²
++ let lm_stat = 0.5 * (tss - rss);
+```
+
+项目已成功编译，BP 检验结果现在应与 Stata 的 `estat hettest` 一致。

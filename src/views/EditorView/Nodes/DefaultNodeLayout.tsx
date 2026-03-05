@@ -3,6 +3,7 @@ import { Pin } from "../Pins/Pin";
 import { Pin as PinModel, Node } from "@/shared/types/domain";
 import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
+import { getPinMetaData } from "@/features/core/pin";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 interface DefaultNodeLayoutProps {
@@ -83,13 +84,17 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
 
+  const nodeDef = useMemo(
+    () => useNodeRegistryStore.getState().getDefinition(node.nodeType),
+    [node.nodeType]
+  );
+
   const repeatableInfo = useMemo(() => {
-    const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
-    if (!def) return null;
-    const slot = def.pinSlots.find(s => s.slotKind === 'repeatable');
+    if (!nodeDef) return null;
+    const slot = nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
     if (!slot || slot.slotKind !== 'repeatable') return null;
     return { namePrefix: slot.namePrefix, minCount: slot.minCount };
-  }, [node.nodeType]);
+  }, [nodeDef]);
 
   const isRepeatablePin = useMemo(() => {
     if (!repeatableInfo) return (_pin: PinModel) => false;
@@ -134,10 +139,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             <div className="flex flex-col gap-1 flex-1">
               {inputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
+                const metaData = getPinMetaData(nodeDef, pin.name);
                 return (
                   <Pin
                     key={pin.id}
                     {...pin}
+                    metaData={metaData}
                     subgraphId={subgraphId}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
@@ -152,10 +159,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             <div className="flex flex-col gap-1 flex-1 items-end">
               {outputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
+                const metaData = getPinMetaData(nodeDef, pin.name);
                 return (
                   <Pin
                     key={pin.id}
                     {...pin}
+                    metaData={metaData}
                     subgraphId={subgraphId}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
@@ -175,10 +184,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             {inputsData.map((pin) => {
               const isRepeatable = isRepeatablePin(pin);
               const ds = getPinDragState(pin);
+              const metaData = getPinMetaData(nodeDef, pin.name);
               return (
                 <Pin
                   key={pin.id}
                   {...pin}
+                  metaData={metaData}
                   subgraphId={subgraphId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
@@ -195,10 +206,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           <div className="flex flex-col gap-1 flex-1 items-end">
             {outputsData.map((pin) => {
               const ds = getPinDragState(pin);
+              const metaData = getPinMetaData(nodeDef, pin.name);
               return (
                 <Pin
                   key={pin.id}
                   {...pin}
+                  metaData={metaData}
                   subgraphId={subgraphId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}

@@ -1,11 +1,14 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { usePinInput } from "@/features/core/pin";
+import { Select } from "@/shared/ui";
+import type { PinMetaDataDTO } from "@/shared/types/domain";
 
 export interface PinInputProps {
   pinId: string;
   nodeId: string;
   subgraphId: string;
   pinType: string;
+  metaData?: PinMetaDataDTO;
   value?: unknown;
   onValueChange?: (value: unknown) => void;
 }
@@ -69,6 +72,7 @@ export const PinInput: React.FC<PinInputProps> = ({
   nodeId,
   subgraphId,
   pinType,
+  metaData,
   value: initialValue,
   onValueChange,
 }) => {
@@ -107,6 +111,25 @@ export const PinInput: React.FC<PinInputProps> = ({
   const measureKey = isNumeric ? inputText : strText;
   const placeholder = pinType === "string" ? "text" : undefined;
   const { ref, width } = useAutoWidth(measureKey, placeholder);
+
+  const isDropdown = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
+
+  if (isDropdown && metaData?.widgetOptions) {
+    const strValue = pinType === "string" ? (value != null ? String(value) : metaData.widgetOptions[0] ?? "") : String(value ?? "");
+    return (
+      <div className="min-w-[60px] max-w-[120px]" onClick={stop} onPointerDown={stop}>
+        <Select
+          value={strValue}
+          onChange={(v) => {
+            handleChange(v);
+            savePinValue(v);
+          }}
+          options={metaData.widgetOptions}
+          className="text-[10px] h-[18px] !w-full"
+        />
+      </div>
+    );
+  }
 
   switch (pinType) {
     case "Int32":

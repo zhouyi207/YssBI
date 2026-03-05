@@ -2,7 +2,7 @@ use crate::log::log_app;
 use crate::schema::NodeDefinitionDTO;
 use crate::{
     project::ProjectState,
-    schema::{get_editor_schema, EditorSchema},
+    schema::EditorSchema,
 };
 use tauri::State;
 
@@ -26,8 +26,20 @@ pub fn get_node_definitions(state: State<ProjectState>) -> Vec<NodeDefinitionDTO
     result
 }
 
-/// 获取完整的编辑器 Schema（一次性获取所有元数据）
+/// 获取完整的编辑器 Schema（初始化时一次性获取，含 nodeDefinitions 及 pin metaData）
 #[tauri::command]
-pub fn get_editor_schema_command() -> EditorSchema {
-    get_editor_schema()
+pub fn get_editor_schema_command(state: State<ProjectState>) -> EditorSchema {
+    log_app::info!("get_editor_schema_command called");
+
+    let node_register = &state.project_store.read().unwrap().node_register;
+    let all_nodes = node_register.all();
+
+    let node_definitions: Vec<NodeDefinitionDTO> = all_nodes
+        .iter()
+        .map(|def| NodeDefinitionDTO::from(def.as_ref()))
+        .collect();
+
+    log_app::debug!("Editor schema: {} node definitions", node_definitions.len());
+
+    EditorSchema { node_definitions }
 }

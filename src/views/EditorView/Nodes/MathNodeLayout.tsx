@@ -4,6 +4,7 @@ import { Pin as PinModel } from "@/shared/types/domain";
 import type { Node } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
+import { getPinMetaData } from "@/features/core/pin";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 interface MathNodeLayoutProps {
@@ -50,15 +51,19 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
     return "dimmed";
   }, [activePin]);
 
+  const nodeDef = useMemo(
+    () => useNodeRegistryStore.getState().getDefinition(node.nodeType),
+    [node.nodeType]
+  );
+
   const repeatableMinCount = useMemo(() => {
-    const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
-    if (!def) return 2;
-    const repeatableSlot = def.pinSlots.find(s => s.slotKind === 'repeatable');
+    if (!nodeDef) return 2;
+    const repeatableSlot = nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
     if (repeatableSlot && repeatableSlot.slotKind === 'repeatable') {
       return repeatableSlot.minCount;
     }
     return 2;
-  }, [node.nodeType]);
+  }, [nodeDef]);
 
   return (
     <div className="relative flex flex-col min-h-full">
@@ -89,6 +94,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               <Pin
                 key={pin.id}
                 {...pin}
+                metaData={getPinMetaData(nodeDef, pin.name)}
                 subgraphId={subgraphId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
@@ -104,6 +110,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               <Pin
                 key={pin.id}
                 {...pin}
+                metaData={getPinMetaData(nodeDef, pin.name)}
                 subgraphId={subgraphId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
@@ -123,6 +130,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
             <Pin
               key={pin.id}
               {...pin}
+              metaData={getPinMetaData(nodeDef, pin.name)}
               subgraphId={subgraphId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
@@ -152,6 +160,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
             <Pin
               key={pin.id}
               {...pin}
+              metaData={getPinMetaData(nodeDef, pin.name)}
               subgraphId={subgraphId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}

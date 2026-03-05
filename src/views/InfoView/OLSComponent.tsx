@@ -39,8 +39,15 @@ export interface Coefficient {
   is_significant: boolean;
 }
 
+interface BreuschPaganTest {
+  lm_stat: number;
+  df: number;
+  p_value: number;
+}
+
 interface DiagnosticInfo {
   cond_no: number;
+  bp_test?: BreuschPaganTest;
   fitted_values?: number[];
   residuals?: number[];
 }
@@ -335,12 +342,23 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <StatCard
           label="Condition Number"
           value={formatNum(diag.cond_no)}
           sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
         />
+        {diag.bp_test && (
+          <StatCard
+            label="Breusch-Pagan (Heteroscedasticity)"
+            value={`LM = ${formatNum(diag.bp_test.lm_stat)} (df = ${diag.bp_test.df}), p = ${formatNum(diag.bp_test.p_value)}`}
+            sub={
+              diag.bp_test.p_value < 0.05
+                ? 'Reject H0: heteroscedasticity detected'
+                : 'Cannot reject H0: homoscedasticity'
+            }
+          />
+        )}
       </div>
 
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (

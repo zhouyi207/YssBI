@@ -52,9 +52,19 @@ pub struct Coefficient {
     pub is_significant: bool,
 }
 
+/// Breusch-Pagan 异方差检验结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BreuschPaganTest {
+    pub lm_stat: f64,
+    pub df: usize,
+    pub p_value: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bp_test: Option<BreuschPaganTest>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub fitted_values: Vec<f64>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

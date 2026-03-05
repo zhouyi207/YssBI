@@ -12,6 +12,8 @@ interface NodeRegistryStore extends NodeRegistryState {
     definitionsArray: NodeDefinition[]; // 缓存的数组，避免每次创建新引用
 
     syncFromBackend: () => Promise<void>;
+    /** 由 Schema store 在初始化时调用，从 schema 填充 definitions */
+    setDefinitionsFromSchema: (definitions: Map<string, NodeDefinition>) => void;
     clear: () => void;
 
     getDefinition: (type: string) => NodeDefinition | undefined;
@@ -72,6 +74,16 @@ export const useNodeRegistryStore = create<NodeRegistryStore>((set, get) => ({
             
             throw err;
         }
+    },
+
+    setDefinitionsFromSchema: (definitions) => {
+        const definitionsArray = Array.from(definitions.values());
+        set({
+            definitions,
+            definitionsArray,
+            status: LoadStatus.Ready,
+            error: null,
+        });
     },
 
     clear: () =>

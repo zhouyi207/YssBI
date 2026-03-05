@@ -5,6 +5,8 @@ mod series_nodes;
 mod transform_nodes;
 mod info_nodes;
 mod ols_nodes;
+mod wls_nodes;
+mod gls_nodes;
 mod dummy_nodes;
 mod prediction_nodes;
 
@@ -15,6 +17,8 @@ pub fn register(registry: &NodeRegistry) {
     series_nodes::register(registry);
     transform_nodes::register(registry);
     ols_nodes::register(registry);
+    wls_nodes::register(registry);
+    gls_nodes::register(registry);
     dummy_nodes::register(registry);
     prediction_nodes::register(registry);
 }

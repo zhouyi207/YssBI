@@ -22,11 +22,11 @@ pub use variables::*;
 
 use serde::Serialize;
 
-/// 完整的 Schema 数据，用于一次性传输给前端
+/// 完整的 Schema 数据，用于初始化时一次性传输给前端
+/// 包含节点定义（含 pin 的 metaData，如 dropdown 的 widget_options）
 #[derive(Debug, Clone, Serialize)]
-pub struct EditorSchema {}
-
-/// 获取完整的 Schema
-pub fn get_editor_schema() -> EditorSchema {
-    EditorSchema {}
+#[serde(rename_all = "camelCase")]
+pub struct EditorSchema {
+    /// 节点定义列表，含完整 pin 槽位及 metaData（widgetType、widgetOptions 等）
+    pub node_definitions: Vec<NodeDefinitionDTO>,
 }

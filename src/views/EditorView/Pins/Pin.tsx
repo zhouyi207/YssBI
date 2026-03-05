@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
+import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
@@ -21,6 +22,8 @@ const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int32", "Int64", "Float32", "Float
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 
 export interface PinProps extends PinModel {
+  /** 来自 schema 的 pin metaData（如 dropdown 的 widgetOptions） */
+  metaData?: PinMetaDataDTO;
   subgraphId?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
@@ -60,6 +63,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     direction,
     links,
     ui,
+    metaData,
     subgraphId,
     onPinClick,
     onPinPointerDown,
@@ -98,9 +102,10 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const shouldPulse = !optional && !isConnected && direction === "input" && type !== "exec";
 
+  const isDropdownPin = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
   const showInput =
     (!isConnected || forceShowInput === true) &&
-    PRIMITIVE_PIN_TYPES.has(type) &&
+    (PRIMITIVE_PIN_TYPES.has(type) || (type === "string" && isDropdownPin)) &&
     !containerType &&
     (direction === "input" || forceShowInput === true) &&
     subgraphId &&
@@ -321,6 +326,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           nodeId={nodeId}
           subgraphId={subgraphId}
           pinType={type}
+          metaData={metaData}
           value={toDisplayValue(userValue ?? defaultValue)}
           onValueChange={(value) => onValueChange?.(id, value)}
         />

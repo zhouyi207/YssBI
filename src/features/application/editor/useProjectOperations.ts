@@ -95,7 +95,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
                 : windowType === 'correlation'
                   ? 'Correlation Plot'
                   : 'Plot'
-        : 'OLS Regression Results';
+        : 'Regression Results';
       new WebviewWindow(label, {
         url,
         title,

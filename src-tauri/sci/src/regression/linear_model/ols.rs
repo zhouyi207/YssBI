@@ -1,3 +1,4 @@
+use crate::regression::covariance::{compute_cov_beta, CovParams};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -9,6 +10,9 @@ use statrs::{
 
 pub struct OLSConfig {
     pub constant: bool,
+    /// Covariance type: "nonrobust", "HC0", "HC1", "HC2", "HC3", "fixed scale", "cluster", etc.
+    pub cov_type: String,
+    pub cov_params: Option<CovParams>,
 }
 
 pub struct OLS {
@@ -34,7 +38,7 @@ pub struct OLSResult {
     pub ms_model: f64,
     pub ms_residual: f64,
     pub ms_total: f64,
-    pub covariance_type: &'static str,
+    pub covariance_type: String,
     pub r2: f64,
     pub r2_adjusted: f64,
     pub fvalue: f64,
@@ -71,7 +75,11 @@ impl OLS {
         };
         let df_total = df_redidual + df_model;
 
-        let covariance_type = "nonrobust";
+        let covariance_type = if self.config.cov_type.is_empty() {
+            "nonrobust".to_string()
+        } else {
+            self.config.cov_type.clone()
+        };
 
         // 普通最小二乘
         let xtx = x.transpose() * x.as_ref();
@@ -106,36 +114,43 @@ impl OLS {
         let dist = FisherSnedecor::new(df_model as f64, df_redidual as f64).unwrap();
         let f_p_value = 1.0 - dist.cdf(f);
         
-        // 残差方差
+        // 残差
         let u = y - y_hat.as_ref();
-        let sigma2 = (u.transpose() * u.as_ref()) / df_redidual as f64;
 
-        // 参数协方差矩阵
-        let cov_beta = sigma2 * xtx_inv.as_ref();
+        let x_nd = x.as_ref().into_ndarray().to_owned();
+        let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
+        let u_nd: Array1<f64> = u.as_ref().into_ndarray().to_owned();
+
+        // 参数协方差矩阵（根据 cov_type）
+        let cov_beta = compute_cov_beta(
+            &x_nd,
+            &xtx_inv_nd,
+            &u_nd,
+            df_redidual,
+            &covariance_type,
+            self.config.cov_params.as_ref(),
+        )?;
 
         // std err
-        let std_err = cov_beta
-            .diagonal()
-            .column_vector()
-            .map(|v| v.sqrt())
-            .to_owned();
+        let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
 
         // t value
-        let t_values: Vec<f64> = betas
+        let betas_nd = betas.as_ref().into_ndarray().to_owned();
+        let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())
             .map(|(b, se)| b / se)
             .collect();
 
         let t_dist = StudentsT::new(f64::zero(), f64::one(), df_redidual as f64).unwrap();
-        let p_values = t_values
+        let p_values: Vec<f64> = t_values
             .iter()
-            .map(|t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
-            .collect::<Vec<f64>>();
+            .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
+            .collect();
 
         let t_cirt = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas.as_ref() - t_cirt * std_err.as_ref();
-        let ci_upper = betas.as_ref() + t_cirt * std_err.as_ref();
+        let ci_lower = betas_nd.clone() - t_cirt * std_err.clone();
+        let ci_upper = betas_nd.clone() + t_cirt * std_err.clone();
 
         Ok(OLSResult {
             num_observation: num_obversion,
@@ -154,15 +169,15 @@ impl OLS {
             fvalue: f,
             f_p_value,
             model: OLSModel {
-                params: betas.as_ref().into_ndarray().to_owned(),
+                params: betas_nd.clone(),
             },
-            betas: betas.as_ref().into_ndarray().to_owned(),
-            stds: std_err.as_ref().into_ndarray().to_owned(),
+            betas: betas_nd,
+            stds: std_err,
             tvalues: Array1::from_vec(t_values),
             pvalues: Array1::from_vec(p_values),
-            conf_int_left: ci_lower.as_ref().into_ndarray().to_owned(),
-            conf_int_right: ci_upper.as_ref().into_ndarray().to_owned(),
-            cov_beta: cov_beta.as_ref().into_ndarray().to_owned(),
+            conf_int_left: ci_lower,
+            conf_int_right: ci_upper,
+            cov_beta,
             cond_no,
         })
     }
@@ -205,7 +220,11 @@ mod tests {
         let exog = Array2::from_shape_vec((n, 4), exog_data).unwrap();
         let endog = Array1::from_vec(sepal_length);
 
-        let ols_config = OLSConfig { constant: true};
+        let ols_config = OLSConfig {
+            constant: true,
+            cov_type: "nonrobust".to_string(),
+            cov_params: None,
+        };
         let ols = OLS { endog, exog, config: ols_config};
         let result = ols.fit().unwrap();
 

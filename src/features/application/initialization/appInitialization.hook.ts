@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
 import { useSchemaStore } from '@/features/core/schema';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { initProjectSync } from '@/features/core/dataStore';
 import { logger } from '@/utils/appLogger';
 
@@ -17,10 +16,8 @@ export function useAppInitialization(): InitializationState {
     const hasRestoredProjectRef = useRef(false);
 
     const { status: schemaStatus, error: schemaError } = useSchemaStore();
-    const { status: registryStatus, error: registryError } = useNodeRegistryStore();
 
     const isSchemaReady = schemaStatus === LoadStatus.Ready;
-    const isRegistryReady = registryStatus === LoadStatus.Ready;
 
     // 监听依赖状态变化
     useEffect(() => {
@@ -40,24 +37,15 @@ export function useAppInitialization(): InitializationState {
             return;
         }
 
-        if (registryError) {
-            logger.sys.error('Initialization failed: NodeRegistry error ' + registryError, 'AppInit');
-            setState({ status: LoadStatus.Error, error: `NodeRegistry: ${registryError}` });
-            return;
-        }
-
-        // 如果 Schema 或 Registry 还未准备好，触发加载并等待
-        if (!isSchemaReady || !isRegistryReady) {
+        // Schema 加载时会填充 Node Registry，故只需等待 Schema Ready
+        if (!isSchemaReady) {
             setState({ status: LoadStatus.Loading, error: null });
-            // 触发加载（幂等，Idle 时才会执行）
             if (schemaStatus === LoadStatus.Idle) {
                 useSchemaStore.getState().syncFromBackend();
             }
-            if (registryStatus === LoadStatus.Idle) {
-                useNodeRegistryStore.getState().syncFromBackend();
-            }
             return;
         }
+        // Schema Ready 后 Registry 已由 schema 填充，无需单独 sync
 
         // 同步项目状态
         const syncProject = async () => {
@@ -76,7 +64,7 @@ export function useAppInitialization(): InitializationState {
         };
 
         syncProject();
-    }, [schemaStatus, registryStatus]);
+    }, [schemaStatus]);
 
     return state;
 }
