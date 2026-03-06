@@ -1,4 +1,4 @@
-//! Scatter 节点：接收两个 DataSeries（X、Y），X 可为数值或日期，Y 为数值，打开 Plot 窗口绘制散点图
+//! Line 节点：接收两个 DataSeries（X、Y），X 可为数值或日期，Y 为数值，打开 Plot 窗口绘制折线图
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ScatterPlotData {
-    data: Vec<ScatterPoint>,
+struct LinePlotData {
+    data: Vec<LinePoint>,
     x_label: Option<String>,
     y_label: Option<String>,
     /// "date" = days since epoch, "datetime" = microseconds since epoch, "number" = 普通数值
@@ -20,7 +20,7 @@ struct ScatterPlotData {
 }
 
 #[derive(Serialize)]
-struct ScatterPoint {
+struct LinePoint {
     x: f64,
     y: f64,
 }
@@ -52,9 +52,9 @@ fn series_to_plot_f64(s: &polars::prelude::Series) -> Result<polars::prelude::Se
 }
 
 pub fn register(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Scatter", vec!["Plot".to_string()])
+    let definition = NodeDefinition::new("Line", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_description("Plot scatter chart from two DataSeries (X, Y). X can be numeric or Date, Y must be numeric.")
+        .with_description("Plot line chart from two DataSeries (X, Y). X can be numeric or Date, Y must be numeric.")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
@@ -87,35 +87,35 @@ pub fn register(registry: &NodeRegistry) {
 
             let x_id = match &x_value {
                 DataValue::DataSeries(v) => v.id.clone(),
-                _ => return Err("Scatter: X input must be a numeric DataSeries".to_string()),
+                _ => return Err("Line: X input must be a numeric DataSeries".to_string()),
             };
             let y_id = match &y_value {
                 DataValue::DataSeries(v) => v.id.clone(),
-                _ => return Err("Scatter: Y input must be a numeric DataSeries".to_string()),
+                _ => return Err("Line: Y input must be a numeric DataSeries".to_string()),
             };
 
             let x_series = ctx.get_series(&x_id)?;
             let y_series = ctx.get_series(&y_id)?;
 
             let x_cast = series_to_plot_f64(&x_series)
-                .map_err(|e| format!("Scatter: X {}", e))?;
+                .map_err(|e| format!("Line: X {}", e))?;
             let y_cast = series_to_plot_f64(&y_series)
-                .map_err(|e| format!("Scatter: Y {}", e))?;
+                .map_err(|e| format!("Line: Y {}", e))?;
 
             let x_f64 = x_cast.f64().map_err(|e| format!("X is not plottable: {}", e))?;
             let y_f64 = y_cast.f64().map_err(|e| format!("Y is not plottable: {}", e))?;
 
-            let data: Vec<ScatterPoint> = x_f64
+            let data: Vec<LinePoint> = x_f64
                 .into_iter()
                 .zip(y_f64.into_iter())
                 .filter_map(|(ox, oy)| match (ox, oy) {
-                    (Some(x), Some(y)) => Some(ScatterPoint { x, y }),
+                    (Some(x), Some(y)) => Some(LinePoint { x, y }),
                     _ => None,
                 })
                 .collect();
 
             if data.is_empty() {
-                return Err("Scatter: no valid (x, y) pairs after filtering nulls".to_string());
+                return Err("Line: no valid (x, y) pairs after filtering nulls".to_string());
             }
 
             let x_label = x_series.name().to_string();
@@ -132,7 +132,7 @@ pub fn register(registry: &NodeRegistry) {
                 _ => "number",
             };
 
-            let plot_data = ScatterPlotData {
+            let plot_data = LinePlotData {
                 data,
                 x_label: if x_label.is_empty() { None } else { Some(x_label) },
                 y_label: if y_label.is_empty() { None } else { Some(y_label) },
@@ -140,8 +140,8 @@ pub fn register(registry: &NodeRegistry) {
                 y_format: y_format.to_string(),
             };
 
-            let json = serde_json::to_string(&plot_data).map_err(|e| format!("Scatter: serialize failed: {}", e))?;
-            ctx.open_window("scatter".to_string(), json);
+            let json = serde_json::to_string(&plot_data).map_err(|e| format!("Line: serialize failed: {}", e))?;
+            ctx.open_window("line".to_string(), json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));

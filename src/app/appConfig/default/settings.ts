@@ -17,6 +17,7 @@ export const DEFAULT_THEME: ThemeSettings = {
     stringColor: "#e5c07b",
     dateColor: "#c678dd",
     datetimeColor: "#c678dd",
+    categoricalColor: "#4ec9b0",
     dataframeColor: "#61afef",
     dataseriesColor: "#56b6c2",
     objectColor: "#abb2bf",

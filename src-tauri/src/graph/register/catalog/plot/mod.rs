@@ -1,4 +1,5 @@
 mod scatter;
+mod line;
 mod ecdf;
 mod kde;
 mod histogram;
@@ -8,6 +9,7 @@ use crate::graph::register::NodeRegistry;
 
 pub fn register(registry: &NodeRegistry) {
     scatter::register(registry);
+    line::register(registry);
     ecdf::register(registry);
     kde::register(registry);
     histogram::register(registry);

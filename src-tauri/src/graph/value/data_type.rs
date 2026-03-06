@@ -19,6 +19,12 @@ pub enum DataType {
     Float64,
     String,
 
+    /// 日期类型（Polars Date / Datetime 统一映射）
+    Date,
+
+    /// 分类类型（Polars Categorical / Enum）
+    Categorical,
+
     // 复合类型
     Array(Box<DataType>),
     Object,
@@ -81,6 +87,8 @@ impl fmt::Display for DataType {
             DataType::Float32 => write!(f, "Float32"),
             DataType::Float64 => write!(f, "Float64"),
             DataType::String => write!(f, "String"),
+            DataType::Date => write!(f, "Date"),
+            DataType::Categorical => write!(f, "Categorical"),
             DataType::Array(inner) => write!(f, "Array<{}>", inner),
             DataType::Object => write!(f, "Object"),
             DataType::DataFrame => write!(f, "DataFrame"),
@@ -118,6 +126,8 @@ impl FromStr for DataType {
             "Float32" => Ok(DataType::Float32),
             "Float64" => Ok(DataType::Float64),
             "String" => Ok(DataType::String),
+            "Date" => Ok(DataType::Date),
+            "Categorical" => Ok(DataType::Categorical),
             "Object" => Ok(DataType::Object),
             "DataFrame" => Ok(DataType::DataFrame),
             "DataSeries" => Ok(DataType::DataSeries(Box::new(DataType::Any))),
@@ -173,6 +183,8 @@ impl DataType {
             DataType::Float32 => DataValue::Float32(num_traits::Zero::zero()),
             DataType::Float64 => DataValue::Float64(num_traits::Zero::zero()),
             DataType::String => DataValue::String(String::new()),
+            DataType::Date => DataValue::String(String::new()), // 默认空日期，用字符串表示
+            DataType::Categorical => DataValue::String(String::new()), // 分类默认空字符串
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),
             DataType::OneOf(types) => types.first().map_or(DataValue::Null, |t| t.default_value()),
@@ -184,7 +196,7 @@ impl DataType {
     pub fn is_primitive(&self) -> bool {
         match self {
             DataType::Boolean | DataType::Int32 | DataType::Int64
-            | DataType::Float32 | DataType::Float64 | DataType::String => true,
+            | DataType::Float32 | DataType::Float64 | DataType::String | DataType::Date | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_primitive()),
             _ => false,
         }
@@ -203,7 +215,7 @@ impl DataType {
     pub fn is_comparable(&self) -> bool {
         match self {
             DataType::Boolean | DataType::Int32 | DataType::Int64
-            | DataType::Float32 | DataType::Float64 | DataType::String => true,
+            | DataType::Float32 | DataType::Float64 | DataType::String | DataType::Date | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_comparable()),
             _ => false,
         }
@@ -246,7 +258,7 @@ impl DataType {
             (_, DataType::OneOf(targets)) => targets.iter().any(|t| DataType::can_convert(from, t)),
             // OneOf 源：任一成员能转为 to 即可
             (DataType::OneOf(sources), _) => sources.iter().any(|s| DataType::can_convert(s, to)),
-            (_, DataType::Boolean | DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64) => {
+            (_, DataType::Boolean | DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64 | DataType::Date | DataType::Categorical) => {
                 from.is_primitive()
             }
             _ => false,

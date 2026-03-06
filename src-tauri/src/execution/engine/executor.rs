@@ -14,8 +14,26 @@ use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
 use crate::log_exec;
+use serde_json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+/// 向窗口数据 JSON 注入 executionTimeMs，供前端 summary 页面做性能分析
+fn inject_execution_time(data_json: &str, duration_ms: u64) -> String {
+    match serde_json::from_str::<serde_json::Value>(data_json) {
+        Ok(mut v) => {
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert(
+                    "executionTimeMs".to_string(),
+                    serde_json::json!(duration_ms),
+                );
+            }
+            serde_json::to_string(&v).unwrap_or_else(|_| data_json.to_string())
+        }
+        Err(_) => data_json.to_string(),
+    }
+}
 
 /// 执行器
 ///
@@ -96,20 +114,22 @@ impl<E: EventEmitter> Executor<E> {
             });
 
             match self.execute_node(&frame) {
-                Ok(effect) => {
+                Ok((effect, duration_ms)) => {
                     self.log(format!("Node returned effect: {:?}", effect));
                     self.emit(ExecutionEvent::NodeComplete {
                         node_id: node_id_str,
+                        duration_ms,
                     });
                     self.interpret_effect(effect, frame)?;
                 }
-                Err(err) => {
+                Err((err, duration_ms)) => {
                     has_error = true;
                     self.log(format!("Node {:?} failed: {}", frame.node_id, err));
                     log_exec!(crate::log::LogLevel::Error, "Node {} failed: {}", node_id_str, err);
                     self.emit(ExecutionEvent::NodeError {
                         node_id: node_id_str,
                         error: err,
+                        duration_ms,
                     });
                     self.handle_frame_completion(frame)?;
                 }
@@ -121,8 +141,8 @@ impl<E: EventEmitter> Executor<E> {
         Ok(())
     }
 
-    /// 执行节点并返回 ExecutionEffect
-    fn execute_node(&mut self, frame: &ExecutionFrame) -> Result<ExecutionEffect, String> {
+    /// 执行节点并返回 (ExecutionEffect, duration_ms)
+    fn execute_node(&mut self, frame: &ExecutionFrame) -> Result<(ExecutionEffect, u64), (String, u64)> {
         let node_id = frame.node_id;
 
         // 获取节点定义
@@ -132,18 +152,21 @@ impl<E: EventEmitter> Executor<E> {
         };
 
         // 在执行节点之前，先执行所有上游的纯数据节点
-        self.execute_upstream_data_nodes(node_id)?;
+        self.execute_upstream_data_nodes(node_id).map_err(|e| (e, 0u64))?;
 
         // 创建执行上下文
         let mut ctx = NodeExecutionContext::new(self.graph.clone(), node_id);
 
+        // 测量主节点计算耗时（用于性能分析）
+        let node_start = Instant::now();
+
         // 执行节点的 FlowProcessor（如果有）
         let result = if let Some(ref processor) = definition.flow_processor {
-            processor(&mut ctx)
+            processor(&mut ctx).map_err(|e| (e, node_start.elapsed().as_millis() as u64))
         } else {
             // 执行节点的 DataEvaluator（如果有）
             if let Some(data_evaluator) = &definition.data_evaluator {
-                data_evaluator(&mut ctx)?;
+                data_evaluator(&mut ctx).map_err(|e| (e, node_start.elapsed().as_millis() as u64))?;
             }
             // 如果没有 FlowProcessor，返回 Done
             Ok(ExecutionEffect::Done)
@@ -152,16 +175,20 @@ impl<E: EventEmitter> Executor<E> {
         // 收集日志
         self.logs.extend(ctx.logs);
 
+        let node_duration_ms = node_start.elapsed().as_millis() as u64;
+
         for action in ctx.window_actions {
             let data_key = format!("win_{}", uuid::Uuid::new_v4().simple());
-            self.window_data_store.insert(data_key.clone(), action.data);
+            // 注入 executionTimeMs 到窗口数据，供前端 summary 页面做性能分析
+            let data_with_timing = inject_execution_time(&action.data, node_duration_ms);
+            self.window_data_store.insert(data_key.clone(), data_with_timing);
             self.emit(ExecutionEvent::OpenWindow {
                 window_type: action.window_type,
                 data_key,
             });
         }
 
-        result
+        result.map(|r| (r, node_duration_ms))
     }
 
     /// 递归执行所有上游的纯数据节点
@@ -213,6 +240,7 @@ impl<E: EventEmitter> Executor<E> {
                         node_id: upstream_node_id_str.clone(),
                     });
 
+                    let upstream_start = Instant::now();
                     let mut ctx =
                         NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
 
@@ -223,11 +251,13 @@ impl<E: EventEmitter> Executor<E> {
                     };
 
                     self.logs.extend(ctx.logs);
+                    let upstream_duration_ms = upstream_start.elapsed().as_millis() as u64;
 
                     match eval_result {
                         Ok(()) => {
                             self.emit(ExecutionEvent::NodeComplete {
                                 node_id: upstream_node_id_str,
+                                duration_ms: upstream_duration_ms,
                             });
                             self.emit(ExecutionEvent::ConnectionActive {
                                 from_pin_id: upstream_pin_id.to_string(),
@@ -238,6 +268,7 @@ impl<E: EventEmitter> Executor<E> {
                             self.emit(ExecutionEvent::NodeError {
                                 node_id: upstream_node_id_str,
                                 error: err.clone(),
+                                duration_ms: upstream_duration_ms,
                             });
                             return Err(err);
                         }

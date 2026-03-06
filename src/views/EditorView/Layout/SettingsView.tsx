@@ -326,6 +326,27 @@ export const SettingsView: React.FC = () => {
                                         onChange={(val: string) => updateTheme({ stringColor: val })}
                                     />
                                     <SettingItem
+                                        label="Date Color"
+                                        description="Color for date type pins."
+                                        type="color"
+                                        value={theme.dateColor}
+                                        onChange={(val: string) => updateTheme({ dateColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="DateTime Color"
+                                        description="Color for datetime type pins."
+                                        type="color"
+                                        value={theme.datetimeColor}
+                                        onChange={(val: string) => updateTheme({ datetimeColor: val })}
+                                    />
+                                    <SettingItem
+                                        label="Categorical Color"
+                                        description="Color for categorical type pins."
+                                        type="color"
+                                        value={theme.categoricalColor}
+                                        onChange={(val: string) => updateTheme({ categoricalColor: val })}
+                                    />
+                                    <SettingItem
                                         label="Object Color"
                                         description="Color for object and reference data type pins."
                                         type="color"

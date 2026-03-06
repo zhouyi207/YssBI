@@ -1,6 +1,24 @@
 //! 信息展示相关的数据结构
 
 use serde::{Deserialize, Serialize};
+use std::f64::consts::PI;
+
+/// 计算 OLS/GLS 的 AIC 和 BIC
+/// 公式: ll = -n/2 * (ln(2π) + ln(σ²) + 1), σ² = ss_residual/n
+/// AIC = -2*ll + 2*k, BIC = -2*ll + k*ln(n)
+pub fn compute_aic_bic(n: usize, k: usize, ss_residual: f64) -> (f64, f64) {
+    let n_f = n as f64;
+    let k_f = k as f64;
+    let sigma2 = if n > 0 && ss_residual >= 0.0 {
+        (ss_residual / n_f).max(1e-300)
+    } else {
+        1e-300
+    };
+    let llf = -n_f / 2.0 * (PI * 2.0_f64.ln() + sigma2.ln() + 1.0);
+    let aic = -2.0 * llf + 2.0 * k_f;
+    let bic = -2.0 * llf + k_f * n_f.ln();
+    (aic, bic)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OLSResult {
@@ -34,6 +52,8 @@ pub struct ModelBasicInfo {
     pub ms_residual: f64,
     pub ms_total: f64,
     pub covariance_type: String,
+    pub aic: f64,
+    pub bic: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +110,20 @@ pub struct ImTest {
     pub total: ImTestComponent,
 }
 
+/// 各诊断模块的后端计算耗时（毫秒），用于性能分析
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiagnosticTiming {
+    /// 拟合值与残差计算
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fitted_residuals_ms: Option<u64>,
+    /// Breusch-Pagan 异方差检验
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bp_tests_ms: Option<u64>,
+    /// Cameron & Trivedi IM-test
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub im_test_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
@@ -101,4 +135,7 @@ pub struct DiagnosticInfo {
     pub fitted_values: Vec<f64>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub residuals: Vec<f64>,
+    /// 各诊断模块耗时（用于性能分析）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timing: Option<DiagnosticTiming>,
 }

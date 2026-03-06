@@ -4,7 +4,7 @@ use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataSeriesValue, DataType, DataValue};
+use crate::graph::value::{DataSeriesValue, DataType, DataValue, TimeSeriesState};
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
@@ -45,7 +45,11 @@ fn register_get_dataseries(registry: &NodeRegistry) {
             let element_type = polars_dtype_to_data_type(col.dtype());
             let series = col.clone().take_materialized_series();
             let series_id = ctx.put_series(series)?;
-            let value = DataValue::DataSeries(DataSeriesValue::with_element_type(series_id, element_type));
+            let mut ds_value = DataSeriesValue::with_element_type(series_id, element_type.clone());
+            if matches!(element_type, DataType::Int64 | DataType::Date) {
+                ds_value = ds_value.with_time_series_state(TimeSeriesState::Unaligned);
+            }
+            let value = DataValue::DataSeries(ds_value);
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), value)?;
             Ok(())
         }));

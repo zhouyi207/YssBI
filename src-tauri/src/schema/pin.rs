@@ -14,6 +14,8 @@ pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
         DataType::Float32 => "Float32",
         DataType::Float64 => "Float64",
         DataType::String => "string",
+        DataType::Date => "date",
+        DataType::Categorical => "categorical",
         DataType::Array(inner) => data_type_to_pin_type(inner),
         DataType::Object => "object",
         DataType::Any => "any",

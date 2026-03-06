@@ -18,6 +18,16 @@ pub enum CategoricalRole {
     Time,
 }
 
+/// 时间序列对齐状态（用于区分已对齐与未对齐的 time series）
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimeSeriesState {
+    /// 已对齐（规则时间轴，无缺失）
+    Aligned,
+    /// 未对齐（原始时间，可能有缺失或重复）
+    Unaligned,
+}
+
 /// 哑变量编码元信息（附加在 String 类型 DataSeries 上，供 OLS 等节点消费）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,12 +38,14 @@ pub struct DummyInfo {
     pub role: CategoricalRole,
 }
 
-/// DataSeries 值（ID + 可选的元素类型 + 可选的哑变量元信息）
+/// DataSeries 值（ID + 可选的元素类型 + 可选的哑变量元信息 + 可选的时间序列对齐状态）
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataSeriesValue {
     pub id: String,
     pub element_type: Option<DataType>,
     pub dummy_info: Option<DummyInfo>,
+    /// 仅当该 DataSeries 表示时间列时有效：Aligned=已对齐，Unaligned=未对齐
+    pub time_series_state: Option<TimeSeriesState>,
 }
 
 impl DataSeriesValue {
@@ -42,6 +54,7 @@ impl DataSeriesValue {
             id: id.into(),
             element_type: None,
             dummy_info: None,
+            time_series_state: None,
         }
     }
 
@@ -50,11 +63,17 @@ impl DataSeriesValue {
             id: id.into(),
             element_type: Some(element_type),
             dummy_info: None,
+            time_series_state: None,
         }
     }
 
     pub fn with_dummy_info(mut self, dummy_info: DummyInfo) -> Self {
         self.dummy_info = Some(dummy_info);
+        self
+    }
+
+    pub fn with_time_series_state(mut self, state: TimeSeriesState) -> Self {
+        self.time_series_state = Some(state);
         self
     }
 }
@@ -64,13 +83,14 @@ impl Serialize for DataSeriesValue {
     where
         S: serde::Serializer,
     {
-        if self.element_type.is_none() && self.dummy_info.is_none() {
+        if self.element_type.is_none() && self.dummy_info.is_none() && self.time_series_state.is_none() {
             serializer.serialize_str(&self.id)
         } else {
             use serde::ser::SerializeStruct;
             let field_count = 1
                 + self.element_type.is_some() as usize
-                + self.dummy_info.is_some() as usize;
+                + self.dummy_info.is_some() as usize
+                + self.time_series_state.is_some() as usize;
             let mut s = serializer.serialize_struct("DataSeries", field_count)?;
             s.serialize_field("id", &self.id)?;
             if self.element_type.is_some() {
@@ -78,6 +98,9 @@ impl Serialize for DataSeriesValue {
             }
             if self.dummy_info.is_some() {
                 s.serialize_field("dummyInfo", &self.dummy_info)?;
+            }
+            if self.time_series_state.is_some() {
+                s.serialize_field("timeSeriesState", &self.time_series_state)?;
             }
             s.end()
         }
@@ -99,6 +122,8 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
                 element_type: Option<DataType>,
                 #[serde(rename = "dummyInfo")]
                 dummy_info: Option<DummyInfo>,
+                #[serde(rename = "timeSeriesState", default)]
+                time_series_state: Option<TimeSeriesState>,
             },
         }
         let p = Payload::deserialize(deserializer)?;
@@ -107,11 +132,13 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
                 id,
                 element_type: None,
                 dummy_info: None,
+                time_series_state: None,
             }),
-            Payload::Full { id, element_type, dummy_info } => Ok(DataSeriesValue {
+            Payload::Full { id, element_type, dummy_info, time_series_state } => Ok(DataSeriesValue {
                 id,
                 element_type,
                 dummy_info,
+                time_series_state: time_series_state,
             }),
         }
     }
@@ -282,7 +309,7 @@ impl DataValue {
                 .as_f64()
                 .map(DataValue::Float64)
                 .unwrap_or_else(|| self.clone()),
-            DataType::String => {
+            DataType::Date | DataType::String | DataType::Categorical => {
                 let s = match self {
                     DataValue::String(s) => return DataValue::String(s.clone()),
                     DataValue::Boolean(b) => b.to_string(),

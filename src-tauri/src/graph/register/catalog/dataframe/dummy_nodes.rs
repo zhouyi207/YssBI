@@ -16,12 +16,12 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Annotate a String DataSeries with dummy variable encoding metadata for OLS regression")
+    .with_description("Annotate a Categorical DataSeries with dummy variable encoding metadata for OLS regression")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
             DataRole::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -49,7 +49,7 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
         PinSlot::fixed(PinDefinition::data_output(
             "Series",
             DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
@@ -87,6 +87,7 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
             id: dsv.id,
             element_type: dsv.element_type,
             dummy_info: Some(dummy_info),
+            time_series_state: dsv.time_series_state.clone(),
         };
 
         ctx.emit_output_by_role(

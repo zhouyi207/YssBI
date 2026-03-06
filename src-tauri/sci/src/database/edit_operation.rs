@@ -1,3 +1,4 @@
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use polars::chunked_array::cast::CastOptions;
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -170,6 +171,23 @@ pub fn json_to_anyvalue(val: &serde_json::Value, dtype: &DataType) -> Result<Any
                     }
                 }
                 DataType::String => Ok(AnyValue::StringOwned(s.clone().into())),
+                DataType::Date => {
+                    NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                        .map(|d| {
+                            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
+                            AnyValue::Date((d.num_days_from_ce() - epoch) as i32)
+                        })
+                        .map_err(|e| format!("Cannot parse \"{}\" as Date (use YYYY-MM-DD): {}", s, e))
+                }
+                DataType::Datetime(_, _) => {
+                    let dt = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f")
+                        .or_else(|_| NaiveDate::parse_from_str(s, "%Y-%m-%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap()));
+                    dt.map(|ndt| {
+                        let ts = chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc).timestamp_micros();
+                        AnyValue::DatetimeOwned(ts, TimeUnit::Microseconds, None)
+                    })
+                    .map_err(|e| format!("Cannot parse \"{}\" as DateTime: {}", s, e))
+                }
                 _ => Ok(AnyValue::StringOwned(s.clone().into())),
             }
         }
@@ -178,6 +196,7 @@ pub fn json_to_anyvalue(val: &serde_json::Value, dtype: &DataType) -> Result<Any
 }
 
 pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
+    use polars::prelude::TimeUnit;
     match val {
         AnyValue::Null => serde_json::Value::Null,
         AnyValue::Boolean(b) => serde_json::Value::Bool(b),
@@ -197,6 +216,35 @@ pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
         AnyValue::Float64(v) => serde_json::Number::from_f64(v)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
+        AnyValue::Date(days) => {
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
+            NaiveDate::from_num_days_from_ce_opt(epoch + days as i32)
+                .map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
+                .unwrap_or_else(|| serde_json::Value::String(days.to_string()))
+        }
+        AnyValue::Datetime(ts, unit, _) | AnyValue::DatetimeOwned(ts, unit, _) => {
+            let (secs, nsecs) = match unit {
+                TimeUnit::Nanoseconds => ((ts / 1_000_000_000) as i64, (ts % 1_000_000_000) as u32),
+                TimeUnit::Microseconds => ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32),
+                TimeUnit::Milliseconds => ((ts / 1000) as i64, ((ts % 1000) * 1_000_000) as u32),
+            };
+            chrono::DateTime::from_timestamp(secs, nsecs)
+                .map(|dt| {
+                    let s = dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+                    let s = s.trim_end_matches('0').trim_end_matches('.');
+                    serde_json::Value::String(s.to_string())
+                })
+                .unwrap_or_else(|| serde_json::Value::String(ts.to_string()))
+        }
+        AnyValue::Time(ns) => {
+            let secs = (ns / 1_000_000_000) as u32;
+            serde_json::Value::String(format!(
+                "{:02}:{:02}:{:02}",
+                secs / 3600,
+                (secs % 3600) / 60,
+                secs % 60
+            ))
+        }
         _ => serde_json::Value::String(format!("{}", val)),
     }
 }
@@ -257,8 +305,13 @@ pub fn dtype_from_string(s: &str) -> DataType {
         "float32" | "f32" => DataType::Float32,
         "float64" | "f64" => DataType::Float64,
         "bool" | "boolean" => DataType::Boolean,
-        "datetime" | "date" | "dt" => DataType::Datetime(TimeUnit::Microseconds, None),
+        "date" => DataType::Date,
+        "datetime" | "dt" => DataType::Datetime(TimeUnit::Microseconds, None),
         "string" | "str" | "utf8" => DataType::String,
+        "categorical" | "category" | "cat" => {
+            use polars_dtype::categorical::Categories;
+            DataType::from_categories(Categories::global())
+        }
         _ => DataType::String,
     }
 }
@@ -277,6 +330,8 @@ pub fn dtype_to_string(dt: &DataType) -> String {
         DataType::Float64 => "Float64".into(),
         DataType::Boolean => "Boolean".into(),
         DataType::String => "String".into(),
+        DataType::Categorical(_, _) => "Categorical".into(),
+        DataType::Date => "Date".into(),
         DataType::Datetime(_, _) => "DateTime".into(),
         _ => "String".into(),
     }

@@ -16,6 +16,7 @@ export interface ThemeSettings {
     stringColor: string;
     dateColor: string;
     datetimeColor: string;
+    categoricalColor: string;
     dataframeColor: string;
     dataseriesColor: string;
     objectColor: string;

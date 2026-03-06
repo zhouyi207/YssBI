@@ -55,6 +55,7 @@ impl DatabaseEngine {
                     .with_separator(*delimiter as u8)
                     .with_has_header(*has_header)
                     .with_infer_schema_length(*infer_schema_length)
+                    .with_try_parse_dates(true)
                     .finish()
             }
 

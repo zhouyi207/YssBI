@@ -16,7 +16,8 @@ use std::sync::Arc;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{GLS, GLSConfig};
 
-use super::info_nodes::{BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
+use std::time::Instant;
 use super::ols_nodes::VariableSpec;
 
 /// Re-export OLSModel for Predict compatibility (GLS outputs same structure)
@@ -86,7 +87,7 @@ fn dataframe_to_array2(df: &DataFrame) -> Result<Array2<f64>, String> {
 fn gls_input_slots() -> Vec<PinSlot> {
     let exog_type = DataType::DataSeries(Box::new(DataType::one_of(vec![
         DataType::Float64,
-        DataType::String,
+        DataType::Categorical,
     ])));
 
     vec![
@@ -231,10 +232,16 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             if raw.is_empty() { format!("x{}", i + 1) } else { raw }
         };
 
-        let is_string = series.dtype() == &polars::prelude::DataType::String;
+        let is_categorical = matches!(
+            series.dtype(),
+            polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
+        );
 
-        if is_string {
-            let str_ca = series.str().map_err(|e| {
+        if is_categorical {
+            let str_series = series
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e| format!("GLS: cannot cast Exog {} to String: {}", i, e))?;
+            let str_ca = str_series.str().map_err(|e| {
                 format!("GLS: cannot cast Exog {} to String: {}", i, e)
             })?;
 
@@ -364,6 +371,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     let result = gls.fit()?;
 
     // ---- Compute fitted values & residuals (in original space, not transformed) ----
+    let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
             exog.row(i)
@@ -378,6 +386,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         .zip(fitted_values.iter())
         .map(|(y, yhat)| y - yhat)
         .collect();
+    let fitted_residuals_ms = t_fitted.elapsed().as_millis() as u64;
 
     // ---- Build coefficient table ----
     let num_coeff = result.betas.len();
@@ -400,78 +409,92 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         });
     }
 
-    let bp_tests = if has_constant {
+    let (bp_tests, bp_tests_ms) = if has_constant {
+        let t_bp = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
         let fitted_arr = Array1::from(fitted_values.clone());
         let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs(&exog, &residuals_arr).ok();
         let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs(&exog, &residuals_arr).ok();
         let r_stata = diagnostics::breusch_pagan_stata(&residuals_arr, &fitted_arr).ok();
         let r_koenker = diagnostics::breusch_pagan_koenker(&residuals_arr, &fitted_arr).ok();
-        Some(BreuschPaganTests {
-            stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-            koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-            stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-            koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-        })
+        let ms = t_bp.elapsed().as_millis() as u64;
+        (
+            Some(BreuschPaganTests {
+                stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+            }),
+            Some(ms),
+        )
     } else {
-        None
+        (None, None)
     };
 
-    let im_test = if has_constant {
+    let (im_test, im_test_ms) = if has_constant {
+        let t_im = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
-        match diagnostics::im_test(&exog, &residuals_arr) {
-            Ok(r) => {
-                let im = ImTest {
-                    heteroskedasticity: ImTestComponent {
-                        chi2: r.heteroskedasticity.chi2,
-                        df: r.heteroskedasticity.df,
-                        p_value: r.heteroskedasticity.p_value,
-                    },
-                    skewness: ImTestComponent {
-                        chi2: r.skewness.chi2,
-                        df: r.skewness.df,
-                        p_value: r.skewness.p_value,
-                    },
-                    kurtosis: ImTestComponent {
-                        chi2: r.kurtosis.chi2,
-                        df: r.kurtosis.df,
-                        p_value: r.kurtosis.p_value,
-                    },
-                    total: ImTestComponent {
-                        chi2: r.total.chi2,
-                        df: r.total.df,
-                        p_value: r.total.p_value,
-                    },
-                };
-                Some(im)
-            }
+        let im = match diagnostics::im_test(&exog, &residuals_arr) {
+            Ok(r) => Some(ImTest {
+                heteroskedasticity: ImTestComponent {
+                    chi2: r.heteroskedasticity.chi2,
+                    df: r.heteroskedasticity.df,
+                    p_value: r.heteroskedasticity.p_value,
+                },
+                skewness: ImTestComponent {
+                    chi2: r.skewness.chi2,
+                    df: r.skewness.df,
+                    p_value: r.skewness.p_value,
+                },
+                kurtosis: ImTestComponent {
+                    chi2: r.kurtosis.chi2,
+                    df: r.kurtosis.df,
+                    p_value: r.kurtosis.p_value,
+                },
+                total: ImTestComponent {
+                    chi2: r.total.chi2,
+                    df: r.total.df,
+                    p_value: r.total.p_value,
+                },
+            }),
             Err(_) => None,
-        }
+        };
+        let ms = t_im.elapsed().as_millis() as u64;
+        (im, Some(ms))
     } else {
-        None
+        (None, None)
     };
 
     let ols_result = OLSResult {
         title: "GLS Regression Results".to_string(),
         endog_name,
-        model_basic_info: ModelBasicInfo {
-            model_type: "GLS".to_string(),
-            method: "Generalized Least Squares".to_string(),
-            num_observation: result.num_observation,
-            r_squared: result.r2,
-            adj_r_squared: result.r2_adjusted,
-            f_statistic: result.fvalue,
-            prob_f_statistic: result.f_p_value,
-            df_model: result.df_model,
-            df_residual: result.df_residual,
-            df_total: result.df_total,
-            ss_model: result.ss_model,
-            ss_residual: result.ss_residual,
-            ss_total: result.ss_total,
-            ms_model: result.ms_model,
-            ms_residual: result.ms_residual,
-            ms_total: result.ms_total,
-            covariance_type: result.covariance_type.to_string(),
+        model_basic_info: {
+            let (aic, bic) = compute_aic_bic(
+                result.num_observation,
+                result.betas.len(),
+                result.ss_residual,
+            );
+            ModelBasicInfo {
+                model_type: "GLS".to_string(),
+                method: "Generalized Least Squares".to_string(),
+                num_observation: result.num_observation,
+                r_squared: result.r2,
+                adj_r_squared: result.r2_adjusted,
+                f_statistic: result.fvalue,
+                prob_f_statistic: result.f_p_value,
+                df_model: result.df_model,
+                df_residual: result.df_residual,
+                df_total: result.df_total,
+                ss_model: result.ss_model,
+                ss_residual: result.ss_residual,
+                ss_total: result.ss_total,
+                ms_model: result.ms_model,
+                ms_residual: result.ms_residual,
+                ms_total: result.ms_total,
+                covariance_type: result.covariance_type.to_string(),
+                aic,
+                bic,
+            }
         },
         coefficients,
         diagnostic_info: DiagnosticInfo {
@@ -480,6 +503,11 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             im_test,
             fitted_values,
             residuals,
+            timing: Some(DiagnosticTiming {
+                fitted_residuals_ms: Some(fitted_residuals_ms),
+                bp_tests_ms,
+                im_test_ms,
+            }),
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

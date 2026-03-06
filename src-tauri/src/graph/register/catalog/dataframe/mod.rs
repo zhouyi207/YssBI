@@ -9,6 +9,7 @@ mod wls_nodes;
 mod gls_nodes;
 mod dummy_nodes;
 mod prediction_nodes;
+mod ts_align_nodes;
 
 use crate::graph::register::NodeRegistry;
 
@@ -21,4 +22,5 @@ pub fn register(registry: &NodeRegistry) {
     gls_nodes::register(registry);
     dummy_nodes::register(registry);
     prediction_nodes::register(registry);
+    ts_align_nodes::register(registry);
 }

@@ -14,6 +14,8 @@ export type DataType =
   | { kind: 'Float32' }
   | { kind: 'Float64' }
   | { kind: 'String' }
+  | { kind: 'Date' }
+  | { kind: 'Categorical' }
   | { kind: 'Object' }
   | { kind: 'Any' }
   | { kind: 'DataFrame' }
@@ -44,9 +46,9 @@ export function dataTypeDisplay(dt: DataType): string {
   return dt.kind;
 }
 
-/** 从 kind 字符串创建 DataType */
+/** 从 kind 字符串创建 DataType（支持后端返回的 type 如 "Date"） */
 export function dataTypeFromKey(key: string, inner?: DataType | string): DataType {
-  const k = key as DataType['kind'];
+  const k = (key?.trim() || 'Any') as DataType['kind'];
   if (k === 'Array') {
     return { kind: 'Array', inner: (inner as DataType) ?? { kind: 'Any' } };
   }
@@ -67,7 +69,7 @@ export function isPrimitiveType(dataType: DataType): boolean {
   if (dataType.kind === 'OneOf') {
     return dataType.inner.length > 0 && dataType.inner.every(isPrimitiveType);
   }
-  return ['Boolean', 'Int32', 'Int64', 'Float32', 'Float64', 'String'].includes(
+  return ['Boolean', 'Int32', 'Int64', 'Float32', 'Float64', 'String', 'Date', 'Categorical'].includes(
     dataType.kind
   );
 }
@@ -92,6 +94,9 @@ export function getDefaultValue(dataType: DataType): unknown {
     case 'Float64':
       return 0.0;
     case 'String':
+      return '';
+    case 'Date':
+    case 'Categorical':
       return '';
     case 'Array':
       return [];
@@ -128,6 +133,11 @@ export function dataTypeFromPinType(pinType: string): DataType {
       return { kind: 'Float64' };
     case 'string':
       return { kind: 'String' };
+    case 'date':
+      return { kind: 'Date' };
+    case 'categorical':
+    case 'category':
+      return { kind: 'Categorical' };
     case 'object':
       return { kind: 'Object' };
     case 'dataframe':

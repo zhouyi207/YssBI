@@ -1,4 +1,4 @@
-/** Supported column types for cast dropdown (value = backend dtype string) */
+/** Supported column types for cast dropdown (Polars dtype strings) */
 export const COLUMN_TYPE_OPTIONS = [
   { label: 'Int8', value: 'Int8' },
   { label: 'Int16', value: 'Int16' },
@@ -12,5 +12,7 @@ export const COLUMN_TYPE_OPTIONS = [
   { label: 'Float64', value: 'Float64' },
   { label: 'Boolean', value: 'Boolean' },
   { label: 'String', value: 'String' },
+  { label: 'Categorical', value: 'Categorical' },
+  { label: 'Date', value: 'Date' },
   { label: 'DateTime', value: 'DateTime' },
 ] as const;

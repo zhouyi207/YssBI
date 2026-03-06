@@ -95,12 +95,13 @@ impl ProjectState {
         })
     }
 
-    /// 为所有图设置 schema provider（在加载项目后调用）
+    /// 为所有图设置 schema provider 并传播 schema（在加载项目后调用）
     fn set_graph_schema_providers(&self) {
         let provider = self.build_schema_provider();
         let mut project_data = self.project_data.write().unwrap();
         for graph in project_data.graphs.values_mut() {
             graph.set_schema_provider(provider.clone());
+            graph.propagate_schemas();
         }
     }
 

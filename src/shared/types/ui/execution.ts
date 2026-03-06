@@ -10,8 +10,8 @@ export type ExecutionEvent =
   | { event: 'executionStart' }
   | { event: 'executionComplete'; data: { hasError: boolean } }
   | { event: 'nodeStart'; data: { nodeId: string } }
-  | { event: 'nodeComplete'; data: { nodeId: string } }
-  | { event: 'nodeError'; data: { nodeId: string; error: string } }
+  | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
+  | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
   | { event: 'openWindow'; data: { windowType: string; dataKey: string } };
 
@@ -29,6 +29,8 @@ export interface NodeExecutionState {
   nodeId: string;
   status: "pending" | "executing" | "completed" | "error";
   timestamp: number;
+  /** 后端计算耗时（毫秒），用于性能分析 */
+  durationMs?: number;
 }
 
 /** 单张图的执行状态 */
@@ -41,6 +43,8 @@ export interface GraphExecutionState {
   errorConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
+  /** 节点 ID -> 后端计算耗时(ms)，用于性能分析 */
+  nodeDurations: Map<string, number>;
 }
 
 /** 全局执行状态 */

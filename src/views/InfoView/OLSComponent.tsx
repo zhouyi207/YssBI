@@ -25,6 +25,8 @@ interface ModelBasicInfo {
   ms_residual: number;
   ms_total: number;
   covariance_type: string;
+  aic?: number;
+  bic?: number;
 }
 
 export interface Coefficient {
@@ -68,12 +70,20 @@ interface ImTest {
   total: ImTestComponent;
 }
 
+/** 各诊断模块的后端计算耗时（毫秒） */
+interface DiagnosticTiming {
+  fitted_residuals_ms?: number;
+  bp_tests_ms?: number;
+  im_test_ms?: number;
+}
+
 interface DiagnosticInfo {
   cond_no: number;
   bp_tests?: BreuschPaganTests;
   im_test?: ImTest;
   fitted_values?: number[];
   residuals?: number[];
+  timing?: DiagnosticTiming;
 }
 
 export interface OLSResultData {
@@ -86,6 +96,8 @@ export interface OLSResultData {
   betas?: number[];
   /** 参数协方差矩阵 (k×k)，用于假设检验 */
   cov_beta?: number[][];
+  /** 后端计算耗时（毫秒），用于性能分析 */
+  executionTimeMs?: number;
 }
 
 function formatNum(value: number, decimals = 4): string {
@@ -259,10 +271,18 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
         <InfoRow label="Df Model">{info.df_model}</InfoRow>
         <InfoRow label="Df Residual">{info.df_residual}</InfoRow>
+        {info.aic != null && <InfoRow label="AIC">{formatNum(info.aic)}</InfoRow>}
+        {info.bic != null && <InfoRow label="BIC">{formatNum(info.bic)}</InfoRow>}
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-gray-500 text-xs">Df Total</span>
           <span className="text-white text-xs font-mono font-medium">{info.df_total}</span>
         </div>
+        {data.executionTimeMs != null && (
+          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2 border-t border-gray-800/30">
+            <span className="text-gray-500 text-xs">后端计算耗时</span>
+            <span className="text-[var(--accent-color)] text-xs font-mono font-medium">{data.executionTimeMs} ms</span>
+          </div>
+        )}
       </div>
 
       {/* Sum of Squares & Mean Squares */}
@@ -427,8 +447,13 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       {diag.bp_tests && (
         <div className="mb-4">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">
-            Breusch-Pagan (Heteroscedasticity) — Stata estat hettest 四种变体
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+              Breusch-Pagan (Heteroscedasticity) — Stata estat hettest 四种变体
+            </span>
+            {diag.timing?.bp_tests_ms != null && (
+              <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.bp_tests_ms} ms</span>
+            )}
           </div>
           <Chi2TestCards
             cards={BP_VARIANTS.filter(({ key }) => diag.bp_tests![key]).map(({ key, label }) => ({
@@ -443,8 +468,13 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       {diag.im_test ? (
         <div className="mb-4">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">
-            Cameron & Trivedi&apos;s decomposition of IM-test — Stata estat imtest
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+              Cameron & Trivedi&apos;s decomposition of IM-test — Stata estat imtest
+            </span>
+            {diag.timing?.im_test_ms != null && (
+              <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.im_test_ms} ms</span>
+            )}
           </div>
           <Chi2TestCards
             cards={[
@@ -459,7 +489,12 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
         <>
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Residuals vs Fitted</div>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
+            {diag.timing?.fitted_residuals_ms != null && (
+              <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.fitted_residuals_ms} ms</span>
+            )}
+          </div>
           <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
             <ResidualPlot fitted={diag.fitted_values} residuals={diag.residuals} />
           </Suspense>

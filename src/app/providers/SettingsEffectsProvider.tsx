@@ -33,6 +33,7 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--string-color", theme.stringColor);
         root.style.setProperty("--date-color", theme.dateColor);
         root.style.setProperty("--datetime-color", theme.datetimeColor);
+        root.style.setProperty("--categorical-color", theme.categoricalColor);
         root.style.setProperty("--dataframe-color", theme.dataframeColor);
         root.style.setProperty("--dataseries-color", theme.dataseriesColor);
         root.style.setProperty("--object-color", theme.objectColor);

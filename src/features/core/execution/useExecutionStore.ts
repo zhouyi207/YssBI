@@ -10,6 +10,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   errorConnections: new Set(),
   recording: [],
   graphDirty: false,
+  nodeDurations: new Map(),
 });
 
 interface ExecutionStore extends ExecutionState {
@@ -19,8 +20,8 @@ interface ExecutionStore extends ExecutionState {
   startExecution: (graphId: string) => void;
   completeExecution: (graphId: string) => void;
   markNodeExecuting: (graphId: string, nodeId: string) => void;
-  markNodeCompleted: (graphId: string, nodeId: string) => void;
-  markNodeError: (graphId: string, nodeId: string, error?: string) => void;
+  markNodeCompleted: (graphId: string, nodeId: string, durationMs?: number) => void;
+  markNodeError: (graphId: string, nodeId: string, durationMs?: number) => void;
   markConnectionCompleted: (graphId: string, fromPinId: string, toPinId: string) => void;
   setRecording: (graphId: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphId?: string) => void;
@@ -58,6 +59,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     completedConnections: new Set(),
     errorConnections: new Set(),
     graphDirty: false,
+    nodeDurations: new Map(),
   })),
 
   completeExecution: (graphId) => set((state) => updateGraph(state, graphId, {
@@ -72,20 +74,22 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return updateGraph(state, graphId, { currentNodeId: nodeId, nodeStates: newNodeStates });
   }),
 
-  markNodeCompleted: (graphId, nodeId) => set((state) => {
+  markNodeCompleted: (graphId, nodeId, durationMs?: number) => set((state) => {
     const g = state.graphs[graphId] ?? emptyGraphState();
     const newNodeStates = new Map(g.nodeStates);
-    newNodeStates.set(nodeId, { nodeId, status: "completed", timestamp: Date.now() });
+    newNodeStates.set(nodeId, { nodeId, status: "completed", timestamp: Date.now(), durationMs });
     const newExecutedNodes = new Set(g.executedNodes);
     newExecutedNodes.add(nodeId);
-    return updateGraph(state, graphId, { nodeStates: newNodeStates, executedNodes: newExecutedNodes });
+    const newNodeDurations = durationMs != null ? new Map(g.nodeDurations).set(nodeId, durationMs) : g.nodeDurations;
+    return updateGraph(state, graphId, { nodeStates: newNodeStates, executedNodes: newExecutedNodes, nodeDurations: newNodeDurations });
   }),
 
-  markNodeError: (graphId, nodeId) => set((state) => {
+  markNodeError: (graphId, nodeId, durationMs?: number) => set((state) => {
     const g = state.graphs[graphId] ?? emptyGraphState();
     const newNodeStates = new Map(g.nodeStates);
-    newNodeStates.set(nodeId, { nodeId, status: "error", timestamp: Date.now() });
-    return updateGraph(state, graphId, { status: "error", currentNodeId: null, nodeStates: newNodeStates });
+    newNodeStates.set(nodeId, { nodeId, status: "error", timestamp: Date.now(), durationMs });
+    const newNodeDurations = durationMs != null ? new Map(g.nodeDurations).set(nodeId, durationMs) : g.nodeDurations;
+    return updateGraph(state, graphId, { status: "error", currentNodeId: null, nodeStates: newNodeStates, nodeDurations: newNodeDurations });
   }),
 
   markConnectionCompleted: (graphId, fromPinId, toPinId) => set((state) => {
@@ -116,6 +120,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         completedConnections: new Set(),
         errorConnections: new Set(),
         recording: [],
+        nodeDurations: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,
@@ -132,6 +137,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         nodeStates: new Map(),
         completedConnections: new Set(),
         errorConnections: new Set(),
+        nodeDurations: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,
@@ -151,10 +157,10 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         store.markNodeExecuting(graphId, event.data.nodeId);
         break;
       case 'nodeComplete':
-        store.markNodeCompleted(graphId, event.data.nodeId);
+        store.markNodeCompleted(graphId, event.data.nodeId, event.data.durationMs);
         break;
       case 'nodeError':
-        store.markNodeError(graphId, event.data.nodeId, event.data.error);
+        store.markNodeError(graphId, event.data.nodeId, event.data.durationMs);
         break;
       case 'connectionActive':
         store.markConnectionCompleted(graphId, event.data.fromPinId, event.data.toPinId);

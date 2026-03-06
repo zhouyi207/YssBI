@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { select, scaleLinear, axisBottom, axisLeft, extent, timeFormat } from 'd3';
+import { select, scaleLinear, axisBottom, axisLeft, extent, line, timeFormat } from 'd3';
 
-export interface ScatterPoint {
+export interface LinePoint {
   x: number;
   y: number;
 }
 
-export interface ScatterProps {
-  data: ScatterPoint[];
+export interface LineProps {
+  data: LinePoint[];
   /** X 轴标签 */
   xLabel?: string;
   /** Y 轴标签 */
@@ -16,18 +16,16 @@ export interface ScatterProps {
   xFormat?: 'date' | 'datetime' | 'number';
   /** Y 轴格式 */
   yFormat?: 'date' | 'datetime' | 'number';
-  /** 散点颜色，默认 #569cd6 */
+  /** 线条颜色，默认 #569cd6 */
   color?: string;
-  /** 散点半径，默认 3 */
-  radius?: number;
+  /** 线条宽度，默认 2 */
+  strokeWidth?: number;
+  /** 是否显示数据点，默认 true */
+  showPoints?: boolean;
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
   margin?: { top: number; right: number; bottom: number; left: number };
-  /** Y 轴是否关于 0 对称（如残差图），默认 false */
-  symmetricY?: boolean;
-  /** 是否绘制 y=0 参考线，默认 false */
-  zeroLine?: boolean;
 }
 
 /** 将数值转为 Date（date=天数, datetime=微秒） */
@@ -41,18 +39,17 @@ function numToDate(v: number, format: 'date' | 'datetime'): Date {
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
 const DEFAULT_COLOR = '#569cd6';
 
-const Scatter: React.FC<ScatterProps> = ({
+const Line: React.FC<LineProps> = ({
   data,
   xLabel,
   yLabel,
   xFormat = 'number',
   yFormat = 'number',
   color = DEFAULT_COLOR,
-  radius = 3,
+  strokeWidth = 2,
+  showPoints = true,
   height: heightProp,
   margin = DEFAULT_MARGIN,
-  symmetricY = false,
-  zeroLine = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -85,17 +82,9 @@ const Scatter: React.FC<ScatterProps> = ({
     const xPad = (xExtent[1] - xExtent[0]) * 0.06 || 1;
     const xScale = scaleLinear().domain([xExtent[0] - xPad, xExtent[1] + xPad]).range([0, w]);
 
-    let yDomain: [number, number];
-    if (symmetricY) {
-      const yExtent = extent(data, (d) => d.y) as [number, number];
-      const yMax = Math.max(Math.abs(yExtent[0]), Math.abs(yExtent[1])) * 1.15;
-      yDomain = [-yMax, yMax];
-    } else {
-      const yExtent = extent(data, (d) => d.y) as [number, number];
-      const yPad = (yExtent[1] - yExtent[0]) * 0.06 || 1;
-      yDomain = [yExtent[0] - yPad, yExtent[1] + yPad];
-    }
-    const yScale = scaleLinear().domain(yDomain).range([h, 0]);
+    const yExtent = extent(data, (d) => d.y) as [number, number];
+    const yPad = (yExtent[1] - yExtent[0]) * 0.06 || 1;
+    const yScale = scaleLinear().domain([yExtent[0] - yPad, yExtent[1] + yPad]).range([h, 0]);
 
     const g = svg
       .attr('width', width)
@@ -111,14 +100,6 @@ const Scatter: React.FC<ScatterProps> = ({
       .attr('x1', 0).attr('x2', w)
       .attr('y1', (d) => yScale(d)).attr('y2', (d) => yScale(d))
       .attr('stroke', '#2a2d35').attr('stroke-dasharray', '2,3');
-
-    // zero reference line
-    if (zeroLine) {
-      g.append('line')
-        .attr('x1', 0).attr('x2', w)
-        .attr('y1', yScale(0)).attr('y2', yScale(0))
-        .attr('stroke', '#4a4d55').attr('stroke-width', 1);
-    }
 
     // x axis
     const xAxis = axisBottom(xScale).ticks(6).tickSize(-4);
@@ -168,19 +149,35 @@ const Scatter: React.FC<ScatterProps> = ({
         .text(yLabel);
     }
 
-    // points
-    g.selectAll('circle')
-      .data(data)
-      .join('circle')
-      .attr('cx', (d) => xScale(d.x))
-      .attr('cy', (d) => yScale(d.y))
-      .attr('r', radius)
-      .attr('fill', color)
-      .attr('fill-opacity', 0.7)
+    // line path
+    const pathLine = line<LinePoint>()
+      .x((d) => xScale(d.x))
+      .y((d) => yScale(d.y));
+
+    g.append('path')
+      .datum(data)
+      .attr('d', pathLine)
+      .attr('fill', 'none')
       .attr('stroke', color)
-      .attr('stroke-opacity', 0.3)
-      .attr('stroke-width', 1);
-  }, [data, xLabel, yLabel, xFormat, yFormat, color, radius, heightProp, margin, symmetricY, zeroLine, size]);
+      .attr('stroke-width', strokeWidth)
+      .attr('stroke-linecap', 'round')
+      .attr('stroke-linejoin', 'round');
+
+    // optional points
+    if (showPoints) {
+      g.selectAll('circle')
+        .data(data)
+        .join('circle')
+        .attr('cx', (d) => xScale(d.x))
+        .attr('cy', (d) => yScale(d.y))
+        .attr('r', 3)
+        .attr('fill', color)
+        .attr('fill-opacity', 0.7)
+        .attr('stroke', color)
+        .attr('stroke-opacity', 0.3)
+        .attr('stroke-width', 1);
+    }
+  }, [data, xLabel, yLabel, xFormat, yFormat, color, strokeWidth, showPoints, heightProp, margin, size]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
@@ -189,4 +186,4 @@ const Scatter: React.FC<ScatterProps> = ({
   );
 };
 
-export default Scatter;
+export default Line;

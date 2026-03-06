@@ -7,6 +7,8 @@ edition = "2024"
 ndarray.workspace = true
 ndarray-stats.workspace = true
 polars.workspace = true
+polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
+chrono = "0.4"
 faer = "0.24.0"
 statrs = "0.17"
 num-traits = "0.2.19"

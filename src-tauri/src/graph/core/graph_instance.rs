@@ -8,8 +8,8 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{ColumnSchema, DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
-use crate::graph::pin::{PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
+use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
+use crate::graph::pin::{DataRole, PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
 use crate::graph::{DataType, GraphId};
@@ -215,6 +215,7 @@ impl GraphInstance {
 
         drop(data_state);
 
+        self.propagate_schemas();
         let _ = self.infer_types();
 
         Ok(())
@@ -389,6 +390,7 @@ impl GraphInstance {
                 .ok_or_else(|| format!("Node {:?} not found", node_id))?;
             node.instance_params = params;
         }
+        self.propagate_schemas();
         let mut change_sets = Vec::new();
         if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
             change_sets.push(cs);
@@ -642,6 +644,7 @@ impl GraphInstance {
             }
         }
 
+        self.propagate_schemas();
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut to_resolve: Vec<NodeId> = [to_node_id, from_node_id]
@@ -699,6 +702,7 @@ impl GraphInstance {
             data_state.connections.disconnect(from_pin, to_pin);
         }
 
+        self.propagate_schemas();
         let inferred = self.infer_types().unwrap_or_default();
 
         let mut to_resolve: Vec<NodeId> = [from_node_id, to_node_id].into_iter().flatten().collect();
@@ -741,6 +745,7 @@ impl GraphInstance {
             data_state.connections.disconnect_all(pin_id);
         }
 
+        self.propagate_schemas();
         let inferred = self.infer_types().unwrap_or_default();
 
         let affected: Vec<NodeId> = affected_node_ids.into_iter().collect();
@@ -886,6 +891,8 @@ impl GraphInstance {
     }
 
     /// 构建 PinResolverContext
+    ///
+    /// 从上游 output pin 的 resolved_schema 获取 input_schemas（连接时已由 propagate_schemas 填充）
     fn build_resolver_context(
         &self,
         node_id: NodeId,
@@ -894,33 +901,16 @@ impl GraphInstance {
         let mut input_schemas = std::collections::HashMap::new();
         let data_state = self.data_state.read().unwrap();
 
-        // 遍历节点的输入 pins，查看是否有上游连接
         if let Some(node) = data_state.nodes.get(&node_id) {
             for &pin_id in &node.pin_ids {
                 if let Some(pin) = data_state.pins.get(&pin_id) {
                     if !pin.is_input() || !pin.is_data() {
                         continue;
                     }
-                    // 查看上游连接
                     if let Some(upstream_pin_id) = data_state.connections.get_upstream(pin_id) {
                         if let Some(upstream_pin) = data_state.pins.get(&upstream_pin_id) {
-                            // 获取上游节点的 instance_params（如 dataframe_id）
-                            if let Some(upstream_node) = data_state.nodes.get(&upstream_pin.node_id) {
-                                // 1. 从 instance_params 提取（如 Get DataFrame）
-                                let schema = self.extract_schema_from_params(
-                                    &upstream_node.instance_params,
-                                    &upstream_node.definition.node_type,
-                                );
-                                let schema = schema.or_else(|| {
-                                    // 2. 从上游节点的 Inputs 连接拓扑提取（约定：如 OLS 的 Exog）
-                                    self.extract_schema_from_node_input_connections(
-                                        &data_state,
-                                        upstream_pin.node_id,
-                                    )
-                                });
-                                if let Some(s) = schema {
-                                    input_schemas.insert(pin.definition.role.clone(), s);
-                                }
+                            if let Some(ref schema) = upstream_pin.resolved_schema {
+                                input_schemas.insert(pin.definition.role.clone(), schema.clone());
                             }
                         }
                     }
@@ -934,82 +924,132 @@ impl GraphInstance {
         })
     }
 
-    /// 从上游节点的 instance_params 提取 DataSchema
-    fn extract_schema_from_params(
-        &self,
-        params: &NodeInstanceParams,
-        node_type: &str,
-    ) -> Option<DataSchema> {
-        match node_type {
-            "Data:Get DataFrame" => {
-                let df_id = params.dataframe_id()?;
-                let provider = self.schema_provider.as_ref()?;
-                provider(df_id)
+    /// 传播 schema：按拓扑序计算并填充各 output pin 的 resolved_schema
+    pub fn propagate_schemas(&self) {
+        let node_order = self.topological_node_order();
+        let mut data_state = self.data_state.write().unwrap();
+
+        for pin in data_state.pins.values_mut() {
+            pin.resolved_schema = None;
+        }
+
+        for node_id in node_order {
+            let schema = Self::compute_output_schema_for_node_inner(
+                &data_state,
+                self.schema_provider.as_ref(),
+                node_id,
+            );
+            if let Some(schema) = schema {
+                let pin_ids: Vec<PinId> = data_state
+                    .nodes
+                    .get(&node_id)
+                    .map(|n| n.pin_ids.clone())
+                    .unwrap_or_default();
+                for pin_id in pin_ids {
+                    if let Some(pin) = data_state.pins.get_mut(&pin_id) {
+                        if pin.is_output()
+                            && pin.definition.data_type.as_ref().map_or(false, |dt| {
+                                matches!(dt, crate::graph::pin::PinDataTypeDefinition::Concrete(
+                                    crate::graph::DataType::DataFrame
+                                ))
+                            })
+                        {
+                            pin.resolved_schema = Some(schema);
+                            break;
+                        }
+                    }
+                }
             }
-            _ => None,
         }
     }
 
-    /// 从节点 Inputs 连接拓扑提取 schema（约定：如 OLS Exog → Model）
-    fn extract_schema_from_node_input_connections(
-        &self,
+    /// 拓扑序：保证上游节点先于下游
+    fn topological_node_order(&self) -> Vec<NodeId> {
+        let data_state = self.data_state.read().unwrap();
+        let mut in_degree: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
+        for node_id in data_state.nodes.keys() {
+            in_degree.entry(*node_id).or_insert(0);
+        }
+        for conn in data_state.connections.all_connections() {
+            if let (Some(from_p), Some(to_p)) = (
+                data_state.pins.get(&conn.from_pin),
+                data_state.pins.get(&conn.to_pin),
+            ) {
+                let from_node = from_p.node_id;
+                let to_node = to_p.node_id;
+                if from_node != to_node {
+                    *in_degree.entry(to_node).or_insert(0) += 1;
+                }
+            }
+        }
+        let mut queue: Vec<NodeId> = in_degree
+            .iter()
+            .filter(|(_, &d)| d == 0)
+            .map(|(id, _)| *id)
+            .collect();
+        let mut order = Vec::new();
+        while let Some(nid) = queue.pop() {
+            order.push(nid);
+            let node = match data_state.nodes.get(&nid) {
+                Some(n) => n,
+                None => continue,
+            };
+            for &pin_id in &node.pin_ids {
+                let pin = match data_state.pins.get(&pin_id) {
+                    Some(p) => p,
+                    None => continue,
+                };
+                if pin.is_output() {
+                    for to_pid in data_state.connections.get_downstream(pin_id) {
+                        if let Some(to_pin) = data_state.pins.get(&to_pid) {
+                            let to_node = to_pin.node_id;
+                            if to_node != nid {
+                                if let Some(d) = in_degree.get_mut(&to_node) {
+                                    *d = d.saturating_sub(1);
+                                    if *d == 0 {
+                                        queue.push(to_node);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        order
+    }
+
+    /// 计算节点的 DataFrame output schema（在已持锁的 data_state 上操作）
+    fn compute_output_schema_for_node_inner(
         data_state: &GraphDataState,
+        schema_provider: Option<&SchemaProvider>,
         node_id: NodeId,
     ) -> Option<DataSchema> {
-        use crate::graph::pin::DataRole as DR;
-
         let node = data_state.nodes.get(&node_id)?;
-        let mut input_pins: Vec<_> = node
-            .pin_ids
-            .iter()
-            .filter_map(|&pid| data_state.pins.get(&pid))
-            .filter(|p| {
-                p.is_input()
-                    && p.is_data()
-                    && matches!(&p.definition.role, PinRole::Data(DR::Inputs(_)))
-            })
-            .collect();
+        let node_type = &node.definition.node_type[..];
+        let input_role = PinRole::Data(DataRole::Input);
 
-        input_pins.sort_by(|a, b| {
-            let ia = match &a.definition.role {
-                PinRole::Data(DR::Inputs(i)) => *i,
-                _ => 0,
-            };
-            let ib = match &b.definition.role {
-                PinRole::Data(DR::Inputs(i)) => *i,
-                _ => 0,
-            };
-            ia.cmp(&ib)
-        });
+        let get_input_upstream_schema = || {
+            let input_pin = node.pin_ids.iter().find_map(|&pid| {
+                let p = data_state.pins.get(&pid)?;
+                if p.is_input() && p.definition.role == input_role {
+                    Some(pid)
+                } else {
+                    None
+                }
+            })?;
+            let upstream_pin_id = data_state.connections.get_upstream(input_pin)?;
+            data_state.pins.get(&upstream_pin_id)?.resolved_schema.clone()
+        };
 
-        let mut columns = Vec::new();
-        for input_pin in input_pins {
-            let upstream_pin_id = data_state.connections.get_upstream(input_pin.id)?;
-            let upstream_pin = data_state.pins.get(&upstream_pin_id)?;
-
-            let name = upstream_pin.definition.name.clone();
-            let data_type = data_state
-                .pin_types
-                .get(&upstream_pin_id)
-                .and_then(|dt| dt.series_inner().cloned())
-                .or_else(|| {
-                    upstream_pin.definition.data_type.as_ref().and_then(|pdt| {
-                        if let crate::graph::pin::PinDataTypeDefinition::Concrete(dt) = pdt {
-                            dt.series_inner().cloned()
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .unwrap_or(DataType::Float64);
-
-            columns.push(ColumnSchema { name, data_type });
+        match node_type {
+            "Data:Get DataFrame" => {
+                let df_id = node.instance_params.dataframe_id()?;
+                let provider = schema_provider?;
+                provider(df_id)
+            }
+            "Data:Time Series:TS Align" | _ => get_input_upstream_schema(),
         }
-
-        if columns.is_empty() {
-            return None;
-        }
-        Some(DataSchema { columns })
     }
 
     /// 节点输入变化时，获取需额外解析的下游节点（消费该节点所有 output 的节点）

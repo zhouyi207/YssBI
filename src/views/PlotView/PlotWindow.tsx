@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '@/utils/appLogger';
 import Scatter, { type ScatterPoint } from '@/views/PlotView/Scatter';
+import Line, { type LinePoint } from '@/views/PlotView/Line';
 import ECDF, { type ECDFPoint } from '@/views/PlotView/ECDF';
 import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
 import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
@@ -10,8 +11,13 @@ import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
 
 interface ScatterEcdfData {
   data: { x: number; y: number }[];
+  /** camelCase (Scatter) 或 snake_case (ECDF/KDE) */
+  xLabel?: string;
   x_label?: string;
+  yLabel?: string;
   y_label?: string;
+  xFormat?: 'date' | 'datetime' | 'number';
+  yFormat?: 'date' | 'datetime' | 'number';
 }
 
 interface HistogramData {
@@ -253,20 +259,30 @@ export const PlotWindow: React.FC = () => {
             {plotType === 'ecdf' ? (
               <ECDF
                 data={scatterEcdfData.data as ECDFPoint[]}
-                xLabel={scatterEcdfData.x_label}
-                yLabel={scatterEcdfData.y_label}
+                xLabel={scatterEcdfData.xLabel ?? scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.yLabel ?? scatterEcdfData.y_label}
               />
             ) : plotType === 'kde' ? (
               <KDE
                 data={scatterEcdfData.data as KDEPoint[]}
-                xLabel={scatterEcdfData.x_label}
-                yLabel={scatterEcdfData.y_label}
+                xLabel={scatterEcdfData.xLabel ?? scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.yLabel ?? scatterEcdfData.y_label}
+              />
+            ) : plotType === 'line' ? (
+              <Line
+                data={scatterEcdfData.data as LinePoint[]}
+                xLabel={scatterEcdfData.xLabel ?? scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.yLabel ?? scatterEcdfData.y_label}
+                xFormat={scatterEcdfData.xFormat}
+                yFormat={scatterEcdfData.yFormat}
               />
             ) : (
               <Scatter
                 data={scatterEcdfData.data as ScatterPoint[]}
-                xLabel={scatterEcdfData.x_label}
-                yLabel={scatterEcdfData.y_label}
+                xLabel={scatterEcdfData.xLabel ?? scatterEcdfData.x_label}
+                yLabel={scatterEcdfData.yLabel ?? scatterEcdfData.y_label}
+                xFormat={scatterEcdfData.xFormat}
+                yFormat={scatterEcdfData.yFormat}
               />
             )}
           </div>
@@ -278,7 +294,7 @@ export const PlotWindow: React.FC = () => {
               </svg>
             </div>
             <h2 className="text-2xl font-bold mb-2 text-white">Plot 窗口已就绪</h2>
-            <p className="mb-4 text-gray-400">从 Scatter、ECDF、KDE、Histogram 或 Correlation Plot 节点执行后将在此显示图表</p>
+            <p className="mb-4 text-gray-400">从 Scatter、Line、ECDF、KDE、Histogram 或 Correlation Plot 节点执行后将在此显示图表</p>
           </div>
         )}
       </div>

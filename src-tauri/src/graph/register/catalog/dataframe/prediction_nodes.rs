@@ -45,7 +45,7 @@ fn register_predict(registry: &NodeRegistry) {
             PinDirection::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
                 DataType::Float64,
-                DataType::String,
+                DataType::Categorical,
             ])))),
         ),
         PinSlot::fixed(PinDefinition::data_output(
@@ -126,7 +126,10 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
                 let series = ctx.get_series(&series_id)?;
-                let str_ca = series.str().map_err(|e| format!("Predict: Exog '{}' cannot cast to String: {}", name, e))?;
+                let str_series = series
+                    .cast(&polars::prelude::DataType::String)
+                    .map_err(|e| format!("Predict: Exog '{}' cannot cast to String: {}", name, e))?;
+                let str_ca = str_series.str().map_err(|e| format!("Predict: Exog '{}' cannot cast to String: {}", name, e))?;
                 let values: Vec<String> = str_ca
                     .into_iter()
                     .map(|o| o.map(|s| s.to_string()).unwrap_or_default())

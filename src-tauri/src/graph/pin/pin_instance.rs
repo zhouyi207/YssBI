@@ -3,6 +3,7 @@
 /// Pin 实例由 Graph 管理，不属于 Node。
 /// Pin 不存储连接信息，所有连接由 ConnectionManager 管理。
 use super::{PinDefinition, PinDirection, PinId, PinKind, PinOrder};
+use crate::graph::node::DataSchema;
 use crate::graph::{DataValue, NodeId, TypeVarId};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,9 @@ pub struct PinInstance {
     pub order: PinOrder,
     pub type_var_id: Option<TypeVarId>,
     pub user_value: Option<DataValue>,
+    /// 连接时传播的 schema（output pin 存储输出 schema，供下游 input 使用）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_schema: Option<DataSchema>,
 }
 
 impl PinInstance {
@@ -27,6 +31,7 @@ impl PinInstance {
             order: PinOrder(order),
             type_var_id: None,
             user_value: None,
+            resolved_schema: None,
         }
     }
 

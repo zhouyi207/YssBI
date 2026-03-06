@@ -23,6 +23,8 @@ pub enum ExecutionEvent {
     #[serde(rename_all = "camelCase")]
     NodeComplete {
         node_id: String,
+        /// 后端计算耗时（毫秒），用于性能分析
+        duration_ms: u64,
     },
 
     /// 节点执行出错
@@ -30,6 +32,8 @@ pub enum ExecutionEvent {
     NodeError {
         node_id: String,
         error: String,
+        /// 后端计算耗时（毫秒），用于性能分析
+        duration_ms: u64,
     },
 
     /// 连接激活（数据/控制流经过该连接）

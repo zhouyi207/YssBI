@@ -8616,12 +8616,14 @@ dependencies = [
 name = "yss-sci"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "csv",
  "faer",
  "ndarray",
  "ndarray-stats",
  "num-traits",
  "polars",
+ "polars-dtype",
  "serde",
  "serde_json",
  "statrs",
