@@ -301,7 +301,8 @@ fn register_ts_lag(registry: &NodeRegistry) {
                 for i in 0..n {
                     lagged.push(if i < lag { None } else { aligned_vec[i - lag] });
                 }
-                let lagged_s = Series::from_iter(lagged);
+                let lagged_s = Series::from_iter(lagged)
+                    .with_name(format!("{}_lag{}", value_series.name(), lag).into());
                 (time_series.clone(), lagged_s)
             } else {
                 check_no_duplicate_times(&time_series).map_err(|e| e.to_string())?;
@@ -314,7 +315,8 @@ fn register_ts_lag(registry: &NodeRegistry) {
                 for i in 0..n {
                     lagged.push(if i < lag { None } else { aligned_vec[i - lag] });
                 }
-                let lagged_s = Series::from_iter(lagged);
+                let lagged_s = Series::from_iter(lagged)
+                    .with_name(format!("{}_lag{}", value_series.name(), lag).into());
                 (full_times, lagged_s)
             };
             let time_out_id = ctx.put_series(full_times.clone())?;

@@ -9,12 +9,14 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
-use polars::prelude::Series;
+use polars::prelude::{Column, DataFrame, Series};
 use std::sync::Arc;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
+use yss_sci::ts::align::infer_interval;
+use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, ResidualScatterData};
 use std::time::Instant;
 use super::ols_nodes::{OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
@@ -59,6 +61,17 @@ fn wls_input_slots() -> Vec<PinSlot> {
             DataRole::Custom("weights".to_string()),
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Time",
+                DataRole::Custom("time".to_string()),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
+                    DataType::Date,
+                    DataType::Int64,
+                ])))),
+            )
+            .with_optional(true),
+        ),
         PinSlot::fixed(
             PinDefinition::data_input(
                 "Config",
@@ -108,12 +121,9 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
     };
-    let endog_f64 = endog_series
-        .f64()
+    let endog_f64_series = endog_series
+        .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("WLS: cannot cast Endog to Float64: {}", e))?;
-    let endog_values: Vec<f64> = endog_f64.into_no_null_iter().collect();
-    let n = endog_values.len();
-    let endog = Array1::from(endog_values);
 
     // ---- Extract weights ----
     let weights_value = ctx.get_input_by_role(
@@ -133,25 +143,15 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         }
     };
     let weights_series = ctx.get_series(&weights_id)?;
-    let weights_f64 = weights_series
-        .f64()
+    let weights_f64_series = weights_series
+        .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("WLS: cannot cast Weights to Float64: {}", e))?;
-    let weights_values: Vec<f64> = weights_f64.into_no_null_iter().collect();
-    if weights_values.len() != n {
+    if weights_f64_series.len() != endog_f64_series.len() {
         return Err(format!(
             "WLS: Weights has {} observations, expected {} (must match Endog length)",
-            weights_values.len(), n
+            weights_f64_series.len(), endog_f64_series.len()
         ));
     }
-    for (i, &w) in weights_values.iter().enumerate() {
-        if w <= 0.0 {
-            return Err(format!(
-                "WLS: Weights must be positive: got {} at row {}",
-                w, i
-            ));
-        }
-    }
-    let weights = Array1::from(weights_values);
 
     // ---- Get config (optional — falls back to OLSConfigure::default()) ----
     let config = match ctx.get_input_by_role(
@@ -180,13 +180,47 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         return Err("WLS: at least one Exog input is required".to_string());
     }
 
-    let mut exog_columns: Vec<Vec<f64>> = Vec::new();
-    let mut col_labels: Vec<(String, Option<String>)> = Vec::new();
-    let mut variable_specs: Vec<VariableSpec> = Vec::new();
+    // Optional time series for residual time info (from direct Time pin or from config)
+    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+        Ok(DataValue::DataSeries(v)) => {
+            let ts = ctx.get_series(&v.id)?;
+            if ts.len() != endog_f64_series.len() {
+                return Err(format!(
+                    "WLS: Time has {} observations, expected {} (must match Endog length)",
+                    ts.len(), endog_f64_series.len()
+                ));
+            }
+            Some(ts)
+        }
+        _ => {
+            if let Some(ref id) = config.time_series_id {
+                let ts = ctx.get_series(id)?;
+                if ts.len() != endog_f64_series.len() {
+                    return Err(format!(
+                        "WLS: Time from config has {} observations, expected {} (must match Endog length)",
+                        ts.len(), endog_f64_series.len()
+                    ));
+                }
+                Some(ts)
+            } else {
+                None
+            }
+        }
+    };
 
+    // Build DataFrame with endog + weights + optional time + all exog, then drop rows with null/NaN
+    let n_raw = endog_f64_series.len();
+    let mut df_cols: Vec<Column> = vec![
+        Column::from(endog_f64_series.with_name("__endog__".into())),
+        Column::from(weights_f64_series.with_name("__weights__".into())),
+    ];
+    if let Some(ref ts) = time_series {
+        df_cols.push(Column::from(ts.clone().with_name("__time__".into())));
+    }
+    let mut exog_meta: Vec<(String, bool, DataSeriesValue)> = Vec::new();
     for (i, val) in exog_data_values.iter().enumerate() {
         let dsv = match val {
-            DataValue::DataSeries(v) => v,
+            DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("WLS: Exog input {} is not a DataSeries", i)),
         };
         let series = ctx.get_series(&dsv.id)?;
@@ -194,42 +228,89 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             let raw = series.name().to_string();
             if raw.is_empty() { format!("x{}", i + 1) } else { raw }
         };
-
+        if series.len() != n_raw {
+            return Err(format!(
+                "WLS: Exog '{}' has {} observations, expected {} (must match Endog length)",
+                series_name, series.len(), n_raw
+            ));
+        }
         let is_categorical = matches!(
             series.dtype(),
             polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
         );
+        let col_series = if is_categorical {
+            series
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e| format!("WLS: cannot cast Exog {} to String: {}", i, e))?
+        } else {
+            series
+                .cast(&polars::prelude::DataType::Float64)
+                .map_err(|e| format!("WLS: cannot cast Exog {} to Float64: {}", i, e))?
+        };
+        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        exog_meta.push((series_name, is_categorical, dsv));
+    }
+    let df = DataFrame::new(n_raw, df_cols)
+        .map_err(|e| format!("WLS: failed to build DataFrame: {}", e))?
+        .drop_nulls::<&str>(None)
+        .map_err(|e| format!("WLS: drop_nulls failed: {}", e))?;
+    let n = df.height();
+    if n == 0 {
+        return Err("WLS: no valid observations after dropping null/NaN values. Check that Endog, Weights, and Exog have at least some complete rows.".to_string());
+    }
+
+    let endog = Array1::from(
+        df.column("__endog__")
+            .map_err(|e| format!("WLS: {}", e))?
+            .f64()
+            .map_err(|e| format!("WLS: {}", e))?
+            .into_no_null_iter()
+            .collect::<Vec<f64>>(),
+    );
+
+    let weights_values: Vec<f64> = df
+        .column("__weights__")
+        .map_err(|e| format!("WLS: {}", e))?
+        .f64()
+        .map_err(|e| format!("WLS: {}", e))?
+        .into_no_null_iter()
+        .collect();
+    for (i, &w) in weights_values.iter().enumerate() {
+        if w <= 0.0 {
+            return Err(format!(
+                "WLS: Weights must be positive: got {} at row {}",
+                w, i
+            ));
+        }
+    }
+    let weights = Array1::from(weights_values);
+
+    let mut exog_columns: Vec<Vec<f64>> = Vec::new();
+    let mut col_labels: Vec<(String, Option<String>)> = Vec::new();
+    let mut variable_specs: Vec<VariableSpec> = Vec::new();
+
+    for (series_name, is_categorical, dsv) in exog_meta {
+        let col = df.column(&series_name).map_err(|e| format!("WLS: {}", e))?;
 
         if is_categorical {
-            let str_series = series
-                .cast(&polars::prelude::DataType::String)
-                .map_err(|e| format!("WLS: cannot cast Exog {} to String: {}", i, e))?;
-            let str_ca = str_series.str().map_err(|e| {
-                format!("WLS: cannot cast Exog {} to String: {}", i, e)
-            })?;
-
+            let str_ca = col.str().map_err(|e| format!("WLS: Exog '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
             let mut unique_ordered: Vec<String> = Vec::new();
-            for opt_val in str_ca.into_iter() {
-                let val_str = opt_val
-                    .ok_or_else(|| format!("WLS: Exog {} contains null values", i))?
-                    .to_string();
-                if !unique_ordered.contains(&val_str) {
-                    unique_ordered.push(val_str);
+            for v in &values {
+                if !unique_ordered.contains(v) {
+                    unique_ordered.push(v.clone());
                 }
             }
-
             if unique_ordered.len() < 2 {
                 return Err(format!(
-                    "WLS: categorical variable '{}' must have at least 2 unique values",
+                    "WLS: categorical variable '{}' must have at least 2 unique values (after dropping nulls)",
                     series_name
                 ));
             }
-
             let dummy_info = dsv.dummy_info.as_ref();
             let role = dummy_info
                 .map(|di| di.role.clone())
                 .unwrap_or(CategoricalRole::General);
-
             let drop_cat = if let Some(di) = dummy_info {
                 if let Some(ref specified) = di.drop_category {
                     if !unique_ordered.contains(specified) {
@@ -247,31 +328,16 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             } else {
                 String::new()
             };
-
             let categories_to_include: Vec<&String> = if drop_cat.is_empty() {
                 unique_ordered.iter().collect()
             } else {
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
-
-            let values: Vec<String> = str_ca
-                .into_iter()
-                .map(|opt| opt.unwrap().to_string())
-                .collect();
-
-            if values.len() != n {
-                return Err(format!(
-                    "WLS: Exog '{}' has {} observations, expected {}",
-                    series_name, values.len(), n
-                ));
-            }
-
             for cat in &categories_to_include {
                 let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
-
             variable_specs.push(VariableSpec::Categorical {
                 name: series_name,
                 categories: unique_ordered,
@@ -279,16 +345,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 role,
             });
         } else {
-            let f64_ca = series.f64().map_err(|e| {
-                format!("WLS: cannot cast Exog {} to Float64: {}", i, e)
-            })?;
-            let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
-            if values.len() != n {
-                return Err(format!(
-                    "WLS: Exog '{}' has {} observations, expected {}",
-                    series_name, values.len(), n
-                ));
-            }
+            let values: Vec<f64> = col.f64().map_err(|e| format!("WLS: Exog '{}': {}", series_name, e))?.into_no_null_iter().collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
@@ -457,9 +514,90 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         (None, None)
     };
 
-    // Stata regress [aweight=] 的 estat ic 使用 ANOVA 表中的 RSS
-    // 与 Stata 一致：用未加权残差平方和 sum(r²) 计算 AIC/BIC
-    let ss_residual_for_ic: f64 = residuals.iter().map(|r| r * r).sum();
+    // WLS: 与 statsmodels 一致，使用加权残差 wresid_i = sqrt(w_i) * r_i 做正态性检验
+    // 未加权残差具异方差，会扭曲 Skew/Kurtosis/JB/Omnibus
+    // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
+    let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
+        let time_col = df.column("__time__").map_err(|e| format!("WLS: {}", e))?;
+        let time_s = time_col.clone().take_materialized_series();
+        let residuals_s = Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
+
+        let interval = infer_interval(&time_s).unwrap_or(1);
+        match ts_lag(&time_s, &residuals_s, 1, interval) {
+            Ok((full_times, e_aligned, e_lag1_series)) => {
+                let e_vec: Vec<Option<f64>> = e_aligned
+                    .f64()
+                    .map_err(|e| format!("WLS: {}", e))?
+                    .into_iter()
+                    .collect();
+                let e_lag1_vec: Vec<Option<f64>> = e_lag1_series
+                    .f64()
+                    .map_err(|e| format!("WLS: {}", e))?
+                    .into_iter()
+                    .collect();
+                let time_str_s = full_times
+                    .cast(&polars::prelude::DataType::String)
+                    .map_err(|e| format!("WLS: time cast: {}", e))?;
+                let time_str_vec: Vec<String> = time_str_s
+                    .str()
+                    .map_err(|e| format!("WLS: {}", e))?
+                    .into_iter()
+                    .map(|v| v.unwrap_or("").to_string())
+                    .collect();
+
+                let mut e = Vec::new();
+                let mut e_lag1 = Vec::new();
+                let mut time_out = Vec::new();
+                for i in 0..e_vec.len().min(e_lag1_vec.len()) {
+                    if let (Some(et), Some(et_lag1)) = (e_vec[i], e_lag1_vec[i]) {
+                        e.push(et);
+                        e_lag1.push(et_lag1);
+                        time_out.push(time_str_vec.get(i).cloned().unwrap_or_default());
+                    }
+                }
+                if e.is_empty() {
+                    None
+                } else {
+                    Some(ResidualScatterData {
+                        e,
+                        e_lag1,
+                        time: Some(time_out),
+                    })
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let normality_tests = if has_constant && residuals.len() >= 8 {
+        let weighted_residuals: Vec<f64> = residuals
+            .iter()
+            .enumerate()
+            .map(|(i, r)| r * weights[i].sqrt())
+            .collect();
+        let residuals_arr = Array1::from(weighted_residuals);
+        diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
+            skewness: r.skewness,
+            kurtosis: r.kurtosis,
+            omnibus_stat: r.omnibus_stat,
+            omnibus_p_value: r.omnibus_p_value,
+            jarque_bera_stat: r.jarque_bera_stat,
+            jarque_bera_p_value: r.jarque_bera_p_value,
+        })
+    } else {
+        None
+    };
+
+    // Stata regress [aweight=] 的 estat ic 使用 ANOVA 表中的加权 RSS
+    // Stata 将 aweights 归一化为 sum(w)=N，故 RSS_stata = (N/sum(v)) * Σ v_i·r_i²
+    let sum_w: f64 = weights.iter().sum();
+    let ss_residual_for_ic = if sum_w > 0.0 {
+        result.ss_residual * (n as f64 / sum_w)
+    } else {
+        result.ss_residual
+    };
     let (aic, bic) = compute_aic_bic(
         result.num_observation,
         result.betas.len(),
@@ -497,8 +635,10 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             cond_no: result.cond_no,
             bp_tests,
             im_test,
+            normality_tests,
             fitted_values,
             residuals,
+            residual_scatter,
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,

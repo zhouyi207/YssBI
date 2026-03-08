@@ -1,7 +1,19 @@
 import React, { useMemo } from 'react';
 import Scatter from '@/views/PlotView/Scatter';
 
-const ResidualPlot: React.FC<{ fitted: number[]; residuals: number[] }> = ({ fitted, residuals }) => {
+interface ResidualPlotProps {
+  fitted: number[];
+  residuals: number[];
+  xLabel?: string;
+  yLabel?: string;
+}
+
+const ResidualPlot: React.FC<ResidualPlotProps> = ({
+  fitted,
+  residuals,
+  xLabel = 'Fitted Values',
+  yLabel = 'Residuals',
+}) => {
   const data = useMemo(
     () => fitted.map((f, i) => ({ x: f, y: residuals[i] })),
     [fitted, residuals],
@@ -11,8 +23,8 @@ const ResidualPlot: React.FC<{ fitted: number[]; residuals: number[] }> = ({ fit
     <div className="w-full min-h-[280px]">
       <Scatter
         data={data}
-        xLabel="Fitted Values"
-        yLabel="Residuals"
+        xLabel={xLabel}
+        yLabel={yLabel}
         height={280}
         symmetricY
         zeroLine

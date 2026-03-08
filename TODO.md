@@ -43,14 +43,18 @@
 ## 2026.03.06
 
 - [x] 添加了模块时间
-- [ ] aic, bic 计算不一致
-- [ ] 加上 aic, bic, Omnibus, Durbin-Watson, Jarque-Bera 就完成了 statsmodel 的 ols summary 了
+- [x] 修真了 aic, bic 的计算，~~aic, bic 计算不一致~~
+- [ ] gls 所有结果都没有被检验
+- [x] 加上 aic, bic, Omnibus, Durbin-Watson, Jarque-Bera 就完成了 statsmodel 的 ols summary 了
 - [x] 时间序列算子设计问题
-- [ ] 由于添加了 categorical 之后，需要将 string 类型转化未 categorical 类型，但是这些在 dataview 中的操作，在保存项目并恢复的时候并没有恢复，这就导致之前是 categorical 的类型变成了 string 类型但是却在 ui 上并没有体现出来
+- [ ] 目前暂时使用 string to categorical 的节点形式展现出来了，但是认为可能需要在 database 层面添加一层映射层将数据进行持久性转化，可以保证项目在加载的时候 database 可以恢复为之前的形式。但是如果对数据进行修改了呢？？难说~~由于添加了 categorical 之后，需要将 string 类型转化未 categorical 类型，但是这些在 dataview 中的操作，在保存项目并恢复的时候并没有恢复，这就导致之前是 categorical 的类型变成了 string 类型但是却在 ui 上并没有体现出来~~
+- [x] 创建一个 string to categorical 节点
 
 ## 2026.03.07
 
 - [ ] 关于动态和静态节点，我认为对数据处理操作都是可以预测的，其生成的形状和 pin 都是可以知道的，不需要计算，因此在数据处理层面我认为可以使用静态节点也应该使用静态节点；对于 predict 节点，其 model 的传入有两种方式，一种是自己配置另一种是连线，连线的 model 必然是 output 节点，那么其在形式上必然有 pin 的生成，我可以使用其上一个节点的 pin 来生成这里的 pin，一种是自己配置的，那么其在连接线的时候必然要解析这里的 model 可以动态生成节点；因此，动态节点在某种程度上必然是不现实的，其会造成卡顿等等一系列的问题？？又或者说在计算的时候对于 data pin 来一个即时使计算，而对于 exec pin 同时在前端出现等待样式；这样的话好像在打开项目节点的时候会很卡顿，不应该这样操作。**既然都可以预测，那么解决问题的最好的方法就是在流动的过程中添加信息层，这里的信息层取决于连接了什么？？？也就是在每次连接的时候进行链式更新，即一个信息的传输作用。例如 ts align 节点，其输入 dataframe 会传入一个 schema 信息给 ts align，在连接的时候其 output dataframe 就会拥有这个信息 schema，以便于 decompose dataframe 在连接 output dataframe 的时候会自动生成 output pin**
+- [x] 完成 ols_summary 和 wls_summary 的测试编写方便后续重构检验正确性
+- [x] 完成 ols, wls, gls 的 dropna
 
 # TODOLIST
 
@@ -148,14 +152,16 @@ PinInstance 新增字段:
 
 **需要改动的位置**：
 
-| # | 位置 | 改动内容 |
-|---|---|---|
-| 1 | `pin_instance.rs` — struct | 添加 `type_narrowing: Option<DataType>` 字段 |
-| 2 | `pin_instance.rs` — `from_definition` | 初始化为 `None` |
-| 3 | `type_inference_session.rs` — `register_all` | 注册 Pin 类型时，若 `type_narrowing` 有值，用它覆盖定义中的 OneOf |
-| 4 | 后端 API | 新增命令：`set_pin_type_narrowing(pin_id, Option<DataType>)` |
-| 5 | 前端 Pin 右键菜单 | 检测 Pin 定义是否含 OneOf → 生成收窄选项菜单 + "重置"选项 |
-| 6 | 前端 Pin 类型显示 | 收窄后显示具体类型，未收窄显示 `Float64 \| String` |
-| 7 | 收窄后触发 | 设置 `type_narrowing` → 重跑类型推断 → 检查已有连线兼容性 |
+| #   | 位置                                         | 改动内容                                                          |
+| --- | -------------------------------------------- | ----------------------------------------------------------------- |
+| 1   | `pin_instance.rs` — struct                   | 添加 `type_narrowing: Option<DataType>` 字段                      |
+| 2   | `pin_instance.rs` — `from_definition`        | 初始化为 `None`                                                   |
+| 3   | `type_inference_session.rs` — `register_all` | 注册 Pin 类型时，若 `type_narrowing` 有值，用它覆盖定义中的 OneOf |
+| 4   | 后端 API                                     | 新增命令：`set_pin_type_narrowing(pin_id, Option<DataType>)`      |
+| 5   | 前端 Pin 右键菜单                            | 检测 Pin 定义是否含 OneOf → 生成收窄选项菜单 + "重置"选项         |
+| 6   | 前端 Pin 类型显示                            | 收窄后显示具体类型，未收窄显示 `Float64 \| String`                |
+| 7   | 收窄后触发                                   | 设置 `type_narrowing` → 重跑类型推断 → 检查已有连线兼容性         |
 
 **优先级链**：`type_narrowing` > 类型推断结果 > Pin 定义默认值
+
+结构估计

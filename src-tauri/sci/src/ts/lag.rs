@@ -13,13 +13,13 @@ use crate::ts::align;
 /// * `lag` - lag 阶数
 /// * `interval` - 时间步长（数字时间为步数，日期为天数）
 ///
-/// 返回 (完整时间轴, lag 后的值，前 lag 个为 null)
+/// 返回 (完整时间轴, 对齐后的当前值, lag 后的值，前 lag 个为 null)
 pub fn ts_lag(
     time_series: &Series,
     value_series: &Series,
     lag: usize,
     interval: i64,
-) -> PolarsResult<(Series, Series)> {
+) -> PolarsResult<(Series, Series, Series)> {
     let (full_times, aligned) = align::align_series(time_series, value_series, interval)?;
 
     let n = aligned.len();
@@ -38,5 +38,5 @@ pub fn ts_lag(
     let out_series = Series::from_iter(out.into_iter())
         .with_name(format!("{}_lag{}", value_series.name(), lag).into());
 
-    Ok((full_times, out_series))
+    Ok((full_times, aligned, out_series))
 }

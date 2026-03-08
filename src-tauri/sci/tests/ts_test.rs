@@ -98,7 +98,7 @@ fn test_align_dataframe() {
 fn test_ts_lag_numeric() {
     let times = Series::new("t".into(), &[1_i64, 2, 4, 5]);
     let values = Series::new("x".into(), &[10.0, 20.0, 30.0, 40.0]);
-    let (t_out, lag_out) = ts::lag::ts_lag(&times, &values, 1, 1).unwrap();
+    let (t_out, _aligned, lag_out) = ts::lag::ts_lag(&times, &values, 1, 1).unwrap();
 
     // 对齐后: t=1,2,3,4,5; values=10,20,NA,30,40
     // lag1: NA,1,2,3,4 -> NA,10,20,NA,30

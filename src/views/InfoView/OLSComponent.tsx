@@ -6,6 +6,7 @@ import type { HypothesisTestResponse } from '@/services/stats';
 
 const FormulaBlock = React.lazy(() => import('./FormulaBlock'));
 const ResidualPlot = React.lazy(() => import('./ResidualPlot'));
+const Scatter = React.lazy(() => import('@/views/PlotView/Scatter'));
 
 interface ModelBasicInfo {
   model_type: string;
@@ -70,6 +71,16 @@ interface ImTest {
   total: ImTestComponent;
 }
 
+/** 残差正态性检验（Omnibus / Jarque-Bera，statsmodels 风格） */
+interface NormalityTests {
+  skewness: number;
+  kurtosis: number;
+  omnibus_stat: number;
+  omnibus_p_value: number;
+  jarque_bera_stat: number;
+  jarque_bera_p_value: number;
+}
+
 /** 各诊断模块的后端计算耗时（毫秒） */
 interface DiagnosticTiming {
   fitted_residuals_ms?: number;
@@ -77,12 +88,21 @@ interface DiagnosticTiming {
   im_test_ms?: number;
 }
 
+/** 残差 vs 残差滞后 1 散点图数据 */
+interface ResidualScatterData {
+  e: number[];
+  e_lag1: number[];
+  time?: string[];
+}
+
 interface DiagnosticInfo {
   cond_no: number;
   bp_tests?: BreuschPaganTests;
   im_test?: ImTest;
+  normality_tests?: NormalityTests;
   fitted_values?: number[];
   residuals?: number[];
+  residual_scatter?: ResidualScatterData;
   timing?: DiagnosticTiming;
 }
 
@@ -487,6 +507,32 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         </div>
       ) : null}
 
+      {diag.normality_tests ? (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+              Residual Normality (Omnibus / Jarque-Bera)
+            </span>
+          </div>
+          <Chi2TestCards
+            cards={[
+              {
+                label: 'Omnibus',
+                chi2: diag.normality_tests.omnibus_stat,
+                df: 2,
+                p_value: diag.normality_tests.omnibus_p_value,
+              },
+              {
+                label: 'Jarque-Bera',
+                chi2: diag.normality_tests.jarque_bera_stat,
+                df: 2,
+                p_value: diag.normality_tests.jarque_bera_p_value,
+              },
+            ]}
+          />
+        </div>
+      ) : null}
+
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
         <>
           <div className="flex items-center justify-between mb-2 px-1">
@@ -498,6 +544,42 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
             <ResidualPlot fitted={diag.fitted_values} residuals={diag.residuals} />
           </Suspense>
+
+          {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals: e vs e_lag1</span>
+              </div>
+              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+                <Scatter
+                  data={diag.residual_scatter.e_lag1.map((x, i) => ({ x, y: diag.residual_scatter!.e[i] }))}
+                  xLabel="e_{t-1}"
+                  yLabel="e_t"
+                  height={280}
+                  symmetricY
+                  zeroLine
+                />
+              </Suspense>
+            </div>
+          )}
+
+          {diag.normality_tests ? (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Skew & Kurtosis</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
+                  <div className="text-[11px] text-gray-500 font-mono mb-2">Skew</div>
+                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.skewness)}</div>
+                </div>
+                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
+                  <div className="text-[11px] text-gray-500 font-mono mb-2">Kurtosis</div>
+                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.kurtosis)}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>

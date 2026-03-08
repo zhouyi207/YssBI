@@ -2,12 +2,14 @@ use crate::graph::infer::{TypeConstraint, TypeVarDefinition, TypeVarKey};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataType, DataValue};
+use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use num_traits::{One, Zero};
 use std::sync::Arc;
+use yss_sci::database::dtype_from_string;
 
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);
+    register_series_string_to_categorical(registry);
 }
 
 fn register_convert(registry: &NodeRegistry) {
@@ -160,4 +162,44 @@ fn parse_boolean(s: &str) -> Option<bool> {
         "false" | "0" | "no" | "off" | "" => Some(false),
         _ => None,
     }
+}
+
+fn register_series_string_to_categorical(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new(
+        "String to Categorical",
+        vec!["Data".to_string(), "Conversion".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("Convert a DataSeries of String type to Categorical")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Series",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Series",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &series_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            _ => return Err("String to Categorical: input is not a DataSeries".to_string()),
+        };
+        let series = ctx.get_series(&series_id)?;
+        let target_dtype = dtype_from_string("categorical");
+        let casted = series
+            .cast(&target_dtype)
+            .map_err(|e| format!("String to Categorical: cast failed: {}", e))?;
+        let result_id = ctx.put_series(casted)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Categorical)),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
 }

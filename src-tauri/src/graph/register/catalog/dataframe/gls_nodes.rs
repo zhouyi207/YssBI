@@ -9,14 +9,15 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
-use polars::prelude::DataFrame;
-use polars::prelude::Series;
+use polars::prelude::{Column, DataFrame, NamedFrom, Series};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{GLS, GLSConfig};
+use yss_sci::ts::align::infer_interval;
+use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, OLSResult};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, ResidualScatterData};
 use std::time::Instant;
 use super::ols_nodes::VariableSpec;
 
@@ -29,11 +30,16 @@ pub use super::ols_nodes::OLSModel;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GLSConfigure {
     pub constant: bool,
+    /// Optional time series ID (from Time pin on configure node)
+    pub time_series_id: Option<String>,
 }
 
 impl Default for GLSConfigure {
     fn default() -> Self {
-        Self { constant: true }
+        Self {
+            constant: true,
+            time_series_id: None,
+        }
     }
 }
 
@@ -114,6 +120,17 @@ fn gls_input_slots() -> Vec<PinSlot> {
         )),
         PinSlot::fixed(
             PinDefinition::data_input(
+                "Time",
+                DataRole::Custom("time".to_string()),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
+                    DataType::Date,
+                    DataType::Int64,
+                ])))),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
                 "Config",
                 DataRole::Custom("gls_config".to_string()),
                 PinDataTypeDefinition::concrete(DataType::Struct("GLSConfigure".to_string())),
@@ -161,12 +178,9 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
     };
-    let endog_f64 = endog_series
-        .f64()
+    let endog_f64_series = endog_series
+        .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("GLS: cannot cast Endog to Float64: {}", e))?;
-    let endog_values: Vec<f64> = endog_f64.into_no_null_iter().collect();
-    let n = endog_values.len();
-    let endog = Array1::from(endog_values);
 
     // ---- Extract Sigma (DataFrame -> Array2) ----
     let sigma_value = ctx.get_input_by_role(
@@ -182,11 +196,12 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         }
     };
     let sigma_df = ctx.get_dataframe(&sigma_df_id)?;
-    let sigma = dataframe_to_array2(sigma_df.as_ref())?;
-    if sigma.nrows() != n {
+    let sigma_full = dataframe_to_array2(sigma_df.as_ref())?;
+    let n_raw = endog_f64_series.len();
+    if sigma_full.nrows() != n_raw {
         return Err(format!(
             "GLS: Sigma is {}×{}, but Endog has {} observations. Sigma must be n×n where n = number of observations.",
-            sigma.nrows(), sigma.ncols(), n
+            sigma_full.nrows(), sigma_full.ncols(), n_raw
         ));
     }
 
@@ -217,13 +232,46 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         return Err("GLS: at least one Exog input is required".to_string());
     }
 
-    let mut exog_columns: Vec<Vec<f64>> = Vec::new();
-    let mut col_labels: Vec<(String, Option<String>)> = Vec::new();
-    let mut variable_specs: Vec<VariableSpec> = Vec::new();
+    // Optional time series for residual time info (from direct Time pin or from config)
+    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+        Ok(DataValue::DataSeries(v)) => {
+            let ts = ctx.get_series(&v.id)?;
+            if ts.len() != n_raw {
+                return Err(format!(
+                    "GLS: Time has {} observations, expected {} (must match Endog length)",
+                    ts.len(), n_raw
+                ));
+            }
+            Some(ts)
+        }
+        _ => {
+            if let Some(ref id) = config.time_series_id {
+                let ts = ctx.get_series(id)?;
+                if ts.len() != n_raw {
+                    return Err(format!(
+                        "GLS: Time from config has {} observations, expected {} (must match Endog length)",
+                        ts.len(), n_raw
+                    ));
+                }
+                Some(ts)
+            } else {
+                None
+            }
+        }
+    };
 
+    // Build DataFrame with __idx__ + endog + optional time + all exog, then drop rows with null/NaN
+    let mut df_cols: Vec<Column> = vec![
+        Column::from(Series::new("__idx__".into(), (0..n_raw).map(|i| i as u32).collect::<Vec<u32>>())),
+        Column::from(endog_f64_series.with_name("__endog__".into())),
+    ];
+    if let Some(ref ts) = time_series {
+        df_cols.push(Column::from(ts.clone().with_name("__time__".into())));
+    }
+    let mut exog_meta: Vec<(String, bool, DataSeriesValue)> = Vec::new();
     for (i, val) in exog_data_values.iter().enumerate() {
         let dsv = match val {
-            DataValue::DataSeries(v) => v,
+            DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("GLS: Exog input {} is not a DataSeries", i)),
         };
         let series = ctx.get_series(&dsv.id)?;
@@ -231,42 +279,83 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             let raw = series.name().to_string();
             if raw.is_empty() { format!("x{}", i + 1) } else { raw }
         };
-
+        if series.len() != n_raw {
+            return Err(format!(
+                "GLS: Exog '{}' has {} observations, expected {} (must match Endog length)",
+                series_name, series.len(), n_raw
+            ));
+        }
         let is_categorical = matches!(
             series.dtype(),
             polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
         );
+        let col_series = if is_categorical {
+            series
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e| format!("GLS: cannot cast Exog {} to String: {}", i, e))?
+        } else {
+            series
+                .cast(&polars::prelude::DataType::Float64)
+                .map_err(|e| format!("GLS: cannot cast Exog {} to Float64: {}", i, e))?
+        };
+        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        exog_meta.push((series_name, is_categorical, dsv));
+    }
+    let df = DataFrame::new(n_raw, df_cols)
+        .map_err(|e| format!("GLS: failed to build DataFrame: {}", e))?
+        .drop_nulls::<&str>(None)
+        .map_err(|e| format!("GLS: drop_nulls failed: {}", e))?;
+    let n = df.height();
+    if n == 0 {
+        return Err("GLS: no valid observations after dropping null/NaN values. Check that Endog and Exog have at least some complete rows.".to_string());
+    }
+
+    // Subset Sigma to valid row/col indices
+    let valid_indices: Vec<usize> = df
+        .column("__idx__")
+        .map_err(|e| format!("GLS: {}", e))?
+        .u32()
+        .map_err(|e| format!("GLS: {}", e))?
+        .into_no_null_iter()
+        .map(|i| i as usize)
+        .collect();
+    let sigma = ndarray::Array2::from_shape_fn((n, n), |(i, j)| sigma_full[[valid_indices[i], valid_indices[j]]]);
+
+    let endog = Array1::from(
+        df.column("__endog__")
+            .map_err(|e| format!("GLS: {}", e))?
+            .f64()
+            .map_err(|e| format!("GLS: {}", e))?
+            .into_no_null_iter()
+            .collect::<Vec<f64>>(),
+    );
+
+    let mut exog_columns: Vec<Vec<f64>> = Vec::new();
+    let mut col_labels: Vec<(String, Option<String>)> = Vec::new();
+    let mut variable_specs: Vec<VariableSpec> = Vec::new();
+
+    for (series_name, is_categorical, dsv) in exog_meta {
+        let col = df.column(&series_name).map_err(|e| format!("GLS: {}", e))?;
 
         if is_categorical {
-            let str_series = series
-                .cast(&polars::prelude::DataType::String)
-                .map_err(|e| format!("GLS: cannot cast Exog {} to String: {}", i, e))?;
-            let str_ca = str_series.str().map_err(|e| {
-                format!("GLS: cannot cast Exog {} to String: {}", i, e)
-            })?;
-
+            let str_ca = col.str().map_err(|e| format!("GLS: Exog '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
             let mut unique_ordered: Vec<String> = Vec::new();
-            for opt_val in str_ca.into_iter() {
-                let val_str = opt_val
-                    .ok_or_else(|| format!("GLS: Exog {} contains null values", i))?
-                    .to_string();
-                if !unique_ordered.contains(&val_str) {
-                    unique_ordered.push(val_str);
+            for v in &values {
+                if !unique_ordered.contains(v) {
+                    unique_ordered.push(v.clone());
                 }
             }
-
             if unique_ordered.len() < 2 {
                 return Err(format!(
-                    "GLS: categorical variable '{}' must have at least 2 unique values",
+                    "GLS: categorical variable '{}' must have at least 2 unique values (after dropping nulls)",
                     series_name
                 ));
             }
-
             let dummy_info = dsv.dummy_info.as_ref();
             let role = dummy_info
                 .map(|di| di.role.clone())
                 .unwrap_or(CategoricalRole::General);
-
             let drop_cat = if let Some(di) = dummy_info {
                 if let Some(ref specified) = di.drop_category {
                     if !unique_ordered.contains(specified) {
@@ -284,31 +373,16 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             } else {
                 String::new()
             };
-
             let categories_to_include: Vec<&String> = if drop_cat.is_empty() {
                 unique_ordered.iter().collect()
             } else {
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
-
-            let values: Vec<String> = str_ca
-                .into_iter()
-                .map(|opt| opt.unwrap().to_string())
-                .collect();
-
-            if values.len() != n {
-                return Err(format!(
-                    "GLS: Exog '{}' has {} observations, expected {}",
-                    series_name, values.len(), n
-                ));
-            }
-
             for cat in &categories_to_include {
                 let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
-
             variable_specs.push(VariableSpec::Categorical {
                 name: series_name,
                 categories: unique_ordered,
@@ -316,16 +390,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
                 role,
             });
         } else {
-            let f64_ca = series.f64().map_err(|e| {
-                format!("GLS: cannot cast Exog {} to Float64: {}", i, e)
-            })?;
-            let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
-            if values.len() != n {
-                return Err(format!(
-                    "GLS: Exog '{}' has {} observations, expected {}",
-                    series_name, values.len(), n
-                ));
-            }
+            let values: Vec<f64> = col.f64().map_err(|e| format!("GLS: Exog '{}': {}", series_name, e))?.into_no_null_iter().collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
@@ -465,6 +530,75 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         (None, None)
     };
 
+    // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
+    let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
+        let time_col = df.column("__time__").map_err(|e| format!("GLS: {}", e))?;
+        let time_s = time_col.clone().take_materialized_series();
+        let residuals_s = Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
+
+        let interval = infer_interval(&time_s).unwrap_or(1);
+        match ts_lag(&time_s, &residuals_s, 1, interval) {
+            Ok((full_times, e_aligned, e_lag1_series)) => {
+                let e_vec: Vec<Option<f64>> = e_aligned
+                    .f64()
+                    .map_err(|e| format!("GLS: {}", e))?
+                    .into_iter()
+                    .collect();
+                let e_lag1_vec: Vec<Option<f64>> = e_lag1_series
+                    .f64()
+                    .map_err(|e| format!("GLS: {}", e))?
+                    .into_iter()
+                    .collect();
+                let time_str_s = full_times
+                    .cast(&polars::prelude::DataType::String)
+                    .map_err(|e| format!("GLS: time cast: {}", e))?;
+                let time_str_vec: Vec<String> = time_str_s
+                    .str()
+                    .map_err(|e| format!("GLS: {}", e))?
+                    .into_iter()
+                    .map(|v| v.unwrap_or("").to_string())
+                    .collect();
+
+                let mut e = Vec::new();
+                let mut e_lag1 = Vec::new();
+                let mut time_out = Vec::new();
+                for i in 0..e_vec.len().min(e_lag1_vec.len()) {
+                    if let (Some(et), Some(et_lag1)) = (e_vec[i], e_lag1_vec[i]) {
+                        e.push(et);
+                        e_lag1.push(et_lag1);
+                        time_out.push(time_str_vec.get(i).cloned().unwrap_or_default());
+                    }
+                }
+                if e.is_empty() {
+                    None
+                } else {
+                    Some(ResidualScatterData {
+                        e,
+                        e_lag1,
+                        time: Some(time_out),
+                    })
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let normality_tests = if has_constant && residuals.len() >= 8 {
+        let residuals_arr = Array1::from(residuals.clone());
+        diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
+            skewness: r.skewness,
+            kurtosis: r.kurtosis,
+            omnibus_stat: r.omnibus_stat,
+            omnibus_p_value: r.omnibus_p_value,
+            jarque_bera_stat: r.jarque_bera_stat,
+            jarque_bera_p_value: r.jarque_bera_p_value,
+        })
+    } else {
+        None
+    };
+
     let ols_result = OLSResult {
         title: "GLS Regression Results".to_string(),
         endog_name,
@@ -501,8 +635,10 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             cond_no: result.cond_no,
             bp_tests,
             im_test,
+            normality_tests,
             fitted_values,
             residuals,
+            residual_scatter,
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -550,6 +686,14 @@ fn register_gls_configure(registry: &NodeRegistry) {
             )
             .with_optional(true),
         ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Time",
+                DataRole::Custom("time".to_string()),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Date))),
+            )
+            .with_optional(true),
+        ),
         PinSlot::fixed(PinDefinition::data_output(
             "Config",
             DataRole::Result,
@@ -563,7 +707,18 @@ fn register_gls_configure(registry: &NodeRegistry) {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        let config = GLSConfigure { constant };
+        let time_series_id = ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string())))
+            .ok()
+            .and_then(|v| match &v {
+                DataValue::DataSeries(dsv) => Some(dsv.id.clone()),
+                _ => None,
+            });
+
+        let config = GLSConfigure {
+            constant,
+            time_series_id,
+        };
         let handle_id = ctx.put_handle(Box::new(config));
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Result),

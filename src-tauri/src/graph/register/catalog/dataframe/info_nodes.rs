@@ -3,9 +3,10 @@
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
-/// 计算 OLS/GLS 的 AIC 和 BIC
-/// 公式: ll = -n/2 * (ln(2π) + ln(σ²) + 1), σ² = ss_residual/n
+/// 计算 OLS/WLS/GLS 的 AIC 和 BIC（与 Stata estat ic 一致）
+/// 公式: ll = -n/2 * (ln(2π) + ln(σ²) + 1), σ² = ss_residual/n (MLE)
 /// AIC = -2*ll + 2*k, BIC = -2*ll + k*ln(n)
+/// 注意: ln(2π) 而非 π*ln(2)
 pub fn compute_aic_bic(n: usize, k: usize, ss_residual: f64) -> (f64, f64) {
     let n_f = n as f64;
     let k_f = k as f64;
@@ -14,7 +15,8 @@ pub fn compute_aic_bic(n: usize, k: usize, ss_residual: f64) -> (f64, f64) {
     } else {
         1e-300
     };
-    let llf = -n_f / 2.0 * (PI * 2.0_f64.ln() + sigma2.ln() + 1.0);
+    let ln_2pi = (2.0 * PI).ln();
+    let llf = -n_f / 2.0 * (ln_2pi + sigma2.ln() + 1.0);
     let aic = -2.0 * llf + 2.0 * k_f;
     let bic = -2.0 * llf + k_f * n_f.ln();
     (aic, bic)
@@ -110,6 +112,17 @@ pub struct ImTest {
     pub total: ImTestComponent,
 }
 
+/// 残差正态性检验（Omnibus / Jarque-Bera，statsmodels 风格）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NormalityTests {
+    pub skewness: f64,
+    pub kurtosis: f64,
+    pub omnibus_stat: f64,
+    pub omnibus_p_value: f64,
+    pub jarque_bera_stat: f64,
+    pub jarque_bera_p_value: f64,
+}
+
 /// 各诊断模块的后端计算耗时（毫秒），用于性能分析
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DiagnosticTiming {
@@ -124,6 +137,18 @@ pub struct DiagnosticTiming {
     pub im_test_ms: Option<u64>,
 }
 
+/// 残差 vs 残差滞后 1 的散点图数据（用于自相关诊断）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidualScatterData {
+    /// e_t（当前残差）
+    pub e: Vec<f64>,
+    /// e_{t-1}（滞后 1 残差）
+    pub e_lag1: Vec<f64>,
+    /// 可选：每个点对应的时间（用于 tooltip 等）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time: Option<Vec<String>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
@@ -131,10 +156,15 @@ pub struct DiagnosticInfo {
     pub bp_tests: Option<BreuschPaganTests>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub im_test: Option<ImTest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normality_tests: Option<NormalityTests>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub fitted_values: Vec<f64>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub residuals: Vec<f64>,
+    /// 残差 vs 残差滞后 1 散点图数据（e 与 e_lag1）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub residual_scatter: Option<ResidualScatterData>,
     /// 各诊断模块耗时（用于性能分析）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timing: Option<DiagnosticTiming>,
