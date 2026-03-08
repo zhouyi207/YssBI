@@ -173,6 +173,60 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
     }
 }
 
+/// Newey-West (1994) automatic bandwidth selection (ivreg2 bw(auto) / abw).
+/// Returns bandwidth = optlag + 1. Per NW(1994) p.639, mstar = trunc(20*(T/100)^expo).
+/// f = (u .* X) * h with h=1 for exog cols, h=0 for constant (last col).
+fn newey_west_1994_bandwidth(x: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize, kernel: &str) -> usize {
+    let t = n as f64;
+    let one_t = 1.0 / t;
+    let (expo, q, cgamma) = match kernel.to_lowercase().as_str() {
+        "parzen" => (4.0 / 25.0, 2, 2.6614),
+        "quadratic spectral" | "quadratic spectral kernel" => (2.0 / 25.0, 2, 1.3221),
+        _ => (2.0 / 9.0, 1, 1.4117), // Bartlett default
+    };
+    let mstar = (20.0 * (t / 100.0).powf(expo)).trunc() as usize;
+    if mstar == 0 {
+        return 1;
+    }
+    let h: Vec<f64> = if k <= 1 {
+        vec![1.0; k]
+    } else {
+        (0..k).map(|c| if c == k - 1 { 0.0 } else { 1.0 }).collect()
+    };
+    let f: Vec<f64> = (0..n)
+        .map(|i| {
+            let mut s = 0.0;
+            for c in 0..k {
+                s += u[i] * x[[i, c]] * h[c];
+            }
+            s
+        })
+        .collect();
+    let mut sigmahat = vec![one_t; mstar + 1];
+    for j in 0..=mstar {
+        let mut sum_val = 0.0;
+        for i in j..n {
+            sum_val += f[i] * f[i - j];
+        }
+        sigmahat[j] += sum_val * one_t;
+    }
+    let mut shatq = 0.0;
+    let mut shat0 = sigmahat[0];
+    for j in 1..=mstar {
+        let jf = j as f64;
+        shatq += 2.0 * sigmahat[j] * jf.powi(q as i32);
+        shat0 += 2.0 * sigmahat[j];
+    }
+    let expon = 1.0 / (2.0 * q as f64 + 1.0);
+    let gammahat = cgamma * (shatq / shat0).powf(2.0).powf(expon);
+    let m = gammahat * t.powf(expon);
+    let optlag = match kernel.to_lowercase().as_str() {
+        "quadratic spectral" | "quadratic spectral kernel" => (m.min(mstar as f64)) as usize,
+        _ => (m.trunc() as usize).min(mstar),
+    };
+    optlag.saturating_add(1)
+}
+
 /// HAC: (X'X)⁻¹ S (X'X)⁻¹（sandwich，无 n/(n-k)）
 /// S = Σ_t e_t² x_t x_t' + Σ_{j=1}^{L} w_j Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
 /// ivreg2 bw(b): max lag = b-1, weight = 1 - j/b
@@ -189,15 +243,13 @@ fn cov_hac(
         _ => return Err("HAC cov_type requires CovParams::HAC with kernel and bandwidth".to_string()),
     };
 
-    // ivreg2 bw(b): max lag = b-1, weight = 1 - j/b. Auto: NW(1994) lag, bandwidth = lag+1.
+    // ivreg2 bw(b): max lag = b-1, weight = 1 - j/b.
+    // bw(auto): full Newey-West (1994) procedure (mstar=20*(T/100)^expo, data-dependent optlag).
     let bw = match bandwidth {
         Some(q) if q > 0 => q as usize,
         Some(0) | Some(1) => 1usize, // bandwidth 0 or 1 => max_lag 0
         Some(_) => return Err("HAC bandwidth must be non-negative".to_string()),
-        None => {
-            let lag = (4.0 * (n as f64 / 100.0).powf(2.0 / 9.0)).floor() as usize;
-            lag.saturating_add(1)
-        }
+        None => newey_west_1994_bandwidth(x, u, n, k, kernel),
     };
     let max_lag = bw.saturating_sub(1);
 
