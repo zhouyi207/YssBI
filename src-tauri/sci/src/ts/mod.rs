@@ -6,7 +6,9 @@
 //! - 支持数字时间 + 日期时间
 //! - O(n) 复杂度（rolling 为 O(n×w)）
 
+pub mod acf_pacf;
 pub mod align;
+pub mod serial_correlation;
 pub mod diff;
 pub mod lag;
 pub mod pct_change;

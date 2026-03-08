@@ -165,6 +165,9 @@ pub struct DiagnosticInfo {
     /// 残差 vs 残差滞后 1 散点图数据（e 与 e_lag1）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub residual_scatter: Option<ResidualScatterData>,
+    /// 回归设计矩阵 X（行优先），用于 Breusch-Godfrey 检验
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exog: Option<Vec<Vec<f64>>>,
     /// 各诊断模块耗时（用于性能分析）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timing: Option<DiagnosticTiming>,

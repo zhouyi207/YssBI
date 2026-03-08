@@ -18,7 +18,7 @@ use yss_sci::ts::lag::ts_lag;
 
 use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, ResidualScatterData};
 use std::time::Instant;
-use super::ols_nodes::{OLSConfigure, OLSCovarianceConfig, VariableSpec};
+use super::ols_nodes::{format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
 /// Re-export OLSModel for Predict compatibility (WLS outputs same structure)
 pub use super::ols_nodes::OLSModel;
@@ -390,6 +390,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             kernel: kernel.clone(),
             bandwidth: *bandwidth,
         },
+        OLSCovarianceConfig::Newey { lag } => CovParams::Newey { lag: *lag },
     });
 
     let sci_config = WLSConfig {
@@ -625,7 +626,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 ms_model: result.ms_model,
                 ms_residual: result.ms_residual,
                 ms_total: result.ms_total,
-                covariance_type: result.covariance_type.to_string(),
+                covariance_type: format_covariance_type_display(&result.covariance_type, config.cov_config.as_ref()),
                 aic,
                 bic,
             }
@@ -639,6 +640,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             fitted_values,
             residuals,
             residual_scatter,
+            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,

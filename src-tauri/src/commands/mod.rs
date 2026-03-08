@@ -4,9 +4,13 @@ pub mod command_settings;
 pub mod command_graph;
 pub mod command_variable;
 pub mod command_dataframe;
+pub mod command_acf_pacf;
+pub mod command_serial_tests;
 pub mod command_hypothesis;
 pub mod command_log;
 
+pub use command_acf_pacf::*;
+pub use command_serial_tests::*;
 pub use command_project::*;
 pub use command_schema::*;
 pub use command_settings::*;

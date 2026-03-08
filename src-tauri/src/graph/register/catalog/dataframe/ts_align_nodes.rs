@@ -6,6 +6,7 @@
 //! - TS Rolling Mean: 滚动均值
 //! - TS Lag: 严格时间对齐的滞后
 
+use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
@@ -243,14 +244,18 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
 fn register_ts_lag(registry: &NodeRegistry) {
     use crate::graph::value::TimeSeriesState;
 
+    let time_series_type = DataType::DataSeries(Box::new(DataType::one_of(vec![
+        DataType::Int64,
+        DataType::Date,
+    ])));
     let definition = NodeDefinition::new("TS Lag", vec!["Data".to_string(), "Time Series".to_string()])
         .with_ui_style("dataframe")
-        .with_description("严格时间对齐的滞后（Stata L. 语义）。Time 为 Aligned 时跳过对齐。")
+        .with_description("严格时间对齐的滞后（Stata L. 语义）。Time 为 Aligned 时跳过对齐。时间列支持 Int64 或 Date。")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "Time Series",
                 DataRole::Input,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Date))),
+                PinDataTypeDefinition::concrete(time_series_type.clone()),
             )),
             PinSlot::fixed(PinDefinition::data_input(
                 "Value Series",
@@ -265,7 +270,7 @@ fn register_ts_lag(registry: &NodeRegistry) {
             PinSlot::fixed(PinDefinition::data_output(
                 "Time",
                 DataRole::Custom("time_out".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Date))),
+                PinDataTypeDefinition::concrete(time_series_type),
             )),
             PinSlot::fixed(PinDefinition::data_output(
                 "Lagged",
@@ -278,7 +283,7 @@ fn register_ts_lag(registry: &NodeRegistry) {
             let time_id = match &time_value {
                 DataValue::DataSeries(v) => v.id.clone(),
                 DataValue::Null => return Err("TS Lag: 请连接 Time Series".to_string()),
-                _ => return Err("TS Lag: Time Series 必须是 DataSeries (Date)".to_string()),
+                _ => return Err("TS Lag: Time Series 必须是 DataSeries (Int64 或 Date)".to_string()),
             };
             let value_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
             let value_id = match &value_value {
@@ -321,10 +326,11 @@ fn register_ts_lag(registry: &NodeRegistry) {
             };
             let time_out_id = ctx.put_series(full_times.clone())?;
             let lagged_id = ctx.put_series(lagged_values)?;
+            let time_element_type = polars_dtype_to_data_type(full_times.dtype());
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("time_out".to_string())),
                 DataValue::DataSeries(
-                    DataSeriesValue::with_element_type(time_out_id, DataType::Date)
+                    DataSeriesValue::with_element_type(time_out_id, time_element_type)
                         .with_time_series_state(TimeSeriesState::Aligned),
                 ),
             )?;

@@ -28,6 +28,8 @@ pub enum OLSCovarianceConfig {
     FixedScale { scale: f64 },
     Cluster { cluster_id: Vec<usize> },
     HAC { kernel: String, bandwidth: Option<i64> },
+    /// Stata newey: Bartlett + n/(n-k)，与 HAC (ivreg2) 不同
+    Newey { lag: Option<i64> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +50,29 @@ impl Default for OLSConfigure {
             time_series_id: None,
         }
     }
+}
+
+/// 格式化 Covariance Type 用于窗口展示
+pub(super) fn format_covariance_type_display(cov_type: &str, cov_config: Option<&OLSCovarianceConfig>) -> String {
+    if cov_type == "HAC" {
+        if let Some(OLSCovarianceConfig::HAC { kernel, bandwidth }) = cov_config {
+            let bw_str = match bandwidth {
+                Some(b) => format!("bandwidth={}", b),
+                None => "bandwidth=auto".to_string(),
+            };
+            return format!("HAC ({}, {})", kernel, bw_str);
+        }
+    }
+    if cov_type == "newey" {
+        if let Some(OLSCovarianceConfig::Newey { lag }) = cov_config {
+            let lag_str = match lag {
+                Some(l) => format!("lag={}", l),
+                None => "lag=auto".to_string(),
+            };
+            return format!("Newey ({})", lag_str);
+        }
+    }
+    cov_type.to_string()
 }
 
 /// VCE 简单类型（无参）的 unit struct，用于 OneOf 和常量节点
@@ -81,6 +106,11 @@ pub struct OLSClusterConfig {
 pub struct OLSHACConfig {
     pub kernel: String,
     pub bandwidth: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OLSNeweyConfig {
+    pub lag: Option<i64>,
 }
 
 /// 变量规格：记录每个输入变量在拟合时的处理方式（供预测复用）
@@ -426,6 +456,9 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             kernel: kernel.clone(),
             bandwidth: *bandwidth,
         },
+        OLSCovarianceConfig::Newey { lag } => yss_sci::regression::linear_model::CovParams::Newey {
+            lag: *lag,
+        },
     });
 
     let sci_config = OLSConfig {
@@ -633,7 +666,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 ms_model: result.ms_model,
                 ms_residual: result.ms_residual,
                 ms_total: result.ms_total,
-                covariance_type: result.covariance_type.to_string(),
+                covariance_type: format_covariance_type_display(&result.covariance_type, config.cov_config.as_ref()),
                 aic,
                 bic,
             }
@@ -647,6 +680,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             fitted_values,
             residuals,
             residual_scatter,
+            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -681,6 +715,7 @@ fn vce_one_of_type() -> DataType {
         DataType::Struct("OLSFixedScaleConfig".to_string()),
         DataType::Struct("OLSClusterConfig".to_string()),
         DataType::Struct("OLSHACConfig".to_string()),
+        DataType::Struct("OLSNeweyConfig".to_string()),
     ])
 }
 
@@ -690,6 +725,7 @@ pub fn register(registry: &NodeRegistry) {
     register_ols_fixed_scale_config(registry);
     register_ols_cluster_config(registry);
     register_ols_hac_config(registry);
+    register_ols_newey_config(registry);
     register_ols(registry);
     register_ols_summary(registry);
 }
@@ -925,6 +961,46 @@ fn register_ols_hac_config(registry: &NodeRegistry) {
     registry.register(definition);
 }
 
+// ======================== OLS Newey Config 节点 ========================
+
+fn register_ols_newey_config(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new(
+        "VCE: Newey",
+        vec!["Data".to_string(), "Statistics".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("Stata newey 风格 — Bartlett kernel + n/(n-k)，与 HAC (ivreg2) 不同")
+    .with_pin_slots(vec![
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Lag",
+                DataRole::Custom("lag".to_string()),
+                PinDataTypeDefinition::concrete(DataType::Int64),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Config",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Struct("OLSNeweyConfig".to_string())),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let lag = ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string())))
+            .ok()
+            .and_then(|v| v.as_i64());
+        let config = OLSNeweyConfig { lag };
+        let handle_id = ctx.put_handle(Box::new(config));
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Result),
+            DataValue::new_struct("OLSNeweyConfig", handle_id),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
+}
+
 // ======================== OLS & WLS Configure 节点 ========================
 
 fn register_ols_configure(registry: &NodeRegistry) {
@@ -955,7 +1031,10 @@ fn register_ols_configure(registry: &NodeRegistry) {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Date))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
+                    DataType::Int64,
+                    DataType::Date,
+                ])))),
             )
             .with_optional(true),
         ),
@@ -1006,6 +1085,11 @@ fn register_ols_configure(registry: &NodeRegistry) {
                             kernel: c.kernel.clone(),
                             bandwidth: c.bandwidth,
                         }),
+                    )
+                } else if let Some(c) = h.downcast_ref::<OLSNeweyConfig>() {
+                    (
+                        "newey".to_string(),
+                        Some(OLSCovarianceConfig::Newey { lag: c.lag }),
                     )
                 } else {
                     return None;

@@ -639,6 +639,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             fitted_values,
             residuals,
             residual_scatter,
+            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -690,7 +691,10 @@ fn register_gls_configure(registry: &NodeRegistry) {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Date))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
+                    DataType::Int64,
+                    DataType::Date,
+                ])))),
             )
             .with_optional(true),
         ),
