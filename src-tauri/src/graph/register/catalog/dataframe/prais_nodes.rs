@@ -67,8 +67,8 @@ fn prais_input_slots() -> Vec<PinSlot> {
     vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
-            "Endog",
-            DataRole::Custom("endog".to_string()),
+            "Y",
+            DataRole::Custom("y".to_string()),
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::repeatable(
@@ -77,7 +77,7 @@ fn prais_input_slots() -> Vec<PinSlot> {
                 DataRole::Inputs(0),
                 PinDataTypeDefinition::concrete(exog_type),
             ),
-            "Exog",
+            "X",
             1,
             None,
         ),
@@ -105,7 +105,7 @@ fn prais_input_slots() -> Vec<PinSlot> {
 
 fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<PraisFitResult, String> {
     let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("endog".to_string())),
+        &PinRole::Data(DataRole::Custom("y".to_string())),
     )?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
@@ -114,13 +114,13 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
                 DataValue::Null => "Null (unconnected or upstream not executed)",
                 DataValue::Struct { type_key, .. } => {
                     return Err(format!(
-                        "Prais: Endog input is not a DataSeries (got Struct<{}>).",
+                        "Prais: Y input is not a DataSeries (got Struct<{}>).",
                         type_key
                     ));
                 }
                 _ => "unexpected type",
             };
-            return Err(format!("Prais: Endog must be a DataSeries (got {}).", got));
+            return Err(format!("Prais: Y must be a DataSeries (got {}).", got));
         }
     };
     let endog_series = ctx.get_series(&endog_id)?;
@@ -130,7 +130,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
-        .map_err(|e| format!("Prais: cannot cast Endog to Float64: {}", e))?;
+        .map_err(|e| format!("Prais: cannot cast Y to Float64: {}", e))?;
 
     let config = match ctx.get_input_by_role(
         &PinRole::Data(DataRole::Custom("prais_config".to_string())),
@@ -156,7 +156,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
 
     let exog_values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
     if exog_values.is_empty() {
-        return Err("Prais: at least one Exog required".to_string());
+        return Err("Prais: at least one X required".to_string());
     }
 
     let n_raw = endog_f64.len();
@@ -168,7 +168,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     for (i, val) in exog_values.iter().enumerate() {
         let dsv = match val {
             DataValue::DataSeries(v) => v.clone(),
-            _ => return Err(format!("Prais: Exog {} is not DataSeries", i)),
+            _ => return Err(format!("Prais: X {} is not DataSeries", i)),
         };
         let s = ctx.get_series(&dsv.id)?;
         let name = {
@@ -177,7 +177,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         };
         if s.len() != n_raw {
             return Err(format!(
-                "Prais: Exog '{}' has {} obs, expected {}",
+                "Prais: X '{}' has {} obs, expected {}",
                 name, s.len(), n_raw
             ));
         }

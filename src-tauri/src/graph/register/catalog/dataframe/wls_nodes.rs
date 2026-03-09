@@ -42,8 +42,8 @@ fn wls_input_slots() -> Vec<PinSlot> {
     vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
-            "Endog",
-            DataRole::Custom("endog".to_string()),
+            "Y",
+            DataRole::Custom("y".to_string()),
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::repeatable(
@@ -52,7 +52,7 @@ fn wls_input_slots() -> Vec<PinSlot> {
                 DataRole::Inputs(0),
                 PinDataTypeDefinition::concrete(exog_type),
             ),
-            "Exog",
+            "X",
             1,
             None,
         ),
@@ -86,7 +86,7 @@ fn wls_input_slots() -> Vec<PinSlot> {
 fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitResult, String> {
     // ---- Extract endog ----
     let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("endog".to_string())),
+        &PinRole::Data(DataRole::Custom("y".to_string())),
     )?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
@@ -104,14 +104,14 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 DataValue::DataFrame(_) => "DataFrame",
                 DataValue::Struct { type_key, .. } => {
                     return Err(format!(
-                        "WLS: Endog input is not a DataSeries (got Struct<{}>). Check that Endog is connected to Add/DataSeries output, not Config.",
+                        "WLS: Y input is not a DataSeries (got Struct<{}>). Check that Y is connected to Add/DataSeries output, not Config.",
                         type_key
                     ));
                 }
                 DataValue::DataSeries(_) => unreachable!(),
             };
             return Err(format!(
-                "WLS: Endog input is not a DataSeries (got {}). Ensure Endog is connected to a DataSeries output (e.g. Add result).",
+                "WLS: Y input is not a DataSeries (got {}). Ensure Y is connected to a DataSeries output (e.g. Add result).",
                 got
             ));
         }
@@ -123,7 +123,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
-        .map_err(|e| format!("WLS: cannot cast Endog to Float64: {}", e))?;
+        .map_err(|e| format!("WLS: cannot cast Y to Float64: {}", e))?;
 
     // ---- Extract weights ----
     let weights_value = ctx.get_input_by_role(
@@ -148,7 +148,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         .map_err(|e| format!("WLS: cannot cast Weights to Float64: {}", e))?;
     if weights_f64_series.len() != endog_f64_series.len() {
         return Err(format!(
-            "WLS: Weights has {} observations, expected {} (must match Endog length)",
+            "WLS: Weights has {} observations, expected {} (must match Y length)",
             weights_f64_series.len(), endog_f64_series.len()
         ));
     }
@@ -177,7 +177,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     )?;
 
     if exog_data_values.is_empty() {
-        return Err("WLS: at least one Exog input is required".to_string());
+        return Err("WLS: at least one X input is required".to_string());
     }
 
     // Optional time series for residual time info (from direct Time pin or from config)
@@ -186,7 +186,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             let ts = ctx.get_series(&v.id)?;
             if ts.len() != endog_f64_series.len() {
                 return Err(format!(
-                    "WLS: Time has {} observations, expected {} (must match Endog length)",
+                    "WLS: Time has {} observations, expected {} (must match Y length)",
                     ts.len(), endog_f64_series.len()
                 ));
             }
@@ -197,7 +197,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 let ts = ctx.get_series(id)?;
                 if ts.len() != endog_f64_series.len() {
                     return Err(format!(
-                        "WLS: Time from config has {} observations, expected {} (must match Endog length)",
+                        "WLS: Time from config has {} observations, expected {} (must match Y length)",
                         ts.len(), endog_f64_series.len()
                     ));
                 }
@@ -221,7 +221,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     for (i, val) in exog_data_values.iter().enumerate() {
         let dsv = match val {
             DataValue::DataSeries(v) => v.clone(),
-            _ => return Err(format!("WLS: Exog input {} is not a DataSeries", i)),
+            _ => return Err(format!("WLS: X input {} is not a DataSeries", i)),
         };
         let series = ctx.get_series(&dsv.id)?;
         let series_name = {
@@ -230,7 +230,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         };
         if series.len() != n_raw {
             return Err(format!(
-                "WLS: Exog '{}' has {} observations, expected {} (must match Endog length)",
+                "WLS: X '{}' has {} observations, expected {} (must match Y length)",
                 series_name, series.len(), n_raw
             ));
         }
@@ -241,11 +241,11 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let col_series = if is_categorical {
             series
                 .cast(&polars::prelude::DataType::String)
-                .map_err(|e| format!("WLS: cannot cast Exog {} to String: {}", i, e))?
+                .map_err(|e| format!("WLS: cannot cast X {} to String: {}", i, e))?
         } else {
             series
                 .cast(&polars::prelude::DataType::Float64)
-                .map_err(|e| format!("WLS: cannot cast Exog {} to Float64: {}", i, e))?
+                .map_err(|e| format!("WLS: cannot cast X {} to Float64: {}", i, e))?
         };
         df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
         exog_meta.push((series_name, is_categorical, dsv));
@@ -256,7 +256,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         .map_err(|e| format!("WLS: drop_nulls failed: {}", e))?;
     let n = df.height();
     if n == 0 {
-        return Err("WLS: no valid observations after dropping null/NaN values. Check that Endog, Weights, and Exog have at least some complete rows.".to_string());
+        return Err("WLS: no valid observations after dropping null/NaN values. Check that Y, Weights, and X have at least some complete rows.".to_string());
     }
 
     let endog = Array1::from(
@@ -293,7 +293,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let col = df.column(&series_name).map_err(|e| format!("WLS: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("WLS: Exog '{}': {}", series_name, e))?;
+            let str_ca = col.str().map_err(|e| format!("WLS: X '{}': {}", series_name, e))?;
             let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
@@ -345,7 +345,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 role,
             });
         } else {
-            let values: Vec<f64> = col.f64().map_err(|e| format!("WLS: Exog '{}': {}", series_name, e))?.into_no_null_iter().collect();
+            let values: Vec<f64> = col.f64().map_err(|e| format!("WLS: X '{}': {}", series_name, e))?.into_no_null_iter().collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });

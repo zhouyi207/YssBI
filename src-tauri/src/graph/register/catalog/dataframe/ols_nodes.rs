@@ -156,8 +156,8 @@ fn ols_input_slots() -> Vec<PinSlot> {
     vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
-            "Endog",
-            DataRole::Custom("endog".to_string()),
+            "Y",
+            DataRole::Custom("y".to_string()),
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::repeatable(
@@ -166,7 +166,7 @@ fn ols_input_slots() -> Vec<PinSlot> {
                 DataRole::Inputs(0),
                 PinDataTypeDefinition::concrete(exog_type),
             ),
-            "Exog",
+            "X",
             1,
             None,
         ),
@@ -198,7 +198,7 @@ use std::collections::HashMap;
 fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitResult, String> {
     // ---- Extract endog ----
     let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("endog".to_string())),
+        &PinRole::Data(DataRole::Custom("y".to_string())),
     )?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
@@ -216,14 +216,14 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 DataValue::DataFrame(_) => "DataFrame",
                 DataValue::Struct { type_key, .. } => {
                     return Err(format!(
-                        "OLS: Endog input is not a DataSeries (got Struct<{}>). Check that Endog is connected to Add/DataSeries output, not Config.",
+                        "OLS: Y input is not a DataSeries (got Struct<{}>). Check that Y is connected to Add/DataSeries output, not Config.",
                         type_key
                     ));
                 }
                 DataValue::DataSeries(_) => unreachable!(),
             };
             return Err(format!(
-                "OLS: Endog input is not a DataSeries (got {}). Ensure Endog is connected to a DataSeries output (e.g. Add result).",
+                "OLS: Y input is not a DataSeries (got {}). Ensure Y is connected to a DataSeries output (e.g. Add result).",
                 got
             ));
         }
@@ -235,7 +235,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
-        .map_err(|e| format!("OLS: cannot cast Endog to Float64: {}", e))?;
+        .map_err(|e| format!("OLS: cannot cast Y to Float64: {}", e))?;
 
     // ---- Get config (optional — falls back to OLSConfigure::default()) ----
     let config = match ctx.get_input_by_role(
@@ -261,7 +261,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     )?;
 
     if exog_data_values.is_empty() {
-        return Err("OLS: at least one Exog input is required".to_string());
+        return Err("OLS: at least one X input is required".to_string());
     }
 
     // Optional time series for residual time info (from direct Time pin or from config)
@@ -270,7 +270,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             let ts = ctx.get_series(&v.id)?;
             if ts.len() != endog_f64_series.len() {
                 return Err(format!(
-                    "OLS: Time has {} observations, expected {} (must match Endog length)",
+                    "OLS: Time has {} observations, expected {} (must match Y length)",
                     ts.len(), endog_f64_series.len()
                 ));
             }
@@ -281,7 +281,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 let ts = ctx.get_series(id)?;
                 if ts.len() != endog_f64_series.len() {
                     return Err(format!(
-                        "OLS: Time from config has {} observations, expected {} (must match Endog length)",
+                        "OLS: Time from config has {} observations, expected {} (must match Y length)",
                         ts.len(), endog_f64_series.len()
                     ));
                 }
@@ -304,7 +304,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     for (i, val) in exog_data_values.iter().enumerate() {
         let dsv = match val {
             DataValue::DataSeries(v) => v.clone(),
-            _ => return Err(format!("OLS: Exog input {} is not a DataSeries", i)),
+            _ => return Err(format!("OLS: X input {} is not a DataSeries", i)),
         };
         let series = ctx.get_series(&dsv.id)?;
         let series_name = {
@@ -313,7 +313,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         };
         if series.len() != n_raw {
             return Err(format!(
-                "OLS: Exog '{}' has {} observations, expected {} (must match Endog length)",
+                "OLS: X '{}' has {} observations, expected {} (must match Y length)",
                 series_name, series.len(), n_raw
             ));
         }
@@ -324,11 +324,11 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let col_series = if is_categorical {
             series
                 .cast(&polars::prelude::DataType::String)
-                .map_err(|e| format!("OLS: cannot cast Exog {} to String: {}", i, e))?
+                .map_err(|e| format!("OLS: cannot cast X {} to String: {}", i, e))?
         } else {
             series
                 .cast(&polars::prelude::DataType::Float64)
-                .map_err(|e| format!("OLS: cannot cast Exog {} to Float64: {}", i, e))?
+                .map_err(|e| format!("OLS: cannot cast X {} to Float64: {}", i, e))?
         };
         df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
         exog_meta.push((series_name, is_categorical, dsv));
@@ -339,7 +339,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         .map_err(|e| format!("OLS: drop_nulls failed: {}", e))?;
     let n = df.height();
     if n == 0 {
-        return Err("OLS: no valid observations after dropping null/NaN values. Check that Endog and Exog have at least some complete rows.".to_string());
+        return Err("OLS: no valid observations after dropping null/NaN values. Check that Y and X have at least some complete rows.".to_string());
     }
 
     let endog = Array1::from(
@@ -359,7 +359,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let col = df.column(&series_name).map_err(|e| format!("OLS: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("OLS: Exog '{}': {}", series_name, e))?;
+            let str_ca = col.str().map_err(|e| format!("OLS: X '{}': {}", series_name, e))?;
             let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
@@ -411,7 +411,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 role,
             });
         } else {
-            let values: Vec<f64> = col.f64().map_err(|e| format!("OLS: Exog '{}': {}", series_name, e))?.into_no_null_iter().collect();
+            let values: Vec<f64> = col.f64().map_err(|e| format!("OLS: X '{}': {}", series_name, e))?.into_no_null_iter().collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
