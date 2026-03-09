@@ -169,7 +169,7 @@ pub fn add_repeatable_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let change_set = graph.add_repeatable_pin(nid, slot_index)?;
+    let (change_set, resolve_sets) = graph.add_repeatable_pin(nid, slot_index)?;
 
     let added_pin = change_set
         .added_pins
@@ -180,7 +180,9 @@ pub fn add_repeatable_pin(
     let pin_dto = PinInstanceDTO::from_pin_with_context(added_pin, resolved_type.as_ref(), Vec::new());
     let pin_id_str = added_pin.id.to_string();
 
-    emit_pin_change_events(&app, graph_id, &graph, vec![change_set]);
+    let mut all_sets = vec![change_set];
+    all_sets.extend(resolve_sets);
+    emit_pin_change_events(&app, graph_id, &graph, all_sets);
 
     Ok(AddRepeatablePinResult {
         pin_id: pin_id_str,
@@ -218,7 +220,7 @@ pub fn remove_repeatable_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (change_set, pin_index) = graph.remove_repeatable_pin(nid, pid)?;
+    let (change_set, pin_index, resolve_sets) = graph.remove_repeatable_pin(nid, pid)?;
 
     let slot_index = {
         let node = graph
@@ -237,7 +239,9 @@ pub fn remove_repeatable_pin(
         .map(|(f, t)| (f.to_string(), t.to_string()))
         .collect();
 
-    emit_pin_change_events(&app, graph_id, &graph, vec![change_set]);
+    let mut all_sets = vec![change_set];
+    all_sets.extend(resolve_sets);
+    emit_pin_change_events(&app, graph_id, &graph, all_sets);
 
     Ok(RemoveRepeatablePinResult {
         removed_pin_id: pin_id,

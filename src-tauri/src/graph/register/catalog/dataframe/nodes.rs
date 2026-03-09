@@ -23,6 +23,11 @@ fn register_get_dataframe(registry: &NodeRegistry) {
                 "DataFrame", DataRole::Output, PinDataTypeDefinition::concrete(DataType::DataFrame),
             )),
         ])
+        .with_output_schema_resolver(Arc::new(|ctx| {
+            let df_id = ctx.instance_params.dataframe_id()?;
+            let provider = ctx.schema_provider.as_ref()?;
+            provider(df_id)
+        }))
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
             let dataframe_id = params.dataframe_id().ok_or("Get DataFrame: dataframe_id not set")?;
@@ -99,6 +104,42 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
         .with_description("Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)")
+        .with_output_schema_resolver(Arc::new(|ctx| {
+            let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
+                .input_schemas
+                .iter()
+                .filter_map(|(role, schema)| {
+                    let idx = role.index()?;
+                    if !role.matches_family(&PinRole::Data(DataRole::Inputs(0))) {
+                        return None;
+                    }
+                    Some((idx, schema))
+                })
+                .collect();
+            indexed.sort_by_key(|(i, _)| *i);
+
+            let columns: Vec<crate::graph::node::ColumnSchema> = indexed
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, (_, schema))| {
+                    let col = schema.columns.first()?;
+                    let name = if col.name.is_empty() || col.name == "literal" {
+                        format!("col_{}", i)
+                    } else {
+                        col.name.clone()
+                    };
+                    Some(crate::graph::node::ColumnSchema {
+                        name,
+                        data_type: col.data_type.clone(),
+                    })
+                })
+                .collect();
+            if columns.is_empty() {
+                None
+            } else {
+                Some(crate::graph::node::DataSchema { columns })
+            }
+        }))
         .with_pin_slots(vec![
             PinSlot::repeatable(
                 PinDefinition::data_input(

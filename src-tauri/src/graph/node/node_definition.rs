@@ -1,8 +1,10 @@
 //! Node 定义（静态描述）
 
 use crate::execution::{ExecutionEffect, NodeExecutionContextTrait};
+use crate::graph::pin::PinRole;
 use crate::graph::{PinDefinition, PinSlot, PinTypeCapability, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub type FlowProcessor =
@@ -24,6 +26,26 @@ pub struct PinResolverContext {
     pub instance_params: super::NodeInstanceParams,
     pub input_schemas: std::collections::HashMap<crate::graph::PinRole, DataSchema>,
 }
+
+/// 模式提供器：通过 dataframe_id 查询 DataFrame 的列结构
+pub type SchemaProvider = Arc<dyn Fn(&str) -> Option<DataSchema> + Send + Sync>;
+
+/// 输出 schema 解析上下文
+///
+/// 包含节点计算 output schema 所需的信息：
+/// - instance_params: 节点实例参数（如 Get DataFrame 的 dataframe_id）
+/// - input_schemas: 上游 input 的 schema（DataFrame 用 resolved_schema，DataSeries 用单列合成 schema）
+/// - schema_provider: 用于按 dataframe_id 查询 schema（如 Get DataFrame）
+#[derive(Clone, Default)]
+pub struct OutputSchemaContext {
+    pub instance_params: super::NodeInstanceParams,
+    pub input_schemas: HashMap<PinRole, DataSchema>,
+    pub schema_provider: Option<SchemaProvider>,
+}
+
+/// 输出 schema 解析器：由节点定义提供，用于计算节点的 DataFrame output schema
+pub type OutputSchemaResolver =
+    Arc<dyn Fn(&OutputSchemaContext) -> Option<DataSchema> + Send + Sync>;
 
 /// 数据源 schema（如 DataFrame 的列结构）
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -88,6 +110,10 @@ pub struct NodeDefinition {
     #[serde(skip)]
     pub pin_resolver: Option<PinResolver>,
 
+    /// 输出 schema 解析器：节点自行计算 DataFrame output schema（可选）
+    #[serde(skip)]
+    pub output_schema_resolver: Option<OutputSchemaResolver>,
+
     pub metadata: NodeMetaData,
 }
 
@@ -102,6 +128,7 @@ impl std::fmt::Debug for NodeDefinition {
             .field("flow_processor", &self.flow_processor.as_ref().map(|_| "<function>"))
             .field("data_evaluator", &self.data_evaluator.as_ref().map(|_| "<function>"))
             .field("pin_resolver", &self.pin_resolver.as_ref().map(|_| "<function>"))
+            .field("output_schema_resolver", &self.output_schema_resolver.as_ref().map(|_| "<function>"))
             .field("metadata", &self.metadata)
             .finish()
     }
@@ -121,6 +148,7 @@ impl NodeDefinition {
             flow_processor: None,
             data_evaluator: None,
             pin_resolver: None,
+            output_schema_resolver: None,
             metadata: NodeMetaData::default(),
         }
     }
@@ -150,6 +178,12 @@ impl NodeDefinition {
     /// 设置动态 Pin 解析器（仅 DerivedFromInput 槽位需要）
     pub fn with_pin_resolver(mut self, resolver: PinResolver) -> Self {
         self.pin_resolver = Some(resolver);
+        self
+    }
+
+    /// 设置输出 schema 解析器（节点自行计算 DataFrame output schema）
+    pub fn with_output_schema_resolver(mut self, resolver: OutputSchemaResolver) -> Self {
+        self.output_schema_resolver = Some(resolver);
         self
     }
 

@@ -102,6 +102,7 @@ impl ProjectState {
         for graph in project_data.graphs.values_mut() {
             graph.set_schema_provider(provider.clone());
             graph.propagate_schemas();
+            let _ = graph.resolve_all_dynamic_pins();
         }
     }
 
