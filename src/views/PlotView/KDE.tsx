@@ -19,6 +19,8 @@ export interface KDEProps {
   height?: number;
   /** 图表边距 */
   margin?: { top: number; right: number; bottom: number; left: number };
+  /** X 轴下界（如 leverage 非负则传 0，避免截断到负轴） */
+  xMin?: number;
 }
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
@@ -31,6 +33,7 @@ const KDE: React.FC<KDEProps> = ({
   color = DEFAULT_COLOR,
   height: heightProp,
   margin = DEFAULT_MARGIN,
+  xMin: xMinProp,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -63,11 +66,12 @@ const KDE: React.FC<KDEProps> = ({
     const yExtent = extent(data, (d) => d.y) as [number, number];
     const xPad = (xExtent[1] - xExtent[0]) * 0.06 || 1;
     const yPad = (yExtent[1] - yExtent[0]) * 0.06 || 0.01;
+    const xDomainMin = xMinProp != null ? Math.max(xMinProp, xExtent[0] - xPad) : xExtent[0] - xPad;
     const xScale = scaleLinear()
-      .domain([xExtent[0] - xPad, xExtent[1] + xPad])
+      .domain([xDomainMin, xExtent[1] + xPad])
       .range([0, w]);
     const yScale = scaleLinear()
-      .domain([0, yExtent[1] + yPad])
+      .domain([0, Math.max(0, yExtent[1]) + yPad])
       .range([h, 0]);
 
     const g = svg
@@ -152,7 +156,7 @@ const KDE: React.FC<KDEProps> = ({
       .attr('stroke-width', 2)
       .attr('stroke-linecap', 'round')
       .attr('stroke-linejoin', 'round');
-  }, [data, xLabel, yLabel, color, heightProp, margin, size]);
+  }, [data, xLabel, yLabel, color, heightProp, margin, xMinProp, size]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

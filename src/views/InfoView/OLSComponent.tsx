@@ -15,12 +15,14 @@ import {
   HypothesisTestBlock,
   ACFPACFBlock,
   SerialTestsBlock,
+  computeKDE,
 } from './shared';
 import type { OLSResultData } from './shared/types';
 
 const FormulaBlock = React.lazy(() => import('./FormulaBlock'));
 const ResidualPlot = React.lazy(() => import('./ResidualPlot'));
 const Scatter = React.lazy(() => import('@/views/PlotView/Scatter'));
+const KDE = React.lazy(() => import('@/views/PlotView/KDE'));
 
 export type { Coefficient, OLSResultData } from './shared/types';
 
@@ -35,6 +37,11 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
   const hasCategorical = useMemo(
     () => coefficients.some((c) => c.category != null),
     [coefficients]
+  );
+
+  const leverageKdeData = useMemo(
+    () => (diag.leverage && diag.leverage.length > 0 ? computeKDE(diag.leverage, 256, 0) : []),
+    [diag.leverage]
   );
 
   return (
@@ -264,6 +271,22 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
         <>
+          {diag.leverage && diag.leverage.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
+              </div>
+              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+                <KDE
+                  data={leverageKdeData}
+                  xLabel="Leverage"
+                  yLabel="Density"
+                  height={280}
+                  xMin={0}
+                />
+              </Suspense>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
             {diag.timing?.fitted_residuals_ms != null && (
@@ -271,7 +294,11 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
             )}
           </div>
           <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
-            <ResidualPlot fitted={diag.fitted_values} residuals={diag.residuals} />
+            <ResidualPlot
+              fitted={diag.fitted_values}
+              residuals={diag.residuals}
+              leverage={diag.leverage}
+            />
           </Suspense>
 
           {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (

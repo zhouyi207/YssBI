@@ -399,6 +399,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             normality_tests: None,
             fitted_values: fitted_values.clone(),
             residuals: residuals.clone(),
+            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
             residual_scatter: None,
             exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: None,

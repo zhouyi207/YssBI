@@ -195,6 +195,9 @@ pub struct DiagnosticInfo {
     pub fitted_values: Vec<f64>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub residuals: Vec<f64>,
+    /// Leverage（帽子矩阵对角元，Stata predict lev, leverage）
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub leverage: Vec<f64>,
     /// 残差 vs 残差滞后 1 散点图数据（e 与 e_lag1）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub residual_scatter: Option<ResidualScatterData>,

@@ -8,11 +8,12 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
-use crate::graph::pin::{DataRole, PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
+use crate::graph::node::{ColumnSchema, DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
+use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
-use crate::graph::{DataType, GraphId};
+use crate::graph::value::DataType;
+use crate::graph::{GraphId};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
@@ -1047,6 +1048,49 @@ impl GraphInstance {
                 let df_id = node.instance_params.dataframe_id()?;
                 let provider = schema_provider?;
                 provider(df_id)
+            }
+            "Data:Combine DataFrame" => {
+                // 从 Inputs(0) 家族的已连接 input 推导 schema
+                let mut indexed: Vec<(usize, PinId)> = node.pin_ids
+                    .iter()
+                    .filter_map(|&pid| {
+                        let p = data_state.pins.get(&pid)?;
+                        if !p.is_input() || !p.is_data() {
+                            return None;
+                        }
+                        let idx = p.definition.role.index()?;
+                        if !p.definition.role.matches_family(&PinRole::Data(DataRole::Inputs(0))) {
+                            return None;
+                        }
+                        Some((idx, pid))
+                    })
+                    .collect();
+                indexed.sort_by_key(|(i, _)| *i);
+
+                let mut columns = Vec::new();
+                for (i, input_pid) in indexed {
+                    let upstream_pid = data_state.connections.get_upstream(input_pid)?;
+                    let upstream_pin = data_state.pins.get(&upstream_pid)?;
+                    let elem_type = match &upstream_pin.definition.data_type {
+                        Some(PinDataTypeDefinition::Concrete(DataType::DataSeries(inner))) => inner.as_ref().clone(),
+                        _ => DataType::Any,
+                    };
+                    let input_pin = data_state.pins.get(&input_pid)?;
+                    let name = {
+                        let n = input_pin.definition.name.clone();
+                        if n.is_empty() || n == "literal" {
+                            format!("col_{}", i)
+                        } else {
+                            n
+                        }
+                    };
+                    columns.push(ColumnSchema { name, data_type: elem_type });
+                }
+                if columns.is_empty() {
+                    None
+                } else {
+                    Some(DataSchema { columns })
+                }
             }
             "Data:Time Series:TS Align" | _ => get_input_upstream_schema(),
         }

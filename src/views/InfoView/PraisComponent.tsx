@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import {
   SectionHeader,
   StatCard,
@@ -11,12 +11,14 @@ import {
   HypothesisTestBlock,
   ACFPACFBlock,
   SerialTestsBlock,
+  computeKDE,
 } from './shared';
 import type { RegressionResultData } from './shared/types';
 
 const FormulaBlock = React.lazy(() => import('./FormulaBlock'));
 const ResidualPlot = React.lazy(() => import('./ResidualPlot'));
 const Scatter = React.lazy(() => import('@/views/PlotView/Scatter'));
+const KDE = React.lazy(() => import('@/views/PlotView/KDE'));
 
 export interface PraisResultData extends RegressionResultData {
   diagnostic_info: RegressionResultData['diagnostic_info'] & {
@@ -35,6 +37,10 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
   const praisInfo = diag.prais_info!;
   const significantCount = coefficients.filter((c) => c.is_significant).length;
   const hasCategorical = coefficients.some((c) => c.category != null);
+  const leverageKdeData = useMemo(
+    () => (diag.leverage && diag.leverage.length > 0 ? computeKDE(diag.leverage, 256, 0) : []),
+    [diag.leverage]
+  );
 
   return (
     <div className="p-6 max-w-[900px] mx-auto">
@@ -197,12 +203,26 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
       {/* Residuals vs Fitted */}
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 && (
         <>
+          {diag.leverage && diag.leverage.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
+              </div>
+              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+                <KDE data={leverageKdeData} xLabel="Leverage" yLabel="Density" height={280} xMin={0} />
+              </Suspense>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
             <span className="text-[10px] text-gray-500">检验对象: u_t (Prais 收敛后)</span>
           </div>
           <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
-            <ResidualPlot fitted={diag.fitted_values} residuals={diag.residuals} />
+            <ResidualPlot
+              fitted={diag.fitted_values}
+              residuals={diag.residuals}
+              leverage={diag.leverage}
+            />
           </Suspense>
 
           {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (

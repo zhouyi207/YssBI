@@ -28,6 +28,10 @@ export interface ScatterProps {
   symmetricY?: boolean;
   /** 是否绘制 y=0 参考线，默认 false */
   zeroLine?: boolean;
+  /** 高亮点的索引（如异常值），使用 highlightColor 绘制 */
+  highlightIndices?: Set<number>;
+  /** 高亮点颜色，默认 #ef4444 */
+  highlightColor?: string;
 }
 
 /** 将数值转为 Date（date=天数, datetime=微秒） */
@@ -53,6 +57,8 @@ const Scatter: React.FC<ScatterProps> = ({
   margin = DEFAULT_MARGIN,
   symmetricY = false,
   zeroLine = false,
+  highlightIndices,
+  highlightColor = '#ef4444',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -175,12 +181,12 @@ const Scatter: React.FC<ScatterProps> = ({
       .attr('cx', (d) => xScale(d.x))
       .attr('cy', (d) => yScale(d.y))
       .attr('r', radius)
-      .attr('fill', color)
+      .attr('fill', (_, i) => (highlightIndices?.has(i) ? highlightColor : color))
       .attr('fill-opacity', 0.7)
-      .attr('stroke', color)
+      .attr('stroke', (_, i) => (highlightIndices?.has(i) ? highlightColor : color))
       .attr('stroke-opacity', 0.3)
       .attr('stroke-width', 1);
-  }, [data, xLabel, yLabel, xFormat, yFormat, color, radius, heightProp, margin, symmetricY, zeroLine, size]);
+  }, [data, xLabel, yLabel, xFormat, yFormat, color, radius, heightProp, margin, symmetricY, zeroLine, highlightIndices, highlightColor, size]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

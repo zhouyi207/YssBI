@@ -133,6 +133,8 @@ export interface DiagnosticInfo {
   normality_tests?: NormalityTests;
   fitted_values?: number[];
   residuals?: number[];
+  /** Leverage（帽子矩阵对角元，Stata predict lev, leverage） */
+  leverage?: number[];
   residual_scatter?: ResidualScatterData;
   exog?: number[][];
   timing?: DiagnosticTiming;

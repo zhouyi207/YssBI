@@ -682,6 +682,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             normality_tests,
             fitted_values,
             residuals,
+            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
             residual_scatter,
             exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {

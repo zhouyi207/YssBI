@@ -689,6 +689,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             normality_tests,
             fitted_values,
             residuals,
+            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
             residual_scatter,
             exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
