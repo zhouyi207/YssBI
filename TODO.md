@@ -73,8 +73,8 @@
 **Stata 手册，全部基于 ρ 变换后的变量和残差 计算，而不是原始 y 和原始残差**
 
 - [x] 完成 prais y x1 x2, nolog 和 prais y x1 x2, corc 两个命令
-- [ ] prais summary 组件搭配，imtest还一系列的自相关检验都可以删掉了
-- [ ] reset 检验
+- [x] prais summary 组件搭配，imtest还一系列的自相关检验都可以删掉了
+- [x] reset 检验
 - [ ] 多重共线性检验
 - [ ] 杠杆作用
 - [ ] chow 检验

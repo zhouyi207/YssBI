@@ -17,7 +17,7 @@ use yss_sci::regression::linear_model::{GLS, GLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, ResidualScatterData};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData};
 use std::time::Instant;
 use super::ols_nodes::VariableSpec;
 
@@ -496,6 +496,24 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         (None, None)
     };
 
+    let (ov_tests, ov_tests_ms) = if has_constant && residuals.len() >= 8 {
+        let t_ov = Instant::now();
+        let y_arr = endog.clone();
+        let fitted_arr = Array1::from(fitted_values.clone());
+        let r_default = diagnostics::reset_test(&y_arr, &exog, &fitted_arr, None).ok();
+        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog, None).ok();
+        let ms = t_ov.elapsed().as_millis() as u64;
+        (
+            Some(OvTests {
+                default: r_default.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
+                rhs: r_rhs.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
+            }),
+            Some(ms),
+        )
+    } else {
+        (None, None)
+    };
+
     let (im_test, im_test_ms) = if has_constant {
         let t_im = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
@@ -634,6 +652,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
             bp_tests,
+            ov_tests,
             im_test,
             normality_tests,
             fitted_values,
@@ -643,6 +662,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
+                ov_tests_ms,
                 im_test_ms,
             }),
             prais_info: None,

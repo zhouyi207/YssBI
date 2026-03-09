@@ -16,7 +16,7 @@ use yss_sci::regression::linear_model::{OLSConfig, OLS};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, ResidualScatterData};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData};
 use std::time::Instant;
 
 // ======================== 结构体 ========================
@@ -570,6 +570,34 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         (None, None)
     };
 
+    let (ov_tests, ov_tests_ms) = if has_constant && residuals.len() >= 8 {
+        let t_ov = Instant::now();
+        let y_arr = endog.clone();
+        let fitted_arr = Array1::from(fitted_values.clone());
+        let r_default = diagnostics::reset_test(&y_arr, &exog, &fitted_arr, None).ok();
+        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog, None).ok();
+        let ms = t_ov.elapsed().as_millis() as u64;
+        (
+            Some(OvTests {
+                default: r_default.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
+                rhs: r_rhs.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
+            }),
+            Some(ms),
+        )
+    } else {
+        (None, None)
+    };
+
     let normality_tests = if has_constant && residuals.len() >= 8 {
         let residuals_arr = Array1::from(residuals.clone());
         diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
@@ -675,6 +703,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
             bp_tests,
+            ov_tests,
             im_test,
             normality_tests,
             fitted_values,
@@ -684,6 +713,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
+                ov_tests_ms,
                 im_test_ms,
             }),
             prais_info: None,

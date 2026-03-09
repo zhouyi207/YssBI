@@ -5,6 +5,8 @@ import {
   RSquaredBadge,
   Chi2TestCards,
   BP_VARIANTS,
+  FTestCards,
+  OV_VARIANTS,
   formatNum,
   ModelSummaryGrid,
   AnovaTable,
@@ -142,6 +144,28 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
               chi2: diag.bp_tests![key]!.lm_stat,
               df: diag.bp_tests![key]!.df,
               p_value: diag.bp_tests![key]!.p_value,
+            }))}
+          />
+        </div>
+      )}
+
+      {diag.ov_tests && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+              Ramsey RESET (Omitted Variables) — Stata estat ovtest 两种变体
+            </span>
+            {diag.timing?.ov_tests_ms != null && (
+              <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.ov_tests_ms} ms</span>
+            )}
+          </div>
+          <FTestCards
+            cards={OV_VARIANTS.filter(({ key }) => diag.ov_tests![key]).map(({ key, label }) => ({
+              label,
+              f_stat: diag.ov_tests![key]!.f_stat,
+              df1: diag.ov_tests![key]!.df1,
+              df2: diag.ov_tests![key]!.df2,
+              p_value: diag.ov_tests![key]!.p_value,
             }))}
           />
         </div>

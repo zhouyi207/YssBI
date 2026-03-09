@@ -62,6 +62,18 @@ export interface BreuschPaganTests {
   koenker_rhs?: BreuschPaganTest;
 }
 
+export interface OvTest {
+  f_stat: number;
+  df1: number;
+  df2: number;
+  p_value: number;
+}
+
+export interface OvTests {
+  default?: OvTest;
+  rhs?: OvTest;
+}
+
 export interface ImTestComponent {
   chi2: number;
   df: number;
@@ -87,6 +99,7 @@ export interface NormalityTests {
 export interface DiagnosticTiming {
   fitted_residuals_ms?: number;
   bp_tests_ms?: number;
+  ov_tests_ms?: number;
   im_test_ms?: number;
 }
 
@@ -108,6 +121,7 @@ export interface PraisInfo {
 export interface DiagnosticInfo {
   cond_no: number;
   bp_tests?: BreuschPaganTests;
+  ov_tests?: OvTests;
   im_test?: ImTest;
   normality_tests?: NormalityTests;
   fitted_values?: number[];

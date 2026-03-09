@@ -104,3 +104,51 @@ export function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
     </div>
   );
 }
+
+export interface FTestCard {
+  label: string;
+  f_stat: number;
+  df1: number;
+  df2: number;
+  p_value: number;
+}
+
+const OV_VARIANTS: { key: 'default' | 'rhs'; label: string }[] = [
+  { key: 'default', label: 'estat ovtest' },
+  { key: 'rhs', label: 'estat ovtest, rhs' },
+];
+
+export { OV_VARIANTS };
+
+export function FTestCards({ cards }: { cards: FTestCard[] }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {cards.map((c) => {
+        const reject = c.p_value < 0.05;
+        return (
+          <div
+            key={c.label}
+            className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors"
+          >
+            <div className="text-[11px] text-gray-500 font-mono mb-2">{c.label}</div>
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+              <span className="text-gray-400">
+                F({c.df1},{c.df2}) = <span className="font-mono text-white">{formatNum(c.f_stat)}</span>
+              </span>
+              <span className="text-gray-400">
+                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(c.p_value)}</span>
+              </span>
+            </div>
+            <div className="mt-1.5 text-[10px]">
+              {reject ? (
+                <span className="text-amber-400">拒绝 H0（模型可能有遗漏变量或函数形式误设）</span>
+              ) : (
+                <span className="text-gray-500">不拒绝 H0</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

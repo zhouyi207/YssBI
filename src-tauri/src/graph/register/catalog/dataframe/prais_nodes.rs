@@ -368,6 +368,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
             bp_tests: None,
+            ov_tests: None,
             im_test: None,
             normality_tests: None,
             fitted_values: fitted_values.clone(),

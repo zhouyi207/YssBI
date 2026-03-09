@@ -95,6 +95,24 @@ pub struct BreuschPaganTests {
     pub koenker_rhs: Option<BreuschPaganTest>,
 }
 
+/// Ramsey RESET 检验单变体（F 检验）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OvTest {
+    pub f_stat: f64,
+    pub df1: usize,
+    pub df2: usize,
+    pub p_value: f64,
+}
+
+/// Ramsey RESET 两种变体（对应 Stata estat ovtest）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OvTests {
+    /// estat ovtest（z=拟合值幂 ŷ²,ŷ³,ŷ⁴）
+    pub default: Option<OvTest>,
+    /// estat ovtest, rhs（z=RHS 变量幂）
+    pub rhs: Option<OvTest>,
+}
+
 /// IM-test 各分量的 chi² 检验结果（chi2, df, p）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImTestComponent {
@@ -132,6 +150,9 @@ pub struct DiagnosticTiming {
     /// Breusch-Pagan 异方差检验
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bp_tests_ms: Option<u64>,
+    /// Ramsey RESET 检验
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ov_tests_ms: Option<u64>,
     /// Cameron & Trivedi IM-test
     #[serde(skip_serializing_if = "Option::is_none")]
     pub im_test_ms: Option<u64>,
@@ -154,6 +175,8 @@ pub struct DiagnosticInfo {
     pub cond_no: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bp_tests: Option<BreuschPaganTests>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ov_tests: Option<OvTests>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub im_test: Option<ImTest>,
     #[serde(skip_serializing_if = "Option::is_none")]
