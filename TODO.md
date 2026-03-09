@@ -77,13 +77,15 @@
 - [x] reset 检验
 - [x] 多重共线性检验
 - [x] 杠杆作用
-- [ ] chow 检验，这个直接虚拟变量实现就好，目前已经实现，但是好像单独提取一个节点实现更为方便？？
+- [ ] chow 检验，这个直接虚拟变量实现就好，目前已经实现，但是好像单独提取一个节点实现更为方便 ？？
 - [ ] 线性插值，插值部分后续还会有很多，后续进行批量添加
 - [x] 创建一个节点，该节点可以将 dataseries 组合成一个 dataframe，与 decompose dataframe 相反
 
 ## 2026.03.10
 
-- [ ] compute_output_schema_for_node_inner 能不能使节点自己完成这个功能
+- [x] compute_output_schema_for_node_inner 能不能使节点自己完成这个功能
+- [ ] 2sls
+- [ ] 
 
 
 
