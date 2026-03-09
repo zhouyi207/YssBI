@@ -14,12 +14,13 @@ use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{
     Prais, PraisConfig, PraisTransform,
 };
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, PraisInfo,
+    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, PraisInfo, VifEntry,
 };
 use super::ols_nodes::VariableSpec;
 
@@ -335,6 +336,30 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         result.ss_residual,
     );
 
+    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+        let vif_entries: Vec<VifEntry> = entries
+            .into_iter()
+            .enumerate()
+            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+            .map(|(j, e)| {
+                let (var_name, _) = all_labels
+                    .get(j)
+                    .cloned()
+                    .unwrap_or_else(|| (format!("x{}", j), None));
+                VifEntry {
+                    variable: var_name,
+                    vif: e.vif,
+                    tolerance: e.tolerance,
+                }
+            })
+            .collect();
+        if vif_entries.is_empty() {
+            None
+        } else {
+            Some(vif_entries)
+        }
+    });
+
     let method = match result.covariance_type.as_str() {
         s if s.starts_with("Cochrane") => "Cochrane-Orcutt",
         _ => "Prais-Winsten",
@@ -367,6 +392,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
+            vif,
             bp_tests: None,
             ov_tests: None,
             im_test: None,

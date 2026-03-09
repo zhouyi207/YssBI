@@ -158,6 +158,14 @@ pub struct DiagnosticTiming {
     pub im_test_ms: Option<u64>,
 }
 
+/// VIF 多重共线性检验单变量结果（对应 Stata estat vif）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VifEntry {
+    pub variable: String,
+    pub vif: f64,
+    pub tolerance: f64, // 1/VIF
+}
+
 /// 残差 vs 残差滞后 1 的散点图数据（用于自相关诊断）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResidualScatterData {
@@ -173,6 +181,8 @@ pub struct ResidualScatterData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vif: Option<Vec<VifEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bp_tests: Option<BreuschPaganTests>,
     #[serde(skip_serializing_if = "Option::is_none")]

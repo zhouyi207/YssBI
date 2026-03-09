@@ -75,7 +75,7 @@
 - [x] 完成 prais y x1 x2, nolog 和 prais y x1 x2, corc 两个命令
 - [x] prais summary 组件搭配，imtest还一系列的自相关检验都可以删掉了
 - [x] reset 检验
-- [ ] 多重共线性检验
+- [x] 多重共线性检验
 - [ ] 杠杆作用
 - [ ] chow 检验
 - [ ] 线性插值

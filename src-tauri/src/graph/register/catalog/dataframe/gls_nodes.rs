@@ -17,7 +17,7 @@ use yss_sci::regression::linear_model::{GLS, GLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData, VifEntry};
 use std::time::Instant;
 use super::ols_nodes::VariableSpec;
 
@@ -548,6 +548,30 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         (None, None)
     };
 
+    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+        let vif_entries: Vec<VifEntry> = entries
+            .into_iter()
+            .enumerate()
+            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+            .map(|(j, e)| {
+                let (var_name, _) = all_labels
+                    .get(j)
+                    .cloned()
+                    .unwrap_or_else(|| (format!("x{}", j), None));
+                VifEntry {
+                    variable: var_name,
+                    vif: e.vif,
+                    tolerance: e.tolerance,
+                }
+            })
+            .collect();
+        if vif_entries.is_empty() {
+            None
+        } else {
+            Some(vif_entries)
+        }
+    });
+
     // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
     let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
         let time_col = df.column("__time__").map_err(|e| format!("GLS: {}", e))?;
@@ -651,6 +675,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
+            vif,
             bp_tests,
             ov_tests,
             im_test,

@@ -120,12 +120,56 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <StatCard
-          label="Condition Number"
-          value={formatNum(diag.cond_no)}
-          sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
-        />
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            Multicollinearity — Condition Number & VIF (Stata estat vif)
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <StatCard
+            label="Condition Number"
+            value={formatNum(diag.cond_no)}
+            sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
+          />
+          {diag.vif && diag.vif.length > 0 && (() => {
+            const finite = diag.vif.filter((e) => Number.isFinite(e.vif));
+            const meanVif = finite.length > 0 ? finite.reduce((s, e) => s + e.vif, 0) / finite.length : null;
+            const fmt = (v: number) => (!Number.isFinite(v) ? 'Inf' : v >= 1e6 ? v.toExponential(2) : v.toFixed(4));
+            return meanVif != null ? (
+              <StatCard
+                label="Mean VIF"
+                value={fmt(meanVif)}
+                sub={meanVif > 10 ? 'High multicollinearity' : meanVif > 5 ? 'Moderate' : 'Low'}
+              />
+            ) : null;
+          })()}
+        </div>
+        {diag.vif && diag.vif.length > 0 && (
+          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-800/50">
+                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Variable</th>
+                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">VIF</th>
+                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">1/VIF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {diag.vif.map((row) => {
+                  const fmt = (v: number) => (!Number.isFinite(v) ? 'Inf' : v >= 1e6 ? v.toExponential(2) : v.toFixed(4));
+                  return (
+                    <tr key={row.variable} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
+                      <td className="px-4 py-2.5 font-mono text-white">{row.variable}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-300">{fmt(row.vif)}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-300">{fmt(row.tolerance)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {diag.bp_tests && (

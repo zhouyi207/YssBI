@@ -16,7 +16,7 @@ use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData, VifEntry};
 use std::time::Instant;
 use super::ols_nodes::{format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
@@ -539,6 +539,30 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         (None, None)
     };
 
+    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+        let vif_entries: Vec<VifEntry> = entries
+            .into_iter()
+            .enumerate()
+            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+            .map(|(j, e)| {
+                let (var_name, _) = all_labels
+                    .get(j)
+                    .cloned()
+                    .unwrap_or_else(|| (format!("x{}", j), None));
+                VifEntry {
+                    variable: var_name,
+                    vif: e.vif,
+                    tolerance: e.tolerance,
+                }
+            })
+            .collect();
+        if vif_entries.is_empty() {
+            None
+        } else {
+            Some(vif_entries)
+        }
+    });
+
     // WLS: 与 statsmodels 一致，使用加权残差 wresid_i = sqrt(w_i) * r_i 做正态性检验
     // 未加权残差具异方差，会扭曲 Skew/Kurtosis/JB/Omnibus
     // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
@@ -658,6 +682,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         coefficients,
         diagnostic_info: DiagnosticInfo {
             cond_no: result.cond_no,
+            vif,
             bp_tests,
             ov_tests,
             im_test,

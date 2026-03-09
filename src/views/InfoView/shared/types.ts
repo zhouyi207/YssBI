@@ -118,8 +118,15 @@ export interface PraisInfo {
   iteration_log?: string[];
 }
 
+export interface VifEntry {
+  variable: string;
+  vif: number;
+  tolerance: number;
+}
+
 export interface DiagnosticInfo {
   cond_no: number;
+  vif?: VifEntry[];
   bp_tests?: BreuschPaganTests;
   ov_tests?: OvTests;
   im_test?: ImTest;
