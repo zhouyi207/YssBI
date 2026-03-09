@@ -171,4 +171,18 @@ pub struct DiagnosticInfo {
     /// 各诊断模块耗时（用于性能分析）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timing: Option<DiagnosticTiming>,
+    /// Prais 特有：ρ、原始 DW、变换后 DW
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prais_info: Option<PraisInfo>,
+}
+
+/// Prais-Winsten / Cochrane-Orcutt 特有诊断信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PraisInfo {
+    pub rho: f64,
+    pub dw_original: f64,
+    pub dw_transformed: f64,
+    pub iterations: usize,
+    /// Iteration log: "Prais iteration N: rho = X.XXXX" for each step
+    pub iteration_log: Vec<String>,
 }

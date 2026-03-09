@@ -61,9 +61,26 @@
 - [ ] 我感觉可以借鉴 ue 中的 compile 形式，完成 ipynb 形式，即生成时编译运行并缓存结果，比如常见的 decompose dataframe 节点，我可以将其在ui上设置一个状态表示需要编译才会生成 data output pin
 - [ ] 我感觉像 ols, wls, gls summary 中缺失值不应该直接 dropna 处理就没了，可能输出的序列中对 dropna 位置的值添加 nan 信息更好一些，例如残差 [nan, 1, 2, nan, ...] 这种形式感觉要很好一些
 - [ ] 目前处理并没有考虑缺失值的情况，在生成自相关检验的时候应该考虑缺失值并给出一个缺失值警告
-- [ ] 创建一个生成 1..n 的 int 64 dataseries 的节点，该节点有一个起始值和一个长度还有 col name 三个 pin 组成，output 是一个 int64 类型的 dataseries pin
+- [x] 创建一个生成 1..n 的 int 64 dataseries 的节点，该节点有一个起始值和一个长度还有 col name 三个 pin 组成，output 是一个 int64 类型的 dataseries pin
 - [ ] 类型限制问题，例如 ts lag 中的 time series 接受 int64, date, 那么其输出的 time series 应该也是其中的一个而不是 oneof，不过好像 one of 好像也没有什么不好？？
 - [x] 完成 acf, pacf 以及 dw 检验，gb 检验，还有 q 检验
+- [x] 完成 newey - west 回归，使用 vce::newey 配置
+- [ ] ivreg2 其实现是使用 z 统计量而不是 t 统计量，因此在这里 hac 的实现是由问题的
+- [ ] 在考虑要不要将 ols, wls, gls 合并为 regression 然后在 configure 中配置
+
+## 2026.03.09
+
+**Stata 手册，全部基于 ρ 变换后的变量和残差 计算，而不是原始 y 和原始残差**
+
+- [x] 完成 prais y x1 x2, nolog 和 prais y x1 x2, corc 两个命令
+- [ ] prais summary 组件搭配，imtest还一系列的自相关检验都可以删掉了
+- [ ] reset 检验
+- [ ] 多重共线性检验
+- [ ] 杠杆作用
+- [ ] chow 检验
+- [ ] 线性插值
+
+
 
 # TODOLIST
 

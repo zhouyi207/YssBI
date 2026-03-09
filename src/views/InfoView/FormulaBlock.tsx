@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
-import type { Coefficient } from './OLSComponent';
+import type { Coefficient } from './shared/types';
 
 function formatNum(value: number, decimals = 4): string {
   if (Math.abs(value) < 0.0001 && value !== 0) {
@@ -53,7 +53,14 @@ function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): str
   return `${lhs} = ${terms.join(' ')} + \\varepsilon`;
 }
 
-function buildSymbolicData(endogName: string, coefficients: Coefficient[]) {
+function buildExpandedLatexWithAR1(endogName: string, coefficients: Coefficient[], rho: number): string {
+  const mainEq = buildExpandedLatex(endogName, coefficients).replace('+ \\varepsilon', '+ u_t');
+  const rhoStr = formatNum(rho);
+  return `${mainEq},\\quad u_t = ${rhoStr} \\cdot u_{t-1} + e_t`;
+}
+
+function buildSymbolicData(endogName: string, coefficients: Coefficient[], ar1Rho?: number) {
+  const hasAR1 = ar1Rho != null;
   const mappings: VariableMapping[] = [];
   const terms: string[] = [];
   let xi = 1;
@@ -73,8 +80,17 @@ function buildSymbolicData(endogName: string, coefficients: Coefficient[]) {
     xi++;
   }
 
-  const latex = `y = ${terms.join(' + ')} + \\varepsilon`;
-  return { latex, mappings };
+  if (hasAR1) {
+    mappings.push({ symbol: '\\rho', variable: 'rho', coef: ar1Rho ?? NaN });
+  }
+  const latex = hasAR1
+    ? buildSymbolicLatexWithAR1(terms)
+    : `y = ${terms.join(' + ')} + \\varepsilon`;
+  return { latex, mappings, terms };
+}
+
+function buildSymbolicLatexWithAR1(terms: string[]): string {
+  return `y = ${terms.join(' + ')} + u_t,\\quad u_t = \\rho \\, u_{t-1} + e_t`;
 }
 
 function renderKatex(latex: string, displayMode = true): string | null {
@@ -89,18 +105,28 @@ function renderInlineKatex(latex: string): string | null {
   return renderKatex(latex, false);
 }
 
-const FormulaBlock: React.FC<{ endogName: string; coefficients: Coefficient[] }> = ({ endogName, coefficients }) => {
+interface FormulaBlockProps {
+  endogName: string;
+  coefficients: Coefficient[];
+  /** AR(1) 自相关参数 ρ，Prais-Winsten/Cochrane-Orcutt 时传入 */
+  ar1Rho?: number;
+}
+
+const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar1Rho }) => {
   const [mode, setMode] = useState<EquationMode>('symbolic');
 
   const expandedHtml = useMemo(
-    () => renderKatex(buildExpandedLatex(endogName, coefficients)),
-    [endogName, coefficients]
+    () =>
+      ar1Rho != null
+        ? renderKatex(buildExpandedLatexWithAR1(endogName, coefficients, ar1Rho))
+        : renderKatex(buildExpandedLatex(endogName, coefficients)),
+    [endogName, coefficients, ar1Rho]
   );
 
   const { symbolicHtml, mappings } = useMemo(() => {
-    const { latex, mappings } = buildSymbolicData(endogName, coefficients);
+    const { latex, mappings } = buildSymbolicData(endogName, coefficients, ar1Rho);
     return { symbolicHtml: renderKatex(latex), mappings };
-  }, [endogName, coefficients]);
+  }, [endogName, coefficients, ar1Rho]);
 
   const hasCat = useMemo(() => mappings.some((m) => m.category != null), [mappings]);
 

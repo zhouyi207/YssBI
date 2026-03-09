@@ -645,6 +645,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
                 bp_tests_ms,
                 im_test_ms,
             }),
+            prais_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

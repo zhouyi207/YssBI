@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
+import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
 
@@ -172,7 +173,11 @@ export const InfoWindow: React.FC = () => {
             <span className="text-sm">{error}</span>
           </div>
         ) : olsData ? (
-          <OLSComponent data={olsData} />
+          olsData.diagnostic_info?.prais_info ? (
+            <PraisComponent data={olsData as PraisResultData} />
+          ) : (
+            <OLSComponent data={olsData} />
+          )
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="w-5 h-5 border-2 border-gray-600 border-t-[var(--accent-color)] rounded-full animate-spin" />
