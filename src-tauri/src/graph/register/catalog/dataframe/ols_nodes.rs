@@ -39,6 +39,8 @@ pub struct OLSConfigure {
     pub cov_config: Option<OLSCovarianceConfig>,
     /// Optional time series ID (from Time pin on configure node)
     pub time_series_id: Option<String>,
+    /// Stata small: degrees-of-freedom adjustment. true = ESS/(n-k), false = ESS/n (Stata default).
+    pub small: bool,
 }
 
 impl Default for OLSConfigure {
@@ -48,6 +50,7 @@ impl Default for OLSConfigure {
             cov_type: "nonrobust".to_string(),
             cov_config: None,
             time_series_id: None,
+            small: true,
         }
     }
 }
@@ -709,6 +712,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 adj_r_squared: result.r2_adjusted,
                 f_statistic: result.fvalue,
                 prob_f_statistic: result.f_p_value,
+                wald_chi2: None,
+                prob_wald_chi2: None,
                 df_model: result.df_model,
                 df_residual: result.df_residual,
                 df_total: result.df_total,
@@ -743,6 +748,14 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 im_test_ms,
             }),
             prais_info: None,
+            iv2sls_first_stage: None,
+            iv2sls_first_stage_summary: None,
+            iv2sls_overid: None,
+            iv2sls_overid_dims: None,
+            iv2sls_hausman: None,
+            iv2sls_endogenous: None,
+            ivliml_kappa: None,
+            ivliml_overid: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())
@@ -793,7 +806,7 @@ fn register_ols_vce_constants(registry: &NodeRegistry) {
     let vce_constants = [
         ("NonRobust", "VCENonRobust"),
         ("HC0", "VCEHC0"),
-        ("HC1", "VCEHC1"),
+        ("HC1 (robust)", "VCEHC1"),
         ("HC2", "VCEHC2"),
         ("HC3", "VCEHC3"),
     ];
@@ -1167,6 +1180,7 @@ fn register_ols_configure(registry: &NodeRegistry) {
             cov_type,
             cov_config,
             time_series_id,
+            small: true,
         };
         let handle_id = ctx.put_handle(Box::new(config));
         ctx.emit_output_by_role(

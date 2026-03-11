@@ -6,12 +6,17 @@ export function CoefficientTable({
   coefficients,
   hasCategorical,
   ar1Rho,
+  useZStat,
 }: {
   coefficients: Coefficient[];
   hasCategorical: boolean;
   /** AR(1) 自相关参数 ρ，Prais 时传入，在表末追加一行 */
   ar1Rho?: number;
+  /** IV:2SLS uses z (asymptotic normal), not t */
+  useZStat?: boolean;
 }) {
+  const statLabel = useZStat ? 'z' : 't';
+  const pLabel = useZStat ? 'P>|z|' : 'P>|t|';
   return (
     <>
       <div className="rounded-lg border border-gray-800/50 overflow-hidden">
@@ -24,8 +29,8 @@ export function CoefficientTable({
               )}
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Coef</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Std Err</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">t</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">P&gt;|t|</th>
+              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{statLabel}</th>
+              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{pLabel}</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">[0.025</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">0.975]</th>
             </tr>

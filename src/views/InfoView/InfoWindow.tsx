@@ -3,6 +3,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
+import { TwoSLSComponent } from './2SLSComponent';
+import { LIMLComponent } from './LIMLComponent';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
 
@@ -175,6 +177,10 @@ export const InfoWindow: React.FC = () => {
         ) : olsData ? (
           olsData.diagnostic_info?.prais_info ? (
             <PraisComponent data={olsData as PraisResultData} />
+          ) :           olsData.model_basic_info?.model_type === 'IV:2SLS' ? (
+            <TwoSLSComponent data={olsData} />
+          ) : olsData.model_basic_info?.model_type === 'IV:LIML' ? (
+            <LIMLComponent data={olsData} />
           ) : (
             <OLSComponent data={olsData} />
           )

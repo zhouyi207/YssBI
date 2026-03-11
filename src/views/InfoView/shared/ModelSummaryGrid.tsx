@@ -15,12 +15,25 @@ export function ModelSummaryGrid({
       <InfoRow label="Method">{info.method}</InfoRow>
       <InfoRow label="R-squared">{info.r_squared.toFixed(4)}</InfoRow>
       <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
-      <InfoRow label="F-statistic">{formatNum(info.f_statistic)}</InfoRow>
-      <InfoRow label="Prob (F-statistic)">
-        <span className={info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
-          {formatNum(info.prob_f_statistic)}
-        </span>
-      </InfoRow>
+      {info.wald_chi2 != null ? (
+        <>
+          <InfoRow label={`Wald chi2(${info.df_model})`}>{formatNum(info.wald_chi2)}</InfoRow>
+          <InfoRow label="Prob &gt; chi2">
+            <span className={(info.prob_wald_chi2 ?? 1) < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
+              {formatNum(info.prob_wald_chi2 ?? 0)}
+            </span>
+          </InfoRow>
+        </>
+      ) : (
+        <>
+          <InfoRow label="F-statistic">{formatNum(info.f_statistic)}</InfoRow>
+          <InfoRow label="Prob (F-statistic)">
+            <span className={info.prob_f_statistic < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
+              {formatNum(info.prob_f_statistic)}
+            </span>
+          </InfoRow>
+        </>
+      )}
       <InfoRow label="No. Observations">{info.num_observation}</InfoRow>
       <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
       <InfoRow label="Df Model">{info.df_model}</InfoRow>

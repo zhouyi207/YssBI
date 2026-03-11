@@ -84,9 +84,12 @@
 ## 2026.03.10
 
 - [x] compute_output_schema_for_node_inner 能不能使节点自己完成这个功能
-- [ ] 2sls
-- [ ] 
 
+## 2026.03.11
+
+- [x] 2sls
+- [x] liml
+- [ ] 前端结果展示中 公式展现形式太差了
 
 
 # TODOLIST
