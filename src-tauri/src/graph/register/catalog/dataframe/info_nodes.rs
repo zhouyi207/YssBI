@@ -239,6 +239,96 @@ pub struct DiagnosticInfo {
     /// IV:LIML 过度识别检验（estat overid）Anderson-Rubin, Basmann F
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ivliml_overid: Option<IvLimlOveridTest>,
+    /// Binary choice (Logit/Probit): classification table (Stata estat classification)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_table: Option<ClassificationTable>,
+    /// Binary choice: mean of each exog column (for margins at means)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exog_means: Option<Vec<f64>>,
+}
+
+/// Compute classification table for binary choice (Stata estat classification)
+pub fn compute_classification_table(
+    endog: &[f64],
+    fitted: &[f64],
+    cutoff: f64,
+) -> ClassificationTable {
+    let n = endog.len().min(fitted.len());
+    let mut tp = 0usize;
+    let mut fp = 0usize;
+    let mut fn_ = 0usize;
+    let mut tn = 0usize;
+    for i in 0..n {
+        let y = endog[i];
+        let pred_pos = fitted[i] >= cutoff;
+        let actual_pos = y > 0.5;
+        match (pred_pos, actual_pos) {
+            (true, true) => tp += 1,
+            (true, false) => fp += 1,
+            (false, true) => fn_ += 1,
+            (false, false) => tn += 1,
+        }
+    }
+    let total_d = tp + fn_;
+    let total_nd = tn + fp;
+    let total_pos = tp + fp;
+    let total_neg = tn + fn_;
+    let sensitivity = if total_d > 0 { tp as f64 / total_d as f64 } else { 0.0 };
+    let specificity = if total_nd > 0 { tn as f64 / total_nd as f64 } else { 0.0 };
+    let ppv = if total_pos > 0 { tp as f64 / total_pos as f64 } else { 0.0 };
+    let npv = if total_neg > 0 { tn as f64 / total_neg as f64 } else { 0.0 };
+    let false_pos_rate = if total_nd > 0 { fp as f64 / total_nd as f64 } else { 0.0 };
+    let false_neg_rate = if total_d > 0 { fn_ as f64 / total_d as f64 } else { 0.0 };
+    let pct_correct = if n > 0 {
+        (tp + tn) as f64 / n as f64 * 100.0
+    } else {
+        0.0
+    };
+    ClassificationTable {
+        tp,
+        fp,
+        fn_,
+        tn,
+        cutoff,
+        sensitivity,
+        specificity,
+        ppv,
+        npv,
+        false_pos_rate,
+        false_neg_rate,
+        pct_correct,
+    }
+}
+
+/// Classification table for binary choice models (Stata estat classification)
+/// Rows: Classified + (pred≥cutoff), Classified - (pred<cutoff)
+/// Cols: True D (y=1), True ~D (y=0), Total
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassificationTable {
+    /// True positives: classified +, actual D
+    pub tp: usize,
+    /// False positives: classified +, actual ~D
+    pub fp: usize,
+    /// False negatives: classified -, actual D
+    pub fn_: usize,
+    /// True negatives: classified -, actual ~D
+    pub tn: usize,
+    /// Cutoff used (default 0.5)
+    pub cutoff: f64,
+    /// Sensitivity Pr(+|D) = TP/(TP+FN)
+    pub sensitivity: f64,
+    /// Specificity Pr(-|~D) = TN/(TN+FP)
+    pub specificity: f64,
+    /// Positive predictive value Pr(D|+)
+    pub ppv: f64,
+    /// Negative predictive value Pr(~D|-)
+    pub npv: f64,
+    /// False + rate for true ~D Pr(+|~D)
+    pub false_pos_rate: f64,
+    /// False - rate for true D Pr(-|D)
+    pub false_neg_rate: f64,
+    /// Percent correctly classified
+    pub pct_correct: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

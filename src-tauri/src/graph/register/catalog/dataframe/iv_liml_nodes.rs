@@ -483,6 +483,8 @@ fn run_iv_liml_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
                 df: o.df,
                 df_denom: o.df_denom,
             }),
+            classification_table: None,
+            exog_means: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: cov_beta_vec,

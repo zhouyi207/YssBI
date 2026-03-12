@@ -756,6 +756,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             iv2sls_endogenous: None,
             ivliml_kappa: None,
             ivliml_overid: None,
+            classification_table: None,
+            exog_means: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

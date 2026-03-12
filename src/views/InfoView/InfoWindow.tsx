@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
+import { BinaryComponent } from './BinaryComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
@@ -177,7 +178,10 @@ export const InfoWindow: React.FC = () => {
         ) : olsData ? (
           olsData.diagnostic_info?.prais_info ? (
             <PraisComponent data={olsData as PraisResultData} />
-          ) :           olsData.model_basic_info?.model_type === 'IV:2SLS' ? (
+          ) : olsData.model_basic_info?.model_type === 'Logit' ||
+            olsData.model_basic_info?.model_type === 'Probit' ? (
+            <BinaryComponent data={olsData} />
+          ) : olsData.model_basic_info?.model_type === 'IV:2SLS' ? (
             <TwoSLSComponent data={olsData} />
           ) : olsData.model_basic_info?.model_type === 'IV:LIML' ? (
             <LIMLComponent data={olsData} />

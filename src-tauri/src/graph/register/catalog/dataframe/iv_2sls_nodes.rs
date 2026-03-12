@@ -640,6 +640,8 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             }),
             ivliml_kappa: None,
             ivliml_overid: None,
+            classification_table: None,
+            exog_means: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: cov_beta_vec,

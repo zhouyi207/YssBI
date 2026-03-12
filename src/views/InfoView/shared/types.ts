@@ -158,6 +158,26 @@ export interface DiagnosticInfo {
   ivliml_kappa?: number;
   /** IV:LIML 过度识别检验（estat overid）Anderson-Rubin, Basmann F */
   ivliml_overid?: IvLimlOveridTest;
+  /** Binary choice (Logit/Probit): classification table (Stata estat classification) */
+  classification_table?: ClassificationTable;
+  /** Binary choice: mean of each exog column (for margins at means) */
+  exog_means?: number[];
+}
+
+/** Classification table for binary choice models (Stata estat classification) */
+export interface ClassificationTable {
+  tp: number;
+  fp: number;
+  fn_: number;
+  tn: number;
+  cutoff: number;
+  sensitivity: number;
+  specificity: number;
+  ppv: number;
+  npv: number;
+  false_pos_rate: number;
+  false_neg_rate: number;
+  pct_correct: number;
 }
 
 export interface IvLimlOveridTest {

@@ -7,6 +7,7 @@ export function CoefficientTable({
   hasCategorical,
   ar1Rho,
   useZStat,
+  showOddsRatio,
 }: {
   coefficients: Coefficient[];
   hasCategorical: boolean;
@@ -14,6 +15,8 @@ export function CoefficientTable({
   ar1Rho?: number;
   /** IV:2SLS uses z (asymptotic normal), not t */
   useZStat?: boolean;
+  /** Logit: show odds ratio exp(β) to the right of Coef */
+  showOddsRatio?: boolean;
 }) {
   const statLabel = useZStat ? 'z' : 't';
   const pLabel = useZStat ? 'P>|z|' : 'P>|t|';
@@ -28,6 +31,14 @@ export function CoefficientTable({
                 <th className="text-left px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Category</th>
               )}
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Coef</th>
+              {showOddsRatio && (
+                <th
+                  className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider cursor-help"
+                  title="exp(β)。变量系数：x 每增加 1 单位，几率变为原来的 exp(β) 倍；常数项：当所有 x 为 0 时 y=1 的基准几率"
+                >
+                  Odds Ratio
+                </th>
+              )}
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Std Err</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{statLabel}</th>
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{pLabel}</th>
@@ -66,6 +77,20 @@ export function CoefficientTable({
                 <td className="text-right px-3 py-2.5 font-mono text-white">
                   {formatNum(coeff.coef)}
                 </td>
+                {showOddsRatio && (
+                  <td
+                    className="text-right px-3 py-2.5 font-mono text-amber-300/90 cursor-help"
+                    title={
+                      coeff.variable === 'const'
+                        ? '基准几率：当所有自变量为 0 时，y=1 的几率'
+                        : coeff.category != null
+                          ? `${coeff.variable}=${coeff.category} 相对于参照组，几率变为原来的 ${formatNum(Math.exp(coeff.coef))} 倍`
+                          : `${coeff.variable} 每增加 1 单位，几率变为原来的 ${formatNum(Math.exp(coeff.coef))} 倍`
+                    }
+                  >
+                    {formatNum(Math.exp(coeff.coef))}
+                  </td>
+                )}
                 <td className="text-right px-3 py-2.5 font-mono text-gray-400">
                   {formatNum(coeff.std_err)}
                 </td>
@@ -96,6 +121,7 @@ export function CoefficientTable({
                 </td>
                 {hasCategorical && <td className="px-3 py-2.5 text-gray-600">—</td>}
                 <td className="text-right px-3 py-2.5 font-mono text-white">{formatNum(ar1Rho)}</td>
+                {showOddsRatio && <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>}
                 <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
                 <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
                 <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
