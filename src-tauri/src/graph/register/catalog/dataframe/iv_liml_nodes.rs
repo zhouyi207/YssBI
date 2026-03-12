@@ -266,6 +266,7 @@ pub fn extract_iv_data(
         OLSCovarianceConfig::FixedScale { scale } => CovParams::FixedScale { scale: *scale },
         OLSCovarianceConfig::Cluster { cluster_id } => CovParams::Cluster {
             cluster_id: valid_indices.iter().map(|&i| cluster_id[i]).collect(),
+            xtreg_fe_style: false,
         },
         OLSCovarianceConfig::HAC { kernel, bandwidth } => CovParams::HAC {
             kernel: kernel.clone(),
@@ -485,6 +486,7 @@ fn run_iv_liml_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             }),
             classification_table: None,
             exog_means: None,
+            panel_fe_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: cov_beta_vec,

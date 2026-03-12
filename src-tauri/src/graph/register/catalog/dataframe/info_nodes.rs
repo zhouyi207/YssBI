@@ -245,6 +245,26 @@ pub struct DiagnosticInfo {
     /// Binary choice: mean of each exog column (for margins at means)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exog_means: Option<Vec<f64>>,
+    /// Panel FE: Stata xtreg, fe style (R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr, obs per group)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel_fe_info: Option<PanelFEInfo>,
+}
+
+/// Panel FE-specific stats (Stata xtreg, fe)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct PanelFEInfo {
+    pub r2_within: f64,
+    pub r2_between: f64,
+    pub r2_overall: f64,
+    pub num_groups: usize,
+    pub obs_per_group_min: usize,
+    pub obs_per_group_avg: f64,
+    pub obs_per_group_max: usize,
+    pub sigma_u: f64,
+    pub sigma_e: f64,
+    pub rho: f64,
+    pub corr_u_i_Xb: f64,
 }
 
 /// Compute classification table for binary choice (Stata estat classification)

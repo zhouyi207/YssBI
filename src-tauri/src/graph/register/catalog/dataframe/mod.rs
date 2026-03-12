@@ -11,6 +11,7 @@ mod prais_nodes;
 mod iv_2sls_nodes;
 mod iv_liml_nodes;
 mod logit_nodes;
+mod panel_nodes;
 mod probit_nodes;
 mod dummy_nodes;
 mod prediction_nodes;
@@ -28,6 +29,7 @@ pub fn register(registry: &NodeRegistry) {
     prais_nodes::register(registry);
     iv_2sls_nodes::register(registry);
     logit_nodes::register(registry);
+    panel_nodes::register(registry);
     probit_nodes::register(registry);
     dummy_nodes::register(registry);
     prediction_nodes::register(registry);

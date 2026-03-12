@@ -4,6 +4,7 @@ export * from './RegressionShared';
 export * from './CoeffBarChart';
 export * from './CoefficientTable';
 export * from './ModelSummaryGrid';
+export * from './PanelFESummaryGrid';
 export * from './BinaryModelSummaryGrid';
 export * from './ClassificationTableBlock';
 export * from './MarginsBlock';

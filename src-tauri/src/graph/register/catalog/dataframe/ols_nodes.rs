@@ -454,6 +454,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         },
         OLSCovarianceConfig::Cluster { cluster_id } => yss_sci::regression::linear_model::CovParams::Cluster {
             cluster_id: cluster_id.clone(),
+            xtreg_fe_style: false,
         },
         OLSCovarianceConfig::HAC { kernel, bandwidth } => yss_sci::regression::linear_model::CovParams::HAC {
             kernel: kernel.clone(),
@@ -758,6 +759,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             ivliml_overid: None,
             classification_table: None,
             exog_means: None,
+            panel_fe_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

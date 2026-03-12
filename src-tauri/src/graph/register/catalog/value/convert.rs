@@ -10,6 +10,7 @@ use yss_sci::database::dtype_from_string;
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);
     register_series_string_to_categorical(registry);
+    register_series_string_to_float64(registry);
 }
 
 fn register_convert(registry: &NodeRegistry) {
@@ -198,6 +199,45 @@ fn register_series_string_to_categorical(registry: &NodeRegistry) {
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Categorical)),
+        )?;
+        Ok(())
+    }));
+    registry.register(definition);
+}
+
+fn register_series_string_to_float64(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new(
+        "String to Float64",
+        vec!["Data".to_string(), "Conversion".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("Convert a DataSeries of String type to Float64")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Series",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Series",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &series_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            _ => return Err("String to Float64: input is not a DataSeries".to_string()),
+        };
+        let series = ctx.get_series(&series_id)?;
+        let casted = series
+            .cast(&polars::prelude::DataType::Float64)
+            .map_err(|e: polars::error::PolarsError| format!("String to Float64: cast failed: {}", e))?;
+        let result_id = ctx.put_series(casted)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
         )?;
         Ok(())
     }));

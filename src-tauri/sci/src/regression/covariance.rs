@@ -7,7 +7,11 @@ use ndarray::{Array1, Array2};
 #[derive(Debug, Clone)]
 pub enum CovParams {
     FixedScale { scale: f64 },
-    Cluster { cluster_id: Vec<usize> },
+    Cluster {
+        cluster_id: Vec<usize>,
+        /// When true, use Stata xtreg,fe style: (N-1)/(N-k-1)*M/(M-1) for intercept adjustment
+        xtreg_fe_style: bool,
+    },
     HAC { kernel: String, bandwidth: Option<i64> },
     /// Stata newey: Bartlett kernel + n/(n-k) finite-sample adjustment (与 ivreg2 HAC 不同)
     Newey { lag: Option<i64> },
@@ -495,8 +499,11 @@ fn cov_cluster(
     u: &Array1<f64>,
     cov_params: Option<&CovParams>,
 ) -> Result<Array2<f64>, String> {
-    let cluster_id = match cov_params {
-        Some(CovParams::Cluster { cluster_id }) => cluster_id,
+    let (cluster_id, xtreg_fe_style) = match cov_params {
+        Some(CovParams::Cluster {
+            cluster_id,
+            xtreg_fe_style,
+        }) => (cluster_id, *xtreg_fe_style),
         _ => return Err("cluster cov_type requires CovParams::Cluster".to_string()),
     };
 
@@ -536,7 +543,12 @@ fn cov_cluster(
     let n = x.nrows() as f64;
     let k_f = k as f64;
     let scale = if g > 1.0 && n > k_f {
-        g / (g - 1.0) * (n - 1.0) / (n - k_f)
+        let denom = if xtreg_fe_style {
+            (n - k_f - 1.0).max(1.0)
+        } else {
+            (n - k_f).max(1.0)
+        };
+        g / (g - 1.0) * (n - 1.0) / denom
     } else {
         1.0
     };

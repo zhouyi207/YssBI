@@ -3,11 +3,22 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { BinaryComponent } from './BinaryComponent';
+import { PanelComponent } from './PanelComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
+import type { PanelSummaryResult } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
+
+function isPanelSummary(data: unknown): data is PanelSummaryResult {
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    (d.fe !== undefined || d.lsdv !== undefined || d.fd !== undefined || d.re !== undefined)
+  );
+}
 
 function getDataKeyFromHash(): string | null {
   const hash = window.location.hash;
@@ -18,7 +29,7 @@ function getDataKeyFromHash(): string | null {
 export const InfoWindow: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [olsData, setOlsData] = useState<OLSResultData | null>(null);
+  const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -132,7 +143,9 @@ export const InfoWindow: React.FC = () => {
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-white font-bold text-sm tracking-tight">{olsData?.title ?? 'Regression Results'}</span>
+          <span className="text-white font-bold text-sm tracking-tight">
+            {(olsData as { title?: string })?.title ?? 'Regression Results'}
+          </span>
         </div>
 
         <div className="flex items-center h-full">
@@ -176,7 +189,9 @@ export const InfoWindow: React.FC = () => {
             <span className="text-sm">{error}</span>
           </div>
         ) : olsData ? (
-          olsData.diagnostic_info?.prais_info ? (
+          isPanelSummary(olsData) ? (
+            <PanelComponent data={olsData as PanelSummaryResult} />
+          ) : olsData.diagnostic_info?.prais_info ? (
             <PraisComponent data={olsData as PraisResultData} />
           ) : olsData.model_basic_info?.model_type === 'Logit' ||
             olsData.model_basic_info?.model_type === 'Probit' ? (

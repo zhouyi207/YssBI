@@ -52,6 +52,22 @@ export interface RegressionResultData {
 /** OLS 专用别名，与后端 OLSResult 一致 */
 export type OLSResultData = RegressionResultData;
 
+/** Panel Summary 结果：FE(Within)、LSDV、FD、RE 四种模型 */
+export interface PanelSummaryResult {
+  title: string;
+  endog_name: string;
+  fe?: OLSResultData;
+  lsdv?: OLSResultData;
+  fd?: OLSResultData;
+  re?: OLSResultData;
+  errors?: {
+    fe?: string;
+    lsdv?: string;
+    fd?: string;
+    re?: string;
+  };
+}
+
 export interface BreuschPaganTest {
   lm_stat: number;
   df: number;
@@ -162,6 +178,23 @@ export interface DiagnosticInfo {
   classification_table?: ClassificationTable;
   /** Binary choice: mean of each exog column (for margins at means) */
   exog_means?: number[];
+  /** Panel FE: Stata xtreg, fe style (R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr, obs per group) */
+  panel_fe_info?: PanelFEInfo;
+}
+
+/** Panel FE-specific stats (Stata xtreg, fe) */
+export interface PanelFEInfo {
+  r2_within: number;
+  r2_between: number;
+  r2_overall: number;
+  num_groups: number;
+  obs_per_group_min: number;
+  obs_per_group_avg: number;
+  obs_per_group_max: number;
+  sigma_u: number;
+  sigma_e: number;
+  rho: number;
+  corr_u_i_Xb: number;
 }
 
 /** Classification table for binary choice models (Stata estat classification) */

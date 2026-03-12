@@ -455,6 +455,7 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
             ivliml_overid: None,
             classification_table: Some(classification_table),
             exog_means: Some(exog_means),
+            panel_fe_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

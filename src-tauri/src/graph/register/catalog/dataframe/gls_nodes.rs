@@ -704,6 +704,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             ivliml_overid: None,
             classification_table: None,
             exog_means: None,
+            panel_fe_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

@@ -385,6 +385,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         },
         OLSCovarianceConfig::Cluster { cluster_id } => CovParams::Cluster {
             cluster_id: cluster_id.clone(),
+            xtreg_fe_style: false,
         },
         OLSCovarianceConfig::HAC { kernel, bandwidth } => CovParams::HAC {
             kernel: kernel.clone(),
@@ -711,6 +712,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             ivliml_overid: None,
             classification_table: None,
             exog_means: None,
+            panel_fe_info: None,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())
