@@ -52,17 +52,23 @@ export interface RegressionResultData {
 /** OLS 专用别名，与后端 OLSResult 一致 */
 export type OLSResultData = RegressionResultData;
 
-/** Panel Summary 结果：FE(Within)、LSDV、FD、RE 四种模型 */
+/** Panel Summary 结果：FE(Within)、FE(Time)、FE(Two-Way)、LSDV、FD、RE */
 export interface PanelSummaryResult {
   title: string;
   endog_name: string;
   fe?: OLSResultData;
+  fe_time?: OLSResultData;
+  fe_twoway?: OLSResultData;
   lsdv?: OLSResultData;
+  lsdv_time?: OLSResultData;
   fd?: OLSResultData;
   re?: OLSResultData;
   errors?: {
     fe?: string;
+    fe_time?: string;
+    fe_twoway?: string;
     lsdv?: string;
+    lsdv_time?: string;
     fd?: string;
     re?: string;
   };

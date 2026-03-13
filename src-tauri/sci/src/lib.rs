@@ -1,4 +1,5 @@
 pub mod diagnostics;
+pub mod panel;
 pub mod regression;
 pub mod stats;
 pub mod tools;

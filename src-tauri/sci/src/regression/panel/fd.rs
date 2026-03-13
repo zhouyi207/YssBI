@@ -1,69 +1,22 @@
 //! Panel First Difference estimator
 //!
 //! Δy_it = β Δx_it + Δu_it
-//! Requires data sorted by (entity, time).
+//! 与 Stata D. 算子一致：仅在原始数据中相邻时间点之间差分（delta=1），不跨 gap。
 
 use crate::regression::covariance::CovParams;
 use crate::regression::linear_model::{OLSConfig, OLS};
 use ndarray::{Array1, Array2};
 
-/// First difference within each entity. Returns (diff_values, diff_entity_ids).
-/// Input must be sorted by (entity_id, time_id).
-fn first_diff_within_entity(
-    v: &[f64],
-    entity_id: &[usize],
-    time_id: &[usize],
-) -> Result<(Vec<f64>, Vec<usize>), String> {
-    let n = v.len();
-    if entity_id.len() != n || time_id.len() != n {
-        return Err(format!(
-            "first_diff: len mismatch entity={} time={} data={}",
-            entity_id.len(),
-            time_id.len(),
-            n
-        ));
-    }
-
-    let mut rows: Vec<(usize, usize, f64)> = (0..n)
-        .map(|i| (entity_id[i], time_id[i], v[i]))
-        .collect();
-    rows.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-
-    let mut diff_vals = Vec::new();
-    let mut diff_entity = Vec::new();
-
-    let mut i = 0;
-    while i < rows.len() {
-        let (eid, _, val_i) = rows[i];
-        let mut j = i + 1;
-        while j < rows.len() && rows[j].0 == eid {
-            let val_j = rows[j].2;
-            let d = val_j - val_i;
-            if !d.is_nan() {
-                diff_vals.push(d);
-                diff_entity.push(eid);
-            }
-            i = j;
-            j += 1;
-        }
-        i += 1;
-    }
-
-    if diff_vals.is_empty() {
-        return Err(
-            "Panel FD: no valid first-differenced observations. Ensure (entity, time) has consecutive periods."
-                .to_string(),
-        );
-    }
-    Ok((diff_vals, diff_entity))
-}
-
 /// Panel First Difference estimator
+///
+/// 与 Stata `reg D.y D.x, nocons` 一致：仅当 time_values[i+1] - time_values[i] == 1 时差分，
+/// 即仅在相邻时间点（delta=1）之间差分，不跨 gap。
 pub fn fit_panel_fd(
     endog: &Array1<f64>,
     exog: &Array2<f64>,
     entity_id: &[usize],
     time_id: &[usize],
+    time_values: &[i64],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
@@ -76,29 +29,32 @@ pub fn fit_panel_fd(
             n
         ));
     }
-    if entity_id.len() != n || time_id.len() != n {
-        return Err("Panel FD: entity_id and time_id must match data length".to_string());
+    if entity_id.len() != n || time_id.len() != n || time_values.len() != n {
+        return Err("Panel FD: entity_id, time_id, time_values must match data length".to_string());
     }
 
-    let y_vec: Vec<f64> = endog.iter().cloned().collect();
-    let (dy, diff_entity) = first_diff_within_entity(&y_vec, entity_id, time_id)?;
-
-    let n_fd = dy.len();
     let k = exog.ncols();
+    let mut diff_entity = Vec::new();
+    let mut dy = Vec::new();
+    let mut dx_cols: Vec<Vec<f64>> = (0..k).map(|_| Vec::new()).collect();
 
-    let mut dx_cols: Vec<Vec<f64>> = Vec::with_capacity(k);
-    for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
-        let (dc, _) = first_diff_within_entity(&col, entity_id, time_id)?;
-        if dc.len() != n_fd {
-            return Err(format!(
-                "Panel FD: column {} produced {} diffs, expected {}",
-                c,
-                dc.len(),
-                n_fd
-            ));
+    // 仅当 entity 相同且 time_values[i+1] - time_values[i] == 1 时差分（Stata delta=1）
+    let mut i = 0;
+    while i + 1 < n {
+        if entity_id[i] == entity_id[i + 1] && time_values[i + 1] - time_values[i] == 1 {
+            diff_entity.push(entity_id[i]);
+            dy.push(endog[i + 1] - endog[i]);
+            for c in 0..k {
+                dx_cols[c].push(exog[[i + 1, c]] - exog[[i, c]]);
+            }
         }
-        dx_cols.push(dc);
+        i += 1;
+    }
+
+    let n_fd = diff_entity.len();
+
+    if n_fd == 0 {
+        return Err("Panel FD: no valid first-differenced observations. Ensure (entity, time) has consecutive periods (delta=1).".to_string());
     }
 
     let dy_arr = Array1::from_vec(dy);
@@ -112,7 +68,7 @@ pub fn fit_panel_fd(
     let dx_arr = Array2::from_shape_vec((n_fd, k), dx_data)
         .map_err(|e| format!("Panel FD: shape error {:?}", e))?;
 
-    // Drop constant column if present (diff of constant = 0)
+    // 若存在常数列，差分后全为 0，需剔除
     let (dx_use, has_const) = if constant && k > 0 {
         let first_col = dx_arr.column(0);
         let all_zero = first_col.iter().all(|&v| v.abs() < 1e-12);

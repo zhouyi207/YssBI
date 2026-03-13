@@ -16,6 +16,7 @@ mod probit_nodes;
 mod dummy_nodes;
 mod prediction_nodes;
 mod ts_align_nodes;
+mod xt_align_nodes;
 
 use crate::graph::register::NodeRegistry;
 
@@ -34,4 +35,5 @@ pub fn register(registry: &NodeRegistry) {
     dummy_nodes::register(registry);
     prediction_nodes::register(registry);
     ts_align_nodes::register(registry);
+    xt_align_nodes::register(registry);
 }

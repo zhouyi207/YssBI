@@ -5,9 +5,9 @@ mod fd;
 mod lsdv;
 mod re;
 
-pub use fe::fit_panel_fe;
+pub use fe::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway};
 pub use fd::fit_panel_fd;
-pub use lsdv::fit_panel_lsdv;
+pub use lsdv::{fit_panel_lsdv, fit_panel_lsdv_time};
 pub use re::fit_panel_re;
 
 use ndarray::{Array1, Array2};

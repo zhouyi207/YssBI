@@ -13,7 +13,7 @@ use polars::prelude::{Column, DataFrame};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use yss_sci::regression::panel::{fit_panel_fe, fit_panel_fd, fit_panel_lsdv, fit_panel_re};
+use yss_sci::regression::panel::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_re};
 
 use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, PanelFEInfo};
 
@@ -47,7 +47,13 @@ pub struct PanelSummaryResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fe: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub fe_time: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fe_twoway: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lsdv: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsdv_time: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fd: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,7 +67,13 @@ pub struct PanelErrors {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fe: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub fe_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fe_twoway: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lsdv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsdv_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -169,9 +181,12 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         Array2<f64>,
         Vec<usize>,
         Vec<usize>,
+        Vec<i64>,
         Vec<(String, Option<String>)>,
         String,
         bool,
+        Vec<String>,
+        String,
         Vec<String>,
         String,
     ),
@@ -254,6 +269,10 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         if raw.is_empty() { "Entity ID".to_string() } else { raw }
     };
     let time_series = ctx.get_series(&time_id_str)?;
+    let time_series_name = {
+        let raw = time_series.name().to_string();
+        if raw.is_empty() { "Time ID".to_string() } else { raw }
+    };
     df_cols.push(Column::from(entity_series.with_name("__entity__".into())));
     df_cols.push(Column::from(time_series.with_name("__time__".into())));
 
@@ -309,7 +328,7 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         (out, idx_to_name)
     };
 
-    let time_after: Vec<usize> = {
+    let (time_after, time_values, time_names): (Vec<usize>, Vec<i64>, Vec<String>) = {
         let s = df.column("__time__").map_err(|e| format!("Panel: {}", e))?;
         if matches!(s.dtype(), polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)) {
             let str_s = s.cast(&polars::prelude::DataType::String).map_err(|e: polars::error::PolarsError| e.to_string())?;
@@ -326,8 +345,10 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
             }
             unique.sort();
             let m: HashMap<String, usize> = unique.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect();
-            values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
-        } else {
+            let indices: Vec<usize> = values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect();
+            let vals: Vec<i64> = indices.iter().map(|&i| i as i64).collect();
+            (indices, vals, unique)
+        } else if s.dtype() == &polars::prelude::DataType::Int64 {
             let ca = s.i64().map_err(|e: polars::error::PolarsError| e.to_string())?;
             let values: Vec<i64> = ca.into_iter()
                 .map(|opt| opt.ok_or("Panel: time contains null"))
@@ -340,7 +361,30 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
             }
             unique.sort_unstable();
             let m: HashMap<i64, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-            values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
+            let indices: Vec<usize> = values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect();
+            let names: Vec<String> = unique.iter().map(|v| v.to_string()).collect();
+            (indices, values, names)
+        } else if s.dtype() == &polars::prelude::DataType::Date {
+            let ca = s.date().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let physical = ca.physical();
+            let values: Vec<i32> = physical
+                .into_iter()
+                .map(|opt| opt.ok_or("Panel: time contains null"))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut unique: Vec<i32> = Vec::new();
+            for v in &values {
+                if !unique.contains(v) {
+                    unique.push(*v);
+                }
+            }
+            unique.sort_unstable();
+            let m: HashMap<i32, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+            let indices: Vec<usize> = values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect();
+            let vals: Vec<i64> = values.iter().map(|&v| v as i64).collect();
+            let names: Vec<String> = unique.iter().map(|v| v.to_string()).collect();
+            (indices, vals, names)
+        } else {
+            return Err("Panel: Time ID must be Categorical, Int64, or Date".to_string());
         }
     };
 
@@ -387,7 +431,7 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         .map_err(|e| format!("Panel: exog shape: {:?}", e))?;
 
     let endog = Array1::from(endog_vec);
-    Ok((endog, exog, entity_after, time_after, all_labels, endog_name, has_constant, entity_names, entity_series_name))
+    Ok((endog, exog, entity_after, time_after, time_values, all_labels, endog_name, has_constant, entity_names, entity_series_name, time_names, time_series_name))
 }
 
 fn panel_result_to_ols_result(
@@ -397,12 +441,13 @@ fn panel_result_to_ols_result(
     endog_name: &str,
     all_labels: &[(String, Option<String>)],
     label_offset: usize,
+    num_groups_override: Option<usize>,
 ) -> OLSResult {
     let panel_fe_info = pr.fe_stats.as_ref().map(|s| PanelFEInfo {
         r2_within: s.r2_within,
         r2_between: s.r2_between,
         r2_overall: s.r2_overall,
-        num_groups: pr.num_entities,
+        num_groups: num_groups_override.unwrap_or(pr.num_entities),
         obs_per_group_min: s.obs_per_group_min,
         obs_per_group_avg: s.obs_per_group_avg,
         obs_per_group_max: s.obs_per_group_max,
@@ -627,23 +672,29 @@ pub fn register(registry: &NodeRegistry) {
             .map(|c| c.cov_type.as_str())
             .unwrap_or("cluster");
 
-        let (endog, exog, entity_id, time_id, all_labels, endog_name, _, entity_names, entity_series_name) =
+        let (endog, exog, entity_id, time_id, time_values, all_labels, endog_name, _, entity_names, entity_series_name, time_names, time_series_name) =
             build_panel_data(ctx, constant)?;
 
         let cov_params: Option<yss_sci::regression::covariance::CovParams> = None;
 
         let mut fe_result = None;
+        let mut fe_time_result = None;
+        let mut fe_twoway_result = None;
         let mut lsdv_result = None;
+        let mut lsdv_time_result = None;
         let mut fd_result = None;
         let mut re_result = None;
         let mut errors = PanelErrors {
             fe: None,
+            fe_time: None,
+            fe_twoway: None,
             lsdv: None,
+            lsdv_time: None,
             fd: None,
             re: None,
         };
 
-        // FE (Within): labels start at 0
+        // FE (Within): entity fixed effects
         match fit_panel_fe(&endog, &exog, &entity_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
                 fe_result = Some(panel_result_to_ols_result(
@@ -653,9 +704,42 @@ pub fn register(registry: &NodeRegistry) {
                     &endog_name,
                     &all_labels,
                     0,
+                    None,
                 ));
             }
             Err(e) => errors.fe = Some(e),
+        }
+
+        // FE (Time): time fixed effects
+        match fit_panel_fe_time(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                fe_time_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:FE(Time)",
+                    "Time Fixed Effects",
+                    &endog_name,
+                    &all_labels,
+                    0,
+                    Some(pr.num_time_periods),
+                ));
+            }
+            Err(e) => errors.fe_time = Some(e),
+        }
+
+        // FE (Two-Way): entity + time fixed effects
+        match fit_panel_fe_twoway(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                fe_twoway_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:FE(Two-Way)",
+                    "Two-Way Fixed Effects",
+                    &endog_name,
+                    &all_labels,
+                    0,
+                    None,
+                ));
+            }
+            Err(e) => errors.fe_twoway = Some(e),
         }
 
         // LSDV: full labels = [const, x1, x2, ..., entity_1, entity_2, ...] (entity 0 is reference)
@@ -672,12 +756,33 @@ pub fn register(registry: &NodeRegistry) {
                     &endog_name,
                     &lsdv_labels,
                     0,
+                    None,
                 ));
             }
             Err(e) => errors.lsdv = Some(e),
         }
 
-        match fit_panel_fd(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+        // LSDV (Time): labels = [const, x1, x2, ..., time_1, time_2, ...] (time 0 is reference)
+        match fit_panel_lsdv_time(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let mut lsdv_time_labels = all_labels.clone();
+                for i in 1..time_names.len() {
+                    lsdv_time_labels.push((time_series_name.clone(), Some(time_names[i].clone())));
+                }
+                lsdv_time_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:LSDV(Time)",
+                    "LSDV (Time Dummies)",
+                    &endog_name,
+                    &lsdv_time_labels,
+                    0,
+                    None,
+                ));
+            }
+            Err(e) => errors.lsdv_time = Some(e),
+        }
+
+        match fit_panel_fd(&endog, &exog, &entity_id, &time_id, &time_values, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
                 fd_result = Some(panel_result_to_ols_result(
                     &pr,
@@ -686,6 +791,7 @@ pub fn register(registry: &NodeRegistry) {
                     &endog_name,
                     &all_labels,
                     1,
+                    None,
                 ));
             }
             Err(e) => errors.fd = Some(e),
@@ -701,31 +807,35 @@ pub fn register(registry: &NodeRegistry) {
                     &endog_name,
                     &all_labels,
                     0,
+                    None,
                 ));
             }
             Err(e) => errors.re = Some(e),
         }
 
-        let has_any = fe_result.is_some() || lsdv_result.is_some() || fd_result.is_some() || re_result.is_some();
+        let has_any = fe_result.is_some() || fe_time_result.is_some() || fe_twoway_result.is_some()
+            || lsdv_result.is_some() || lsdv_time_result.is_some() || fd_result.is_some() || re_result.is_some();
         if !has_any {
             return Err(format!(
-                "Panel Summary: all models failed. FE: {:?}, LSDV: {:?}, FD: {:?}, RE: {:?}",
-                errors.fe, errors.lsdv, errors.fd, errors.re
+                "Panel Summary: all models failed. FE: {:?}, FE(Time): {:?}, FE(Two-Way): {:?}, LSDV: {:?}, LSDV(Time): {:?}, FD: {:?}, RE: {:?}",
+                errors.fe, errors.fe_time, errors.fe_twoway, errors.lsdv, errors.lsdv_time, errors.fd, errors.re
             ));
         }
+
+        let has_errors = errors.fe.is_some() || errors.fe_time.is_some() || errors.fe_twoway.is_some()
+            || errors.lsdv.is_some() || errors.lsdv_time.is_some() || errors.fd.is_some() || errors.re.is_some();
 
         let summary = PanelSummaryResult {
             title: "Panel Regression Results".to_string(),
             endog_name,
             fe: fe_result,
+            fe_time: fe_time_result,
+            fe_twoway: fe_twoway_result,
             lsdv: lsdv_result,
+            lsdv_time: lsdv_time_result,
             fd: fd_result,
             re: re_result,
-            errors: if errors.fe.is_some() || errors.lsdv.is_some() || errors.fd.is_some() || errors.re.is_some() {
-                Some(errors)
-            } else {
-                None
-            },
+            errors: if has_errors { Some(errors) } else { None },
         };
 
         let json_data = serde_json::to_string(&summary)

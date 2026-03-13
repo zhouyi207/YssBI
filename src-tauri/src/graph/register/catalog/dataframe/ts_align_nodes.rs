@@ -107,20 +107,40 @@ fn register_ts_align(registry: &NodeRegistry) {
 }
 
 fn register_ts_diff(registry: &NodeRegistry) {
+    let time_series_type = DataType::DataSeries(Box::new(DataType::one_of(vec![
+        DataType::Int64,
+        DataType::Date,
+    ])));
     let definition = NodeDefinition::new("TS Diff", vec!["Data".to_string(), "Time Series".to_string()])
         .with_ui_style("dataframe")
-        .with_description("对 DataSeries 做差分：y_t - y_{t-lag}，前 lag 个为 null")
+        .with_description("对 DataSeries 做差分：y_t - y_{t-lag}。连接 Time Series 时与 Stata D. 一致，仅对相邻时间点（interval）差分，不跨 gap。")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
-                "Series",
+                "Value Series",
                 DataRole::Input,
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
             )),
+            PinSlot::fixed(
+                PinDefinition::data_input(
+                    "Time Series",
+                    DataRole::Custom("time_series".to_string()),
+                    PinDataTypeDefinition::concrete(time_series_type),
+                )
+                .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_input(
                 "Lag",
                 DataRole::Custom("lag".to_string()),
                 PinDataTypeDefinition::concrete(DataType::Int64),
             )),
+            PinSlot::fixed(
+                PinDefinition::data_input(
+                    "Interval",
+                    DataRole::Custom("interval".to_string()),
+                    PinDataTypeDefinition::concrete(DataType::Int64),
+                )
+                .with_optional(true),
+            ),
             PinSlot::fixed(PinDefinition::data_output(
                 "Diff",
                 DataRole::Output,
@@ -131,7 +151,7 @@ fn register_ts_diff(registry: &NodeRegistry) {
             let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
             let series_id = match &series_value {
                 DataValue::DataSeries(v) => v.id.clone(),
-                DataValue::Null => return Err("TS Diff: 请连接 DataSeries".to_string()),
+                DataValue::Null => return Err("TS Diff: 请连接 Value Series".to_string()),
                 _ => return Err("TS Diff: 输入必须是 DataSeries".to_string()),
             };
             let lag = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string()))) {
@@ -140,7 +160,21 @@ fn register_ts_diff(registry: &NodeRegistry) {
                 _ => 1,
             };
             let series = ctx.get_series(&series_id)?;
-            let result = diff::ts_diff(&series, lag).map_err(|e| format!("TS Diff: {}", e))?;
+
+            let time_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_series".to_string())));
+            let result = match time_value {
+                Ok(DataValue::DataSeries(v)) if !v.id.is_empty() => {
+                    let time_series = ctx.get_series(&v.id)?;
+                    let interval = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string()))) {
+                        Ok(DataValue::Int64(i)) if i > 0 => i,
+                        Ok(DataValue::Int64(_)) => return Err("TS Diff: Interval 必须为正整数".to_string()),
+                        _ => 1,
+                    };
+                    diff::ts_diff_with_time(&time_series, &series, lag, interval)
+                }
+                _ => diff::ts_diff(&series, lag),
+            };
+            let result = result.map_err(|e| format!("TS Diff: {}", e))?;
             let result_id = ctx.put_series(result)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Output),
