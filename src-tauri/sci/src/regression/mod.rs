@@ -1,3 +1,4 @@
+pub mod collinearity;
 pub mod covariance;
 pub mod diagnostics;
 pub mod discrete;

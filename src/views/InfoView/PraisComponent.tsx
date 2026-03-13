@@ -101,6 +101,47 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
       />
       <CoefficientTable coefficients={coefficients} hasCategorical={hasCategorical} ar1Rho={praisInfo.rho} />
 
+      {/* Omitted variables (collinearity) */}
+      {diag.omit_info && diag.omit_info.omitted.length > 0 && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex items-start gap-2">
+            <svg
+              className="w-5 h-5 text-amber-400 shrink-0 mt-0.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+            <div>
+              <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
+              <div className="text-sm text-gray-300">
+                The following variables were dropped due to strict multicollinearity
+                (non-dummy variables removed first):
+              </div>
+              <ul className="mt-2 space-y-1 text-sm font-mono">
+                {diag.omit_info.omitted.map((o, i) => (
+                  <li key={i} className="text-gray-400">
+                    {o.variable}
+                    {o.category != null ? (
+                      <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
+                        {o.category}
+                      </span>
+                    ) : null}
+                    <span className="text-gray-500 text-xs ml-1">({o.reason})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hypothesis Test */}
       <HypothesisTestBlock data={data} />
 

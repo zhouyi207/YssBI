@@ -3,6 +3,8 @@ import {
   SectionHeader,
   ModelSummaryGrid,
   PanelFESummaryGrid,
+  PanelBESummaryGrid,
+  PanelRESummaryGrid,
   CoefficientTable,
   CoeffBarChart,
   HypothesisTestBlock,
@@ -11,7 +13,7 @@ import type { PanelSummaryResult, OLSResultData } from './shared/types';
 
 const PanelFormulaBlock = React.lazy(() => import('./PanelFormulaBlock'));
 
-type TabKey = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'fd' | 're';
+type TabKey = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be';
 
 type ModelType = 'fe' | 're'; // 固定效应 | 随机效应
 type EffectType = 'entity' | 'time' | 'twoway'; // 个体 | 时间 | 双向
@@ -39,12 +41,27 @@ const METHOD_MAP: Record<ModelType, Record<EffectType, { key: TabKey; label: str
       { key: 'fe_time', label: 'Within' },
       { key: 'lsdv_time', label: 'LSDV' },
     ],
-    twoway: [{ key: 'fe_twoway', label: 'FE (Two-Way)' }],
+    twoway: [
+      { key: 'fe_twoway', label: 'Within' },
+      { key: 'lsdv_twoway', label: 'LSDV' },
+    ],
   },
   re: {
-    entity: [{ key: 're', label: 'RE (Random Effects)' }],
-    time: [{ key: 're', label: 'RE' }], // 随机效应通常仅个体，时间/双向复用 RE
-    twoway: [{ key: 're', label: 'RE' }],
+    entity: [
+      { key: 're_fgls', label: 'FGLS' },
+      { key: 're_mle', label: 'MLE' },
+      { key: 're_be', label: 'BE' },
+    ],
+    time: [
+      { key: 're_fgls', label: 'FGLS' },
+      { key: 're_mle', label: 'MLE' },
+      { key: 're_be', label: 'BE' },
+    ],
+    twoway: [
+      { key: 're_fgls', label: 'FGLS' },
+      { key: 're_mle', label: 'MLE' },
+      { key: 're_be', label: 'BE' },
+    ],
   },
 };
 
@@ -55,6 +72,7 @@ function getDefaultSelections(data: PanelSummaryResult): { model: ModelType; eff
   if (data.fe_time) return { model: 'fe', effect: 'time', method: 'fe_time' };
   if (data.lsdv_time) return { model: 'fe', effect: 'time', method: 'lsdv_time' };
   if (data.fe_twoway) return { model: 'fe', effect: 'twoway', method: 'fe_twoway' };
+  if (data.lsdv_twoway) return { model: 'fe', effect: 'twoway', method: 'lsdv_twoway' };
   if (data.re) return { model: 're', effect: 'entity', method: 're' };
   return { model: 'fe', effect: 'entity', method: 'fe' };
 }
@@ -85,16 +103,22 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
         return data.fe_time;
       case 'fe_twoway':
         return data.fe_twoway;
+      case 'lsdv_twoway':
+        return data.lsdv_twoway;
       case 'lsdv':
         return data.lsdv;
       case 'lsdv_time':
         return data.lsdv_time;
       case 'fd':
         return data.fd;
-      case 're':
-        return data.re;
+      case 're_fgls':
+        return data.re_fgls;
+      case 're_mle':
+        return data.re_mle;
+      case 're_be':
+        return data.re_be;
       default:
-        return data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.fd ?? data.re;
+        return data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.lsdv_twoway ?? data.fd ?? data.re_fgls ?? data.re_mle ?? data.re_be;
     }
   }, [currentMethod, data]);
 
@@ -274,8 +298,19 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
               </svg>
             }
           />
-          {(currentMethod === 'fe' || currentMethod === 'fe_time') &&
+          {(currentMethod === 're_fgls' || currentMethod === 're_mle') &&
           currentData?.diagnostic_info?.panel_fe_info ? (
+            <PanelRESummaryGrid
+              info={currentData.model_basic_info}
+              panelFe={currentData.diagnostic_info.panel_fe_info}
+            />
+          ) : currentMethod === 're_be' && currentData?.diagnostic_info?.panel_fe_info ? (
+            <PanelBESummaryGrid
+              info={currentData.model_basic_info}
+              panelFe={currentData.diagnostic_info.panel_fe_info}
+            />
+          ) : (currentMethod === 'fe' || currentMethod === 'fe_time') &&
+            currentData?.diagnostic_info?.panel_fe_info ? (
             <PanelFESummaryGrid
               info={currentData.model_basic_info}
               panelFe={currentData.diagnostic_info.panel_fe_info}
@@ -296,7 +331,53 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
           <CoefficientTable
             coefficients={currentData.coefficients}
             hasCategorical={hasCategorical}
+            useZStat={
+            currentData.model_basic_info?.wald_chi2 != null ||
+            currentData.model_basic_info?.lr_chi2 != null
+          }
           />
+
+          {/* Omitted variables (collinearity) */}
+          {currentData?.diagnostic_info?.omit_info &&
+            currentData.diagnostic_info.omit_info.omitted.length > 0 && (
+              <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-start gap-2">
+                  <svg
+                    className="w-5 h-5 text-amber-400 shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                    />
+                  </svg>
+                  <div>
+                    <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
+                    <div className="text-sm text-gray-300">
+                      The following variables were dropped due to strict multicollinearity
+                      (non-dummy variables removed first):
+                    </div>
+                    <ul className="mt-2 space-y-1 text-sm font-mono">
+                      {currentData.diagnostic_info.omit_info.omitted.map((o, i) => (
+                        <li key={i} className="text-gray-400">
+                          {o.variable}
+                          {o.category != null ? (
+                            <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
+                              {o.category}
+                            </span>
+                          ) : null}
+                          <span className="text-gray-500 text-xs ml-1">({o.reason})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
 
           {/* Hypothesis Test */}
           <HypothesisTestBlock data={currentData as OLSResultData} />

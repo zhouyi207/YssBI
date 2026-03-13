@@ -4,6 +4,7 @@
 //! Standard errors: cluster by entity (default).
 //! Stata xtreg, fe style: R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr(u_i,Xb).
 
+use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::covariance::CovParams;
 use crate::regression::linear_model::{OLSConfig, OLS};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
@@ -454,7 +455,7 @@ pub fn fit_panel_fe(
     }
 
     // After within transform, constant column (all 1s) becomes zero - drop it if present
-    let (x_use, has_const) = if constant && k > 0 {
+    let (x_after_const, has_const) = if constant && k > 0 {
         let first_col = x_tilde.column(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
@@ -464,6 +465,17 @@ pub fn fit_panel_fe(
         }
     } else {
         (x_tilde, constant)
+    };
+
+    // Drop collinear columns in transformed matrix (e.g. time-invariant vars → zero in entity FE)
+    let k_after_const = x_after_const.ncols();
+    let col_is_dummy = vec![false; k_after_const];
+    let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
+        None
+    } else {
+        // Map to full coefficient indices: const=0, slopes at 1..; x_after_const col j = slope j+1
+        Some(omitted_x.iter().map(|&j| j + 1).collect())
     };
 
     let cov_params = cov_params.or_else(|| {
@@ -518,8 +530,11 @@ pub fn fit_panel_fe(
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { wald / df_model as f64 } else { 0.0 };
-        let dist = FisherSnedecor::new(df_model as f64, df_residual as f64).unwrap();
+        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let df1 = (df_model as f64).max(1.0);
+        let df2 = (df_residual as f64).max(1.0);
+        let dist = FisherSnedecor::new(df1, df2)
+            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -528,15 +543,20 @@ pub fn fit_panel_fe(
     // Recovered constant _cons = ȳ - β'x̄ (Stata xtreg, fe style)
     let y_mean = endog.iter().sum::<f64>() / n as f64;
     let k_vars = result.betas.len();
+    let kept_slope: Vec<usize> = (0..k_after_const)
+        .filter(|&j| !omitted_x.contains(&j))
+        .collect();
     let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(c + 1).iter().sum::<f64>() / n as f64)
+        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
     let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
         + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
-    let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64).unwrap();
+    let t_df = (df_residual as f64).max(1.0);
+    let t_dist = StudentsT::new(0.0, 1.0, t_df)
+        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);
@@ -586,9 +606,13 @@ pub fn fit_panel_fe(
     }
 
     // Stata xtreg, fe style: R2 Between/Overall, obs per group, sigma_u, sigma_e, rho, corr(u_i,Xb)
+    let kept_cols: Vec<usize> = std::iter::once(0)
+        .chain(kept_slope.iter().map(|&j| j + 1))
+        .collect();
+    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
     let fe_stats = compute_fe_stats(
         endog,
-        exog,
+        &exog_kept,
         entity_id,
         n_entities,
         &result.betas,
@@ -627,6 +651,14 @@ pub fn fit_panel_fe(
         conf_int_right,
         cov_beta,
         cond_no: result.cond_no,
+        omitted_indices,
+        wald_chi2: None,
+        prob_wald_chi2: None,
+        log_likelihood: None,
+        lr_chi2: None,
+        prob_lr_chi2: None,
+        chibar2: None,
+        prob_chibar2: None,
     })
 }
 
@@ -668,7 +700,7 @@ pub fn fit_panel_fe_time(
     }
 
     // After within transform, constant column becomes zero - drop if present
-    let (x_use, has_const) = if constant && k > 0 {
+    let (x_after_const, has_const) = if constant && k > 0 {
         let first_col = x_tilde.column(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
@@ -679,6 +711,19 @@ pub fn fit_panel_fe_time(
     } else {
         (x_tilde, constant)
     };
+
+    // Drop collinear columns (e.g. entity-invariant vars → zero in time FE)
+    let k_after_const = x_after_const.ncols();
+    let col_is_dummy = vec![false; k_after_const];
+    let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
+        None
+    } else {
+        Some(omitted_x.iter().map(|&j| j + 1).collect())
+    };
+    let kept_slope: Vec<usize> = (0..k_after_const)
+        .filter(|&j| !omitted_x.contains(&j))
+        .collect();
 
     // Time FE: cluster by time (residuals correlated within time period)
     let cov_params = cov_params.or_else(|| {
@@ -732,8 +777,11 @@ pub fn fit_panel_fe_time(
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { wald / df_model as f64 } else { 0.0 };
-        let dist = FisherSnedecor::new(df_model as f64, df_residual as f64).unwrap();
+        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let df1 = (df_model as f64).max(1.0);
+        let df2 = (df_residual as f64).max(1.0);
+        let dist = FisherSnedecor::new(df1, df2)
+            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -742,14 +790,16 @@ pub fn fit_panel_fe_time(
     let y_mean = endog.iter().sum::<f64>() / n as f64;
     let k_vars = result.betas.len();
     let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(c + 1).iter().sum::<f64>() / n as f64)
+        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
     let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
         + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
-    let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64).unwrap();
+    let t_df = (df_residual as f64).max(1.0);
+    let t_dist = StudentsT::new(0.0, 1.0, t_df)
+        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);
@@ -798,9 +848,13 @@ pub fn fit_panel_fe_time(
         cov_beta[[i + 1, 0]] = cov_const_beta_i;
     }
 
+    let kept_cols: Vec<usize> = std::iter::once(0)
+        .chain(kept_slope.iter().map(|&j| j + 1))
+        .collect();
+    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
     let fe_stats = compute_fe_stats_time(
         endog,
-        exog,
+        &exog_kept,
         time_id,
         n_times,
         &result.betas,
@@ -839,6 +893,14 @@ pub fn fit_panel_fe_time(
         conf_int_right,
         cov_beta,
         cond_no: result.cond_no,
+        omitted_indices,
+        wald_chi2: None,
+        prob_wald_chi2: None,
+        log_likelihood: None,
+        lr_chi2: None,
+        prob_lr_chi2: None,
+        chibar2: None,
+        prob_chibar2: None,
     })
 }
 
@@ -875,7 +937,7 @@ pub fn fit_panel_fe_twoway(
         }
     }
 
-    let (x_use, has_const) = if constant && k > 0 {
+    let (x_after_const, has_const) = if constant && k > 0 {
         let first_col = x_tilde.column(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
@@ -886,6 +948,19 @@ pub fn fit_panel_fe_twoway(
     } else {
         (x_tilde, constant)
     };
+
+    // Drop collinear columns (e.g. time-invariant or entity-invariant in two-way)
+    let k_after_const = x_after_const.ncols();
+    let col_is_dummy = vec![false; k_after_const];
+    let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
+        None
+    } else {
+        Some(omitted_x.iter().map(|&j| j + 1).collect())
+    };
+    let kept_slope: Vec<usize> = (0..k_after_const)
+        .filter(|&j| !omitted_x.contains(&j))
+        .collect();
 
     let cov_params = cov_params.or_else(|| {
         if cov_type == "cluster" {
@@ -937,8 +1012,11 @@ pub fn fit_panel_fe_twoway(
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { wald / df_model as f64 } else { 0.0 };
-        let dist = FisherSnedecor::new(df_model as f64, df_residual as f64).unwrap();
+        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let df1 = (df_model as f64).max(1.0);
+        let df2 = (df_residual as f64).max(1.0);
+        let dist = FisherSnedecor::new(df1, df2)
+            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -947,14 +1025,16 @@ pub fn fit_panel_fe_twoway(
     let y_mean = endog.iter().sum::<f64>() / n as f64;
     let k_vars = result.betas.len();
     let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(c + 1).iter().sum::<f64>() / n as f64)
+        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
     let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
         + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
-    let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64).unwrap();
+    let t_df = (df_residual as f64).max(1.0);
+    let t_dist = StudentsT::new(0.0, 1.0, t_df)
+        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);
@@ -1033,5 +1113,13 @@ pub fn fit_panel_fe_twoway(
         conf_int_right,
         cov_beta,
         cond_no: result.cond_no,
+        omitted_indices,
+        wald_chi2: None,
+        prob_wald_chi2: None,
+        log_likelihood: None,
+        lr_chi2: None,
+        prob_lr_chi2: None,
+        chibar2: None,
+        prob_chibar2: None,
     })
 }

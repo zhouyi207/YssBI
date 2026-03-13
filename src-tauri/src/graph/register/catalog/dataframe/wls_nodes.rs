@@ -11,12 +11,13 @@ use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue}
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
 use std::sync::Arc;
+use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData, VifEntry};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry};
 use std::time::Instant;
 use super::ols_nodes::{format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
@@ -378,6 +379,30 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let exog = Array2::from_shape_vec((n, k), exog_raw)
         .map_err(|e| format!("WLS: failed to build exog matrix: {}", e))?;
 
+    // ---- Drop strictly collinear columns (continuous > dummy > intercept) ----
+    let col_is_dummy: Vec<bool> = all_labels.iter().map(|(_, cat)| cat.is_some()).collect();
+    let intercept_col = if has_constant { Some(0) } else { None };
+    let (exog_use, omitted_indices) =
+        collinearity::drop_collinear_columns(&exog, &col_is_dummy, intercept_col)?;
+    let omit_info = if omitted_indices.is_empty() {
+        None
+    } else {
+        let omitted: Vec<OmittedVariable> = omitted_indices
+            .iter()
+            .filter_map(|&i| all_labels.get(i))
+            .map(|(var, cat)| OmittedVariable {
+                variable: var.clone(),
+                category: cat.clone(),
+                reason: "collinearity".to_string(),
+            })
+            .collect();
+        Some(OmitInfo { omitted })
+    };
+    let all_labels_use: Vec<(String, Option<String>)> = (0..k)
+        .filter(|i| !omitted_indices.contains(i))
+        .filter_map(|i| all_labels.get(i).cloned())
+        .collect();
+
     // ---- Run WLS regression ----
     let cov_params = config.cov_config.as_ref().map(|c| match c {
         OLSCovarianceConfig::FixedScale { scale } => CovParams::FixedScale {
@@ -401,7 +426,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     };
     let wls = WLS {
         endog: endog.clone(),
-        exog: exog.clone(),
+        exog: exog_use.clone(),
         weights: weights.clone(),
         config: sci_config,
     };
@@ -411,7 +436,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            exog.row(i)
+            exog_use.row(i)
                 .iter()
                 .zip(result.betas.iter())
                 .map(|(x, b)| x * b)
@@ -429,7 +454,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let num_coeff = result.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
     for i in 0..num_coeff {
-        let (var_name, category) = all_labels
+        let (var_name, category) = all_labels_use
             .get(i)
             .cloned()
             .unwrap_or_else(|| (format!("x{}", i), None));
@@ -458,8 +483,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             weights.clone()
         };
 
-        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs_weighted(&exog, &residuals_arr, &w_norm).ok();
-        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs_weighted(&exog, &residuals_arr, &w_norm).ok();
+        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs_weighted(&exog_use, &residuals_arr, &w_norm).ok();
+        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs_weighted(&exog_use, &residuals_arr, &w_norm).ok();
         let r_stata = diagnostics::breusch_pagan_stata_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
         let r_koenker = diagnostics::breusch_pagan_koenker_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
         let ms = t_bp.elapsed().as_millis() as u64;
@@ -486,8 +511,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         } else {
             Array1::from(weights.clone())
         };
-        let r_default = diagnostics::reset_test(&y_arr, &exog, &fitted_arr, Some(&w_norm)).ok();
-        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog, Some(&w_norm)).ok();
+        let r_default = diagnostics::reset_test(&y_arr, &exog_use, &fitted_arr, Some(&w_norm)).ok();
+        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog_use, Some(&w_norm)).ok();
         let ms = t_ov.elapsed().as_millis() as u64;
         (
             Some(OvTests {
@@ -509,7 +534,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         } else {
             weights.clone()
         };
-        let im = match diagnostics::im_test_weighted(&exog, &residuals_arr, &w_norm) {
+        let im = match diagnostics::im_test_weighted(&exog_use, &residuals_arr, &w_norm) {
             Ok(r) => Some(ImTest {
                 heteroskedasticity: ImTestComponent {
                     chi2: r.heteroskedasticity.chi2,
@@ -540,13 +565,13 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         (None, None)
     };
 
-    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
         let vif_entries: Vec<VifEntry> = entries
             .into_iter()
             .enumerate()
             .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
             .map(|(j, e)| {
-                let (var_name, _) = all_labels
+                let (var_name, _) = all_labels_use
                     .get(j)
                     .cloned()
                     .unwrap_or_else(|| (format!("x{}", j), None));
@@ -668,6 +693,11 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 prob_f_statistic: result.f_p_value,
                 wald_chi2: None,
                 prob_wald_chi2: None,
+                log_likelihood: None,
+                lr_chi2: None,
+                prob_lr_chi2: None,
+                chibar2: None,
+                prob_chibar2: None,
                 df_model: result.df_model,
                 df_residual: result.df_residual,
                 df_total: result.df_total,
@@ -692,9 +722,9 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             normality_tests,
             fitted_values,
             residuals,
-            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
+            leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter,
-            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
+            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -713,6 +743,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             classification_table: None,
             exog_means: None,
             panel_fe_info: None,
+            omit_info,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())
@@ -720,10 +751,16 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             .collect(),
     };
 
+    let kept_indices = if omitted_indices.is_empty() {
+        None
+    } else {
+        Some((0..k).filter(|i| !omitted_indices.contains(i)).collect())
+    };
     let ols_model = OLSModel {
         betas: result.betas.to_vec(),
         has_constant,
         variable_specs,
+        kept_indices,
     };
 
     Ok(WLSFitResult { ols_result, ols_model })

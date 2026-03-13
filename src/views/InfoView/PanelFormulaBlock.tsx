@@ -2,7 +2,7 @@ import React from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-type PanelMethod = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'fd' | 're';
+type PanelMethod = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be';
 type ModelType = 'fe' | 're';
 type EffectType = 'entity' | 'time' | 'twoway';
 
@@ -21,9 +21,9 @@ function renderInlineKatex(latex: string): string | null {
 // Part 1: Core formula (Model Type + Effect Type)
 const CORE_FORMULAS: Record<ModelType, Record<EffectType, string>> = {
   fe: {
-    entity: `y_{it} = \\beta X_{it} + \\alpha_i + u_{it}`,
-    time: `y_{it} = \\beta X_{it} + \\lambda_t + u_{it}`,
-    twoway: `y_{it} = \\beta X_{it} + \\alpha_i + \\lambda_t + u_{it}`,
+    entity: `y_{it} = X_{it}'\\beta + \\alpha_i + u_{it}`,
+    time: `y_{it} = X_{it}'\\beta + \\lambda_t + u_{it}`,
+    twoway: `y_{it} = X_{it}'\\beta + \\alpha_i + \\lambda_t + u_{it}`,
   },
   re: {
     entity: `y_{it} &= X_{it} \\beta + \\varepsilon_{it} \\\\
@@ -42,8 +42,11 @@ const METHOD_FORMULAS: Record<PanelMethod, string> = {
   fe_twoway: `\\tilde{y}_{it} = \\tilde{X}_{it}'\\beta + \\tilde{u}_{it},\\quad \\tilde{z}_{it} = z_{it} - \\bar{z}_i - \\bar{z}_t + \\bar{z}`,
   lsdv: `y_{it} = \\alpha + X_{it}'\\beta + \\sum_{i=2}^{n} \\gamma_i D_i + u_{it}`,
   lsdv_time: `y_{it} = \\alpha + X_{it}'\\beta + \\sum_{t=2}^{T} \\gamma_t D_t + u_{it}`,
+  lsdv_twoway: `y_{it} = \\alpha + X_{it}'\\beta + \\sum_{i=2}^{n} \\gamma_i D_i + \\sum_{t=2}^{T} \\lambda_t D_t + u_{it}`,
   fd: `\\Delta y_{it} = \\Delta X_{it}'\\beta + \\Delta u_{it},\\quad \\Delta z_{it} = z_{it} - z_{i,t-1}`,
-  re: `\\hat{\\beta} = (X'\\Omega^{-1} X)^{-1} X'\\Omega^{-1} y,\\quad \\Omega = \\sigma_u^2 I + \\sigma_\\alpha^2 (I_T \\otimes J_N)`,
+  re_fgls: `y_{it}^* = y_{it} - \\theta\\bar{y}_i,\\quad X_{it}^* = X_{it} - \\theta\\bar{X}_i,\\quad \\theta = 1 - \\sqrt{\\frac{\\sigma_e^2}{\\sigma_e^2 + T\\sigma_u^2}}`,
+  re_mle: `\\text{MLE: } \\hat{\\sigma}_e^2,\\hat{\\sigma}_u^2 \\text{ from within/between residuals, quasi-demean with } \\theta`,
+  re_be: `\\bar{y}_i = \\bar{X}_i'\\beta + \\bar{\\varepsilon}_i,\\quad \\text{regress entity means } \\bar{y}_i \\text{ on } \\bar{X}_i`,
 };
 
 const MAPPINGS_BASE = [
@@ -82,7 +85,6 @@ const MAPPINGS_RE = [
   ...MAPPINGS_BASE,
   { symbol: '\\varepsilon_{it}', variable: 'composite error' },
   { symbol: '\\alpha_i', variable: 'individual random effect' },
-  { symbol: 'u_{it}', variable: 'idiosyncratic error' },
 ];
 
 const MAPPINGS_OTHER = [
@@ -97,13 +99,23 @@ const MAPPINGS_LSDV_TIME = [
   { symbol: 'D_t', variable: 'dummy variable (1 if time t, 0 else)' },
 ];
 
+const MAPPINGS_LSDV_TWOWAY = [
+  ...MAPPINGS_BASE,
+  { symbol: '\\alpha', variable: 'intercept' },
+  { symbol: '\\gamma_i', variable: 'coefficient for entity i dummy' },
+  { symbol: 'D_i', variable: 'entity dummy (1 if entity i, 0 else)' },
+  { symbol: '\\lambda_t', variable: 'coefficient for time t dummy' },
+  { symbol: 'D_t', variable: 'time dummy (1 if time t, 0 else)' },
+];
+
 function getMappings(method: PanelMethod) {
   if (method === 'fe') return MAPPINGS_FE;
   if (method === 'fe_time') return MAPPINGS_FE_TIME;
   if (method === 'fe_twoway') return MAPPINGS_FE_TWOWAY;
-  if (method === 're') return MAPPINGS_RE;
+  if (method === 're_fgls' || method === 're_mle' || method === 're_be') return MAPPINGS_RE;
   if (method === 'lsdv') return MAPPINGS_LSDV;
   if (method === 'lsdv_time') return MAPPINGS_LSDV_TIME;
+  if (method === 'lsdv_twoway') return MAPPINGS_LSDV_TWOWAY;
   return MAPPINGS_OTHER;
 }
 
@@ -163,7 +175,7 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
             {mappings.map((m, idx) => {
               const symHtml = renderInlineKatex(m.symbol);
               return (
-                <tr key={m.symbol} className={`border-t border-gray-800/20 ${idx % 2 === 0 ? 'bg-[#15171d]/50' : ''}`}>
+                <tr key={`${m.symbol}-${idx}`} className={`border-t border-gray-800/20 ${idx % 2 === 0 ? 'bg-[#15171d]/50' : ''}`}>
                   <td className="px-3 py-1.5">
                     {symHtml ? (
                       <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />

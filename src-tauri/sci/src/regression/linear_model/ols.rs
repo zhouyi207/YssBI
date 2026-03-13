@@ -109,9 +109,13 @@ impl OLS {
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = 1.0 - ms_residual / ms_total;
 
-        let f = ms_model / ms_residual;
+        let f = (ms_model / ms_residual).max(0.0);
 
-        let dist = FisherSnedecor::new(df_model as f64, df_redidual as f64).unwrap();
+        // Fisher-Snedecor requires df1 > 0 and df2 > 0; guard against edge cases (e.g. constant-only, perfect fit)
+        let df1 = (df_model as f64).max(1.0);
+        let df2 = (df_redidual as f64).max(1.0);
+        let dist = FisherSnedecor::new(df1, df2)
+            .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
         let f_p_value = 1.0 - dist.cdf(f);
         
         // 残差
@@ -142,7 +146,9 @@ impl OLS {
             .map(|(b, se)| b / se)
             .collect();
 
-        let t_dist = StudentsT::new(f64::zero(), f64::one(), df_redidual as f64).unwrap();
+        let t_df = (df_redidual as f64).max(1.0);
+        let t_dist = StudentsT::new(f64::zero(), f64::one(), t_df)
+            .map_err(|e| format!("OLS t-distribution: df_residual={} {}", df_redidual, e))?;
         let p_values: Vec<f64> = t_values
             .iter()
             .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))

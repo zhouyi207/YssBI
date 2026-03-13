@@ -8,7 +8,7 @@ use crate::graph::pin::{
 };
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
-use ndarray::Array2;
+use ndarray::{Array2, Axis};
 use polars::prelude::Series;
 use statrs::distribution::{ContinuousCDF, Normal};
 use std::sync::Arc;
@@ -184,7 +184,12 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
     let exog = Array2::from_shape_vec((n, k), exog_raw)
         .map_err(|e| format!("Predict: failed to build exog matrix: {}", e))?;
 
-    let predicted: Vec<f64> = exog
+    let exog_for_pred = if let Some(ref indices) = model.kept_indices {
+        exog.select(Axis(1), indices)
+    } else {
+        exog.view().to_owned()
+    };
+    let predicted: Vec<f64> = exog_for_pred
         .rows()
         .into_iter()
         .map(|row| row.iter().zip(model.betas.iter()).map(|(x, b)| x * b).sum())

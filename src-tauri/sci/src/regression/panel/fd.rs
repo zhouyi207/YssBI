@@ -141,5 +141,13 @@ pub fn fit_panel_fd(
         conf_int_right: result.conf_int_right,
         cov_beta: result.cov_beta,
         cond_no: result.cond_no,
+        omitted_indices: None,
+        wald_chi2: None,
+        prob_wald_chi2: None,
+        log_likelihood: None,
+        lr_chi2: None,
+        prob_lr_chi2: None,
+        chibar2: None,
+        prob_chibar2: None,
     })
 }

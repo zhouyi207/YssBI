@@ -13,9 +13,10 @@ use polars::prelude::{Column, DataFrame};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use yss_sci::regression::panel::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_re};
+use yss_sci::regression::collinearity;
+use yss_sci::regression::panel::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_lsdv_twoway, fit_panel_re_be, fit_panel_re_fgls, fit_panel_re_mle};
 
-use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, PanelFEInfo};
+use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PanelFEInfo};
 
 // ======================== 结构体 ========================
 
@@ -55,9 +56,15 @@ pub struct PanelSummaryResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lsdv_time: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsdv_twoway: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fd: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub re: Option<OLSResult>,
+    pub re_fgls: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_be: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub errors: Option<PanelErrors>,
 }
@@ -75,9 +82,15 @@ pub struct PanelErrors {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lsdv_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsdv_twoway: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub re: Option<String>,
+    pub re_fgls: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_be: Option<String>,
 }
 
 // ======================== 辅助函数 ========================
@@ -442,6 +455,7 @@ fn panel_result_to_ols_result(
     all_labels: &[(String, Option<String>)],
     label_offset: usize,
     num_groups_override: Option<usize>,
+    omit_info: Option<&OmitInfo>,
 ) -> OLSResult {
     let panel_fe_info = pr.fe_stats.as_ref().map(|s| PanelFEInfo {
         r2_within: s.r2_within,
@@ -455,6 +469,8 @@ fn panel_result_to_ols_result(
         sigma_e: s.sigma_e,
         rho: s.rho,
         corr_u_i_Xb: s.corr_u_i_xb,
+        chibar2: pr.chibar2,
+        prob_chibar2: pr.prob_chibar2,
     });
     let num_coeff = pr.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
@@ -487,10 +503,17 @@ fn panel_result_to_ols_result(
             num_observation: pr.num_observation,
             r_squared: pr.r2,
             adj_r_squared: pr.r2_adjusted,
-            f_statistic: pr.fvalue,
-            prob_f_statistic: pr.f_p_value,
-            wald_chi2: None,
-            prob_wald_chi2: None,
+            f_statistic: pr.lr_chi2
+                .unwrap_or_else(|| pr.wald_chi2.unwrap_or(pr.fvalue)),
+            prob_f_statistic: pr.prob_lr_chi2
+                .unwrap_or_else(|| pr.prob_wald_chi2.unwrap_or(pr.f_p_value)),
+            wald_chi2: pr.wald_chi2,
+            prob_wald_chi2: pr.prob_wald_chi2,
+            log_likelihood: pr.log_likelihood,
+            lr_chi2: pr.lr_chi2,
+            prob_lr_chi2: pr.prob_lr_chi2,
+            chibar2: pr.chibar2,
+            prob_chibar2: pr.prob_chibar2,
             df_model: pr.df_model,
             df_residual: pr.df_residual,
             df_total: pr.df_total,
@@ -530,6 +553,7 @@ fn panel_result_to_ols_result(
             classification_table: None,
             exog_means: None,
             panel_fe_info,
+            omit_info: omit_info.cloned(),
         },
         betas: pr.betas.to_vec(),
         cov_beta: (0..pr.cov_beta.nrows())
@@ -675,6 +699,31 @@ pub fn register(registry: &NodeRegistry) {
         let (endog, exog, entity_id, time_id, time_values, all_labels, endog_name, _, entity_names, entity_series_name, time_names, time_series_name) =
             build_panel_data(ctx, constant)?;
 
+        // ---- Drop strictly collinear columns (prefer non-dummy) ----
+        let k = exog.ncols();
+        let col_is_dummy: Vec<bool> = all_labels.iter().map(|(_, cat)| cat.is_some()).collect();
+        let intercept_col = if constant { Some(0) } else { None };
+        let (exog_use, omitted_indices) =
+            collinearity::drop_collinear_columns(&exog, &col_is_dummy, intercept_col)?;
+        let omit_info = if omitted_indices.is_empty() {
+            None
+        } else {
+            let omitted: Vec<OmittedVariable> = omitted_indices
+                .iter()
+                .filter_map(|&i| all_labels.get(i))
+                .map(|(var, cat)| OmittedVariable {
+                    variable: var.clone(),
+                    category: cat.clone(),
+                    reason: "collinearity".to_string(),
+                })
+                .collect();
+            Some(OmitInfo { omitted })
+        };
+        let all_labels_use: Vec<(String, Option<String>)> = (0..k)
+            .filter(|i| !omitted_indices.contains(i))
+            .filter_map(|i| all_labels.get(i).cloned())
+            .collect();
+
         let cov_params: Option<yss_sci::regression::covariance::CovParams> = None;
 
         let mut fe_result = None;
@@ -682,148 +731,424 @@ pub fn register(registry: &NodeRegistry) {
         let mut fe_twoway_result = None;
         let mut lsdv_result = None;
         let mut lsdv_time_result = None;
+        let mut lsdv_twoway_result = None;
         let mut fd_result = None;
-        let mut re_result = None;
+        let mut re_fgls_result = None;
+        let mut re_mle_result = None;
+        let mut re_be_result = None;
         let mut errors = PanelErrors {
             fe: None,
             fe_time: None,
             fe_twoway: None,
             lsdv: None,
             lsdv_time: None,
+            lsdv_twoway: None,
             fd: None,
-            re: None,
+            re_fgls: None,
+            re_mle: None,
+            re_be: None,
         };
 
         // FE (Within): entity fixed effects
-        match fit_panel_fe(&endog, &exog, &entity_id, constant, cov_type, cov_params.clone()) {
+        match fit_panel_fe(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
+                let (kept_labels, fe_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..all_labels_use.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| all_labels_use.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| all_labels_use.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let fe_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &fe_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (all_labels_use.clone(), omit_info.clone()),
+                };
                 fe_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:FE",
                     "Fixed Effects (Within)",
                     &endog_name,
-                    &all_labels,
+                    &kept_labels,
                     0,
                     None,
+                    fe_omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.fe = Some(e),
         }
 
         // FE (Time): time fixed effects
-        match fit_panel_fe_time(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+        match fit_panel_fe_time(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
+                let (kept_labels, fe_time_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..all_labels_use.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| all_labels_use.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| all_labels_use.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let fe_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &fe_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (all_labels_use.clone(), omit_info.clone()),
+                };
                 fe_time_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:FE(Time)",
                     "Time Fixed Effects",
                     &endog_name,
-                    &all_labels,
+                    &kept_labels,
                     0,
                     Some(pr.num_time_periods),
+                    fe_time_omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.fe_time = Some(e),
         }
 
         // FE (Two-Way): entity + time fixed effects
-        match fit_panel_fe_twoway(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+        match fit_panel_fe_twoway(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
+                let (kept_labels, fe_twoway_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..all_labels_use.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| all_labels_use.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| all_labels_use.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let fe_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &fe_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (all_labels_use.clone(), omit_info.clone()),
+                };
                 fe_twoway_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:FE(Two-Way)",
                     "Two-Way Fixed Effects",
                     &endog_name,
-                    &all_labels,
+                    &kept_labels,
                     0,
                     None,
+                    fe_twoway_omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.fe_twoway = Some(e),
         }
 
-        // LSDV: full labels = [const, x1, x2, ..., entity_1, entity_2, ...] (entity 0 is reference)
-        match fit_panel_lsdv(&endog, &exog, &entity_id, constant, cov_type, cov_params.clone()) {
+        // LSDV (Two-Way): labels = [const, x1, x2, ..., entity_1, ..., entity_{n-1}, time_1, ..., time_{T-1}]
+        match fit_panel_lsdv_twoway(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
-                let mut lsdv_labels = all_labels.clone();
+                let mut lsdv_twoway_labels = all_labels_use.clone();
+                for i in 1..entity_names.len() {
+                    lsdv_twoway_labels.push((entity_series_name.clone(), Some(entity_names[i].clone())));
+                }
+                for i in 1..time_names.len() {
+                    lsdv_twoway_labels.push((time_series_name.clone(), Some(time_names[i].clone())));
+                }
+                let (kept_labels, lsdv_twoway_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..lsdv_twoway_labels.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| lsdv_twoway_labels.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| lsdv_twoway_labels.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let lsdv_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &lsdv_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (lsdv_twoway_labels.clone(), omit_info.clone()),
+                };
+                lsdv_twoway_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:LSDV(Two-Way)",
+                    "LSDV (Two-Way Dummies)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    None,
+                    lsdv_twoway_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.lsdv_twoway = Some(e),
+        }
+
+        // LSDV: full labels = [const, x1, x2, ..., entity_1, entity_2, ...] (entity 0 is reference)
+        match fit_panel_lsdv(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let mut lsdv_labels = all_labels_use.clone();
                 for i in 1..entity_names.len() {
                     lsdv_labels.push((entity_series_name.clone(), Some(entity_names[i].clone())));
                 }
+                let (kept_labels, lsdv_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..lsdv_labels.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| lsdv_labels.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| lsdv_labels.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let lsdv_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &lsdv_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (lsdv_labels.clone(), omit_info.clone()),
+                };
                 lsdv_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:LSDV",
                     "Least Squares Dummy Variables",
                     &endog_name,
-                    &lsdv_labels,
+                    &kept_labels,
                     0,
                     None,
+                    lsdv_omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.lsdv = Some(e),
         }
 
         // LSDV (Time): labels = [const, x1, x2, ..., time_1, time_2, ...] (time 0 is reference)
-        match fit_panel_lsdv_time(&endog, &exog, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+        match fit_panel_lsdv_time(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
-                let mut lsdv_time_labels = all_labels.clone();
+                let mut lsdv_time_labels = all_labels_use.clone();
                 for i in 1..time_names.len() {
                     lsdv_time_labels.push((time_series_name.clone(), Some(time_names[i].clone())));
                 }
+                let (kept_labels, lsdv_time_omit_info) = match &pr.omitted_indices {
+                    Some(omitted) if !omitted.is_empty() => {
+                        let kept: Vec<_> = (0..lsdv_time_labels.len())
+                            .filter(|i| !omitted.contains(i))
+                            .filter_map(|i| lsdv_time_labels.get(i).cloned())
+                            .collect();
+                        let omitted_vars: Vec<OmittedVariable> = omitted
+                            .iter()
+                            .filter_map(|&i| lsdv_time_labels.get(i))
+                            .map(|(var, cat)| OmittedVariable {
+                                variable: var.clone(),
+                                category: cat.clone(),
+                                reason: "collinearity".to_string(),
+                            })
+                            .collect();
+                        let lsdv_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let merged = match (omit_info.as_ref(), &lsdv_omit) {
+                            (Some(a), Some(b)) => Some(OmitInfo {
+                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                            }),
+                            (Some(a), None) => Some(a.clone()),
+                            (None, Some(b)) => Some(b.clone()),
+                            (None, None) => None,
+                        };
+                        (kept, merged)
+                    }
+                    _ => (lsdv_time_labels.clone(), omit_info.clone()),
+                };
                 lsdv_time_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:LSDV(Time)",
                     "LSDV (Time Dummies)",
                     &endog_name,
-                    &lsdv_time_labels,
+                    &kept_labels,
                     0,
                     None,
+                    lsdv_time_omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.lsdv_time = Some(e),
         }
 
-        match fit_panel_fd(&endog, &exog, &entity_id, &time_id, &time_values, constant, cov_type, cov_params.clone()) {
+        match fit_panel_fd(&endog, &exog_use, &entity_id, &time_id, &time_values, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
                 fd_result = Some(panel_result_to_ols_result(
                     &pr,
                     "Panel:FD",
                     "First Difference",
                     &endog_name,
-                    &all_labels,
+                    &all_labels_use,
                     1,
                     None,
+                    omit_info.as_ref(),
                 ));
             }
             Err(e) => errors.fd = Some(e),
         }
 
-        // RE may keep constant
-        match fit_panel_re(&endog, &exog, &entity_id, constant, cov_type, cov_params.clone()) {
+        // Helper to build kept_labels and merged omit_info from panel omitted_indices
+        let re_omit_handling = |pr: &yss_sci::regression::panel::PanelOLSResult| {
+            match &pr.omitted_indices {
+                Some(omitted) if !omitted.is_empty() => {
+                    let kept: Vec<_> = (0..all_labels_use.len())
+                        .filter(|i| !omitted.contains(i))
+                        .filter_map(|i| all_labels_use.get(i).cloned())
+                        .collect();
+                    let omitted_vars: Vec<OmittedVariable> = omitted
+                        .iter()
+                        .filter_map(|&i| all_labels_use.get(i))
+                        .map(|(var, cat)| OmittedVariable {
+                            variable: var.clone(),
+                            category: cat.clone(),
+                            reason: "collinearity".to_string(),
+                        })
+                        .collect();
+                    let re_omit = Some(OmitInfo { omitted: omitted_vars });
+                    let merged = match (omit_info.as_ref(), &re_omit) {
+                        (Some(a), Some(b)) => Some(OmitInfo {
+                            omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                        }),
+                        (Some(a), None) => Some(a.clone()),
+                        (None, Some(b)) => Some(b.clone()),
+                        (None, None) => None,
+                    };
+                    (kept, merged)
+                }
+                _ => (all_labels_use.clone(), omit_info.clone()),
+            }
+        };
+
+        // RE: FGLS (Swamy-Arora)
+        match fit_panel_re_fgls(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
             Ok(pr) => {
-                re_result = Some(panel_result_to_ols_result(
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_fgls_result = Some(panel_result_to_ols_result(
                     &pr,
-                    "Panel:RE",
-                    "Random Effects (GLS)",
+                    "Panel:RE(FGLS)",
+                    "Random Effects (FGLS)",
                     &endog_name,
-                    &all_labels,
+                    &kept_labels,
                     0,
                     None,
+                    re_omit_info.as_ref(),
                 ));
             }
-            Err(e) => errors.re = Some(e),
+            Err(e) => errors.re_fgls = Some(e),
+        }
+
+        // RE: MLE
+        match fit_panel_re_mle(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_mle_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(MLE)",
+                    "Random Effects (MLE)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    None,
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_mle = Some(e),
+        }
+
+        // RE: Between estimator
+        match fit_panel_re_be(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_be_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(BE)",
+                    "Random Effects (Between)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    None,
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_be = Some(e),
         }
 
         let has_any = fe_result.is_some() || fe_time_result.is_some() || fe_twoway_result.is_some()
-            || lsdv_result.is_some() || lsdv_time_result.is_some() || fd_result.is_some() || re_result.is_some();
+            || lsdv_result.is_some() || lsdv_time_result.is_some() || lsdv_twoway_result.is_some()
+            || fd_result.is_some() || re_fgls_result.is_some() || re_mle_result.is_some() || re_be_result.is_some();
         if !has_any {
             return Err(format!(
-                "Panel Summary: all models failed. FE: {:?}, FE(Time): {:?}, FE(Two-Way): {:?}, LSDV: {:?}, LSDV(Time): {:?}, FD: {:?}, RE: {:?}",
-                errors.fe, errors.fe_time, errors.fe_twoway, errors.lsdv, errors.lsdv_time, errors.fd, errors.re
+                "Panel Summary: all models failed. FE: {:?}, FE(Time): {:?}, FE(Two-Way): {:?}, LSDV: {:?}, LSDV(Time): {:?}, LSDV(Two-Way): {:?}, FD: {:?}, RE(FGLS): {:?}, RE(MLE): {:?}, RE(BE): {:?}",
+                errors.fe, errors.fe_time, errors.fe_twoway, errors.lsdv, errors.lsdv_time, errors.lsdv_twoway, errors.fd, errors.re_fgls, errors.re_mle, errors.re_be
             ));
         }
 
         let has_errors = errors.fe.is_some() || errors.fe_time.is_some() || errors.fe_twoway.is_some()
-            || errors.lsdv.is_some() || errors.lsdv_time.is_some() || errors.fd.is_some() || errors.re.is_some();
+            || errors.lsdv.is_some() || errors.lsdv_time.is_some() || errors.lsdv_twoway.is_some()
+            || errors.fd.is_some() || errors.re_fgls.is_some() || errors.re_mle.is_some() || errors.re_be.is_some();
 
         let summary = PanelSummaryResult {
             title: "Panel Regression Results".to_string(),
@@ -833,8 +1158,11 @@ pub fn register(registry: &NodeRegistry) {
             fe_twoway: fe_twoway_result,
             lsdv: lsdv_result,
             lsdv_time: lsdv_time_result,
+            lsdv_twoway: lsdv_twoway_result,
             fd: fd_result,
-            re: re_result,
+            re_fgls: re_fgls_result,
+            re_mle: re_mle_result,
+            re_be: re_be_result,
             errors: if has_errors { Some(errors) } else { None },
         };
 

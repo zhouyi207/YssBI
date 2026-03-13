@@ -7,8 +7,8 @@ mod re;
 
 pub use fe::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway};
 pub use fd::fit_panel_fd;
-pub use lsdv::{fit_panel_lsdv, fit_panel_lsdv_time};
-pub use re::fit_panel_re;
+pub use lsdv::{fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_lsdv_twoway};
+pub use re::{fit_panel_re, fit_panel_re_be, fit_panel_re_fgls, fit_panel_re_mle};
 
 use ndarray::{Array1, Array2};
 
@@ -62,4 +62,20 @@ pub struct PanelOLSResult {
     pub conf_int_right: Array1<f64>,
     pub cov_beta: Array2<f64>,
     pub cond_no: f64,
+    /// Column indices omitted due to collinearity (LSDV/LSDV-time full matrix). Used by caller to build omit_info.
+    pub omitted_indices: Option<Vec<usize>>,
+    /// Wald chi2 for RE FGLS (Stata xtreg, re). None for FE/BE/MLE.
+    pub wald_chi2: Option<f64>,
+    /// Prob > chi2 for Wald test. None for FE/BE/MLE.
+    pub prob_wald_chi2: Option<f64>,
+    /// Log likelihood (MLE only). None for FGLS/FE/BE.
+    pub log_likelihood: Option<f64>,
+    /// LR chi2 for MLE (Stata xtreg, mle). None for FGLS/FE/BE.
+    pub lr_chi2: Option<f64>,
+    /// Prob > chi2 for LR test. None for FGLS/FE/BE.
+    pub prob_lr_chi2: Option<f64>,
+    /// chibar2(01) for sigma_u=0 (MLE only). None for FGLS/FE/BE.
+    pub chibar2: Option<f64>,
+    /// Prob >= chibar2 for sigma_u=0 test. None for FGLS/FE/BE.
+    pub prob_chibar2: Option<f64>,
 }

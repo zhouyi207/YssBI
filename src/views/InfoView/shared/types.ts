@@ -11,6 +11,12 @@ export interface ModelBasicInfo {
   /** IV:2SLS uses Wald chi2 (asymptotic). When present, show Wald chi2 instead of F. */
   wald_chi2?: number;
   prob_wald_chi2?: number;
+  /** MLE: log likelihood, LR chi2, chibar2 for sigma_u=0 */
+  log_likelihood?: number;
+  lr_chi2?: number;
+  prob_lr_chi2?: number;
+  chibar2?: number;
+  prob_chibar2?: number;
   df_model: number;
   df_residual: number;
   df_total: number;
@@ -52,7 +58,7 @@ export interface RegressionResultData {
 /** OLS 专用别名，与后端 OLSResult 一致 */
 export type OLSResultData = RegressionResultData;
 
-/** Panel Summary 结果：FE(Within)、FE(Time)、FE(Two-Way)、LSDV、FD、RE */
+/** Panel Summary 结果：FE(Within)、FE(Time)、FE(Two-Way)、LSDV、FD、RE(FGLS/MLE/BE) */
 export interface PanelSummaryResult {
   title: string;
   endog_name: string;
@@ -61,16 +67,22 @@ export interface PanelSummaryResult {
   fe_twoway?: OLSResultData;
   lsdv?: OLSResultData;
   lsdv_time?: OLSResultData;
+  lsdv_twoway?: OLSResultData;
   fd?: OLSResultData;
-  re?: OLSResultData;
+  re_fgls?: OLSResultData;
+  re_mle?: OLSResultData;
+  re_be?: OLSResultData;
   errors?: {
     fe?: string;
     fe_time?: string;
     fe_twoway?: string;
     lsdv?: string;
     lsdv_time?: string;
+    lsdv_twoway?: string;
     fd?: string;
-    re?: string;
+    re_fgls?: string;
+    re_mle?: string;
+    re_be?: string;
   };
 }
 
@@ -186,6 +198,18 @@ export interface DiagnosticInfo {
   exog_means?: number[];
   /** Panel FE: Stata xtreg, fe style (R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr, obs per group) */
   panel_fe_info?: PanelFEInfo;
+  /** Variables omitted due to strict multicollinearity */
+  omit_info?: OmitInfo;
+}
+
+export interface OmitInfo {
+  omitted: OmittedVariable[];
+}
+
+export interface OmittedVariable {
+  variable: string;
+  category?: string;
+  reason: string;
 }
 
 /** Panel FE-specific stats (Stata xtreg, fe) */
@@ -201,6 +225,9 @@ export interface PanelFEInfo {
   sigma_e: number;
   rho: number;
   corr_u_i_Xb: number;
+  /** MLE: chibar2(01) for sigma_u=0 test */
+  chibar2?: number;
+  prob_chibar2?: number;
 }
 
 /** Classification table for binary choice models (Stata estat classification) */

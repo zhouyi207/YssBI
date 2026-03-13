@@ -14,13 +14,14 @@ use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{
     Prais, PraisConfig, PraisTransform,
 };
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, PraisInfo, VifEntry,
+    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PraisInfo, VifEntry,
 };
 use super::ols_nodes::VariableSpec;
 
@@ -290,6 +291,30 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let exog = Array2::from_shape_vec((n, k), exog_raw)
         .map_err(|e| format!("Prais: exog matrix: {}", e))?;
 
+    // ---- Drop strictly collinear columns (continuous > dummy > intercept) ----
+    let col_is_dummy: Vec<bool> = all_labels.iter().map(|(_, cat)| cat.is_some()).collect();
+    let intercept_col = if has_constant { Some(0) } else { None };
+    let (exog_use, omitted_indices) =
+        collinearity::drop_collinear_columns(&exog, &col_is_dummy, intercept_col)?;
+    let omit_info = if omitted_indices.is_empty() {
+        None
+    } else {
+        let omitted: Vec<OmittedVariable> = omitted_indices
+            .iter()
+            .filter_map(|&i| all_labels.get(i))
+            .map(|(var, cat)| OmittedVariable {
+                variable: var.clone(),
+                category: cat.clone(),
+                reason: "collinearity".to_string(),
+            })
+            .collect();
+        Some(OmitInfo { omitted })
+    };
+    let all_labels_use: Vec<(String, Option<String>)> = (0..k)
+        .filter(|i| !omitted_indices.contains(i))
+        .filter_map(|i| all_labels.get(i).cloned())
+        .collect();
+
     let sci_config = PraisConfig {
         constant: has_constant,
         transform,
@@ -299,13 +324,13 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     };
     let prais = Prais {
         endog: endog.clone(),
-        exog: exog.clone(),
+        exog: exog_use.clone(),
         config: sci_config,
     };
     let result = prais.fit()?;
 
     let fitted_values: Vec<f64> = (0..n)
-        .map(|i| exog.row(i).iter().zip(result.betas.iter()).map(|(x, b)| x * b).sum())
+        .map(|i| exog_use.row(i).iter().zip(result.betas.iter()).map(|(x, b)| x * b).sum())
         .collect();
     let residuals: Vec<f64> = endog
         .iter()
@@ -316,7 +341,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let num_coeff = result.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
     for i in 0..num_coeff {
-        let (var, cat) = all_labels.get(i).cloned().unwrap_or_else(|| (format!("x{}", i), None));
+        let (var, cat) = all_labels_use.get(i).cloned().unwrap_or_else(|| (format!("x{}", i), None));
         coefficients.push(Coefficient {
             variable: var,
             category: cat,
@@ -336,13 +361,13 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         result.ss_residual,
     );
 
-    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
         let vif_entries: Vec<VifEntry> = entries
             .into_iter()
             .enumerate()
             .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
             .map(|(j, e)| {
-                let (var_name, _) = all_labels
+                let (var_name, _) = all_labels_use
                     .get(j)
                     .cloned()
                     .unwrap_or_else(|| (format!("x{}", j), None));
@@ -378,6 +403,11 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             prob_f_statistic: result.f_p_value,
             wald_chi2: None,
             prob_wald_chi2: None,
+            log_likelihood: None,
+            lr_chi2: None,
+            prob_lr_chi2: None,
+            chibar2: None,
+            prob_chibar2: None,
             df_model: result.df_model,
             df_residual: result.df_residual,
             df_total: result.df_total,
@@ -401,9 +431,9 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             normality_tests: None,
             fitted_values: fitted_values.clone(),
             residuals: residuals.clone(),
-            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
+            leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter: None,
-            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
+            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
             timing: None,
             prais_info: Some(PraisInfo {
                 rho: result.rho,
@@ -423,6 +453,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             classification_table: None,
             exog_means: None,
             panel_fe_info: None,
+            omit_info,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())

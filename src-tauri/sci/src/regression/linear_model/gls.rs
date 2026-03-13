@@ -99,9 +99,12 @@ impl GLS {
         let r2_adjusted = 1.0 - ms_residual / ms_total;
         let f = ms_model / ms_residual;
 
-        let dist = FisherSnedecor::new(df_model as f64, df_residual as f64)
+        let f_safe = f.max(0.0);
+        let df1 = (df_model as f64).max(1.0);
+        let df2 = (df_residual as f64).max(1.0);
+        let dist = FisherSnedecor::new(df1, df2)
             .map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
-        let f_p_value = 1.0 - dist.cdf(f);
+        let f_p_value = 1.0 - dist.cdf(f_safe);
 
         let cov_beta = xtx_inv.as_ref().into_ndarray().to_owned();
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);

@@ -49,6 +49,19 @@ pub struct ModelBasicInfo {
     pub wald_chi2: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prob_wald_chi2: Option<f64>,
+    /// MLE: log likelihood (Stata xtreg, mle)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_likelihood: Option<f64>,
+    /// MLE: LR chi2 (Stata xtreg, mle)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lr_chi2: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prob_lr_chi2: Option<f64>,
+    /// MLE: chibar2(01) for sigma_u=0 test
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chibar2: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prob_chibar2: Option<f64>,
     pub df_model: usize,
     pub df_residual: usize,
     pub df_total: usize,
@@ -248,6 +261,23 @@ pub struct DiagnosticInfo {
     /// Panel FE: Stata xtreg, fe style (R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr, obs per group)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub panel_fe_info: Option<PanelFEInfo>,
+    /// Variables omitted due to strict multicollinearity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub omit_info: Option<OmitInfo>,
+}
+
+/// Variables omitted due to strict multicollinearity (Stata-style)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OmitInfo {
+    pub omitted: Vec<OmittedVariable>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OmittedVariable {
+    pub variable: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    pub reason: String,
 }
 
 /// Panel FE-specific stats (Stata xtreg, fe)
@@ -265,6 +295,11 @@ pub struct PanelFEInfo {
     pub sigma_e: f64,
     pub rho: f64,
     pub corr_u_i_Xb: f64,
+    /// MLE: chibar2(01) for sigma_u=0 (Stata xtreg, mle)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chibar2: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prob_chibar2: Option<f64>,
 }
 
 /// Compute classification table for binary choice (Stata estat classification)

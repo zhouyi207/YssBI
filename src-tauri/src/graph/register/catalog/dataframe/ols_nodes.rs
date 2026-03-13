@@ -11,12 +11,13 @@ use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{OLSConfig, OLS};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OvTest, OvTests, ResidualScatterData, VifEntry};
+use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry};
 use std::time::Instant;
 
 // ======================== 结构体 ========================
@@ -140,6 +141,9 @@ pub struct OLSModel {
     pub betas: Vec<f64>,
     pub has_constant: bool,
     pub variable_specs: Vec<VariableSpec>,
+    /// When Some, prediction uses only these column indices (after encoding). Used when variables omitted for collinearity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kept_indices: Option<Vec<usize>>,
 }
 
 /// OLS 回归拟合结果（内部 helper 返回值）
@@ -447,6 +451,33 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let exog = Array2::from_shape_vec((n, k), exog_raw)
         .map_err(|e| format!("OLS: failed to build exog matrix: {}", e))?;
 
+    // ---- Drop strictly collinear columns (prefer non-dummy) ----
+    let col_is_dummy: Vec<bool> = all_labels
+        .iter()
+        .map(|(_, cat)| cat.is_some())
+        .collect();
+    let intercept_col = if has_constant { Some(0) } else { None };
+    let (exog_use, omitted_indices) =
+        collinearity::drop_collinear_columns(&exog, &col_is_dummy, intercept_col)?;
+    let omit_info = if omitted_indices.is_empty() {
+        None
+    } else {
+        let omitted: Vec<OmittedVariable> = omitted_indices
+            .iter()
+            .filter_map(|&i| all_labels.get(i))
+            .map(|(var, cat)| OmittedVariable {
+                variable: var.clone(),
+                category: cat.clone(),
+                reason: "collinearity".to_string(),
+            })
+            .collect();
+        Some(OmitInfo { omitted })
+    };
+    let all_labels_use: Vec<(String, Option<String>)> = (0..k)
+        .filter(|i| !omitted_indices.contains(i))
+        .filter_map(|i| all_labels.get(i).cloned())
+        .collect();
+
     // ---- Run OLS regression ----
     let cov_params = config.cov_config.as_ref().map(|c| match c {
         OLSCovarianceConfig::FixedScale { scale } => yss_sci::regression::linear_model::CovParams::FixedScale {
@@ -472,7 +503,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     };
     let ols = OLS {
         endog: endog.clone(),
-        exog: exog.clone(),
+        exog: exog_use.clone(),
         config: sci_config,
     };
     let result = ols.fit()?;
@@ -481,7 +512,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            exog.row(i)
+            exog_use.row(i)
                 .iter()
                 .zip(result.betas.iter())
                 .map(|(x, b)| x * b)
@@ -499,7 +530,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let num_coeff = result.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
     for i in 0..num_coeff {
-        let (var_name, category) = all_labels
+        let (var_name, category) = all_labels_use
             .get(i)
             .cloned()
             .unwrap_or_else(|| (format!("x{}", i), None));
@@ -520,8 +551,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let t_bp = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
         let fitted_arr = Array1::from(fitted_values.clone());
-        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs(&exog, &residuals_arr).ok();
-        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs(&exog, &residuals_arr).ok();
+        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs(&exog_use, &residuals_arr).ok();
+        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs(&exog_use, &residuals_arr).ok();
         let r_stata = diagnostics::breusch_pagan_stata(&residuals_arr, &fitted_arr).ok();
         let r_koenker = diagnostics::breusch_pagan_koenker(&residuals_arr, &fitted_arr).ok();
         let ms = t_bp.elapsed().as_millis() as u64;
@@ -541,7 +572,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let (im_test, im_test_ms) = if has_constant {
         let t_im = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
-        let im = match diagnostics::im_test(&exog, &residuals_arr) {
+        let im = match diagnostics::im_test(&exog_use, &residuals_arr) {
             Ok(r) => {
                 Some(ImTest {
                     heteroskedasticity: ImTestComponent {
@@ -578,8 +609,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let t_ov = Instant::now();
         let y_arr = endog.clone();
         let fitted_arr = Array1::from(fitted_values.clone());
-        let r_default = diagnostics::reset_test(&y_arr, &exog, &fitted_arr, None).ok();
-        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog, None).ok();
+        let r_default = diagnostics::reset_test(&y_arr, &exog_use, &fitted_arr, None).ok();
+        let r_rhs = diagnostics::reset_test_rhs(&y_arr, &exog_use, None).ok();
         let ms = t_ov.elapsed().as_millis() as u64;
         (
             Some(OvTests {
@@ -616,13 +647,13 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         None
     };
 
-    let vif = diagnostics::vif_centered(&exog, has_constant).ok().and_then(|entries| {
+    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
         let vif_entries: Vec<VifEntry> = entries
             .into_iter()
             .enumerate()
             .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
             .map(|(j, e)| {
-                let (var_name, _) = all_labels
+                let (var_name, _) = all_labels_use
                     .get(j)
                     .cloned()
                     .unwrap_or_else(|| (format!("x{}", j), None));
@@ -713,9 +744,14 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 adj_r_squared: result.r2_adjusted,
                 f_statistic: result.fvalue,
                 prob_f_statistic: result.f_p_value,
-                wald_chi2: None,
-                prob_wald_chi2: None,
-                df_model: result.df_model,
+            wald_chi2: None,
+            prob_wald_chi2: None,
+            log_likelihood: None,
+            lr_chi2: None,
+            prob_lr_chi2: None,
+            chibar2: None,
+            prob_chibar2: None,
+            df_model: result.df_model,
                 df_residual: result.df_residual,
                 df_total: result.df_total,
                 ss_model: result.ss_model,
@@ -739,9 +775,9 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             normality_tests,
             fitted_values,
             residuals,
-            leverage: diagnostics::leverage(&exog).unwrap_or_default(),
+            leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter,
-            exog: Some((0..n).map(|i| exog.row(i).iter().cloned().collect()).collect()),
+            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -760,6 +796,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             classification_table: None,
             exog_means: None,
             panel_fe_info: None,
+            omit_info,
         },
         betas: result.betas.to_vec(),
         cov_beta: (0..result.cov_beta.nrows())
@@ -767,10 +804,16 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             .collect(),
     };
 
+    let kept_indices = if omitted_indices.is_empty() {
+        None
+    } else {
+        Some((0..k).filter(|i| !omitted_indices.contains(i)).collect())
+    };
     let ols_model = OLSModel {
         betas: result.betas.to_vec(),
         has_constant,
         variable_specs,
+        kept_indices,
     };
 
     Ok(OLSFitResult { ols_result, ols_model })
