@@ -218,6 +218,8 @@ pub fn fit_panel_lsdv(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }
 
@@ -419,6 +421,8 @@ pub fn fit_panel_lsdv_time(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }
 
@@ -626,5 +630,7 @@ pub fn fit_panel_lsdv_twoway(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }

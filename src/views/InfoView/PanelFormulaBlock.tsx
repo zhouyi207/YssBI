@@ -2,7 +2,7 @@ import React from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-type PanelMethod = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be';
+type PanelMethod = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
 type ModelType = 'fe' | 're';
 type EffectType = 'entity' | 'time' | 'twoway';
 
@@ -26,12 +26,12 @@ const CORE_FORMULAS: Record<ModelType, Record<EffectType, string>> = {
     twoway: `y_{it} = X_{it}'\\beta + \\alpha_i + \\lambda_t + u_{it}`,
   },
   re: {
-    entity: `y_{it} &= X_{it} \\beta + \\varepsilon_{it} \\\\
-    \\varepsilon_{it} &= \\alpha_i + u_{it}`,
-    time: `y_{it} &= X_{it} \\beta + \\varepsilon_{it} \\\\
-    \\varepsilon_{it} &= \\alpha_i + u_{it}`,
-    twoway: `y_{it} &= X_{it} \\beta + \\varepsilon_{it} \\\\
-    \\varepsilon_{it} &= \\alpha_i + u_{it}`,
+    entity: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
+    \\varepsilon_{it} = \\alpha_i + u_{it}`,
+    time: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
+    \\varepsilon_{it} = \\lambda_t + u_{it}`,
+    twoway: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
+    \\varepsilon_{it} = \\alpha_i + \\lambda_t + u_{it}`,
   },
 };
 
@@ -44,9 +44,14 @@ const METHOD_FORMULAS: Record<PanelMethod, string> = {
   lsdv_time: `y_{it} = \\alpha + X_{it}'\\beta + \\sum_{t=2}^{T} \\gamma_t D_t + u_{it}`,
   lsdv_twoway: `y_{it} = \\alpha + X_{it}'\\beta + \\sum_{i=2}^{n} \\gamma_i D_i + \\sum_{t=2}^{T} \\lambda_t D_t + u_{it}`,
   fd: `\\Delta y_{it} = \\Delta X_{it}'\\beta + \\Delta u_{it},\\quad \\Delta z_{it} = z_{it} - z_{i,t-1}`,
-  re_fgls: `y_{it}^* = y_{it} - \\theta\\bar{y}_i,\\quad X_{it}^* = X_{it} - \\theta\\bar{X}_i,\\quad \\theta = 1 - \\sqrt{\\frac{\\sigma_e^2}{\\sigma_e^2 + T\\sigma_u^2}}`,
-  re_mle: `\\text{MLE: } \\hat{\\sigma}_e^2,\\hat{\\sigma}_u^2 \\text{ from within/between residuals, quasi-demean with } \\theta`,
-  re_be: `\\bar{y}_i = \\bar{X}_i'\\beta + \\bar{\\varepsilon}_i,\\quad \\text{regress entity means } \\bar{y}_i \\text{ on } \\bar{X}_i`,
+  re_fgls: `y_{it}^* = y_{it} - \\theta_i \\bar{y}_i,\\quad X_{it}^* = X_{it} - \\theta_i \\bar{X}_i,\\quad \\theta_i = 1 - \\sqrt{\\frac{\\sigma_e^2}{T_i\\sigma_u^2 + \\sigma_e^2}}`,
+  re_mle: `y_{it}^* = y_{it} - \\theta_i \\bar{y}_i,\\quad X_{it}^* = X_{it} - \\theta_i \\bar{X}_i,\\quad \\theta_i = 1 - \\sqrt{\\frac{\\sigma_e^2}{T_i\\sigma_u^2 + \\sigma_e^2}}`,
+  re_be: `\\bar{y}_i = \\bar{X}_i'\\beta + \\bar{\\varepsilon}_i,\\quad \\hat{\\beta} = (\\bar{X}'\\bar{X})^{-1}\\bar{X}'\\bar{y}`,
+  re_fgls_time: `y_{it}^* = y_{it} - \\theta_t \\bar{y}_t,\\quad X_{it}^* = X_{it} - \\theta_t \\bar{X}_t,\\quad \\theta_t = 1 - \\sqrt{\\frac{\\sigma_e^2}{N_t\\sigma_u^2 + \\sigma_e^2}}`,
+  re_mle_time: `y_{it}^* = y_{it} - \\theta_t \\bar{y}_t,\\quad X_{it}^* = X_{it} - \\theta_t \\bar{X}_t,\\quad \\theta_t = 1 - \\sqrt{\\frac{\\sigma_e^2}{N_t\\sigma_u^2 + \\sigma_e^2}}`,
+  re_be_time: `\\bar{y}_t = \\bar{X}_t'\\beta + \\bar{\\varepsilon}_t,\\quad \\hat{\\beta} = (\\bar{X}'\\bar{X})^{-1}\\bar{X}'\\bar{y}`,
+  re_fgls_twoway: `y_{it}^* = y_{it} - \\theta_i \\bar{y}_i - \\theta_t \\bar{y}_t + \\theta_{it}\\bar{y},\\quad \\varepsilon_{it} = \\alpha_i + \\lambda_t + u_{it}`,
+  re_mle_twoway: `y_{it}^* = y_{it} - \\theta_i \\bar{y}_i - \\theta_t \\bar{y}_t + \\theta_{it}\\bar{y},\\quad \\varepsilon_{it} = \\alpha_i + \\lambda_t + u_{it}`,
 };
 
 const MAPPINGS_BASE = [
@@ -85,6 +90,11 @@ const MAPPINGS_RE = [
   ...MAPPINGS_BASE,
   { symbol: '\\varepsilon_{it}', variable: 'composite error' },
   { symbol: '\\alpha_i', variable: 'individual random effect' },
+  { symbol: '\\theta_i', variable: 'quasi-demeaning weight' },
+  { symbol: '\\sigma_u^2,\\sigma_e^2', variable: 'variance components' },
+  { symbol: '\\ell', variable: 'log-likelihood' },
+  { symbol: 'SSR_w,SSR_b', variable: 'within/between sum of squared residuals' },
+  { symbol: '\\bar{T}', variable: 'harmonic mean of T_i' },
 ];
 
 const MAPPINGS_OTHER = [
@@ -112,7 +122,7 @@ function getMappings(method: PanelMethod) {
   if (method === 'fe') return MAPPINGS_FE;
   if (method === 'fe_time') return MAPPINGS_FE_TIME;
   if (method === 'fe_twoway') return MAPPINGS_FE_TWOWAY;
-  if (method === 're_fgls' || method === 're_mle' || method === 're_be') return MAPPINGS_RE;
+  if (method === 're_fgls' || method === 're_mle' || method === 're_be' || method === 're_fgls_time' || method === 're_mle_time' || method === 're_be_time' || method === 're_fgls_twoway' || method === 're_mle_twoway') return MAPPINGS_RE;
   if (method === 'lsdv') return MAPPINGS_LSDV;
   if (method === 'lsdv_time') return MAPPINGS_LSDV_TIME;
   if (method === 'lsdv_twoway') return MAPPINGS_LSDV_TWOWAY;
@@ -129,8 +139,14 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
   const coreLatex = CORE_FORMULAS[modelType][effectType];
   const methodLatex = METHOD_FORMULAS[method] ?? METHOD_FORMULAS.fe;
 
-  const coreHtml = renderKatex(`\\begin{aligned} ${coreLatex} \\end{aligned}`);
-  const methodHtml = renderKatex(`\\begin{aligned} ${methodLatex} \\end{aligned}`);
+  const coreMultiline = coreLatex.includes('\\\\');
+  const methodMultiline = methodLatex.includes('\\\\');
+  const coreHtml = renderKatex(
+    coreMultiline ? `\\begin{gathered} ${coreLatex} \\end{gathered}` : coreLatex
+  );
+  const methodHtml = renderKatex(
+    methodMultiline ? `\\begin{gathered} ${methodLatex} \\end{gathered}` : methodLatex
+  );
   const mappings = getMappings(method);
 
   if (!coreHtml || !methodHtml) return null;

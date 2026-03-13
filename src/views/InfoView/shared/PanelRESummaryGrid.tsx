@@ -29,13 +29,15 @@ export function PanelRESummaryGrid({
         <InfoRow label="Number of groups">{panelFe.num_groups}</InfoRow>
       </div>
 
-      {/* R-squared: Within, Between, Overall */}
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
-        <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
-      </div>
+      {/* R-squared: Within, Between, Overall (FGLS only; MLE does not report these) */}
+      {panelFe.r2_within != null && panelFe.r2_between != null && panelFe.r2_overall != null && (
+        <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+          <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
+          <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
+          <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
+          <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
+        </div>
+      )}
 
       {/* Obs per group */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
@@ -60,6 +62,13 @@ export function PanelRESummaryGrid({
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-gray-500 text-xs">corr(u_i, X) = 0 (assumed)</span>
         </div>
+        {isMle && (
+          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
+            <span className="text-gray-500 text-xs">
+              u_i ~ N(0, σ²_u), ε_it ~ N(0, σ²_e)
+            </span>
+          </div>
+        )}
         {isCluster && (
           <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
             <span className="text-gray-500 text-xs">

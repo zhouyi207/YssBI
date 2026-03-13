@@ -5,6 +5,7 @@ import {
   PanelFESummaryGrid,
   PanelBESummaryGrid,
   PanelRESummaryGrid,
+  PanelMLEIterationBlock,
   CoefficientTable,
   CoeffBarChart,
   HypothesisTestBlock,
@@ -13,7 +14,7 @@ import type { PanelSummaryResult, OLSResultData } from './shared/types';
 
 const PanelFormulaBlock = React.lazy(() => import('./PanelFormulaBlock'));
 
-type TabKey = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be';
+type TabKey = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
 
 type ModelType = 'fe' | 're'; // 固定效应 | 随机效应
 type EffectType = 'entity' | 'time' | 'twoway'; // 个体 | 时间 | 双向
@@ -53,14 +54,13 @@ const METHOD_MAP: Record<ModelType, Record<EffectType, { key: TabKey; label: str
       { key: 're_be', label: 'BE' },
     ],
     time: [
-      { key: 're_fgls', label: 'FGLS' },
-      { key: 're_mle', label: 'MLE' },
-      { key: 're_be', label: 'BE' },
+      { key: 're_fgls_time', label: 'FGLS' },
+      { key: 're_mle_time', label: 'MLE' },
+      { key: 're_be_time', label: 'BE' },
     ],
     twoway: [
-      { key: 're_fgls', label: 'FGLS' },
-      { key: 're_mle', label: 'MLE' },
-      { key: 're_be', label: 'BE' },
+      { key: 're_fgls_twoway', label: 'FGLS' },
+      { key: 're_mle_twoway', label: 'MLE' },
     ],
   },
 };
@@ -73,7 +73,14 @@ function getDefaultSelections(data: PanelSummaryResult): { model: ModelType; eff
   if (data.lsdv_time) return { model: 'fe', effect: 'time', method: 'lsdv_time' };
   if (data.fe_twoway) return { model: 'fe', effect: 'twoway', method: 'fe_twoway' };
   if (data.lsdv_twoway) return { model: 'fe', effect: 'twoway', method: 'lsdv_twoway' };
-  if (data.re) return { model: 're', effect: 'entity', method: 're' };
+  if (data.re_fgls) return { model: 're', effect: 'entity', method: 're_fgls' };
+  if (data.re_mle) return { model: 're', effect: 'entity', method: 're_mle' };
+  if (data.re_be) return { model: 're', effect: 'entity', method: 're_be' };
+  if (data.re_fgls_time) return { model: 're', effect: 'time', method: 're_fgls_time' };
+  if (data.re_mle_time) return { model: 're', effect: 'time', method: 're_mle_time' };
+  if (data.re_be_time) return { model: 're', effect: 'time', method: 're_be_time' };
+  if (data.re_fgls_twoway) return { model: 're', effect: 'twoway', method: 're_fgls_twoway' };
+  if (data.re_mle_twoway) return { model: 're', effect: 'twoway', method: 're_mle_twoway' };
   return { model: 'fe', effect: 'entity', method: 'fe' };
 }
 
@@ -117,8 +124,18 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
         return data.re_mle;
       case 're_be':
         return data.re_be;
+      case 're_fgls_time':
+        return data.re_fgls_time;
+      case 're_mle_time':
+        return data.re_mle_time;
+      case 're_be_time':
+        return data.re_be_time;
+      case 're_fgls_twoway':
+        return data.re_fgls_twoway;
+      case 're_mle_twoway':
+        return data.re_mle_twoway;
       default:
-        return data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.lsdv_twoway ?? data.fd ?? data.re_fgls ?? data.re_mle ?? data.re_be;
+        return data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.lsdv_twoway ?? data.fd ?? data.re_fgls ?? data.re_mle ?? data.re_be ?? data.re_fgls_time ?? data.re_mle_time ?? data.re_be_time ?? data.re_fgls_twoway ?? data.re_mle_twoway;
     }
   }, [currentMethod, data]);
 
@@ -138,7 +155,8 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
 
   const handleModelChange = (m: ModelType) => {
     setModelType(m);
-    const newEffect: EffectType = m === 're' && effectType !== 'entity' ? 'entity' : effectType;
+    // RE supports entity, time, twoway; keep current effect if valid
+    const newEffect: EffectType = effectType;
     setEffectType(newEffect);
     const first = METHOD_MAP[m][newEffect][0];
     if (first) setActiveMethod(first.key);
@@ -191,7 +209,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             </div>
             <div className="flex flex-wrap gap-2 justify-end">
               {EFFECT_TYPE_TABS.map(({ key, label }) => {
-                const disabled = modelType === 're' && (key === 'time' || key === 'twoway');
+                const disabled = false;
                 return (
                   <button
                     key={key}
@@ -298,16 +316,17 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
               </svg>
             }
           />
-          {(currentMethod === 're_fgls' || currentMethod === 're_mle') &&
+          {(currentMethod === 're_fgls' || currentMethod === 're_mle' || currentMethod === 're_fgls_time' || currentMethod === 're_mle_time' || currentMethod === 're_fgls_twoway' || currentMethod === 're_mle_twoway') &&
           currentData?.diagnostic_info?.panel_fe_info ? (
             <PanelRESummaryGrid
               info={currentData.model_basic_info}
               panelFe={currentData.diagnostic_info.panel_fe_info}
             />
-          ) : currentMethod === 're_be' && currentData?.diagnostic_info?.panel_fe_info ? (
+          ) : (currentMethod === 're_be' || currentMethod === 're_be_time') && currentData?.diagnostic_info?.panel_fe_info ? (
             <PanelBESummaryGrid
               info={currentData.model_basic_info}
               panelFe={currentData.diagnostic_info.panel_fe_info}
+              effectType={currentMethod === 're_be_time' ? 'time' : 'entity'}
             />
           ) : (currentMethod === 'fe' || currentMethod === 'fe_time') &&
             currentData?.diagnostic_info?.panel_fe_info ? (
@@ -397,6 +416,28 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             }
           />
           <CoeffBarChart coefficients={currentData.coefficients} />
+
+          {/* MLE: iteration log (separate module at bottom) */}
+          {(currentMethod === 're_mle' || currentMethod === 're_mle_time' || currentMethod === 're_mle_twoway') &&
+            (currentData.model_basic_info?.mle_iter_log_lik_const != null ||
+              currentData.model_basic_info?.mle_iter_log_lik != null) && (
+              <>
+                <SectionHeader
+                  title="MLE Iteration Log"
+                  icon={
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2V9a2 2 0 00-2-2z"
+                      />
+                    </svg>
+                  }
+                />
+                <PanelMLEIterationBlock info={currentData.model_basic_info} />
+              </>
+            )}
         </>
       )}
     </div>

@@ -14,7 +14,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
-use yss_sci::regression::panel::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_lsdv_twoway, fit_panel_re_be, fit_panel_re_fgls, fit_panel_re_mle};
+use yss_sci::regression::panel::{
+    fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv,
+    fit_panel_lsdv_time, fit_panel_lsdv_twoway,     fit_panel_re_be, fit_panel_re_be_time, fit_panel_re_fgls, fit_panel_re_fgls_time, fit_panel_re_fgls_twoway,
+    fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
+};
 
 use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PanelFEInfo};
 
@@ -66,6 +70,16 @@ pub struct PanelSummaryResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub re_be: Option<OLSResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_fgls_time: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle_time: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_be_time: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_fgls_twoway: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle_twoway: Option<OLSResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub errors: Option<PanelErrors>,
 }
 
@@ -91,6 +105,16 @@ pub struct PanelErrors {
     pub re_mle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub re_be: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_fgls_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_be_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_fgls_twoway: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub re_mle_twoway: Option<String>,
 }
 
 // ======================== 辅助函数 ========================
@@ -457,20 +481,23 @@ fn panel_result_to_ols_result(
     num_groups_override: Option<usize>,
     omit_info: Option<&OmitInfo>,
 ) -> OLSResult {
-    let panel_fe_info = pr.fe_stats.as_ref().map(|s| PanelFEInfo {
-        r2_within: s.r2_within,
-        r2_between: s.r2_between,
-        r2_overall: s.r2_overall,
-        num_groups: num_groups_override.unwrap_or(pr.num_entities),
-        obs_per_group_min: s.obs_per_group_min,
-        obs_per_group_avg: s.obs_per_group_avg,
-        obs_per_group_max: s.obs_per_group_max,
-        sigma_u: s.sigma_u,
-        sigma_e: s.sigma_e,
-        rho: s.rho,
-        corr_u_i_Xb: s.corr_u_i_xb,
-        chibar2: pr.chibar2,
-        prob_chibar2: pr.prob_chibar2,
+    let panel_fe_info = pr.fe_stats.as_ref().map(|s| {
+        let r2 = s.r2.as_ref();
+        PanelFEInfo {
+            r2_within: r2.map(|r| r.r2_within),
+            r2_between: r2.map(|r| r.r2_between),
+            r2_overall: r2.map(|r| r.r2_overall),
+            num_groups: num_groups_override.unwrap_or(pr.num_entities),
+            obs_per_group_min: s.obs_per_group_min,
+            obs_per_group_avg: s.obs_per_group_avg,
+            obs_per_group_max: s.obs_per_group_max,
+            sigma_u: s.sigma_u,
+            sigma_e: s.sigma_e,
+            rho: s.rho,
+            corr_u_i_Xb: s.corr_u_i_xb,
+            chibar2: pr.chibar2,
+            prob_chibar2: pr.prob_chibar2,
+        }
     });
     let num_coeff = pr.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
@@ -514,6 +541,8 @@ fn panel_result_to_ols_result(
             prob_lr_chi2: pr.prob_lr_chi2,
             chibar2: pr.chibar2,
             prob_chibar2: pr.prob_chibar2,
+            mle_iter_log_lik_const: pr.mle_iter_log_lik_const.clone(),
+            mle_iter_log_lik: pr.mle_iter_log_lik.clone(),
             df_model: pr.df_model,
             df_residual: pr.df_residual,
             df_total: pr.df_total,
@@ -736,6 +765,11 @@ pub fn register(registry: &NodeRegistry) {
         let mut re_fgls_result = None;
         let mut re_mle_result = None;
         let mut re_be_result = None;
+        let mut re_fgls_time_result = None;
+        let mut re_mle_time_result = None;
+        let mut re_be_time_result = None;
+        let mut re_fgls_twoway_result = None;
+        let mut re_mle_twoway_result = None;
         let mut errors = PanelErrors {
             fe: None,
             fe_time: None,
@@ -747,6 +781,11 @@ pub fn register(registry: &NodeRegistry) {
             re_fgls: None,
             re_mle: None,
             re_be: None,
+            re_fgls_time: None,
+            re_mle_time: None,
+            re_be_time: None,
+            re_fgls_twoway: None,
+            re_mle_twoway: None,
         };
 
         // FE (Within): entity fixed effects
@@ -1101,7 +1140,7 @@ pub fn register(registry: &NodeRegistry) {
         }
 
         // RE: MLE
-        match fit_panel_re_mle(&endog, &exog_use, &entity_id, constant, cov_type, cov_params.clone()) {
+        match fit_panel_re_mle(&endog, &exog_use, &entity_id, constant) {
             Ok(pr) => {
                 let (kept_labels, re_omit_info) = re_omit_handling(&pr);
                 re_mle_result = Some(panel_result_to_ols_result(
@@ -1136,19 +1175,110 @@ pub fn register(registry: &NodeRegistry) {
             Err(e) => errors.re_be = Some(e),
         }
 
+        // RE (Time): FGLS
+        match fit_panel_re_fgls_time(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_fgls_time_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(Time,FGLS)",
+                    "Time Random Effects (FGLS)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    Some(pr.num_time_periods),
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_fgls_time = Some(e),
+        }
+
+        // RE (Time): MLE
+        match fit_panel_re_mle_time(&endog, &exog_use, &entity_id, &time_id, constant) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_mle_time_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(Time,MLE)",
+                    "Time Random Effects (MLE)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    Some(pr.num_time_periods),
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_mle_time = Some(e),
+        }
+
+        // RE (Time): Between
+        match fit_panel_re_be_time(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_be_time_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(Time,BE)",
+                    "Time Random Effects (Between)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    Some(pr.num_time_periods),
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_be_time = Some(e),
+        }
+
+        // RE (Two-Way): FGLS, MLE, BE (stubs - not yet implemented)
+        match fit_panel_re_fgls_twoway(&endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params.clone()) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_fgls_twoway_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(Two-Way,FGLS)",
+                    "Two-Way Random Effects (FGLS)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    None,
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_fgls_twoway = Some(e),
+        }
+        match fit_panel_re_mle_twoway(&endog, &exog_use, &entity_id, &time_id, constant) {
+            Ok(pr) => {
+                let (kept_labels, re_omit_info) = re_omit_handling(&pr);
+                re_mle_twoway_result = Some(panel_result_to_ols_result(
+                    &pr,
+                    "Panel:RE(Two-Way,MLE)",
+                    "Two-Way Random Effects (MLE)",
+                    &endog_name,
+                    &kept_labels,
+                    0,
+                    None,
+                    re_omit_info.as_ref(),
+                ));
+            }
+            Err(e) => errors.re_mle_twoway = Some(e),
+        }
         let has_any = fe_result.is_some() || fe_time_result.is_some() || fe_twoway_result.is_some()
             || lsdv_result.is_some() || lsdv_time_result.is_some() || lsdv_twoway_result.is_some()
-            || fd_result.is_some() || re_fgls_result.is_some() || re_mle_result.is_some() || re_be_result.is_some();
+            || fd_result.is_some() || re_fgls_result.is_some() || re_mle_result.is_some() || re_be_result.is_some()
+            || re_fgls_time_result.is_some() || re_mle_time_result.is_some() || re_be_time_result.is_some()
+            || re_fgls_twoway_result.is_some() || re_mle_twoway_result.is_some();
         if !has_any {
             return Err(format!(
-                "Panel Summary: all models failed. FE: {:?}, FE(Time): {:?}, FE(Two-Way): {:?}, LSDV: {:?}, LSDV(Time): {:?}, LSDV(Two-Way): {:?}, FD: {:?}, RE(FGLS): {:?}, RE(MLE): {:?}, RE(BE): {:?}",
-                errors.fe, errors.fe_time, errors.fe_twoway, errors.lsdv, errors.lsdv_time, errors.lsdv_twoway, errors.fd, errors.re_fgls, errors.re_mle, errors.re_be
+                "Panel Summary: all models failed. FE: {:?}, FE(Time): {:?}, FE(Two-Way): {:?}, LSDV: {:?}, LSDV(Time): {:?}, LSDV(Two-Way): {:?}, FD: {:?}, RE(FGLS): {:?}, RE(MLE): {:?}, RE(BE): {:?}, RE(Time,FGLS): {:?}, RE(Time,MLE): {:?}, RE(Time,BE): {:?}, RE(Two-Way,FGLS): {:?}, RE(Two-Way,MLE): {:?}",
+                errors.fe, errors.fe_time, errors.fe_twoway, errors.lsdv, errors.lsdv_time, errors.lsdv_twoway, errors.fd, errors.re_fgls, errors.re_mle, errors.re_be, errors.re_fgls_time, errors.re_mle_time, errors.re_be_time, errors.re_fgls_twoway, errors.re_mle_twoway
             ));
         }
 
         let has_errors = errors.fe.is_some() || errors.fe_time.is_some() || errors.fe_twoway.is_some()
             || errors.lsdv.is_some() || errors.lsdv_time.is_some() || errors.lsdv_twoway.is_some()
-            || errors.fd.is_some() || errors.re_fgls.is_some() || errors.re_mle.is_some() || errors.re_be.is_some();
+            || errors.fd.is_some() || errors.re_fgls.is_some() || errors.re_mle.is_some() || errors.re_be.is_some()
+            || errors.re_fgls_time.is_some() || errors.re_mle_time.is_some() || errors.re_be_time.is_some()
+            || errors.re_fgls_twoway.is_some() || errors.re_mle_twoway.is_some();
 
         let summary = PanelSummaryResult {
             title: "Panel Regression Results".to_string(),
@@ -1163,6 +1293,11 @@ pub fn register(registry: &NodeRegistry) {
             re_fgls: re_fgls_result,
             re_mle: re_mle_result,
             re_be: re_be_result,
+            re_fgls_time: re_fgls_time_result,
+            re_mle_time: re_mle_time_result,
+            re_be_time: re_be_time_result,
+            re_fgls_twoway: re_fgls_twoway_result,
+            re_mle_twoway: re_mle_twoway_result,
             errors: if has_errors { Some(errors) } else { None },
         };
 

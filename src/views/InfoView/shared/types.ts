@@ -17,6 +17,10 @@ export interface ModelBasicInfo {
   prob_lr_chi2?: number;
   chibar2?: number;
   prob_chibar2?: number;
+  /** MLE: constant-only model iterations (Stata "Fitting constant-only model") */
+  mle_iter_log_lik_const?: number[];
+  /** MLE: full model iterations (Stata "Fitting full model") */
+  mle_iter_log_lik?: number[];
   df_model: number;
   df_residual: number;
   df_total: number;
@@ -72,6 +76,11 @@ export interface PanelSummaryResult {
   re_fgls?: OLSResultData;
   re_mle?: OLSResultData;
   re_be?: OLSResultData;
+  re_fgls_time?: OLSResultData;
+  re_mle_time?: OLSResultData;
+  re_be_time?: OLSResultData;
+  re_fgls_twoway?: OLSResultData;
+  re_mle_twoway?: OLSResultData;
   errors?: {
     fe?: string;
     fe_time?: string;
@@ -83,6 +92,11 @@ export interface PanelSummaryResult {
     re_fgls?: string;
     re_mle?: string;
     re_be?: string;
+    re_fgls_time?: string;
+    re_mle_time?: string;
+    re_be_time?: string;
+    re_fgls_twoway?: string;
+    re_mle_twoway?: string;
   };
 }
 
@@ -214,9 +228,10 @@ export interface OmittedVariable {
 
 /** Panel FE-specific stats (Stata xtreg, fe) */
 export interface PanelFEInfo {
-  r2_within: number;
-  r2_between: number;
-  r2_overall: number;
+  /** R² Within/Between/Overall. undefined for MLE. */
+  r2_within?: number;
+  r2_between?: number;
+  r2_overall?: number;
   num_groups: number;
   obs_per_group_min: number;
   obs_per_group_avg: number;

@@ -149,5 +149,7 @@ pub fn fit_panel_fd(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }

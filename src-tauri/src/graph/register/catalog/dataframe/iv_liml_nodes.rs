@@ -411,6 +411,8 @@ fn run_iv_liml_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             prob_lr_chi2: None,
             chibar2: None,
             prob_chibar2: None,
+            mle_iter_log_lik_const: None,
+            mle_iter_log_lik: None,
             df_model: result.df_model,
             df_residual: result.df_residual,
             df_total: result.df_total,

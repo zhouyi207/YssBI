@@ -163,9 +163,7 @@ fn compute_fe_stats(
     };
 
     Ok(super::PanelFEStats {
-        r2_within,
-        r2_between,
-        r2_overall,
+        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
         obs_per_group_min: obs_min,
         obs_per_group_avg: obs_avg,
         obs_per_group_max: obs_max,
@@ -326,9 +324,7 @@ fn compute_fe_stats_time(
     };
 
     Ok(super::PanelFEStats {
-        r2_within,
-        r2_between,
-        r2_overall,
+        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
         obs_per_group_min: obs_min,
         obs_per_group_avg: obs_avg,
         obs_per_group_max: obs_max,
@@ -659,6 +655,8 @@ pub fn fit_panel_fe(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }
 
@@ -901,6 +899,8 @@ pub fn fit_panel_fe_time(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }
 
@@ -1121,5 +1121,7 @@ pub fn fit_panel_fe_twoway(
         prob_lr_chi2: None,
         chibar2: None,
         prob_chibar2: None,
+        mle_iter_log_lik_const: None,
+        mle_iter_log_lik: None,
     })
 }

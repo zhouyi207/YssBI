@@ -21,9 +21,15 @@ export function PanelFESummaryGrid({
 
       {/* R-squared: Within, Between, Overall */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
+        {panelFe.r2_within != null && (
+          <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
+        )}
+        {panelFe.r2_between != null && (
+          <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
+        )}
+        {panelFe.r2_overall != null && (
+          <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
+        )}
         <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
       </div>
 

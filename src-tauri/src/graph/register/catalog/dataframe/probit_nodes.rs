@@ -424,6 +424,8 @@ fn run_probit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prob
             prob_lr_chi2: Some(result.lr_p_value),
             chibar2: None,
             prob_chibar2: None,
+            mle_iter_log_lik_const: None,
+            mle_iter_log_lik: None,
             df_model,
             df_residual,
             df_total,

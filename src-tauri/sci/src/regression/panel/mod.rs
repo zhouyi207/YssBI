@@ -8,16 +8,26 @@ mod re;
 pub use fe::{fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway};
 pub use fd::fit_panel_fd;
 pub use lsdv::{fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_lsdv_twoway};
-pub use re::{fit_panel_re, fit_panel_re_be, fit_panel_re_fgls, fit_panel_re_mle};
+pub use re::{
+    fit_panel_re, fit_panel_re_be, fit_panel_re_be_time,
+    fit_panel_re_fgls, fit_panel_re_fgls_time, fit_panel_re_fgls_twoway, fit_panel_re_mle,
+    fit_panel_re_mle_time, fit_panel_re_mle_twoway,
+};
 
 use ndarray::{Array1, Array2};
+
+/// R² Within/Between/Overall. None for MLE (does not report these).
+#[derive(Debug, Clone)]
+pub struct PanelR2Stats {
+    pub r2_within: f64,
+    pub r2_between: f64,
+    pub r2_overall: f64,
+}
 
 /// FE-specific stats (Stata xtreg, fe style)
 #[derive(Debug, Clone)]
 pub struct PanelFEStats {
-    pub r2_within: f64,
-    pub r2_between: f64,
-    pub r2_overall: f64,
+    pub r2: Option<PanelR2Stats>,
     pub obs_per_group_min: usize,
     pub obs_per_group_avg: f64,
     pub obs_per_group_max: usize,
@@ -78,4 +88,8 @@ pub struct PanelOLSResult {
     pub chibar2: Option<f64>,
     /// Prob >= chibar2 for sigma_u=0 test. None for FGLS/FE/BE.
     pub prob_chibar2: Option<f64>,
+    /// MLE constant-only model iterations (Stata "Fitting constant-only model"). None for non-MLE.
+    pub mle_iter_log_lik_const: Option<Vec<f64>>,
+    /// MLE full model iterations (Stata "Fitting full model"). None for non-MLE.
+    pub mle_iter_log_lik: Option<Vec<f64>>,
 }

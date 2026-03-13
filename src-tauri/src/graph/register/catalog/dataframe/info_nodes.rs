@@ -62,6 +62,12 @@ pub struct ModelBasicInfo {
     pub chibar2: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prob_chibar2: Option<f64>,
+    /// MLE: constant-only model iterations (Stata "Fitting constant-only model")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mle_iter_log_lik_const: Option<Vec<f64>>,
+    /// MLE: full model iterations (Stata "Fitting full model")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mle_iter_log_lik: Option<Vec<f64>>,
     pub df_model: usize,
     pub df_residual: usize,
     pub df_total: usize,
@@ -284,9 +290,13 @@ pub struct OmittedVariable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct PanelFEInfo {
-    pub r2_within: f64,
-    pub r2_between: f64,
-    pub r2_overall: f64,
+    /// R² Within/Between/Overall. None for MLE.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r2_within: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r2_between: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r2_overall: Option<f64>,
     pub num_groups: usize,
     pub obs_per_group_min: usize,
     pub obs_per_group_avg: f64,

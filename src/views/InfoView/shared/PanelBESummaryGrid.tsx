@@ -7,10 +7,16 @@ import type { ModelBasicInfo } from './types';
 export function PanelBESummaryGrid({
   info,
   panelFe,
+  effectType = 'entity',
 }: {
   info: ModelBasicInfo;
   panelFe: PanelFEInfo;
+  effectType?: 'entity' | 'time';
 }) {
+  const sdLabel =
+    effectType === 'time'
+      ? 'sd(λ_t + avg(e_.t))'
+      : 'sd(u_i + avg(e_i.))';
   return (
     <div className="space-y-2 mb-2">
       {/* Header: Between regression */}
@@ -26,9 +32,15 @@ export function PanelBESummaryGrid({
 
       {/* R-squared: Within, Between, Overall */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
-        <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
+        {panelFe.r2_within != null && (
+          <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
+        )}
+        {panelFe.r2_between != null && (
+          <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
+        )}
+        {panelFe.r2_overall != null && (
+          <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
+        )}
         <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
       </div>
 
@@ -48,7 +60,7 @@ export function PanelBESummaryGrid({
           </span>
         </InfoRow>
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-gray-500 text-xs">sd(u_i + avg(e_i.))</span>
+          <span className="text-gray-500 text-xs">{sdLabel}</span>
           <span className="text-white text-xs font-mono font-medium">{formatNum(panelFe.sigma_u)}</span>
         </div>
         <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
