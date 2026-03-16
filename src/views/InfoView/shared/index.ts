@@ -7,6 +7,7 @@ export * from './ModelSummaryGrid';
 export * from './PanelFESummaryGrid';
 export * from './PanelBESummaryGrid';
 export * from './PanelRESummaryGrid';
+export * from './PanelSelectionTestsBlock';
 export * from './PanelMLEIterationBlock';
 export * from './BinaryModelSummaryGrid';
 export * from './ClassificationTableBlock';

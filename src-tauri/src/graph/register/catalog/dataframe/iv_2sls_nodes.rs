@@ -655,6 +655,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         },
         betas: result.betas.to_vec(),
         cov_beta: cov_beta_vec,
+        cov_beta_nonrobust: None,
     })
 }
 

@@ -2,9 +2,9 @@ import React from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-type PanelMethod = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
-type ModelType = 'fe' | 're';
-type EffectType = 'entity' | 'time' | 'twoway';
+export type PanelMethod = 'mixed_ols' | 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
+export type PanelModelType = 'mixed' | 'fe' | 're';
+export type PanelEffectType = 'none' | 'entity' | 'time' | 'twoway';
 
 function renderKatex(latex: string, displayMode = true): string | null {
   try {
@@ -19,13 +19,22 @@ function renderInlineKatex(latex: string): string | null {
 }
 
 // Part 1: Core formula (Model Type + Effect Type)
-const CORE_FORMULAS: Record<ModelType, Record<EffectType, string>> = {
+const CORE_FORMULAS: Record<PanelModelType, Record<PanelEffectType, string>> = {
+  mixed: {
+    none: `y_{it} = X_{it}'\\beta + u_{it}`,
+    entity: `y_{it} = X_{it}'\\beta + u_{it}`,
+    time: `y_{it} = X_{it}'\\beta + u_{it}`,
+    twoway: `y_{it} = X_{it}'\\beta + u_{it}`,
+  },
   fe: {
+    none: `y_{it} = X_{it}'\\beta + \\alpha_i + u_{it}`,
     entity: `y_{it} = X_{it}'\\beta + \\alpha_i + u_{it}`,
     time: `y_{it} = X_{it}'\\beta + \\lambda_t + u_{it}`,
     twoway: `y_{it} = X_{it}'\\beta + \\alpha_i + \\lambda_t + u_{it}`,
   },
   re: {
+    none: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
+    \\varepsilon_{it} = \\alpha_i + u_{it}`,
     entity: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
     \\varepsilon_{it} = \\alpha_i + u_{it}`,
     time: `y_{it} = X_{it} \\beta + \\varepsilon_{it} \\\\
@@ -37,6 +46,7 @@ const CORE_FORMULAS: Record<ModelType, Record<EffectType, string>> = {
 
 // Part 2: Estimation method formula
 const METHOD_FORMULAS: Record<PanelMethod, string> = {
+  mixed_ols: `\\hat{\\beta}_{OLS} = (X'X)^{-1}X'y`,
   fe: `(y_{it} - \\bar{y}_i) = (X_{it} - \\bar{X}_i)'\\beta + (u_{it} - \\bar{u}_i)`,
   fe_time: `(y_{it} - \\bar{y}_t) = (X_{it} - \\bar{X}_t)'\\beta + (u_{it} - \\bar{u}_t)`,
   fe_twoway: `\\tilde{y}_{it} = \\tilde{X}_{it}'\\beta + \\tilde{u}_{it},\\quad \\tilde{z}_{it} = z_{it} - \\bar{z}_i - \\bar{z}_t + \\bar{z}`,
@@ -119,6 +129,7 @@ const MAPPINGS_LSDV_TWOWAY = [
 ];
 
 function getMappings(method: PanelMethod) {
+  if (method === 'mixed_ols') return MAPPINGS_BASE;
   if (method === 'fe') return MAPPINGS_FE;
   if (method === 'fe_time') return MAPPINGS_FE_TIME;
   if (method === 'fe_twoway') return MAPPINGS_FE_TWOWAY;
@@ -130,8 +141,8 @@ function getMappings(method: PanelMethod) {
 }
 
 interface PanelFormulaBlockProps {
-  modelType: ModelType;
-  effectType: EffectType;
+  modelType: PanelModelType;
+  effectType: PanelEffectType;
   method: PanelMethod;
 }
 

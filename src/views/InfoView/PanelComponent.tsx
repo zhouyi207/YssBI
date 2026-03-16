@@ -5,21 +5,19 @@ import {
   PanelFESummaryGrid,
   PanelBESummaryGrid,
   PanelRESummaryGrid,
+  PanelSelectionTestsBlock,
   PanelMLEIterationBlock,
   CoefficientTable,
   CoeffBarChart,
   HypothesisTestBlock,
 } from './shared';
 import type { PanelSummaryResult, OLSResultData } from './shared/types';
+import type { PanelEffectType as EffectType, PanelMethod as TabKey, PanelModelType as ModelType } from './PanelFormulaBlock';
 
 const PanelFormulaBlock = React.lazy(() => import('./PanelFormulaBlock'));
 
-type TabKey = 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
-
-type ModelType = 'fe' | 're'; // 固定效应 | 随机效应
-type EffectType = 'entity' | 'time' | 'twoway'; // 个体 | 时间 | 双向
-
 const MODEL_TYPE_TABS: { key: ModelType; label: string }[] = [
+  { key: 'mixed', label: 'Mixed Regression' },
   { key: 'fe', label: 'Fixed Effects' },
   { key: 're', label: 'Random Effects' },
 ];
@@ -32,7 +30,14 @@ const EFFECT_TYPE_TABS: { key: EffectType; label: string }[] = [
 
 // Tab 3 估计方法：根据 (ModelType, EffectType) 映射到 TabKey[]
 const METHOD_MAP: Record<ModelType, Record<EffectType, { key: TabKey; label: string }[]>> = {
+  mixed: {
+    none: [{ key: 'mixed_ols', label: 'OLS' }],
+    entity: [{ key: 'mixed_ols', label: 'OLS' }],
+    time: [{ key: 'mixed_ols', label: 'OLS' }],
+    twoway: [{ key: 'mixed_ols', label: 'OLS' }],
+  },
   fe: {
+    none: [],
     entity: [
       { key: 'fe', label: 'Within' },
       { key: 'lsdv', label: 'LSDV' },
@@ -48,6 +53,7 @@ const METHOD_MAP: Record<ModelType, Record<EffectType, { key: TabKey; label: str
     ],
   },
   re: {
+    none: [],
     entity: [
       { key: 're_fgls', label: 'FGLS' },
       { key: 're_mle', label: 'MLE' },
@@ -66,6 +72,7 @@ const METHOD_MAP: Record<ModelType, Record<EffectType, { key: TabKey; label: str
 };
 
 function getDefaultSelections(data: PanelSummaryResult): { model: ModelType; effect: EffectType; method: TabKey } {
+  if (data.mixed_ols) return { model: 'mixed', effect: 'none', method: 'mixed_ols' };
   if (data.fe) return { model: 'fe', effect: 'entity', method: 'fe' };
   if (data.lsdv) return { model: 'fe', effect: 'entity', method: 'lsdv' };
   if (data.fd) return { model: 'fe', effect: 'entity', method: 'fd' };
@@ -81,7 +88,7 @@ function getDefaultSelections(data: PanelSummaryResult): { model: ModelType; eff
   if (data.re_be_time) return { model: 're', effect: 'time', method: 're_be_time' };
   if (data.re_fgls_twoway) return { model: 're', effect: 'twoway', method: 're_fgls_twoway' };
   if (data.re_mle_twoway) return { model: 're', effect: 'twoway', method: 're_mle_twoway' };
-  return { model: 'fe', effect: 'entity', method: 'fe' };
+  return { model: 'mixed', effect: 'none', method: 'mixed_ols' };
 }
 
 export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data }) => {
@@ -106,6 +113,8 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
     switch (key) {
       case 'fe':
         return data.fe;
+      case 'mixed_ols':
+        return data.mixed_ols;
       case 'fe_time':
         return data.fe_time;
       case 'fe_twoway':
@@ -135,7 +144,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
       case 're_mle_twoway':
         return data.re_mle_twoway;
       default:
-        return data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.lsdv_twoway ?? data.fd ?? data.re_fgls ?? data.re_mle ?? data.re_be ?? data.re_fgls_time ?? data.re_mle_time ?? data.re_be_time ?? data.re_fgls_twoway ?? data.re_mle_twoway;
+        return data.mixed_ols ?? data.fe ?? data.fe_time ?? data.fe_twoway ?? data.lsdv ?? data.lsdv_time ?? data.lsdv_twoway ?? data.fd ?? data.re_fgls ?? data.re_mle ?? data.re_be ?? data.re_fgls_time ?? data.re_mle_time ?? data.re_be_time ?? data.re_fgls_twoway ?? data.re_mle_twoway;
     }
   }, [currentMethod, data]);
 
@@ -155,8 +164,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
 
   const handleModelChange = (m: ModelType) => {
     setModelType(m);
-    // RE supports entity, time, twoway; keep current effect if valid
-    const newEffect: EffectType = effectType;
+    const newEffect: EffectType = m === 'mixed' ? 'none' : (effectType === 'none' ? 'entity' : effectType);
     setEffectType(newEffect);
     const first = METHOD_MAP[m][newEffect][0];
     if (first) setActiveMethod(first.key);
@@ -182,6 +190,9 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
       </div>
 
       {/* Model selector card: 2 rows */}
+      {data.selection_tests && data.selection_tests.length > 0 && (
+        <PanelSelectionTestsBlock tests={data.selection_tests} />
+      )}
       <div className="mb-6 rounded-xl border border-gray-800/60 bg-gray-900/40 overflow-hidden">
         {/* Row 1: Model Type (left) | Effect Type (right) */}
         <div className="flex flex-col sm:flex-row sm:divide-x sm:divide-gray-800/60">
@@ -207,23 +218,29 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2.5 font-medium">
               Effect Type
             </div>
-            <div className="flex flex-wrap gap-2 justify-end">
-              {EFFECT_TYPE_TABS.map(({ key, label }) => {
-                const disabled = false;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => !disabled && handleEffectChange(key)}
-                    disabled={disabled}
-                    className={`px-3.5 py-1.5 text-sm font-medium rounded-lg border transition-all ${
-                      effectType === key && !disabled ? pillActive : pillInactive
-                    } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+            {modelType === 'mixed' ? (
+              <div className="text-sm text-gray-400 border border-gray-700/60 rounded-lg px-3.5 py-1.5">
+                Not Applicable
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 justify-end">
+                {EFFECT_TYPE_TABS.map(({ key, label }) => {
+                  const disabled = false;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => !disabled && handleEffectChange(key)}
+                      disabled={disabled}
+                      className={`px-3.5 py-1.5 text-sm font-medium rounded-lg border transition-all ${
+                        effectType === key && !disabled ? pillActive : pillInactive
+                      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

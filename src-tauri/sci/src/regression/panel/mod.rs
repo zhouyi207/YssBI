@@ -35,6 +35,11 @@ pub struct PanelFEStats {
     pub sigma_e: f64,
     pub rho: f64,
     pub corr_u_i_xb: f64,
+    /// RE quasi-demeaning parameter θ = 1 - sqrt(σ²_e / (T_i·σ²_u + σ²_e)).
+    /// For balanced panels all three are equal; for unbalanced they differ.
+    pub theta_min: Option<f64>,
+    pub theta_avg: Option<f64>,
+    pub theta_max: Option<f64>,
 }
 
 /// Common result structure for panel OLS-style estimators (FE, FD, RE)
@@ -71,6 +76,8 @@ pub struct PanelOLSResult {
     pub conf_int_left: Array1<f64>,
     pub conf_int_right: Array1<f64>,
     pub cov_beta: Array2<f64>,
+    /// Nonrobust VCE: σ² (X'X)⁻¹ for Hausman test
+    pub cov_beta_nonrobust: Option<Array2<f64>>,
     pub cond_no: f64,
     /// Column indices omitted due to collinearity (LSDV/LSDV-time full matrix). Used by caller to build omit_info.
     pub omitted_indices: Option<Vec<usize>>,

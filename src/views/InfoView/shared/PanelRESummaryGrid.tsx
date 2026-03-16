@@ -91,6 +91,27 @@ export function PanelRESummaryGrid({
         </div>
       </div>
 
+      {/* theta (RE quasi-demeaning parameter) */}
+      {panelFe.theta_avg != null && (
+        <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+          {panelFe.theta_min != null && panelFe.theta_max != null &&
+           Math.abs(panelFe.theta_min - panelFe.theta_max) > 1e-10 ? (
+            <>
+              <InfoRow label="theta (min)">{formatNum(panelFe.theta_min)}</InfoRow>
+              <InfoRow label="theta (avg)">{formatNum(panelFe.theta_avg)}</InfoRow>
+              <InfoRow label="theta (max)">{formatNum(panelFe.theta_max)}</InfoRow>
+            </>
+          ) : (
+            <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
+              <span className="text-gray-500 text-xs">theta</span>
+              <span className="text-white text-xs font-mono font-medium">
+                {formatNum(panelFe.theta_avg)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* MLE: LR test of sigma_u=0 */}
       {isMle && panelFe.chibar2 != null && panelFe.prob_chibar2 != null && (
         <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">

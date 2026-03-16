@@ -33,6 +33,9 @@ pub struct OLSResult {
     pub betas: Vec<f64>,
     /// 参数协方差矩阵 (k×k)，行优先，用于假设检验
     pub cov_beta: Vec<Vec<f64>>,
+    /// Nonrobust VCE for Hausman test (panel models only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cov_beta_nonrobust: Option<Vec<Vec<f64>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -305,6 +308,13 @@ pub struct PanelFEInfo {
     pub sigma_e: f64,
     pub rho: f64,
     pub corr_u_i_Xb: f64,
+    /// RE quasi-demeaning parameter θ (min/avg/max across groups)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theta_min: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theta_avg: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theta_max: Option<f64>,
     /// MLE: chibar2(01) for sigma_u=0 (Stata xtreg, mle)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chibar2: Option<f64>,

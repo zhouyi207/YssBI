@@ -743,6 +743,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         cov_beta: (0..result.cov_beta.nrows())
             .map(|i| result.cov_beta.row(i).iter().cloned().collect())
             .collect(),
+        cov_beta_nonrobust: None,
     };
 
     let kept_indices = if omitted_indices.is_empty() {

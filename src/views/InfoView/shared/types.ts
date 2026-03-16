@@ -62,10 +62,11 @@ export interface RegressionResultData {
 /** OLS 专用别名，与后端 OLSResult 一致 */
 export type OLSResultData = RegressionResultData;
 
-/** Panel Summary 结果：FE(Within)、FE(Time)、FE(Two-Way)、LSDV、FD、RE(FGLS/MLE/BE) */
+/** Panel Summary 结果：Mixed(OLS)、FE(Within)、FE(Time)、FE(Two-Way)、LSDV、FD、RE(FGLS/MLE/BE) */
 export interface PanelSummaryResult {
   title: string;
   endog_name: string;
+  mixed_ols?: OLSResultData;
   fe?: OLSResultData;
   fe_time?: OLSResultData;
   fe_twoway?: OLSResultData;
@@ -81,7 +82,9 @@ export interface PanelSummaryResult {
   re_be_time?: OLSResultData;
   re_fgls_twoway?: OLSResultData;
   re_mle_twoway?: OLSResultData;
+  selection_tests?: PanelSelectionTest[];
   errors?: {
+    mixed_ols?: string;
     fe?: string;
     fe_time?: string;
     fe_twoway?: string;
@@ -98,6 +101,21 @@ export interface PanelSummaryResult {
     re_fgls_twoway?: string;
     re_mle_twoway?: string;
   };
+}
+
+export interface PanelSelectionTest {
+  id: string;
+  group: 'model_choice' | 'effect_choice' | string;
+  label: string;
+  h0: string;
+  stat_type: string;
+  stat?: number;
+  df1?: number;
+  df2?: number;
+  p_value?: number;
+  decision: 'significant' | 'not_significant' | 'unavailable' | string;
+  recommendation: string;
+  note?: string;
 }
 
 export interface BreuschPaganTest {
@@ -240,6 +258,10 @@ export interface PanelFEInfo {
   sigma_e: number;
   rho: number;
   corr_u_i_Xb: number;
+  /** RE quasi-demeaning parameter θ (min/avg/max across groups) */
+  theta_min?: number;
+  theta_avg?: number;
+  theta_max?: number;
   /** MLE: chibar2(01) for sigma_u=0 test */
   chibar2?: number;
   prob_chibar2?: number;

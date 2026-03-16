@@ -78,7 +78,7 @@ pub fn fit_panel_lsdv(
         if cov_type == "cluster" {
             Some(CovParams::Cluster {
                 cluster_id: entity_id.to_vec(),
-                xtreg_fe_style: true,
+                xtreg_fe_style: false,
             })
         } else {
             None
@@ -209,6 +209,7 @@ pub fn fit_panel_lsdv(
         conf_int_left: conf_left_full,
         conf_int_right: conf_right_full,
         cov_beta: result.cov_beta.clone(),
+        cov_beta_nonrobust: None,
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,
@@ -281,7 +282,7 @@ pub fn fit_panel_lsdv_time(
         if cov_type == "cluster" {
             Some(CovParams::Cluster {
                 cluster_id: time_id.to_vec(),
-                xtreg_fe_style: true,
+                xtreg_fe_style: false,
             })
         } else {
             None
@@ -412,6 +413,7 @@ pub fn fit_panel_lsdv_time(
         conf_int_left: conf_left_full,
         conf_int_right: conf_right_full,
         cov_beta: result.cov_beta.clone(),
+        cov_beta_nonrobust: None,
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,
@@ -493,7 +495,7 @@ pub fn fit_panel_lsdv_twoway(
         if cov_type == "cluster" {
             Some(CovParams::Cluster {
                 cluster_id: entity_id.to_vec(),
-                xtreg_fe_style: true,
+                xtreg_fe_style: false,
             })
         } else {
             None
@@ -621,6 +623,7 @@ pub fn fit_panel_lsdv_twoway(
         conf_int_left: conf_left_full,
         conf_int_right: conf_right_full,
         cov_beta: result.cov_beta.clone(),
+        cov_beta_nonrobust: None,
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,

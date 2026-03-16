@@ -8638,6 +8638,7 @@ dependencies = [
  "chrono",
  "crossbeam",
  "dashmap",
+ "faer",
  "ndarray",
  "ndarray-stats",
  "num-traits",

@@ -140,6 +140,7 @@ pub fn fit_panel_fd(
         conf_int_left: result.conf_int_left,
         conf_int_right: result.conf_int_right,
         cov_beta: result.cov_beta,
+        cov_beta_nonrobust: None,
         cond_no: result.cond_no,
         omitted_indices: None,
         wald_chi2: None,

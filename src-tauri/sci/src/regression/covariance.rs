@@ -9,7 +9,9 @@ pub enum CovParams {
     FixedScale { scale: f64 },
     Cluster {
         cluster_id: Vec<usize>,
-        /// When true, use Stata xtreg,fe style: (N-1)/(N-k-1)*M/(M-1) for intercept adjustment
+        /// When true, use Stata xtreg,fe style: denom = (N-k-1) instead of (N-k).
+        /// Only for FE within estimator where design matrix has slopes only (no absorbed dummies).
+        /// For LSDV: use false — x already includes all dummies, (N-k) is correct.
         xtreg_fe_style: bool,
     },
     HAC { kernel: String, bandwidth: Option<i64> },

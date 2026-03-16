@@ -55,6 +55,9 @@ pub struct OLSResult {
     /// 参数协方差矩阵 (k×k)，用于 Wald 假设检验
     pub cov_beta: Array2<f64>,
 
+    /// Nonrobust VCE: σ² (X'X)⁻¹, always available for Hausman test
+    pub cov_beta_nonrobust: Array2<f64>,
+
     // 矩阵是否病态（多重共线性）
     pub cond_no: f64,
 }
@@ -135,6 +138,8 @@ impl OLS {
             self.config.cov_params.as_ref(),
         )?;
 
+        let cov_beta_nonrobust = ms_residual * &xtx_inv_nd;
+
         // std err
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
 
@@ -184,6 +189,7 @@ impl OLS {
             conf_int_left: ci_lower,
             conf_int_right: ci_upper,
             cov_beta,
+            cov_beta_nonrobust,
             cond_no,
         })
     }

@@ -120,6 +120,14 @@
 - [ ] 面板 iv
 - [ ] 双向随机效应模型没有验证，stata 好像无法实现
 
+## 2026.03.16
+
+- [ ] polars 条件过滤
+- [ ] polars 平方，对数，指数
+- [ ] 图形处理
+- [ ] panel Effect Type (Entity / Time / Two-Way) 未验证
+- [ ] theta min, theta avg, theta max 可以使用一个结构体包裹
+
 
 
 # TODOLIST

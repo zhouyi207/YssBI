@@ -171,6 +171,9 @@ fn compute_fe_stats(
         sigma_e,
         rho,
         corr_u_i_xb,
+        theta_min: None,
+        theta_avg: None,
+        theta_max: None,
     })
 }
 
@@ -332,6 +335,9 @@ fn compute_fe_stats_time(
         sigma_e,
         rho,
         corr_u_i_xb,
+        theta_min: None,
+        theta_avg: None,
+        theta_max: None,
     })
 }
 
@@ -600,6 +606,12 @@ pub fn fit_panel_fe(
         cov_beta[[0, i + 1]] = cov_const_beta_i;
         cov_beta[[i + 1, 0]] = cov_const_beta_i;
     }
+    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    for i in 0..k_vars {
+        for j in 0..k_vars {
+            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+        }
+    }
 
     // Stata xtreg, fe style: R2 Between/Overall, obs per group, sigma_u, sigma_e, rho, corr(u_i,Xb)
     let kept_cols: Vec<usize> = std::iter::once(0)
@@ -646,6 +658,7 @@ pub fn fit_panel_fe(
         conf_int_left,
         conf_int_right,
         cov_beta,
+        cov_beta_nonrobust: Some(cov_nr),
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,
@@ -845,6 +858,12 @@ pub fn fit_panel_fe_time(
         cov_beta[[0, i + 1]] = cov_const_beta_i;
         cov_beta[[i + 1, 0]] = cov_const_beta_i;
     }
+    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    for i in 0..k_vars {
+        for j in 0..k_vars {
+            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+        }
+    }
 
     let kept_cols: Vec<usize> = std::iter::once(0)
         .chain(kept_slope.iter().map(|&j| j + 1))
@@ -890,6 +909,7 @@ pub fn fit_panel_fe_time(
         conf_int_left,
         conf_int_right,
         cov_beta,
+        cov_beta_nonrobust: Some(cov_nr),
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,
@@ -1082,6 +1102,12 @@ pub fn fit_panel_fe_twoway(
         cov_beta[[0, i + 1]] = cov_const_beta_i;
         cov_beta[[i + 1, 0]] = cov_const_beta_i;
     }
+    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    for i in 0..k_vars {
+        for j in 0..k_vars {
+            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+        }
+    }
 
     Ok(super::PanelOLSResult {
         const_coef: Some(const_coef),
@@ -1112,6 +1138,7 @@ pub fn fit_panel_fe_twoway(
         conf_int_left,
         conf_int_right,
         cov_beta,
+        cov_beta_nonrobust: Some(cov_nr),
         cond_no: result.cond_no,
         omitted_indices,
         wald_chi2: None,
