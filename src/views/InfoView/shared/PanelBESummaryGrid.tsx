@@ -46,9 +46,9 @@ export function PanelBESummaryGrid({
 
       {/* Obs per group */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group_min}</InfoRow>
-        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group_avg.toFixed(1)}</InfoRow>
-        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group_max}</InfoRow>
+        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group.min}</InfoRow>
+        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group.avg.toFixed(1)}</InfoRow>
+        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group.max}</InfoRow>
       </div>
 
       {/* F test and sd(u_i + avg(e_i.)) — Stata layout */}
@@ -61,7 +61,7 @@ export function PanelBESummaryGrid({
         </InfoRow>
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-gray-500 text-xs">{sdLabel}</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(panelFe.sigma_u)}</span>
+          <span className="text-white text-xs font-mono font-medium">{formatNum(panelFe.sigma.sigma_u)}</span>
         </div>
         <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
       </div>

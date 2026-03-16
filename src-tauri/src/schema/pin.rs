@@ -118,7 +118,7 @@ impl PinInstanceDTO {
             pin_type,
             direction: pin.definition.direction,
             links,
-            default_value: None,
+            default_value: pin.definition.default_value.clone(),
             user_value: pin.user_value.clone(),
             container_type,
             type_display,

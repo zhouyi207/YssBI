@@ -251,17 +251,11 @@ export interface PanelFEInfo {
   r2_between?: number;
   r2_overall?: number;
   num_groups: number;
-  obs_per_group_min: number;
-  obs_per_group_avg: number;
-  obs_per_group_max: number;
-  sigma_u: number;
-  sigma_e: number;
-  rho: number;
+  obs_per_group: { min: number; avg: number; max: number };
+  sigma: { sigma_u: number; sigma_e: number; rho: number };
   corr_u_i_Xb: number;
   /** RE quasi-demeaning parameter θ (min/avg/max across groups) */
-  theta_min?: number;
-  theta_avg?: number;
-  theta_max?: number;
+  theta?: { min: number; avg: number; max: number };
   /** MLE: chibar2(01) for sigma_u=0 test */
   chibar2?: number;
   prob_chibar2?: number;

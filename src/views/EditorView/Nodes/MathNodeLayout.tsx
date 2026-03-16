@@ -56,14 +56,12 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
     [node.nodeType]
   );
 
-  const repeatableMinCount = useMemo(() => {
-    if (!nodeDef) return 2;
-    const repeatableSlot = nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
-    if (repeatableSlot && repeatableSlot.slotKind === 'repeatable') {
-      return repeatableSlot.minCount;
-    }
-    return 2;
+  const repeatableSlot = useMemo(() => {
+    if (!nodeDef) return undefined;
+    return nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
   }, [nodeDef]);
+
+  const repeatableMinCount = repeatableSlot?.minCount ?? 2;
 
   return (
     <div className="relative flex flex-col min-h-full">
@@ -137,11 +135,11 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
-              removable={onRemovePin != null && inputsData.length > repeatableMinCount}
+              removable={onRemovePin != null && repeatableSlot != null && inputsData.length > repeatableMinCount}
               onRemovePin={onRemovePin ? (pinId) => onRemovePin(node.id, pinId) : undefined}
             />
           ))}
-          {onAddInput && (
+          {onAddInput && repeatableSlot && (
             <button
               onClick={(e) => {
                 e.stopPropagation();

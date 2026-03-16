@@ -8,6 +8,7 @@ import ECDF, { type ECDFPoint } from '@/views/PlotView/ECDF';
 import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
 import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
 import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
+import CorrelogramChart, { type CorrelogramDatum } from '@/views/PlotView/CorrelogramChart';
 
 interface ScatterEcdfData {
   data: { x: number; y: number }[];
@@ -32,6 +33,13 @@ interface CorrelationData {
   p_matrix?: number[][];
 }
 
+interface CorrelogramData {
+  acf: CorrelogramDatum[];
+  pacf: CorrelogramDatum[];
+  ci_half_width: number;
+  n: number;
+}
+
 function getDataKeyFromHash(): string | null {
   const hash = window.location.hash;
   const match = hash.match(/[?&]key=([^&]+)/);
@@ -54,6 +62,7 @@ export const PlotWindow: React.FC = () => {
   const [scatterEcdfData, setScatterEcdfData] = useState<ScatterEcdfData | null>(null);
   const [histogramData, setHistogramData] = useState<HistogramData | null>(null);
   const [correlationData, setCorrelationData] = useState<CorrelationData | null>(null);
+  const [correlogramData, setCorrelogramData] = useState<CorrelogramData | null>(null);
   const [plotType, setPlotType] = useState<string>(() => getPlotTypeFromHash());
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +83,16 @@ export const PlotWindow: React.FC = () => {
             try {
               const parsed = JSON.parse(json);
               const ptype = getPlotTypeFromHash();
-              if (ptype === 'correlation') {
+              if (ptype === 'correlogram') {
+                if (parsed.acf && Array.isArray(parsed.acf) && parsed.pacf && Array.isArray(parsed.pacf)) {
+                  setCorrelogramData(parsed);
+                  setScatterEcdfData(null);
+                  setHistogramData(null);
+                  setCorrelationData(null);
+                } else {
+                  setError('Invalid correlogram data format');
+                }
+              } else if (ptype === 'correlation') {
                 if (parsed.labels && Array.isArray(parsed.labels) && parsed.matrix && Array.isArray(parsed.matrix)) {
                   setCorrelationData({
                     labels: parsed.labels,
@@ -83,6 +101,7 @@ export const PlotWindow: React.FC = () => {
                   });
                   setScatterEcdfData(null);
                   setHistogramData(null);
+                  setCorrelogramData(null);
                 } else {
                   setError('Invalid correlation data format');
                 }
@@ -91,6 +110,7 @@ export const PlotWindow: React.FC = () => {
                   setHistogramData(parsed);
                   setScatterEcdfData(null);
                   setCorrelationData(null);
+                  setCorrelogramData(null);
                 } else {
                   setError('Invalid histogram data format');
                 }
@@ -99,6 +119,7 @@ export const PlotWindow: React.FC = () => {
                   setScatterEcdfData(parsed);
                   setHistogramData(null);
                   setCorrelationData(null);
+                  setCorrelogramData(null);
                 } else {
                   setError('Invalid plot data format');
                 }
@@ -237,6 +258,22 @@ export const PlotWindow: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
             <span className="text-sm">{error}</span>
+          </div>
+        ) : correlogramData ? (
+          <div className="flex-1 min-h-0 w-full flex flex-col gap-2">
+            <CorrelogramChart
+              data={correlogramData.acf}
+              ciHalfWidth={correlogramData.ci_half_width}
+              title="ACF"
+              valueLabel="ACF"
+            />
+            <CorrelogramChart
+              data={correlogramData.pacf}
+              ciHalfWidth={correlogramData.ci_half_width}
+              title="PACF"
+              color="#e5c07b"
+              valueLabel="PACF"
+            />
           </div>
         ) : histogramData ? (
           <div className="flex-1 min-h-0 w-full">

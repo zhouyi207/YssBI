@@ -24,22 +24,39 @@ pub struct PanelR2Stats {
     pub r2_overall: f64,
 }
 
+/// Observations per group (min/avg/max across entities or time periods).
+#[derive(Debug, Clone)]
+pub struct ObsPerGroupStats {
+    pub min: usize,
+    pub avg: f64,
+    pub max: usize,
+}
+
+/// Variance decomposition: σ_u, σ_e, ρ = σ²_u / (σ²_u + σ²_e).
+#[derive(Debug, Clone)]
+pub struct SigmaStats {
+    pub sigma_u: f64,
+    pub sigma_e: f64,
+    pub rho: f64,
+}
+
+/// RE quasi-demeaning parameter θ = 1 - sqrt(σ²_e / (T_i·σ²_u + σ²_e)).
+/// For balanced panels all three are equal; for unbalanced they differ.
+#[derive(Debug, Clone)]
+pub struct ThetaStats {
+    pub min: f64,
+    pub avg: f64,
+    pub max: f64,
+}
+
 /// FE-specific stats (Stata xtreg, fe style)
 #[derive(Debug, Clone)]
 pub struct PanelFEStats {
     pub r2: Option<PanelR2Stats>,
-    pub obs_per_group_min: usize,
-    pub obs_per_group_avg: f64,
-    pub obs_per_group_max: usize,
-    pub sigma_u: f64,
-    pub sigma_e: f64,
-    pub rho: f64,
+    pub obs_per_group: ObsPerGroupStats,
+    pub sigma: SigmaStats,
     pub corr_u_i_xb: f64,
-    /// RE quasi-demeaning parameter θ = 1 - sqrt(σ²_e / (T_i·σ²_u + σ²_e)).
-    /// For balanced panels all three are equal; for unbalanced they differ.
-    pub theta_min: Option<f64>,
-    pub theta_avg: Option<f64>,
-    pub theta_max: Option<f64>,
+    pub theta: Option<ThetaStats>,
 }
 
 /// Common result structure for panel OLS-style estimators (FE, FD, RE)

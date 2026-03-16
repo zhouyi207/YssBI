@@ -164,16 +164,10 @@ fn compute_fe_stats(
 
     Ok(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     })
 }
 
@@ -328,16 +322,10 @@ fn compute_fe_stats_time(
 
     Ok(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     })
 }
 

@@ -205,7 +205,10 @@ impl GraphRuntime {
         // 3. 检查用户值
         let raw_value = raw_value.or_else(|| pin_instance.user_value.clone());
 
-        // 4. 检查默认值
+        // 4. 检查 pin 定义的自定义默认值
+        let raw_value = raw_value.or_else(|| pin_instance.definition.default_value.clone());
+
+        // 5. 检查类型默认值
         let raw_value = raw_value.or_else(|| {
             if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
                 if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {

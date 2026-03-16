@@ -3,6 +3,7 @@
 //!
 //! 因此不能将实例或者运行时的状态如 value 带入
 
+use crate::graph::value::DataValue;
 use crate::graph::TypeVarKey;
 
 use super::{DataRole, ExecRole, PinDataTypeDefinition, PinRole};
@@ -78,6 +79,10 @@ pub struct PinDefinition {
     #[serde(default)]
     pub optional: bool,
 
+    /// 自定义默认值（覆盖类型的 default_value，用于 pin 初始显示和运行时回退）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<DataValue>,
+
     /// UI / 编辑器相关元数据
     pub meta_data: PinMetaData,
 }
@@ -96,6 +101,7 @@ impl PinDefinition {
             role: PinRole::Data(role),
             data_type: Some(data_type),
             optional: false,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -113,6 +119,7 @@ impl PinDefinition {
             role: PinRole::Data(role),
             data_type: Some(data_type),
             optional: false,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -126,6 +133,7 @@ impl PinDefinition {
             role: PinRole::Exec(role),
             data_type: None,
             optional: false,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -139,6 +147,7 @@ impl PinDefinition {
             role: PinRole::Exec(role),
             data_type: None,
             optional: false,
+            default_value: None,
             meta_data: PinMetaData::default(),
         }
     }
@@ -146,6 +155,12 @@ impl PinDefinition {
     /// 标记为可选（无需连接也可运行）
     pub fn with_optional(mut self, optional: bool) -> Self {
         self.optional = optional;
+        self
+    }
+
+    /// 设置自定义默认值（覆盖类型的 default_value）
+    pub fn with_default_value(mut self, value: DataValue) -> Self {
+        self.default_value = Some(value);
         self
     }
 

@@ -126,12 +126,22 @@
 - [ ] polars 平方，对数，指数
 - [ ] 图形处理
 - [ ] panel Effect Type (Entity / Time / Two-Way) 未验证
-- [ ] theta min, theta avg, theta max 可以使用一个结构体包裹
+- [x] theta min, theta avg, theta max 可以使用一个结构体包裹，同样的还有 obs_per_group_min, obs_per_group_avg, obs_per_group_max；sigma_u, sigma_e, rho; 这些字段
+
+
+## 2026.03.17
+
+- [ ] 拉取数据库我希望是懒加载同时加上数据懒式加载
+- [x] 目前只加了 line ~~对 plot 组件添加工具栏，可以在数据生成之后继续对图形进行操作~~: 
+- [x] 一元数学函数节点：ln, log2, log10, exp, sqrt, square：~~添加 ln log2 log10 math 组件可以将 dataseires 求对数~~
+- [ ] 添加了 correlogram 节点
+- [ ] 解决了默认值问题，使用 default_value 解决的，但是我感觉好像有问题，应该使用 user_value，如果 user_value 为 None，那么就显示 default_value
 
 
 
 # TODOLIST
 
+绘图组件库需要重构
 
 xt align 进行对齐，在这里是不是可以于 ts align 可以共用呢
 

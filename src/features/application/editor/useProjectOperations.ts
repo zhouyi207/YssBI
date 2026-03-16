@@ -81,22 +81,19 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   const handleOpenWindow = useCallback((windowType: string, dataKey: string) => {
     try {
       const label = `${windowType}-${Math.random().toString(36).substring(2, 10)}`;
-      const isPlot = windowType === 'scatter' || windowType === 'line' || windowType === 'plot' || windowType === 'ecdf' || windowType === 'kde' || windowType === 'histogram' || windowType === 'correlation';
+      const isPlot = windowType === 'scatter' || windowType === 'line' || windowType === 'plot' || windowType === 'ecdf' || windowType === 'kde' || windowType === 'histogram' || windowType === 'correlation' || windowType === 'correlogram';
       const url = isPlot ? `index.html#/plot?key=${dataKey}&type=${windowType}` : `index.html#/info?key=${dataKey}`;
+      const plotTitles: Record<string, string> = {
+        ecdf: 'ECDF Plot',
+        scatter: 'Scatter Plot',
+        line: 'Line Plot',
+        kde: 'KDE Plot',
+        histogram: 'Histogram',
+        correlation: 'Correlation Plot',
+        correlogram: 'Correlogram',
+      };
       const title = isPlot
-        ? windowType === 'ecdf'
-          ? 'ECDF Plot'
-          : windowType === 'scatter'
-            ? 'Scatter Plot'
-            : windowType === 'line'
-              ? 'Line Plot'
-              : windowType === 'kde'
-                ? 'KDE Plot'
-                : windowType === 'histogram'
-                ? 'Histogram'
-                : windowType === 'correlation'
-                  ? 'Correlation Plot'
-                  : 'Plot'
+        ? plotTitles[windowType] ?? 'Plot'
         : 'Regression Results';
       new WebviewWindow(label, {
         url,

@@ -35,9 +35,9 @@ export function PanelFESummaryGrid({
 
       {/* Obs per group */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group_min}</InfoRow>
-        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group_avg.toFixed(1)}</InfoRow>
-        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group_max}</InfoRow>
+        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group.min}</InfoRow>
+        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group.avg.toFixed(1)}</InfoRow>
+        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group.max}</InfoRow>
       </div>
 
       {/* F test */}
@@ -58,12 +58,12 @@ export function PanelFESummaryGrid({
 
       {/* sigma_u, sigma_e, rho */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="sigma_u">{formatNum(panelFe.sigma_u)}</InfoRow>
-        <InfoRow label="sigma_e">{formatNum(panelFe.sigma_e)}</InfoRow>
+        <InfoRow label="sigma_u">{formatNum(panelFe.sigma.sigma_u)}</InfoRow>
+        <InfoRow label="sigma_e">{formatNum(panelFe.sigma.sigma_e)}</InfoRow>
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-gray-500 text-xs">rho</span>
           <span className="text-white text-xs font-mono font-medium">
-            {formatNum(panelFe.rho)}{' '}
+            {formatNum(panelFe.sigma.rho)}{' '}
             <span className="text-gray-500 font-normal">(fraction of variance due to u_i)</span>
           </span>
         </div>

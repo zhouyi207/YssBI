@@ -23,7 +23,7 @@ use yss_sci::regression::panel::{
 use yss_sci::regression::linear_model::{OLSConfig, OLS};
 use yss_sci::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
 
-use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PanelFEInfo};
+use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, ObsPerGroupInfo, OmitInfo, OmittedVariable, PanelFEInfo, SigmaInfo, ThetaInfo};
 
 // ======================== 结构体 ========================
 
@@ -520,16 +520,22 @@ fn panel_result_to_ols_result(
             r2_between: r2.map(|r| r.r2_between),
             r2_overall: r2.map(|r| r.r2_overall),
             num_groups: num_groups_override.unwrap_or(pr.num_entities),
-            obs_per_group_min: s.obs_per_group_min,
-            obs_per_group_avg: s.obs_per_group_avg,
-            obs_per_group_max: s.obs_per_group_max,
-            sigma_u: s.sigma_u,
-            sigma_e: s.sigma_e,
-            rho: s.rho,
+            obs_per_group: ObsPerGroupInfo {
+                min: s.obs_per_group.min,
+                avg: s.obs_per_group.avg,
+                max: s.obs_per_group.max,
+            },
+            sigma: SigmaInfo {
+                sigma_u: s.sigma.sigma_u,
+                sigma_e: s.sigma.sigma_e,
+                rho: s.sigma.rho,
+            },
             corr_u_i_Xb: s.corr_u_i_xb,
-            theta_min: s.theta_min,
-            theta_avg: s.theta_avg,
-            theta_max: s.theta_max,
+            theta: s.theta.as_ref().map(|t| ThetaInfo {
+                min: t.min,
+                avg: t.avg,
+                max: t.max,
+            }),
             chibar2: pr.chibar2,
             prob_chibar2: pr.prob_chibar2,
         }

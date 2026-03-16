@@ -271,16 +271,10 @@ pub fn fit_panel_re_be(
     let sd_u_plus_avg_e = (result.ms_residual).sqrt();
     let fe_stats = Some(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u: sd_u_plus_avg_e,
-        sigma_e: 0.0,
-        rho: 0.0,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u: sd_u_plus_avg_e, sigma_e: 0.0, rho: 0.0 },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     Ok(super::PanelOLSResult {
@@ -628,7 +622,7 @@ pub fn fit_panel_re_fgls(
     let sigma_e = sigma2_e.sqrt();
     let rho = sigma2_u / (sigma2_u + sigma2_e);
 
-    let (theta_min, theta_avg, theta_max) = {
+    let theta = {
         let thetas: Vec<f64> = obs_per_entity.values().map(|&t_i| {
             let denom = t_i as f64 * sigma2_u + sigma2_e;
             1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
@@ -636,21 +630,15 @@ pub fn fit_panel_re_fgls(
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        (mn, avg, mx)
+        super::ThetaStats { min: mn, avg, max: mx }
     };
 
     let fe_stats = Some(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: Some(theta_min),
-        theta_avg: Some(theta_avg),
-        theta_max: Some(theta_max),
+        theta: Some(theta),
     });
 
     // Wald chi2 for joint significance (Stata xtreg, re uses chi2, not F)
@@ -1340,7 +1328,7 @@ pub fn fit_panel_re_mle(
     let chi2_1 = ChiSquared::new(1.0).map_err(|e| format!("Panel RE MLE chibar2: {}", e))?;
     let prob_chibar2 = 0.5 * (1.0 - chi2_1.cdf(chibar2));
 
-    let (mle_theta_min, mle_theta_avg, mle_theta_max) = {
+    let mle_theta = {
         let thetas: Vec<f64> = obs_per_entity.values().map(|&t_i| {
             let denom = t_i as f64 * sigma2_u + sigma2_e;
             1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
@@ -1348,21 +1336,15 @@ pub fn fit_panel_re_mle(
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        (mn, avg, mx)
+        super::ThetaStats { min: mn, avg, max: mx }
     };
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: Some(mle_theta_min),
-        theta_avg: Some(mle_theta_avg),
-        theta_max: Some(mle_theta_max),
+        theta: Some(mle_theta),
     });
 
     // Stata xtreg, re uses z (asymptotic normal), not t
@@ -1752,16 +1734,10 @@ pub fn fit_panel_re_fgls_twoway(
             r2_between,
             r2_overall,
         }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     let (wald_chi2, prob_wald_chi2) = {
@@ -2435,16 +2411,10 @@ pub fn fit_panel_re_mle_twoway(
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way) MLE: {}", e))?;
@@ -2748,16 +2718,10 @@ pub fn fit_panel_re_fgls_time(
 
     let fe_stats = Some(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     let (wald_chi2, prob_wald_chi2) = {
@@ -2968,16 +2932,10 @@ pub fn fit_panel_re_be_time(
     let sd_lambda_plus_avg_e = (result.ms_residual).sqrt();
     let fe_stats = Some(super::PanelFEStats {
         r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u: sd_lambda_plus_avg_e,
-        sigma_e: 0.0,
-        rho: 0.0,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u: sd_lambda_plus_avg_e, sigma_e: 0.0, rho: 0.0 },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
@@ -3353,16 +3311,10 @@ pub fn fit_panel_re_mle_time(
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group_min: obs_min,
-        obs_per_group_avg: obs_avg,
-        obs_per_group_max: obs_max,
-        sigma_u,
-        sigma_e,
-        rho,
+        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
+        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
         corr_u_i_xb: 0.0,
-        theta_min: None,
-        theta_avg: None,
-        theta_max: None,
+        theta: None,
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE Time: {}", e))?;

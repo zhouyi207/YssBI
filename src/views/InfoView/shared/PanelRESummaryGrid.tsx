@@ -41,9 +41,9 @@ export function PanelRESummaryGrid({
 
       {/* Obs per group */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group_min}</InfoRow>
-        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group_avg.toFixed(1)}</InfoRow>
-        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group_max}</InfoRow>
+        <InfoRow label="Obs per group (min)">{panelFe.obs_per_group.min}</InfoRow>
+        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group.avg.toFixed(1)}</InfoRow>
+        <InfoRow label="Obs per group (max)">{panelFe.obs_per_group.max}</InfoRow>
       </div>
 
       {/* Wald/LR chi2, Prob > chi2, Log likelihood (MLE), corr(u_i, X) = 0 (assumed) */}
@@ -81,31 +81,30 @@ export function PanelRESummaryGrid({
 
       {/* sigma_u, sigma_e, rho */}
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-        <InfoRow label="sigma_u">{formatNum(panelFe.sigma_u)}</InfoRow>
-        <InfoRow label="sigma_e">{formatNum(panelFe.sigma_e)}</InfoRow>
+        <InfoRow label="sigma_u">{formatNum(panelFe.sigma.sigma_u)}</InfoRow>
+        <InfoRow label="sigma_e">{formatNum(panelFe.sigma.sigma_e)}</InfoRow>
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
           <span className="text-gray-500 text-xs">rho</span>
           <span className="text-white text-xs font-mono font-medium">
-            {formatNum(panelFe.rho)} (fraction of variance due to u_i)
+            {formatNum(panelFe.sigma.rho)} (fraction of variance due to u_i)
           </span>
         </div>
       </div>
 
       {/* theta (RE quasi-demeaning parameter) */}
-      {panelFe.theta_avg != null && (
+      {panelFe.theta != null && (
         <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
-          {panelFe.theta_min != null && panelFe.theta_max != null &&
-           Math.abs(panelFe.theta_min - panelFe.theta_max) > 1e-10 ? (
+          {Math.abs(panelFe.theta.min - panelFe.theta.max) > 1e-10 ? (
             <>
-              <InfoRow label="theta (min)">{formatNum(panelFe.theta_min)}</InfoRow>
-              <InfoRow label="theta (avg)">{formatNum(panelFe.theta_avg)}</InfoRow>
-              <InfoRow label="theta (max)">{formatNum(panelFe.theta_max)}</InfoRow>
+              <InfoRow label="theta (min)">{formatNum(panelFe.theta.min)}</InfoRow>
+              <InfoRow label="theta (avg)">{formatNum(panelFe.theta.avg)}</InfoRow>
+              <InfoRow label="theta (max)">{formatNum(panelFe.theta.max)}</InfoRow>
             </>
           ) : (
             <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
               <span className="text-gray-500 text-xs">theta</span>
               <span className="text-white text-xs font-mono font-medium">
-                {formatNum(panelFe.theta_avg)}
+                {formatNum(panelFe.theta.avg)}
               </span>
             </div>
           )}
