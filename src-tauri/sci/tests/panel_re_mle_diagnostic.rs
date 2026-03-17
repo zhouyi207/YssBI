@@ -117,8 +117,8 @@ fn panel_re_mle_lin() {
     writeln!(out, "Our results:").ok();
     writeln!(out, "  Log likelihood = {:?}", result.log_likelihood).ok();
     if let Some(ref fe) = result.fe_stats {
-        writeln!(out, "  sigma_u = {:.4}, sigma_e = {:.4}", fe.sigma_u, fe.sigma_e).ok();
-        writeln!(out, "  rho = {:.4}", fe.rho).ok();
+        writeln!(out, "  sigma_u = {:.4}, sigma_e = {:.4}", fe.sigma.sigma_u, fe.sigma.sigma_e).ok();
+        writeln!(out, "  rho = {:.4}", fe.sigma.rho).ok();
     }
     writeln!(out, "  LR chi2 = {:?}", result.lr_chi2).ok();
     writeln!(out, "").ok();
