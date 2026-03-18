@@ -2,11 +2,18 @@ use crate::regression::covariance::{compute_cov_beta, CovParams};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
-use num_traits::{One, Pow, Signed, Zero};
+use num_traits::{One, Pow, Zero};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+
+fn is_robust_cov_type(cov_type: &str) -> bool {
+    matches!(
+        cov_type,
+        "HC0" | "HC1" | "HC2" | "HC3" | "cluster" | "HAC" | "newey" | "fixed scale"
+    )
+}
 
 pub struct OLSConfig {
     pub constant: bool,
@@ -112,16 +119,7 @@ impl OLS {
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = 1.0 - ms_residual / ms_total;
 
-        let f = (ms_model / ms_residual).max(0.0);
-
-        // Fisher-Snedecor requires df1 > 0 and df2 > 0; guard against edge cases (e.g. constant-only, perfect fit)
-        let df1 = (df_model as f64).max(1.0);
-        let df2 = (df_redidual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
-        let f_p_value = 1.0 - dist.cdf(f);
-        
-        // 残差
+        // 残差（需在 cov_beta 之前计算）
         let u = y - y_hat.as_ref();
 
         let x_nd = x.as_ref().into_ndarray().to_owned();
@@ -139,6 +137,50 @@ impl OLS {
         )?;
 
         let cov_beta_nonrobust = ms_residual * &xtx_inv_nd;
+
+        // F 统计量：robust VCE 时用 Wald，否则用经典 F
+        let (f, f_p_value) = if df_model > 0 {
+            if is_robust_cov_type(&covariance_type) {
+                let betas_nd = betas.as_ref().into_ndarray().to_owned();
+                // Wald = β_s' V_s^{-1} β_s，F = Wald / df_model
+                let (beta_s, v_s) = if self.config.constant && rank > 1 {
+                    (
+                        betas_nd.slice(ndarray::s![1..]).into_owned(),
+                        cov_beta.slice(ndarray::s![1.., 1..]).into_owned(),
+                    )
+                } else {
+                    (betas_nd.clone(), cov_beta.clone())
+                };
+                let wald = if beta_s.len() > 0 {
+                    let v_faer = v_s.view().into_faer().to_owned();
+                    let beta_faer = beta_s.view().into_faer_col().to_owned();
+                    match v_faer.as_ref().llt(Side::Lower) {
+                        Ok(llt) => {
+                            let x_sol = llt.solve(beta_faer.as_ref());
+                            beta_s.dot(&x_sol.as_ref().into_ndarray())
+                        }
+                        Err(_) => 0.0, // cov 非正定（如 cluster 聚类少）时回退
+                    }
+                } else {
+                    0.0
+                };
+                let f_val = (wald / df_model as f64).max(0.0);
+                let df1 = (df_model as f64).max(1.0);
+                let df2 = (df_redidual as f64).max(1.0);
+                let dist = FisherSnedecor::new(df1, df2)
+                    .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
+                (f_val, 1.0 - dist.cdf(f_val))
+            } else {
+                let f_val = (ms_model / ms_residual).max(0.0);
+                let df1 = (df_model as f64).max(1.0);
+                let df2 = (df_redidual as f64).max(1.0);
+                let dist = FisherSnedecor::new(df1, df2)
+                    .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
+                (f_val, 1.0 - dist.cdf(f_val))
+            }
+        } else {
+            (0.0, 1.0)
+        };
 
         // std err
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);

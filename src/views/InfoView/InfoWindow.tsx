@@ -2,14 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
+import { VARComponent } from './VARComponent';
 import { BinaryComponent } from './BinaryComponent';
 import { PanelComponent } from './PanelComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
+import { DataViewComponent } from './DataViewComponent';
 import type { PanelSummaryResult } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
+
+function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]: unknown } {
+  const d = data as Record<string, unknown>;
+  return typeof d === 'object' && d != null && d.viewType === 'data_view';
+}
+
+function isVARSummary(data: unknown): data is { title: string; var_names?: string[]; oirf?: unknown } {
+  const d = data as Record<string, unknown>;
+  return typeof d === 'object' && d != null && Array.isArray(d.var_names) && d.oirf !== undefined;
+}
 
 function isPanelSummary(data: unknown): data is PanelSummaryResult {
   const d = data as Record<string, unknown>;
@@ -189,7 +201,11 @@ export const InfoWindow: React.FC = () => {
             <span className="text-sm">{error}</span>
           </div>
         ) : olsData ? (
-          isPanelSummary(olsData) ? (
+          isDataView(olsData) ? (
+            <DataViewComponent data={olsData} />
+          ) : isVARSummary(olsData) ? (
+            <VARComponent data={olsData} />
+          ) : isPanelSummary(olsData) ? (
             <PanelComponent data={olsData as PanelSummaryResult} />
           ) : olsData.diagnostic_info?.prais_info ? (
             <PraisComponent data={olsData as PraisResultData} />

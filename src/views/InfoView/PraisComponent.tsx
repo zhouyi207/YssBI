@@ -6,8 +6,7 @@ import {
   formatNum,
   ModelSummaryGrid,
   AnovaTable,
-  CoefficientTable,
-  CoeffBarChart,
+  CoefficientsBlock,
   HypothesisTestBlock,
   ACFPACFBlock,
   SerialTestsBlock,
@@ -35,7 +34,6 @@ export interface PraisResultData extends RegressionResultData {
 export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) => {
   const { model_basic_info: info, coefficients, diagnostic_info: diag } = data;
   const praisInfo = diag.prais_info!;
-  const significantCount = coefficients.filter((c) => c.is_significant).length;
   const hasCategorical = coefficients.some((c) => c.category != null);
   const leverageKdeData = useMemo(
     () => (diag.leverage && diag.leverage.length > 0 ? computeKDE(diag.leverage, 256, 0) : []),
@@ -91,15 +89,11 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
       <AnovaTable info={info} />
 
       {/* Coefficients */}
-      <SectionHeader
-        title={`Coefficients (${significantCount}/${coefficients.length} significant)`}
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h10M4 17h6" />
-          </svg>
-        }
+      <CoefficientsBlock
+        coefficients={coefficients}
+        hasCategorical={hasCategorical}
+        ar1Rho={praisInfo.rho}
       />
-      <CoefficientTable coefficients={coefficients} hasCategorical={hasCategorical} ar1Rho={praisInfo.rho} />
 
       {/* Omitted variables (collinearity) */}
       {diag.omit_info && diag.omit_info.omitted.length > 0 && (
@@ -144,17 +138,6 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
 
       {/* Hypothesis Test */}
       <HypothesisTestBlock data={data} />
-
-      {/* Coefficient Bar */}
-      <SectionHeader
-        title="Coefficient Magnitude"
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        }
-      />
-      <CoeffBarChart coefficients={coefficients} />
 
       {/* Prais Diagnostics */}
       <SectionHeader

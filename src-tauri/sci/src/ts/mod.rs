@@ -14,3 +14,4 @@ pub mod lag;
 pub mod pct_change;
 pub mod rolling;
 pub mod types;
+pub mod var;

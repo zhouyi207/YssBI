@@ -7,8 +7,7 @@ import {
   PanelRESummaryGrid,
   PanelSelectionTestsBlock,
   PanelMLEIterationBlock,
-  CoefficientTable,
-  CoeffBarChart,
+  CoefficientsBlock,
   HypothesisTestBlock,
 } from './shared';
 import type { PanelSummaryResult, OLSResultData } from './shared/types';
@@ -152,10 +151,6 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
     return data.errors?.[currentMethod];
   }, [currentMethod, data.errors]);
 
-  const significantCount = useMemo(
-    () => (currentData ? currentData.coefficients.filter((c) => c.is_significant).length : 0),
-    [currentData]
-  );
 
   const hasCategorical = useMemo(
     () => (currentData ? currentData.coefficients.some((c) => c.category != null) : false),
@@ -356,21 +351,13 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
           )}
 
           {/* Coefficients */}
-          <SectionHeader
-            title={`Coefficients (${significantCount}/${currentData.coefficients.length} significant)`}
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h10M4 17h6" />
-              </svg>
-            }
-          />
-          <CoefficientTable
+          <CoefficientsBlock
             coefficients={currentData.coefficients}
             hasCategorical={hasCategorical}
             useZStat={
-            currentData.model_basic_info?.wald_chi2 != null ||
-            currentData.model_basic_info?.lr_chi2 != null
-          }
+              currentData.model_basic_info?.wald_chi2 != null ||
+              currentData.model_basic_info?.lr_chi2 != null
+            }
           />
 
           {/* Omitted variables (collinearity) */}
@@ -417,22 +404,6 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
 
           {/* Hypothesis Test */}
           <HypothesisTestBlock data={currentData as OLSResultData} />
-
-          {/* Coefficient Bar */}
-          <SectionHeader
-            title="Coefficient Magnitude"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            }
-          />
-          <CoeffBarChart coefficients={currentData.coefficients} />
 
           {/* MLE: iteration log (separate module at bottom) */}
           {(currentMethod === 're_mle' || currentMethod === 're_mle_time' || currentMethod === 're_mle_twoway') &&

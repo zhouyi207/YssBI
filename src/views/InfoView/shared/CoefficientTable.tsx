@@ -8,6 +8,7 @@ export function CoefficientTable({
   ar1Rho,
   useZStat,
   showOddsRatio,
+  categoryLabel,
 }: {
   coefficients: Coefficient[];
   hasCategorical: boolean;
@@ -17,9 +18,12 @@ export function CoefficientTable({
   useZStat?: boolean;
   /** Logit: show odds ratio exp(β) to the right of Coef */
   showOddsRatio?: boolean;
+  /** Override "Category" column label (e.g. "Equation" for VAR) */
+  categoryLabel?: string;
 }) {
   const statLabel = useZStat ? 'z' : 't';
   const pLabel = useZStat ? 'P>|z|' : 'P>|t|';
+  const catHeader = categoryLabel ?? 'Category';
   return (
     <>
       <div className="rounded-lg border border-gray-800/50 overflow-hidden">
@@ -28,7 +32,7 @@ export function CoefficientTable({
             <tr className="bg-[#1a1d23]">
               <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
               {hasCategorical && (
-                <th className="text-left px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Category</th>
+                <th className="text-left px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{catHeader}</th>
               )}
               <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Coef</th>
               {showOddsRatio && (

@@ -12,6 +12,7 @@ pub fn register(registry: &NodeRegistry) {
     register_get_dataframe(registry);
     register_decompose_dataframe(registry);
     register_combine_dataframe(registry);
+    register_filter_dataframe(registry);
 }
 
 fn register_get_dataframe(registry: &NodeRegistry) {
@@ -202,6 +203,86 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Output),
                 DataValue::DataFrame(id),
+            )?;
+            Ok(())
+        }));
+    registry.register(definition);
+}
+
+fn register_filter_dataframe(registry: &NodeRegistry) {
+    let definition = NodeDefinition::new("Filter DataFrame", vec!["Data".to_string()])
+        .with_ui_style("dataframe")
+        .with_description("Filter rows by a Boolean DataSeries mask (keep rows where condition is true)")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "DataFrame",
+                DataRole::Input,
+                PinDataTypeDefinition::concrete(DataType::DataFrame),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "Condition",
+                DataRole::Custom("condition".to_string()),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Boolean))),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "DataFrame",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataFrame),
+            )),
+        ])
+        .with_output_schema_resolver(Arc::new(|ctx| {
+            ctx.input_schemas
+                .get(&PinRole::Data(DataRole::Input))
+                .cloned()
+        }))
+        .with_data_evaluator(Arc::new(|ctx| {
+            let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+            let df_id = match &df_value {
+                DataValue::DataFrame(id) => id.clone(),
+                DataValue::Null => {
+                    return Err("Filter DataFrame: input is not connected. Connect a Get DataFrame node.".to_string())
+                }
+                other => {
+                    return Err(format!(
+                        "Filter DataFrame: input is not a DataFrame (got {:?}).",
+                        other.value_type().unwrap_or(DataType::Any)
+                    ))
+                }
+            };
+
+            let cond_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("condition".to_string())))?;
+            let cond_id = match &cond_value {
+                DataValue::DataSeries(v) => v.id.clone(),
+                DataValue::Null => {
+                    return Err("Filter DataFrame: Condition is not connected. Connect a Boolean DataSeries (e.g. from Compare nodes).".to_string())
+                }
+                other => {
+                    return Err(format!(
+                        "Filter DataFrame: Condition must be a Boolean DataSeries (got {:?}).",
+                        other.value_type().unwrap_or(DataType::Any)
+                    ))
+                }
+            };
+
+            let df = ctx.get_dataframe(&df_id)?;
+            let mask_series = ctx.get_series(&cond_id)?;
+            let mask = mask_series
+                .bool()
+                .map_err(|e| format!("Filter DataFrame: Condition must be Boolean DataSeries: {}", e))?;
+
+            if mask.len() != df.height() {
+                return Err(format!(
+                    "Filter DataFrame: Condition length {} does not match DataFrame rows {}",
+                    mask.len(),
+                    df.height()
+                ));
+            }
+
+            let filtered = df.filter(mask).map_err(|e| format!("Filter DataFrame: {}", e))?;
+            let out_id = ctx.put_dataframe(filtered)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Output),
+                DataValue::DataFrame(out_id),
             )?;
             Ok(())
         }));

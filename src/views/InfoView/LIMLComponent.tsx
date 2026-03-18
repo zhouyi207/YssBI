@@ -11,7 +11,7 @@ import {
   ModelSummaryGrid,
   AnovaTable,
   CoefficientTable,
-  CoeffBarChart,
+  CoefficientsBlock,
   HypothesisTestBlock,
   ACFPACFBlock,
   SerialTestsBlock,
@@ -27,11 +27,6 @@ const KDE = React.lazy(() => import('@/views/PlotView/KDE'));
 
 export const LIMLComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
   const { model_basic_info: info, coefficients, diagnostic_info: diag } = data;
-
-  const significantCount = useMemo(
-    () => coefficients.filter((c) => c.is_significant).length,
-    [coefficients]
-  );
 
   const hasCategorical = useMemo(
     () => coefficients.some((c) => c.category != null),
@@ -372,29 +367,14 @@ export const LIMLComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       <AnovaTable info={info} />
 
       {/* Coefficients */}
-      <SectionHeader
-        title={`Coefficients (${significantCount}/${coefficients.length} significant)`}
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h10M4 17h6" />
-          </svg>
-        }
+      <CoefficientsBlock
+        coefficients={coefficients}
+        hasCategorical={hasCategorical}
+        useZStat
       />
-      <CoefficientTable coefficients={coefficients} hasCategorical={hasCategorical} useZStat />
 
       {/* Hypothesis Test */}
       <HypothesisTestBlock data={data} />
-
-      {/* Coefficient Bar */}
-      <SectionHeader
-        title="Coefficient Magnitude"
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        }
-      />
-      <CoeffBarChart coefficients={coefficients} />
 
       {/* Diagnostics */}
       <SectionHeader
