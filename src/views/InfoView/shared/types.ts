@@ -39,11 +39,11 @@ export interface Coefficient {
   variable: string;
   category?: string;
   coef: number;
-  std_err: number;
-  t_value: number;
-  p_value: number;
-  'confidence_interval_0.025': number;
-  'confidence_interval_0.975': number;
+  std_err?: number;
+  t_value?: number;
+  p_value?: number;
+  'confidence_interval_0.025'?: number;
+  'confidence_interval_0.975'?: number;
   is_significant: boolean;
 }
 
@@ -423,6 +423,64 @@ export interface VAREquationDisplay {
 }
 
 export interface VARCoefDisplay {
+  eq_name: string;
+  variable: string;
+  coef: number;
+  std_err: number;
+  z_value: number;
+  p_value: number;
+  ci_lower: number;
+  ci_upper: number;
+}
+
+/** VEC 协整分析结果（Stata vec 风格） */
+export interface VECSummaryResultData {
+  title: string;
+  var_names: string[];
+  num_observation: number;
+  log_likelihood: number;
+  aic: number;
+  hqic: number;
+  sbic: number;
+  det_sigma_ml: number;
+  rank: number;
+  lags: number;
+  trend_spec: string;
+  equations: VECEquationDisplay[];
+  coefficients: VECCoefDisplay[];
+  beta: number[][];
+  /** beta 表变量名，与 beta 列对应（含 const） */
+  beta_var_names?: string[];
+  cointegrating_equations: VECCointegratingEquationDisplay[];
+  /** beta 表 Stata 风格：Std. err., z, P>|z|, [95% conf. interval]，归一化/常数用 null */
+  beta_std_err?: (number | null)[][];
+  beta_z_value?: (number | null)[][];
+  beta_p_value?: (number | null)[][];
+  beta_ci_lower?: (number | null)[][];
+  beta_ci_upper?: (number | null)[][];
+  /** veclmar: LM 残差自相关检验 */
+  veclmar?: VARLmarDisplay[];
+  /** vecstable: 特征值平稳性检验 */
+  vecstable?: VARStableRow[];
+}
+
+export interface VECCointegratingEquationDisplay {
+  eq_name: string;
+  parms: number;
+  chi2: number;
+  p_chi2: number;
+}
+
+export interface VECEquationDisplay {
+  eq_name: string;
+  parms: number;
+  rmse: number;
+  r_sq: number;
+  chi2: number;
+  p_chi2: number;
+}
+
+export interface VECCoefDisplay {
   eq_name: string;
   variable: string;
   coef: number;

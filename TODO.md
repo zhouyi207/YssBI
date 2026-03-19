@@ -155,7 +155,13 @@
 ## 2026.03.19
 
 - [ ] 随机模拟的例子，可能需要用到函数，我觉得这一步应该是很重要的，这对于框架的完整性而言
-- [x] DF & ADF 单位根检验，添加了单个和 summary
+- [x] DF & ADF 单位根检验，添加了单个和 summary 节点
+- [x] 接下来我需要处理协整节点
+- [ ] 目前 vecm 中的 Equation Summary 中的 R-sq 数值和 stata 对不上，不知道 stata 的这个 R-sq 是怎么计算的
+- [ ] EG-ADF 检验未完成
+- [ ] 检验 var 模型的滞后阶数 varsoc x y z ..... 目前不是完整命令
+- [ ] 检验协整秩 vecrank x y z, lags(#) max trend(none) trend(trend)
+- [ ] vecm 就是利用上面这两玩意确认阶数和秩
 
 
 

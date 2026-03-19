@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
+import { VECComponent } from './VECComponent';
 import { DFADFComponent } from './DFADFComponent';
 import { DFADFSummaryListComponent } from './DFADFSummaryListComponent';
 import { BinaryComponent } from './BinaryComponent';
@@ -23,6 +24,17 @@ function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]
 function isVARSummary(data: unknown): data is { title: string; var_names?: string[]; oirf?: unknown } {
   const d = data as Record<string, unknown>;
   return typeof d === 'object' && d != null && Array.isArray(d.var_names) && d.oirf !== undefined;
+}
+
+function isVECSummary(data: unknown): data is { title: string; var_names?: string[]; rank?: number; trend_spec?: string } {
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    Array.isArray(d.var_names) &&
+    typeof d.rank === 'number' &&
+    typeof d.trend_spec === 'string'
+  );
 }
 
 function isDFADFSummaryList(data: unknown): data is { title: string; var_name: string; items: unknown[] } {
@@ -231,6 +243,8 @@ export const InfoWindow: React.FC = () => {
             <DFADFSummaryListComponent data={olsData} />
           ) : isDFADFSummary(olsData) ? (
             <DFADFComponent data={olsData} />
+          ) : isVECSummary(olsData) ? (
+            <VECComponent data={olsData} />
           ) : isVARSummary(olsData) ? (
             <VARComponent data={olsData} />
           ) : isPanelSummary(olsData) ? (

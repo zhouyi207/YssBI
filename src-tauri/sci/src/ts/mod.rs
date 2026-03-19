@@ -16,3 +16,4 @@ pub mod rolling;
 pub mod types;
 pub mod unit_root;
 pub mod var;
+pub mod vec;

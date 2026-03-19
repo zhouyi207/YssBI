@@ -96,22 +96,28 @@ export function CoefficientTable({
                   </td>
                 )}
                 <td className="text-right px-3 py-2.5 font-mono text-gray-400">
-                  {formatNum(coeff.std_err)}
+                  {coeff.std_err != null ? formatNum(coeff.std_err) : '.'}
                 </td>
                 <td className="text-right px-3 py-2.5 font-mono text-gray-300">
-                  {formatNum(coeff.t_value, 3)}
+                  {coeff.t_value != null ? formatNum(coeff.t_value, 3) : '.'}
                 </td>
                 <td className="text-right px-3 py-2.5 font-mono">
-                  <span className={coeff.is_significant ? 'text-emerald-400' : 'text-gray-500'}>
-                    {formatNum(coeff.p_value, 3)}
-                  </span>
-                  <SignificanceStars pValue={coeff.p_value} />
+                  {coeff.p_value != null ? (
+                    <>
+                      <span className={coeff.is_significant ? 'text-emerald-400' : 'text-gray-500'}>
+                        {formatNum(coeff.p_value, 3)}
+                      </span>
+                      <SignificanceStars pValue={coeff.p_value} />
+                    </>
+                  ) : (
+                    <span className="text-gray-500">.</span>
+                  )}
                 </td>
                 <td className="text-right px-3 py-2.5 font-mono text-gray-500">
-                  {formatNum(coeff['confidence_interval_0.025'])}
+                  {coeff['confidence_interval_0.025'] != null ? formatNum(coeff['confidence_interval_0.025']) : '.'}
                 </td>
                 <td className="text-right px-3 py-2.5 font-mono text-gray-500">
-                  {formatNum(coeff['confidence_interval_0.975'])}
+                  {coeff['confidence_interval_0.975'] != null ? formatNum(coeff['confidence_interval_0.975']) : '.'}
                 </td>
               </tr>
             ))}
