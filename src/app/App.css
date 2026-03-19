@@ -36,6 +36,15 @@
   display: none;
 }
 
+/* 隐藏滚动条但保留滚动能力 */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Sidebar: developer-tool aesthetic, dark, high density */
 .sidebar-container {
   --sidebar-section-bg: rgba(255, 255, 255, 0.03);

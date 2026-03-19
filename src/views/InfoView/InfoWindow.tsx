@@ -3,6 +3,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
+import { DFADFComponent } from './DFADFComponent';
+import { DFADFSummaryListComponent } from './DFADFSummaryListComponent';
 import { BinaryComponent } from './BinaryComponent';
 import { PanelComponent } from './PanelComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
@@ -21,6 +23,28 @@ function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]
 function isVARSummary(data: unknown): data is { title: string; var_names?: string[]; oirf?: unknown } {
   const d = data as Record<string, unknown>;
   return typeof d === 'object' && d != null && Array.isArray(d.var_names) && d.oirf !== undefined;
+}
+
+function isDFADFSummaryList(data: unknown): data is { title: string; var_name: string; items: unknown[] } {
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    Array.isArray(d.items) &&
+    typeof d.var_name === 'string'
+  );
+}
+
+function isDFADFSummary(data: unknown): data is { title: string; test_statistic: number; critical_value_5pct: number } {
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    typeof d.test_statistic === 'number' &&
+    typeof d.critical_value_5pct === 'number' &&
+    d.oirf === undefined &&
+    !Array.isArray(d.items)
+  );
 }
 
 function isPanelSummary(data: unknown): data is PanelSummaryResult {
@@ -203,6 +227,10 @@ export const InfoWindow: React.FC = () => {
         ) : olsData ? (
           isDataView(olsData) ? (
             <DataViewComponent data={olsData} />
+          ) : isDFADFSummaryList(olsData) ? (
+            <DFADFSummaryListComponent data={olsData} />
+          ) : isDFADFSummary(olsData) ? (
+            <DFADFComponent data={olsData} />
           ) : isVARSummary(olsData) ? (
             <VARComponent data={olsData} />
           ) : isPanelSummary(olsData) ? (

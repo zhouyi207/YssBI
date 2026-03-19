@@ -5,6 +5,7 @@ mod series_nodes;
 mod series_compare_nodes;
 mod transform_nodes;
 mod info_nodes;
+mod df_adf_nodes;
 mod ols_nodes;
 mod var_nodes;
 mod wls_nodes;
@@ -27,6 +28,7 @@ pub fn register(registry: &NodeRegistry) {
     series_nodes::register(registry);
     series_compare_nodes::register(registry);
     transform_nodes::register(registry);
+    df_adf_nodes::register(registry);
     ols_nodes::register(registry);
     var_nodes::register(registry);
     wls_nodes::register(registry);
