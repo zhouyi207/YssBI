@@ -36,7 +36,25 @@ function varCoeffsToOLSFormat(coefficients: VARSummaryResultData['coefficients']
 }
 
 export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data }) => {
-  const { var_names, num_observation, log_likelihood, aic, fpe, hqic, sbic, equations, coefficients, oirf, fevd, varwle, varlmar, varstable, vargranger } = data;
+  const {
+    var_names,
+    num_observation,
+    complete_sample_rows,
+    var_max_lag,
+    log_likelihood,
+    aic,
+    fpe,
+    hqic,
+    sbic,
+    equations,
+    coefficients,
+    oirf,
+    fevd,
+    varwle,
+    varlmar,
+    varstable,
+    vargranger,
+  } = data;
 
   const coeffsForTable = useMemo(() => varCoeffsToOLSFormat(coefficients), [coefficients]);
   const varstableSorted = useMemo(
@@ -50,8 +68,18 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-gray-500">
-            Variables: {var_names.join(', ')} · n={num_observation}
+          <span className="text-xs text-gray-500 leading-relaxed">
+            Variables: {var_names.join(', ')}
+            {complete_sample_rows != null && var_max_lag != null ? (
+              <>
+                {' '}
+                · T={complete_sample_rows}（时间轴对齐行数）· p={var_max_lag} · n={num_observation}
+                （Stata Number of obs；仅内生 listwise 时 n = T − p；有外生 DataFrame 时与 Stata var ex() 相同，仅当期
+                exog[t] 须有效）
+              </>
+            ) : (
+              <> · n={num_observation}</>
+            )}
           </span>
         </div>
       </div>
@@ -79,6 +107,17 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
         }
       />
       <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50 mb-6">
+        {complete_sample_rows != null && var_max_lag != null && (
+          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2 border-b border-gray-800/40">
+            <span className="text-gray-500 text-xs shrink-0">Observations</span>
+            <span className="text-white text-xs font-mono text-right">
+              T = {complete_sample_rows}, p = {var_max_lag}, n = {num_observation}{' '}
+              <span className="text-gray-500 font-sans">
+                （无缺失外生时 n = T − p；首期外生缺失不减少 n）
+              </span>
+            </span>
+          </div>
+        )}
         <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
           <span className="text-gray-500 text-xs">Log likelihood</span>
           <span className="text-white text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>

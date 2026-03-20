@@ -391,10 +391,36 @@ export interface VARGrangerDisplay {
   p_value: number;
 }
 
+/** Stata varsoc 表行（Lag 从 0 起；0 无 LR） */
+export interface VARSocRowData {
+  lag: number;
+  log_likelihood: number;
+  lr?: number | null;
+  lr_df?: number | null;
+  lr_p?: number | null;
+  fpe: number;
+  aic: number;
+  hqic: number;
+  sbic: number;
+}
+
+/** VAR varsoc 结果（Stata varsoc varlist, maxlag(#)） */
+export interface VARSocResultData {
+  title: string;
+  var_names: string[];
+  maxlag: number;
+  num_observation: number;
+  rows: VARSocRowData[];
+}
+
 /** VAR Summary 结果（Stata varbasic 风格） */
 export interface VARSummaryResultData {
   title: string;
   var_names: string[];
+  /** listwise 后的对齐行数 T；估计用 n = T − var_max_lag */
+  complete_sample_rows?: number;
+  /** 最大滞后阶 p（Lags 引脚） */
+  var_max_lag?: number;
   num_observation: number;
   log_likelihood: number;
   aic: number;
@@ -489,6 +515,37 @@ export interface VECCoefDisplay {
   p_value: number;
   ci_lower: number;
   ci_upper: number;
+}
+
+/** Stata vecrank 风格 — Johansen trace / max eigenvalue */
+export interface VecRankRowData {
+  rank: number;
+  log_likelihood: number;
+  eigenvalue: number | null;
+  trace_statistic: number | null;
+  trace_crit_10pct: number | null;
+  trace_crit_5pct: number | null;
+  trace_crit_1pct: number | null;
+  max_eigenvalue_statistic: number | null;
+  max_eigen_crit_10pct: number | null;
+  max_eigen_crit_5pct: number | null;
+  max_eigen_crit_1pct: number | null;
+}
+
+export interface VecRankResultData {
+  kind: string;
+  title: string;
+  var_names: string[];
+  num_observation: number;
+  n_lags: number;
+  trend_spec: string;
+  show_max_eigen: boolean;
+  selected_rank_trace_95: number;
+  selected_rank_trace_99: number;
+  selected_rank_max_95: number;
+  selected_rank_max_99: number;
+  rows: VecRankRowData[];
+  note: string;
 }
 
 /** DF & ADF 回归表行 */

@@ -9,6 +9,7 @@ mod df_adf_nodes;
 mod ols_nodes;
 mod var_nodes;
 mod vec_coint_nodes;
+mod vec_coint_vecrank_nodes;
 mod wls_nodes;
 mod gls_nodes;
 mod prais_nodes;
@@ -33,6 +34,7 @@ pub fn register(registry: &NodeRegistry) {
     ols_nodes::register(registry);
     var_nodes::register(registry);
     vec_coint_nodes::register(registry);
+    vec_coint_vecrank_nodes::register(registry);
     wls_nodes::register(registry);
     gls_nodes::register(registry);
     prais_nodes::register(registry);

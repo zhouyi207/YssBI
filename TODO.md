@@ -159,11 +159,13 @@
 - [x] 接下来我需要处理协整节点
 - [ ] 目前 vecm 中的 Equation Summary 中的 R-sq 数值和 stata 对不上，不知道 stata 的这个 R-sq 是怎么计算的
 - [ ] EG-ADF 检验未完成
-- [ ] 检验 var 模型的滞后阶数 varsoc x y z ..... 目前不是完整命令
+- [x] 检验 var 模型的滞后阶数 varsoc x y z ..... 目前不是完整命令
 - [ ] 检验协整秩 vecrank x y z, lags(#) max trend(none) trend(trend)
 - [ ] vecm 就是利用上面这两玩意确认阶数和秩
 
+## 2026.03.20
 
+- [ ] did
 
 
 # TODOLIST

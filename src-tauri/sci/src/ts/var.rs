@@ -54,6 +54,11 @@ pub struct VARConfig {
     pub dfk: bool,
     /// varlmar 最大滞后阶数，默认 2
     pub mlag: usize,
+    /// 与 Stata `varsoc` 一致：回归从全局时刻 `sample_start` 开始（0-based 行下标），`n_obs = T - sample_start`。
+    /// `None` 时等于 `max(lags)`（原行为）。
+    pub sample_start_offset: Option<usize>,
+    /// 仅似然与信息准则，跳过 IRF/FEVD/诊断（`varsoc` 用）
+    pub skip_extras: bool,
 }
 
 impl Default for VARConfig {
@@ -64,6 +69,8 @@ impl Default for VARConfig {
             step: 8,
             dfk: false,
             mlag: 2,
+            sample_start_offset: None,
+            skip_extras: false,
         }
     }
 }
@@ -72,13 +79,16 @@ impl Default for VARConfig {
 pub struct VAR {
     /// 内生变量 Y (T × K)，每列一个变量
     pub y: Array2<f64>,
-    /// 外生变量 X (T × M)，可选
+    /// 外生变量 X (T × M)，可选；缺失处可为 NaN（仅非回归行）
     pub exog: Option<Array2<f64>>,
     pub config: VARConfig,
     /// 变量名，用于系数标签
     pub var_names: Option<Vec<String>>,
     /// 外生变量名，用于系数标签
     pub exog_names: Option<Vec<String>>,
+    /// 与 Stata `var …, exog()` 一致：`None` 时用连续样本 `t = sample_start … T−1`；
+    /// `Some` 时仅在列出的全局行下标 `t` 上估计（要求该期 `exog[t]` 及所需 `y` 均有限）。
+    pub regression_times: Option<Vec<usize>>,
 }
 
 /// 单方程估计结果（Stata 风格）
@@ -171,6 +181,182 @@ pub struct VARWleRow {
     pub p_value: f64,
 }
 
+/// `varsoc` 表一行（Stata `varsoc` 输出对应列）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VARSocRow {
+    pub lag: usize,
+    pub log_likelihood: f64,
+    /// 相对 VAR(p−1) 的 LR；lag 1 为 `None`
+    pub lr: Option<f64>,
+    pub lr_df: Option<usize>,
+    pub lr_p: Option<f64>,
+    pub fpe: f64,
+    pub aic: f64,
+    pub hqic: f64,
+    pub sbic: f64,
+}
+
+/// `varsoc` 完整结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VARSocResult {
+    pub title: String,
+    pub var_names: Vec<String>,
+    pub maxlag: usize,
+    pub num_observation: usize,
+    pub rows: Vec<VARSocRow>,
+}
+
+/// Stata `varsoc varlist, maxlag(P)`：Lag 行 **0…P**（0 = 仅截距的 VAR(0)）；各阶共用 `T−P` 个观测。
+/// `LR(j)=2(LL(j)−LL(j−1))`（`j≥1`），`df=K²`；Lag 0 无 LR（与 Stata 表一致）。
+pub fn var_varsoc(
+    y: Array2<f64>,
+    maxlag: usize,
+    var_names: Option<Vec<String>>,
+) -> Result<VARSocResult, String> {
+    if maxlag < 1 {
+        return Err("varsoc: maxlag must be >= 1".to_string());
+    }
+    let (t, k) = (y.nrows(), y.ncols());
+    if k < 1 {
+        return Err("varsoc: need at least one endogenous variable".to_string());
+    }
+    if t <= maxlag {
+        return Err(format!(
+            "varsoc: need T > maxlag ({}), got T={}",
+            maxlag, t
+        ));
+    }
+
+    let n_obs = t - maxlag;
+    let mut rows = Vec::with_capacity(maxlag + 1);
+    let mut prev_ll: Option<f64> = None;
+
+    for p in 0..=maxlag {
+        let lags: Vec<usize> = if p == 0 {
+            Vec::new()
+        } else {
+            (1..=p).collect()
+        };
+        let var = VAR {
+            y: y.clone(),
+            exog: None,
+            config: VARConfig {
+                constant: true,
+                lags,
+                step: 1,
+                dfk: false,
+                mlag: 1,
+                sample_start_offset: Some(maxlag),
+                skip_extras: true,
+            },
+            var_names: var_names.clone(),
+            exog_names: None,
+            regression_times: None,
+        };
+        let r = var.fit()?;
+
+        let (lr, lr_df, lr_p) = if p == 0 {
+            (None, None, None)
+        } else {
+            let ll_prev = prev_ll.ok_or("varsoc: internal prev_ll")?;
+            let lr_stat = 2.0 * (r.log_likelihood - ll_prev);
+            let df = k * k;
+            let pval =
+                1.0 - statrs::distribution::ChiSquared::new(df as f64).unwrap().cdf(lr_stat);
+            (Some(lr_stat), Some(df), Some(pval))
+        };
+        prev_ll = Some(r.log_likelihood);
+
+        rows.push(VARSocRow {
+            lag: p,
+            log_likelihood: r.log_likelihood,
+            lr,
+            lr_df: lr_df,
+            lr_p: lr_p,
+            fpe: r.fpe,
+            aic: r.aic,
+            hqic: r.hqic,
+            sbic: r.sbic,
+        });
+    }
+
+    let names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
+    Ok(VARSocResult {
+        title: "VAR lag-order selection (varsoc)".to_string(),
+        var_names: names,
+        maxlag,
+        num_observation: n_obs,
+        rows,
+    })
+}
+
+/// Stata `var …, exog()`：在时刻 `t` 参与估计当且仅当 `y[t]`、每个 `y[t−lag]` 以及（若有）`exog[t]` 均有限。
+/// 第一期外生缺失不删行：仍可作为 `t≥p` 时的滞后，只要当期 `exog[t]` 完整。
+pub fn var_regression_times_stata(
+    y: &Array2<f64>,
+    lags: &[usize],
+    exog: Option<&Array2<f64>>,
+) -> Result<Vec<usize>, String> {
+    if lags.is_empty() {
+        return Err("VAR: lags cannot be empty".to_string());
+    }
+    let t = y.nrows();
+    let k = y.ncols();
+    let p_model = *lags.iter().max().expect("lags non-empty");
+    if let Some(ex) = exog {
+        if ex.nrows() != t {
+            return Err(format!(
+                "VAR: exog has {} rows, expected {} (must match Y)",
+                ex.nrows(),
+                t
+            ));
+        }
+    }
+    let mut out = Vec::new();
+    for row_t in p_model..t {
+        let mut ok = true;
+        for j in 0..k {
+            if !y[[row_t, j]].is_finite() {
+                ok = false;
+                break;
+            }
+        }
+        if !ok {
+            continue;
+        }
+        for &lag in lags {
+            let lr = row_t - lag;
+            for j in 0..k {
+                if !y[[lr, j]].is_finite() {
+                    ok = false;
+                    break;
+                }
+            }
+            if !ok {
+                break;
+            }
+        }
+        if !ok {
+            continue;
+        }
+        if let Some(ex) = exog {
+            for j in 0..ex.ncols() {
+                if !ex[[row_t, j]].is_finite() {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok {
+            out.push(row_t);
+        }
+    }
+    if out.is_empty() {
+        return Err("VAR: no valid regression periods (check y / exog for missing)".to_string());
+    }
+    Ok(out)
+}
+
 impl VAR {
     pub fn fit(&self) -> Result<VARResult, String> {
         let y = &self.y;
@@ -179,14 +365,28 @@ impl VAR {
         let step = self.config.step;
         let constant = self.config.constant;
 
-        if lags.is_empty() {
-            return Err("VAR: lags cannot be empty".to_string());
-        }
-        let p_max = *lags.iter().max().ok_or("VAR: empty lags")?;
-        if t <= p_max {
+        let p_model = if lags.is_empty() {
+            if !self.config.skip_extras {
+                return Err("VAR: lags cannot be empty unless skip_extras".to_string());
+            }
+            0
+        } else {
+            *lags.iter().max().expect("non-empty lags checked")
+        };
+        let sample_start = self
+            .config
+            .sample_start_offset
+            .unwrap_or(p_model);
+        if p_model > sample_start {
             return Err(format!(
-                "VAR: need T > p_max ({}), got T={}",
-                p_max, t
+                "VAR: sample_start_offset ({}) must be >= max(lag) ({})",
+                sample_start, p_model
+            ));
+        }
+        if t <= sample_start {
+            return Err(format!(
+                "VAR: need T > sample_start ({}), got T={}",
+                sample_start, t
             ));
         }
 
@@ -194,7 +394,6 @@ impl VAR {
         let n_lag_coefs = k * lags.len();
         let n_exog = self.exog.as_ref().map(|x| x.ncols()).unwrap_or(0);
         let n_z = n_lag_coefs + n_exog + if constant { 1 } else { 0 };
-        let n_obs = t - p_max;
 
         if let Some(ref exog) = self.exog {
             if exog.nrows() != t {
@@ -205,11 +404,34 @@ impl VAR {
             }
         }
 
+        let row_indices: Vec<usize> = if let Some(ref rt) = self.regression_times {
+            if rt.is_empty() {
+                return Err("VAR: regression_times is empty".to_string());
+            }
+            for &row_t in rt {
+                if row_t < sample_start {
+                    return Err(format!(
+                        "VAR: regression_times contains {} < sample_start ({})",
+                        row_t, sample_start
+                    ));
+                }
+                if row_t >= t {
+                    return Err(format!(
+                        "VAR: regression_times contains {} >= T ({})",
+                        row_t, t
+                    ));
+                }
+            }
+            rt.clone()
+        } else {
+            (sample_start..t).collect()
+        };
+        let n_obs = row_indices.len();
+
         let mut z = Array2::zeros((n_obs, n_z));
         let mut y_dep = Array2::zeros((n_obs, k));
 
-        for i in 0..n_obs {
-            let row_t = p_max + i;
+        for (i, &row_t) in row_indices.iter().enumerate() {
             let mut col_z = 0;
             // 先遍历每个 y，再遍历其 L1, L2, ... → L1.y1, L2.y1; L1.y2, L2.y2; ...
             for j in 0..k {
@@ -323,9 +545,65 @@ impl VAR {
         let sigma = (u_mat.t().dot(&u_mat) / te).to_owned();
         let df_r = n_obs - n_z;
 
+        if self.config.skip_extras {
+            let mut g_nd = sigma.clone();
+            cholesky_lower_in_place(&mut g_nd)
+                .map_err(|_| "VAR: Sigma not positive definite for Cholesky".to_string())?;
+            let det_g: f64 = (0..k).map(|i| g_nd[[i, i]]).product();
+            let det_sigma = (det_g * det_g).abs();
+            let det_sigma_ml = if det_sigma > 1e-300 {
+                det_sigma
+            } else {
+                1e-300
+            };
+            let ll = -0.5 * (n_obs as f64)
+                * (k as f64 * (2.0 * std::f64::consts::PI).ln() + det_sigma_ml.ln() + k as f64);
+            let n_parms = (k * n_z) as f64;
+            let aic = -2.0 * ll / (n_obs as f64) + 2.0 * n_parms / (n_obs as f64);
+            let fpe = det_sigma_ml
+                * ((n_obs as f64 + n_parms) / (n_obs as f64 - n_parms)).powi(k as i32);
+            let hqic = -2.0 * ll / (n_obs as f64)
+                + 2.0 * n_parms * (n_obs as f64).ln().ln() / (n_obs as f64);
+            let sbic = -2.0 * ll / (n_obs as f64) + n_parms * (n_obs as f64).ln() / (n_obs as f64);
+            let var_names = self
+                .var_names
+                .clone()
+                .unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
+            let sigma_mat: Vec<Vec<f64>> = sigma
+                .rows()
+                .into_iter()
+                .map(|r| r.iter().cloned().collect())
+                .collect();
+            return Ok(VARResult {
+                var_names,
+                num_observation: n_obs,
+                log_likelihood: ll,
+                aic,
+                fpe,
+                hqic,
+                sbic,
+                det_sigma_ml,
+                equations: vec![],
+                coefficients,
+                std_errs,
+                z_values: vec![],
+                p_values: vec![],
+                ci_lower: vec![],
+                ci_upper: vec![],
+                coef_labels,
+                sigma: sigma_mat,
+                oirf: vec![],
+                fevd: vec![],
+                varwle: vec![],
+                varlmar: vec![],
+                varstable: vec![],
+                vargranger: vec![],
+            });
+        }
+
         // 提取 A 矩阵：A_i 为 K×K，对应 lag i
-        let mut a_mats: Vec<Array2<f64>> = Vec::with_capacity(p_max + 1);
-        for _ in 0..=p_max {
+        let mut a_mats: Vec<Array2<f64>> = Vec::with_capacity(p_model + 1);
+        for _ in 0..=p_model {
             a_mats.push(Array2::zeros((k, k)));
         }
         let n_lags = lags.len();
@@ -342,7 +620,7 @@ impl VAR {
         let mut phi: Vec<Array2<f64>> = vec![Array2::eye(k)];
         for s in 1..=step {
             let mut phi_s = Array2::zeros((k, k));
-            for i in 1..=s.min(p_max) {
+            for i in 1..=s.min(p_model) {
                 if lags.contains(&i) {
                     phi_s = phi_s + a_mats[i].dot(&phi[s - i]);
                 }

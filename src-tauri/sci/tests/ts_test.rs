@@ -1,7 +1,9 @@
 //! 时间序列模块测试
 
+use ndarray::Array2;
 use polars::prelude::*;
 use yss_sci::ts;
+use yss_sci::ts::var::var_varsoc;
 
 #[test]
 fn test_ts_diff() {
@@ -111,4 +113,29 @@ fn test_ts_lag_numeric() {
     assert_eq!(lag_vals[2], Some(20.0));
     assert_eq!(lag_vals[3], None);
     assert_eq!(lag_vals[4], Some(30.0));
+}
+
+#[test]
+fn test_var_varsoc_shape_and_lr() {
+    // T、K 足够大，两列独立非周期模式，避免任意阶 Z'Z 接近奇异
+    let t = 80usize;
+    let y = Array2::from_shape_fn((t, 2), |(i, j)| {
+        let i = i as f64;
+        if j == 0 {
+            0.02 * i + (0.11 * i + 0.3).sin() * 3.0
+        } else {
+            -0.015 * i + (0.07 * i * i * 0.001 + 1.2).cos() * 2.5 + 5.0
+        }
+    });
+    let r = var_varsoc(y, 3, Some(vec!["a".into(), "b".into()])).unwrap();
+    assert_eq!(r.maxlag, 3);
+    assert_eq!(r.num_observation, t - r.maxlag);
+    // Stata 表：Lag 0 … maxlag
+    assert_eq!(r.rows.len(), 4);
+    assert_eq!(r.rows[0].lag, 0);
+    assert!(r.rows[0].lr.is_none());
+    assert_eq!(r.rows[1].lag, 1);
+    assert!(r.rows[1].lr.is_some());
+    assert_eq!(r.rows[1].lr_df, Some(4));
+    assert!(r.rows[1].lr_p.unwrap() >= 0.0 && r.rows[1].lr_p.unwrap() <= 1.0);
 }

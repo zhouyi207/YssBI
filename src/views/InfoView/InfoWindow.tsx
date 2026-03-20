@@ -3,7 +3,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
+import { VARSocComponent } from './VARSocComponent';
 import { VECComponent } from './VECComponent';
+import { VecRankComponent } from './VecRankComponent';
 import { DFADFComponent } from './DFADFComponent';
 import { DFADFSummaryListComponent } from './DFADFSummaryListComponent';
 import { BinaryComponent } from './BinaryComponent';
@@ -12,7 +14,7 @@ import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
 import { DataViewComponent } from './DataViewComponent';
-import type { PanelSummaryResult } from './shared/types';
+import type { PanelSummaryResult, VecRankResultData } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
 
@@ -24,6 +26,32 @@ function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]
 function isVARSummary(data: unknown): data is { title: string; var_names?: string[]; oirf?: unknown } {
   const d = data as Record<string, unknown>;
   return typeof d === 'object' && d != null && Array.isArray(d.var_names) && d.oirf !== undefined;
+}
+
+function isVARSoc(data: unknown): data is { title: string; maxlag: number; rows: unknown[] } {
+  const d = data as Record<string, unknown>;
+  if (typeof d !== 'object' || d == null || typeof d.maxlag !== 'number' || !Array.isArray(d.rows)) {
+    return false;
+  }
+  const r0 = d.rows[0] as Record<string, unknown> | undefined;
+  return (
+    r0 != null &&
+    typeof r0.lag === 'number' &&
+    typeof r0.log_likelihood === 'number' &&
+    d.oirf === undefined
+  );
+}
+
+function isVecRank(data: unknown): data is VecRankResultData {
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    d.kind === 'vecrank' &&
+    Array.isArray(d.rows) &&
+    typeof d.num_observation === 'number' &&
+    typeof d.n_lags === 'number'
+  );
 }
 
 function isVECSummary(data: unknown): data is { title: string; var_names?: string[]; rank?: number; trend_spec?: string } {
@@ -243,8 +271,12 @@ export const InfoWindow: React.FC = () => {
             <DFADFSummaryListComponent data={olsData} />
           ) : isDFADFSummary(olsData) ? (
             <DFADFComponent data={olsData} />
+          ) : isVecRank(olsData) ? (
+            <VecRankComponent data={olsData} />
           ) : isVECSummary(olsData) ? (
             <VECComponent data={olsData} />
+          ) : isVARSoc(olsData) ? (
+            <VARSocComponent data={olsData} />
           ) : isVARSummary(olsData) ? (
             <VARComponent data={olsData} />
           ) : isPanelSummary(olsData) ? (

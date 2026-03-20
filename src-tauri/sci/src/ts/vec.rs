@@ -3,6 +3,7 @@
 //! 按 Stata vec 命令的 Johansen (1995) 方法实现。
 //! 支持 trend(none), trend(constant), trend(trend)。
 
+use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
 use faer::{linalg::solvers::Solve, Mat, Side};
 use faer::linalg::solvers::Eigen;
@@ -69,6 +70,40 @@ pub struct VECResult {
     pub vecstable: Vec<VecStableRow>,
 }
 
+/// Stata `vecrank` 风格输出（Johansen trace / max eigenvalue）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VecRankRow {
+    pub rank: usize,
+    pub log_likelihood: f64,
+    pub eigenvalue: Option<f64>,
+    pub trace_statistic: Option<f64>,
+    /// 右尾检验在 10% / 5% / 1% 显著性下的临界值（与 Stata/R 10pct·5pct·1pct 列一致）
+    pub trace_crit_10pct: Option<f64>,
+    pub trace_crit_5pct: Option<f64>,
+    pub trace_crit_1pct: Option<f64>,
+    pub max_eigenvalue_statistic: Option<f64>,
+    pub max_eigen_crit_10pct: Option<f64>,
+    pub max_eigen_crit_5pct: Option<f64>,
+    pub max_eigen_crit_1pct: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VecRankResult {
+    pub kind: String,
+    pub title: String,
+    pub var_names: Vec<String>,
+    pub num_observation: usize,
+    pub n_lags: usize,
+    pub trend_spec: String,
+    pub show_max_eigen: bool,
+    pub selected_rank_trace_95: usize,
+    pub selected_rank_trace_99: usize,
+    pub selected_rank_max_95: usize,
+    pub selected_rank_max_99: usize,
+    pub rows: Vec<VecRankRow>,
+    pub note: String,
+}
+
 /// veclmar 单行：lag 阶的 LM 检验
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecLmarRow {
@@ -117,29 +152,35 @@ fn diff_y(y: &Array2<f64>) -> Array2<f64> {
     dy
 }
 
-/// VEC 估计：Johansen 方法
-pub fn vec_estimate(
+/// Johansen MLE 第一阶段：Z、S 矩阵与降序特征值（与 Stata [TS] vec / vecrank 公式一致）
+pub(crate) struct JohansenStage1 {
+    pub n: usize,
+    pub m1: usize,
+    pub m2: usize,
+    pub has_const: bool,
+    pub has_trend: bool,
+    pub z0: Array2<f64>,
+    pub z1: Array2<f64>,
+    pub z2: Array2<f64>,
+    pub s00: Array2<f64>,
+    pub s01: Array2<f64>,
+    pub s10: Array2<f64>,
+    pub s11: Array2<f64>,
+    /// (列索引, λ)，λ 降序
+    pub eval_pairs: Vec<(usize, f64)>,
+    /// 特征向量矩阵实部（m1×m1），与 faer 复特征向量 U 的 .re 一致
+    pub u_eigen_real: Array2<f64>,
+}
+
+pub(crate) fn johansen_stage1(
     y: &Array2<f64>,
-    config: &VECConfig,
-    var_names: Option<Vec<String>>,
+    p: usize,
+    trend_spec: VecTrendSpec,
     sindicators: Option<&Array2<f64>>,
-) -> Result<VECResult, String> {
+) -> Result<JohansenStage1, String> {
     let (n_full, k) = (y.nrows(), y.ncols());
-    let p = config.lags;
-    let r = config.rank;
-
-    if p < 1 {
-        return Err("VEC: lags must be >= 1".to_string());
-    }
-    if r >= k {
-        return Err(format!(
-            "VEC: rank({}) must be < number of variables ({})",
-            r, k
-        ));
-    }
-
     let dy = diff_y(y);
-    let n = n_full - p; // 有效观测数
+    let n = n_full - p;
     if n <= 0 {
         return Err("VEC: not enough observations after lag adjustment".to_string());
     }
@@ -151,11 +192,7 @@ pub fn vec_estimate(
         }
     }
 
-    let var_names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
-
-    // 根据 trend_spec 确定 Z1, Z2 维度
-    // m1 = Z1 的维度, m2 = Z2 的维度
-    let (m1, has_const, has_trend): (usize, bool, bool) = match config.trend_spec {
+    let (m1, has_const, has_trend): (usize, bool, bool) = match trend_spec {
         VecTrendSpec::None => (k, false, false),
         VecTrendSpec::Constant => (k, true, false),
         VecTrendSpec::Trend => (k, true, true),
@@ -171,7 +208,6 @@ pub fn vec_estimate(
         ));
     }
 
-    // 构建 Z0 (n×K), Z1 (n×m1), Z2 (n×m2)
     let mut z0 = Array2::zeros((n, k));
     let mut z1 = Array2::zeros((n, m1));
     let mut z2 = Array2::zeros((n, m2));
@@ -205,7 +241,6 @@ pub fn vec_estimate(
         }
     }
 
-    // Mij = (1/T) sum Zit Zjt'
     let t_inv = 1.0 / (n as f64);
     let m02 = (z0.t().dot(&z2)) * t_inv;
     let m12 = (z1.t().dot(&z2)) * t_inv;
@@ -218,7 +253,6 @@ pub fn vec_estimate(
         .map_err(|_| "VEC: M22 not positive definite (collinearity in Z2)".to_string())?
         .solve(Mat::identity(m22.nrows(), m22.ncols()));
 
-    // R0 = Z0 - M02 M22^{-1} Z2, R1 = Z1 - M12 M22^{-1} Z2
     let m02_m22i = m02.view().into_faer().to_owned() * m22_inv.as_ref();
     let m12_m22i = m12.view().into_faer().to_owned() * m22_inv.as_ref();
 
@@ -241,7 +275,6 @@ pub fn vec_estimate(
         }
     }
 
-    // Sij = (1/T) sum Rit Rjt'
     let s00 = (r0.t().dot(&r0)) * t_inv;
     let s01 = (r0.t().dot(&r1)) * t_inv;
     let s10 = (r1.t().dot(&r0)) * t_inv;
@@ -261,8 +294,6 @@ pub fn vec_estimate(
         .map_err(|_| "VEC: S11 not positive definite".to_string())?
         .solve(Mat::identity(s11.nrows(), s11.ncols()));
 
-    // 广义特征值: λ S11 v = S10 S00^{-1} S01 v
-    // 即 S11^{-1} S10 S00^{-1} S01 v = λ v
     let s10_s00i_s01 = s10.view().into_faer().to_owned() * s00_inv.as_ref() * s01.view().into_faer();
     let e_mat = s11_inv.as_ref() * s10_s00i_s01.as_ref();
 
@@ -270,21 +301,89 @@ pub fn vec_estimate(
         .map_err(|_| "VEC: eigenvalue decomposition failed".to_string())?;
 
     let s_diag = evd.S().column_vector();
-    let u_mat = evd.U();
+    let u_c = evd.U();
+    let u_nr = u_c.nrows();
+    let u_nc = u_c.ncols();
+    let mut u_eigen_real = Array2::zeros((u_nr, u_nc));
+    for i in 0..u_nr {
+        for j in 0..u_nc {
+            u_eigen_real[[i, j]] = u_c[(i, j)].re;
+        }
+    }
 
-    let mut evals: Vec<(usize, f64)> = (0..m1)
+    let mut eval_pairs: Vec<(usize, f64)> = (0..m1)
         .map(|i| {
             let ev = s_diag.get(i);
             (i, ev.re)
         })
         .collect();
-    evals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    eval_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    Ok(JohansenStage1 {
+        n,
+        m1,
+        m2,
+        has_const,
+        has_trend,
+        z0,
+        z1,
+        z2,
+        s00,
+        s01,
+        s10,
+        s11,
+        eval_pairs,
+        u_eigen_real,
+    })
+}
+
+/// VEC 估计：Johansen 方法
+pub fn vec_estimate(
+    y: &Array2<f64>,
+    config: &VECConfig,
+    var_names: Option<Vec<String>>,
+    sindicators: Option<&Array2<f64>>,
+) -> Result<VECResult, String> {
+    let (_, k) = (y.nrows(), y.ncols());
+    let p = config.lags;
+    let r = config.rank;
+
+    if p < 1 {
+        return Err("VEC: lags must be >= 1".to_string());
+    }
+    if r >= k {
+        return Err(format!(
+            "VEC: rank({}) must be < number of variables ({})",
+            r, k
+        ));
+    }
+
+    let var_names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
+
+    let s1 = johansen_stage1(y, p, config.trend_spec, sindicators)?;
+    let n = s1.n;
+    let m1 = s1.m1;
+    let m2 = s1.m2;
+    let has_const = s1.has_const;
+    let has_trend = s1.has_trend;
+    let z0 = s1.z0;
+    let z1 = s1.z1;
+    let z2 = s1.z2;
+    let s00 = s1.s00;
+    let s01 = s1.s01;
+    let s10 = s1.s10;
+    let s11 = s1.s11;
+    let evals = s1.eval_pairs;
+    let u_eigen = s1.u_eigen_real;
+    let m_si = sindicators.map(|s| s.ncols()).unwrap_or(0);
+
+    let n_lag_dy = k * (p - 1);
+    let s11_faer = s11.view().into_faer().to_owned();
 
     let mut beta_tilde = Mat::zeros(m1, r);
     for (col, &(idx, _)) in evals.iter().take(r).enumerate() {
         for row in 0..m1 {
-            let v = u_mat[(row, idx)];
-            beta_tilde.as_mut()[(row, col)] = v.re;
+            beta_tilde.as_mut()[(row, col)] = u_eigen[[row, idx]];
         }
     }
 
@@ -336,7 +435,6 @@ pub fn vec_estimate(
 
     let alpha_nd = alpha_mat.as_ref().into_ndarray().to_owned();
 
-    let n_lag_dy = k * (p - 1);
     let mut mu_rho: Vec<f64> = Vec::new();
     if has_const || has_trend {
         // Use Z1 (y_{t-1}) not r1 for backing out μ,ρ per Stata eq.(11)
@@ -764,6 +862,185 @@ pub fn vec_estimate(
         beta_ci_upper,
         veclmar,
         vecstable,
+    })
+}
+
+/// Johansen 协整秩检验（LR_trace、LR_max、LL(r) 与 Stata [TS] vecrank 公式一致；临界值为 Osterwald–Lenum，与 Stata 打印一致）
+pub fn vec_vecrank_stats(
+    y: &Array2<f64>,
+    lags: usize,
+    trend_spec: VecTrendSpec,
+    sindicators: Option<&Array2<f64>>,
+    show_max_eigen: bool,
+    var_names: Option<Vec<String>>,
+) -> Result<VecRankResult, String> {
+    let k = y.ncols();
+    if k < 2 {
+        return Err("vecrank: need at least 2 variables".to_string());
+    }
+    if k > 12 {
+        return Err("vecrank: Johansen tables only defined for K <= 12".to_string());
+    }
+    if lags < 1 {
+        return Err("vecrank: lags must be >= 1".to_string());
+    }
+
+    let s1 = johansen_stage1(y, lags, trend_spec, sindicators)?;
+    let n = s1.n;
+    let t = n as f64;
+    let evals: Vec<f64> = s1.eval_pairs.iter().map(|(_, v)| *v).collect();
+    if evals.len() != k {
+        return Err("vecrank: internal eigenvalue count mismatch".to_string());
+    }
+
+    let det_order = match trend_spec {
+        VecTrendSpec::None => -1,
+        VecTrendSpec::Constant => 0,
+        VecTrendSpec::Trend => 1,
+    };
+
+    let mut s00_chol = s1.s00.clone();
+    cholesky_lower_in_place(&mut s00_chol).map_err(|_| "vecrank: S00 not positive definite".to_string())?;
+    let ln_det_s00: f64 = 2.0 * (0..k).map(|i| s00_chol[[i, i]].ln()).sum::<f64>();
+    let k_bracket = k as f64 * ((2.0 * std::f64::consts::PI).ln() + 1.0);
+
+    let log_1m = |lam: f64| -> f64 {
+        let lam = lam.clamp(0.0, 1.0 - 1e-15);
+        (1.0 - lam).max(1e-300).ln()
+    };
+
+    let mut trace = vec![0.0_f64; k];
+    for r in 0..k {
+        let s: f64 = (r..k).map(|j| log_1m(evals[j])).sum();
+        trace[r] = -t * s;
+    }
+
+    let mut maxe = vec![0.0_f64; k];
+    for r in 0..k {
+        maxe[r] = -t * log_1m(evals[r]);
+    }
+
+    let mut sel_tr_95 = k;
+    for r in 0..k {
+        let dim = k - r;
+        if let Some(cv) = trace_critical_row(dim, det_order) {
+            if trace[r] < cv[1] {
+                sel_tr_95 = r;
+                break;
+            }
+        }
+    }
+    let mut sel_tr_99 = k;
+    for r in 0..k {
+        let dim = k - r;
+        if let Some(cv) = trace_critical_row(dim, det_order) {
+            if trace[r] < cv[2] {
+                sel_tr_99 = r;
+                break;
+            }
+        }
+    }
+
+    let mut sel_mx_95 = k;
+    for r in 0..k {
+        let dim = k - r;
+        if let Some(cv) = max_eigen_critical_row(dim, det_order) {
+            if maxe[r] < cv[1] {
+                sel_mx_95 = r;
+                break;
+            }
+        }
+    }
+    let mut sel_mx_99 = k;
+    for r in 0..k {
+        let dim = k - r;
+        if let Some(cv) = max_eigen_critical_row(dim, det_order) {
+            if maxe[r] < cv[2] {
+                sel_mx_99 = r;
+                break;
+            }
+        }
+    }
+
+    let trend_str = match trend_spec {
+        VecTrendSpec::None => "none",
+        VecTrendSpec::Constant => "constant",
+        VecTrendSpec::Trend => "trend",
+    }
+    .to_string();
+
+    let names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
+
+    let mut rows = Vec::with_capacity(k + 1);
+    for rank in 0..=k {
+        let sum_r: f64 = (0..rank).map(|j| log_1m(evals[j])).sum();
+        let ll_r = -0.5 * t * (k_bracket + ln_det_s00 + sum_r);
+
+        let eigenvalue = if rank >= 1 && rank <= k {
+            Some(evals[rank - 1])
+        } else {
+            None
+        };
+
+        let trace_stat = if rank < k {
+            Some(trace[rank])
+        } else {
+            None
+        };
+
+        let max_stat = if rank < k {
+            Some(maxe[rank])
+        } else {
+            None
+        };
+
+        let (t10, t5, t1) = if rank < k {
+            let dim = k - rank;
+            trace_critical_row(dim, det_order)
+                .map(|cv| (Some(cv[0]), Some(cv[1]), Some(cv[2])))
+                .unwrap_or((None, None, None))
+        } else {
+            (None, None, None)
+        };
+
+        let (m10, m5, m1) = if rank < k {
+            let dim = k - rank;
+            max_eigen_critical_row(dim, det_order)
+                .map(|cv| (Some(cv[0]), Some(cv[1]), Some(cv[2])))
+                .unwrap_or((None, None, None))
+        } else {
+            (None, None, None)
+        };
+
+        rows.push(VecRankRow {
+            rank,
+            log_likelihood: ll_r,
+            eigenvalue,
+            trace_statistic: trace_stat,
+            trace_crit_10pct: t10,
+            trace_crit_5pct: t5,
+            trace_crit_1pct: t1,
+            max_eigenvalue_statistic: max_stat,
+            max_eigen_crit_10pct: m10,
+            max_eigen_crit_5pct: m5,
+            max_eigen_crit_1pct: m1,
+        });
+    }
+
+    Ok(VecRankResult {
+        kind: "vecrank".to_string(),
+        title: "Johansen tests for cointegration".to_string(),
+        var_names: names,
+        num_observation: n,
+        n_lags: lags,
+        trend_spec: trend_str,
+        show_max_eigen,
+        selected_rank_trace_95: sel_tr_95,
+        selected_rank_trace_99: sel_tr_99,
+        selected_rank_max_95: sel_mx_95,
+        selected_rank_max_99: sel_mx_99,
+        rows,
+        note: "Trace and max-eigenvalue statistics follow Johansen (1995) and Stata [TS] vecrank. Critical columns are 10% / 5% / 1% significance (right tail). Critical values: Osterwald–Lenum (1992), same digits as Stata vecrank (see johans.ado Case tables); dim=12 uses MacKinnon–Haug–Michelis tail row. If trace/LL differ from Stata but critical values match, check the same sample length (T) and lag order — LR statistics scale with T.".to_string(),
     })
 }
 
