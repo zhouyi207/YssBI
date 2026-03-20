@@ -16,8 +16,8 @@ pub trait NodeExecutionContextTrait {
     /// 通过角色获取多个输入值（用于动态组）
     fn get_inputs_by_role(&self, role: &PinRole) -> Result<Vec<DataValue>, String>;
 
-    /// 通过角色家族获取所有输入值（例如获取所有 Operands）
-    /// pattern: 用于匹配的角色模式，例如 PinRole::Data(DataRole::Operands(0))
+    /// 通过角色家族获取所有输入值（例如获取所有 Operands）。
+    /// 无匹配 pin 时返回空 `Vec`（与「未连接任何该族输入」一致）；需要至少一个的节点应自行检查。
     fn get_inputs_by_family(&self, pattern: &PinRole) -> Result<Vec<DataValue>, String>;
 
     /// 通过角色设置单个输出值

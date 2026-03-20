@@ -151,6 +151,8 @@ pub fn run() {
             compute_acf_pacf,
             // ==================== 序列相关检验 ====================
             compute_serial_tests,
+            // ==================== Panel DID（结果页） ====================
+            compute_panel_did_fake_group_ri,
             // ==================== 日志 ====================
             frontend_log,
             get_logs,

@@ -8,7 +8,7 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{ColumnSchema, DataSchema, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
+use crate::graph::node::{ColumnSchema, DataSchema, NodeDefinition, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
 pub use crate::graph::node::SchemaProvider;
 use crate::graph::node::OutputSchemaContext;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
@@ -1147,6 +1147,59 @@ impl GraphInstance {
     }
 }
 
+/// 在 `pin_ids` 中插入新 repeatable 成员的索引：若有同族 pin 则插在最后一个之后；否则插在本槽位在定义中的起始位置（避免 min_count=0 时误插到节点底部）。
+fn pin_repeatable_insert_index(
+    node: &NodeInstance,
+    data_state: &GraphDataState,
+    definition: &NodeDefinition,
+    slot_index: usize,
+    template_role: &PinRole,
+) -> usize {
+    if let Some(pos) = node.pin_ids.iter().rposition(|pid| {
+        data_state
+            .pins
+            .get(pid)
+            .map(|p| p.definition.role.matches_family(template_role))
+            .unwrap_or(false)
+    }) {
+        return pos + 1;
+    }
+
+    let mut idx = 0;
+    for (si, slot) in definition.pin_slots.iter().enumerate() {
+        if si == slot_index {
+            return idx;
+        }
+        match slot {
+            PinSlot::Fixed { .. } => {
+                if idx < node.pin_ids.len() {
+                    idx += 1;
+                }
+            }
+            PinSlot::Repeatable { .. } => {
+                let Some(tmpl) = slot.repeatable_template_role() else {
+                    continue;
+                };
+                while idx < node.pin_ids.len() {
+                    let pid = node.pin_ids[idx];
+                    let m = data_state
+                        .pins
+                        .get(&pid)
+                        .map(|p| p.definition.role.matches_family(tmpl))
+                        .unwrap_or(false);
+                    if m {
+                        idx += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            PinSlot::DerivedFromInput { .. } => {}
+        }
+    }
+    idx
+}
+
 /// Repeatable Pin 增删
 impl GraphInstance {
     /// 向节点的某个 Repeatable 槽位追加一个新 pin
@@ -1211,17 +1264,23 @@ impl GraphInstance {
             data_state.connections.register_pin(new_pin_id, node_id);
             data_state.pins.insert(new_pin_id, new_pin.clone());
 
-            let insert_pos = data_state.nodes.get(&node_id).map(|node| {
-                node.pin_ids.iter().rposition(|pid| {
-                    data_state.pins.get(pid)
-                        .map(|p| p.definition.role.matches_family(template_role))
-                        .unwrap_or(false)
-                }).map(|pos| pos + 1)
-                .unwrap_or(node.pin_ids.len())
-            });
+            let insert_pos = data_state
+                .nodes
+                .get(&node_id)
+                .map(|node| {
+                    pin_repeatable_insert_index(
+                        node,
+                        &data_state,
+                        definition.as_ref(),
+                        slot_index,
+                        template_role,
+                    )
+                })
+                .unwrap_or(0);
 
             if let Some(node) = data_state.nodes.get_mut(&node_id) {
-                node.pin_ids.insert(insert_pos.unwrap_or(node.pin_ids.len()), new_pin_id);
+                let pos = insert_pos.min(node.pin_ids.len());
+                node.pin_ids.insert(pos, new_pin_id);
             }
         }
 

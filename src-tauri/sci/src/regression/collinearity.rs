@@ -35,6 +35,9 @@ pub fn drop_collinear_columns(
 ) -> Result<(Array2<f64>, Vec<usize>), String> {
     let _n = exog.nrows();
     let k = exog.ncols();
+    if k == 0 {
+        return Ok((exog.clone(), Vec::new()));
+    }
     if col_is_dummy.len() != k {
         return Err(format!(
             "drop_collinear_columns: col_is_dummy len {} != exog cols {}",

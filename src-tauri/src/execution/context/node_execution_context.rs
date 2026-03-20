@@ -83,10 +83,6 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             }
         }
 
-        if values.is_empty() {
-            return Err(format!("No input pins matching family {:?} found", pattern));
-        }
-
         Ok(values)
     }
 

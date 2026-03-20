@@ -6,6 +6,7 @@ export * from './CoefficientTable';
 export * from './CoefficientsBlock';
 export * from './ModelSummaryGrid';
 export * from './PanelFESummaryGrid';
+export * from './DidEventStudyChart';
 export * from './PanelBESummaryGrid';
 export * from './PanelRESummaryGrid';
 export * from './PanelSelectionTestsBlock';

@@ -27,10 +27,27 @@ use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasic
 
 // ======================== 结构体 ========================
 
+fn serde_default_true() -> bool {
+    true
+}
+
+fn serde_default_one_usize() -> usize {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PanelConfigure {
     pub constant: bool,
     pub cov_type: String,
+    /// Event-study Wald on pre-policy `rel_time×treat` (Stata-style `test` on leads)
+    #[serde(default = "serde_default_true")]
+    pub did_parallel_trends: bool,
+    /// Falsification: treated×fake pre window before adoption
+    #[serde(default = "serde_default_true")]
+    pub did_placebo: bool,
+    /// Length of fake pre window [t*−H, t*−1] in time ordinal units
+    #[serde(default = "serde_default_one_usize")]
+    pub did_placebo_horizon: usize,
 }
 
 /// VCE constant for Panel: cluster by entity (uses Entity ID from Panel Summary)
@@ -151,7 +168,7 @@ pub struct PanelSelectionTest {
 
 // ======================== 辅助函数 ========================
 
-fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &str) -> Result<Vec<usize>, String> {
+pub(crate) fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &str) -> Result<Vec<usize>, String> {
     let series = ctx.get_series(series_id)?;
     let n = series.len();
     let mut indices = Vec::with_capacity(n);
@@ -503,7 +520,7 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
     Ok((endog, exog, entity_after, time_after, time_values, all_labels, endog_name, has_constant, entity_names, entity_series_name, time_names, time_series_name))
 }
 
-fn panel_result_to_ols_result(
+pub(crate) fn panel_result_to_ols_result(
     pr: &yss_sci::regression::panel::PanelOLSResult,
     model_type: &str,
     method: &str,
@@ -1312,6 +1329,9 @@ fn register_panel_configure(registry: &NodeRegistry) {
         let config = PanelConfigure {
             constant,
             cov_type,
+            did_parallel_trends: true,
+            did_placebo: true,
+            did_placebo_horizon: 1,
         };
         let handle_id = ctx.put_handle(Box::new(config));
         ctx.emit_output_by_role(

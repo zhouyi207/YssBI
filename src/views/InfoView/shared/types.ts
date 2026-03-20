@@ -103,6 +103,96 @@ export interface PanelSummaryResult {
   };
 }
 
+/** 事件研究图：与平行趋势 Wald 同一套 TWFE 的 treat×rel_time 系数 */
+export interface DidEventStudyPoint {
+  rel_time: number;
+  coef: number;
+  std_err: number;
+  ci_low: number;
+  ci_high: number;
+  /** 参照期（回归中省略），coef=0 无置信区间 */
+  is_reference?: boolean;
+}
+
+/** 平行趋势：事件研究前导项 Wald（与 Stata reghdfe + test 思路一致） */
+export interface DidParallelTrendsBlock {
+  available: boolean;
+  chi2?: number;
+  df?: number;
+  p_value?: number;
+  reference_rel?: number;
+  tested_rel_periods?: number[];
+  /** 用于绘制事件研究图（含参照期 0 点） */
+  event_study?: DidEventStudyPoint[];
+  method_note: string;
+}
+
+/** 安慰剂① 虚构政策时点：真实处理组 × 政策前 H 期伪窗口（系数应接近 0） */
+export interface DidPlaceboTimingBlock {
+  available: boolean;
+  coef?: number;
+  std_err?: number;
+  t_value?: number;
+  p_value?: number;
+  horizon: number;
+  method_note: string;
+}
+
+/** @deprecated 使用 DidPlaceboTimingBlock；JSON 字段名仍为 `placebo` */
+export type DidPlaceboBlock = DidPlaceboTimingBlock;
+
+/** 安慰剂② 虚构处理组：实体级随机指定处理身份（置换推断 p 值） */
+export interface DidPlaceboFakeGroupBlock {
+  available: boolean;
+  observed_coef?: number;
+  n_perm: number;
+  n_perm_valid: number;
+  p_value_ri?: number;
+  perm_coef_mean?: number;
+  perm_coef_std?: number;
+  method_note: string;
+}
+
+/** 与后端 `ExogLabelEntry` 一致 */
+export interface ExogLabelEntry {
+  variable: string;
+  category?: string | null;
+}
+
+/** 结果页「计算虚构处理组」所需快照（不含置换结果） */
+export interface DidFakeGroupEnginePayload {
+  endog: number[];
+  exog_row_major: number[];
+  ncols: number;
+  all_labels: ExogLabelEntry[];
+  entity_id: number[];
+  time_id: number[];
+  post: number[];
+  treat: number[];
+  did_label: string;
+  observed_coef: number;
+  constant: boolean;
+  cov_type: string;
+}
+
+/** 面板 DID（仅双向固定效应）：Y、可选 X、Entity/Time、Boolean Treat & Post；DID 估计量为 Treat×Post 系数 */
+export interface PanelDidResultData {
+  kind: 'panel_did';
+  title: string;
+  endog_name: string;
+  treat_name: string;
+  post_name: string;
+  fe_twoway?: OLSResultData;
+  error?: string;
+  parallel_trends?: DidParallelTrendsBlock;
+  /** 虚构政策时点 */
+  placebo?: DidPlaceboTimingBlock;
+  /** 供结果页按需调用 `compute_panel_did_fake_group_ri` */
+  fake_group_engine?: DidFakeGroupEnginePayload | null;
+  /** 旧版图执行时内嵌的置换结果（仅兼容历史窗口 JSON） */
+  placebo_fake_group?: DidPlaceboFakeGroupBlock;
+}
+
 export interface PanelSelectionTest {
   id: string;
   group: 'model_choice' | 'effect_choice' | string;

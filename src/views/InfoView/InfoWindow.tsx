@@ -10,11 +10,12 @@ import { DFADFComponent } from './DFADFComponent';
 import { DFADFSummaryListComponent } from './DFADFSummaryListComponent';
 import { BinaryComponent } from './BinaryComponent';
 import { PanelComponent } from './PanelComponent';
+import { DIDComponent } from './DIDComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
 import { DataViewComponent } from './DataViewComponent';
-import type { PanelSummaryResult, VecRankResultData } from './shared/types';
+import type { PanelDidResultData, PanelSummaryResult, VecRankResultData } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
 
@@ -87,11 +88,17 @@ function isDFADFSummary(data: unknown): data is { title: string; test_statistic:
   );
 }
 
+function isPanelDid(data: unknown): data is PanelDidResultData {
+  const d = data as Record<string, unknown>;
+  return typeof d === 'object' && d != null && d.kind === 'panel_did';
+}
+
 function isPanelSummary(data: unknown): data is PanelSummaryResult {
   const d = data as Record<string, unknown>;
   return (
     typeof d === 'object' &&
     d != null &&
+    d.kind !== 'panel_did' &&
     (d.fe !== undefined || d.lsdv !== undefined || d.fd !== undefined || d.re !== undefined)
   );
 }
@@ -105,7 +112,7 @@ function getDataKeyFromHash(): string | null {
 export const InfoWindow: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | null>(null);
+  const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | PanelDidResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -279,6 +286,8 @@ export const InfoWindow: React.FC = () => {
             <VARSocComponent data={olsData} />
           ) : isVARSummary(olsData) ? (
             <VARComponent data={olsData} />
+          ) : isPanelDid(olsData) ? (
+            <DIDComponent data={olsData} />
           ) : isPanelSummary(olsData) ? (
             <PanelComponent data={olsData as PanelSummaryResult} />
           ) : olsData.diagnostic_info?.prais_info ? (

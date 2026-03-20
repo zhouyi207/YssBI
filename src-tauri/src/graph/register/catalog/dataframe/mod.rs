@@ -17,6 +17,9 @@ mod iv_2sls_nodes;
 mod iv_liml_nodes;
 mod logit_nodes;
 mod panel_nodes;
+mod panel_did_nodes;
+mod panel_did_auxiliary;
+mod panel_did_engine;
 mod probit_nodes;
 mod dummy_nodes;
 mod prediction_nodes;
@@ -24,6 +27,11 @@ mod ts_align_nodes;
 mod xt_align_nodes;
 
 use crate::graph::register::NodeRegistry;
+
+pub use panel_did_engine::{
+    compute_fake_group_ri, ComputeDidFakeGroupRequest, DidFakeGroupEnginePayload,
+    DidPlaceboFakeGroupBlock,
+};
 
 pub fn register(registry: &NodeRegistry) {
     nodes::register(registry);
@@ -41,6 +49,7 @@ pub fn register(registry: &NodeRegistry) {
     iv_2sls_nodes::register(registry);
     logit_nodes::register(registry);
     panel_nodes::register(registry);
+    panel_did_nodes::register(registry);
     probit_nodes::register(registry);
     dummy_nodes::register(registry);
     prediction_nodes::register(registry);

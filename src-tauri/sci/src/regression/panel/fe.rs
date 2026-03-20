@@ -461,6 +461,12 @@ pub fn fit_panel_fe(
     let k_after_const = x_after_const.ncols();
     let col_is_dummy = vec![false; k_after_const];
     let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    if x_use.ncols() == 0 {
+        return Err(
+            "Panel FE: no regressors left after within transform and collinearity drop (all absorbed or redundant)"
+                .to_string(),
+        );
+    }
     let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
         None
     } else {
@@ -715,6 +721,12 @@ pub fn fit_panel_fe_time(
     let k_after_const = x_after_const.ncols();
     let col_is_dummy = vec![false; k_after_const];
     let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    if x_use.ncols() == 0 {
+        return Err(
+            "Panel FE (Time): no regressors left after within transform and collinearity drop (all absorbed or redundant)"
+                .to_string(),
+        );
+    }
     let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
         None
     } else {
@@ -961,6 +973,13 @@ pub fn fit_panel_fe_twoway(
     let k_after_const = x_after_const.ncols();
     let col_is_dummy = vec![false; k_after_const];
     let (x_use, omitted_x) = drop_collinear_columns(&x_after_const, &col_is_dummy, None)?;
+    if x_use.ncols() == 0 {
+        return Err(
+            "Panel FE (Two-Way): no regressors left after within transform and collinearity drop \
+             (all absorbed by entity/time FE or redundant). Omit absorbed dummies—e.g. for DID, use Treat×Post only, not separate Treat/Post mains."
+                .to_string(),
+        );
+    }
     let omitted_indices: Option<Vec<usize>> = if omitted_x.is_empty() {
         None
     } else {
@@ -1097,10 +1116,26 @@ pub fn fit_panel_fe_twoway(
         }
     }
 
+    // Same Stata-style entity-level block as one-way FE (R² Between/Overall, σ_u, σ_e, ρ, corr); TWFE uses two-way within R².
+    let kept_cols: Vec<usize> = std::iter::once(0)
+        .chain(kept_slope.iter().map(|&j| j + 1))
+        .collect();
+    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
+    let fe_stats = compute_fe_stats(
+        endog,
+        &exog_kept,
+        entity_id,
+        n_entities,
+        &result.betas,
+        const_coef,
+        result.r2,
+        result.ss_residual,
+    )?;
+
     Ok(super::PanelOLSResult {
         const_coef: Some(const_coef),
         const_std_err: Some(const_std_err),
-        fe_stats: None,
+        fe_stats: Some(fe_stats),
         num_observation: result.num_observation,
         num_entities: n_entities,
         num_time_periods: n_times,
