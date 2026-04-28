@@ -5,6 +5,7 @@ import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { Button } from "@/components/ui/button";
 
 interface DefaultNodeLayoutProps {
   node: Node & { nodeType?: string; variableId?: string; dataframeId?: string };
@@ -227,16 +228,19 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
 
         {hasRepeatable && onAddInput && (
           <div className="flex justify-end px-2 pb-2">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddInput(node.id);
               }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="w-4 h-4 flex items-center justify-center bg-black/10 hover:bg-black/20 rounded text-[10px]"
+              className="h-4 w-4 text-[10px]"
             >
               +
-            </button>
+            </Button>
           </div>
         )}
       </div>

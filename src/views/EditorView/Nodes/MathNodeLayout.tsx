@@ -6,6 +6,7 @@ import { useNodeStyle } from "@/features/core/node";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { Button } from "@/components/ui/button";
 
 interface MathNodeLayoutProps {
   node: Node;
@@ -140,16 +141,19 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
             />
           ))}
           {onAddInput && repeatableSlot && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddInput?.(node.id);
               }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="mt-1 w-4 h-4 flex items-center justify-center bg-black/10 hover:bg-black/20 rounded text-[10px]"
+              className="mt-1 h-4 w-4 text-[10px]"
             >
               +
-            </button>
+            </Button>
           )}
         </div>
         <div className="flex-1" />

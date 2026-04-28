@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { VscDatabase } from 'react-icons/vsc';
 import { logger } from '@/utils/appLogger';
+import { Button } from '@/components/ui/button';
 
 interface TitleBarProps {
   isModified: boolean;
@@ -37,15 +38,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({ isModified }) => {
         )}
       </div>
       <div className="flex items-center h-full">
-        <button onClick={handleMinimize} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors" title="Minimize">
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMinimize} className="h-10 rounded-none text-muted-foreground" title="Minimize">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-        </button>
-        <button onClick={handleMaximize} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors" title={isMaximized ? 'Restore' : 'Maximize'}>
+        </Button>
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMaximize} className="h-10 rounded-none text-muted-foreground" title={isMaximized ? 'Restore' : 'Maximize'}>
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" strokeWidth={2} /></svg>
-        </button>
-        <button onClick={handleClose} className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors" title="Close">
+        </Button>
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleClose} className="h-10 w-12 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white" title="Close">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -1,4 +1,7 @@
+export type ThemeMode = "light" | "dark";
+
 export interface ThemeSettings {
+    mode: ThemeMode;
     workbenchBackground: string;
     sidebarBackground: string;
     accentColor: string;

@@ -5,6 +5,7 @@ import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
+import { Button } from "@/components/ui/button";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -181,7 +182,10 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
       {/* Group Action Buttons */}
       <div className="flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full bg-[var(--workbench-bg)]">
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
           onPointerDown={(e) => {
             // 使用 PointerDown 代替 Click，消除点击抬起的延迟感
             if (e.button !== 0) return;
@@ -193,19 +197,22 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
                 useLayoutStore.getState().setAltPressed(e.altKey);
             }
           }}
-          className="p-1 px-1.5 text-gray-500 hover:text-white hover:bg-white/5 transition-colors rounded-sm"
+          className="text-muted-foreground"
           title={isAltPressed ? "Split Editor Down (Alt)" : "Split Editor Right"}
         >
           {isAltPressed ? <VscSplitVertical size={15} /> : <VscSplitHorizontal size={15} />}
-        </button>
+        </Button>
 
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={handleCloseGroup}
-          className="p-1 px-1.5 text-gray-500 hover:text-red-400 hover:bg-white/5 transition-colors rounded-sm"
+          className="text-muted-foreground hover:text-red-400"
           title="Close Group"
         >
           <VscChromeClose size={15} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -294,14 +301,17 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             <span className={`text-xs truncate max-w-[120px]`}>
                 {tab.title}
             </span>
-            <button
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={onClose}
-                className="p-0.5 rounded-sm hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+                className="text-muted-foreground hover:text-foreground"
             >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-            </button>
+            </Button>
         </div>
     );
 });

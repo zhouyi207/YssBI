@@ -9,6 +9,7 @@ import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
 import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
 import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
 import CorrelogramChart, { type CorrelogramDatum } from '@/views/PlotView/CorrelogramChart';
+import { Button } from '@/components/ui/button';
 
 interface ScatterEcdfData {
   data: { x: number; y: number }[];
@@ -220,33 +221,42 @@ export const PlotWindow: React.FC = () => {
 
         {/* 窗口控制按钮 */}
         <div className="flex items-center h-full">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
             onClick={handleMinimize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
+            className="h-10 rounded-none text-muted-foreground"
             title="最小化"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
             </svg>
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
             onClick={handleMaximize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
+            className="h-10 rounded-none text-muted-foreground"
             title={isMaximized ? '还原' : '最大化'}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
             </svg>
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
             onClick={handleClose}
-            className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
+            className="h-10 w-12 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white"
             title="关闭"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
       </div>
 

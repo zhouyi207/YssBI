@@ -7,6 +7,9 @@ import { useExecutionPlayback, useExecutionStore } from "@/features/core/executi
 
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { HUD } from "./HUD";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
 import {
@@ -86,26 +89,32 @@ export default function CanvasOverlays({
             {isEventTab && (
                 <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
                     {/* Debug — 预留，始终禁用 */}
-                    <button
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         disabled
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-secondary)] opacity-40 cursor-not-allowed"
+                        className="text-[var(--text-secondary)] opacity-40"
                         title="调试（即将推出）"
                     >
                         <VscDebugStart size={14} />
-                    </button>
+                    </Button>
 
                     <div className="w-px h-5 bg-[var(--border-color)]" />
 
                     {/* Replay */}
                     {!playbackActive ? (
-                        <button
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => canReplay && togglePlayPause()}
                             disabled={!canReplay}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                            className={
                                 canReplay
-                                    ? 'text-blue-400 hover:bg-blue-500/15 hover:text-blue-300'
+                                    ? 'text-blue-400 hover:text-blue-300'
                                     : 'text-[var(--text-secondary)] opacity-40 cursor-not-allowed'
-                            }`}
+                            }
                             title={
                                 graphDirty ? "图结构已更改，无法回放" :
                                 !hasRecording ? "无录制数据" :
@@ -113,45 +122,54 @@ export default function CanvasOverlays({
                             }
                         >
                             <VscDebugRestart size={14} />
-                        </button>
+                        </Button>
                     ) : (
                         <div className="flex items-center">
-                            <button
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={togglePlayPause}
-                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-l text-xs font-medium transition-colors ${
+                                className={
                                     isPlaying
-                                        ? 'text-amber-400 hover:bg-amber-500/15'
-                                        : 'text-blue-400 hover:bg-blue-500/15'
-                                }`}
+                                        ? 'text-amber-400'
+                                        : 'text-blue-400'
+                                }
                                 title={isPlaying ? "暂停回放" : "继续回放"}
                             >
                                 {isPlaying ? <VscDebugPause size={14} /> : <VscPlay size={14} />}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={stop}
-                                className="flex items-center px-2 py-1.5 rounded-r text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors"
+                                className="text-red-400"
                                 title="停止回放"
                             >
                                 <VscDebugStop size={14} />
-                            </button>
+                            </Button>
                         </div>
                     )}
 
                     <div className="w-px h-5 bg-[var(--border-color)]" />
 
                     {/* Execute */}
-                    <button
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => !isThisGraphRunning && executeGraph(tabId)}
                         disabled={isThisGraphRunning}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                        className={
                             isThisGraphRunning
                                 ? 'text-green-400 opacity-60 cursor-not-allowed'
-                                : 'text-green-400 hover:bg-green-500/15 hover:text-green-300'
-                        }`}
+                                : 'text-green-400 hover:text-green-300'
+                        }
                         title={isThisGraphRunning ? "执行中…" : "执行当前 Event"}
                     >
                         <VscRunAll size={14} />
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -190,26 +208,31 @@ export default function CanvasOverlays({
 
             {/* ================= Variable Drop Menu ================= */}
             {activeGroupId === groupId && variableDropMenu && createPortal(
-                <div
-                    className="fixed z-50 bg-gray-800 text-white rounded shadow-lg overflow-hidden border border-gray-700 py-1 menu-container"
+                <Card
+                    className="menu-container fixed z-50 overflow-hidden py-1 shadow-xl"
                     style={{ left: variableDropMenu.x, top: variableDropMenu.y }}
                     onPointerDown={(e) => e.stopPropagation()}
                 >
-                    <div
-                        className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2"
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto w-full justify-start rounded-none px-4 py-2 text-sm font-bold"
                         onClick={() => handleVariableDropGet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-blue-400" />
                         Get {variableDropMenu.variableName}
-                    </div>
-                    <div
-                        className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-sm font-bold flex items-center gap-2 border-t border-gray-700"
+                    </Button>
+                    <Separator />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto w-full justify-start rounded-none px-4 py-2 text-sm font-bold"
                         onClick={() => handleVariableDropSet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-orange-400" />
                         Set {variableDropMenu.variableName}
-                    </div>
-                </div>,
+                    </Button>
+                </Card>,
                 document.body
             )}
         </>

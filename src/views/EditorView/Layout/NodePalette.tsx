@@ -6,6 +6,9 @@ import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType
 import { isNodeCompatibleWithPin } from "@/shared/utils/pinCompatibility";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 /** PaletteItem overrides 扩展类型 */
 export interface PaletteItemOverrides extends Partial<Node> {
@@ -265,19 +268,19 @@ export function NodePalette({
   const noResults = query && (!filteredTree || !filteredTree.tree);
 
   return (
-    <div
-      className="fixed z-50 w-80 bg-[#1e1e1e] text-[#cccccc] rounded shadow-2xl overflow-hidden border border-[#333333] flex flex-col menu-container animate-zoom-in"
+    <Card
+      className="menu-container fixed z-50 flex w-80 flex-col overflow-hidden shadow-2xl animate-zoom-in"
       style={{ left: x, top: y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center px-3 py-2 bg-[#252526] border-b border-[#333333]">
-        <VscSearch className="text-gray-500 mr-2" size={14} />
-        <input
+      <div className="flex items-center border-b border-border bg-muted/20 px-3 py-2">
+        <VscSearch className="mr-2 text-muted-foreground" size={14} />
+        <Input
           ref={inputRef}
           value={queryRaw}
           onChange={(e) => setQueryRaw(e.target.value)}
           placeholder="Search nodes..."
-          className="w-full bg-transparent outline-none text-xs"
+          className="h-7 border-0 bg-transparent px-0 text-xs shadow-none"
         />
       </div>
 
@@ -319,7 +322,7 @@ export function NodePalette({
           </div>
         </OverlayScrollbar>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -335,8 +338,10 @@ const LeafRow = React.memo(function LeafRow({
   if (!item?.nodeType) return null;
   const paddingLeft = (level + 1) * 12 + 12;
   return (
-    <div
-      className="px-3 py-1.5 hover:bg-[#2a2d2e] cursor-pointer flex items-center gap-2 transition-colors h-full"
+    <Button
+      type="button"
+      variant="ghost"
+      className="flex h-full w-full cursor-pointer items-center justify-start gap-2 rounded-none px-3 py-1.5"
       style={{ paddingLeft }}
       onClick={() => onSelect(item)}
     >
@@ -348,7 +353,7 @@ const LeafRow = React.memo(function LeafRow({
         <VscSymbolProperty className="text-[var(--accent-color)] shrink-0" size={14} />
       )}
       <span className="text-xs truncate">{item.title}</span>
-    </div>
+    </Button>
   );
 });
 
@@ -366,8 +371,10 @@ const CategoryRow = React.memo(function CategoryRow({
   onToggle: (path: string) => void;
 }) {
   return (
-    <div
-      className="px-2 py-1.5 hover:bg-[#252526] cursor-pointer flex items-center gap-1 transition-colors text-gray-300 font-bold h-full"
+    <Button
+      type="button"
+      variant="ghost"
+      className="flex h-full w-full cursor-pointer items-center justify-start gap-1 rounded-none px-2 py-1.5 font-bold text-gray-300"
       style={{ paddingLeft: level * 12 + 8 }}
       onClick={() => onToggle(path)}
     >
@@ -378,6 +385,6 @@ const CategoryRow = React.memo(function CategoryRow({
       )}
       <VscCircuitBoard className="text-gray-500 shrink-0" size={14} />
       <span className="text-[11px] uppercase tracking-wider truncate">{node.name}</span>
-    </div>
+    </Button>
   );
 });

@@ -13,6 +13,9 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 const TYPE_LABELS: Record<string, string> = {
   application: 'APP', execution: 'EXEC', system: 'SYS', graph: 'GRAPH', data: 'DATA',
@@ -371,70 +374,72 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={() => refreshLogs()}
             disabled={loading}
-            className="px-2 py-1 rounded text-xs font-medium text-gray-400 hover:bg-gray-500/20 transition-colors disabled:opacity-50"
             title="刷新日志"
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={() => setAutoScroll(!autoScroll)}
-            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${autoScroll
-              ? 'text-[var(--accent-color)] hover:bg-[var(--accent-color)]/20'
-              : 'text-gray-400 hover:bg-gray-500/20'
-              }`}
+            className={autoScroll ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
             title={autoScroll ? '自动滚动已启用' : '自动滚动已禁用'}
           >
             {autoScroll ? <FiChevronDown size={14} /> : <FiChevronUp size={14} />}
-          </button>
+          </Button>
           <div className="relative">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
               ref={filterButtonRef}
               onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isFilterOpen
-                ? 'text-[var(--accent-color)] hover:bg-[var(--accent-color)]/20'
-                : 'text-gray-400 hover:bg-gray-500/20'
-                }`}
+              className={isFilterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
               title="过滤器"
             >
               <FiFilter size={14} />
-            </button>
+            </Button>
             {isFilterOpen &&
               createPortal(
-                <div
+                <Card
                   ref={filterPopoverRef}
-                  className="fixed z-[200] w-[280px] p-3 rounded-lg shadow-2xl border border-gray-700 bg-[var(--workbench-bg)] space-y-3"
+                  className="fixed z-[200] w-[280px] space-y-3 p-3 shadow-2xl"
                   style={{ top: popoverPosition.top, left: popoverPosition.left }}
                   onClick={(e) => e.stopPropagation()}
                 >
                 <div className="relative">
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-                  <input
+                  <Input
                     type="text"
                     placeholder="搜索日志内容..."
                     value={filter?.searchText ?? ''}
                     onChange={(e) => setSearchText(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--sidebar-bg)] border border-gray-700 rounded-md focus:outline-none focus:border-[var(--accent-color)] focus:ring-1 focus:ring-[var(--accent-color)]/50 text-gray-200 placeholder-gray-500 transition-all"
+                    className="pl-9"
                   />
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">级别</div>
                   <div className="flex flex-wrap gap-2">
                     {(['error', 'warn', 'info', 'debug', 'trace'] as LogLevel[]).map((level) => (
-                      <button
+                      <Button
+                        type="button"
+                        variant={filter?.levels?.has(level) ? "secondary" : "outline"}
+                        size="sm"
                         key={level}
                         onClick={() => toggleLevel(level)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${filter?.levels?.has(level)
-                          ? `${getLevelBgColor(level)} ${getLevelColor(level)} border border-current`
-                          : 'bg-[var(--sidebar-bg)] text-gray-500 border border-transparent hover:border-gray-600'
-                          }`}
+                        className={filter?.levels?.has(level) ? `${getLevelBgColor(level)} ${getLevelColor(level)} border-current` : 'text-muted-foreground'}
                       >
                         {level.toUpperCase()}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -442,37 +447,41 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                   <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">类型</div>
                   <div className="flex flex-wrap gap-2">
                     {(['application', 'execution', 'system', 'graph', 'data'] as LogType[]).map((type) => (
-                      <button
+                      <Button
+                        type="button"
+                        variant={filter?.types?.has(type) ? "secondary" : "outline"}
+                        size="sm"
                         key={type}
                         onClick={() => toggleType(type)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${filter?.types?.has(type)
-                          ? `bg-gray-700 ${getTypeColor(type)} border border-current`
-                          : 'bg-[var(--sidebar-bg)] text-gray-500 border border-transparent hover:border-gray-600'
-                          }`}
+                        className={filter?.types?.has(type) ? `${getTypeColor(type)} border-current` : 'text-muted-foreground'}
                       >
                         {TYPE_LABELS[type] ?? type}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
-              </div>,
+              </Card>,
                 document.body
               )}
           </div>
-          <button
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon-sm"
             onClick={clearLogs}
-            className="px-2 py-1 rounded text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
             title="清空日志"
           >
             <FiTrash2 size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={handleClose}
-            className="px-2 py-1 rounded text-xs font-medium text-gray-400 hover:bg-gray-500/20 transition-colors"
             title={variant === 'embedded' ? '关闭日志面板' : '关闭窗口'}
           >
             <FiX size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 

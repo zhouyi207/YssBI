@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from
 import { usePinInput } from "@/features/core/pin";
 import { Select } from "@/shared/ui";
 import type { PinMetaDataDTO } from "@/shared/types/domain";
+import { Input } from "@/components/ui/input";
 
 export interface PinInputProps {
   pinId: string;
@@ -13,13 +14,8 @@ export interface PinInputProps {
   onValueChange?: (value: unknown) => void;
 }
 
-const INPUT_CLASS = `
-  h-[18px] px-1.5 text-[10px] text-[#ccc] leading-[18px] box-border
-  bg-[#3c3c3c] border border-transparent rounded-sm
-  hover:bg-[#454545]
-  focus:bg-[#3c3c3c] focus:border-[#007fd4] focus:outline-none
-  transition-colors placeholder-[#5a5a5a]
-`;
+const INPUT_CLASS =
+  "h-[18px] box-border rounded-sm px-1.5 text-[10px] leading-[18px] placeholder:text-muted-foreground";
 
 const MIN_WIDTH = 28;
 
@@ -135,7 +131,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     case "Int32":
     case "Int64":
       return (
-        <input
+        <Input
           ref={ref}
           type="text"
           inputMode="numeric"
@@ -171,7 +167,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     case "Float32":
     case "Float64":
       return (
-        <input
+        <Input
           ref={ref}
           type="text"
           inputMode="decimal"
@@ -211,7 +207,7 @@ export const PinInput: React.FC<PinInputProps> = ({
           onClick={stop}
           onPointerDown={stop}
         >
-          <input
+          <Input
             type="checkbox"
             checked={Boolean(value)}
             onChange={async (e) => {
@@ -233,7 +229,7 @@ export const PinInput: React.FC<PinInputProps> = ({
 
     case "string":
       return (
-        <input
+        <Input
           ref={ref}
           type="text"
           value={strText}

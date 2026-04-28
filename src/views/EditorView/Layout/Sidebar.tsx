@@ -27,6 +27,7 @@ import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import { logger } from "@/utils/appLogger";
 import { uiStore } from "@/features/core/ui/UIStore";
+import { Button } from "@/components/ui/button";
 
 async function openDataViewWindow(databaseId?: string): Promise<void> {
   try {
@@ -141,17 +142,19 @@ const StackedCollapsibleSection = ({
       </span>
       <span className="flex-1 text-[12px] tracking-tight truncate">{label}</span>
       {onAdd && (
-        <button
+        <Button
           data-add-btn
           type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={(e) => {
             e.stopPropagation();
             onAdd();
           }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] text-gray-500 transition-colors shrink-0"
+          className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
         >
           <VscAdd size={11} />
-        </button>
+        </Button>
       )}
     </div>
     <div
@@ -203,17 +206,19 @@ const CollapsibleSection = ({
       </span>
       {headerContent ?? <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>}
       {onAdd && (
-        <button
+        <Button
           data-add-btn
           type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={(e) => {
             e.stopPropagation();
             onAdd();
           }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] text-gray-500 transition-colors shrink-0"
+          className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
         >
           <VscAdd size={11} />
-        </button>
+        </Button>
       )}
     </div>
     <div
@@ -396,41 +401,50 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         </span>
         <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
         {(type === "event" || type === "function") && (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={(e) => {
               e.stopPropagation();
               openGraph(id, name, type);
             }}
-            className={`opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] transition-colors ${isSelected ? "text-gray-200" : "text-gray-500"}`}
+            className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
             title="Open"
           >
             <VscChevronRight size={11} />
-          </button>
+          </Button>
         )}
         {type === "variable" && !readOnly && (
           <>
             {!extra?.isGlobal ? (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={(e) => {
                   e.stopPropagation();
                   promoteVariable(id);
                 }}
-                className={`opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] transition-colors ${isSelected ? "text-gray-200" : "text-gray-500"}`}
+                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
                 title="Promote to global"
               >
                 <VscEye size={11} />
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={(e) => {
                   e.stopPropagation();
                   demoteVariable(id);
                 }}
-                className={`opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] transition-colors ${isSelected ? "text-gray-200" : "text-gray-500"}`}
+                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
                 title="Demote to local"
               >
                 <VscEyeClosed size={11} />
-              </button>
+              </Button>
             )}
             <span
               className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-white/[0.04]"}`}
@@ -605,17 +619,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                               </span>
                               <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
                             </SidebarDraggableItem>
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="icon-xs"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openDataViewWindow(id);
                               }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.06] text-gray-500 transition-colors shrink-0"
+                              className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
                               title="在 Data Viewer 中查看"
                             >
                               <VscEye size={12} />
-                            </button>
+                            </Button>
                           </div>
                         }
                       >

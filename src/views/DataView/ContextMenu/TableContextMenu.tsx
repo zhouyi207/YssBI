@@ -1,4 +1,7 @@
 import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 export interface ContextMenuState {
   x: number;
@@ -22,9 +25,6 @@ interface TableContextMenuProps {
   onClose: () => void;
 }
 
-const btnClass = "w-full text-left px-3 py-1.5 text-[11px] text-gray-300 hover:bg-[var(--accent-color)]/20 hover:text-white transition-colors";
-const dangerClass = btnClass + ' text-red-400 hover:text-red-300';
-
 export const TableContextMenu: React.FC<TableContextMenuProps> = ({
   menu, selectedRowIndices, onStartEdit, onAddRow, onDeleteRow,
   onRenameColumn, onAddColumn, onDeleteColumn, onClearSelection, onClose,
@@ -32,66 +32,66 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
   const multiRow = selectedRowIndices.length > 1 && menu.rowIndex !== undefined && selectedRowIndices.includes(menu.rowIndex);
 
   return (
-    <div
-      className="fixed z-[100] min-w-[160px] bg-[var(--sidebar-bg)] border border-gray-700 rounded shadow-xl py-1 select-none"
+    <Card
+      className="fixed z-[100] min-w-[160px] py-1 select-none shadow-xl"
       style={{ left: menu.x, top: menu.y }}
       onClick={(e) => e.stopPropagation()}
     >
       {menu.type === 'cell' && (
         <>
-          <button className={btnClass} onClick={() => { onStartEdit(menu.rowIndex!, menu.colIndex!); onClose(); }}>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onStartEdit(menu.rowIndex!, menu.colIndex!); onClose(); }}>
             Edit Cell
-          </button>
-          <div className="h-px bg-gray-700 my-1" />
-          <button className={btnClass} onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
+          </Button>
+          <Separator className="my-1" />
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
             Insert Row Above
-          </button>
-          <button className={btnClass} onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
             Insert Row Below
-          </button>
+          </Button>
           {multiRow ? (
-            <button className={dangerClass} onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
+            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
               Delete {selectedRowIndices.length} Rows
-            </button>
+            </Button>
           ) : (
-            <button className={dangerClass} onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
+            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
               Delete Row
-            </button>
+            </Button>
           )}
         </>
       )}
       {menu.type === 'row' && (
         <>
-          <button className={btnClass} onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
             Insert Row Above
-          </button>
-          <button className={btnClass} onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
             Insert Row Below
-          </button>
+          </Button>
           {multiRow ? (
-            <button className={dangerClass} onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
+            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
               Delete {selectedRowIndices.length} Rows
-            </button>
+            </Button>
           ) : (
-            <button className={dangerClass} onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
+            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
               Delete Row
-            </button>
+            </Button>
           )}
         </>
       )}
       {menu.type === 'header' && (
         <>
-          <button className={btnClass} onClick={() => { onRenameColumn(menu.colName!); onClose(); }}>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onRenameColumn(menu.colName!); onClose(); }}>
             Rename Column
-          </button>
-          <button className={btnClass} onClick={() => { onAddColumn(); onClose(); }}>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddColumn(); onClose(); }}>
             Add Column
-          </button>
-          <button className={dangerClass} onClick={() => { onDeleteColumn(menu.colName!); onClose(); }}>
+          </Button>
+          <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteColumn(menu.colName!); onClose(); }}>
             Delete Column &quot;{menu.colName}&quot;
-          </button>
+          </Button>
         </>
       )}
-    </div>
+    </Card>
   );
 };

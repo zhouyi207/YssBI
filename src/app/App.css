@@ -73,8 +73,16 @@
   display: none;
 }
 
-/* Sidebar: developer-tool aesthetic, dark, high density */
+/* Sidebar: developer-tool aesthetic, high density */
 .sidebar-container {
+  --sidebar-section-bg: rgba(17, 24, 39, 0.04);
+  --sidebar-section-active: rgba(37, 99, 235, 0.08);
+  --sidebar-hover: rgba(17, 24, 39, 0.06);
+  --sidebar-item-active: rgba(37, 99, 235, 0.12);
+  --sidebar-divider: rgba(17, 24, 39, 0.08);
+}
+
+.dark .sidebar-container {
   --sidebar-section-bg: rgba(255, 255, 255, 0.03);
   --sidebar-section-active: rgba(255, 255, 255, 0.06);
   --sidebar-hover: rgba(255, 255, 255, 0.04);

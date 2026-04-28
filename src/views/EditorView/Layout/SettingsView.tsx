@@ -3,6 +3,8 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const SettingsView: React.FC = () => {
     const theme = useSettingsStore((s) => s.theme);
@@ -88,8 +90,8 @@ export const SettingsView: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="w-full h-full bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center">
-                <div className="text-sm text-[#858585]">加载设置中...</div>
+            <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex items-center justify-center">
+                <div className="text-sm text-muted-foreground">加载设置中...</div>
             </div>
         );
     }
@@ -101,14 +103,16 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-gray-100">Editor</h2>
-                                <button
+                                <h2 className="text-xl text-foreground">Editor</h2>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => handleResetSection("editor")}
                                     disabled={isResetting}
-                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
                                 >
                                     恢复默认
-                                </button>
+                                </Button>
                             </div>
                             <div className="space-y-6">
                                 <SettingItem
@@ -147,7 +151,7 @@ export const SettingsView: React.FC = () => {
                 return (
                     <div className="space-y-8">
                         <div>
-                            <h2 className="text-xl text-gray-100 mb-6">Project</h2>
+                            <h2 className="text-xl text-foreground mb-6">Project</h2>
                             <div className="space-y-6">
                                 <SettingItem
                                     label="Project Name"
@@ -180,14 +184,16 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-gray-100">Appearance</h2>
-                                <button
+                                <h2 className="text-xl text-foreground">Appearance</h2>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => handleResetSection("appearance")}
                                     disabled={isResetting}
-                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
                                 >
                                     恢复默认
-                                </button>
+                                </Button>
                             </div>
                             <div className="space-y-6">
                                 <SettingItem
@@ -222,14 +228,16 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-gray-100">Colors</h2>
-                                <button
+                                <h2 className="text-xl text-foreground">Colors</h2>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => handleResetSection("color")}
                                     disabled={isResetting}
-                                    className="px-3 py-1 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] text-[#cccccc] rounded transition-colors disabled:opacity-50"
                                 >
                                     恢复默认
-                                </button>
+                                </Button>
                             </div>
 
                             <div className="mb-8">
@@ -426,36 +434,33 @@ export const SettingsView: React.FC = () => {
     };
 
     return (
-        <div className="w-full h-full bg-[#1e1e1e] text-[#cccccc] flex flex-col overflow-hidden font-sans">
+        <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex flex-col overflow-hidden font-sans">
             {/* Header / Search Area */}
-            <div className="h-12 border-b border-[#2b2b2b] flex items-center px-6 shrink-0 bg-[#1e1e1e]">
+            <div className="h-12 border-b border-border flex items-center px-6 shrink-0 bg-[var(--workbench-bg)]">
                 <div className="flex-1 relative">
-                    <input
+                    <Input
                         type="text"
                         placeholder="Search settings"
-                        className="w-full bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-3 py-1 text-sm text-[#cccccc] placeholder-[#858585]"
+                        className="h-8"
                     />
                 </div>
             </div>
 
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Sidebar Navigation */}
-                <aside className="w-64 border-r border-[#2b2b2b] bg-[#1e1e1e] shrink-0 flex flex-col min-h-0">
+                <aside className="w-64 border-r border-border bg-[var(--sidebar-bg)] shrink-0 flex flex-col min-h-0">
                     <OverlayScrollbar className="flex-1 pt-4 min-h-0" direction="vertical">
                     <nav className="px-4 space-y-0.5">
                         {sections.map(section => (
-                            <button
+                            <Button
+                                type="button"
+                                variant={activeSection === section.id ? "secondary" : "ghost"}
                                 key={section.id}
                                 onClick={() => setActiveSection(section.id)}
-                                className={`
-                                    w-full text-left px-3 py-1.5 rounded transition-colors text-sm
-                                    ${activeSection === section.id
-                                        ? 'bg-[#37373d] text-white font-semibold'
-                                        : 'hover:bg-[#2a2d2e] text-[#cccccc]'}
-                                `}
+                                className="w-full justify-start"
                             >
                                 {section.label}
-                            </button>
+                            </Button>
                         ))}
                     </nav>
                     </OverlayScrollbar>
@@ -472,14 +477,15 @@ export const SettingsView: React.FC = () => {
             </div>
 
             {/* 底部全局恢复默认设置按钮 */}
-            <div className="h-12 border-t border-[#2b2b2b] flex items-center justify-end px-6 shrink-0 bg-[#1e1e1e]">
-                <button
+            <div className="h-12 border-t border-border flex items-center justify-end px-6 shrink-0 bg-[var(--workbench-bg)]">
+                <Button
+                    type="button"
+                    variant="destructive"
                     onClick={handleResetAll}
                     disabled={isResetting}
-                    className="px-4 py-1.5 text-sm bg-[#c94f4f] hover:bg-[#d95f5f] text-white rounded transition-colors disabled:opacity-50"
                 >
                     {isResetting ? "恢复中..." : "恢复所有默认设置"}
-                </button>
+                </Button>
             </div>
 
         </div>
@@ -513,35 +519,35 @@ const SettingItem: React.FC<SettingItemProps> = ({
     options
 }) => {
     return (
-        <div className="group border-l-2 border-transparent hover:border-[#007acc] pl-4 transition-colors">
-            <div className="mb-1 text-sm font-semibold text-[#cccccc] group-hover:text-[#007acc] transition-colors">{label}</div>
-            <div className="text-xs text-[#858585] mb-3 leading-relaxed max-w-2xl">{description}</div>
+        <div className="group border-l-2 border-transparent hover:border-[var(--accent-color)] pl-4 transition-colors">
+            <div className="mb-1 text-sm font-semibold text-foreground group-hover:text-[var(--accent-color)] transition-colors">{label}</div>
+            <div className="text-xs text-muted-foreground mb-3 leading-relaxed max-w-2xl">{description}</div>
 
             <div className="flex items-center">
                 {type === "checkbox" && (
-                    <input
+                    <Input
                         type="checkbox"
                         checked={checked ?? true}
                         onChange={(e) => onChange?.(e.target.checked)}
-                        className="w-4 h-4 rounded-sm border-[#3c3c3c] bg-[#3c3c3c] text-[#007acc] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                        className="h-4 w-4 accent-[var(--accent-color)]"
                     />
                 )}
                 {type === "text" && (
-                    <input
+                    <Input
                         type="text"
                         value={value ?? defaultValue ?? ""}
                         onChange={(e) => onChange?.(e.target.value)}
                         placeholder={placeholder}
                         disabled={disabled}
-                        className="w-full max-w-md bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-2 py-1 text-sm text-[#cccccc] disabled:opacity-50"
+                        className="max-w-md"
                     />
                 )}
                 {type === "number" && (
-                    <input
+                    <Input
                         type="number"
                         value={value ?? defaultValue ?? ""}
                         onChange={(e) => onChange?.(e.target.value)}
-                        className="w-24 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-2 py-1 text-sm text-[#cccccc]"
+                        className="w-24"
                     />
                 )}
                 {type === "select" && (
@@ -555,19 +561,19 @@ const SettingItem: React.FC<SettingItemProps> = ({
                 )}
                 {type === "color" && (
                     <div className="flex items-center gap-3">
-                        <div className="relative w-10 h-6 rounded border border-[#3c3c3c] overflow-hidden">
-                            <input
+                        <div className="relative w-10 h-6 rounded border border-border overflow-hidden">
+                            <Input
                                 type="color"
                                 value={value}
                                 onChange={(e) => onChange?.(e.target.value)}
-                                className="absolute -inset-1 w-12 h-8 p-0 border-none bg-transparent cursor-pointer"
+                                className="absolute -inset-1 h-8 w-12 cursor-pointer border-none bg-transparent p-0"
                             />
                         </div>
-                        <input
+                        <Input
                             type="text"
                             value={value}
                             onChange={(e) => onChange?.(e.target.value)}
-                            className="w-24 bg-[#3c3c3c] border border-transparent focus:border-[#007acc] outline-none rounded px-2 py-0.5 text-[11px] text-[#cccccc] font-mono"
+                            className="h-7 w-24 font-mono text-[11px]"
                         />
                     </div>
                 )}

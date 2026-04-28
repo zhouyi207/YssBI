@@ -3,16 +3,19 @@ import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase, VscTerminal } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { Button } from "@/components/ui/button";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean; onClick: () => void; children: React.ReactNode; title: string; id: string }) => (
-  <button
+  <Button
+    type="button"
+    variant="ghost"
     onClick={onClick}
     title={title}
     data-tab-id={id}
-    className={`relative w-full h-12 flex items-center justify-center transition-colors group ${active ? "text-white" : "text-[#858585] hover:text-[#cccccc]"}`}
+    className={`relative h-12 w-full rounded-none ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
   >
     {children}
-  </button>
+  </Button>
 );
 
 export function ActivityBar() {
@@ -63,7 +66,7 @@ export function ActivityBar() {
   }, [activeTab]);
 
   return (
-    <div ref={activityBarRef} className="w-12 h-full bg-[#333333] flex flex-col items-center py-2 shrink-0 border-r border-[#2b2b2b] relative">
+    <div ref={activityBarRef} className="w-12 h-full bg-[var(--sidebar-bg)] flex flex-col items-center py-2 shrink-0 border-r border-border relative">
       <div
         className="absolute left-0 top-0 w-0.5 h-12 bg-[var(--accent-color)] transition-all duration-300 ease-in-out z-10 pointer-events-none"
         style={{

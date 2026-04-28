@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SqlConnectionDialogOptions } from "@/shared/types/ui";
 
 const DEFAULT_PORTS = { postgres: 5432, mysql: 3306, mariadb: 3306 } as const;
@@ -92,8 +93,8 @@ export const SqlConnectionModal = ({
                     </div>
 
                     {useRaw ? (
-                        <div>
-                            <label className="block text-[11px] text-muted-foreground mb-1">连接字符串</label>
+                        <div className="space-y-1.5">
+                            <Label>连接字符串</Label>
                             <Input
                                 type="text"
                                 value={rawUrl}
@@ -108,8 +109,8 @@ export const SqlConnectionModal = ({
                     ) : (
                         <>
                             <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[11px] text-muted-foreground mb-1">主机</label>
+                                <div className="space-y-1.5">
+                                    <Label>主机</Label>
                                     <Input
                                         type="text"
                                         value={host}
@@ -117,8 +118,8 @@ export const SqlConnectionModal = ({
                                         placeholder="localhost"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] text-muted-foreground mb-1">端口</label>
+                                <div className="space-y-1.5">
+                                    <Label>端口</Label>
                                     <Input
                                         type="number"
                                         value={port}
@@ -126,24 +127,24 @@ export const SqlConnectionModal = ({
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[11px] text-muted-foreground mb-1">用户名</label>
+                            <div className="space-y-1.5">
+                                <Label>用户名</Label>
                                 <Input
                                     type="text"
                                     value={user}
                                     onChange={(e) => setUser(e.target.value)}
                                 />
                             </div>
-                            <div>
-                                <label className="block text-[11px] text-muted-foreground mb-1">密码</label>
+                            <div className="space-y-1.5">
+                                <Label>密码</Label>
                                 <Input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
                             </div>
-                            <div>
-                                <label className="block text-[11px] text-muted-foreground mb-1">数据库</label>
+                            <div className="space-y-1.5">
+                                <Label>数据库</Label>
                                 <Input
                                     type="text"
                                     value={database}

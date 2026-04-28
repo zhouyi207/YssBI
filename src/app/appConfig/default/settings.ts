@@ -1,6 +1,7 @@
 import { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, WindowSettings, AppSettings } from "@/shared/types/settings";
 
-export const DEFAULT_THEME: ThemeSettings = {
+export const DEFAULT_DARK_THEME: ThemeSettings = {
+    mode: "dark",
     workbenchBackground: "#121212",
     sidebarBackground: "#252526",
     accentColor: "#0078d4",
@@ -26,6 +27,22 @@ export const DEFAULT_THEME: ThemeSettings = {
     arrayColor: "#d19a66",
     structColor: "#b07cd8",
 };
+
+export const DEFAULT_LIGHT_THEME: ThemeSettings = {
+    ...DEFAULT_DARK_THEME,
+    mode: "light",
+    workbenchBackground: "#f6f7f9",
+    sidebarBackground: "#ffffff",
+    gridLines: "#e4e7ec",
+    nodeBase: "#ffffff",
+    connectionLines: "#667085",
+    selectionRegion: "#2563eb",
+    execColor: "#111827",
+    objectColor: "#4b5563",
+    anyColor: "#6b7280",
+};
+
+export const DEFAULT_THEME: ThemeSettings = DEFAULT_DARK_THEME;
 
 export const DEFAULT_EDITOR: EditorSettings = {
     showGrid: true,

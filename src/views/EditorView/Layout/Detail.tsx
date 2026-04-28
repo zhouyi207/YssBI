@@ -2,6 +2,9 @@ import { forwardRef, useMemo } from "react";
 import { useEditorGroup } from "@/features/application/editor";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from "@/shared/types/domain/dataType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
 import { uiStore } from "@/features/core/ui/UIStore";
@@ -101,23 +104,26 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       <div className="mt-4 px-2">
         <div className="flex justify-between items-center mb-1">
           <span className="text-[10px] font-black text-gray-400 uppercase">{title}</span>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={() => {
               const newPins = [...pins, { id: `pin-${crypto.randomUUID()}`, name: "NewPin", type: "int" }];
               handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
             }}
-            className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-[var(--accent-color)] transition-colors"
+            className="text-muted-foreground hover:text-[var(--accent-color)]"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <path d="M12 5v14M5 12h14" />
             </svg>
-          </button>
+          </Button>
         </div>
         <div className="space-y-1">
           {pins.map((pin, idx) => (
             <div key={pin.id} className="flex gap-1 items-center bg-white/5 p-1 rounded group">
-              <input
-                className="flex-1 bg-transparent border-none text-[10px] focus:ring-0 p-0 font-medium"
+              <Input
+                className="h-6 flex-1 border-0 bg-transparent px-1 py-0 text-[10px] shadow-none"
                 value={pin.name}
                 onChange={(e) => {
                   const newPins = [...pins];
@@ -135,7 +141,10 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
               />
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => {
                   const newPins = [...pins];
                   const current = newPins[idx].containerType;
@@ -143,22 +152,25 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                   newPins[idx] = { ...newPins[idx], containerType: next };
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
-                className={`p-1 rounded transition-colors ${pin.containerType ? 'text-blue-400 bg-blue-500/10' : 'text-gray-500 hover:bg-white/5'}`}
+                className={pin.containerType ? 'bg-blue-500/10 text-blue-400' : 'text-muted-foreground'}
                 title={`Container: ${pin.containerType ?? 'none'} (click to cycle)`}
               >
                 <span className="text-[9px] font-black">{pin.containerType === 'dataseries' ? '◇' : pin.containerType === 'array' ? '[]' : '·'}</span>
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => {
                   const newPins = pins.filter((_, i) => i !== idx);
                   handleUpdate(isInput ? { inputs: newPins } : { outputs: newPins });
                 }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-500 transition-all"
+                className="opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
-              </button>
+              </Button>
             </div>
           ))}
           {pins.length === 0 && <div className="text-[9px] text-gray-300 italic text-center py-1">No {title.toLowerCase()}</div>}
@@ -181,60 +193,60 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
 
       {selectedItemType === 'log' && selectedLog ? (
         <OverlayScrollbar className="flex-1 pb-4" direction="vertical">
-          <table className="w-full text-[11px] border-collapse text-[#cccccc]">
-            <tbody>
-              <tr className="border-b border-[#2b2b2b]">
-                <td className="p-2 font-bold text-gray-400 bg-white/5 w-20">Time</td>
-                <td className="p-2 font-mono text-gray-300">{selectedLog.timestamp}</td>
-              </tr>
-              <tr className="border-b border-[#2b2b2b]">
-                <td className="p-2 font-bold text-gray-400 bg-white/5">Level</td>
-                <td className="p-2">
+          <Table className="text-[11px] text-[#cccccc]">
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Time</TableCell>
+                <TableCell className="font-mono text-gray-300">{selectedLog.timestamp}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="bg-white/5 font-bold text-gray-400">Level</TableCell>
+                <TableCell>
                   <span className={`${getLevelColor(selectedLog.level)} font-bold uppercase`}>{selectedLog.level}</span>
-                </td>
-              </tr>
-              <tr className="border-b border-[#2b2b2b]">
-                <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
-                <td className="p-2">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="bg-white/5 font-bold text-gray-400">Type</TableCell>
+                <TableCell>
                   <span className={`${getTypeColor(selectedLog.log_type)} font-semibold`}>
                     {LOG_TYPE_LABELS[selectedLog.log_type] ?? selectedLog.log_type.toUpperCase()}
                   </span>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               {selectedLog.source && (
-                <tr className="border-b border-[#2b2b2b]">
-                  <td className="p-2 font-bold text-gray-400 bg-white/5">Source</td>
-                  <td className="p-2 text-cyan-400 font-mono">{selectedLog.source}</td>
-                </tr>
+                <TableRow>
+                  <TableCell className="bg-white/5 font-bold text-gray-400">Source</TableCell>
+                  <TableCell className="font-mono text-cyan-400">{selectedLog.source}</TableCell>
+                </TableRow>
               )}
-              <tr className="border-b border-[#2b2b2b]">
-                <td className="p-2 font-bold text-gray-400 bg-white/5 align-top">Message</td>
-                <td className="p-2">
+              <TableRow>
+                <TableCell className="bg-white/5 align-top font-bold text-gray-400">Message</TableCell>
+                <TableCell>
                   <pre className="text-[11px] font-mono text-gray-200 whitespace-pre-wrap break-all leading-relaxed">{selectedLog.message}</pre>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </OverlayScrollbar>
       ) : selectedData ? (
         <OverlayScrollbar className="flex-1 pb-4" direction="vertical">
-          <table className="w-full text-[11px] border-collapse text-[#cccccc]">
-            <tbody>
-              <tr className="border-b border-[#2b2b2b]">
-                <td className="p-2 font-bold text-gray-400 bg-white/5 w-20">Name</td>
-                <td className="p-2">
-                  <input
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
+          <Table className="text-[11px] text-[#cccccc]">
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Name</TableCell>
+                <TableCell>
+                  <Input
+                    className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
                     value={selectedData.name}
                     onChange={(e) => handleUpdate({ name: e.target.value })}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               {selectedItemType === 'variable' && (
                 <>
-                  <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
-                    <td className="p-2">
+                  <TableRow>
+                    <TableCell className="bg-white/5 font-bold text-gray-400">Type</TableCell>
+                    <TableCell>
                       <Select
                         value={dataTypeKind(selectedData.dataType)}
                         options={[
@@ -251,22 +263,22 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                         ]}
                         onChange={(val) => handleUpdate({ dataType: dataTypeFromKey(val as string) })}
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                   {selectedData.dataType.kind !== "Array" && isPrimitiveType(selectedData.dataType) && (
-                    <tr className="border-b border-[#2b2b2b]">
-                      <td className="p-2 font-bold text-gray-400 bg-white/5">Value</td>
-                      <td className="p-2">
+                    <TableRow>
+                      <TableCell className="bg-white/5 font-bold text-gray-400">Value</TableCell>
+                      <TableCell>
                         {(selectedData.dataType.kind === "Boolean") ? (
-                          <input
+                          <Input
                             type="checkbox"
-                            className="rounded text-[var(--accent-color)] focus:ring-[var(--accent-color)] bg-transparent border-[#2b2b2b]"
+                            className="h-4 w-4 accent-[var(--accent-color)]"
                             checked={!!dataValueToRaw(selectedData.dataValue)}
                             onChange={(e) => handleUpdate({ dataValue: dataValueFromRaw(e.target.checked, selectedData.dataType) })}
                           />
                         ) : (
-                          <input
-                            className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium"
+                          <Input
+                            className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
                             type={selectedData.dataType.kind === "String" ? "text" : "number"}
                             value={String(dataValueToRaw(selectedData.dataValue) ?? '')}
                             onChange={(e) => {
@@ -277,70 +289,70 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                             }}
                           />
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </>
               )}
               {selectedItemType === 'function' && (
-                <tr className="border-b border-[#2b2b2b]">
-                  <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
-                  <td className="p-2 text-gray-400 italic">
+                <TableRow>
+                  <TableCell className="bg-white/5 font-bold text-gray-400">Type</TableCell>
+                  <TableCell className="text-gray-400 italic">
                     {selectedItemType.charAt(0).toUpperCase() + selectedItemType.slice(1)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
               {selectedItemType === 'data' && (
                 <>
-                  <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Columns</td>
-                    <td className="p-2 text-gray-400">
+                  <TableRow>
+                    <TableCell className="bg-white/5 font-bold text-gray-400">Columns</TableCell>
+                    <TableCell className="text-gray-400">
                       {selectedData.columnCount || selectedData.columns?.length || 0} columns
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                   {selectedData.columns && selectedData.columns.length > 0 && (
-                    <tr className="border-b border-[#2b2b2b]">
-                      <td colSpan={2} className="p-0">
+                    <TableRow>
+                      <TableCell colSpan={2} className="p-0">
                         <OverlayScrollbar className="max-h-40 bg-black/20" direction="vertical">
-                          <table className="w-full text-[9px]">
-                            <thead>
-                              <tr className="text-gray-500 border-b border-[#2b2b2b]">
-                                <th className="p-1 text-left font-normal uppercase">Column</th>
-                                <th className="p-1 text-left font-normal uppercase">Type</th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                          <Table className="text-[9px]">
+                            <TableHeader>
+                              <TableRow className="text-gray-500">
+                                <TableHead className="h-6 p-1 font-normal uppercase">Column</TableHead>
+                                <TableHead className="h-6 p-1 font-normal uppercase">Type</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {selectedData.columns.map((col: any) => (
-                                <tr key={col.name} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                  <td className="p-1 text-gray-300 font-medium">{col.name}</td>
-                                  <td className="p-1 text-[var(--accent-color)]/70">{col.type}</td>
-                                </tr>
+                                <TableRow key={col.name} className="border-white/5">
+                                  <TableCell className="p-1 font-medium text-gray-300">{col.name}</TableCell>
+                                  <TableCell className="p-1 text-[var(--accent-color)]/70">{col.type}</TableCell>
+                                </TableRow>
                               ))}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         </OverlayScrollbar>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                  <tr className="border-b border-[#2b2b2b]">
-                    <td className="p-2 font-bold text-gray-400 bg-white/5">Rows</td>
-                    <td className="p-2 text-gray-400">
+                  <TableRow>
+                    <TableCell className="bg-white/5 font-bold text-gray-400">Rows</TableCell>
+                    <TableCell className="text-gray-400">
                       {selectedData.rowCount || selectedData.rows?.length || 0} rows
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                   {selectedData.sourcePath && (
-                    <tr className="border-b border-[#2b2b2b]">
-                      <td className="p-2 font-bold text-gray-400 bg-white/5">Source</td>
-                      <td className="p-2 text-gray-400 break-all text-[9px]">
+                    <TableRow>
+                      <TableCell className="bg-white/5 font-bold text-gray-400">Source</TableCell>
+                      <TableCell className="break-all text-[9px] text-gray-400">
                         {selectedData.sourcePath}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </>
               )}
 
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
 
           {selectedItemType === 'function' && (
             <>
@@ -349,12 +361,15 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
             </>
           )}
           <div className="p-2">
-            <button
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
               onClick={handleDelete}
-              className="w-full py-1.5 mt-4 border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded transition-colors font-bold text-[9px] uppercase tracking-wider"
+              className="mt-4 w-full uppercase tracking-wider"
             >
               Delete {selectedItemType}
-            </button>
+            </Button>
           </div>
         </OverlayScrollbar>
       ) : (

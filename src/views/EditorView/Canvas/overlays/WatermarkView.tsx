@@ -1,4 +1,6 @@
 import { useEditorGroup } from "@/features/application/editor";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const WatermarkView = () => {
   const { addEvent, addFunction, importGraph } = useEditorGroup();
@@ -13,37 +15,39 @@ export const WatermarkView = () => {
         </svg>
       </div>
       {/* Shortcut Hints */}
-      <div className="flex flex-col gap-4 items-start text-gray-500 text-sm font-medium">
-        <div className="flex items-center gap-12 justify-between w-full min-w-[340px] hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addEvent(undefined, { openAfterCreate: true })}>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-            <span>新建 Event Graph</span>
-          </div>
-          <span className="text-[10px] text-gray-600 italic">Core logic</span>
-        </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addFunction(undefined, { openAfterCreate: true })}>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            <span>新建 Function</span>
-          </div>
-          <span className="text-[10px] text-gray-600 italic">Reusable routine</span>
-        </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => importGraph()}>
-          <span>打开文件</span>
-          <span className="flex gap-1">
-            <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Ctrl</kbd>
-            <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">O</kbd>
-          </span>
-        </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-not-allowed opacity-50">
-          <span>显示所有命令</span>
-          <span className="flex gap-1">
-            <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Ctrl</kbd>
-            <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">Shift</kbd>
-            <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-400">P</kbd>
-          </span>
-        </div>
-      </div>
+      <Card className="min-w-[360px] bg-card/60 backdrop-blur-sm">
+        <CardContent className="flex flex-col gap-2 p-2">
+          <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => addEvent(undefined, { openAfterCreate: true })}>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <span>新建 Event Graph</span>
+            </span>
+            <span className="text-[10px] text-muted-foreground italic">Core logic</span>
+          </Button>
+          <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => addFunction(undefined, { openAfterCreate: true })}>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span>新建 Function</span>
+            </span>
+            <span className="text-[10px] text-muted-foreground italic">Reusable routine</span>
+          </Button>
+          <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => importGraph()}>
+            <span>打开文件</span>
+            <span className="flex gap-1">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Ctrl</kbd>
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">O</kbd>
+            </span>
+          </Button>
+          <Button type="button" variant="ghost" disabled className="h-auto justify-between gap-12 p-2">
+            <span>显示所有命令</span>
+            <span className="flex gap-1">
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Ctrl</kbd>
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Shift</kbd>
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">P</kbd>
+            </span>
+          </Button>
+        </CardContent>
+      </Card>
       {/* Subtle grid background for the empty state too, but very faint */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{

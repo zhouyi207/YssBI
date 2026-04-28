@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 export interface ContextMenuPosition {
   x: number;
@@ -51,30 +54,25 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   }, [onClose]);
 
   return createPortal(
-    <div
+    <Card
       ref={menuRef}
-      className="fixed z-[200] bg-[#252526] rounded-md shadow-xl border border-[#454545] py-1 min-w-[180px]"
+      className="fixed z-[200] min-w-[180px] py-1 shadow-xl"
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {sections.map((section, sectionIdx) => (
         <React.Fragment key={sectionIdx}>
           {sectionIdx > 0 && (
-            <div className="mx-2 my-1 border-t border-[#454545]" />
+            <Separator className="my-1" />
           )}
           {section.items.map((item) => (
-            <button
+            <Button
               key={item.id}
+              type="button"
+              variant={item.danger ? "destructive" : "ghost"}
+              size="sm"
               disabled={item.disabled}
-              className={`
-                w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 transition-colors
-                ${item.disabled
-                  ? "text-[#6b6b6b] cursor-default"
-                  : item.danger
-                    ? "text-[#cccccc] hover:bg-[#cc3333]/20 hover:text-[#f48771]"
-                    : "text-[#cccccc] hover:bg-[#094771]"
-                }
-              `}
+              className="h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-xs"
               onClick={() => {
                 if (item.disabled) return;
                 item.onClick?.();
@@ -86,15 +84,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               </span>
               <span className="flex-1">{item.label}</span>
               {item.shortcut && (
-                <span className={`text-[10px] ml-4 ${item.disabled ? "text-[#555]" : "text-[#888]"}`}>
+                <span className="ml-4 text-[10px] text-muted-foreground">
                   {item.shortcut}
                 </span>
               )}
-            </button>
+            </Button>
           ))}
         </React.Fragment>
       ))}
-    </div>,
+    </Card>,
     document.body
   );
 };

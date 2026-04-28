@@ -13,6 +13,10 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
     // 这样可以避免 TabBar 等组件渲染时读取到旧的 CSS 变量值
     useLayoutEffect(() => {
         const root = document.documentElement;
+        const isDark = theme.mode !== "light";
+
+        root.classList.toggle("dark", isDark);
+        root.style.colorScheme = isDark ? "dark" : "light";
 
         // 主要背景色
         root.style.setProperty("--workbench-bg", theme.workbenchBackground);
@@ -46,7 +50,7 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--border-color", theme.gridLines);
         root.style.setProperty("--text-primary", theme.execColor);
         root.style.setProperty("--text-secondary", theme.connectionLines);
-        root.style.setProperty("--hover-bg", "rgba(255, 255, 255, 0.05)");
+        root.style.setProperty("--hover-bg", isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(17, 24, 39, 0.06)");
 
         // 计算派生颜色
         root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");
