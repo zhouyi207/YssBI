@@ -120,7 +120,6 @@ export function Menubar() {
     activeTabId,
     addEvent,
     addFunction,
-    addMacro,
   } = useEditorGroup();
 
   const {
@@ -140,7 +139,6 @@ export function Menubar() {
   const fileItems: MenuItem[] = [
     { label: "New Event Graph", shortcut: "Ctrl+N", onClick: () => addEvent(undefined, { openAfterCreate: true }) },
     { label: "New Function", onClick: () => addFunction(undefined, { openAfterCreate: true }) },
-    { label: "New Macro", onClick: () => addMacro(undefined, { openAfterCreate: true }) },
     { label: "-" },
     { label: "Open Project...", shortcut: "Ctrl+O", onClick: () => importGraph() },
     { label: "-" },

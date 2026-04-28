@@ -15,7 +15,7 @@ interface PendingAction {
 /**
  * Graph Management Hook
  * 
- * 负责 Event/Function/Macro 的创建、更新、删除逻辑
+ * 负责 Event/Function 的创建、更新、删除逻辑
  * - 生成唯一名称
  * - 调用 GraphService 与后端通信（后端会创建完整的 Graph 结构并返回 ID）
  * - 后端通过事件系统通知前端，由 projectSync 更新状态
@@ -235,96 +235,6 @@ export function useGraphManagement(
     }
   }, [closeTab]);
 
-  // Macros
-  const addMacro = useCallback(async (name?: string, options?: AddGraphOptions) => {
-    const openAfterCreate = options?.openAfterCreate ?? false;
-
-    logger.graph.debug(`addMacro called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
-
-    const baseName = name || "New Macro";
-    logger.graph.debug(`Creating macro: ${baseName}`, 'GraphManagement');
-
-    try {
-      const id = await GraphService.createMacro(baseName);
-
-      logger.graph.info(`Macro creation request sent, ID: ${id}`, 'GraphManagement');
-
-      if (openAfterCreate) {
-        const graph = await GraphService.getGraph(id);
-        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'macro', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(id, {
-          ...graph,
-          nodes: graph.nodes ?? [],
-          pins: graph.pins ?? [],
-          connections: graph.connections ?? { connections: [] },
-          canvas: graph.canvas ?? { x: 0, y: 0, scale: 1 },
-        } as any);
-        logger.graph.debug(`Opening newly created macro: ${id}`, 'GraphManagement');
-        openGraph(id, graph.name, "macro", graph);
-      }
-
-      switchSidebarTab('graphs');
-      cleanupExpiredActions();
-    } catch (error) {
-      logger.graph.error(`Failed to create macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      showToast?.(`创建 Macro 失败: ${error}`, 'error');
-      throw error;
-    }
-  }, [openGraph, switchSidebarTab, showToast, cleanupExpiredActions]);
-
-  const handleMacroCreated = useCallback((id: string, data: any) => {
-    logger.graph.debug(`handleMacroCreated: ${id}`, 'GraphManagement');
-    const action = pendingActionsRef.current.get(id);
-    if (action) {
-      clearTimeout(action.timeout);
-      action.callback();
-      pendingActionsRef.current.delete(id);
-    }
-  }, []);
-
-  const handleMacroCreatedFailed = useCallback((name: string, error: string) => {
-    logger.graph.error(`handleMacroCreatedFailed: ${name} - ${error}`, 'GraphManagement');
-    
-    for (const [id, action] of pendingActionsRef.current.entries()) {
-      if (action.name === name) {
-        clearTimeout(action.timeout);
-        pendingActionsRef.current.delete(id);
-        showToast?.(`创建 Macro 失败: ${error}`, 'error');
-        break;
-      }
-    }
-  }, [showToast]);
-
-  const updateMacro = useCallback(async (id: string, data: Partial<Graph>) => {
-    const currentGraph = getGraphById(id);
-    if (!currentGraph) return;
-    
-    const fullData = { ...currentGraph, ...data };
-    
-    try {
-      await GraphService.updateMacro(id, fullData as any);
-      useGraphMetaStore.getState().updateGraph(id, data as any);
-      if (data.nodes || data.pins || data.connections) {
-        useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
-      }
-    } catch (error) {
-      logger.graph.error(`Failed to update macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      throw error;
-    }
-  }, []);
-
-  const deleteMacro = useCallback(async (id: string) => {
-    try {
-      await GraphService.removeGraph(id);
-      useGraphDataStore.getState().clearGraph(id);
-      useGraphMetaStore.getState().deleteGraph(id);
-      closeTab(id);
-    } catch (error) {
-      logger.graph.error(`Failed to delete macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      throw error;
-    }
-  }, [closeTab]);
-
   return {
     // Events
     addEvent,
@@ -340,13 +250,6 @@ export function useGraphManagement(
     handleFunctionCreated,
     handleFunctionCreatedFailed,
 
-    // Macros
-    addMacro,
-    updateMacro,
-    deleteMacro,
-    handleMacroCreated,
-    handleMacroCreatedFailed,
-    
     // Nodes：NodeCreatedHandler 已直接更新 Store，此处仅做可选 UI 扩展（如选中新节点）
     handleNodeCreated: useCallback((graphId: string, nodeId: string, data: any) => {
       logger.graph.debug(`handleNodeCreated: graphId=${graphId}, nodeId=${nodeId}`, 'GraphManagement');

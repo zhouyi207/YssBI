@@ -35,7 +35,6 @@ export default function CanvasOverlays({
         variables,
         Variables,
         functions,
-        macros,
         tabs,
         activeTabId,
         activeGroupId,
@@ -57,7 +56,6 @@ export default function CanvasOverlays({
         groupId,
         activeTabId,
         functions,
-        macros,
         variables,
         Variables,
         pendingConnection,
@@ -185,7 +183,6 @@ export default function CanvasOverlays({
                         variables={variables}
                         Variables={Variables}
                         functions={functions}
-                        macros={macros}
                     />
                 </div>,
                 document.body

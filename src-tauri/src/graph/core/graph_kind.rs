@@ -4,5 +4,4 @@ use serde::{Deserialize, Serialize};
 pub enum GraphKind {
     Event,
     Function,
-    Macro,
 }

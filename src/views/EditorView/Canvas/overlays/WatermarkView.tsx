@@ -1,7 +1,7 @@
 import { useEditorGroup } from "@/features/application/editor";
 
 export const WatermarkView = () => {
-  const { addEvent, addFunction, addMacro, importGraph } = useEditorGroup();
+  const { addEvent, addFunction, importGraph } = useEditorGroup();
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-[var(--workbench-bg)] select-none overflow-hidden">
@@ -27,13 +27,6 @@ export const WatermarkView = () => {
             <span>新建 Function</span>
           </div>
           <span className="text-[10px] text-gray-600 italic">Reusable routine</span>
-        </div>
-        <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => addMacro(undefined, { openAfterCreate: true })}>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-            <span>新建 Macro</span>
-          </div>
-          <span className="text-[10px] text-gray-600 italic">Node pattern</span>
         </div>
         <div className="flex items-center gap-12 justify-between w-full hover:bg-white/5 p-2 rounded transition-colors group cursor-pointer" onClick={() => importGraph()}>
           <span>打开文件</span>

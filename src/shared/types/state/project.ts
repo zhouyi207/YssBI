@@ -28,5 +28,4 @@ export interface UseProjectSyncOptions {
   onProjectSaved?: (path: string) => void;
   onEventCreated?: (id: string, data: Graph) => void;
   onFunctionCreated?: (id: string, data: Graph) => void;
-  onMacroCreated?: (id: string, data: Graph) => void;
 }

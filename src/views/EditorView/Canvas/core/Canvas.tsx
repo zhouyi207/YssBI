@@ -42,7 +42,6 @@ export default function Canvas() {
     pendingConnection,
     setPendingConnection,
     functions,
-    macros,
     groupId,
     selectedNodeIds,
   } = useEditorGroup();
@@ -91,7 +90,6 @@ export default function Canvas() {
     graphId: activeTabId,
     variables: { ...variables, ...Variables },
     functions,
-    macros,
     setNodes,
     setContextMenu,
     setPendingConnection,

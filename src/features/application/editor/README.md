@@ -17,7 +17,7 @@ editor/
 │   ├── useEditorOperations.ts       # Clipboard, history, node operations
 │   ├── useTabManagement.ts          # Tab opening, closing, switching
 │   ├── useProjectOperations.ts      # Save, load, execute operations
-│   ├── useGraphManagement.ts     # Events, functions, macros management
+│   ├── useGraphManagement.ts     # Events and functions management
 │   ├── useVariableManagement.ts     # Variable CRUD and promotion/demotion
 │   ├── useDatabaseManagement.ts    # DataFrame CRUD
 │   ├── useEditorKeyboard.ts         # Keyboard shortcuts
@@ -191,7 +191,7 @@ Handles project-level operations.
 
 ### useGraphManagement(openGraph, closeTab, switchSidebarTab)
 
-Handles events, functions, and macros.
+Handles events and functions.
 
 **Parameters:**
 - `openGraph` - Function to open a subgraph
@@ -205,9 +205,6 @@ Handles events, functions, and macros.
 - `addFunction(name?)` - Create new function
 - `updateFunction(id, data)` - Update function
 - `deleteFunction(id)` - Delete function
-- `addMacro(name?)` - Create new macro
-- `updateMacro(id, data)` - Update macro
-- `deleteMacro(id)` - Delete macro
 
 ### useVariableManagement(switchSidebarTab)
 

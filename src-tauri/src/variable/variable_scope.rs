@@ -19,12 +19,6 @@ pub enum VariableScope {
         #[serde(rename = "functionId")]
         function_id: String,
     },
-    /// 宏作用域
-    #[serde(rename = "macro")]
-    Macro {
-        #[serde(rename = "macroId")]
-        macro_id: String,
-    },
 }
 
 impl Default for VariableScope {

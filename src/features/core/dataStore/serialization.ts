@@ -11,14 +11,14 @@ import { useNodeRegistryStore } from "../nodeRegister";
 import { logger } from '@/utils/appLogger';
 
 /**
- * 将单个子图（Event, Function, Macro）序列化
+ * 将单个子图（Event, Function）序列化
  * 
  * 从节点的 Pin.links 中提取连接关系，生成独立的 connections 数组
  */
 export function serializeGraph(
   id: string,
   name: string,
-  type: "event" | "function" | "macro",
+  type: "event" | "function",
   nodes: Node[],
   canvas: GraphPosition,
   variables: Record<string, Variable>,

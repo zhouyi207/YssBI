@@ -52,11 +52,4 @@ impl ProjectState {
 
     /// 可能会拓展
     pub fn update_function(&self) {}
-
-    pub fn add_macro(&self, graph_name: &str) -> GraphInstance {
-        self.add_graph(graph_name, GraphKind::Macro)
-    }
-
-    /// 可能会拓展
-    pub fn update_macro() {}
 }

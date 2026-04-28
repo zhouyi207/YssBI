@@ -1,5 +1,5 @@
 /**
- * 获取 events、functions、macros、dataframes 集合
+ * 获取 events、functions、dataframes 集合
  * 依赖 dataStore
  */
 
@@ -27,16 +27,8 @@ export function useEditorCollections() {
     return result;
   }, [graphs]);
 
-  const macros = useMemo(() => {
-    const result: Record<string, any> = {};
-    for (const [id, meta] of Object.entries(graphs)) {
-      if (meta.type === 'macro') result[id] = meta;
-    }
-    return result;
-  }, [graphs]);
-
   return useMemo(
-    () => ({ events, functions, macros, Variables, dataframes }),
-    [events, functions, macros, Variables, dataframes]
+    () => ({ events, functions, Variables, dataframes }),
+    [events, functions, Variables, dataframes]
   );
 }

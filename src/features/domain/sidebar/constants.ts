@@ -38,11 +38,10 @@ export const PIN_COLORS: Record<string, string> = {
   delegate: "#FF3333",
 };
 
-/** Sidebar item type icon colors (event, function, macro, variable, data) */
+/** Sidebar item type icon colors (event, function, variable, data) */
 export const TYPE_ICON_COLORS: Record<string, string> = {
   event: "rgba(96, 165, 250, 0.9)",
   function: "rgba(74, 222, 128, 0.9)",
-  macro: "rgba(251, 146, 60, 0.9)",
   variable: "rgba(156, 163, 175, 0.85)",
   variableGlobal: "rgba(245, 158, 11, 0.9)",
   data: "rgba(16, 185, 129, 0.9)",

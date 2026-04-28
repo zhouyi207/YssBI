@@ -230,7 +230,7 @@ src-tauri/src/
 │   │   ├─ graph_instance.rs      # GraphInstance（持有 data_state，提供 mutation API）
 │   │   ├─ graph_data_state.rs    # GraphDataState（nodes、pins、connections 的容器）
 │   │   ├─ graph_id.rs            # GraphId（UUID 包装）
-│   │   ├─ graph_kind.rs          # GraphKind（Event/Function/Macro）
+│   │   ├─ graph_kind.rs          # GraphKind（Event/Function）
 │   │   └─ graph_position.rs      # 画布位置 { x, y, scale }
 │   ├─ node/                # 节点系统
 │   │   ├─ node_definition.rs     # 节点定义模板（name、category、pins、metadata）
@@ -280,7 +280,6 @@ src-tauri/src/
 │   ├─ event_project.rs     # 项目事件
 │   ├─ event_event.rs       # Event 子图事件
 │   ├─ event_function.rs    # Function 子图事件
-│   ├─ event_macro.rs       # Macro 子图事件
 │   ├─ event_node.rs        # 节点事件
 │   ├─ event_connection.rs  # 连接事件
 │   ├─ event_variable.rs    # 变量事件
@@ -379,7 +378,7 @@ RuntimeState（执行态快照） ─ 持有 ID + 当前状态 + 运行时值，
 | 分类 | 后缀约定 | 示例 |
 |------|---------|------|
 | 状态枚举 | `State` | `NodeState { Idle, Ready, Executing, Completed, Error }` |
-| 分类枚举 | `Kind` | `GraphKind { Event, Function, Macro }`、`PinKind { Data, Exec }` |
+| 分类枚举 | `Kind` | `GraphKind { Event, Function }`、`PinKind { Data, Exec }` |
 | 方向枚举 | `Direction` | `PinDirection { Input, Output }` |
 | 语义角色 | `Role` | `PinRole { Exec(ExecRole), Data(DataRole) }` |
 | 事件枚举 | `Event<Domain>` | `EventNode { NodeCreated, NodeDeleted, ... }` |

@@ -25,7 +25,6 @@ interface UseCanvasDropParams {
   graphId: string | null;
   variables: Record<string, any>;
   functions: Record<string, any>;
-  macros: Record<string, any>;
   setNodes: (updater: (prev: any[]) => any[]) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: any) => void;
@@ -42,7 +41,6 @@ export function useCanvasDrop({
   graphId: _graphId,
   variables,
   functions,
-  macros,
   setNodes,
   setContextMenu,
   setPendingConnection,
@@ -186,14 +184,11 @@ export function useCanvasDrop({
         return;
       }
 
-      // Function / Macro 拖放
-      if (
-        dragState.template.nodeType === "Functions:Call Function" ||
-        dragState.template.nodeType === "Macros:Call Macro"
-      ) {
+      // Function 拖放
+      if (dragState.template.nodeType === "Functions:Call Function") {
         const nodeType = dragState.template.nodeType;
         const subId = dragState.template.subGraphId;
-        const subData = nodeType === "Functions:Call Function" ? functions[subId] : macros[subId];
+        const subData = functions[subId];
         if (!subData) return;
 
         await createNode(nodeType, { x, y }, { subGraphId: subId });
@@ -208,7 +203,6 @@ export function useCanvasDrop({
       groupId,
       variables,
       functions,
-      macros,
       createNode,
       setVariableDropMenu,
     ]

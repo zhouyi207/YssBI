@@ -16,7 +16,7 @@ Connection              →    ConnectionItemDTO    →    ConnectionItem / Conn
 ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 ```
 
-**序列化约定**：所有 DTO 使用 `#[serde(rename_all = "camelCase")]`，JSON 键为 camelCase。`GraphTypeDTO` 使用 `rename_all = "lowercase"`，序列化为 `"event"` / `"function"` / `"macro"`。
+**序列化约定**：所有 DTO 使用 `#[serde(rename_all = "camelCase")]`，JSON 键为 camelCase。`GraphTypeDTO` 使用 `rename_all = "lowercase"`，序列化为 `"event"` / `"function"`。
 
 ---
 
@@ -28,7 +28,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 |------|------------------------------|-----------------------------|---------------------|------------------------|------|
 | id | GraphId (UUID) | id | string | string | 图唯一标识 |
 | name | String | name | string | string | 图名称 |
-| type | GraphKind (enum) | type (graph_type → rename) | GraphType | 'event'\|'function'\|'macro' | 图类型，DTO 用 `type` 避免 JS 保留字 |
+| type | GraphKind (enum) | type (graph_type → rename) | GraphType | 'event'\|'function' | 图类型，DTO 用 `type` 避免 JS 保留字 |
 | nodes | HashMap<NodeId, NodeInstance> | NodeInstanceDTO[] | Node[] | NodeData[] | 节点列表，DTO 展平为数组 |
 | pins | (在 data_state 中) | PinInstanceDTO[] | Pin[] | PinData[] | 所有 Pin，DTO 展平为数组 |
 | connections | ConnectionManager | connections: ConnectionDTO | Connection | ConnectionData[] 或 { connections } | 连接关系 |
@@ -159,7 +159,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | name | name | name | name | 变量名 |
 | dataType | data_type | dataType | dataType | 数据类型枚举 |
 | description | description | description | description | 描述 |
-| scope | scope | scope | scope | 作用域 (Global/Function/Macro) |
+| scope | scope | scope | scope | 作用域 (Global/Event/Function) |
 | staticValue | static_value? | staticValue? | - | 静态初始值 |
 | sourceConfig | source_config? | sourceConfig? | - | 数据来源配置 |
 | isArray | is_array | isArray | isArray | 是否数组 |

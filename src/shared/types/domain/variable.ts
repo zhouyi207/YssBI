@@ -31,17 +31,9 @@ export interface FunctionScope {
 }
 
 /**
- * 宏作用域
- */
-export interface MacroScope {
-  type: 'macro';
-  macroId: string;
-}
-
-/**
  * 变量作用域
  */
-export type VariableScope = GlobalScope | EventScope | FunctionScope | MacroScope;
+export type VariableScope = GlobalScope | EventScope | FunctionScope;
 
 /**
  * 变量实例

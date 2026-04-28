@@ -5,7 +5,7 @@ import { logger } from '@/utils/appLogger';
 export interface GraphMeta {
   id: GraphId;
   name: string;
-  type: 'event' | 'function' | 'macro';
+  type: 'event' | 'function';
   entryNodeId?: NodeId;
 }
 

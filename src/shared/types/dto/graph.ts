@@ -80,7 +80,7 @@ export interface ConnectionDTO {
 
 // ==================== Graph DTO ====================
 
-export type GraphTypeDTO = 'event' | 'function' | 'macro';
+export type GraphTypeDTO = 'event' | 'function';
 
 /** 后端 GraphInstanceDTO 对应 */
 export interface GraphInstanceDTO {

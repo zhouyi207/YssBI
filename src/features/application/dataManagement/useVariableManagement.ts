@@ -12,7 +12,7 @@ import { logger } from '@/utils/appLogger';
 function buildScope(
   isGlobal: boolean,
   activeTabId: string | null,
-  graphType: 'event' | 'function' | 'macro' | undefined
+  graphType: 'event' | 'function' | undefined
 ): VariableScope {
   // 明确要求全局变量，或无打开图 → 全局
   if (isGlobal || !activeTabId) return { type: 'global' };
@@ -23,8 +23,6 @@ function buildScope(
       return { type: 'event', eventId: activeTabId };
     case 'function':
       return { type: 'function', functionId: activeTabId };
-    case 'macro':
-      return { type: 'macro', macroId: activeTabId };
     default:
       return { type: 'event', eventId: activeTabId };
   }
@@ -48,7 +46,7 @@ export function useVariableManagement() {
     activeTabId ? s.graphs[activeTabId]?.type : undefined
   );
   const rawType = graphTypeFromTab || graphTypeFromMeta;
-  const graphType = (rawType === 'event' || rawType === 'function' || rawType === 'macro' ? rawType : undefined) as 'event' | 'function' | 'macro' | undefined;
+  const graphType = (rawType === 'event' || rawType === 'function' ? rawType : undefined) as 'event' | 'function' | undefined;
 
   const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
     try {

@@ -86,8 +86,6 @@ pub fn run() {
             update_event,
             create_function,
             update_function,
-            create_macro,
-            update_macro,
             // ==================== Variable CRUD ====================
             create_variable,
             get_variable,

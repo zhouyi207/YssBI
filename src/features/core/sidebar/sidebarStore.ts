@@ -30,7 +30,7 @@ function saveToStorage(key: string, value: unknown) {
 
 /** 堆叠列表：同一 group 内仅一个 section 可展开 */
 const SECTION_GROUPS: Record<string, string[]> = {
-  graphs: ["graphsEvent", "graphsFunction", "graphsMacro", "graphsVariable"],
+  graphs: ["graphsEvent", "graphsFunction", "graphsVariable"],
   variables: ["variablesGlobal", "variablesLocal"],
   data: ["dataData"],
 };
@@ -38,7 +38,6 @@ const SECTION_GROUPS: Record<string, string[]> = {
 const DEFAULT_SECTIONS: Record<string, boolean> = {
   graphsEvent: true,
   graphsFunction: false,
-  graphsMacro: false,
   graphsVariable: false,
   variablesGlobal: true,
   variablesLocal: false,

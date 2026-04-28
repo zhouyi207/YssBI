@@ -1,5 +1,5 @@
 /**
- * 编辑器组目录数据：variables、events、functions、macros、dataframes、selectedItem
+ * 编辑器组目录数据：variables、events、functions、dataframes、selectedItem
  * 直接使用 core hooks，无 application 依赖
  */
 import { useMemo } from 'react';

@@ -28,7 +28,7 @@ export function useTabManagement() {
 
   const handleSetActiveTabId = useCallback((
     newId: string | null,
-    forceType?: 'event' | 'function' | 'macro' | 'setting',
+    forceType?: 'event' | 'function' | 'setting',
     initialData?: Graph,
     targetGroupId?: string
   ) => {
@@ -48,7 +48,7 @@ export function useTabManagement() {
   const openGraph = useCallback((
     id: string,
     name: string,
-    type: "event" | "function" | "macro",
+    type: "event" | "function",
     initialData?: Graph
   ) => {
     logger.graph.trace(`openGraph called: id=${id}, name=${name}, type=${type}`, 'TabManagement');

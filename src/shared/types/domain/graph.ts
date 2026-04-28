@@ -5,13 +5,13 @@ import { Pin } from "./pin";
 /**
  * Domain Types - Graph
  * 
- * Graph 代表一个可执行的图（Event、Function、Macro）
+ * Graph 代表一个可执行的图（Event、Function）
  */
 
 /**
  * 图类型
  */
-export type GraphType = 'event' | 'function' | 'macro';
+export type GraphType = 'event' | 'function';
 
 /**
  * 图的视口位置

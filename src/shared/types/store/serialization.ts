@@ -38,7 +38,7 @@ export interface SerializedNode {
 export interface SerializedGraphData {
   id: string;
   name: string;
-  type: 'event' | 'function' | 'macro';
+  type: 'event' | 'function';
   canvas: GraphPosition;
   variables: Record<string, Variable>;
   inputs: Pin[];

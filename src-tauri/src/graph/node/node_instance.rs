@@ -43,7 +43,7 @@ pub enum NodeInstanceParams {
         variable_type: Option<String>,
     },
 
-    /// 函数/宏调用节点（call_function / call_macro）
+    /// 函数调用节点（call_function）
     #[serde(rename = "subGraph")]
     SubGraph {
         #[serde(rename = "subGraphId")]

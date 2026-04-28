@@ -23,10 +23,6 @@ import {
     FunctionUpdatedHandler,
     FunctionDeletedHandler,
     FunctionCreatedFailedHandler,
-    MacroCreatedHandler,
-    MacroUpdatedHandler,
-    MacroDeletedHandler,
-    MacroCreatedFailedHandler,
 } from './GraphEventHandler';
 import {
     VariableCreatedHandler,
@@ -73,12 +69,6 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new FunctionUpdatedHandler() as EventHandler<unknown>,
         new FunctionDeletedHandler() as EventHandler<unknown>,
         new FunctionCreatedFailedHandler() as EventHandler<unknown>,
-        
-        // Macro
-        new MacroCreatedHandler() as EventHandler<unknown>,
-        new MacroUpdatedHandler() as EventHandler<unknown>,
-        new MacroDeletedHandler() as EventHandler<unknown>,
-        new MacroCreatedFailedHandler() as EventHandler<unknown>,
         
         // Variable
         new VariableCreatedHandler() as EventHandler<unknown>,

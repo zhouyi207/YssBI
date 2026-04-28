@@ -113,7 +113,6 @@ export function NodePalette({
   variables = {},
   Variables = {},
   functions = {},
-  macros = {},
 }: {
   x: number;
   y: number;
@@ -122,7 +121,6 @@ export function NodePalette({
   variables?: Record<string, Variable>;
   Variables?: Record<string, Variable>;
   functions?: Record<string, Graph>;
-  macros?: Record<string, Graph>;
 }) {
   const [queryRaw, setQueryRaw] = useState("");
   const query = useDebouncedValue(queryRaw, 150);
@@ -141,16 +139,11 @@ export function NodePalette({
     () => Object.keys(functions).sort().join(","),
     [functions]
   );
-  const macroKeysStr = useMemo(
-    () => Object.keys(macros).sort().join(","),
-    [macros]
-  );
-
   const allItems = useMemo(() => {
     const items: PaletteItem[] = [];
 
     definitions.forEach((node) => {
-      if (["Variables:Get Variable", "Variables:Set Variable", "Functions:Call Function", "Macros:Call Macro"].includes(node.nodeType)) return;
+      if (["Variables:Get Variable", "Variables:Set Variable", "Functions:Call Function"].includes(node.nodeType)) return;
 
       if (filterPin) {
         if (!isNodeCompatibleWithPin(node, filterPin)) return;
@@ -195,29 +188,25 @@ export function NodePalette({
       }
     });
 
-    const processGraphs = (collection: Record<string, any>, type: "function" | "macro") => {
-      Object.values(collection).forEach((sub) => {
-        if (!sub?.name || !sub?.id) return;
-        if (filterPin) {
-          const targetPins = filterPin.direction === "input" ? sub.outputs : sub.inputs;
-          const hasCompatible = (targetPins || []).some(
-            (p: any) => p.type === filterPin.type || p.type === "any" || p.type === "oneof" || filterPin.type === "any" || filterPin.type === "oneof"
-          );
-          if (!hasCompatible && filterPin.type !== "exec") return;
-        }
-        items.push({
-          nodeType: type === "function" ? "Functions:Call Function" : "Macros:Call Macro",
-          title: `${type === "function" ? "Call" : "Macro"} ${sub.name}`,
-          category: type === "function" ? ["Functions"] : ["Macros"],
-          overrides: { subGraphId: sub.id, title: sub.name },
-        });
+    Object.values(functions).forEach((sub) => {
+      if (!sub?.name || !sub?.id) return;
+      if (filterPin) {
+        const targetPins = filterPin.direction === "input" ? sub.outputs : sub.inputs;
+        const hasCompatible = (targetPins || []).some(
+          (p: any) => p.type === filterPin.type || p.type === "any" || p.type === "oneof" || filterPin.type === "any" || filterPin.type === "oneof"
+        );
+        if (!hasCompatible && filterPin.type !== "exec") return;
+      }
+      items.push({
+        nodeType: "Functions:Call Function",
+        title: `Call ${sub.name}`,
+        category: ["Functions"],
+        overrides: { subGraphId: sub.id, title: sub.name },
       });
-    };
-    processGraphs(functions, "function");
-    processGraphs(macros, "macro");
+    });
 
     return items;
-  }, [filterPin, variableKeysStr, globalVariableKeysStr, functionKeysStr, macroKeysStr, definitions]);
+  }, [filterPin, variableKeysStr, globalVariableKeysStr, functionKeysStr, definitions]);
 
   const root = useMemo(() => buildTreeFromItems(allItems), [allItems]);
 

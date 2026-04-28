@@ -9,7 +9,7 @@ import { Position } from "@/shared/types/ui";
 export interface CreateNodeRequest {
     nodeType: string;
     position: Position;
-    /** 可选参数，如 subGraphId（call_function/call_macro），需后端支持 */
+    /** 可选参数，如 subGraphId（call_function），需后端支持 */
     overrides?: Record<string, unknown>;
 }
 
@@ -26,12 +26,12 @@ export function buildCreateNodeRequest(
 }
 
 export function syncInternalNodePins(node: Node, subGraphPins: GraphPinDef[], isInputNode: boolean) {
-    // For an input node (like Function Entry or Macro Inputs), the subgraph's inputs become the node's OUTPUT pins
-    // For an output node (like Function Return or Macro Outputs), the subgraph's outputs become the node's INPUT pins
+    // For an input node (like Function Entry), the subgraph's inputs become the node's OUTPUT pins
+    // For an output node (like Function Return), the subgraph's outputs become the node's INPUT pins
 
     const currentPins = isInputNode ? node.outputs : node.inputs;
 
-    // The first pin is always the fixed exec pin (e.g., "In" for macro_inputs, "Out" for macro_outputs, "Then" for function_entry, "In" for function_return)
+    // The first pin is always the fixed exec pin (e.g., "Then" for function_entry, "In" for function_return)
     const fixedExecPin = currentPins.length > 0 && currentPins[0].type === 'exec' ? currentPins[0] : null;
 
     // All other pins (including user-defined exec pins) come from subGraphPins

@@ -113,7 +113,7 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
     logger.app.trace(`[toFrontendGraph] Converted: nodes=${nodes.length}, pins=${pins.length}, connections=${connectionsArray.length}`, 'ProjectService');
     
     const rawType = data.type ?? 'event';
-    const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function" | "macro";
+    const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function";
     return {
         id: data.id,
         name: data.name,

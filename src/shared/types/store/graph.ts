@@ -63,7 +63,7 @@ export interface ConnectionData {
 export interface GraphData {
   id: string;
   name: string;
-  type: 'event' | 'function' | 'macro';
+  type: 'event' | 'function';
   nodes: NodeData[];
   pins: PinData[];
   connections: ConnectionData[] | { connections: Array<{ fromPin: string; toPin: string }> };

@@ -39,7 +39,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     Variables,
     events,
     functions,
-    macros,
     dataframes,
     selectedItemId,
     selectedItemType,
@@ -50,8 +49,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
     deleteEvent,
     updateFunction,
     deleteFunction,
-    updateMacro,
-    deleteMacro,
     updateDataFrame,
     deleteDataFrame
   } = useEditorGroup();
@@ -68,20 +65,17 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       return events[selectedItemId];
     } else if (selectedItemType === 'function') {
       return functions[selectedItemId];
-    } else if (selectedItemType === 'macro') {
-      return macros[selectedItemId];
     } else if (selectedItemType === 'data') {
       return dataframes[selectedItemId];
     }
     return null;
-  }, [selectedItemId, selectedItemType, Variables, events, functions, macros, dataframes]);
+  }, [selectedItemId, selectedItemType, Variables, events, functions, dataframes]);
 
   const handleUpdate = (data: any) => {
     if (!selectedItemId || !selectedItemType) return;
     if (selectedItemType === 'variable') updateVariable(selectedItemId, data);
     else if (selectedItemType === 'event') updateEvent(selectedItemId, data);
     else if (selectedItemType === 'function') updateFunction(selectedItemId, data);
-    else if (selectedItemType === 'macro') updateMacro(selectedItemId, data);
     else if (selectedItemType === 'data') updateDataFrame(selectedItemId, data);
   };
 
@@ -96,7 +90,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
         if (selectedItemType === 'variable') deleteVariable(selectedItemId);
         else if (selectedItemType === 'event') deleteEvent(selectedItemId);
         else if (selectedItemType === 'function') deleteFunction(selectedItemId);
-        else if (selectedItemType === 'macro') deleteMacro(selectedItemId);
         else if (selectedItemType === 'data') deleteDataFrame(selectedItemId);
         setSelectedInfo(null, null);
       }
@@ -289,7 +282,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
                   )}
                 </>
               )}
-              {(selectedItemType === 'function' || selectedItemType === 'macro') && (
+              {selectedItemType === 'function' && (
                 <tr className="border-b border-[#2b2b2b]">
                   <td className="p-2 font-bold text-gray-400 bg-white/5">Type</td>
                   <td className="p-2 text-gray-400 italic">
@@ -349,7 +342,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
             </tbody>
           </table>
 
-          {(selectedItemType === 'function' || selectedItemType === 'macro') && (
+          {selectedItemType === 'function' && (
             <>
               {renderPinEditor("Inputs", selectedData.inputs, true)}
               {renderPinEditor("Outputs", selectedData.outputs, false)}

@@ -9,7 +9,7 @@ export interface ParsedEvent {
 
 /** 顶层事件分类（需递归解析到具体类型） */
 const TOP_LEVEL_TYPES = new Set([
-    'Project', 'Event', 'Function', 'Macro', 'Variable', 'Node', 'Connection', 'DataFrame',
+    'Project', 'Event', 'Function', 'Variable', 'Node', 'Connection', 'DataFrame',
 ]);
 
 /**
@@ -45,7 +45,6 @@ export function isValidEventType(type: string): boolean {
         // Graph
         'EventCreated', 'EventUpdated', 'EventDeleted', 'EventCreatedFailed',
         'FunctionCreated', 'FunctionUpdated', 'FunctionDeleted', 'FunctionCreatedFailed',
-        'MacroCreated', 'MacroUpdated', 'MacroDeleted', 'MacroCreatedFailed',
         // Variable
         'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame

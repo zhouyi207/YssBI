@@ -34,7 +34,7 @@ export function useNodeManagement() {
      * 创建单个节点（CQRS模式）
      * @param nodeType 节点类型
      * @param position 节点位置
-     * @param params 实例参数（variableId、subGraphId 等，用于 variable/function/macro/dataframe 节点）
+     * @param params 实例参数（variableId、subGraphId 等，用于 variable/function/dataframe 节点）
      * @returns Promise<void>
      */
     const createNode = useCallback(

@@ -157,7 +157,7 @@ export type EditorGesture =
 export interface EditorTab {
     id: string;
     title: string;
-    type: "event" | "function" | "macro" | "project" | "setting";
+    type: "event" | "function" | "project" | "setting";
     isDirty?: boolean;
 }
 

@@ -2,7 +2,7 @@
 
 ## 现象
 
-创建 Event/Function/Macro 时偶尔出现：
+创建 Event/Function 时偶尔出现：
 ```
 [useGraphManagement] Timeout waiting for EventCreated event for <uuid>
 ```

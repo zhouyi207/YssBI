@@ -1,5 +1,5 @@
 use crate::event::emit_project_event;
-use crate::event::{EventEvent, EventFunction, EventMacro};
+use crate::event::{EventEvent, EventFunction};
 use crate::graph::{GraphId, GraphKind};
 use crate::log::log_app;
 use crate::schema::GraphInstanceDTO;
@@ -50,24 +50,6 @@ pub fn create_function(
 }
 
 #[tauri::command]
-pub fn create_macro(
-    app: AppHandle,
-    state: State<ProjectState>,
-    graph_name: &str,
-) -> Result<String, String> {
-    let graph = state.add_macro(graph_name);
-    let graph_id = graph.id.to_string();
-    emit_project_event(
-        &app,
-        Event::Macro(EventMacro::MacroCreated {
-            id: graph.id,
-            data: (&graph).into(),
-        }),
-    );
-    Ok(graph_id)
-}
-
-#[tauri::command]
 pub fn remove_graph(
     app: AppHandle,
     state: State<ProjectState>,
@@ -77,7 +59,6 @@ pub fn remove_graph(
     let event = match graph.kind {
         GraphKind::Event => Event::Event(EventEvent::EventDeleted { id: graph_id }),
         GraphKind::Function => Event::Function(EventFunction::FunctionDeleted { id: graph_id }),
-        GraphKind::Macro => Event::Macro(EventMacro::MacroDeleted { id: graph_id }),
     };
     emit_project_event(&app, event);
     Ok(())
@@ -115,7 +96,6 @@ fn update_graph_inner(
     let event = match graph.kind {
         GraphKind::Event => Event::Event(EventEvent::EventUpdated { id, data: dto }),
         GraphKind::Function => Event::Function(EventFunction::FunctionUpdated { id, data: dto }),
-        GraphKind::Macro => Event::Macro(EventMacro::MacroUpdated { id, data: dto }),
     };
     drop(project_data);
     emit_project_event(app, event);
@@ -130,11 +110,6 @@ pub fn update_event(app: AppHandle, state: State<ProjectState>, id: GraphId, eve
 #[tauri::command]
 pub fn update_function(app: AppHandle, state: State<ProjectState>, id: GraphId, function: Value) -> Result<(), String> {
     update_graph_inner(&app, &state, id, function)
-}
-
-#[tauri::command]
-pub fn update_macro(app: AppHandle, state: State<ProjectState>, id: GraphId, macro_data: Value) -> Result<(), String> {
-    update_graph_inner(&app, &state, id, macro_data)
 }
 
 #[tauri::command]

@@ -3,7 +3,7 @@ import { Graph } from "@/shared/types/domain";
 import { logger } from '@/utils/appLogger';
 
 /**
- * Graph Service - 管理 Event、Function、Macro 的创建、删除、更新和查询
+ * Graph Service - 管理 Event、Function 的创建、删除、更新和查询
  * 
  * 注意：创建方法只需要传递 graph_name，后端会自动创建完整的 Graph 结构
  */
@@ -41,23 +41,7 @@ export class GraphService {
     }
 
     /**
-     * 创建 Macro
-     * @param graphName - Macro 的名称
-     * @returns 后端生成的 Graph ID
-     */
-    static async createMacro(graphName: string): Promise<string> {
-        try {
-            const id = await invoke<string>("create_macro", { graphName });
-            logger.graph.info(`Macro '${graphName}' created with ID: ${id}`, 'GraphService');
-            return id;
-        } catch (error) {
-            logger.graph.error(`Error creating macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
-
-    /**
-     * 删除 Graph (Event/Function/Macro)
+     * 删除 Graph (Event/Function)
      * @param graphId - Graph 的 ID
      */
     static async removeGraph(graphId: string): Promise<void> {
@@ -96,21 +80,6 @@ export class GraphService {
             logger.graph.info(`Function '${id}' updated successfully`, 'GraphService');
         } catch (error) {
             logger.graph.error(`Error updating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
-
-    /**
-     * 更新 Macro
-     * @param id - Macro 的 ID
-     * @param macroData - 更新的 Macro 数据
-     */
-    static async updateMacro(id: string, macroData: Graph): Promise<void> {
-        try {
-            await invoke("update_macro", { id, macroData });
-            logger.graph.info(`Macro '${id}' updated successfully`, 'GraphService');
-        } catch (error) {
-            logger.graph.error(`Error updating macro: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }

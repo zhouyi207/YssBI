@@ -1,5 +1,6 @@
 import { useUIStore } from "@/features/core/ui/useUIStore";
 import { uiStore } from "@/features/core/ui/UIStore";
+import { Toaster } from "@/components/ui/sonner";
 import {
   ExcelSheetSelectModal,
   ImportModal,
@@ -18,11 +19,10 @@ export const UIHost = () => {
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 z-[600] flex flex-col gap-3">
-        {messages.map((message) => (
-          <Toast key={message.id} message={message} onClose={() => uiStore.closeToast(message.id)} />
-        ))}
-      </div>
+      <Toaster />
+      {messages.map((message) => (
+        <Toast key={message.id} message={message} onClose={() => uiStore.closeToast(message.id)} />
+      ))}
 
       {top?.type === "confirm" && (
         <Modal options={top.options} onClose={() => uiStore.closeModal(top.id)} />

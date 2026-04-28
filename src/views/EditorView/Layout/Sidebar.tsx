@@ -13,7 +13,6 @@ import {
   VscListUnordered,
   VscSymbolEvent,
   VscSymbolMethod,
-  VscSymbolKeyword,
   VscSymbolVariable,
   VscDiscard,
   VscRedo,
@@ -242,8 +241,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     demoteVariable,
     functions,
     addFunction,
-    macros,
-    addMacro,
     events,
     addEvent,
     dataframes,
@@ -265,13 +262,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const global: Record<string, { name: string; dataType?: unknown }> = {};
     const local: Record<string, { name: string; dataType?: unknown }> = {};
     for (const [id, v] of Object.entries(allVariables)) {
-      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string; macroId?: string } }).scope;
+      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
       if (scope?.type === "global") {
         global[id] = v as { name: string; dataType?: unknown };
       } else if (
         activeTabId &&
         scope &&
-        (scope.eventId === activeTabId || scope.functionId === activeTabId || scope.macroId === activeTabId)
+        (scope.eventId === activeTabId || scope.functionId === activeTabId)
       ) {
         local[id] = v as { name: string; dataType?: unknown };
       }
@@ -284,15 +281,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const global: Record<string, { name: string; dataType?: unknown }> = {};
     const byGraph: Record<string, { graphName: string; graphType: string; variables: Record<string, { name: string; dataType?: unknown }> }> = {};
     for (const [id, v] of Object.entries(allVariables)) {
-      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string; macroId?: string } }).scope;
+      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
       const data = v as { name: string; dataType?: unknown };
       if (scope?.type === "global") {
         global[id] = data;
       } else {
-        const graphId = scope?.eventId ?? scope?.functionId ?? scope?.macroId;
+        const graphId = scope?.eventId ?? scope?.functionId;
         if (graphId) {
           if (!byGraph[graphId]) {
-            const meta = events[graphId] ?? functions[graphId] ?? macros[graphId];
+            const meta = events[graphId] ?? functions[graphId];
             byGraph[graphId] = {
               graphName: (meta as { name?: string })?.name ?? graphId,
               graphType: (meta as { type?: string })?.type ?? "event",
@@ -314,14 +311,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
-  const macrosCount = Object.keys(macros).length;
   const graphVarsCount = Object.keys(graphScopeVariables).length + Object.keys(globalVariables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
   const prevCounts = useRef({
     events: eventsCount,
     functions: functionsCount,
-    macros: macrosCount,
     variables: graphVarsCount,
     dataframes: dataframesCount,
   });
@@ -330,7 +325,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const isAdded =
       eventsCount > prevCounts.current.events ||
       functionsCount > prevCounts.current.functions ||
-      macrosCount > prevCounts.current.macros ||
       graphVarsCount > prevCounts.current.variables ||
       dataframesCount > prevCounts.current.dataframes;
 
@@ -340,16 +334,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     prevCounts.current = {
       events: eventsCount,
       functions: functionsCount,
-      macros: macrosCount,
       variables: graphVarsCount,
       dataframes: dataframesCount,
     };
-  }, [eventsCount, functionsCount, macrosCount, graphVarsCount, dataframesCount]);
+  }, [eventsCount, functionsCount, graphVarsCount, dataframesCount]);
 
   const renderItem = (
     id: string,
     name: string,
-    type: "variable" | "function" | "macro" | "event" | "data",
+    type: "variable" | "function" | "event" | "data",
     extra?: { dataType?: unknown; isGlobal?: boolean },
     readOnly?: boolean,
     nested?: boolean
@@ -387,9 +380,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 ? TYPE_ICON_COLORS.event
                 : type === "function"
                   ? TYPE_ICON_COLORS.function
-                  : type === "macro"
-                    ? TYPE_ICON_COLORS.macro
-                    : type === "variable"
+                  : type === "variable"
                       ? extra?.isGlobal
                         ? TYPE_ICON_COLORS.variableGlobal
                         : TYPE_ICON_COLORS.variable
@@ -400,12 +391,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         >
           {type === "event" && <VscSymbolEvent size={12} />}
           {type === "function" && <VscSymbolMethod size={12} />}
-          {type === "macro" && <VscSymbolKeyword size={12} />}
           {type === "variable" && <VscSymbolVariable size={12} />}
           {type === "data" && <VscDatabase size={12} />}
         </span>
         <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
-        {(type === "event" || type === "function" || type === "macro") && (
+        {(type === "event" || type === "function") && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -510,20 +500,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   )}
                   {Object.keys(functions).length === 0 && (
                     <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No functions</div>
-                  )}
-              </StackedCollapsibleSection>
-
-              <StackedCollapsibleSection
-                label="Macro"
-                expanded={isSectionExpanded("graphsMacro")}
-                onToggle={() => toggleSection("graphsMacro")}
-                onAdd={addMacro}
-              >
-                  {Object.entries(macros).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "macro")
-                  )}
-                  {Object.keys(macros).length === 0 && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No macros</div>
                   )}
               </StackedCollapsibleSection>
 

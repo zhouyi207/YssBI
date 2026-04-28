@@ -154,12 +154,10 @@ export interface EventCallbacks {
     // Graph callbacks
     onEventCreated?: (id: string, data: Graph) => void;
     onFunctionCreated?: (id: string, data: Graph) => void;
-    onMacroCreated?: (id: string, data: Graph) => void;
     
     // Graph error callbacks
     onEventCreatedFailed?: (name: string, error: string) => void;
     onFunctionCreatedFailed?: (name: string, error: string) => void;
-    onMacroCreatedFailed?: (name: string, error: string) => void;
     
     // Variable callbacks
     onVariableCreated?: (id: string, data: Variable) => void;

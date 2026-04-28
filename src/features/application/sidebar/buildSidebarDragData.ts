@@ -2,12 +2,12 @@ import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import type { DataType } from "@/shared/types/domain";
 
 /**
- * Build drag data for sidebar items (variables, functions, macros, events, data).
+ * Build drag data for sidebar items (variables, functions, events, data).
  */
 export function buildSidebarDragData(
   id: string,
   name: string,
-  type: "variable" | "function" | "macro" | "event" | "data",
+  type: "variable" | "function" | "event" | "data",
   extra?: { dataType?: DataType | string }
 ) {
   if (type === "variable") {
@@ -32,12 +32,12 @@ export function buildSidebarDragData(
       },
     };
   }
-  if (type === "function" || type === "macro") {
+  if (type === "function") {
     return {
       type: "node-template",
       template: {
-        nodeType: type === "function" ? "Functions:Call Function" : "Macros:Call Macro",
-        category: type === "function" ? "Functions" : "Macros",
+        nodeType: "Functions:Call Function",
+        category: "Functions",
         subGraphId: id,
         subName: name,
       },

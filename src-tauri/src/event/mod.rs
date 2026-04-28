@@ -4,7 +4,6 @@ pub mod event_connection;
 pub mod event_dataframe;
 pub mod event_event;
 pub mod event_function;
-pub mod event_macro;
 pub mod event_node;
 pub mod event_project;
 pub mod event_variable;
@@ -13,7 +12,6 @@ pub use event_connection::*;
 pub use event_dataframe::*;
 pub use event_event::*;
 pub use event_function::*;
-pub use event_macro::*;
 pub use event_node::*;
 pub use event_project::*;
 pub use event_variable::*;
@@ -31,8 +29,6 @@ pub enum Event {
     Event(EventEvent),
     // Function 子图事件
     Function(EventFunction),
-    // Macro 子图事件
-    Macro(EventMacro),
     // 全局变量事件
     Variable(EventVariable),
     // 节点事件

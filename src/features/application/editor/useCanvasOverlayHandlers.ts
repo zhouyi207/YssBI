@@ -34,7 +34,6 @@ export function useCanvasOverlayHandlers({
   groupId,
   activeTabId,
   functions,
-  macros,
   variables,
   Variables,
   pendingConnection,
@@ -48,7 +47,6 @@ export function useCanvasOverlayHandlers({
   groupId: string;
   activeTabId: string | null;
   functions: Record<string, any>;
-  macros: Record<string, any>;
   variables: Record<string, any>;
   Variables: Record<string, any>;
   pendingConnection: Pin | null;
@@ -66,8 +64,6 @@ export function useCanvasOverlayHandlers({
         "event_on_run",
         "function_entry",
         "function_return",
-        "macro_inputs",
-        "macro_outputs",
       ];
 
       if (internalNodeTypes.includes(item.nodeType)) {
@@ -99,10 +95,10 @@ export function useCanvasOverlayHandlers({
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      if (item.nodeType === "Functions:Call Function" || item.nodeType === "Macros:Call Macro") {
+      if (item.nodeType === "Functions:Call Function") {
         const subId = item.overrides?.subGraphId;
         if (!subId) { setContextMenu(null); setPendingConnection(null); return; }
-        const subData = item.nodeType === "Functions:Call Function" ? functions[subId] : macros[subId];
+        const subData = functions[subId];
         if (!subData) { setContextMenu(null); setPendingConnection(null); return; }
       }
 
@@ -132,7 +128,6 @@ export function useCanvasOverlayHandlers({
       groupId,
       activeTabId,
       functions,
-      macros,
       pendingConnection,
       createNode,
       setContextMenu,

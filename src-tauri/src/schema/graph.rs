@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 pub enum GraphTypeDTO {
     Event,
     Function,
-    Macro,
 }
 
 impl From<&GraphKind> for GraphTypeDTO {
@@ -20,7 +19,6 @@ impl From<&GraphKind> for GraphTypeDTO {
         match value {
             GraphKind::Event => GraphTypeDTO::Event,
             GraphKind::Function => GraphTypeDTO::Function,
-            GraphKind::Macro => GraphTypeDTO::Macro,
         }
     }
 }

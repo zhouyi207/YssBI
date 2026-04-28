@@ -70,8 +70,6 @@ export function useProjectSyncWithEditor() {
       onEventCreatedFailed: editor.handleEventCreatedFailed,
       onFunctionCreated: editor.handleFunctionCreated,
       onFunctionCreatedFailed: editor.handleFunctionCreatedFailed,
-      onMacroCreated: editor.handleMacroCreated,
-      onMacroCreatedFailed: editor.handleMacroCreatedFailed,
       onNodeCreated: editor.handleNodeCreated as EventCallbacks['onNodeCreated'],
       onNodeDeleted: editor.handleNodeDeleted,
     }),
@@ -80,8 +78,6 @@ export function useProjectSyncWithEditor() {
       editor.handleEventCreatedFailed,
       editor.handleFunctionCreated,
       editor.handleFunctionCreatedFailed,
-      editor.handleMacroCreated,
-      editor.handleMacroCreatedFailed,
       editor.handleNodeCreated,
       editor.handleNodeDeleted,
     ]
