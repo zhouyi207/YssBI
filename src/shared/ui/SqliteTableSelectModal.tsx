@@ -1,5 +1,9 @@
 import { VscDatabase, VscClose } from "react-icons/vsc";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SqliteTableSelectDialogOptions } from "@/shared/types/ui";
+import { OverlayScrollbar } from "./OverlayScrollbar";
 
 export const SqliteTableSelectModal = ({
   options,
@@ -12,42 +16,49 @@ export const SqliteTableSelectModal = ({
   const dbName = dbPath.replace(/^.*[/\\]/, "");
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-2xl w-[400px] overflow-hidden animate-zoom-in">
-        <div className="px-6 py-4 border-b border-gray-800 bg-[#252526] flex justify-between items-center">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
-            <VscDatabase className="text-blue-500" size={18} /> 选择表
-          </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[420px]">
+        <DialogHeader className="border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle className="flex items-center gap-2">
+              <VscDatabase className="text-blue-400" size={18} /> 选择表
+            </DialogTitle>
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
             <VscClose size={20} />
-          </button>
-        </div>
+            </Button>
+          </div>
+        </DialogHeader>
 
         <div className="p-6">
-          <p className="text-xs text-gray-500 mb-3 truncate" title={dbPath}>
+          <p className="mb-3 truncate text-xs text-muted-foreground" title={dbPath}>
             {dbName}
           </p>
-          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-            {tables.map((table) => (
-              <button
-                key={table}
-                onClick={() => {
-                  onSelect(table);
-                  onClose();
-                }}
-                className="flex items-center gap-2 px-4 py-3 rounded-lg border border-gray-800 hover:border-[var(--accent-color)] hover:bg-white/5 transition-all text-left"
-              >
-                <span className="text-[11px] font-mono text-gray-400">TABLE</span>
-                <span className="text-sm font-medium text-gray-200">{table}</span>
-              </button>
-            ))}
-          </div>
+          <OverlayScrollbar className="max-h-60">
+            <div className="flex flex-col gap-2">
+              {tables.map((table) => (
+                <Button
+                  key={table}
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    onSelect(table);
+                    onClose();
+                  }}
+                  className="h-auto justify-start gap-3 px-4 py-3 text-left"
+                >
+                  <Badge variant="default">Table</Badge>
+                  <span className="text-sm font-medium text-gray-200">{table}</span>
+                </Button>
+              ))}
+            </div>
+          </OverlayScrollbar>
         </div>
 
-        <div className="px-6 py-3 bg-[#252526] border-t border-gray-800 text-center">
-          <p className="text-[10px] text-gray-500 font-medium">选择要导入的表</p>
-        </div>
-      </div>
-    </div>
+        <DialogFooter className="justify-center">
+          <p className="text-[10px] font-medium text-muted-foreground">选择要导入的表</p>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

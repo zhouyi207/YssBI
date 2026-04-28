@@ -1,0 +1,29 @@
+---
+description: Avoid frontend jank from long-running Tauri commands
+globs: src-tauri/src/**/*.rs
+alwaysApply: false
+---
+
+# Long-Running Tauri Tasks
+
+- `#[tauri::command]` 必须保持薄且快速：只做参数解析、状态校验、启动任务、返回任务状态或快照。
+- 不要在 command 中持有全局 `Mutex` 时执行耗时 I/O、串口阻塞读取、模型加载、采集循环、推理循环或长时间 sleep。
+- 耗时任务使用后台线程、异步任务或专用 worker 管理；结果通过状态缓存、事件推送或单独查询 command 返回给前端。
+- 共享状态只在短临界区内读写；耗时操作前先取出必要参数，完成后再短暂加锁写回状态。
+- 高频数据（按键、FPS、帧状态）优先由后台任务写缓存；前端读取缓存或订阅事件，不要用高频阻塞 command 轮询硬件。
+- 启停类 command 应返回 `Starting` / `Stopping` / `Running` / `Stopped` 等状态，不等待完整长流程结束。
+
+```rust
+// ❌ BAD: 持锁执行阻塞 I/O
+state.with_mut(|s| {
+    let data = serial.read_blocking();
+    s.status = data;
+});
+
+// ✅ GOOD: 后台任务处理 I/O，只短暂写状态
+let app_state = state.inner();
+std::thread::spawn(move || {
+    let data = read_serial_loop();
+    app_state.with_mut(|s| s.status = data);
+});
+```

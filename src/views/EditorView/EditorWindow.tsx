@@ -4,7 +4,6 @@ import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
-import { UIHost } from "@/shared/ui";
 import { useProjectSyncWithEditor } from "@/features/application/initialization";
 import { useEditorGroup } from "@/features/application/editor";
 import { useEditorKeyboard } from "@/features/application/editor";
@@ -49,15 +48,12 @@ export const EditorWindow = () => {
     }
 
     return (
-        <>
-            <div className="flex flex-col w-full h-screen">
-                <Menubar />
-                <div className="flex flex-1 overflow-hidden isolate">
-                    <ActivityBar />
-                    <Workspace nodeId={rootId} />
-                </div>
+        <div className="flex flex-col w-full h-screen">
+            <Menubar />
+            <div className="flex flex-1 overflow-hidden isolate">
+                <ActivityBar />
+                <Workspace nodeId={rootId} />
             </div>
-            <UIHost />
-        </>
+        </div>
     );
 }

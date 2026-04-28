@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
 interface Option {
@@ -39,9 +42,13 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
             ref={containerRef}
             className={`relative inline-block w-full text-xs select-none ${className} ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
-            <div
+            <Button
+                type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
-                className={`flex items-center justify-between px-2 py-1 bg-[#3c3c3c] border ${isOpen ? "border-[#007acc]" : "border-transparent"} hover:border-[#007acc] rounded transition-all`}
+                variant="outline"
+                size="sm"
+                disabled={disabled}
+                className={`w-full justify-between ${isOpen ? "border-[var(--accent-color)]" : ""}`}
             >
                 <span className="truncate text-[#cccccc]">{selectedOption?.label}</span>
                 <svg
@@ -52,26 +59,28 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
                 >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
-            </div>
+            </Button>
 
             {isOpen && (
-                <div className="absolute z-50 w-full mt-0.5 bg-[#252526] border border-[#454545] shadow-2xl rounded overflow-hidden">
+                <Card className="absolute z-50 mt-1 w-full overflow-hidden shadow-2xl">
                     <OverlayScrollbar className="max-h-60 py-1" direction="vertical">
                         {formattedOptions.map((option) => (
-                            <div
+                            <Button
+                                type="button"
+                                variant="ghost"
                                 key={option.value}
                                 onClick={() => {
                                     onChange(option.value);
                                     setIsOpen(false);
                                 }}
-                                className={`px-2 py-1.5 hover:bg-[#007acc] hover:text-white transition-colors cursor-pointer ${value === option.value ? "bg-[#37373d] text-white" : "text-[#cccccc]"
-                                    }`}
+                                className={`h-auto w-full justify-between rounded-none px-3 py-2 text-left ${value === option.value ? "bg-muted text-white" : "text-[#cccccc]"}`}
                             >
-                                {option.label}
-                            </div>
+                                <span className="truncate">{option.label}</span>
+                                {value === option.value && <Badge variant="outline">当前</Badge>}
+                            </Button>
                         ))}
                     </OverlayScrollbar>
-                </div>
+                </Card>
             )}
         </div>
     );

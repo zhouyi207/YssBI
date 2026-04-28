@@ -2,16 +2,12 @@
 /// Schema 在初始化时加载，含 nodeDefinitions（含 pin metaData 如 dropdown 的 widget_options）
 
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { SchemaService } from "@/services/schema";
 import { LoadStatus } from "@/shared/types/ui";
 import { SchemaState } from "@/shared/types/state";
 import type { NodeDefinition } from "@/shared/types/domain";
 import { logger } from '@/utils/appLogger';
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
-
-export interface EditorSchemaDTO {
-  nodeDefinitions: NodeDefinition[];
-}
 
 interface SchemaStore extends SchemaState {
   // Schema 数据（含 nodeDefinitions，用于 pin dropdown 等）
@@ -45,7 +41,7 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
     set({ status: LoadStatus.Loading, error: null });
 
     try {
-      const schema = await invoke<EditorSchemaDTO>("get_editor_schema_command");
+      const schema = await SchemaService.getEditorSchema();
 
       const definitions = new Map<string, NodeDefinition>();
       (schema.nodeDefinitions ?? []).forEach((def) => {

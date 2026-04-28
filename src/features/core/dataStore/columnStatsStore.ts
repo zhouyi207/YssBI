@@ -1,34 +1,7 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
-
-export interface NumericColumnStats {
-  columnName: string;
-  columnType: string;
-  kind: 'numeric';
-  count: number;
-  nullCount: number;
-  min: number | null;
-  max: number | null;
-  mean: number | null;
-  median: number | null;
-  std: number | null;
-  variance: number | null;
-}
-
-export interface StringColumnStats {
-  columnName: string;
-  columnType: string;
-  kind: 'string';
-  count: number;
-  nullCount: number;
-  emptyCount: number;
-  validRatio: number;
-  unique: number;
-  mode: string | null;
-  modeCount: number;
-}
-
-export type ColumnStats = NumericColumnStats | StringColumnStats;
+import type { ColumnStats } from '@/shared/types/domain/dataframe';
+export type { ColumnStats, NumericColumnStats, StringColumnStats } from '@/shared/types/domain/dataframe';
 
 /** 按列名索引的统计信息 */
 type ColumnStatsMap = Record<string, ColumnStats>;

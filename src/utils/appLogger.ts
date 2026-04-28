@@ -2,7 +2,7 @@
  * Unified Application Logger
  *
  * 所有日志统一经过 Rust LogManager 处理：
- *   FE logger/console → invoke("frontend_log") → Rust LogManager
+ *   FE logger/console → LogService.frontendLog() → Rust LogManager
  *     → 终端(tauri_plugin_log) + 文件 + emit("log-message") → LogWindow
  *
  * 前端只负责两件事：
@@ -12,7 +12,7 @@
  * LogWindow 只有一个数据源：listen("log-message")
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { LogService } from '@/services/log';
 import { LogLevel, LogType } from '@/shared/types/ui';
 
 // ─── 保存原始 console 方法（拦截前） ───
@@ -35,12 +35,7 @@ function formatArgs(args: unknown[]): string {
 }
 
 function sendToRust(level: LogLevel, logType: LogType, message: string, source?: string) {
-  invoke('frontend_log', {
-    level,
-    logType,
-    message,
-    source: source ?? null,
-  }).catch(() => {});
+  LogService.frontendLog(level, logType, message, source).catch(() => {});
 }
 
 // ─── Console 拦截：所有 console 调用 → DevTools + Rust LogManager ───

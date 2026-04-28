@@ -1,18 +1,7 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
-
-export interface EditState {
-  canUndo: boolean;
-  canRedo: boolean;
-  isModified: boolean;
-  undoCount: number;
-  redoCount: number;
-}
-
-export interface EditingCell {
-  row: number;
-  col: number;
-}
+import type { EditingCell, EditState } from '@/shared/types/domain/dataframe';
+export type { EditingCell, EditState } from '@/shared/types/domain/dataframe';
 
 interface EditStateStore {
   editingCell: EditingCell | null;

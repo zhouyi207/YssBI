@@ -1,30 +1,13 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
-
-export interface HistogramBin {
-  label: string;
-  count: number;
-}
-
-export interface CategoryCount {
-  label: string;
-  value: number;
-}
-
-export interface NumericDistribution {
-  columnName: string;
-  kind: 'numeric';
-  bins: HistogramBin[];
-}
-
-export interface StringDistribution {
-  columnName: string;
-  kind: 'string';
-  categories: CategoryCount[];
-  otherCount: number;
-}
-
-export type ColumnDistribution = NumericDistribution | StringDistribution;
+import type { ColumnDistribution } from '@/shared/types/domain/dataframe';
+export type {
+  CategoryCount,
+  ColumnDistribution,
+  HistogramBin,
+  NumericDistribution,
+  StringDistribution,
+} from '@/shared/types/domain/dataframe';
 
 type DistributionMap = Record<string, ColumnDistribution>;
 

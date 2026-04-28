@@ -1,13 +1,16 @@
 import { Message } from "@/shared/types/ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import React from "react";
 
 export const Toast = ({ message, onClose }: { message: Message; onClose: (id: string) => void }) => {
-    const bgColor = {
-        info: "bg-blue-600",
-        success: "bg-green-600",
-        warning: "bg-yellow-600",
-        error: "bg-red-600",
-        log: "bg-gray-800 border border-gray-700",
+    const tone = {
+        info: "default",
+        success: "success",
+        warning: "warning",
+        error: "destructive",
+        log: "outline",
     }[message.type];
 
     React.useEffect(() => {
@@ -16,9 +19,19 @@ export const Toast = ({ message, onClose }: { message: Message; onClose: (id: st
     }, [message, onClose]);
 
     return (
-        <div className={`${bgColor} text-white px-4 py-2 rounded shadow-lg flex items-center gap-3 animate-slide-in`}>
-            <span className="text-sm font-medium">{message.content}</span>
-            <button onClick={() => onClose(message.id)} className="opacity-50 hover:opacity-100">x</button>
-        </div>
+        <Card className="flex max-w-[360px] items-center gap-3 border-border/80 bg-card/95 px-4 py-3 shadow-2xl backdrop-blur animate-slide-in">
+            <Badge variant={tone}>{message.type}</Badge>
+            <span className="min-w-0 flex-1 text-sm font-medium text-card-foreground">{message.content}</span>
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => onClose(message.id)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="关闭提示"
+            >
+                x
+            </Button>
+        </Card>
     );
 };

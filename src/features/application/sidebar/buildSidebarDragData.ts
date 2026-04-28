@@ -1,14 +1,14 @@
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import type { DataType } from "@/shared/types/domain";
 
 /**
  * Build drag data for sidebar items (variables, functions, macros, events, data).
- * Extracted from Sidebar.tsx - view should only consume this hook.
  */
 export function buildSidebarDragData(
   id: string,
   name: string,
   type: "variable" | "function" | "macro" | "event" | "data",
-  extra?: { dataType?: import("@/shared/types/domain").DataType | string }
+  extra?: { dataType?: DataType | string }
 ) {
   if (type === "variable") {
     const dt = extra?.dataType;
@@ -56,4 +56,3 @@ export function buildSidebarDragData(
   }
   return null;
 }
-

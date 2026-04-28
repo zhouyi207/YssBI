@@ -2,23 +2,20 @@ use crate::database::{DatabaseInstance, DatabaseState};
 use crate::event::EventProject;
 use crate::graph::GraphId;
 use crate::event::{emit_project_event, Event};
-use crate::execution::{ChannelEventEmitter, Executor, ExecutionEvent};
+use crate::execution::ExecutionEvent;
 use crate::frontend::FrontendError;
-use crate::graph::GraphKind;
 use crate::log::LogLevel;
 use crate::log_app;
-use crate::log_exec;
-use crate::project::{load_project_from_file, save_project_to_file, ProjectState};
+use crate::project::{execute_project_data, load_project_from_file, save_project_to_file, ProjectState};
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO, GraphsWithValidationDTO,
     InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
 use polars::prelude::*;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State, ipc::Channel};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn dtype_to_string(dt: &DataType) -> String {
     format!("{:?}", dt)
@@ -323,14 +320,16 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 /// 执行指定的 Event 图。
 /// 若传入 graph_id 则只执行该图，否则执行所有 Event 图。
 #[tauri::command]
-pub fn execute_project(
-    state: State<ProjectState>,
-    window_store: State<crate::execution::WindowDataStore>,
+pub async fn execute_project(
+    state: State<'_, ProjectState>,
+    window_store: State<'_, crate::execution::WindowDataStore>,
     on_event: Channel<ExecutionEvent>,
     graph_id: Option<String>,
 ) -> Result<Value, String> {
     let project_data = state.get_data();
     let window_store = window_store.inner().clone();
+    let project_data_state = state.project_data.clone();
+    let project_store = state.project_store.clone();
 
     let target_graph_id: Option<GraphId> = graph_id
         .as_deref()
@@ -341,71 +340,18 @@ pub fn execute_project(
         })
         .transpose()?;
 
-    let mut all_logs = Vec::new();
-    let mut executed_count = 0;
-
-    for (gid, graph) in project_data.graphs.iter() {
-        if graph.kind != GraphKind::Event {
-            continue;
-        }
-
-        if let Some(ref target) = target_graph_id {
-            if gid != target {
-                continue;
-            }
-        }
-
-        let event_begin_nodes: Vec<_> = {
-            let data_state = graph.data_state.read().map_err(|e| e.to_string())?;
-            data_state
-                .nodes
-                .iter()
-                .filter(|(_, n)| n.definition.node_type == "Event:Event Begin")
-                .map(|(id, _)| *id)
-                .collect()
-        };
-
-        if event_begin_nodes.is_empty() {
-            log_exec!(
-                LogLevel::Info,
-                "[execute_project] Graph '{}' has no event_begin node, skipping",
-                graph.name
-            );
-            continue;
-        }
-
-        let entry_node = event_begin_nodes[0];
-        log_exec!(
-            LogLevel::Info,
-            "[execute_project] Starting graph '{}' from event_begin node {:?}",
-            graph.name,
-            entry_node
-        );
-
-        let runtime = crate::graph::GraphRuntime::new(
-            Arc::new(graph.clone()),
-            Arc::clone(&state.project_data),
-            Arc::clone(&state.project_store),
-        );
-
-        let mut executor = Executor::new(
-            Arc::new(Mutex::new(runtime)),
-            ChannelEventEmitter(on_event.clone()),
-            window_store.clone(),
-        );
-        executor.start(entry_node)?;
-
-        for line in executor.logs() {
-            all_logs.push(line.clone());
-            log_exec!(LogLevel::Info, "[Execute] {}", line);
-        }
-        executed_count += 1;
-    }
-
-    Ok(json!({
-        "executedGraphs": executed_count,
-        "logs": all_logs,
-    }))
+    tauri::async_runtime::spawn_blocking(move || {
+        execute_project_data(
+            project_data,
+            project_data_state,
+            project_store,
+            window_store,
+            on_event,
+            target_graph_id,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// 新窗口通过 key 拉取数据（非破坏性读取，兼容 React Strict Mode）

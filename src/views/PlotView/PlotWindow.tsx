@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { invoke } from '@tauri-apps/api/core';
+import { WindowDataService } from '@/services/window';
 import { logger } from '@/utils/appLogger';
 import Scatter, { type ScatterPoint } from '@/views/PlotView/Scatter';
 import Line, { type LinePoint } from '@/views/PlotView/Line';
@@ -78,7 +78,7 @@ export const PlotWindow: React.FC = () => {
         setPlotType(getPlotTypeFromHash());
 
         if (dataKey) {
-          const json = await invoke<string | null>('get_window_data', { key: dataKey });
+          const json = await WindowDataService.getWindowData(dataKey);
           if (mounted && json) {
             try {
               const parsed = JSON.parse(json);

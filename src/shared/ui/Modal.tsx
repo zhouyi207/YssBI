@@ -1,35 +1,43 @@
 import { DialogOptions } from "@/shared/types/ui";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: () => void }) => {
+  const handleCancel = () => {
+    options.onCancel?.();
+    onClose();
+  };
+
+  const handleConfirm = () => {
+    options.onConfirm();
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-[400px] overflow-hidden animate-zoom-in">
-        <div className="px-6 py-4 border-b border-gray-800 bg-gray-800/50">
-          <h3 className="text-lg font-bold text-white">{options.title}</h3>
+    <Dialog open onOpenChange={(open) => !open && handleCancel()}>
+      <DialogContent className="max-w-[420px]">
+        <DialogHeader className="border-b border-border bg-muted/20">
+          <DialogTitle>{options.title}</DialogTitle>
+        </DialogHeader>
+        <div className="px-6 py-5">
+          <DialogDescription className="whitespace-pre-line">{options.message}</DialogDescription>
         </div>
-        <div className="px-6 py-6">
-          <p className="text-gray-300 text-sm leading-relaxed">{options.message}</p>
-        </div>
-        <div className="px-6 py-4 bg-gray-800/30 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-          >
+        <DialogFooter>
+          <Button onClick={handleCancel} variant="ghost" size="lg">
             {options.cancelText || "取消"}
-          </button>
-          <button
-            onClick={() => {
-              options.onConfirm();
-              onClose();
-            }}
-            className={`px-4 py-2 text-sm text-white rounded transition-all active:scale-95 ${
-              options.type === "danger" ? "bg-red-600 hover:bg-red-500" : "bg-blue-600 hover:bg-blue-500"
-            }`}
-          >
+          </Button>
+          <Button onClick={handleConfirm} variant={options.type === "danger" ? "destructive" : "default"} size="lg">
             {options.confirmText || "确定"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

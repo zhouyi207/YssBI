@@ -1,33 +1,7 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
-
-export interface SizeShape {
-  nRows: number;
-  nColumns: number;
-  memorySize: number;
-  duplicatedRows: number;
-}
-
-export interface SchemaOverview {
-  numericCols: number;
-  categoricalCols: number;
-  stringCols: number;
-  datetimeCols: number;
-  boolCols: number;
-}
-
-export interface DataCompleteness {
-  totalNulls: number;
-  nullRatio: number;
-  colsWithNulls: number;
-  rowsWithNulls: number;
-}
-
-export interface DatasetOverview {
-  sizeShape: SizeShape;
-  schemaOverview: SchemaOverview;
-  dataCompleteness: DataCompleteness;
-}
+import type { DatasetOverview } from '@/shared/types/domain/dataframe';
+export type { DataCompleteness, DatasetOverview, SchemaOverview, SizeShape } from '@/shared/types/domain/dataframe';
 
 interface DatasetOverviewStore {
   overviewByDatabase: Record<DatabaseId, DatasetOverview>;

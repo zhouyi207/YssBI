@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { formatNum, SignificanceStars } from './shared';
 import { DFADFComponent } from './DFADFComponent';
 import type {
@@ -117,10 +118,10 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
             aria-hidden="true"
           />
           <div
-            className="fixed right-0 bottom-0 w-[min(90vw,900px)] bg-[var(--workbench-bg)] border-l border-gray-800/50 z-50 overflow-auto scrollbar-hide shadow-2xl animate-slide-in"
+            className="fixed right-0 bottom-0 w-[min(90vw,900px)] bg-[var(--workbench-bg)] border-l border-gray-800/50 z-50 shadow-2xl animate-slide-in flex flex-col min-h-0"
             style={{ top: '2.5rem' }}
           >
-            <div className="sticky top-0 bg-[var(--workbench-bg)] border-b border-gray-800/50 px-4 py-3 flex items-center justify-between z-10">
+            <div className="bg-[var(--workbench-bg)] border-b border-gray-800/50 px-4 py-3 flex items-center justify-between z-10 shrink-0">
               <span className="text-sm font-medium text-gray-400">{itemLabel(selected)}</span>
               <button
                 type="button"
@@ -133,7 +134,9 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
                 </svg>
               </button>
             </div>
-            <DFADFComponent data={selected} />
+            <OverlayScrollbar className="flex-1">
+              <DFADFComponent data={selected} />
+            </OverlayScrollbar>
           </div>
         </>
       )}

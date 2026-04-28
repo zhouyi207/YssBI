@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
-import { invoke } from '@tauri-apps/api/core';
+import { LogService } from '@/services/log';
 
 interface LogStore {
   logs: LogMessage[];
@@ -106,12 +106,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
   loadLogs: async (offset: number, limit: number) => {
     set({ loading: true });
     try {
-      const response = await invoke<unknown>('get_logs', { offset, limit });
-      const fileLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      const response = await LogService.getLogs(offset, limit);
+      const fileLogs = LogService.normalizeLogResponse(response);
       let total = fileLogs.length;
       let hasMore = fileLogs.length >= limit;
       try {
-        const count = await invoke<number>('get_log_count');
+        const count = await LogService.getLogCount();
         if (typeof count === 'number') {
           total = count;
           hasMore = offset + fileLogs.length < total;
@@ -138,12 +138,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
     set({ loading: true });
     try {
       const offset = Array.isArray(logs) ? logs.length : 0;
-      const response = await invoke<unknown>('get_logs', { offset, limit: 50 });
-      const olderLogs: LogMessage[] = Array.isArray(response) ? response : (response as any)?.logs ?? [];
+      const response = await LogService.getLogs(offset, 50);
+      const olderLogs = LogService.normalizeLogResponse(response);
       let total = offset + olderLogs.length;
       let hasMoreResult = olderLogs.length >= 50;
       try {
-        const count = await invoke<number>('get_log_count');
+        const count = await LogService.getLogCount();
         if (typeof count === 'number') {
           total = count;
           hasMoreResult = offset + olderLogs.length < total;
@@ -165,7 +165,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   
   refreshLogs: async () => {
     try {
-      const count = await invoke<number>('get_log_count');
+      const count = await LogService.getLogCount();
       const limit = typeof count === 'number' ? count : 200;
       await get().loadLogs(0, limit);
     } catch {

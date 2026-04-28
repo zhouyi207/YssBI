@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { invoke } from '@tauri-apps/api/core';
+import { WindowDataService } from '@/services/window';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';
@@ -131,7 +131,7 @@ export const InfoWindow: React.FC = () => {
           return;
         }
 
-        const json = await invoke<string | null>('get_window_data', { key: dataKey });
+        const json = await WindowDataService.getWindowData(dataKey);
         if (!mounted) return;
 
         if (json) {

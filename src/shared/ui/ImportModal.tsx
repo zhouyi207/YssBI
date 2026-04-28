@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload } from "react-icons/vsc";
 import { BsDatabaseFill } from "react-icons/bs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
+import { OverlayScrollbar } from "./OverlayScrollbar";
 
 type ImportTypeConfig = {
   id: ImportDataSourceType;
@@ -51,15 +56,17 @@ function TypeOptionButton({
   onClose: () => void;
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
       onClick={() => {
         onSelect(type.id);
         if (!type.comingSoon) onClose();
       }}
-      className={`group flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all active:scale-[0.98] ${
+      className={`group h-auto flex-col items-center gap-2 p-3 ${
         type.comingSoon
-          ? "border-gray-800/50 bg-gray-800/20 opacity-60 cursor-default"
-          : "border-gray-800 hover:border-[var(--accent-color)] hover:bg-white/5"
+          ? "cursor-default opacity-55"
+          : "hover:border-[var(--accent-color)] hover:bg-white/5"
       }`}
       title={type.comingSoon ? "功能开发中" : undefined}
     >
@@ -70,11 +77,11 @@ function TypeOptionButton({
       >
         {type.icon}
       </div>
-      <span className={`text-[11px] font-bold uppercase tracking-tight ${type.comingSoon ? "text-gray-500" : "text-gray-300 group-hover:text-white"}`}>
+      <span className={`text-[11px] font-bold uppercase tracking-tight ${type.comingSoon ? "text-muted-foreground" : "text-gray-300 group-hover:text-white"}`}>
         {type.label}
-        {type.comingSoon && <span className="block text-[9px] font-normal text-gray-600 mt-0.5">开发中</span>}
+        {type.comingSoon && <Badge variant="outline" className="mt-1 block w-fit">开发中</Badge>}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -83,50 +90,52 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
   const types = CATEGORY_TYPES[selectedCategory];
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-2xl w-[420px] h-[320px] overflow-hidden animate-zoom-in flex flex-col">
-        {/* 标题栏：横跨整个弹窗顶部 */}
-        <div className="px-6 py-4 border-b border-gray-800 bg-[#252526] flex justify-between items-center flex-shrink-0">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
-            <VscDatabase className="text-blue-500" size={18} /> 导入外部数据
-          </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-            <VscClose size={20} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="h-[340px] max-w-[460px]">
+        <DialogHeader className="shrink-0 border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle className="flex items-center gap-2">
+              <VscDatabase className="text-blue-400" size={18} /> 导入外部数据
+            </DialogTitle>
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
+              <VscClose size={20} />
+            </Button>
+          </div>
+        </DialogHeader>
 
-        {/* 内容区：左侧分类 + 右侧图标 */}
-        <div className="flex flex-1 min-h-0">
-          <div className="w-[120px] border-r border-gray-800 bg-[#252526] flex flex-col py-2 flex-shrink-0">
+        <div className="flex min-h-0 flex-1">
+          <Card className="w-[132px] shrink-0 rounded-none border-0 border-r border-border bg-muted/20">
+            <CardContent className="flex flex-col gap-1 p-2">
             {CATEGORIES.map((cat) => (
-              <button
+              <Button
                 key={cat.id}
+                type="button"
+                variant={selectedCategory === cat.id ? "secondary" : "ghost"}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${
-                  selectedCategory === cat.id
-                    ? "bg-white/10 border-l-2 border-[var(--accent-color)] text-white"
-                    : "text-gray-400 hover:bg-white/5 hover:text-gray-300"
-                }`}
+                className="h-auto justify-start gap-2 px-2 py-2"
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cat.color}`}>
                   {cat.icon}
                 </div>
                 <span className="text-[11px] font-medium truncate">{cat.label}</span>
-              </button>
+              </Button>
             ))}
-          </div>
+            </CardContent>
+          </Card>
 
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            <div className="p-4 overflow-y-auto h-full">
-              <div className="grid grid-cols-2 gap-3">
-                {types.map((type) => (
-                  <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
-                ))}
+            <OverlayScrollbar className="h-full">
+              <div className="p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {types.map((type) => (
+                    <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
+                  ))}
+                </div>
               </div>
-            </div>
+            </OverlayScrollbar>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

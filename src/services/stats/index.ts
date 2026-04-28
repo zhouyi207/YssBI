@@ -15,3 +15,4 @@ export {
   type SerialTestWithLag,
   type DurbinWatsonResult,
 } from "./serialTestsService";
+export * from "./panelDidService";

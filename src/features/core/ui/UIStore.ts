@@ -2,6 +2,7 @@ import {
     Message,
     MessageType,
     DialogOptions,
+    InputDialogOptions,
     ImportDialogOptions,
     SqliteTableSelectDialogOptions,
     ExcelSheetSelectDialogOptions,
@@ -11,6 +12,7 @@ import {
 
 type UIModal =
     | { id: string; type: "confirm"; options: DialogOptions }
+    | { id: string; type: "input"; options: InputDialogOptions }
     | { id: string; type: "import"; options: ImportDialogOptions }
     | { id: string; type: "sqliteTableSelect"; options: SqliteTableSelectDialogOptions }
     | { id: string; type: "excelSheetSelect"; options: ExcelSheetSelectDialogOptions }
@@ -85,6 +87,37 @@ class UIStore {
       ],
     };
     this.emit();
+  }
+
+  confirm(options: Omit<DialogOptions, "onConfirm" | "onCancel">): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.showDialog({
+        ...options,
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+  }
+
+  prompt(options: Omit<InputDialogOptions, "onSubmit" | "onCancel">): Promise<string | null> {
+    return new Promise((resolve) => {
+      this.state = {
+        ...this.state,
+        modals: [
+          ...this.state.modals,
+          {
+            id: crypto.randomUUID(),
+            type: "input",
+            options: {
+              ...options,
+              onSubmit: (value) => resolve(value),
+              onCancel: () => resolve(null),
+            },
+          },
+        ],
+      };
+      this.emit();
+    });
   }
 
   showImportDialog(options: ImportDialogOptions) {

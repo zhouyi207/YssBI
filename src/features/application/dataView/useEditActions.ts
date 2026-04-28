@@ -4,6 +4,7 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
 import { EMPTY_EDIT_STATE } from '@/features/core/dataStore/editStateStore';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
 export interface ColumnMeta { name: string; type: string; }
@@ -61,7 +62,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
     } catch (e) {
       const msg = String(e);
       logger.data.error('editCell failed: ' + msg, 'DataViewWindow');
-      window.alert(msg);
+      uiStore.showToast(msg, 'error', 5000);
       editInputRef.current?.focus();
     }
   }, [selectedDfId, editingCell, columns, loadedRows, editValue, handleEditResult]);
@@ -129,9 +130,19 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
 
   const handleAddColumn = useCallback(async () => {
     if (!selectedDfId) return;
-    const name = prompt('Column name:');
+    const name = await uiStore.prompt({
+      title: '新增列',
+      label: '列名',
+      placeholder: 'Column name',
+    });
     if (!name) return;
-    const dtype = prompt('Column type (string, float64, int64, bool):', 'string');
+    const dtype = await uiStore.prompt({
+      title: '新增列',
+      message: '请输入列类型：string, float64, int64, bool',
+      label: '列类型',
+      defaultValue: 'string',
+      placeholder: 'string',
+    });
     if (!dtype) return;
     try {
       const es = await DatabaseService.addColumn(selectedDfId, name, dtype);
@@ -153,7 +164,12 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
 
   const handleRenameColumn = useCallback(async (oldName: string) => {
     if (!selectedDfId) return;
-    const newName = prompt('New column name:', oldName);
+    const newName = await uiStore.prompt({
+      title: '重命名列',
+      label: '新列名',
+      defaultValue: oldName,
+      placeholder: oldName,
+    });
     if (!newName || newName === oldName) return;
     try {
       const es = await DatabaseService.renameColumn(selectedDfId, oldName, newName);
@@ -173,7 +189,12 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
       loadColumnStats(selectedDfId);
     } catch (e) {
       const msg = String(e);
-      const force = window.confirm(`${msg}\n\n是否强制转换？无法转换的值将变为 null。`);
+      const force = await uiStore.confirm({
+        title: '强制转换列类型',
+        message: `${msg}\n\n是否强制转换？无法转换的值将变为 null。`,
+        type: 'danger',
+        confirmText: '强制转换',
+      });
       if (force) {
         try {
           const es = await DatabaseService.castColumn(selectedDfId, colName, newDtype, true);
@@ -181,7 +202,11 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
           const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
           useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
           loadColumnStats(selectedDfId);
-        } catch (e2) { logger.data.error('castColumn force failed: ' + String(e2), 'DataViewWindow'); window.alert(String(e2)); }
+        } catch (e2) {
+          const forceError = String(e2);
+          logger.data.error('castColumn force failed: ' + forceError, 'DataViewWindow');
+          uiStore.showToast(forceError, 'error', 5000);
+        }
       }
     }
   }, [selectedDfId, handleEditResult, loadColumnStats]);

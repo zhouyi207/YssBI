@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { PanelDidService } from '@/services/stats';
 import {
   SectionHeader,
   PanelFESummaryGrid,
@@ -40,12 +40,10 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
     setFgLoading(true);
     try {
       const n_perm = Math.max(1, Math.min(2000, Math.floor(permReps) || 399));
-      const res = await invoke<DidPlaceboFakeGroupBlock>('compute_panel_did_fake_group_ri', {
-        req: {
-          ...fake_group_engine,
-          n_perm,
-          rng_seed: Number.isFinite(rngSeed) ? Math.max(0, Math.floor(Number(rngSeed))) : 42,
-        },
+      const res = await PanelDidService.computeFakeGroupRi<typeof fake_group_engine & { n_perm: number; rng_seed: number }, DidPlaceboFakeGroupBlock>({
+        ...fake_group_engine,
+        n_perm,
+        rng_seed: Number.isFinite(rngSeed) ? Math.max(0, Math.floor(Number(rngSeed))) : 42,
       });
       setFakeGroupRi(res);
     } catch (e) {

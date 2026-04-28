@@ -1,4 +1,5 @@
 import React, { Suspense, useMemo } from 'react';
+import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import {
   SectionHeader,
   StatCard,
@@ -218,9 +219,11 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
           <div className="text-[11px] text-gray-500 uppercase tracking-wider px-4 py-2 bg-[#1a1d23] border-b border-gray-800/40">
             Iteration Log
           </div>
-          <pre className="px-4 py-3 text-xs font-mono text-gray-300 overflow-x-auto max-h-40 overflow-y-auto">
-            {praisInfo.iteration_log.join('\n')}
-          </pre>
+          <OverlayScrollbar direction="both" className="max-h-40">
+            <pre className="min-w-max whitespace-pre px-4 py-3 text-xs font-mono text-gray-300">
+              {praisInfo.iteration_log.join('\n')}
+            </pre>
+          </OverlayScrollbar>
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 
@@ -29,13 +30,22 @@ export const SettingsView: React.FC = () => {
     ];
 
     const handleResetAll = async () => {
-        if (window.confirm("确定要恢复所有默认设置吗？此操作不可撤销。")) {
-            setIsResetting(true);
-            try {
-                await resetAllToDefaults();
-            } finally {
-                setIsResetting(false);
-            }
+        const confirmed = await uiStore.confirm({
+            title: "恢复所有默认设置",
+            message: "确定要恢复所有默认设置吗？此操作不可撤销。",
+            type: "danger",
+            confirmText: "恢复默认",
+        });
+        if (!confirmed) return;
+
+        setIsResetting(true);
+        try {
+            await resetAllToDefaults();
+            uiStore.showToast("已恢复所有默认设置", "success");
+        } catch (error) {
+            uiStore.showToast(`恢复默认设置失败: ${String(error)}`, "error");
+        } finally {
+            setIsResetting(false);
         }
     };
 
@@ -46,23 +56,33 @@ export const SettingsView: React.FC = () => {
             color: "颜色/主题",
         };
 
-        if (window.confirm(`确定要恢复${sectionNames[section] || section}的默认设置吗？`)) {
-            setIsResetting(true);
-            try {
-                switch (section) {
-                    case "editor":
-                        await resetEditorToDefaults();
-                        break;
-                    case "appearance":
-                        await resetAppearanceToDefaults();
-                        break;
-                    case "color":
-                        await resetThemeToDefaults();
-                        break;
-                }
-            } finally {
-                setIsResetting(false);
+        const sectionName = sectionNames[section] || section;
+        const confirmed = await uiStore.confirm({
+            title: "恢复默认设置",
+            message: `确定要恢复${sectionName}的默认设置吗？`,
+            type: "danger",
+            confirmText: "恢复默认",
+        });
+        if (!confirmed) return;
+
+        setIsResetting(true);
+        try {
+            switch (section) {
+                case "editor":
+                    await resetEditorToDefaults();
+                    break;
+                case "appearance":
+                    await resetAppearanceToDefaults();
+                    break;
+                case "color":
+                    await resetThemeToDefaults();
+                    break;
             }
+            uiStore.showToast(`已恢复${sectionName}默认设置`, "success");
+        } catch (error) {
+            uiStore.showToast(`恢复${sectionName}默认设置失败: ${String(error)}`, "error");
+        } finally {
+            setIsResetting(false);
         }
     };
 

@@ -4,6 +4,7 @@ pub mod project_data;
 pub mod unique_name;
 pub mod project_error;
 pub mod project_metadata;
+pub mod project_execution;
 pub mod project_store;
 pub mod project_state;
 pub mod project_state_database;
@@ -12,6 +13,7 @@ pub mod project_state_variable;
 
 pub use project_data::*;
 pub use project_error::*;
+pub use project_execution::*;
 pub use project_metadata::*;
 pub use project_store::*;
 pub use project_state::*;

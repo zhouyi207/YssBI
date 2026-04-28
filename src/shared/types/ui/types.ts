@@ -14,6 +14,19 @@ export interface DialogOptions {
     cancelText?: string;
     type?: "danger" | "info";
     onConfirm: () => void;
+    onCancel?: () => void;
+}
+
+export interface InputDialogOptions {
+    title: string;
+    message?: string;
+    label?: string;
+    defaultValue?: string;
+    placeholder?: string;
+    confirmText?: string;
+    cancelText?: string;
+    onSubmit: (value: string) => void;
+    onCancel?: () => void;
 }
 
 /** 导入数据源类型：文件类、SQL 数据库类、其他 */

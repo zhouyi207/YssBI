@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ColumnStats } from "@/features/core/dataStore/columnStatsStore";
-import { ColumnDistribution } from "@/features/core/dataStore/columnDistributionStore";
-import { DatasetOverview } from "@/features/core/dataStore/datasetOverviewStore";
-import { EditState } from "@/features/core/dataStore/editStateStore";
+import type {
+    ColumnDistribution,
+    ColumnStats,
+    DatasetOverview,
+    EditState,
+} from "@/shared/types/domain/dataframe";
 
 /** CSV 引擎配置（与后端 DatabaseEngineDTO::Csv 对应） */
 export interface CsvEngineSpec {

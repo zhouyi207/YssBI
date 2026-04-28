@@ -4,6 +4,6 @@ export * from "./ExcelSheetSelectModal";
 export * from "./SqlConnectionModal";
 export * from "./SqlRemoteTableSelectModal";
 export * from "./Modal";
+export * from "./InputModal";
 export * from "./Select";
 export * from "./Toast";
-export * from "./UIHost";
