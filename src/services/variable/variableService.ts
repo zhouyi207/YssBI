@@ -42,7 +42,7 @@ export class VariableService {
       variableId: id,
       name: patch.name ?? null,
       dataType: patch.dataType ? dataTypeToBackend(patch.dataType) : null,
-      dataValue: patch.dataValue ? dataValueToBackend(patch.dataValue) : null,
+      dataValue: patch.dataValue !== undefined ? dataValueToBackend(patch.dataValue) : null,
       description: patch.description ?? null,
       tags: patch.tags ?? null,
     });

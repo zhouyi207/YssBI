@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
@@ -110,6 +111,7 @@ function getDataKeyFromHash(): string | null {
 }
 
 export const InfoWindow: React.FC = () => {
+  const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | PanelDidResultData | null>(null);
@@ -125,7 +127,7 @@ export const InfoWindow: React.FC = () => {
         const dataKey = getDataKeyFromHash();
 
         if (!dataKey) {
-          setError('Missing data key in URL');
+          setError(t('info.missingDataKey'));
           setIsReady(true);
           await currentWindow.show().catch(() => {});
           return;
@@ -145,7 +147,7 @@ export const InfoWindow: React.FC = () => {
             setError(`Failed to parse data: ${e instanceof Error ? e.message : String(e)}`);
           }
         } else {
-          setError('No data available for this window');
+            setError(t('info.noData'));
         }
 
         await currentWindow.show().catch((e) =>
@@ -166,12 +168,13 @@ export const InfoWindow: React.FC = () => {
             logger.sys.warn('Failed to check maximized state: ' + String(e), 'InfoWindow');
           }
         });
-        cleanup.push(unlistenResize);
+        if (mounted) cleanup.push(unlistenResize);
+        else unlistenResize();
       } catch (e) {
         logger.sys.error('Failed to initialize window: ' + String(e), 'InfoWindow');
         if (mounted) {
           setIsReady(true);
-          setError('Failed to initialize window');
+          setError(t('info.failedInitialize'));
         }
       }
     };
@@ -209,33 +212,35 @@ export const InfoWindow: React.FC = () => {
 
   if (!isReady) {
     return (
-      <div className="flex items-center justify-center w-full h-screen bg-[var(--workbench-bg)] text-gray-400">
-        正在初始化...
+      <div className="flex items-center justify-center w-full h-screen bg-[var(--workbench-bg)] text-muted-foreground">
+        {t('common.initializing')}
       </div>
     );
   }
 
+  const resultData = olsData as any;
+
   return (
-    <div className="flex flex-col w-full h-screen overflow-hidden bg-[var(--workbench-bg)]">
+    <div className="flex flex-col w-full h-screen overflow-hidden bg-[var(--workbench-bg)] text-foreground">
       {/* Title bar */}
       <div
         data-tauri-drag-region
-        className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none rounded-tr-lg overflow-hidden shrink-0"
+        className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 shadow-xl select-none rounded-tr-lg overflow-hidden shrink-0"
       >
         <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-white font-bold text-sm tracking-tight">
-            {(olsData as { title?: string })?.title ?? 'Regression Results'}
+          <span className="text-foreground font-bold text-sm tracking-tight">
+            {resultData?.title ?? t('info.regressionResults')}
           </span>
         </div>
 
         <div className="flex items-center h-full">
           <button
             onClick={handleMinimize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
-            title="最小化"
+            className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title={t('common.minimize')}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -243,8 +248,8 @@ export const InfoWindow: React.FC = () => {
           </button>
           <button
             onClick={handleMaximize}
-            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-[var(--sidebar-bg)] hover:text-white transition-colors"
-            title={isMaximized ? '还原' : '最大化'}
+            className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title={isMaximized ? t('common.restore') : t('common.maximize')}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
@@ -253,7 +258,7 @@ export const InfoWindow: React.FC = () => {
           <button
             onClick={handleClose}
             className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
-            title="关闭"
+            title={t('common.close')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -265,46 +270,46 @@ export const InfoWindow: React.FC = () => {
       {/* Content */}
       <OverlayScrollbar className="flex-1 min-h-0" direction="vertical">
         {error ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <svg className="w-12 h-12 text-red-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
             <span className="text-sm">{error}</span>
           </div>
-        ) : olsData ? (
-          isDataView(olsData) ? (
-            <DataViewComponent data={olsData} />
-          ) : isDFADFSummaryList(olsData) ? (
-            <DFADFSummaryListComponent data={olsData} />
-          ) : isDFADFSummary(olsData) ? (
-            <DFADFComponent data={olsData} />
-          ) : isVecRank(olsData) ? (
-            <VecRankComponent data={olsData} />
-          ) : isVECSummary(olsData) ? (
-            <VECComponent data={olsData} />
-          ) : isVARSoc(olsData) ? (
-            <VARSocComponent data={olsData} />
-          ) : isVARSummary(olsData) ? (
-            <VARComponent data={olsData} />
-          ) : isPanelDid(olsData) ? (
-            <DIDComponent data={olsData} />
-          ) : isPanelSummary(olsData) ? (
-            <PanelComponent data={olsData as PanelSummaryResult} />
-          ) : olsData.diagnostic_info?.prais_info ? (
-            <PraisComponent data={olsData as PraisResultData} />
-          ) : olsData.model_basic_info?.model_type === 'Logit' ||
-            olsData.model_basic_info?.model_type === 'Probit' ? (
-            <BinaryComponent data={olsData} />
-          ) : olsData.model_basic_info?.model_type === 'IV:2SLS' ? (
-            <TwoSLSComponent data={olsData} />
-          ) : olsData.model_basic_info?.model_type === 'IV:LIML' ? (
-            <LIMLComponent data={olsData} />
+        ) : resultData ? (
+          isDataView(resultData) ? (
+            <DataViewComponent data={resultData as any} />
+          ) : isDFADFSummaryList(resultData) ? (
+            <DFADFSummaryListComponent data={resultData as any} />
+          ) : isDFADFSummary(resultData) ? (
+            <DFADFComponent data={resultData as any} />
+          ) : isVecRank(resultData) ? (
+            <VecRankComponent data={resultData} />
+          ) : isVECSummary(resultData) ? (
+            <VECComponent data={resultData as any} />
+          ) : isVARSoc(resultData) ? (
+            <VARSocComponent data={resultData as any} />
+          ) : isVARSummary(resultData) ? (
+            <VARComponent data={resultData as any} />
+          ) : isPanelDid(resultData) ? (
+            <DIDComponent data={resultData} />
+          ) : isPanelSummary(resultData) ? (
+            <PanelComponent data={resultData as PanelSummaryResult} />
+          ) : resultData.diagnostic_info?.prais_info ? (
+            <PraisComponent data={resultData as PraisResultData} />
+          ) : resultData.model_basic_info?.model_type === 'Logit' ||
+            resultData.model_basic_info?.model_type === 'Probit' ? (
+            <BinaryComponent data={resultData} />
+          ) : resultData.model_basic_info?.model_type === 'IV:2SLS' ? (
+            <TwoSLSComponent data={resultData} />
+          ) : resultData.model_basic_info?.model_type === 'IV:LIML' ? (
+            <LIMLComponent data={resultData} />
           ) : (
-            <OLSComponent data={olsData} />
+            <OLSComponent data={resultData} />
           )
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="w-5 h-5 border-2 border-gray-600 border-t-[var(--accent-color)] rounded-full animate-spin" />
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <div className="w-5 h-5 border-2 border-border border-t-[var(--accent-color)] rounded-full animate-spin" />
           </div>
         )}
       </OverlayScrollbar>

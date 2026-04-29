@@ -5,8 +5,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { useViewportStore } from '@/features/core/viewport';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { getViewport, subscribeToViewport } from '@/features/core/viewport';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorNodeActions } from './useEditorNodeActions';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
@@ -25,20 +24,15 @@ export function useEditorActions(overrideGroupId?: string | null) {
   const uiActions = useEditorUIActions();
   const layoutActions = useEditorLayoutActions();
 
-  const canvasRef = useRef(useViewportStore.getState().viewports[editorGroupId] || DEFAULT_VIEWPORT);
+  const canvasRef = useRef(getViewport(editorGroupId));
 
   useEffect(() => {
-    const unsub = useViewportStore.subscribe((state) => {
-      const editorGid = useLayoutStore.getState().activeEditorGroupId;
-      if (editorGid && state.viewports[editorGid]) {
-        canvasRef.current = state.viewports[editorGid];
-      }
+    const editorGid = useLayoutStore.getState().activeEditorGroupId || editorGroupId;
+    canvasRef.current = getViewport(editorGid);
+    return subscribeToViewport(editorGid, (viewport) => {
+      canvasRef.current = viewport;
     });
-    const editorGid = useLayoutStore.getState().activeEditorGroupId || '';
-    const current = useViewportStore.getState().viewports[editorGid];
-    if (current) canvasRef.current = current;
-    return unsub;
-  }, []);
+  }, [editorGroupId]);
 
   return {
     activeGroupIdRef,

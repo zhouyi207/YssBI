@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useTranslation } from "react-i18next";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
@@ -83,6 +84,7 @@ function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
 }
 
 export function Menubar() {
+  const { t } = useTranslation();
   const {
     saveGraphAs,
     importGraph,
@@ -98,7 +100,7 @@ export function Menubar() {
     activeTabId,
     addEvent,
     addFunction,
-  } = useEditorGroup();
+  } = useEditorGroup({ withCanvasInteraction: false });
 
   const {
     openSettings,
@@ -124,64 +126,64 @@ export function Menubar() {
   };
 
   const fileItems: MenuItem[] = [
-    { label: "New Event Graph", shortcut: "Ctrl+N", onClick: () => addEvent(undefined, { openAfterCreate: true }) },
-    { label: "New Function", onClick: () => addFunction(undefined, { openAfterCreate: true }) },
+    { label: t("menubar.newEventGraph"), shortcut: "Ctrl+N", onClick: () => addEvent(undefined, { openAfterCreate: true }) },
+    { label: t("menubar.newFunction"), onClick: () => addFunction(undefined, { openAfterCreate: true }) },
     { label: "-" },
-    { label: "Open Project...", shortcut: "Ctrl+O", onClick: () => importGraph() },
+    { label: t("menubar.openProject"), shortcut: "Ctrl+O", onClick: () => importGraph() },
     { label: "-" },
-    { label: "Save Project", shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
-    { label: "Save Project As...", shortcut: "Ctrl+Shift+S", onClick: activeTabId ? () => saveGraphAs() : undefined },
+    { label: t("menubar.saveProject"), shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
+    { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: activeTabId ? () => saveGraphAs() : undefined },
   ];
 
   const editItems: MenuItem[] = [
-    { label: "Undo", shortcut: "Ctrl+Z", onClick: (activeTabId && canUndo) ? undo : undefined },
-    { label: "Redo", shortcut: "Ctrl+Y", onClick: (activeTabId && canRedo) ? redo : undefined },
+    { label: t("common.undo"), shortcut: "Ctrl+Z", onClick: (activeTabId && canUndo) ? undo : undefined },
+    { label: t("common.redo"), shortcut: "Ctrl+Y", onClick: (activeTabId && canRedo) ? redo : undefined },
     { label: "-" },
-    { label: "Cut", shortcut: "Ctrl+X", onClick: activeTabId ? cut : undefined },
-    { label: "Copy", shortcut: "Ctrl+C", onClick: activeTabId ? copy : undefined },
-    { label: "Paste", shortcut: "Ctrl+V", onClick: activeTabId ? () => paste() : undefined },
+    { label: t("menubar.cut"), shortcut: "Ctrl+X", onClick: activeTabId ? cut : undefined },
+    { label: t("menubar.copy"), shortcut: "Ctrl+C", onClick: activeTabId ? copy : undefined },
+    { label: t("menubar.paste"), shortcut: "Ctrl+V", onClick: activeTabId ? () => paste() : undefined },
     { label: "-" },
-    { label: "Delete", shortcut: "Del", onClick: activeTabId ? deleteSelected : undefined },
+    { label: t("common.delete"), shortcut: "Del", onClick: activeTabId ? deleteSelected : undefined },
   ];
 
   const dataItems: MenuItem[] = [
-    { label: "Manage Variables" },
-    { label: "Import Data", onClick: handleImportData },
-    { label: "Data Viewer", onClick: handleDataView },
+    { label: t("menubar.manageVariables") },
+    { label: t("menubar.importData"), onClick: handleImportData },
+    { label: t("menubar.dataViewer"), onClick: handleDataView },
     { label: "-" },
-    { label: "Schema Viewer" },
+    { label: t("menubar.schemaViewer") },
   ];
 
   const windowItems: MenuItem[] = [
-    { label: "New Window", onClick: openNewWindow },
+    { label: t("menubar.newWindow"), onClick: openNewWindow },
     { label: "-" },
-    { label: "Split Editor Right", onClick: handleSplitRight },
-    { label: "Split Editor Down", onClick: handleSplitDown },
+    { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
+    { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },
-    { label: isLogPanelVisible ? "Hide Logs" : "Show Logs", shortcut: "Ctrl+`", onClick: toggleLogPanel },
-    { label: "Open Logs in New Window", onClick: handleOpenLogs },
+    { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
+    { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
     { label: "-" },
-    { label: "Reset Layout" },
-    { label: "Zoom In", shortcut: "Ctrl++" },
-    { label: "Zoom Out", shortcut: "Ctrl+-" },
+    { label: t("menubar.resetLayout") },
+    { label: t("menubar.zoomIn"), shortcut: "Ctrl++" },
+    { label: t("menubar.zoomOut"), shortcut: "Ctrl+-" },
   ];
 
   const toolItems: MenuItem[] = [
-    { label: "Debugger" },
-    { label: "Profiler" },
+    { label: t("menubar.debugger") },
+    { label: t("menubar.profiler") },
     { label: "-" },
-    { label: "Settings", shortcut: "Ctrl+,", onClick: openSettings },
+    { label: t("menubar.settings"), shortcut: "Ctrl+,", onClick: openSettings },
   ];
 
   const helpItems: MenuItem[] = [
-    { label: "Documentation" },
-    { label: "Release Notes" },
-    { label: "About" },
+    { label: t("menubar.documentation") },
+    { label: t("menubar.releaseNotes") },
+    { label: t("menubar.about") },
   ];
 
   return (
     <div
-      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center relative z-[100] shadow-xl select-none"
+      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center relative z-[100] shadow-xl select-none"
       onWheel={(e) => e.stopPropagation()}
       data-tauri-drag-region
     >
@@ -197,12 +199,12 @@ export function Menubar() {
 
       {/* Center Left: Menus */}
       <div className="flex items-center gap-1">
-        <MenuButton id="file" label="File" items={fileItems} />
-        <MenuButton id="edit" label="Edit" items={editItems} />
-        <MenuButton id="data" label="Data" items={dataItems} />
-        <MenuButton id="window" label="Window" items={windowItems} />
-        <MenuButton id="tools" label="Tools" items={toolItems} />
-        <MenuButton id="help" label="Help" items={helpItems} />
+        <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
+        <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
+        <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
+        <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
+        <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
+        <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
       </div>
 
       <div className="flex-1 min-w-[20px]" data-tauri-drag-region />
@@ -215,8 +217,8 @@ export function Menubar() {
           size="icon-lg"
           onClick={toggleThemeMode}
           className="text-muted-foreground"
-          title={isLightTheme ? "切换为深色主题" : "切换为浅色主题"}
-          aria-label={isLightTheme ? "切换为深色主题" : "切换为浅色主题"}
+          title={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
+          aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
         >
           {isLightTheme ? (
             <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -235,7 +237,7 @@ export function Menubar() {
           size="icon-lg"
           onClick={toggleDetail}
           className={isDetailVisible ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-          title={isDetailVisible ? "Hide Detail" : "Show Detail"}
+          title={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
         </Button>
@@ -246,7 +248,7 @@ export function Menubar() {
           size="icon-lg"
           onClick={() => openSettings()}
           className="text-muted-foreground"
-          title="Settings"
+          title={t("menubar.settings")}
         >
           <VscSettingsGear size={14} />
         </Button>

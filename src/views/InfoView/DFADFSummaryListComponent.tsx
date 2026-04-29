@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { formatNum, SignificanceStars } from './shared';
 import { DFADFComponent } from './DFADFComponent';
@@ -17,6 +18,7 @@ function findRegRow(table: DFADFRegRowData[], name: string): DFADFRegRowData | u
 }
 
 export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultData }> = ({ data }) => {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<DFADFSummaryResultData | null>(null);
 
   return (
@@ -127,7 +129,7 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
                 type="button"
                 onClick={() => setSelected(null)}
                 className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800/50 transition-colors"
-                title="关闭"
+                title={t('common.close')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

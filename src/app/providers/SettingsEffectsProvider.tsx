@@ -1,19 +1,44 @@
 import { useEffect, useLayoutEffect } from "react";
+import { i18n } from "@/app/i18n";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const theme = useSettingsStore((s) => s.theme);
+    const language = useSettingsStore((s) => s.appearance.language);
     const load = useSettingsStore((s) => s.load);
 
     useEffect(() => {
         load();
     }, [load]);
 
+    useEffect(() => {
+        if (i18n.language !== language) {
+            void i18n.changeLanguage(language);
+        }
+    }, [language]);
+
     // 使用 useLayoutEffect 确保 CSS 变量在 DOM 更新前同步应用
     // 这样可以避免 TabBar 等组件渲染时读取到旧的 CSS 变量值
     useLayoutEffect(() => {
         const root = document.documentElement;
         const isDark = theme.mode !== "light";
+        const surface = isDark
+            ? {
+                workbenchForeground: "#f8fafc",
+                panelBackground: theme.sidebarBackground,
+                panelForeground: "#f8fafc",
+                mutedForeground: "#a1a1aa",
+                border: "rgba(255, 255, 255, 0.10)",
+                hoverBackground: "rgba(255, 255, 255, 0.05)",
+            }
+            : {
+                workbenchForeground: "#111827",
+                panelBackground: "#ffffff",
+                panelForeground: "#111827",
+                mutedForeground: "#64748b",
+                border: "#e5e7eb",
+                hoverBackground: "rgba(15, 23, 42, 0.06)",
+            };
 
         root.classList.toggle("dark", isDark);
         root.style.colorScheme = isDark ? "dark" : "light";
@@ -21,6 +46,10 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         // 主要背景色
         root.style.setProperty("--workbench-bg", theme.workbenchBackground);
         root.style.setProperty("--sidebar-bg", theme.sidebarBackground);
+        root.style.setProperty("--workbench-fg", surface.workbenchForeground);
+        root.style.setProperty("--panel-bg", surface.panelBackground);
+        root.style.setProperty("--panel-fg", surface.panelForeground);
+        root.style.setProperty("--strong-border", surface.border);
         root.style.setProperty("--accent-color", theme.accentColor);
         root.style.setProperty("--grid-lines", theme.gridLines);
         root.style.setProperty("--node-base", theme.nodeBase);
@@ -48,9 +77,9 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         // 添加Plot窗口需要的CSS变量
         root.style.setProperty("--titlebar-bg", theme.sidebarBackground);
         root.style.setProperty("--border-color", theme.gridLines);
-        root.style.setProperty("--text-primary", theme.execColor);
-        root.style.setProperty("--text-secondary", theme.connectionLines);
-        root.style.setProperty("--hover-bg", isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(17, 24, 39, 0.06)");
+        root.style.setProperty("--text-primary", surface.workbenchForeground);
+        root.style.setProperty("--text-secondary", surface.mutedForeground);
+        root.style.setProperty("--hover-bg", surface.hoverBackground);
 
         // 计算派生颜色
         root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");

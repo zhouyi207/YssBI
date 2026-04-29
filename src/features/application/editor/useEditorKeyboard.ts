@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useViewportStore } from '@/features/core/viewport';
+import { useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 interface UseEditorKeyboardProps {
   deleteSelected: () => void;
@@ -56,14 +58,15 @@ export function useEditorKeyboard({
   }, []);
 
   useEffect(() => {
+    const setModifierKeys = useModifierKeyStore.getState().setModifierKeys;
+    const resetModifierKeys = useModifierKeyStore.getState().resetModifierKeys;
+
     const handlePointerMove = (e: PointerEvent) => {
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Track modifier keys globally
-      (window as any)._lastAltKey = e.altKey;
-      (window as any)._lastCtrlKey = e.ctrlKey;
+      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
 
       if (e.key === 'Alt') {
         e.preventDefault();
@@ -147,27 +150,27 @@ export function useEditorKeyboard({
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      (window as any)._lastAltKey = e.altKey;
-      (window as any)._lastCtrlKey = e.ctrlKey;
+      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
       if (e.key === 'Alt') {
         useLayoutStore.getState().setAltPressed(false);
       }
     };
 
     const handleBlur = () => {
+      resetModifierKeys();
       useLayoutStore.getState().setAltPressed(false);
     };
 
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    window.addEventListener('keyup', handleKeyUp, { capture: true });
-    window.addEventListener('pointermove', handlePointerMove, { capture: true });
-    window.addEventListener('blur', handleBlur);
+    const cleanupKeyDown = addGlobalEventListener(window, 'keydown', handleKeyDown, { capture: true });
+    const cleanupKeyUp = addGlobalEventListener(window, 'keyup', handleKeyUp, { capture: true });
+    const cleanupPointerMove = addGlobalEventListener(window, 'pointermove', handlePointerMove, { capture: true });
+    const cleanupBlur = addGlobalEventListener(window, 'blur', handleBlur);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      window.removeEventListener('keyup', handleKeyUp, { capture: true });
-      window.removeEventListener('pointermove', handlePointerMove, { capture: true });
-      window.removeEventListener('blur', handleBlur);
+      cleanupKeyDown();
+      cleanupKeyUp();
+      cleanupPointerMove();
+      cleanupBlur();
     };
   }, [
     deleteSelected,

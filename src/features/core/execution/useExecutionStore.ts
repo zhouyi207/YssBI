@@ -19,6 +19,7 @@ interface ExecutionStore extends ExecutionState {
 
   startExecution: (graphId: string) => void;
   completeExecution: (graphId: string) => void;
+  failExecution: (graphId: string) => void;
   markNodeExecuting: (graphId: string, nodeId: string) => void;
   markNodeCompleted: (graphId: string, nodeId: string, durationMs?: number) => void;
   markNodeError: (graphId: string, nodeId: string, durationMs?: number) => void;
@@ -67,6 +68,11 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     currentNodeId: null,
   })),
 
+  failExecution: (graphId) => set((state) => updateGraph(state, graphId, {
+    status: "error",
+    currentNodeId: null,
+  })),
+
   markNodeExecuting: (graphId, nodeId) => set((state) => {
     const g = state.graphs[graphId] ?? emptyGraphState();
     const newNodeStates = new Map(g.nodeStates);
@@ -103,7 +109,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   setPlaying: (playing, graphId) => set({
     isPlaying: playing,
-    playbackGraphId: playing ? (graphId ?? get().playbackGraphId) : get().playbackGraphId,
+    playbackGraphId: playing ? (graphId ?? get().playbackGraphId) : null,
   }),
 
   markGraphDirty: (graphId) => set((state) => {

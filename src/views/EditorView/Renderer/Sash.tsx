@@ -2,6 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { LayoutDirection } from '@/shared/types/ui';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 
 interface SashProps {
@@ -32,6 +33,7 @@ export const Sash: React.FC<SashProps> = ({
     const isDragging = useRef(false);
     const startPos = useRef(0);
     const startSizes = useRef<{ before: number; after: number } | null>(null);
+    const cleanupDragListeners = useRef<(() => void) | null>(null);
 
     // Store actions
     // We will need an action to update size. For now we assume we might dispatch later.
@@ -72,9 +74,13 @@ export const Sash: React.FC<SashProps> = ({
                 after: orientation === 'row' ? afterRect.width : afterRect.height
             };
 
-            // Add window listeners
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
+            cleanupDragListeners.current?.();
+            const cleanupMouseMove = addGlobalEventListener(window, 'mousemove', handleMouseMove);
+            const cleanupMouseUp = addGlobalEventListener(window, 'mouseup', handleMouseUp);
+            cleanupDragListeners.current = () => {
+                cleanupMouseMove();
+                cleanupMouseUp();
+            };
         };
 
         const handleMouseMove = (e: MouseEvent) => {
@@ -121,16 +127,16 @@ export const Sash: React.FC<SashProps> = ({
                 sashRef.current.classList.remove('active');
             }
 
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            cleanupDragListeners.current?.();
+            cleanupDragListeners.current = null;
         };
 
         sash.addEventListener('mousedown', handleMouseDown);
 
         return () => {
             sash.removeEventListener('mousedown', handleMouseDown);
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            cleanupDragListeners.current?.();
+            cleanupDragListeners.current = null;
         };
     }, [orientation, beforeRef, afterRef, beforeNodeId, afterNodeId]);
 

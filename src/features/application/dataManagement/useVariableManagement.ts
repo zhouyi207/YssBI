@@ -6,6 +6,7 @@ import { useVariableStore, useGraphMetaStore, useGraphDataStore } from '@/featur
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
@@ -71,10 +72,8 @@ export function useVariableManagement() {
     }
   }, [activeTabId, graphType, switchSidebarTab]);
 
-  const updateVariable = useCallback(async (id: string, data: Partial<Variable>) => {
-    useVariableStore.getState().updateVariable(id, data);
+  const updateVariableReferences = useCallback((id: string, variable: Variable) => {
     // 同步更新所有引用该变量的 get_variable/set_variable 节点的 title 和 variableName
-    const variable = useVariableStore.getState().variables[id];
     if (variable) {
       const graphStore = useGraphDataStore.getState();
       for (const [nodeId, node] of Object.entries(graphStore.nodes)) {
@@ -88,15 +87,35 @@ export function useVariableManagement() {
         }
       }
     }
-    try {
-      await VariableService.updateVariable(id, data);
-    } catch (e) {
-      logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableManagement');
-    }
   }, []);
 
-  const deleteVariable = useCallback((id: string) => {
-    useVariableStore.getState().deleteVariable(id);
+  const updateVariable = useCallback(async (id: string, data: Partial<Variable>) => {
+    const store = useVariableStore.getState();
+    const previous = store.variables[id];
+    if (!previous) return;
+
+    try {
+      await VariableService.updateVariable(id, data);
+      const next = { ...previous, ...data };
+      useVariableStore.getState().updateVariable(id, data);
+      updateVariableReferences(id, next);
+    } catch (e) {
+      logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableManagement');
+      uiStore.showToast(`变量更新失败: ${e}`, 'error');
+    }
+  }, [updateVariableReferences]);
+
+  const deleteVariable = useCallback(async (id: string) => {
+    const previous = useVariableStore.getState().variables[id];
+    if (!previous) return;
+
+    try {
+      await VariableService.deleteVariable(id);
+      useVariableStore.getState().deleteVariable(id);
+    } catch (e) {
+      logger.data.error('Failed to delete variable in backend: ' + String(e), 'VariableManagement');
+      uiStore.showToast(`变量删除失败: ${e}`, 'error');
+    }
   }, []);
 
   const promoteVariable = useCallback((_id: string) => {

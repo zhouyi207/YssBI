@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { useGestureStore } from '@/features/core/gesture';
-import { useViewportStore } from '@/features/core/viewport';
+import { subscribeToViewport, useViewportStore } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
@@ -46,6 +46,7 @@ export const ConnectionLine = ({
             const { gesture } = useGestureStore.getState();
             const isConnecting = gesture?.type === "connect";
             const gestureStartPin = isConnecting ? (gesture as any).startPin : null;
+            const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
             const canvasEl = canvasRef.current;
             if (!canvasEl) return;
@@ -53,6 +54,8 @@ export const ConnectionLine = ({
             if (!ctx) return;
 
             ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+            if (!gestureStartPin && !hasPendingConnection) return;
 
             let activeStart = null;
             let endWorld: { x: number, y: number } | null = null;
@@ -65,7 +68,7 @@ export const ConnectionLine = ({
                 } else {
                     endWorld = getCanvasLocalPointRef.current((gesture as any).currentX, (gesture as any).currentY);
                 }
-            } else if (pendingConnectionRef.current && menuPosRef.current) {
+            } else if (hasPendingConnection) {
                 activeStart = pendingConnectionRef.current;
                 endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
             }
@@ -95,8 +98,13 @@ export const ConnectionLine = ({
         };
 
         renderRef.current = render;
-        const unsubGesture = useGestureStore.subscribe(render);
-        const unsubViewport = useViewportStore.subscribe(render);
+        let previousGesture = useGestureStore.getState().gesture;
+        const unsubGesture = useGestureStore.subscribe((state) => {
+            if (state.gesture === previousGesture) return;
+            previousGesture = state.gesture;
+            render();
+        });
+        const unsubViewport = subscribeToViewport(groupId, render);
         render();
 
         return () => { unsubGesture(); unsubViewport(); };
@@ -118,15 +126,7 @@ export const ConnectionLine = ({
             canvasEl.style.height = `${rect.height}px`;
             const ctx = canvasEl.getContext('2d');
             if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-            // Force a redraw after resize
-            const { gesture } = useGestureStore.getState();
-            if (gesture?.type === 'connect') {
-                // We can't easily call 'render' here as it's inside the other effect.
-                // But resizing usually happens on window resize, which might not be high freq during drag.
-                // We can just rely on the next mouse move or viewport change to fix it, or trigger a dummy viewport update?
-                // Or better, just extract render logic. For now, this is acceptable.
-            }
+            renderRef.current();
         });
         resizeObserver.observe(parent);
 

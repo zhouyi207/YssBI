@@ -8,6 +8,12 @@ import type { LayoutState } from '@/features/core/layout/layoutStore';
 import { Node } from '@/shared/types/ui';
 import { deserializeGraph } from '@/features/core/dataStore';
 
+function areStringArraysEqual(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((value) => set.has(value));
+}
+
 export function useEditorNodeActions(
   activeTabIdRef: RefObject<string | null>,
   activeGroupId: string
@@ -33,6 +39,8 @@ export function useEditorNodeActions(
         if (node) {
           const current = node.data?.params?.selectedNodeIds || [];
           const next = typeof updater === 'function' ? updater(current) : updater;
+          if (areStringArraysEqual(current, next)) return;
+
           useLayoutStore.getState().updateNode(gid, {
             data: {
               ...node.data,

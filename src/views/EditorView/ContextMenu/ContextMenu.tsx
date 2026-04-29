@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 
 export interface ContextMenuPosition {
   x: number;
@@ -37,7 +38,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as HTMLElement)) {
         onClose();
       }
@@ -45,11 +46,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    window.addEventListener("pointerdown", handleClickOutside, true);
-    window.addEventListener("keydown", handleEscape);
+    const cleanupPointerDown = addGlobalEventListener(window, "pointerdown", handleClickOutside, true);
+    const cleanupKeyDown = addGlobalEventListener(window, "keydown", handleEscape);
     return () => {
-      window.removeEventListener("pointerdown", handleClickOutside, true);
-      window.removeEventListener("keydown", handleEscape);
+      cleanupPointerDown();
+      cleanupKeyDown();
     };
   }, [onClose]);
 

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { VscTable, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export const ExcelSheetSelectModal = ({
   options: ExcelSheetSelectDialogOptions;
   onClose: () => void;
 }) => {
+  const { t } = useTranslation();
   const { filePath, sheets, onSelect } = options;
   const fileName = filePath.replace(/^.*[/\\]/, "");
 
@@ -21,9 +23,9 @@ export const ExcelSheetSelectModal = ({
         <DialogHeader className="border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="flex items-center gap-2">
-              <VscTable className="text-emerald-400" size={18} /> 选择 Sheet
+              <VscTable className="text-emerald-400" size={18} /> {t("importModal.selectSheet")}
             </DialogTitle>
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
             <VscClose size={20} />
             </Button>
           </div>
@@ -56,7 +58,7 @@ export const ExcelSheetSelectModal = ({
         </div>
 
         <DialogFooter className="justify-center">
-          <p className="text-[10px] font-medium text-muted-foreground">选择要导入的 Sheet</p>
+          <p className="text-[10px] font-medium text-muted-foreground">{t("importModal.sheetHint")}</p>
         </DialogFooter>
       </DialogContent>
     </Dialog>

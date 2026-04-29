@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -29,6 +30,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
   menu, selectedRowIndices, onStartEdit, onAddRow, onDeleteRow,
   onRenameColumn, onAddColumn, onDeleteColumn, onClearSelection, onClose,
 }) => {
+  const { t } = useTranslation();
   const multiRow = selectedRowIndices.length > 1 && menu.rowIndex !== undefined && selectedRowIndices.includes(menu.rowIndex);
 
   return (
@@ -40,22 +42,22 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
       {menu.type === 'cell' && (
         <>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onStartEdit(menu.rowIndex!, menu.colIndex!); onClose(); }}>
-            Edit Cell
+            {t("dataView.editCell")}
           </Button>
           <Separator className="my-1" />
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
-            Insert Row Above
+            {t("dataView.insertRowAbove")}
           </Button>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
-            Insert Row Below
+            {t("dataView.insertRowBelow")}
           </Button>
           {multiRow ? (
             <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
-              Delete {selectedRowIndices.length} Rows
+              {t("dataView.deleteRows", { count: selectedRowIndices.length })}
             </Button>
           ) : (
             <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
-              Delete Row
+              {t("dataView.deleteRow")}
             </Button>
           )}
         </>
@@ -63,18 +65,18 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
       {menu.type === 'row' && (
         <>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
-            Insert Row Above
+            {t("dataView.insertRowAbove")}
           </Button>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
-            Insert Row Below
+            {t("dataView.insertRowBelow")}
           </Button>
           {multiRow ? (
             <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
-              Delete {selectedRowIndices.length} Rows
+              {t("dataView.deleteRows", { count: selectedRowIndices.length })}
             </Button>
           ) : (
             <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
-              Delete Row
+              {t("dataView.deleteRow")}
             </Button>
           )}
         </>
@@ -82,13 +84,13 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
       {menu.type === 'header' && (
         <>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onRenameColumn(menu.colName!); onClose(); }}>
-            Rename Column
+            {t("dataView.renameColumn")}
           </Button>
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddColumn(); onClose(); }}>
-            Add Column
+            {t("dataView.addColumn")}
           </Button>
           <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteColumn(menu.colName!); onClose(); }}>
-            Delete Column &quot;{menu.colName}&quot;
+            {t("dataView.deleteColumn", { name: menu.colName })}
           </Button>
         </>
       )}

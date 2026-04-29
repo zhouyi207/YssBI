@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { DialogOptions } from "@/shared/types/ui";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 
 export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: () => void }) => {
+  const { t } = useTranslation();
   const handleCancel = () => {
     options.onCancel?.();
     onClose();
@@ -31,10 +33,10 @@ export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: (
         </div>
         <DialogFooter>
           <Button onClick={handleCancel} variant="ghost" size="lg">
-            {options.cancelText || "取消"}
+            {options.cancelText || t("common.cancel")}
           </Button>
           <Button onClick={handleConfirm} variant={options.type === "danger" ? "destructive" : "default"} size="lg">
-            {options.confirmText || "确定"}
+            {options.confirmText || t("common.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

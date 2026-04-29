@@ -1,14 +1,17 @@
 import { Message } from "@/shared/types/ui";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 export const Toast = ({ message, onClose }: { message: Message; onClose: (id: string) => void }) => {
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
+
     useEffect(() => {
         const options = {
             id: message.id,
             duration: message.duration || 3000,
-            onDismiss: () => onClose(message.id),
-            onAutoClose: () => onClose(message.id),
+            onDismiss: () => onCloseRef.current(message.id),
+            onAutoClose: () => onCloseRef.current(message.id),
         };
 
         switch (message.type) {
@@ -29,7 +32,7 @@ export const Toast = ({ message, onClose }: { message: Message; onClose: (id: st
                 toast.info(message.content, options);
                 break;
         }
-    }, [message, onClose]);
+    }, [message.id, message.type, message.content, message.duration]);
 
     return null;
 };

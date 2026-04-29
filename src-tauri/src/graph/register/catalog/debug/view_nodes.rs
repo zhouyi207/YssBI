@@ -10,7 +10,7 @@ use crate::graph::value::{DataType, DataValue};
 use polars::prelude::DataFrame;
 use serde_json::json;
 use std::sync::Arc;
-use yss_sci::database::anyvalue_to_json;
+use yss_sci::api::database::anyvalue_to_json;
 
 const PREVIEW_ROWS: usize = 100;
 

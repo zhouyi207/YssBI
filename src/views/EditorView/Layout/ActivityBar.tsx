@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase, VscTerminal } from "react-icons/vsc";
@@ -19,6 +20,7 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 );
 
 export function ActivityBar() {
+  const { t } = useTranslation();
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
   const isSidebarVisible = sidebarNode?.data?.visible !== false;
   const activeTab = isSidebarVisible
@@ -75,16 +77,16 @@ export function ActivityBar() {
         }}
       />
 
-      <ActivityIcon id="graphs" active={activeTab === "graphs"} onClick={() => toggleTab("graphs")} title="Graphs">
+      <ActivityIcon id="graphs" active={activeTab === "graphs"} onClick={() => toggleTab("graphs")} title={t("activityBar.graphs")}>
         <PiGraph size={24} />
       </ActivityIcon>
-      <ActivityIcon id="variables" active={activeTab === "variables"} onClick={() => toggleTab("variables")} title="Variables">
+      <ActivityIcon id="variables" active={activeTab === "variables"} onClick={() => toggleTab("variables")} title={t("activityBar.variables")}>
         <HiVariable size={24} />
       </ActivityIcon>
-      <ActivityIcon id="data" active={activeTab === "data"} onClick={() => toggleTab("data")} title="Data">
+      <ActivityIcon id="data" active={activeTab === "data"} onClick={() => toggleTab("data")} title={t("activityBar.data")}>
         <VscDatabase size={24} />
       </ActivityIcon>
-      <ActivityIcon id="commands" active={activeTab === "commands"} onClick={() => toggleTab("commands")} title="Commands">
+      <ActivityIcon id="commands" active={activeTab === "commands"} onClick={() => toggleTab("commands")} title={t("activityBar.commands")}>
         <VscTerminal size={24} />
       </ActivityIcon>
     </div>

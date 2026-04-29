@@ -192,12 +192,18 @@ export function useDatabaseManagement() {
     useDatabaseStore.getState().updateDatabase(id, data);
   }, []);
 
-  const deleteDataFrame = useCallback((id: string) => {
-    useDatabaseStore.getState().deleteDatabase(id);
-    if (selectedItemId === id) setSelectedInfo(null, null);
-    DatabaseService.deleteDatabase(id).catch((e) =>
-      logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement')
-    );
+  const deleteDataFrame = useCallback(async (id: string) => {
+    const previous = useDatabaseStore.getState().databases[id];
+    if (!previous) return;
+
+    try {
+      await DatabaseService.deleteDatabase(id);
+      useDatabaseStore.getState().deleteDatabase(id);
+      if (selectedItemId === id) setSelectedInfo(null, null);
+    } catch (e) {
+      logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement');
+      uiStore.showToast(`删除数据失败: ${e}`, 'error');
+    }
   }, [selectedItemId, setSelectedInfo]);
 
   return {

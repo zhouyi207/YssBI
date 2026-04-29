@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
+import type { GraphInstanceDTO } from "@/shared/types/dto";
+import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -91,9 +93,9 @@ export class GraphService {
      */
     static async getGraph(graphId: string): Promise<Graph> {
         try {
-            const graph = await invoke<Graph>("get_graph", { graphId });
+            const graph = await invoke<GraphInstanceDTO>("get_graph", { graphId });
             logger.graph.info(`Graph '${graphId}' retrieved successfully`, 'GraphService');
-            return graph;
+            return toFrontendGraph(graph);
         } catch (error) {
             logger.graph.error(`Error getting graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;

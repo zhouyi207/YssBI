@@ -3,6 +3,9 @@ import { Pin } from "@/shared/types/domain";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT, NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from "@/app/appConfig/default";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { ProjectService } from "@/services/project/projectService";
+import { clamp } from "@/shared/utils";
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
 function segmentIntersectsRect(
@@ -40,6 +43,25 @@ export function useCanvasViewport(
 ) {
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  const wheelPersistTimerRef = useRef<number | null>(null);
+  const cullingTimerRef = useRef<number | null>(null);
+
+  const persistViewport = useCallback(() => {
+    if (!activeTabId) return;
+    const viewport = useViewportStore.getState().viewports[groupId];
+    if (!viewport) return;
+    ProjectService.updateCanvas(activeTabId, viewport).catch(() => {});
+  }, [activeTabId, groupId]);
+
+  const scheduleViewportPersist = useCallback(() => {
+    if (wheelPersistTimerRef.current !== null) {
+      window.clearTimeout(wheelPersistTimerRef.current);
+    }
+    wheelPersistTimerRef.current = window.setTimeout(() => {
+      wheelPersistTimerRef.current = null;
+      persistViewport();
+    }, 300);
+  }, [persistViewport]);
 
   const updateVisibleNodes = useCallback(() => {
     const el = canvasRef.current;
@@ -109,15 +131,26 @@ export function useCanvasViewport(
     setVisibleNodes(visible);
   }, [canvasRef, groupId, activeTabId]);
 
-  // 订阅 viewport 变化，画布平移/缩放时连续更新可见集（而非拖拽结束才更新）
-  const viewport = useViewportStore((state) => state.viewports[groupId] || DEFAULT_VIEWPORT);
   useEffect(() => {
     updateVisibleNodes();
-  }, [scale, nodes, viewport.x, viewport.y, viewport.scale, updateVisibleNodes]);
+  }, [scale, nodes, updateVisibleNodes]);
 
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
   }, [gestureType, updateVisibleNodes]);
+
+  useEffect(() => {
+    if (gestureType !== "pan") return;
+
+    return useViewportStore.subscribe((state, prevState) => {
+      if (state.viewports[groupId] === prevState.viewports[groupId]) return;
+      if (cullingTimerRef.current !== null) return;
+      cullingTimerRef.current = window.setTimeout(() => {
+        cullingTimerRef.current = null;
+        updateVisibleNodes();
+      }, 120);
+    });
+  }, [gestureType, groupId, updateVisibleNodes]);
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
@@ -125,8 +158,7 @@ export function useCanvasViewport(
       if (
         target.closest(".menubar-container") ||
         target.closest(".sidebar-container") ||
-        target.closest(".menu-container") ||
-        target.closest(".hud-container")
+        target.closest(".menu-container")
       ) {
         return;
       }
@@ -144,30 +176,48 @@ export function useCanvasViewport(
       }
 
       e.preventDefault();
-      const factor = 0.001;
-      const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
-      const nextScale = Math.min(Math.max(currentCanvas.scale * (1 - e.deltaY * factor), 0.2), 1.2);
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const worldX = (mouseX - currentCanvas.x) / currentCanvas.scale;
-      const worldY = (mouseY - currentCanvas.y) / currentCanvas.scale;
+      const currentCanvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+      if (e.ctrlKey || e.metaKey) {
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const factor = Math.pow(1.1, -e.deltaY / 100);
+        const nextScale = clamp(currentCanvas.scale * factor, 0.1, 5);
+        const worldX = (mouseX - currentCanvas.x) / currentCanvas.scale;
+        const worldY = (mouseY - currentCanvas.y) / currentCanvas.scale;
 
-      setCanvas({
-        scale: nextScale,
-        x: mouseX - worldX * nextScale,
-        y: mouseY - worldY * nextScale,
-      });
+        setCanvas({
+          scale: nextScale,
+          x: mouseX - worldX * nextScale,
+          y: mouseY - worldY * nextScale,
+        }, groupId);
+      } else {
+        const panX = e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX;
+        const panY = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY;
+        setCanvas((prev: { x: number; y: number; scale: number }) => ({
+          ...prev,
+          x: prev.x - panX,
+          y: prev.y - panY,
+        }), groupId);
+      }
+
+      scheduleViewportPersist();
     },
-    [canvasRef, setCanvas, groupId]
+    [canvasRef, setCanvas, groupId, scheduleViewportPersist]
   );
 
   useEffect(() => {
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
-    window.addEventListener("wheel", handleWheel, { passive: false, capture: true });
-    return () => window.removeEventListener("wheel", handleWheel, { capture: true });
+    return addGlobalEventListener(window, "wheel", handleWheel, { passive: false, capture: true });
   }, [handleWheel]);
+
+  useEffect(() => {
+    return () => {
+      if (wheelPersistTimerRef.current !== null) window.clearTimeout(wheelPersistTimerRef.current);
+      if (cullingTimerRef.current !== null) window.clearTimeout(cullingTimerRef.current);
+    };
+  }, []);
 
   // pin→nodeId 映射，只在 nodes 变化时重建
   const pinNodeIdMap = useMemo(() => {
@@ -216,7 +266,7 @@ export function useCanvasViewport(
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
 
-    nodes.forEach((node) => {
+    nodes.filter((node) => visibleNodeIds.has(node.id)).forEach((node) => {
       const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
       if (!nodeEl) return;
 

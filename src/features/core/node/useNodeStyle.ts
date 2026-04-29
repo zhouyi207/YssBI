@@ -1,4 +1,3 @@
-import { useSchemaStore } from '@/features/core/schema';
 import { Node } from '@/shared/types/ui';
 
 /**
@@ -13,13 +12,8 @@ import { Node } from '@/shared/types/ui';
  * - 需要根据 schema 获取样式配置
  */
 export function useNodeStyle(node: Node) {
-  // 优先从 schema 获取 centerSymbol，回退到节点属性
-  const schemaCenterSymbol = useSchemaStore((_s) => undefined);
-  
-  const centerSymbol = schemaCenterSymbol ?? node.centerSymbol;
-
   return {
-    centerSymbol,
+    centerSymbol: node.centerSymbol,
     uiStyle: node.uiStyle,
   };
 }

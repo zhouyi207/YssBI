@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
@@ -6,6 +7,7 @@ import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -14,6 +16,7 @@ interface TabBarProps {
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeTabId }) => {
+  const { t } = useTranslation();
   // 使用 useShallow 和单个选择器订阅所有需要的状态，避免多次重渲染
   const { 
     updateNode, 
@@ -125,7 +128,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   return (
     <div 
       ref={setDropRef}
-      className="flex items-center border-b w-full shrink-0 select-none overflow-hidden bg-[var(--workbench-bg)] border-[#3e3e3e]"
+      className="flex items-center border-b w-full shrink-0 select-none overflow-hidden bg-[var(--workbench-bg)] border-[var(--strong-border)]"
       style={{ height: 'var(--titlebar-height)' }}
     >
       <div className="relative flex-1 flex items-start h-full min-w-0">
@@ -181,7 +184,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
       </div>
 
       {/* Group Action Buttons */}
-      <div className="flex items-center gap-0.5 px-1 border-l border-[#2b2b2b] h-full bg-[var(--workbench-bg)]">
+      <div className="flex items-center gap-0.5 px-1 border-l border-[var(--strong-border)] h-full bg-[var(--workbench-bg)]">
         <Button
           type="button"
           variant="ghost"
@@ -198,7 +201,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             }
           }}
           className="text-muted-foreground"
-          title={isAltPressed ? "Split Editor Down (Alt)" : "Split Editor Right"}
+          title={isAltPressed ? t("tabBar.splitDownAlt") : t("tabBar.splitRight")}
         >
           {isAltPressed ? <VscSplitVertical size={15} /> : <VscSplitHorizontal size={15} />}
         </Button>
@@ -209,7 +212,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
           size="icon-sm"
           onClick={handleCloseGroup}
           className="text-muted-foreground hover:text-red-400"
-          title="Close Group"
+          title={t("tabBar.closeGroup")}
         >
           <VscChromeClose size={15} />
         </Button>
@@ -265,8 +268,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             }
         };
         
-        window.addEventListener('mousemove', handleMouseMove);
-        return () => window.removeEventListener('mousemove', handleMouseMove);
+        return addGlobalEventListener(window, 'mousemove', handleMouseMove);
     }, [isOver, index, onDragOver]);
 
     const style = transform ? {
@@ -288,8 +290,8 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             data-tab-id={tab.id}
             onClick={onClick}
             className={`
-                relative flex items-center gap-2 px-3 border-r border-[#2b2b2b] cursor-pointer shrink-0
-                ${isActive ? "bg-[var(--sidebar-bg)] text-white" : "text-gray-500 hover:bg-white/5"}
+                relative flex items-center gap-2 px-3 border-r border-[var(--strong-border)] cursor-pointer shrink-0
+                ${isActive ? "bg-[var(--sidebar-bg)] text-foreground" : "text-muted-foreground hover:bg-muted"}
                 ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}
             `}
         >

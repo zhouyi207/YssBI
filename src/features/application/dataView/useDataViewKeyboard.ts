@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { CellPos, SelectionRange } from './useSelection';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 interface UseDataViewKeyboardParams {
   handleUndo: () => void;
@@ -66,8 +67,7 @@ export function useDataViewKeyboard({
         e.preventDefault(); startEdit(activeCell.row, activeCell.col);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    return addGlobalEventListener(window, 'keydown', handler);
   }, [
     handleUndo, handleRedo, cancelEdit, startEdit, handleDeleteRow,
     selectAll, clearSelection, setSelection, dismissContextMenu,

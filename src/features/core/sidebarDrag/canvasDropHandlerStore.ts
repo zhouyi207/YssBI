@@ -2,17 +2,37 @@
  * Store for registering the Canvas drop handler per group.
  * Workspace calls this when a node-template is dropped on the canvas.
  */
+import { createStore } from "zustand/vanilla";
+
 type DropHandler = (
   dragState: { type: string; template: any; x: number; y: number },
   event: { altKey: boolean; ctrlKey: boolean }
 ) => void | Promise<void>;
 
-const handlers = new Map<string, DropHandler>();
+interface CanvasDropHandlerState {
+  handlers: Record<string, DropHandler | undefined>;
+  setHandler: (groupId: string, handler: DropHandler | null) => void;
+}
+
+const dropHandlerStore = createStore<CanvasDropHandlerState>((set) => ({
+  handlers: {},
+  setHandler: (groupId, handler) =>
+    set((state) => {
+      const handlers = { ...state.handlers };
+      if (handler) {
+        handlers[groupId] = handler;
+      } else {
+        delete handlers[groupId];
+      }
+      return { handlers };
+    }),
+}));
 
 export const canvasDropHandlerStore = {
   setHandler: (groupId: string, h: DropHandler | null) => {
-    if (h) handlers.set(groupId, h);
-    else handlers.delete(groupId);
+    dropHandlerStore.getState().setHandler(groupId, h);
   },
-  getHandler: (groupId: string): DropHandler | null => handlers.get(groupId) ?? null,
+  getHandler: (groupId: string): DropHandler | null =>
+    dropHandlerStore.getState().handlers[groupId] ?? null,
+  subscribe: dropHandlerStore.subscribe,
 };

@@ -14,10 +14,11 @@ export { GroupContext };
  *
  * Sidebar/detail 等非 Canvas 组件自动禁用 canvas 交互，避免注册全局 pointer 监听器。
  */
-export function useEditorGroup() {
+export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
   const currentGroupId = useContext(GroupContext);
   const overrideGroupId = currentGroupId || undefined;
-  const withCanvasInteraction = overrideGroupId !== 'sidebar' && overrideGroupId !== 'detail';
+  const withCanvasInteraction =
+    options?.withCanvasInteraction ?? (overrideGroupId !== 'sidebar' && overrideGroupId !== 'detail');
   const editor = useEditor({ withCanvasInteraction });
 
   const { groupId, tabs, activeTabId, nodes, variables, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
@@ -45,13 +46,6 @@ export function useEditorGroup() {
     editor.onPinPointerDown(pinId, e, groupId);
   }, [groupId, editor.onPinPointerDown, setActiveGroup]);
 
-  const wrappedOnCanvasWheel = useCallback((e: React.WheelEvent, targetGroupId?: string) => {
-    if (useLayoutStore.getState().activeGroupId !== groupId) {
-      setActiveGroup(groupId);
-    }
-    editor.onCanvasWheel(e, targetGroupId || groupId);
-  }, [groupId, editor.onCanvasWheel, setActiveGroup]);
-
   const wrappedSetCanvas = useCallback((updater: any, targetGroupId?: string) => {
     if (useLayoutStore.getState().activeGroupId !== groupId) {
       setActiveGroup(groupId);
@@ -71,7 +65,6 @@ export function useEditorGroup() {
     onCanvasPointerDown: wrappedOnCanvasPointerDown,
     onNodePointerDown: wrappedOnNodePointerDown,
     onPinPointerDown: wrappedOnPinPointerDown,
-    onCanvasWheel: wrappedOnCanvasWheel,
     setCanvas: wrappedSetCanvas,
   }), [
     editor,
@@ -84,7 +77,6 @@ export function useEditorGroup() {
     wrappedOnCanvasPointerDown,
     wrappedOnNodePointerDown,
     wrappedOnPinPointerDown,
-    wrappedOnCanvasWheel,
     wrappedSetCanvas,
   ]);
 }

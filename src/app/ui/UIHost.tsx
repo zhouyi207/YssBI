@@ -25,31 +25,31 @@ export const UIHost = () => {
       ))}
 
       {top?.type === "confirm" && (
-        <Modal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <Modal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "input" && (
-        <InputModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <InputModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "import" && (
-        <ImportModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <ImportModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "sqliteTableSelect" && (
-        <SqliteTableSelectModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <SqliteTableSelectModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "excelSheetSelect" && (
-        <ExcelSheetSelectModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <ExcelSheetSelectModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "sqlConnection" && (
-        <SqlConnectionModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <SqlConnectionModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
 
       {top?.type === "sqlRemoteTableSelect" && (
-        <SqlRemoteTableSelectModal options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+        <SqlRemoteTableSelectModal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
       )}
     </>
   );

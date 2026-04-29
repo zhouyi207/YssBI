@@ -11,9 +11,14 @@ import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 import { logger } from '@/utils/appLogger';
 import { ProjectService } from "@/services/project/projectService";
 
-import { clamp } from "@/shared/utils";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { deserializeGraph } from "@/features/core/dataStore";
-import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from "@/app/appConfig/default";
+import {
+    getCanvasWorldPoint,
+    getGestureScreenMovement,
+    hasSelectionChanged,
+    selectNodeIdsInScreenRect,
+} from "./canvasInteractionUtils";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
@@ -22,9 +27,27 @@ interface UseCanvasInteractionProps {
     groups: EditorGroup[];
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     setNodes: (updater: Node[] | ((prev: Node[]) => Node[])) => void;
-    setCanvas: (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition), targetGroupId?: string) => void;
     /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
     enabled?: boolean;
+}
+
+function updateSelectionPreview(groupId: string, previousIds: string[], nextIds: string[]) {
+    const canvasEl = document.querySelector(`[data-editor-group-id="${groupId}"]`);
+    if (!canvasEl) return;
+
+    const nextSet = new Set(nextIds);
+    for (const id of previousIds) {
+        if (!nextSet.has(id)) {
+            canvasEl.querySelector(`[data-node-id="${id}"]`)?.removeAttribute("data-selection-preview");
+        }
+    }
+
+    const previousSet = new Set(previousIds);
+    for (const id of nextIds) {
+        if (!previousSet.has(id)) {
+            canvasEl.querySelector(`[data-node-id="${id}"]`)?.setAttribute("data-selection-preview", "true");
+        }
+    }
 }
 
 export function useCanvasInteraction({
@@ -34,7 +57,6 @@ export function useCanvasInteraction({
     groups,
     setSelectedNodeIds,
     setNodes,
-    setCanvas,
     enabled = true,
 }: UseCanvasInteractionProps) {
 
@@ -44,7 +66,7 @@ export function useCanvasInteraction({
     const pendingConnection = useEditorStore((s) => s.pendingConnection);
     const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
 
-    const wheelSaveTimerRef = useRef<number | null>(null);
+    const selectionPreviewIdsRef = useRef<string[]>([]);
 
     const persistViewport = useCallback((groupId?: string) => {
         const gid = groupId || activeGroupIdRef.current;
@@ -84,6 +106,7 @@ export function useCanvasInteraction({
         }
         if (e.button === 0) {
             if (!e.shiftKey) { setSelectedNodeIds([], groupId); }
+            selectionPreviewIdsRef.current = [];
             useGestureStore.getState().setGesture({ type: "select", startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, groupId });
         }
     }, [setSelectedNodeIds]);
@@ -145,31 +168,10 @@ export function useCanvasInteraction({
 
         // 计算初始世界坐标，避免第一帧在多 editor 中终点不一致
         const gid = groupId || activeGroupIdRef.current;
-        const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
-        let worldX = e.clientX;
-        let worldY = e.clientY;
-        if (canvasEl) {
-            const rect = canvasEl.getBoundingClientRect();
-            const vp = useViewportStore.getState().viewports[gid] || { x: 0, y: 0, scale: 1 };
-            worldX = (e.clientX - rect.left - vp.x) / vp.scale;
-            worldY = (e.clientY - rect.top - vp.y) / vp.scale;
-        }
+        const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, e.clientX, e.clientY);
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
     }, [activeTabIdRef, setNodes]);
 
-
-    const onCanvasWheel = useCallback((e: React.WheelEvent, targetGroupId?: string) => {
-        if (e.ctrlKey) {
-            e.preventDefault(); const delta = -e.deltaY; const factor = Math.pow(1.1, delta / 100);
-            setCanvas((prev: GraphPosition) => ({ ...prev, scale: clamp(prev.scale * factor, 0.1, 5) }), targetGroupId);
-        } else { setCanvas((prev: GraphPosition) => ({ ...prev, x: prev.x - e.deltaX, y: prev.y - e.deltaY }), targetGroupId); }
-
-        if (wheelSaveTimerRef.current !== null) clearTimeout(wheelSaveTimerRef.current);
-        wheelSaveTimerRef.current = window.setTimeout(() => {
-            wheelSaveTimerRef.current = null;
-            persistViewport(targetGroupId);
-        }, 300);
-    }, [setCanvas, persistViewport]);
 
     // Global Pointer Events (Move/Up) - 仅当 enabled 时注册，避免 Sidebar 等组件重复监听
     useEffect(() => {
@@ -197,50 +199,20 @@ export function useCanvasInteraction({
                 nextGesture = { ...g, lastX: e.clientX, lastY: e.clientY, moved: true };
             } else if (g.type === "select") {
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY };
-                // 实时选择：拖拽过程中立即更新框选中的节点（优化：避免重复更新、避免重反序列化）
                 const x1 = Math.min(g.startX, e.clientX), y1 = Math.min(g.startY, e.clientY);
                 const x2 = Math.max(g.startX, e.clientX), y2 = Math.max(g.startY, e.clientY);
                 const gid = g.groupId || activeGroupIdRef.current;
-                // 使用 gesture 所在 editor group 的 activeTabId，而非全局 activeTabIdRef
                 const layoutNode = useLayoutStore.getState().nodes[gid];
                 const tabId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current ?? null;
                 const graphData = getGraphById(tabId || "");
-                const currentNodes = graphData?.nodes ?? [];
-                const newSelectedIds: string[] = [];
-                // 在 gesture 所在 editor 的 canvas 内查找节点，避免多 editor 同 graph 时 document.getElementById 返回错误 editor 的节点
-                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
-                for (const n of currentNodes) {
-                    const nodeId = (n as { id?: string }).id;
-                    if (!nodeId) continue;
-                    const el = canvasEl
-                        ? (canvasEl as Element).querySelector(`[data-node-id="${nodeId}"]`)
-                        : document.getElementById(nodeId);
-                    if (!el) continue;
-                    const r = el.getBoundingClientRect();
-                    if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
-                        newSelectedIds.push(nodeId);
-                    }
-                }
-                // 仅当选择结果变化时才更新，减少不必要的 re-render
-                const current = layoutNode?.data?.params?.selectedNodeIds ?? [];
-                const newSet = new Set(newSelectedIds);
-                const curSet = new Set(current);
-                if (newSet.size !== curSet.size || [...newSet].some((id) => !curSet.has(id))) {
-                    setSelectedNodeIds(newSelectedIds, gid);
-                }
+                const newSelectedIds = selectNodeIdsInScreenRect(gid, graphData?.nodes ?? [], { x1, y1, x2, y2 });
+                updateSelectionPreview(gid, selectionPreviewIdsRef.current, newSelectedIds);
+                selectionPreviewIdsRef.current = newSelectedIds;
             }
             else if (g.type === "connect") {
                 // 计算世界坐标，使多 editor 渲染同一连接线时终点一致
                 const gid = g.groupId || activeGroupIdRef.current;
-                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
-                let worldX = e.clientX;
-                let worldY = e.clientY;
-                if (canvasEl) {
-                    const rect = canvasEl.getBoundingClientRect();
-                    const vp = useViewportStore.getState().viewports[gid] || { x: 0, y: 0, scale: 1 };
-                    worldX = (e.clientX - rect.left - vp.x) / vp.scale;
-                    worldY = (e.clientY - rect.top - vp.y) / vp.scale;
-                }
+                const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, e.clientX, e.clientY);
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY, worldX, worldY };
                 useGestureStore.getState().setGesture(nextGesture);
                 nextGesture = null; // already set above
@@ -293,30 +265,19 @@ export function useCanvasInteraction({
             }
             else if (g.type === "select") {
                 const rect = g;
-                const x1 = Math.min(rect.startX, rect.currentX), y1 = Math.min(rect.startY, rect.currentY);
-                const x2 = Math.max(rect.startX, rect.currentX), y2 = Math.max(rect.startY, rect.currentY);
+                const x1 = Math.min(rect.startX, e.clientX), y1 = Math.min(rect.startY, e.clientY);
+                const x2 = Math.max(rect.startX, e.clientX), y2 = Math.max(rect.startY, e.clientY);
                 const gid = g.groupId || activeGroupIdRef.current;
-                // 使用 gesture 所在 editor group 的 activeTabId，而非全局 activeTabIdRef
                 const layoutNode = useLayoutStore.getState().nodes[gid];
                 const tabId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current ?? null;
                 const graphData = getGraphById(tabId || "");
-                const currentNodes = graphData?.nodes ?? [];
-                const newSelectedIds: string[] = [];
-                // 在 gesture 所在 editor 的 canvas 内查找节点，避免多 editor 同 graph 时 document.getElementById 返回错误 editor 的节点
-                const canvasEl = document.querySelector(`[data-editor-group-id="${gid}"]`);
-                for (const n of currentNodes) {
-                    const nodeId = (n as { id?: string }).id;
-                    if (!nodeId) continue;
-                    const el = canvasEl
-                        ? (canvasEl as Element).querySelector(`[data-node-id="${nodeId}"]`)
-                        : document.getElementById(nodeId);
-                    if (!el) continue;
-                    const r = el.getBoundingClientRect();
-                    if (!(r.left > x2 || r.right < x1 || r.top > y2 || r.bottom < y1)) {
-                        newSelectedIds.push(nodeId);
-                    }
+                const newSelectedIds = selectNodeIdsInScreenRect(gid, graphData?.nodes ?? [], { x1, y1, x2, y2 });
+                updateSelectionPreview(gid, selectionPreviewIdsRef.current, []);
+                selectionPreviewIdsRef.current = [];
+                const current = useLayoutStore.getState().nodes[gid]?.data?.params?.selectedNodeIds ?? [];
+                if (hasSelectionChanged(current, newSelectedIds)) {
+                    setSelectedNodeIds(newSelectedIds, gid);
                 }
-                setSelectedNodeIds(newSelectedIds, gid);
             } else if (g.type === "connect") {
                 const target = (e.target as HTMLElement).closest("[data-pin-id]");
                 if (target) connectPins(g.startPin.id, target.getAttribute("data-pin-id")!);
@@ -342,31 +303,19 @@ export function useCanvasInteraction({
             }
 
             useGestureStore.getState().endConnection();
-            const threshold = CONTEXT_MENU_MOVE_THRESHOLD_PX;
-            let hadMovement = false;
-            if (g.type === "pan") {
-                const dx = g.lastX - g.startX;
-                const dy = g.lastY - g.startY;
-                hadMovement = Math.sqrt(dx * dx + dy * dy) > threshold;
-            } else if (g.type === "select") {
-                const dx = Math.abs(g.currentX - g.startX);
-                const dy = Math.abs(g.currentY - g.startY);
-                hadMovement = dx > threshold || dy > threshold;
-            } else if (g.type === "drag" && g.dragDelta) {
-                const scale = canvasRef.current?.scale ?? 1;
-                const screenDx = Math.abs(g.dragDelta.x * scale);
-                const screenDy = Math.abs(g.dragDelta.y * scale);
-                hadMovement = screenDx > threshold || screenDy > threshold;
-            }
+            const hadMovement = getGestureScreenMovement(g, canvasRef.current?.scale ?? 1);
             useGestureStore.getState().clearGesture(hadMovement);
+            updateSelectionPreview(g.groupId || activeGroupIdRef.current, selectionPreviewIdsRef.current, []);
+            selectionPreviewIdsRef.current = [];
         };
 
-        window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
+        const cleanupPointerMove = addGlobalEventListener(window, "pointermove", onMove);
+        const cleanupPointerUp = addGlobalEventListener(window, "pointerup", onUp);
         return () => {
-            window.removeEventListener("pointermove", onMove);
-            window.removeEventListener("pointerup", onUp);
+            cleanupPointerMove();
+            cleanupPointerUp();
             if (rAFId) cancelAnimationFrame(rAFId);
-            if (wheelSaveTimerRef.current !== null) clearTimeout(wheelSaveTimerRef.current);
+            updateSelectionPreview(activeGroupIdRef.current, selectionPreviewIdsRef.current, []);
         };
     }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, setSelectedNodeIds, persistViewport]);
 
@@ -378,7 +327,6 @@ export function useCanvasInteraction({
         connectPins,
         onCanvasPointerDown,
         onNodePointerDown,
-        onPinPointerDown,
-        onCanvasWheel
+        onPinPointerDown
     };
 }

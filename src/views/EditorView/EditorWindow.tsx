@@ -1,5 +1,7 @@
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useTranslation } from "react-i18next";
 import { ActivityBar } from "./Layout/ActivityBar";
+import { BottomBar } from "./Layout/BottomBar";
 import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/application/initialization";
@@ -11,6 +13,7 @@ import { useMenubar } from "@/features/application/menubar";
 
 
 export const EditorWindow = () => {
+    const { t } = useTranslation();
     const rootId = useLayoutStore((s) => s.rootId);
     const { status, error } = useAppInitialization();
 
@@ -18,7 +21,7 @@ export const EditorWindow = () => {
     useProjectSyncWithEditor();
 
     // 全局键盘快捷键（Ctrl+C/V/Z/Y 等），粘贴时使用鼠标位置
-    const editor = useEditorGroup();
+    const editor = useEditorGroup({ withCanvasInteraction: false });
     const { toggleLogPanel } = useMenubar();
     useEditorKeyboard({
         deleteSelected: editor.deleteSelected,
@@ -42,7 +45,7 @@ export const EditorWindow = () => {
     if (status !== LoadStatus.Ready) {
         return (
             <div className="flex items-center justify-center w-full h-screen">
-                {error ? `初始化失败:${error}` : "加载中..."}
+                {error ? t("editor.initializationFailed", { error }) : t("common.loading")}
             </div>
         );
     }
@@ -54,6 +57,7 @@ export const EditorWindow = () => {
                 <ActivityBar />
                 <Workspace nodeId={rootId} />
             </div>
+            <BottomBar />
         </div>
     );
 }

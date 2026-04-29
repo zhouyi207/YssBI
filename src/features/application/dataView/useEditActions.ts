@@ -22,6 +22,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
   const editingCell = useEditStateStore(s => s.editingCell);
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  const commitInFlightRef = useRef(false);
 
   const currentEditState: EditState = selectedDfId
     ? (editStateByDatabase[selectedDfId] ?? EMPTY_EDIT_STATE)
@@ -42,6 +43,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
 
   const commitEdit = useCallback(async () => {
     if (!selectedDfId || !editingCell) return;
+    if (commitInFlightRef.current) return;
     const { row, col } = editingCell;
     const colName = columns[col]?.name;
     if (!colName) return;
@@ -52,6 +54,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
       return;
     }
     try {
+      commitInFlightRef.current = true;
       let parsed: unknown = editValue;
       if (editValue === '') parsed = null;
       else if (!isNaN(Number(editValue)) && editValue.trim() !== '') parsed = Number(editValue);
@@ -64,6 +67,8 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
       logger.data.error('editCell failed: ' + msg, 'DataViewWindow');
       uiStore.showToast(msg, 'error', 5000);
       editInputRef.current?.focus();
+    } finally {
+      commitInFlightRef.current = false;
     }
   }, [selectedDfId, editingCell, columns, loadedRows, editValue, handleEditResult]);
 
@@ -92,7 +97,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
     try {
       const es = await DatabaseService.resetDatabase(selectedDfId);
       await handleEditResult(es);
-      loadColumnStats(selectedDfId);
+      await loadColumnStats(selectedDfId);
     } catch (e) { logger.data.error('reset failed: ' + String(e), 'DataViewWindow'); }
   }, [selectedDfId, currentEditState.isModified, handleEditResult, loadColumnStats]);
 
@@ -186,7 +191,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-      loadColumnStats(selectedDfId);
+      await loadColumnStats(selectedDfId);
     } catch (e) {
       const msg = String(e);
       const force = await uiStore.confirm({
@@ -201,7 +206,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
           await handleEditResult(es);
           const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
           useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-          loadColumnStats(selectedDfId);
+          await loadColumnStats(selectedDfId);
         } catch (e2) {
           const forceError = String(e2);
           logger.data.error('castColumn force failed: ' + forceError, 'DataViewWindow');

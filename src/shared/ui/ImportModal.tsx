@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload } from "react-icons/vsc";
 import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,8 @@ function TypeOptionButton({
   onSelect: (id: ImportDataSourceType) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <Button
       type="button"
@@ -68,7 +71,7 @@ function TypeOptionButton({
           ? "cursor-default opacity-55"
           : "hover:border-[var(--accent-color)] hover:bg-white/5"
       }`}
-      title={type.comingSoon ? "功能开发中" : undefined}
+      title={type.comingSoon ? t("importModal.comingSoon") : undefined}
     >
       <div
         className={`flex items-center justify-center w-12 h-12 rounded-full ${type.color} transition-transform ${
@@ -79,13 +82,14 @@ function TypeOptionButton({
       </div>
       <span className={`text-[11px] font-bold uppercase tracking-tight ${type.comingSoon ? "text-muted-foreground" : "text-gray-300 group-hover:text-white"}`}>
         {type.label}
-        {type.comingSoon && <Badge variant="outline" className="mt-1 block w-fit">开发中</Badge>}
+        {type.comingSoon && <Badge variant="outline" className="mt-1 block w-fit">{t("importModal.developing")}</Badge>}
       </span>
     </Button>
   );
 }
 
 export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions; onClose: () => void }) => {
+  const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
   const types = CATEGORY_TYPES[selectedCategory];
 
@@ -95,9 +99,9 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
         <DialogHeader className="shrink-0 border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="flex items-center gap-2">
-              <VscDatabase className="text-blue-400" size={18} /> 导入外部数据
+              <VscDatabase className="text-blue-400" size={18} /> {t("importModal.title")}
             </DialogTitle>
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
               <VscClose size={20} />
             </Button>
           </div>
@@ -117,7 +121,7 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cat.color}`}>
                   {cat.icon}
                 </div>
-                <span className="text-[11px] font-medium truncate">{cat.label}</span>
+                <span className="text-[11px] font-medium truncate">{t(`importModal.categories.${cat.id}`)}</span>
               </Button>
             ))}
             </CardContent>

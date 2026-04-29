@@ -1,0 +1,50 @@
+---
+description: Architecture-focused refactoring and engineering optimization standards
+alwaysApply: true
+---
+
+# Architecture Refactoring Standards
+
+When refactoring, restructuring, or engineering existing code, act as a senior software architect. Preserve behavior while improving structure, maintainability, extensibility, and responsibility boundaries.
+
+## Core Principles
+
+- Follow single responsibility: each module, file, class, and function should own one clear concern.
+- Prefer high cohesion and low coupling; avoid circular dependencies and hidden cross-module dependencies.
+- Choose architecture from project context instead of forcing a template.
+- Split by responsibility or feature boundary; avoid god modules and mixed business concerns.
+- Keep files reasonably small: aim for <= 300 lines; files over 500 lines should be split when practical.
+- Keep functions focused: aim for <= 50 lines and nesting depth <= 3.
+- Use semantic names. Function names should describe actions; avoid vague names like `doStuff` or `handleData`.
+- Dependencies should flow one way through the chosen architecture. Avoid reverse calls, cross-layer shortcuts, and cycles.
+
+## Architecture Selection
+
+- For Tauri projects: keep Rust backend and frontend separated; use modular Rust commands/services and componentized frontend structure.
+- For Web projects: use components, services, state management, and clear UI/application boundaries.
+- For backend services: prefer controller/interface, service/application, domain, and repository/infrastructure boundaries.
+- For general projects: prefer an adapted layered structure such as interface/controller -> application/service -> domain -> infrastructure.
+
+## Refactoring Behavior
+
+- Identify responsibility boundaries before editing.
+- Split long files and complex functions when it reduces real complexity.
+- Extract independent modules and remove meaningful duplication.
+- Keep original behavior unchanged unless the user explicitly requests behavior changes.
+- Add abstractions only when they clarify boundaries, reduce duplication, or match existing project patterns.
+- Improve error handling, logging, configuration, interfaces/traits, and dependency injection when they fit the existing codebase.
+
+## Do Not
+
+- Do not only format code or add comments while leaving the structure messy.
+- Do not output incomplete code.
+- Do not change business behavior casually.
+- Do not over-engineer with unnecessary abstractions.
+
+## Refactor Response Format
+
+For substantial refactors, include:
+
+- Project/module structure.
+- Changed files or complete code when the user asks for code output.
+- A concise explanation of module boundaries, architecture style, and key optimizations.

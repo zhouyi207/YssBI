@@ -6,6 +6,7 @@
  */
 export class SingletonManager {
     private static instances = new Map<string, any>();
+    private static pending = new Map<string, Promise<any>>();
     private static refCounts = new Map<string, number>();
 
     /**
@@ -20,11 +21,23 @@ export class SingletonManager {
             return Promise.resolve(this.instances.get(key));
         }
 
-        return factory().then(instance => {
+        if (this.pending.has(key)) {
+            this.incrementRef(key);
+            return this.pending.get(key) as Promise<T>;
+        }
+
+        this.refCounts.set(key, 1);
+        const pending = factory().then(instance => {
             this.instances.set(key, instance);
-            this.refCounts.set(key, 1);
+            this.pending.delete(key);
             return instance;
+        }).catch(error => {
+            this.pending.delete(key);
+            this.refCounts.delete(key);
+            throw error;
         });
+        this.pending.set(key, pending);
+        return pending;
     }
 
     /**
@@ -47,6 +60,7 @@ export class SingletonManager {
                 cleanup(instance);
             }
             this.instances.delete(key);
+            this.pending.delete(key);
             this.refCounts.delete(key);
         } else {
             this.refCounts.set(key, count - 1);

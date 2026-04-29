@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
-import { LogService } from '@/services/log';
 
-interface LogStore {
+export interface LogStore {
   logs: LogMessage[];
   filter: LogFilter;
   total: number;
@@ -13,6 +12,8 @@ interface LogStore {
   addLog: (log: LogMessage) => void;
   setLogs: (logs: LogMessage[]) => void;
   appendLogs: (logs: LogMessage[]) => void;
+  prependLogs: (logs: LogMessage[]) => void;
+  setLogPageState: (state: { total?: number; hasMore?: boolean; loading?: boolean }) => void;
   clearLogs: () => void;
   setSelectedLog: (log: LogMessage | null) => void;
   setFilter: (filter: Partial<LogFilter>) => void;
@@ -20,10 +21,6 @@ interface LogStore {
   toggleType: (type: LogType) => void;
   setSearchText: (text: string) => void;
   getFilteredLogs: () => LogMessage[];
-  
-  loadLogs: (offset: number, limit: number) => Promise<void>;
-  loadMoreLogs: () => Promise<void>;
-  refreshLogs: () => Promise<void>;
 }
 
 const initialFilter: LogFilter = {
@@ -50,6 +47,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
   appendLogs: (logs) => set((state) => ({
     logs: [...state.logs, ...logs],
   })),
+
+  prependLogs: (logs) => set((state) => ({
+    logs: [...logs, ...(Array.isArray(state.logs) ? state.logs : [])],
+  })),
+
+  setLogPageState: (pageState) => set(pageState),
 
   clearLogs: () => set({ logs: [], total: 0, hasMore: false, selectedLog: null }),
 
@@ -101,75 +104,5 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
       return true;
     });
-  },
-  
-  loadLogs: async (offset: number, limit: number) => {
-    set({ loading: true });
-    try {
-      const response = await LogService.getLogs(offset, limit);
-      const fileLogs = LogService.normalizeLogResponse(response);
-      let total = fileLogs.length;
-      let hasMore = fileLogs.length >= limit;
-      try {
-        const count = await LogService.getLogCount();
-        if (typeof count === 'number') {
-          total = count;
-          hasMore = offset + fileLogs.length < total;
-        }
-      } catch {
-        // ignore
-      }
-      set({
-        logs: fileLogs,
-        total,
-        hasMore,
-        loading: false,
-      });
-    } catch (error) {
-      console.error('[LogStore] Failed to load logs:', error);
-      set({ loading: false });
-    }
-  },
-  
-  loadMoreLogs: async () => {
-    const { logs, hasMore, loading } = get();
-    if (!hasMore || loading) return;
-    
-    set({ loading: true });
-    try {
-      const offset = Array.isArray(logs) ? logs.length : 0;
-      const response = await LogService.getLogs(offset, 50);
-      const olderLogs = LogService.normalizeLogResponse(response);
-      let total = offset + olderLogs.length;
-      let hasMoreResult = olderLogs.length >= 50;
-      try {
-        const count = await LogService.getLogCount();
-        if (typeof count === 'number') {
-          total = count;
-          hasMoreResult = offset + olderLogs.length < total;
-        }
-      } catch {
-        // ignore
-      }
-      set((state) => ({
-        logs: [...olderLogs, ...(Array.isArray(state.logs) ? state.logs : [])],
-        total,
-        hasMore: hasMoreResult,
-        loading: false,
-      }));
-    } catch (error) {
-      console.error('[LogStore] Failed to load more logs:', error);
-      set({ loading: false });
-    }
-  },
-  
-  refreshLogs: async () => {
-    try {
-      const count = await LogService.getLogCount();
-      const limit = typeof count === 'number' ? count : 200;
-      await get().loadLogs(0, limit);
-    } catch {
-      await get().loadLogs(0, 200);
-    }
   },
 }));

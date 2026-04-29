@@ -28,3 +28,22 @@ export const useViewportStore = create<ViewportStore>((set) => ({
     };
   }),
 }));
+
+export function getViewport(groupId: string): GraphPosition {
+  return useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+}
+
+export function subscribeToViewport(
+  groupId: string,
+  listener: (viewport: GraphPosition) => void,
+): () => void {
+  let previous = getViewport(groupId);
+
+  return useViewportStore.subscribe((state) => {
+    const next = state.viewports[groupId] || DEFAULT_VIEWPORT;
+    if (next === previous) return;
+
+    previous = next;
+    listener(next);
+  });
+}

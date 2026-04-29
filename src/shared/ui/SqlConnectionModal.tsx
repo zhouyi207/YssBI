@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VscDatabase, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export const SqlConnectionModal = ({
     options: SqlConnectionDialogOptions;
     onClose: () => void;
 }) => {
+    const { t } = useTranslation();
     const { engine, onConnect } = options;
     const [host, setHost] = useState("localhost");
     const [port, setPort] = useState(String(DEFAULT_PORTS[engine]));
@@ -57,7 +59,7 @@ export const SqlConnectionModal = ({
                       database.trim()
                   );
             if (!connStr) {
-                setError("请填写连接信息");
+                setError(t("importModal.connectionRequired"));
                 return;
             }
             onConnect(connStr);
@@ -74,9 +76,9 @@ export const SqlConnectionModal = ({
                 <DialogHeader className="border-b border-border bg-muted/20">
                     <div className="flex items-center justify-between gap-4">
                         <DialogTitle className="flex items-center gap-2">
-                            <VscDatabase className="text-blue-400" size={18} /> 连接 {label}
+                            <VscDatabase className="text-blue-400" size={18} /> {t("importModal.connectTo", { name: label })}
                         </DialogTitle>
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
                         <VscClose size={20} />
                         </Button>
                     </div>
@@ -85,16 +87,16 @@ export const SqlConnectionModal = ({
                 <div className="p-6 space-y-4">
                     <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/20 p-1">
                         <Button type="button" variant={!useRaw ? "secondary" : "ghost"} size="sm" onClick={() => setUseRaw(false)}>
-                            表单配置
+                            {t("importModal.formConfig")}
                         </Button>
                         <Button type="button" variant={useRaw ? "secondary" : "ghost"} size="sm" onClick={() => setUseRaw(true)}>
-                            连接字符串
+                            {t("importModal.connectionString")}
                         </Button>
                     </div>
 
                     {useRaw ? (
                         <div className="space-y-1.5">
-                            <Label>连接字符串</Label>
+                            <Label>{t("importModal.connectionString")}</Label>
                             <Input
                                 type="text"
                                 value={rawUrl}
@@ -110,7 +112,7 @@ export const SqlConnectionModal = ({
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <Label>主机</Label>
+                                    <Label>{t("importModal.host")}</Label>
                                     <Input
                                         type="text"
                                         value={host}
@@ -119,7 +121,7 @@ export const SqlConnectionModal = ({
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>端口</Label>
+                                    <Label>{t("importModal.port")}</Label>
                                     <Input
                                         type="number"
                                         value={port}
@@ -128,7 +130,7 @@ export const SqlConnectionModal = ({
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <Label>用户名</Label>
+                                <Label>{t("importModal.username")}</Label>
                                 <Input
                                     type="text"
                                     value={user}
@@ -136,7 +138,7 @@ export const SqlConnectionModal = ({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label>密码</Label>
+                                <Label>{t("importModal.password")}</Label>
                                 <Input
                                     type="password"
                                     value={password}
@@ -144,7 +146,7 @@ export const SqlConnectionModal = ({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label>数据库</Label>
+                                <Label>{t("importModal.database")}</Label>
                                 <Input
                                     type="text"
                                     value={database}
@@ -159,10 +161,10 @@ export const SqlConnectionModal = ({
 
                 <DialogFooter>
                     <Button type="button" onClick={onClose} variant="ghost" size="lg">
-                        取消
+                        {t("common.cancel")}
                     </Button>
                     <Button type="submit" size="lg">
-                        连接
+                        {t("importModal.connect")}
                     </Button>
                 </DialogFooter>
                 </form>

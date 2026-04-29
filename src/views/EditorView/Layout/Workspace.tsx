@@ -3,6 +3,8 @@ import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { useModifierKeyStore } from "@/features/core/keyboard";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DropIndicator } from "../Renderer/DropIndicator";
 import { SidebarDragOverlay } from "./SidebarDragOverlay";
 import { LayoutNode } from "@/shared/types/ui";
@@ -15,7 +17,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
   const setActiveDrag = useSidebarDragStore(s => s.setActiveDrag);
   const updatePosition = useSidebarDragStore(s => s.updatePosition);
 
-  const pointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
 
   const [dropState, setDropState] = useState<{ visible: boolean; position: any; type?: 'dock' | 'merge' }>({
     visible: false, position: {}, type: 'dock'
@@ -31,9 +33,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
   useEffect(() => {
     return () => {
-      if (pointerMoveRef.current) {
-        document.removeEventListener("pointermove", pointerMoveRef.current);
-      }
+      pointerMoveCleanupRef.current?.();
+      pointerMoveCleanupRef.current = null;
     };
   }, []);
 
@@ -46,8 +47,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       const y = activatorEvent?.clientY ?? 0;
       setActiveDrag({ type: activeData.type, template: activeData.template, x, y });
       const onMove = (e: PointerEvent) => updatePosition(e.clientX, e.clientY);
-      pointerMoveRef.current = onMove;
-      document.addEventListener("pointermove", onMove);
+      pointerMoveCleanupRef.current?.();
+      pointerMoveCleanupRef.current = addGlobalEventListener(document, "pointermove", onMove);
     }
   };
 
@@ -122,10 +123,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const activeData = active.data.current as any;
 
     if (activeData?.type === "node-template") {
-      if (pointerMoveRef.current) {
-        document.removeEventListener("pointermove", pointerMoveRef.current);
-        pointerMoveRef.current = null;
-      }
+      pointerMoveCleanupRef.current?.();
+      pointerMoveCleanupRef.current = null;
       const dragState = useSidebarDragStore.getState().activeDrag;
       setActiveDrag(null);
       const overId = typeof over?.id === "string" ? over.id : "";
@@ -138,10 +137,10 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
         const handler = canvasDropHandlerStore.getHandler(groupId);
         if (handler) {
-          const win = window as Window & { _lastAltKey?: boolean; _lastCtrlKey?: boolean };
+          const modifierKeys = useModifierKeyStore.getState();
           handler(dragState, {
-            altKey: win._lastAltKey ?? (event.activatorEvent as PointerEvent)?.altKey ?? false,
-            ctrlKey: win._lastCtrlKey ?? (event.activatorEvent as PointerEvent)?.ctrlKey ?? false,
+            altKey: modifierKeys.altKey || (event.activatorEvent as PointerEvent)?.altKey || false,
+            ctrlKey: modifierKeys.ctrlKey || (event.activatorEvent as PointerEvent)?.ctrlKey || false,
           });
         }
       }

@@ -32,7 +32,6 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     groups: state.groups,
     setSelectedNodeIds: actions.setSelectedNodeIds,
     setNodes: actions.setNodes,
-    setCanvas: actions.setCanvas,
     enabled: withCanvasInteraction,
   });
 
@@ -50,7 +49,6 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     setPendingConnection: actions.setPendingConnection,
 
     // Canvas interaction
-    onCanvasWheel: canvasInteraction.onCanvasWheel,
     onCanvasPointerDown: canvasInteraction.onCanvasPointerDown,
     onNodePointerDown: canvasInteraction.onNodePointerDown,
     onPinPointerDown: canvasInteraction.onPinPointerDown,

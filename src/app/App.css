@@ -129,6 +129,13 @@ body.layout-sash-dragging canvas {
   pointer-events: none;
 }
 
+[data-node-id][data-selection-preview="true"] {
+  border-color: var(--accent-color) !important;
+  outline: 2px solid color-mix(in oklab, var(--accent-color) 50%, transparent);
+  outline-offset: 0;
+  z-index: 30 !important;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Inter Variable', sans-serif;
@@ -216,4 +223,46 @@ body.layout-sash-dragging canvas {
   html {
     @apply font-sans;
   }
+}
+
+/* Light mode compatibility for legacy dark-editor utility classes.
+   New UI should use shadcn tokens directly; these rules keep older result and plot
+   surfaces readable when the app is switched to the shadcn light theme. */
+:root:not(.dark) .text-white,
+:root:not(.dark) .text-gray-200,
+:root:not(.dark) .text-gray-300 {
+  color: var(--foreground) !important;
+}
+
+:root:not(.dark) .text-gray-400,
+:root:not(.dark) .text-gray-500,
+:root:not(.dark) .text-gray-600 {
+  color: var(--muted-foreground) !important;
+}
+
+:root:not(.dark) .bg-\[var\(--accent-color\)\] .text-white,
+:root:not(.dark) .hover\:text-white:hover {
+  color: white !important;
+}
+
+:root:not(.dark) [class*="bg-[#13151a]"],
+:root:not(.dark) [class*="bg-[#15171d]"],
+:root:not(.dark) [class*="bg-[#1a1d23]"],
+:root:not(.dark) [class*="bg-[#1e2028]"] {
+  background-color: var(--card) !important;
+}
+
+:root:not(.dark) [class*="bg-gray-800/20"],
+:root:not(.dark) [class*="bg-gray-800/50"] {
+  background-color: var(--muted) !important;
+}
+
+:root:not(.dark) [class*="border-gray-700"],
+:root:not(.dark) [class*="border-gray-800"] {
+  border-color: var(--border) !important;
+}
+
+:root:not(.dark) .hover\:bg-white\/5:hover,
+:root:not(.dark) .hover\:bg-white\/10:hover {
+  background-color: var(--muted) !important;
 }

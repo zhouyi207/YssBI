@@ -1,137 +1,17 @@
-use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
-use crate::database::database_schema::polars_dtype_to_raw_string;
-use crate::project::{unique_name, ProjectState};
+use crate::project::ProjectState;
 use crate::schema::DatabaseEngineDTO;
-use chrono::{DateTime, Datelike, NaiveDate};
-use polars::prelude::*;
-use serde::Serialize;
-use std::path::Path;
 use tauri::State;
-use uuid::Uuid;
 
-/// load_database 返回给前端的数据结构
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct LoadDatabaseResult {
-    id: String,
-    name: String,
-    row_count: usize,
-    column_count: usize,
-    columns: Vec<ColumnInfo>,
-}
+mod types;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ColumnInfo {
-    name: String,
-    #[serde(rename = "type")]
-    dtype: String,
-}
-
-/// 从路径提取文件名（不含扩展名）
-fn name_from_path(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unnamed")
-        .to_string()
-}
+use types::polars_value_to_json;
 
 #[tauri::command]
 pub fn load_database(
     state: State<ProjectState>,
     engine: DatabaseEngineDTO,
 ) -> Result<serde_json::Value, String> {
-    let engine_domain = crate::database::DatabaseEngine::try_from(engine.clone())
-        .map_err(|e| format!("Invalid engine config: {}", e))?;
-
-    let mut lazy_frame = engine_domain
-        .build_lazy()
-        .map_err(|e| format!("Failed to build lazy frame: {}", e))?;
-
-    let schema = lazy_frame
-        .collect_schema()
-        .map_err(|e| format!("Failed to collect schema: {}", e))?;
-
-    let columns: Vec<ColumnInfo> = schema
-        .iter_names()
-        .filter_map(|name| {
-            schema.get(name).map(|dt| ColumnInfo {
-                name: name.to_string(),
-                dtype: polars_dtype_to_raw_string(dt),
-            })
-        })
-        .collect();
-
-    let column_count = columns.len();
-
-    let row_count = {
-        let count_df = lazy_frame
-            .clone()
-            .select([len()])
-            .collect()
-            .map_err(|e| format!("Failed to get row count: {}", e))?;
-        count_df
-            .columns()
-            .first()
-            .and_then(|s| s.u32().ok())
-            .and_then(|ca| ca.get(0))
-            .map(|v| v as usize)
-            .unwrap_or(0)
-    };
-
-    let id = format!("db-{}", Uuid::new_v4());
-    let base_name = match &engine {
-        DatabaseEngineDTO::Csv { path, .. } => name_from_path(path),
-        DatabaseEngineDTO::Parquet { path, .. } => name_from_path(path),
-        DatabaseEngineDTO::Sql { table, .. } => table.clone(),
-        DatabaseEngineDTO::Excel { sheet, .. } => sheet.clone(),
-        _ => id.clone(),
-    };
-
-    let name = {
-        let store = state.project_store.read().unwrap();
-        let existing: Vec<String> = store
-            .databases
-            .values()
-            .map(|db| {
-                match &db.decl.engine {
-                    DatabaseEngine::Csv { path, .. } | DatabaseEngine::Parquet { path, .. } => {
-                        name_from_path(path)
-                    }
-                    DatabaseEngine::Sql { table, .. } => table.clone(),
-                    DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
-                    DatabaseEngine::InMemory { name } => name.clone(),
-                    _ => db.decl.id.clone(),
-                }
-            })
-            .collect();
-        unique_name::unique_name(&base_name, existing.iter().map(|s| s.as_str()))
-    };
-
-    let decl = DatabaseDecl {
-        id: id.clone(),
-        engine: engine_domain,
-        schema_version: 1,
-        required: false,
-        name: Some(name.clone()),
-    };
-
-    let instance = DatabaseInstance {
-        decl: decl.clone(),
-        state: DatabaseState::Lazy { lazy_frame },
-    };
-
-    state.add_database(instance);
-
-    let result = LoadDatabaseResult {
-        id: id.clone(),
-        name,
-        row_count,
-        column_count,
-        columns,
-    };
-
+    let result = crate::application::database::load_database(state.inner(), engine)?;
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
@@ -167,66 +47,8 @@ pub fn get_database_meta(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Preview)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
-
-    let df = &view.dataframe;
-    let schema = df.schema();
-    let columns: Vec<ColumnInfo> = schema
-        .iter_names()
-        .filter_map(|name| {
-            schema.get(name).map(|dt| ColumnInfo {
-                name: name.to_string(),
-                dtype: polars_dtype_to_raw_string(dt),
-            })
-        })
-        .collect();
-
-    let (name, row_count) = {
-        let store = state.project_store.read().unwrap();
-        let db = store.databases.get(&id).ok_or("Database not found")?;
-        let name = db.decl.name.clone().unwrap_or_else(|| {
-            match &db.decl.engine {
-                crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
-                crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
-                crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
-                crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
-                crate::database::DatabaseEngine::InMemory { name } => name.clone(),
-                _ => id.clone(),
-            }
-        });
-        let row_count = match &db.state {
-            crate::database::DatabaseState::Loaded { dataframe, .. } => dataframe.height(),
-            crate::database::DatabaseState::Lazy { lazy_frame } => {
-                let lf = lazy_frame.clone();
-                drop(store);
-                let count_df = lf
-                    .select([len()])
-                    .collect()
-                    .map_err(|e| format!("Failed to get row count: {}", e))?;
-                count_df
-                    .columns()
-                    .first()
-                    .and_then(|s| s.u32().ok())
-                    .and_then(|ca| ca.get(0))
-                    .map(|v| v as usize)
-                    .unwrap_or(0)
-            }
-            crate::database::DatabaseState::Failed { .. } => 0,
-        };
-        (name, row_count)
-    };
-
-    let result = serde_json::json!({
-        "id": id,
-        "name": name,
-        "rowCount": row_count,
-        "columnCount": columns.len(),
-        "columns": columns,
-    });
-
-    Ok(result)
+    let result = crate::application::database::get_database_meta(state.inner(), &id)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -280,7 +102,7 @@ pub fn get_column_stats(
         .access_database(&id, crate::database::DatabaseAccess::Execution)
         .map_err(|e| format!("Failed to access database: {}", e))?;
 
-    let stats = yss_sci::database::compute_all_column_stats(&view.dataframe);
+    let stats = yss_sci::api::database::compute_all_column_stats(&view.dataframe);
 
     serde_json::to_value(stats).map_err(|e| e.to_string())
 }
@@ -294,7 +116,7 @@ pub fn get_column_distribution(
         .access_database(&id, crate::database::DatabaseAccess::Execution)
         .map_err(|e| format!("Failed to access database: {}", e))?;
 
-    let dists = yss_sci::database::compute_all_column_distributions(&view.dataframe);
+    let dists = yss_sci::api::database::compute_all_column_distributions(&view.dataframe);
 
     serde_json::to_value(dists).map_err(|e| e.to_string())
 }
@@ -308,7 +130,7 @@ pub fn get_dataset_overview(
         .access_database(&id, crate::database::DatabaseAccess::Execution)
         .map_err(|e| format!("Failed to access database: {}", e))?;
 
-    let overview = yss_sci::database::compute_dataset_overview(&view.dataframe);
+    let overview = yss_sci::api::database::compute_dataset_overview(&view.dataframe);
 
     serde_json::to_value(overview).map_err(|e| e.to_string())
 }
@@ -450,7 +272,7 @@ pub fn export_database(
         .map_err(|e| format!("Failed to access database: {}", e))?;
 
     let mut df = view.dataframe;
-    yss_sci::database::export_dataframe(&mut df, &path, &format)
+    yss_sci::api::database::export_dataframe(&mut df, &path, &format)
 }
 
 #[tauri::command]
@@ -465,53 +287,3 @@ pub fn get_edit_state(
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
-fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
-    use polars::prelude::{AnyValue, TimeUnit};
-    match v {
-        AnyValue::Null => serde_json::Value::Null,
-        AnyValue::Boolean(b) => serde_json::Value::Bool(b),
-        AnyValue::String(s) => serde_json::Value::String(s.to_string()),
-        AnyValue::Int64(i) => serde_json::Number::from_f64(i as f64)
-            .map(serde_json::Value::Number)
-            .unwrap_or_else(|| serde_json::Value::String(i.to_string())),
-        AnyValue::UInt64(u) => serde_json::Number::from_f64(u as f64)
-            .map(serde_json::Value::Number)
-            .unwrap_or_else(|| serde_json::Value::String(u.to_string())),
-        AnyValue::Float64(f) => serde_json::Number::from_f64(f)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        AnyValue::Date(days) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
-            NaiveDate::from_num_days_from_ce_opt(epoch + days as i32)
-                .map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
-                .unwrap_or_else(|| serde_json::Value::String(days.to_string()))
-        }
-        AnyValue::Datetime(ts, unit, _) | AnyValue::DatetimeOwned(ts, unit, _) => {
-            let (secs, nsecs) = match unit {
-                TimeUnit::Nanoseconds => ((ts / 1_000_000_000) as i64, (ts % 1_000_000_000) as u32),
-                TimeUnit::Microseconds => ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32),
-                TimeUnit::Milliseconds => ((ts / 1000) as i64, ((ts % 1000) * 1_000_000) as u32),
-            };
-            DateTime::from_timestamp(secs, nsecs)
-                .map(|dt| {
-                    let s = dt.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
-                    let s = s.trim_end_matches('0').trim_end_matches('.');
-                    serde_json::Value::String(s.to_string())
-                })
-                .unwrap_or_else(|| serde_json::Value::String(ts.to_string()))
-        }
-        AnyValue::Time(ns) => {
-            let secs = (ns / 1_000_000_000) as u32;
-            let h = secs / 3600;
-            let m = (secs % 3600) / 60;
-            let s = secs % 60;
-            serde_json::Value::String(format!("{:02}:{:02}:{:02}", h, m, s))
-        }
-        AnyValue::Duration(ns, _) => serde_json::Value::String(ns.to_string()),
-        AnyValue::Categorical(_, _) | AnyValue::CategoricalOwned(_, _)
-        | AnyValue::Enum(_, _) | AnyValue::EnumOwned(_, _) => {
-            serde_json::Value::String(format!("{}", v))
-        }
-        _ => serde_json::Value::String(format!("{}", v)),
-    }
-}

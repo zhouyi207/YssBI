@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
@@ -10,7 +11,6 @@ import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { HUD } from "./HUD";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
 import {
   VscDebugStart,
@@ -21,6 +21,35 @@ import {
   VscRunAll,
 } from "react-icons/vsc";
 
+function SelectionRegion({
+    groupId,
+    canvasRef,
+}: {
+    groupId: string;
+    canvasRef: React.RefObject<HTMLDivElement | null>;
+}) {
+    const gesture = useGestureStore((state) => {
+        const current = state.gesture;
+        return current?.type === "select" ? current : null;
+    });
+
+    if (gesture?.groupId !== groupId || !canvasRef.current) return null;
+
+    const canvasBounds = canvasRef.current.getBoundingClientRect();
+
+    return (
+        <div
+            className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
+            style={{
+                left: Math.min(gesture.startX, gesture.currentX) - canvasBounds.left,
+                top: Math.min(gesture.startY, gesture.currentY) - canvasBounds.top,
+                width: Math.abs(gesture.startX - gesture.currentX),
+                height: Math.abs(gesture.startY - gesture.currentY),
+            }}
+        />
+    );
+}
+
 export default function CanvasOverlays({
     canvasRef,
     variableDropMenu,
@@ -30,6 +59,7 @@ export default function CanvasOverlays({
     variableDropMenu: any;
     setVariableDropMenu: (val: any) => void;
 }) {
+    const { t } = useTranslation();
     const {
         contextMenu,
         setContextMenu,
@@ -47,8 +77,6 @@ export default function CanvasOverlays({
     } = useEditorGroup();
 
     const { createNode } = useNodeManagement();
-
-    const gesture = useGestureStore((state) => state.gesture);
 
     const {
         handleNodePaletteSelect,
@@ -84,18 +112,16 @@ export default function CanvasOverlays({
 
     return (
         <>
-            <HUD />
-
             {isEventTab && (
                 <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
-                    {/* Debug — 预留，始终禁用 */}
+                    {/* Debug placeholder */}
                     <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled
                         className="text-[var(--text-secondary)] opacity-40"
-                        title="调试（即将推出）"
+                        title={t("canvas.debugComingSoon")}
                     >
                         <VscDebugStart size={14} />
                     </Button>
@@ -116,9 +142,9 @@ export default function CanvasOverlays({
                                     : 'text-[var(--text-secondary)] opacity-40 cursor-not-allowed'
                             }
                             title={
-                                graphDirty ? "图结构已更改，无法回放" :
-                                !hasRecording ? "无录制数据" :
-                                "回放执行"
+                                graphDirty ? t("canvas.replayDisabledDirty") :
+                                !hasRecording ? t("canvas.replayNoRecording") :
+                                t("canvas.replayExecution")
                             }
                         >
                             <VscDebugRestart size={14} />
@@ -135,7 +161,7 @@ export default function CanvasOverlays({
                                         ? 'text-amber-400'
                                         : 'text-blue-400'
                                 }
-                                title={isPlaying ? "暂停回放" : "继续回放"}
+                                title={isPlaying ? t("canvas.pauseReplay") : t("canvas.resumeReplay")}
                             >
                                 {isPlaying ? <VscDebugPause size={14} /> : <VscPlay size={14} />}
                             </Button>
@@ -145,7 +171,7 @@ export default function CanvasOverlays({
                                 size="sm"
                                 onClick={stop}
                                 className="text-red-400"
-                                title="停止回放"
+                                title={t("canvas.stopReplay")}
                             >
                                 <VscDebugStop size={14} />
                             </Button>
@@ -166,7 +192,7 @@ export default function CanvasOverlays({
                                 ? 'text-green-400 opacity-60 cursor-not-allowed'
                                 : 'text-green-400 hover:text-green-300'
                         }
-                        title={isThisGraphRunning ? "执行中…" : "执行当前 Event"}
+                        title={isThisGraphRunning ? t("canvas.executing") : t("canvas.executeCurrentEvent")}
                     >
                         <VscRunAll size={14} />
                     </Button>
@@ -174,21 +200,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Selection Box ================= */}
-            {gesture?.type === 'select' && gesture?.groupId === groupId && canvasRef.current && (
-                <div
-                    className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
-                    style={{
-                        left:
-                            Math.min(gesture.startX, gesture.currentX) -
-                            canvasRef.current.getBoundingClientRect().left,
-                        top:
-                            Math.min(gesture.startY, gesture.currentY) -
-                            canvasRef.current.getBoundingClientRect().top,
-                        width: Math.abs(gesture.startX - gesture.currentX),
-                        height: Math.abs(gesture.startY - gesture.currentY),
-                    }}
-                />
-            )}
+            <SelectionRegion groupId={groupId} canvasRef={canvasRef} />
 
             {/* ================= Node Palette ================= */}
             {activeGroupId === groupId && contextMenu?.visible && createPortal(
@@ -220,7 +232,7 @@ export default function CanvasOverlays({
                         onClick={() => handleVariableDropGet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-blue-400" />
-                        Get {variableDropMenu.variableName}
+                        {t("canvas.getVariable", { name: variableDropMenu.variableName })}
                     </Button>
                     <Separator />
                     <Button
@@ -230,7 +242,7 @@ export default function CanvasOverlays({
                         onClick={() => handleVariableDropSet(variableDropMenu)}
                     >
                         <div className="w-2 h-2 rounded-full bg-orange-400" />
-                        Set {variableDropMenu.variableName}
+                        {t("canvas.setVariable", { name: variableDropMenu.variableName })}
                     </Button>
                 </Card>,
                 document.body

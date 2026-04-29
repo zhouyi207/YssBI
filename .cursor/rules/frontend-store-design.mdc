@@ -1,0 +1,23 @@
+---
+description: Frontend Zustand store subscription and runtime state design rules
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Store Design
+
+- 组件订阅 Zustand store 时必须传入 selector，只订阅当前渲染真正需要的字段或 action。
+- 不要在组件中解构整个 store，例如 `const { a, b } = useXxxStore()`。
+- 事件监听、拖拽状态、键盘修饰键等跨组件运行时状态应放在明确的 store 或服务模块中，不挂到 `window`。
+- Store 按领域划分：编辑器、布局、数据、日志、视口、拖拽等；不要为单个临时布尔值随意新增全局 store。
+- Store action 保持小而稳定，复杂流程放到 application hook 或 service 中。
+- 新增或修改 `window` / `document` 监听器时，统一通过 `src/shared/utils/globalEvent.ts` 的 `addGlobalEventListener` 注册，避免清理逻辑分散。
+
+```ts
+// ✅ GOOD
+const activeTabId = useLayoutStore((s) => s.nodes[groupId]?.data?.activeTabId);
+const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
+
+// ❌ BAD
+const { nodes, setActiveGroup } = useLayoutStore();
+```

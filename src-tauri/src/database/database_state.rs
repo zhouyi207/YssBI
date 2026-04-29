@@ -1,6 +1,6 @@
 use polars::prelude::*;
 use std::sync::Arc;
-use yss_sci::database::EditHistory;
+use yss_sci::api::database::EditHistory;
 
 pub enum DatabaseState {
     Lazy { lazy_frame: LazyFrame },

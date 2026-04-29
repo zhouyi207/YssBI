@@ -1,0 +1,191 @@
+import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useTranslation } from "react-i18next";
+import {
+  VscCircleFilled,
+  VscFile,
+  VscGitPullRequest,
+  VscGraph,
+  VscRadioTower,
+  VscSymbolEvent,
+  VscSymbolMethod,
+  VscZoomIn,
+} from "react-icons/vsc";
+import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
+import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
+import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { getViewport, subscribeToViewport } from "@/features/core/viewport";
+import { LoadStatus } from "@/shared/types/ui";
+import { cn } from "@/lib/utils";
+
+function fileNameFromPath(path: string | null) {
+  if (!path) return null;
+  return path.replace(/\\/g, "/").split("/").pop() || path;
+}
+
+function executionLabel(status: string, t: (key: string) => string) {
+  switch (status) {
+    case "running":
+      return t("common.running");
+    case "completed":
+      return t("common.completed");
+    case "error":
+      return t("common.error");
+    default:
+      return t("common.idle");
+  }
+}
+
+function projectStatusLabel(status: LoadStatus, error: string | null, t: (key: string) => string) {
+  if (status === LoadStatus.Error) return error ? `${t("common.error")}: ${error}` : t("bottomBar.projectError");
+  if (status === LoadStatus.Loading) return t("bottomBar.loadingProject");
+  if (status === LoadStatus.Ready) return t("common.ready");
+  return t("common.idle");
+}
+
+const StatusItem = ({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("flex h-full items-center gap-1.5 px-2", className)} {...props}>
+    {children}
+  </div>
+);
+
+function formatViewportStatus(groupId: string) {
+  const viewport = getViewport(groupId);
+  return `X ${Math.round(viewport.x)} Y ${Math.round(viewport.y)} ${Math.round(viewport.scale * 100)}%`;
+}
+
+function ViewportStatus({ groupId }: { groupId: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const update = () => {
+      if (ref.current) ref.current.textContent = formatViewportStatus(groupId);
+    };
+
+    update();
+    return subscribeToViewport(groupId, update);
+  }, [groupId]);
+
+  return <span ref={ref}>{formatViewportStatus(groupId)}</span>;
+}
+
+export function BottomBar() {
+  const { t } = useTranslation();
+  const editor = useLayoutStore(
+    useShallow((state) => {
+      const groupId = state.activeEditorGroupId ?? state.activeGroupId ?? "default_editor";
+      const node = state.nodes[groupId];
+      const activeTabId = node?.data?.activeTabId ?? null;
+      const activeTab = node?.data?.tabs?.find((tab) => tab.id === activeTabId) ?? null;
+      const selectedNodeIds = node?.data?.params?.selectedNodeIds;
+
+      return {
+        groupId,
+        activeTabId,
+        activeTitle: activeTab?.title ?? t("bottomBar.noActiveGraph"),
+        activeType: activeTab?.type ?? null,
+        selectedCount: Array.isArray(selectedNodeIds) ? selectedNodeIds.length : 0,
+      };
+    }),
+  );
+
+  const graphStats = useGraphDataStore(
+    useShallow((state) => {
+      if (!editor.activeTabId) return { nodeCount: 0, connectionCount: 0 };
+
+      const nodeIds = state.graphNodes[editor.activeTabId] ?? [];
+      const connectionIds = new Set<string>();
+      for (const nodeId of nodeIds) {
+        for (const pinId of state.nodePins[nodeId] ?? []) {
+          for (const connectionId of state.pinConnections[pinId] ?? []) {
+            connectionIds.add(connectionId);
+          }
+        }
+      }
+
+      return {
+        nodeCount: nodeIds.length,
+        connectionCount: connectionIds.size,
+      };
+    }),
+  );
+
+  const project = useProjectIOStore(
+    useShallow((state) => ({
+      status: state.status,
+      error: state.error,
+      fileName: fileNameFromPath(state.currentPath) ?? t("bottomBar.untitledProject"),
+    })),
+  );
+  const executionStatus = useExecutionStore((state) =>
+    editor.activeTabId ? state.graphs[editor.activeTabId]?.status ?? "idle" : "idle",
+  );
+  const themeMode = useSettingsStore((state) => state.theme.mode);
+
+  const typeIcon =
+    editor.activeType === "event" ? <VscSymbolEvent size={13} /> :
+    editor.activeType === "function" ? <VscSymbolMethod size={13} /> :
+    <VscGraph size={13} />;
+
+  return (
+    <footer className="flex h-6 shrink-0 items-center justify-between overflow-hidden bg-[var(--accent-color)] text-[11px] font-medium text-white shadow-[0_-1px_0_rgba(0,0,0,0.12)]">
+      <div className="flex h-full min-w-0 items-center">
+        <StatusItem className="bg-black/10">
+          <VscGitPullRequest size={13} />
+          <span>{projectStatusLabel(project.status, project.error, t)}</span>
+        </StatusItem>
+        <StatusItem className="min-w-0">
+          <VscFile size={13} className="shrink-0" />
+          <span className="truncate">{project.fileName}</span>
+        </StatusItem>
+        <StatusItem className="min-w-0 border-l border-white/15">
+          {typeIcon}
+          <span className="truncate">{editor.activeTitle}</span>
+        </StatusItem>
+      </div>
+
+      <div className="flex h-full shrink-0 items-center">
+        <StatusItem title={t("bottomBar.nodeCount")}>
+          <VscGraph size={13} />
+          <span>{t("bottomBar.nodes", { count: graphStats.nodeCount })}</span>
+        </StatusItem>
+        <StatusItem title={t("bottomBar.connectionCount")}>
+          <VscRadioTower size={13} />
+          <span>{t("bottomBar.links", { count: graphStats.connectionCount })}</span>
+        </StatusItem>
+        <StatusItem title={t("bottomBar.selectedNodes")}>
+          <VscCircleFilled size={9} />
+          <span>{t("bottomBar.selected", { count: editor.selectedCount })}</span>
+        </StatusItem>
+        <StatusItem title={t("bottomBar.executionStatus")}>
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              executionStatus === "running" && "animate-pulse bg-yellow-200",
+              executionStatus === "completed" && "bg-emerald-200",
+              executionStatus === "error" && "bg-red-200",
+              executionStatus !== "running" &&
+                executionStatus !== "completed" &&
+                executionStatus !== "error" &&
+                "bg-white/70",
+            )}
+          />
+          <span>{executionLabel(executionStatus, t)}</span>
+        </StatusItem>
+        <StatusItem title={t("bottomBar.canvasViewport")}>
+          <VscZoomIn size={13} />
+          <ViewportStatus groupId={editor.groupId} />
+        </StatusItem>
+        <StatusItem title={t("bottomBar.themeMode")} className="capitalize">
+          {themeMode}
+        </StatusItem>
+      </div>
+    </footer>
+  );
+}

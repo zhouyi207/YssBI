@@ -143,4 +143,13 @@ fn panel_re_mle_lin() {
         let se = result.stds.get(i).copied().unwrap_or(0.0);
         writeln!(out, "  {}: {:.6} (se={:.6})", name, b, se).ok();
     }
+
+    assert!((result.log_likelihood.unwrap() - 334.64947).abs() < 1e-3);
+    assert!((result.lr_chi2.unwrap() - 964.50).abs() < 1e-2);
+    let fe_stats = result.fe_stats.as_ref().expect("RE MLE sigma stats");
+    assert!((fe_stats.sigma.sigma_u - 0.2166).abs() < 1e-3);
+    assert!((fe_stats.sigma.sigma_e - 0.1056).abs() < 1e-3);
+    assert_eq!(result.num_observation, n);
+    assert_eq!(result.num_entities, n_entities);
+    assert_eq!(result.betas.len(), 10);
 }

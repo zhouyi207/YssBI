@@ -79,6 +79,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     handleChange,
     handleBlur,
     handleKeyDown,
+    cancelBlurCommit,
     savePinValue,
   } = usePinInput({
     pinId,
@@ -151,6 +152,10 @@ export const PinInput: React.FC<PinInputProps> = ({
           onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => {
+            if (cancelBlurCommit()) {
+              setInputText(String(initialValue ?? 0));
+              return;
+            }
             const parsed = parseInt(inputText, 10);
             const final = isNaN(parsed) ? 0 : parsed;
             handleChange(final);
@@ -187,6 +192,10 @@ export const PinInput: React.FC<PinInputProps> = ({
           onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => {
+            if (cancelBlurCommit()) {
+              setInputText(String(initialValue ?? 0));
+              return;
+            }
             const parsed = parseFloat(inputText);
             const final = isNaN(parsed) ? 0 : parsed;
             handleChange(final);

@@ -134,7 +134,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphId})`);
 
       const recording: RecordedEvent[] = [];
-      const { applyEvent, setRecording, startExecution } = useExecutionStore.getState();
+      const { applyEvent, completeExecution, setRecording, startExecution } = useExecutionStore.getState();
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
@@ -147,6 +147,9 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       }, graphId);
 
       setRecording(graphId, recording);
+      if (useExecutionStore.getState().graphs[graphId]?.status === 'running') {
+        completeExecution(graphId);
+      }
 
       if (res.logs.length > 0) {
         logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
@@ -156,8 +159,15 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     } catch (e) {
       logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
       uiStore.showToast(`执行失败: ${e}`, "error", 5000);
+      const graphId = targetGraphId ?? (() => {
+        const layoutStore = useLayoutStore.getState();
+        const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+        const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
+        return editorNode?.data?.activeTabId as string | undefined;
+      })();
+      if (graphId) useExecutionStore.getState().failExecution(graphId);
     }
-  }, [syncActiveToCollection]);
+  }, [handleOpenWindow, syncActiveToCollection]);
 
   return {
     saveGraph,

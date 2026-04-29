@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useExecutionStore } from './useExecutionStore';
 
 const DELAYS: Record<string, number> = {
@@ -36,6 +36,7 @@ export function useExecutionPlayback(graphId: string) {
       if (pausedRef.current) return;
       const idx = indexRef.current;
       if (idx >= rec.length) {
+        clearTimer();
         setPlaying(false);
         return;
       }
@@ -47,13 +48,14 @@ export function useExecutionPlayback(graphId: string) {
     };
 
     step();
-  }, [graphId]);
+  }, [graphId, clearTimer]);
 
   const play = useCallback(() => {
     const store = useExecutionStore.getState();
     const rec = store.graphs[graphId]?.recording ?? [];
     if (rec.length === 0) return;
 
+    clearTimer();
     store.resetGraphVisuals(graphId);
     store.setPlaying(true, graphId);
     setIsPaused(false);
@@ -61,7 +63,7 @@ export function useExecutionPlayback(graphId: string) {
     indexRef.current = 0;
 
     scheduleSteps(rec);
-  }, [graphId, scheduleSteps]);
+  }, [graphId, scheduleSteps, clearTimer]);
 
   const pause = useCallback(() => {
     pausedRef.current = true;
@@ -85,6 +87,16 @@ export function useExecutionPlayback(graphId: string) {
     setIsPaused(false);
     clearTimer();
     useExecutionStore.getState().resetGraphVisuals(graphId);
+  }, [graphId, clearTimer]);
+
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      const store = useExecutionStore.getState();
+      if (store.playbackGraphId === graphId) {
+        store.setPlaying(false);
+      }
+    };
   }, [graphId, clearTimer]);
 
   const togglePlayPause = useCallback(() => {

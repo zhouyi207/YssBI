@@ -12,6 +12,16 @@ interface PendingAction {
     name: string;
 }
 
+function toGraphMetaPatch(data: Partial<Graph>) {
+  const patch: { name?: string; type?: 'event' | 'function'; entryNodeId?: string } = {};
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.type === 'event' || data.type === 'function') patch.type = data.type;
+  if ((data as Graph & { entryNodeId?: string }).entryNodeId !== undefined) {
+    patch.entryNodeId = (data as Graph & { entryNodeId?: string }).entryNodeId;
+  }
+  return patch;
+}
+
 /**
  * Graph Management Hook
  * 
@@ -123,7 +133,7 @@ export function useGraphManagement(
     
     try {
       await GraphService.updateEvent(id, fullData as any);
-      useGraphMetaStore.getState().updateGraph(id, data as any);
+      useGraphMetaStore.getState().updateGraph(id, toGraphMetaPatch(data));
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
@@ -213,7 +223,7 @@ export function useGraphManagement(
     
     try {
       await GraphService.updateFunction(id, fullData as any);
-      useGraphMetaStore.getState().updateGraph(id, data as any);
+      useGraphMetaStore.getState().updateGraph(id, toGraphMetaPatch(data));
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }

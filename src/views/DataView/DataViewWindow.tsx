@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
@@ -11,8 +12,19 @@ import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
 import { RightPanel } from './Stats';
 import { logger } from '@/utils/appLogger';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+
+function getDatabaseIdFromUrl(): string | null {
+  const searchValue = new URLSearchParams(window.location.search).get('database');
+  if (searchValue) return searchValue;
+
+  const hashQueryIndex = window.location.hash.indexOf('?');
+  if (hashQueryIndex < 0) return null;
+  return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1)).get('database');
+}
 
 export const DataViewWindow: React.FC = () => {
+  const { t } = useTranslation();
   const dataframes = useDatabaseStore(s => s.databases);
   const statsByDatabase = useColumnStatsStore(s => s.statsByDatabase);
   const distByDatabase = useColumnDistributionStore(s => s.distByDatabase);
@@ -75,8 +87,7 @@ export const DataViewWindow: React.FC = () => {
       dataLoader.setLoadedRows([]);
       return;
     }
-    const params = new URLSearchParams(window.location.search);
-    const dbFromUrl = params.get('database');
+    const dbFromUrl = getDatabaseIdFromUrl();
     const preferred = dbFromUrl && dataframes[dbFromUrl] ? dbFromUrl : ids[0];
     if (!selectedDfId || !dataframes[selectedDfId]) setSelectedDfId(preferred);
   }, [dataframes, selectedDfId]);
@@ -98,14 +109,18 @@ export const DataViewWindow: React.FC = () => {
     const df = dataframes[selectedDfId] as Record<string, unknown> | undefined;
     if (!df) return;
     if (df.name && Array.isArray(df.columns) && df.columns.length > 0) return;
+    let cancelled = false;
+    const id = selectedDfId;
     DatabaseService.getDatabaseMeta(selectedDfId)
       .then((meta) => {
-        useDatabaseStore.getState().updateDatabase(selectedDfId, {
+        if (cancelled || id !== selectedDfId) return;
+        useDatabaseStore.getState().updateDatabase(id, {
           name: meta.name, columns: meta.columns,
           rowCount: meta.rowCount, columnCount: meta.columnCount,
         });
       })
       .catch((e) => logger.data.warn('getDatabaseMeta failed: ' + String(e), 'DataViewWindow'));
+    return () => { cancelled = true; };
   }, [selectedDfId, dataframes]);
 
   // Show window on mount
@@ -117,8 +132,7 @@ export const DataViewWindow: React.FC = () => {
   // Dismiss context menu on any click
   useEffect(() => {
     const dismiss = () => setContextMenu(null);
-    window.addEventListener('click', dismiss);
-    return () => window.removeEventListener('click', dismiss);
+    return addGlobalEventListener(window, 'click', dismiss);
   }, []);
 
   // Scroll handler for infinite loading（固定总高度下：当可见行接近已加载末尾时触发加载）
@@ -148,12 +162,12 @@ export const DataViewWindow: React.FC = () => {
   const currentOverview = selectedDfId ? overviewByDatabase[selectedDfId] : undefined;
 
   return (
-    <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-gray-300 overflow-hidden font-sans">
+    <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-[var(--workbench-fg)] overflow-hidden font-sans">
       <TitleBar isModified={edit.currentEditState.isModified} />
 
       <Toolbar
         selectedDfId={selectedDfId}
-        options={dfOptions.length > 0 ? dfOptions : [{ label: 'No DataFrame', value: '' }]}
+        options={dfOptions.length > 0 ? dfOptions : [{ label: t('dataView.noDataFrame'), value: '' }]}
         loading={dataLoader.loading}
         totalRowCount={totalRowCount}
         columnCount={(selectedDf as { columnCount?: number })?.columnCount ?? 0}

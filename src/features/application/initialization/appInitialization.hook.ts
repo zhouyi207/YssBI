@@ -15,7 +15,8 @@ export function useAppInitialization(): InitializationState {
     // 使用 ref 防止重复初始化项目同步
     const hasRestoredProjectRef = useRef(false);
 
-    const { status: schemaStatus, error: schemaError } = useSchemaStore();
+    const schemaStatus = useSchemaStore((s) => s.status);
+    const schemaError = useSchemaStore((s) => s.error);
 
     const isSchemaReady = schemaStatus === LoadStatus.Ready;
 
@@ -64,7 +65,7 @@ export function useAppInitialization(): InitializationState {
         };
 
         syncProject();
-    }, [schemaStatus]);
+    }, [isSchemaReady, schemaError, schemaStatus, state.error]);
 
     return state;
 }

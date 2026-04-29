@@ -10,7 +10,7 @@ import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { getViewport } from '@/features/core/viewport';
 
 /**
  * 从 GraphMetaStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
@@ -27,9 +27,12 @@ export function getGraphById(graphId: string): GraphData | null {
   pins.forEach((p) => {
     (dataState.pinConnections[p?.id] ?? []).forEach((cid) => connIds.add(cid));
   });
-  const connections = Array.from(connIds).map((cid) => dataState.connections[cid]).filter(Boolean);
+  const connections = Array.from(connIds)
+    .map((cid) => dataState.connections[cid])
+    .filter(Boolean)
+    .map((conn) => ({ fromPin: conn.from, toPin: conn.to }));
 
-  return { ...meta, nodes, pins, connections, canvas: { x: 0, y: 0, scale: 1 } };
+  return { ...meta, nodes, pins, connections: { connections }, canvas: getViewport(graphId) };
 }
 
 /**
@@ -104,8 +107,10 @@ export function useGraphData(activeTabId: string | null) {
       ...meta,
       nodes: graphNodes,
       pins: graphPins ?? [],
-      connections: graphConnections ?? [],
-      canvas: DEFAULT_VIEWPORT,
+      connections: {
+        connections: (graphConnections ?? []).map((conn) => ({ fromPin: conn.from, toPin: conn.to })),
+      },
+      canvas: getViewport(activeTabId),
     };
     prevRef.current = result;
     return result;

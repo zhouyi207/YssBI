@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import { useLogActions } from '@/features/application/log';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -16,14 +18,14 @@ import { logger } from '@/utils/appLogger';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-
-const TYPE_LABELS: Record<string, string> = {
-  application: 'APP', execution: 'EXEC', system: 'SYS', graph: 'GRAPH', data: 'DATA',
-};
-const TYPE_BG: Record<string, string> = {
-  application: 'bg-green-500/10', execution: 'bg-purple-500/10', system: 'bg-cyan-500/10',
-  graph: 'bg-orange-500/10', data: 'bg-pink-500/10',
-};
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+import {
+  getLogLevelBackground,
+  getLogLevelColor,
+  getLogTypeColor,
+  LOG_TYPE_BACKGROUND,
+  LOG_TYPE_LABELS,
+} from './logPresentation';
 
 // ─── Log Item Row ───
 
@@ -50,13 +52,13 @@ const LogItem = ({ log, isSelected, onClick, getLevelColor, getLevelBgColor, get
         isSelected ? 'ring-1 ring-[var(--accent-color)] bg-[var(--accent-color)]/10' : 'hover:bg-[var(--sidebar-bg)]'
       }`}
     >
-      <span className="text-gray-500 shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
+      <span className="text-muted-foreground shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
       <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
-      <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${TYPE_BG[log.log_type] ?? 'bg-gray-500/10'}`}>
-        {TYPE_LABELS[log.log_type] ?? log.log_type.toUpperCase()}
+      <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${LOG_TYPE_BACKGROUND[log.log_type] ?? 'bg-gray-500/10'}`}>
+        {LOG_TYPE_LABELS[log.log_type] ?? log.log_type.toUpperCase()}
       </span>
-      {log.source && <span className="text-cyan-400 shrink-0 text-[11px] font-mono opacity-70">[{log.source}]</span>}
-      <span className="text-gray-200 text-[11px] leading-relaxed font-mono flex-1 min-w-0 truncate">{log.message}</span>
+      {log.source && <span className="text-sky-500 shrink-0 text-[11px] font-mono opacity-80">[{log.source}]</span>}
+      <span className="text-foreground text-[11px] leading-relaxed font-mono flex-1 min-w-0 truncate">{log.message}</span>
     </div>
   );
 };
@@ -69,6 +71,7 @@ export interface LogPanelContentProps {
 }
 
 export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPanelContentProps) => {
+  const { t } = useTranslation();
   const logs = useLogStore((s) => s.logs);
   const filter = useLogStore((s) => s.filter);
   const addLog = useLogStore((s) => s.addLog);
@@ -77,14 +80,12 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const toggleType = useLogStore((s) => s.toggleType);
   const setSearchText = useLogStore((s) => s.setSearchText);
   const getFilteredLogs = useLogStore((s) => s.getFilteredLogs);
-  const loadLogs = useLogStore((s) => s.loadLogs);
-  const loadMoreLogs = useLogStore((s) => s.loadMoreLogs);
-  const refreshLogs = useLogStore((s) => s.refreshLogs);
   const loading = useLogStore((s) => s.loading);
   const hasMore = useLogStore((s) => s.hasMore);
   const total = useLogStore((s) => s.total);
   const selectedLog = useLogStore((s) => s.selectedLog);
   const setSelectedLog = useLogStore((s) => s.setSelectedLog);
+  const { loadLogs, loadMoreLogs, refreshLogs } = useLogActions();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -136,8 +137,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       ) return;
       setIsFilterOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return addGlobalEventListener(document, 'mousedown', handleClickOutside);
   }, [isFilterOpen]);
 
   useEffect(() => {
@@ -191,7 +191,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       const label = `logs-${Math.random().toString(36).substring(7)}`;
       const opts: Record<string, unknown> = {
         url: 'index.html#/logs',
-        title: 'Logs',
+        title: t('log.title'),
         width: 1000,
         height: 600,
         decorations: false,
@@ -204,9 +204,9 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
       new WebviewWindow(label, opts);
     } catch (error) {
       logger.app.error('Failed to open logs window: ' + String(error), 'LogPanel');
-      uiStore.showToast('无法打开日志窗口', 'error');
+      uiStore.showToast(t('log.failedOpenWindow'), 'error');
     }
-  }, []);
+  }, [t]);
 
   const dragImageRef = useRef<HTMLDivElement>(null);
   const droppedOnOurWindowRef = useRef(false);
@@ -254,11 +254,11 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
         droppedOnOurWindowRef.current = true;
       }
     };
-    document.addEventListener('dragover', onDragOver);
-    document.addEventListener('drop', onDrop);
+    const cleanupDragOver = addGlobalEventListener(document, 'dragover', onDragOver);
+    const cleanupDrop = addGlobalEventListener(document, 'drop', onDrop);
     return () => {
-      document.removeEventListener('dragover', onDragOver);
-      document.removeEventListener('drop', onDrop);
+      cleanupDragOver();
+      cleanupDrop();
     };
   }, [variant]);
 
@@ -294,41 +294,12 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     overscan: 8,
   });
 
-  const getLevelColor = (level: LogLevel) => {
-    switch (level) {
-      case 'error': return 'text-red-400';
-      case 'warn': return 'text-yellow-400';
-      case 'info': return 'text-blue-400';
-      case 'debug': return 'text-gray-400';
-      case 'trace': return 'text-gray-500';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getLevelBgColor = (level: LogLevel) => {
-    switch (level) {
-      case 'error': return 'bg-red-500/10';
-      case 'warn': return 'bg-yellow-500/10';
-      case 'info': return 'bg-blue-500/10';
-      case 'debug': return 'bg-gray-500/10';
-      case 'trace': return 'bg-gray-600/10';
-      default: return 'bg-gray-500/10';
-    }
-  };
-
-  const getTypeColor = (type: LogType) => {
-    switch (type) {
-      case 'application': return 'text-green-400';
-      case 'execution': return 'text-purple-400';
-      case 'system': return 'text-cyan-400';
-      case 'graph': return 'text-orange-400';
-      case 'data': return 'text-pink-400';
-      default: return 'text-gray-400';
-    }
-  };
+  const getLevelColor = getLogLevelColor;
+  const getLevelBgColor = getLogLevelBackground;
+  const getTypeColor = getLogTypeColor;
 
   return (
-    <div className={`flex flex-col h-full bg-[var(--workbench-bg)] text-white overflow-hidden ${className}`}>
+    <div className={`flex flex-col h-full bg-[var(--workbench-bg)] text-[var(--workbench-fg)] overflow-hidden ${className}`}>
       {/* 拖拽预览图 */}
       {variant === 'embedded' &&
         createPortal(
@@ -337,15 +308,15 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             className="fixed -left-[9999px] -top-[9999px] w-64 rounded-lg border-2 border-[var(--accent-color)]/60 bg-[var(--workbench-bg)] overflow-hidden opacity-95 shadow-2xl pointer-events-none select-none"
             aria-hidden
           >
-            <div className="flex items-center gap-2 px-3 py-2 bg-[var(--sidebar-bg)] border-b border-gray-700">
+            <div className="flex items-center gap-2 px-3 py-2 bg-[var(--sidebar-bg)] border-b border-border">
               <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span className="text-xs font-semibold text-white">Logs</span>
-              <span className="text-[10px] text-gray-400 ml-1">松开创建新窗口</span>
+              <span className="text-xs font-semibold text-foreground">{t("log.title")}</span>
+              <span className="text-[10px] text-muted-foreground ml-1">{t("log.releaseToCreateWindow")}</span>
             </div>
             <div className="h-16 bg-[var(--workbench-bg)] flex items-center justify-center">
-              <span className="text-xs text-gray-500">拖到窗口外释放</span>
+              <span className="text-xs text-muted-foreground">{t("log.dragOutsideToRelease")}</span>
             </div>
           </div>,
           document.body
@@ -353,24 +324,24 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
 
       {/* 工具栏 */}
       <div
-        className={`flex items-center justify-between px-3 py-2 bg-[var(--sidebar-bg)] border-b border-gray-800 shrink-0 ${variant === 'embedded' ? 'select-none cursor-grab active:cursor-grabbing' : ''}`}
+        className={`flex items-center justify-between px-3 py-2 bg-[var(--sidebar-bg)] border-b border-border shrink-0 ${variant === 'embedded' ? 'select-none cursor-grab active:cursor-grabbing' : ''}`}
         {...(variant === 'embedded' && {
           draggable: true,
           onDragStart: handleEmbeddedDragStart,
           onDragEnd: handleEmbeddedDragEnd,
-          title: '拖动到窗口外可打开新窗口',
+          title: t('log.dragToOpenWindow'),
         })}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${loading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 animate-pulse'}`}></div>
-            <span className="text-xs font-medium text-gray-300">
-              {loading ? '加载中...' : '日志监控'}
+            <span className="text-xs font-medium text-foreground">
+              {loading ? t('log.loading') : t('log.monitor')}
             </span>
           </div>
-          <div className="h-4 w-px bg-gray-700"></div>
-          <span className="text-xs text-gray-400">
-            显示 <span className="text-[var(--accent-color)] font-semibold">{filteredLogs.length}</span> / {total} 条
+          <div className="h-4 w-px bg-border"></div>
+          <span className="text-xs text-muted-foreground">
+            {t("log.showCount", { filtered: filteredLogs.length, total })}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
@@ -380,7 +351,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             size="icon-sm"
             onClick={() => refreshLogs()}
             disabled={loading}
-            title="刷新日志"
+            title={t("log.refresh")}
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -392,7 +363,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             size="icon-sm"
             onClick={() => setAutoScroll(!autoScroll)}
             className={autoScroll ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-            title={autoScroll ? '自动滚动已启用' : '自动滚动已禁用'}
+            title={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
           >
             {autoScroll ? <FiChevronDown size={14} /> : <FiChevronUp size={14} />}
           </Button>
@@ -404,7 +375,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
               ref={filterButtonRef}
               onClick={() => setIsFilterOpen(!isFilterOpen)}
               className={isFilterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-              title="过滤器"
+              title={t("log.filter")}
             >
               <FiFilter size={14} />
             </Button>
@@ -417,17 +388,17 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                   onClick={(e) => e.stopPropagation()}
                 >
                 <div className="relative">
-                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
                   <Input
                     type="text"
-                    placeholder="搜索日志内容..."
+                    placeholder={t("log.searchPlaceholder")}
                     value={filter?.searchText ?? ''}
                     onChange={(e) => setSearchText(e.target.value)}
                     className="pl-9"
                   />
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">级别</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{t("log.level")}</div>
                   <div className="flex flex-wrap gap-2">
                     {(['error', 'warn', 'info', 'debug', 'trace'] as LogLevel[]).map((level) => (
                       <Button
@@ -444,7 +415,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">类型</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{t("log.type")}</div>
                   <div className="flex flex-wrap gap-2">
                     {(['application', 'execution', 'system', 'graph', 'data'] as LogType[]).map((type) => (
                       <Button
@@ -455,7 +426,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                         onClick={() => toggleType(type)}
                         className={filter?.types?.has(type) ? `${getTypeColor(type)} border-current` : 'text-muted-foreground'}
                       >
-                        {TYPE_LABELS[type] ?? type}
+                        {LOG_TYPE_LABELS[type] ?? type}
                       </Button>
                     ))}
                   </div>
@@ -469,7 +440,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             variant="destructive"
             size="icon-sm"
             onClick={clearLogs}
-            title="清空日志"
+            title={t("log.clear")}
           >
             <FiTrash2 size={14} />
           </Button>
@@ -478,7 +449,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             variant="ghost"
             size="icon-sm"
             onClick={handleClose}
-            title={variant === 'embedded' ? '关闭日志面板' : '关闭窗口'}
+            title={variant === 'embedded' ? t('log.closePanel') : t('log.closeWindow')}
           >
             <FiX size={14} />
           </Button>
@@ -493,21 +464,21 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
         className="flex-1 min-h-0 bg-[var(--workbench-bg)]"
       >
         {isInitialLoad ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <div className="w-8 h-8 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin"></div>
-            <div className="text-sm">加载日志中...</div>
+            <div className="text-sm">{t("log.loadingLogs")}</div>
           </div>
         ) : (filteredLogs?.length ?? 0) === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <svg className="w-16 h-16 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <div className="text-center">
               <div className="text-sm font-medium mb-1">
-                {safeLogs.length === 0 ? '暂无日志' : '没有匹配的日志'}
+                {safeLogs.length === 0 ? t('log.noLogs') : t('log.noMatches')}
               </div>
               <div className="text-xs opacity-60">
-                {safeLogs.length === 0 ? '执行图后将显示日志' : '尝试调整过滤条件'}
+                {safeLogs.length === 0 ? t('log.runGraphHint') : t('log.adjustFilterHint')}
               </div>
             </div>
           </div>
@@ -516,7 +487,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             {loading && (
               <div className="absolute top-0 left-0 right-0 z-10 py-2 text-center text-xs text-[var(--accent-color)] flex items-center justify-center gap-2 bg-[var(--workbench-bg)]/95 pointer-events-none">
                 <div className="w-3 h-3 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin"></div>
-                加载中...
+                {t("log.loading")}
               </div>
             )}
             <div className="relative px-3 py-1">

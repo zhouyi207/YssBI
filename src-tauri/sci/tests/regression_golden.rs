@@ -370,3 +370,51 @@ fn test_wls_golden() {
     assert!(approx_eq(nt.jarque_bera_stat, 0.6777110971285353, TOL, TOL_REL), "jarque_bera_stat: got {}", nt.jarque_bera_stat);
     assert!(approx_eq(nt.jarque_bera_p_value, 0.7125853756356614, TOL, TOL_REL), "jarque_bera_p_value: got {}", nt.jarque_bera_p_value);
 }
+
+#[test]
+fn test_diagnostics_direct_helpers() {
+    let (exog, endog, _weights) = load_iris();
+    let ols = OLS {
+        endog: endog.clone(),
+        exog: exog.clone(),
+        config: OLSConfig {
+            constant: true,
+            cov_type: "nonrobust".to_string(),
+            cov_params: None,
+        },
+    };
+    let o = ols.fit().unwrap();
+    let fitted: Array1<f64> = exog
+        .rows()
+        .into_iter()
+        .map(|row| row.iter().zip(o.betas.iter()).map(|(x, b)| x * b).sum())
+        .collect();
+    let resid = &endog - &fitted;
+
+    let white = diagnostics::white_test(&exog, &resid).unwrap();
+    assert_eq!(white.df, 9);
+    assert!(white.lm_stat > 0.0);
+    assert!((0.0..=1.0).contains(&white.p_value));
+
+    let reset = diagnostics::reset_test(&endog, &exog, &fitted, None).unwrap();
+    assert_eq!(reset.df1, 3);
+    assert_eq!(reset.df2, 143);
+    assert!(reset.f_stat.is_finite());
+    assert!((0.0..=1.0).contains(&reset.p_value));
+
+    let reset_rhs = diagnostics::reset_test_rhs(&endog, &exog, None).unwrap();
+    assert_eq!(reset_rhs.df1, 9);
+    assert_eq!(reset_rhs.df2, 137);
+    assert!(reset_rhs.f_stat.is_finite());
+    assert!((0.0..=1.0).contains(&reset_rhs.p_value));
+
+    let vif = diagnostics::vif_centered(&exog, true).unwrap();
+    assert_eq!(vif.len(), 4);
+    assert!(vif[0].vif.is_nan());
+    assert!(vif.iter().skip(1).all(|entry| entry.vif >= 1.0 || entry.vif.is_infinite()));
+
+    let leverage = diagnostics::leverage(&exog).unwrap();
+    assert_eq!(leverage.len(), exog.nrows());
+    assert!(leverage.iter().all(|v| *v >= 0.0 && *v <= 1.0));
+    assert!(approx_eq(leverage.iter().sum::<f64>(), exog.ncols() as f64, 1e-8, 1e-8));
+}

@@ -6,6 +6,7 @@ import { triggerImportData } from "@/features/application/dataManagement/useData
 import { SettingsService } from "@/services/settings/settingsService";
 import { DEFAULT_WINDOW } from "@/app/appConfig/default";
 import { uiStore } from "@/features/core/ui/UIStore";
+import { i18n } from "@/app/i18n";
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -104,7 +105,7 @@ export function useMenubar() {
       });
     } catch (error) {
       logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
-      uiStore.showToast("无法打开数据视图窗口", "error");
+      uiStore.showToast(i18n.t("dataView.failedOpenWindow"), "error");
     }
   }, []);
 

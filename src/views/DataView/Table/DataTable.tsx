@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { VscDatabase } from 'react-icons/vsc';
 import type { ColumnMeta, CellPos, SelectionRange } from '@/features/application/dataView';
@@ -59,6 +60,7 @@ export const DataTable: React.FC<DataTableProps> = ({
   editValue, editInputRef, onEditValueChange, onStartEdit, onCommitEdit, onCancelEdit,
   onContextMenu, onCastColumn, onScroll,
 }) => {
+  const { t } = useTranslation();
   const headerRef = useRef<HTMLTableSectionElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
@@ -93,7 +95,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       <div className="flex-1 min-h-0 min-w-0 flex flex-col items-center justify-center gap-4 bg-[var(--workbench-bg)]">
         <VscDatabase className="text-gray-500/60" size={48} />
         <span className="text-sm font-medium tracking-widest uppercase text-gray-500/70">
-          {loading ? 'Loading project data...' : 'No DataFrame Selected'}
+          {loading ? t('dataView.loadingProjectData') : t('dataView.noDataFrameSelected')}
         </span>
       </div>
     );

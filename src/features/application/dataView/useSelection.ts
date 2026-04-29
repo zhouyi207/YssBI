@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 export interface CellPos { row: number; col: number; }
 export interface SelectionRange { anchor: CellPos; end: CellPos; }
@@ -57,8 +58,7 @@ export function useSelection({ columnCount, rowCount, isEditing }: UseSelectionP
   useEffect(() => {
     if (!isDragging) return;
     const up = () => setIsDragging(false);
-    window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
+    return addGlobalEventListener(window, 'mouseup', up);
   }, [isDragging]);
 
   const handleRowHeaderClick = useCallback((row: number, e: React.MouseEvent) => {

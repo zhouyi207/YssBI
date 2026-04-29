@@ -30,7 +30,6 @@ export function useEditorOperations() {
 
   const activeTabIdRef = useRef(activeTabId);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
-  const canvasRef = useRef(useViewportStore.getState().viewports[activeGroupId || ''] || DEFAULT_VIEWPORT);
 
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
@@ -138,7 +137,8 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
-    const vp = canvasRef.current;
+    const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || activeGroupId || '';
+    const vp = useViewportStore.getState().viewports[gid] || DEFAULT_VIEWPORT;
     const tX = pos ? pos.x : -vp.x / vp.scale + 100;
     const tY = pos ? pos.y : -vp.y / vp.scale + 100;
     const minX = Math.min(...clipboard.entries.map(e => e.position.x));
@@ -159,7 +159,7 @@ export function useEditorOperations() {
       logger.graph.error(`Failed to paste nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [clipboard]);
+  }, [activeGroupId, clipboard]);
 
   const deleteSelected = useCallback(async () => {
     const sIds = new Set(selectedNodeIdsRef.current);
@@ -186,9 +186,9 @@ export function useEditorOperations() {
     }
   }, [setSelectedNodeIds]);
 
-  const cut = useCallback(() => {
+  const cut = useCallback(async () => {
     copy();
-    deleteSelected();
+    await deleteSelected();
   }, [copy, deleteSelected]);
 
   const canUndo = useHistoryStore((s) => {

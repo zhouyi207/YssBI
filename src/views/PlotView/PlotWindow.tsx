@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
 import { logger } from '@/utils/appLogger';
@@ -58,6 +59,7 @@ function getPlotTypeFromHash(): string {
  * 用于显示数据可视化图表（散点图等）
  */
 export const PlotWindow: React.FC = () => {
+  const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [scatterEcdfData, setScatterEcdfData] = useState<ScatterEcdfData | null>(null);
@@ -149,13 +151,14 @@ export const PlotWindow: React.FC = () => {
           }
         });
         if (mounted) cleanup = () => unlisten();
+        else unlisten();
 
         logger.sys.debug('Plot window initialized successfully', 'PlotWindow');
       } catch (e) {
         logger.sys.error('Failed to initialize plot window: ' + String(e), 'PlotWindow');
         if (mounted) {
           setIsReady(true);
-          setError('Failed to initialize window');
+          setError(t('plot.failedInitialize'));
         }
       }
     };
@@ -200,7 +203,7 @@ export const PlotWindow: React.FC = () => {
   if (!isReady) {
     return (
       <div className="flex items-center justify-center w-full h-screen bg-[var(--workbench-bg)] text-gray-400">
-        正在初始化...
+        {t('common.initializing')}
       </div>
     );
   }
@@ -216,7 +219,7 @@ export const PlotWindow: React.FC = () => {
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
-          <span className="text-white font-bold text-sm tracking-tight">Plot</span>
+          <span className="text-foreground font-bold text-sm tracking-tight">{t('plot.title')}</span>
         </div>
 
         {/* 窗口控制按钮 */}
@@ -227,7 +230,7 @@ export const PlotWindow: React.FC = () => {
             size="icon-lg"
             onClick={handleMinimize}
             className="h-10 rounded-none text-muted-foreground"
-            title="最小化"
+            title={t('common.minimize')}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -239,7 +242,7 @@ export const PlotWindow: React.FC = () => {
             size="icon-lg"
             onClick={handleMaximize}
             className="h-10 rounded-none text-muted-foreground"
-            title={isMaximized ? '还原' : '最大化'}
+            title={isMaximized ? t('common.restore') : t('common.maximize')}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
@@ -251,7 +254,7 @@ export const PlotWindow: React.FC = () => {
             size="icon-lg"
             onClick={handleClose}
             className="h-10 w-12 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white"
-            title="关闭"
+            title={t('common.close')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -340,8 +343,8 @@ export const PlotWindow: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold mb-2 text-white">Plot 窗口已就绪</h2>
-            <p className="mb-4 text-gray-400">从 Scatter、Line、ECDF、KDE、Histogram 或 Correlation Plot 节点执行后将在此显示图表</p>
+            <h2 className="text-2xl font-bold mb-2 text-foreground">{t('plot.readyTitle')}</h2>
+            <p className="mb-4 text-muted-foreground">{t('plot.readyHint')}</p>
           </div>
         )}
       </div>

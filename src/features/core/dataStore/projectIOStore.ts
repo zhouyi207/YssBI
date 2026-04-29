@@ -11,6 +11,7 @@ import { useDatabaseStore } from './databaseStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
 import { useHistoryStore } from '@/features/core/history';
+import { getViewport } from '@/features/core/viewport';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -81,6 +82,47 @@ function normalizeVariables(
     result[id] = normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
   return result;
+}
+
+function buildGraphSnapshot(): ProjectData['graphs'] {
+  const metaStore = useGraphMetaStore.getState();
+  const dataStore = useGraphDataStore.getState();
+
+  return Object.fromEntries(
+    metaStore.graphOrder
+      .map((graphId) => {
+        const meta = metaStore.graphs[graphId];
+        if (!meta) return null;
+
+        const nodeIds = dataStore.graphNodes[graphId] ?? [];
+        const nodes = nodeIds.map((nodeId) => dataStore.nodes[nodeId]).filter(Boolean);
+        const pins = nodeIds.flatMap((nodeId) =>
+          (dataStore.nodePins[nodeId] ?? []).map((pinId) => dataStore.pins[pinId]).filter(Boolean)
+        );
+        const connectionIds = new Set<string>();
+        for (const pin of pins) {
+          for (const connectionId of dataStore.pinConnections[pin.id] ?? []) {
+            connectionIds.add(connectionId);
+          }
+        }
+        const connections = Array.from(connectionIds)
+          .map((connectionId) => dataStore.connections[connectionId])
+          .filter(Boolean)
+          .map((connection) => ({ fromPin: connection.from, toPin: connection.to }));
+
+        return [
+          graphId,
+          {
+            ...meta,
+            nodes,
+            pins,
+            connections: { connections },
+            canvas: getViewport(graphId),
+          },
+        ] as [string, ProjectData['graphs'][string]];
+      })
+      .filter((entry): entry is [string, ProjectData['graphs'][string]] => entry !== null)
+  ) as ProjectData['graphs'];
 }
 
 export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
@@ -162,7 +204,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     return {
       variables: useVariableStore.getState().variables,
       databases: useDatabaseStore.getState().databases,
-      graphs: useGraphMetaStore.getState().graphs, // 图概览
+      graphs: buildGraphSnapshot(),
       metadata: {
         exportTime: new Date().toISOString(),
         appVersion: '1.0.0',

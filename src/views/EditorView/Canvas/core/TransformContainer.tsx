@@ -1,14 +1,12 @@
 ﻿import { useRef, useEffect } from "react";
-import { useViewportStore } from "@/features/core/viewport";
-import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
+import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 
 export const TransformContainer = ({ groupId, children }: { groupId: string, children: React.ReactNode }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         // 零 React 重绘：平移缩放时直接操作 transform，跳过 Virtual DOM Diff
-        return useViewportStore.subscribe(state => {
-            const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
+        return subscribeToViewport(groupId, (canvas) => {
             const el = containerRef.current;
             if (el) {
                 // 使用 translate3d 触发 GPU 加速，确保 CSS 格式正确
@@ -17,7 +15,7 @@ export const TransformContainer = ({ groupId, children }: { groupId: string, chi
         });
     }, [groupId]);
 
-    const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+    const initial = getViewport(groupId);
     return (
         <div
             ref={containerRef}

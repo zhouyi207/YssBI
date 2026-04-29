@@ -1,5 +1,6 @@
 import "@/utils/appLogger";
 import "./App.css";
+import "./i18n";
 
 import React, { Suspense } from "react";
 import { HashRouter, Route, Routes } from "react-router";

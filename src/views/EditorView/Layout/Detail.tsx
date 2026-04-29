@@ -89,12 +89,12 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       message: `Are you sure you want to delete ${selectedItemType} '${selectedData.name}'?`,
       type: "danger",
       confirmText: "Delete",
-      onConfirm: () => {
-        if (selectedItemType === 'variable') deleteVariable(selectedItemId);
-        else if (selectedItemType === 'event') deleteEvent(selectedItemId);
-        else if (selectedItemType === 'function') deleteFunction(selectedItemId);
-        else if (selectedItemType === 'data') deleteDataFrame(selectedItemId);
-        setSelectedInfo(null, null);
+      onConfirm: async () => {
+        if (selectedItemType === 'variable') await deleteVariable(selectedItemId);
+        else if (selectedItemType === 'event') await deleteEvent(selectedItemId);
+        else if (selectedItemType === 'function') await deleteFunction(selectedItemId);
+        else if (selectedItemType === 'data') await deleteDataFrame(selectedItemId);
+        if (selectedItemType !== 'data') setSelectedInfo(null, null);
       }
     });
   };

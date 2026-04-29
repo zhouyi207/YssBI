@@ -31,15 +31,30 @@ export const DEFAULT_DARK_THEME: ThemeSettings = {
 export const DEFAULT_LIGHT_THEME: ThemeSettings = {
     ...DEFAULT_DARK_THEME,
     mode: "light",
-    workbenchBackground: "#f6f7f9",
-    sidebarBackground: "#ffffff",
-    gridLines: "#e4e7ec",
+    workbenchBackground: "#ffffff",
+    sidebarBackground: "#f8fafc",
+    accentColor: "#2563eb",
+    gridLines: "#e5e7eb",
     nodeBase: "#ffffff",
-    connectionLines: "#667085",
+    connectionLines: "#64748b",
     selectionRegion: "#2563eb",
     execColor: "#111827",
-    objectColor: "#4b5563",
-    anyColor: "#6b7280",
+    int32Color: "#0f766e",
+    int64Color: "#0e7490",
+    float32Color: "#4d7c0f",
+    float64Color: "#3f6212",
+    boolColor: "#b91c1c",
+    stringColor: "#a16207",
+    dateColor: "#7e22ce",
+    datetimeColor: "#7e22ce",
+    categoricalColor: "#047857",
+    dataframeColor: "#1d4ed8",
+    dataseriesColor: "#0369a1",
+    objectColor: "#475569",
+    anyColor: "#64748b",
+    oneofColor: "#2563eb",
+    arrayColor: "#c2410c",
+    structColor: "#7c3aed",
 };
 
 export const DEFAULT_THEME: ThemeSettings = DEFAULT_DARK_THEME;
@@ -53,6 +68,7 @@ export const DEFAULT_EDITOR: EditorSettings = {
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
     colorTheme: "Dark Modern (Default)",
+    language: "zh-CN",
     activityBarPosition: "Left",
     smoothScroll: true,
 };

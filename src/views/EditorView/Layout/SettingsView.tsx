@@ -1,12 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { i18n, type AppLanguage } from "@/app/i18n";
 
 export const SettingsView: React.FC = () => {
+    const { t } = useTranslation();
     const theme = useSettingsStore((s) => s.theme);
     const editor = useSettingsStore((s) => s.editor);
     const appearance = useSettingsStore((s) => s.appearance);
@@ -16,6 +19,7 @@ export const SettingsView: React.FC = () => {
     const updateEditor = useSettingsStore((s) => s.updateEditor);
     const updateAppearance = useSettingsStore((s) => s.updateAppearance);
     const updateProject = useSettingsStore((s) => s.updateProject);
+    const saveDebounced = useSettingsStore((s) => s.saveDebounced);
     const resetAllToDefaults = useSettingsStore((s) => s.resetAllToDefaults);
     const resetThemeToDefaults = useSettingsStore((s) => s.resetThemeToDefaults);
     const resetEditorToDefaults = useSettingsStore((s) => s.resetEditorToDefaults);
@@ -23,29 +27,59 @@ export const SettingsView: React.FC = () => {
 
     const [activeSection, setActiveSection] = useState("editor");
     const [isResetting, setIsResetting] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const sections = [
-        { id: "editor", label: "Editor" },
-        { id: "project", label: "Project" },
-        { id: "appearance", label: "Appearance" },
-        { id: "color", label: "Color" }
+        { id: "editor", label: t("settings.sections.editor") },
+        { id: "project", label: t("settings.sections.project") },
+        { id: "appearance", label: t("settings.sections.appearance") },
+        { id: "color", label: t("settings.sections.color") }
+    ];
+
+    const visibleSections = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return sections;
+        return sections.filter((section) => section.label.toLowerCase().includes(query));
+    }, [sections, searchQuery]);
+
+    useEffect(() => {
+        if (visibleSections.length > 0 && !visibleSections.some((section) => section.id === activeSection)) {
+            setActiveSection(visibleSections[0].id);
+        }
+    }, [activeSection, visibleSections]);
+
+    const languageOptions = [
+        { label: t("language.zhCN"), value: "zh-CN" },
+        { label: t("language.enUS"), value: "en-US" },
+    ];
+
+    const themeOptions = [
+        { label: t("settings.options.darkModern"), value: "Dark Modern (Default)" },
+        { label: t("settings.options.oledBlack"), value: "OLED Black" },
+        { label: t("settings.options.lightModern"), value: "Light Modern" },
+    ];
+
+    const activityBarOptions = [
+        { label: t("settings.options.left"), value: "Left" },
+        { label: t("settings.options.right"), value: "Right" },
+        { label: t("settings.options.hidden"), value: "Hidden" },
     ];
 
     const handleResetAll = async () => {
         const confirmed = await uiStore.confirm({
-            title: "恢复所有默认设置",
-            message: "确定要恢复所有默认设置吗？此操作不可撤销。",
+            title: t("settings.confirmResetAllTitle"),
+            message: t("settings.confirmResetAllMessage"),
             type: "danger",
-            confirmText: "恢复默认",
+            confirmText: t("common.restoreDefaults"),
         });
         if (!confirmed) return;
 
         setIsResetting(true);
         try {
             await resetAllToDefaults();
-            uiStore.showToast("已恢复所有默认设置", "success");
+            uiStore.showToast(t("settings.restoredAll"), "success");
         } catch (error) {
-            uiStore.showToast(`恢复默认设置失败: ${String(error)}`, "error");
+            uiStore.showToast(t("settings.restoreAllFailed", { error: String(error) }), "error");
         } finally {
             setIsResetting(false);
         }
@@ -53,17 +87,17 @@ export const SettingsView: React.FC = () => {
 
     const handleResetSection = async (section: string) => {
         const sectionNames: Record<string, string> = {
-            editor: "编辑器",
-            appearance: "外观",
-            color: "颜色/主题",
+            editor: t("settings.sections.editor"),
+            appearance: t("settings.sections.appearance"),
+            color: t("settings.sections.color"),
         };
 
         const sectionName = sectionNames[section] || section;
         const confirmed = await uiStore.confirm({
-            title: "恢复默认设置",
-            message: `确定要恢复${sectionName}的默认设置吗？`,
+            title: t("settings.confirmResetTitle"),
+            message: t("settings.confirmResetMessage", { section: sectionName }),
             type: "danger",
-            confirmText: "恢复默认",
+            confirmText: t("common.restoreDefaults"),
         });
         if (!confirmed) return;
 
@@ -80,9 +114,9 @@ export const SettingsView: React.FC = () => {
                     await resetThemeToDefaults();
                     break;
             }
-            uiStore.showToast(`已恢复${sectionName}默认设置`, "success");
+            uiStore.showToast(t("settings.restoredSection", { section: sectionName }), "success");
         } catch (error) {
-            uiStore.showToast(`恢复${sectionName}默认设置失败: ${String(error)}`, "error");
+            uiStore.showToast(t("settings.restoreSectionFailed", { section: sectionName, error: String(error) }), "error");
         } finally {
             setIsResetting(false);
         }
@@ -91,7 +125,7 @@ export const SettingsView: React.FC = () => {
     if (isLoading) {
         return (
             <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex items-center justify-center">
-                <div className="text-sm text-muted-foreground">加载设置中...</div>
+                <div className="text-sm text-muted-foreground">{t("settings.loading")}</div>
             </div>
         );
     }
@@ -103,7 +137,7 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-foreground">Editor</h2>
+                                <h2 className="text-xl text-foreground">{t("settings.sections.editor")}</h2>
                                 <Button
                                     type="button"
                                     variant="secondary"
@@ -111,34 +145,34 @@ export const SettingsView: React.FC = () => {
                                     onClick={() => handleResetSection("editor")}
                                     disabled={isResetting}
                                 >
-                                    恢复默认
+                                    {t("common.restoreDefaults")}
                                 </Button>
                             </div>
                             <div className="space-y-6">
                                 <SettingItem
-                                    label="Show Grid"
-                                    description="Controls whether the background grid is visible."
+                                    label={t("settings.labels.showGrid")}
+                                    description={t("settings.descriptions.showGrid")}
                                     type="checkbox"
                                     checked={editor.showGrid}
                                     onChange={(val) => updateEditor({ showGrid: val === "true" || val === true })}
                                 />
                                 <SettingItem
-                                    label="Auto Save"
-                                    description="Controls whether changed files are saved automatically after a delay."
+                                    label={t("settings.labels.autoSave")}
+                                    description={t("settings.descriptions.autoSave")}
                                     type="checkbox"
                                     checked={editor.autoSave}
                                     onChange={(val) => updateEditor({ autoSave: val === "true" || val === true })}
                                 />
                                 <SettingItem
-                                    label="Snap to Grid"
-                                    description="Controls whether nodes should snap to the grid corners when dragged."
+                                    label={t("settings.labels.snapToGrid")}
+                                    description={t("settings.descriptions.snapToGrid")}
                                     type="checkbox"
                                     checked={editor.snapToGrid}
                                     onChange={(val) => updateEditor({ snapToGrid: val === "true" || val === true })}
                                 />
                                 <SettingItem
-                                    label="Font Size"
-                                    description="Controls the font size in pixels for node titles and labels."
+                                    label={t("settings.labels.fontSize")}
+                                    description={t("settings.descriptions.fontSize")}
                                     type="number"
                                     value={String(editor.fontSize)}
                                     onChange={(val) => updateEditor({ fontSize: parseInt(val as string) || 12 })}
@@ -151,25 +185,25 @@ export const SettingsView: React.FC = () => {
                 return (
                     <div className="space-y-8">
                         <div>
-                            <h2 className="text-xl text-foreground mb-6">Project</h2>
+                            <h2 className="text-xl text-foreground mb-6">{t("settings.sections.project")}</h2>
                             <div className="space-y-6">
                                 <SettingItem
-                                    label="Project Name"
-                                    description="The name displayed in the title bar and used for exports."
+                                    label={t("settings.labels.projectName")}
+                                    description={t("settings.descriptions.projectName")}
                                     type="text"
                                     value={project.projectName}
                                     onChange={(val) => updateProject({ projectName: val as string })}
                                 />
                                 <SettingItem
-                                    label="Project Version"
-                                    description="The version of the project. This is managed by the system."
+                                    label={t("settings.labels.projectVersion")}
+                                    description={t("settings.descriptions.projectVersion")}
                                     type="text"
                                     defaultValue="1.0.0"
                                     disabled
                                 />
                                 <SettingItem
-                                    label="Export Path"
-                                    description="Default directory where the project will be exported."
+                                    label={t("settings.labels.exportPath")}
+                                    description={t("settings.descriptions.exportPath")}
                                     type="text"
                                     value={project.exportPath}
                                     onChange={(val) => updateProject({ exportPath: val as string })}
@@ -184,7 +218,7 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-foreground">Appearance</h2>
+                                <h2 className="text-xl text-foreground">{t("settings.sections.appearance")}</h2>
                                 <Button
                                     type="button"
                                     variant="secondary"
@@ -192,29 +226,42 @@ export const SettingsView: React.FC = () => {
                                     onClick={() => handleResetSection("appearance")}
                                     disabled={isResetting}
                                 >
-                                    恢复默认
+                                    {t("common.restoreDefaults")}
                                 </Button>
                             </div>
                             <div className="space-y-6">
                                 <SettingItem
-                                    label="Color Theme"
-                                    description="Controls the overall color theme of the editor."
+                                    label={t("settings.labels.colorTheme")}
+                                    description={t("settings.descriptions.colorTheme")}
                                     type="select"
-                                    options={["Dark Modern (Default)", "OLED Black", "Light Modern"]}
+                                    options={themeOptions}
                                     value={appearance.colorTheme}
                                     onChange={(val) => updateAppearance({ colorTheme: val as string })}
                                 />
                                 <SettingItem
-                                    label="Activity Bar Position"
-                                    description="Controls the visibility and position of the activity bar."
+                                    label={t("settings.labels.language")}
+                                    description={t("settings.descriptions.language")}
                                     type="select"
-                                    options={["Left", "Right", "Hidden"]}
+                                    options={languageOptions}
+                                    value={appearance.language}
+                                    onChange={(val) => {
+                                        const language = val as AppLanguage;
+                                        updateAppearance({ language });
+                                        void i18n.changeLanguage(language);
+                                        saveDebounced();
+                                    }}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.activityBarPosition")}
+                                    description={t("settings.descriptions.activityBarPosition")}
+                                    type="select"
+                                    options={activityBarOptions}
                                     value={appearance.activityBarPosition}
                                     onChange={(val) => updateAppearance({ activityBarPosition: val as string })}
                                 />
                                 <SettingItem
-                                    label="Smooth Scroll"
-                                    description="Enable smooth scrolling in the canvas and menus."
+                                    label={t("settings.labels.smoothScroll")}
+                                    description={t("settings.descriptions.smoothScroll")}
                                     type="checkbox"
                                     checked={appearance.smoothScroll}
                                     onChange={(val) => updateAppearance({ smoothScroll: val === "true" || val === true })}
@@ -228,7 +275,7 @@ export const SettingsView: React.FC = () => {
                     <div className="space-y-8">
                         <div>
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl text-foreground">Colors</h2>
+                                <h2 className="text-xl text-foreground">{t("settings.sections.color")}</h2>
                                 <Button
                                     type="button"
                                     variant="secondary"
@@ -236,30 +283,30 @@ export const SettingsView: React.FC = () => {
                                     onClick={() => handleResetSection("color")}
                                     disabled={isResetting}
                                 >
-                                    恢复默认
+                                    {t("common.restoreDefaults")}
                                 </Button>
                             </div>
 
                             <div className="mb-8">
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">Editor UI</h3>
+                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.editorUi")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
-                                        label="Workbench Background"
-                                        description="The primary background color of the editor environment."
+                                        label={t("settings.labels.workbenchBackground")}
+                                        description={t("settings.descriptions.workbenchBackground")}
                                         type="color"
                                         value={theme.workbenchBackground}
                                         onChange={(val: string) => updateTheme({ workbenchBackground: val })}
                                     />
                                     <SettingItem
-                                        label="Sidebar Background"
-                                        description="Background color for sidebars and headers."
+                                        label={t("settings.labels.sidebarBackground")}
+                                        description={t("settings.descriptions.sidebarBackground")}
                                         type="color"
                                         value={theme.sidebarBackground}
                                         onChange={(val: string) => updateTheme({ sidebarBackground: val })}
                                     />
                                     <SettingItem
-                                        label="Accent Color"
-                                        description="The primary color used for selections and active highlights."
+                                        label={t("settings.labels.accentColor")}
+                                        description={t("settings.descriptions.accentColor")}
                                         type="color"
                                         value={theme.accentColor}
                                         onChange={(val: string) => updateTheme({ accentColor: val })}
@@ -268,32 +315,32 @@ export const SettingsView: React.FC = () => {
                             </div>
 
                             <div>
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">Canvas Elements</h3>
+                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.canvasElements")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
-                                        label="Grid Lines"
-                                        description="The color of the background grid in the graph editor."
+                                        label={t("settings.labels.gridLines")}
+                                        description={t("settings.descriptions.gridLines")}
                                         type="color"
                                         value={theme.gridLines}
                                         onChange={(val: string) => updateTheme({ gridLines: val })}
                                     />
                                     <SettingItem
-                                        label="Node Base Color"
-                                        description="The default background color for node bodies."
+                                        label={t("settings.labels.nodeBaseColor")}
+                                        description={t("settings.descriptions.nodeBaseColor")}
                                         type="color"
                                         value={theme.nodeBase}
                                         onChange={(val: string) => updateTheme({ nodeBase: val })}
                                     />
                                     <SettingItem
-                                        label="Connection Lines"
-                                        description="The base color for edges (links) between pins."
+                                        label={t("settings.labels.connectionLines")}
+                                        description={t("settings.descriptions.connectionLines")}
                                         type="color"
                                         value={theme.connectionLines}
                                         onChange={(val: string) => updateTheme({ connectionLines: val })}
                                     />
                                     <SettingItem
-                                        label="Selection Region"
-                                        description="The color of the drag-selection box."
+                                        label={t("settings.labels.selectionRegion")}
+                                        description={t("settings.descriptions.selectionRegion")}
                                         type="color"
                                         value={theme.selectionRegion}
                                         onChange={(val: string) => updateTheme({ selectionRegion: val })}
@@ -302,123 +349,123 @@ export const SettingsView: React.FC = () => {
                             </div>
 
                             <div>
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">Pin Colors</h3>
+                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.pinColors")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
-                                        label="Execution Color"
-                                        description="Color for execution flow pins and lines."
+                                        label={t("settings.labels.executionColor")}
+                                        description={t("settings.descriptions.executionColor")}
                                         type="color"
                                         value={theme.execColor}
                                         onChange={(val: string) => updateTheme({ execColor: val })}
                                     />
                                     <SettingItem
-                                        label="Boolean Color"
-                                        description="Color for boolean (true/false) data type pins."
+                                        label={t("settings.labels.booleanColor")}
+                                        description={t("settings.descriptions.booleanColor")}
                                         type="color"
                                         value={theme.boolColor}
                                         onChange={(val: string) => updateTheme({ boolColor: val })}
                                     />
                                     <SettingItem
-                                        label="Int32 Color"
-                                        description="Color for 32-bit integer pins."
+                                        label={t("settings.labels.int32Color")}
+                                        description={t("settings.descriptions.int32Color")}
                                         type="color"
                                         value={theme.int32Color}
                                         onChange={(val: string) => updateTheme({ int32Color: val })}
                                     />
                                     <SettingItem
-                                        label="Int64 Color"
-                                        description="Color for 64-bit integer pins."
+                                        label={t("settings.labels.int64Color")}
+                                        description={t("settings.descriptions.int64Color")}
                                         type="color"
                                         value={theme.int64Color}
                                         onChange={(val: string) => updateTheme({ int64Color: val })}
                                     />
                                     <SettingItem
-                                        label="Float32 Color"
-                                        description="Color for 32-bit float pins."
+                                        label={t("settings.labels.float32Color")}
+                                        description={t("settings.descriptions.float32Color")}
                                         type="color"
                                         value={theme.float32Color}
                                         onChange={(val: string) => updateTheme({ float32Color: val })}
                                     />
                                     <SettingItem
-                                        label="Float64 Color"
-                                        description="Color for 64-bit float pins."
+                                        label={t("settings.labels.float64Color")}
+                                        description={t("settings.descriptions.float64Color")}
                                         type="color"
                                         value={theme.float64Color}
                                         onChange={(val: string) => updateTheme({ float64Color: val })}
                                     />
                                     <SettingItem
-                                        label="String Color"
-                                        description="Color for text data type pins."
+                                        label={t("settings.labels.stringColor")}
+                                        description={t("settings.descriptions.stringColor")}
                                         type="color"
                                         value={theme.stringColor}
                                         onChange={(val: string) => updateTheme({ stringColor: val })}
                                     />
                                     <SettingItem
-                                        label="Date Color"
-                                        description="Color for date type pins."
+                                        label={t("settings.labels.dateColor")}
+                                        description={t("settings.descriptions.dateColor")}
                                         type="color"
                                         value={theme.dateColor}
                                         onChange={(val: string) => updateTheme({ dateColor: val })}
                                     />
                                     <SettingItem
-                                        label="DateTime Color"
-                                        description="Color for datetime type pins."
+                                        label={t("settings.labels.dateTimeColor")}
+                                        description={t("settings.descriptions.dateTimeColor")}
                                         type="color"
                                         value={theme.datetimeColor}
                                         onChange={(val: string) => updateTheme({ datetimeColor: val })}
                                     />
                                     <SettingItem
-                                        label="Categorical Color"
-                                        description="Color for categorical type pins."
+                                        label={t("settings.labels.categoricalColor")}
+                                        description={t("settings.descriptions.categoricalColor")}
                                         type="color"
                                         value={theme.categoricalColor}
                                         onChange={(val: string) => updateTheme({ categoricalColor: val })}
                                     />
                                     <SettingItem
-                                        label="Object Color"
-                                        description="Color for object and reference data type pins."
+                                        label={t("settings.labels.objectColor")}
+                                        description={t("settings.descriptions.objectColor")}
                                         type="color"
                                         value={theme.objectColor}
                                         onChange={(val: string) => updateTheme({ objectColor: val })}
                                     />
                                     <SettingItem
-                                        label="Any Color"
-                                        description="Color for untyped (Any) pins."
+                                        label={t("settings.labels.anyColor")}
+                                        description={t("settings.descriptions.anyColor")}
                                         type="color"
                                         value={theme.anyColor}
                                         onChange={(val: string) => updateTheme({ anyColor: val })}
                                     />
                                     <SettingItem
-                                        label="OneOf Color"
-                                        description="Color for union type (OneOf) pins, e.g. Float64 | String."
+                                        label={t("settings.labels.oneOfColor")}
+                                        description={t("settings.descriptions.oneOfColor")}
                                         type="color"
                                         value={theme.oneofColor}
                                         onChange={(val: string) => updateTheme({ oneofColor: val })}
                                     />
                                     <SettingItem
-                                        label="DataFrame Color"
-                                        description="Color for DataFrame pins."
+                                        label={t("settings.labels.dataFrameColor")}
+                                        description={t("settings.descriptions.dataFrameColor")}
                                         type="color"
                                         value={theme.dataframeColor}
                                         onChange={(val: string) => updateTheme({ dataframeColor: val })}
                                     />
                                     <SettingItem
-                                        label="DataSeries Color"
-                                        description="Color for DataSeries pins."
+                                        label={t("settings.labels.dataSeriesColor")}
+                                        description={t("settings.descriptions.dataSeriesColor")}
                                         type="color"
                                         value={theme.dataseriesColor}
                                         onChange={(val: string) => updateTheme({ dataseriesColor: val })}
                                     />
                                     <SettingItem
-                                        label="Array Color"
-                                        description="Color for Array pins."
+                                        label={t("settings.labels.arrayColor")}
+                                        description={t("settings.descriptions.arrayColor")}
                                         type="color"
                                         value={theme.arrayColor}
                                         onChange={(val: string) => updateTheme({ arrayColor: val })}
                                     />
                                     <SettingItem
-                                        label="Struct Color"
-                                        description="Color for user-defined Struct type pins."
+                                        label={t("settings.labels.structColor")}
+                                        description={t("settings.descriptions.structColor")}
                                         type="color"
                                         value={theme.structColor}
                                         onChange={(val: string) => updateTheme({ structColor: val })}
@@ -440,7 +487,9 @@ export const SettingsView: React.FC = () => {
                 <div className="flex-1 relative">
                     <Input
                         type="text"
-                        placeholder="Search settings"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t("settings.searchPlaceholder")}
                         className="h-8"
                     />
                 </div>
@@ -451,7 +500,7 @@ export const SettingsView: React.FC = () => {
                 <aside className="w-64 border-r border-border bg-[var(--sidebar-bg)] shrink-0 flex flex-col min-h-0">
                     <OverlayScrollbar className="flex-1 pt-4 min-h-0" direction="vertical">
                     <nav className="px-4 space-y-0.5">
-                        {sections.map(section => (
+                        {visibleSections.map(section => (
                             <Button
                                 type="button"
                                 variant={activeSection === section.id ? "secondary" : "ghost"}
@@ -484,7 +533,7 @@ export const SettingsView: React.FC = () => {
                     onClick={handleResetAll}
                     disabled={isResetting}
                 >
-                    {isResetting ? "恢复中..." : "恢复所有默认设置"}
+                    {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
                 </Button>
             </div>
 
@@ -503,7 +552,7 @@ interface SettingItemProps {
     onChange?: (val: any) => void;
     placeholder?: string;
     disabled?: boolean;
-    options?: string[];
+    options?: Array<{ label: string; value: string }>;
 }
 
 const SettingItem: React.FC<SettingItemProps> = ({
@@ -518,22 +567,26 @@ const SettingItem: React.FC<SettingItemProps> = ({
     disabled,
     options
 }) => {
+    const controlId = React.useId();
+
     return (
         <div className="group border-l-2 border-transparent hover:border-[var(--accent-color)] pl-4 transition-colors">
-            <div className="mb-1 text-sm font-semibold text-foreground group-hover:text-[var(--accent-color)] transition-colors">{label}</div>
+            <label htmlFor={controlId} className="mb-1 block text-sm font-semibold text-foreground group-hover:text-[var(--accent-color)] transition-colors">{label}</label>
             <div className="text-xs text-muted-foreground mb-3 leading-relaxed max-w-2xl">{description}</div>
 
             <div className="flex items-center">
                 {type === "checkbox" && (
                     <Input
+                        id={controlId}
                         type="checkbox"
-                        checked={checked ?? true}
+                        checked={checked ?? false}
                         onChange={(e) => onChange?.(e.target.checked)}
                         className="h-4 w-4 accent-[var(--accent-color)]"
                     />
                 )}
                 {type === "text" && (
                     <Input
+                        id={controlId}
                         type="text"
                         value={value ?? defaultValue ?? ""}
                         onChange={(e) => onChange?.(e.target.value)}
@@ -544,6 +597,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
                 )}
                 {type === "number" && (
                     <Input
+                        id={controlId}
                         type="number"
                         value={value ?? defaultValue ?? ""}
                         onChange={(e) => onChange?.(e.target.value)}
@@ -553,8 +607,9 @@ const SettingItem: React.FC<SettingItemProps> = ({
                 {type === "select" && (
                     <div className="w-full max-w-md">
                         <Select
+                            id={controlId}
                             options={options || []}
-                            value={value || (options?.[0] || "")}
+                            value={value || (options?.[0]?.value || "")}
                             onChange={(val) => onChange?.(val)}
                         />
                     </div>
@@ -563,6 +618,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
                     <div className="flex items-center gap-3">
                         <div className="relative w-10 h-6 rounded border border-border overflow-hidden">
                             <Input
+                                id={controlId}
                                 type="color"
                                 value={value}
                                 onChange={(e) => onChange?.(e.target.value)}
@@ -570,6 +626,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
                             />
                         </div>
                         <Input
+                            aria-label={label}
                             type="text"
                             value={value}
                             onChange={(e) => onChange?.(e.target.value)}

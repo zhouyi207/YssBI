@@ -245,7 +245,9 @@ mod tests {
     #[test]
     fn test_ols_with_iris() {
         // 读取 iris.csv 数据
-        let mut rdr = csv::Reader::from_path("tests/iris.csv").unwrap();
+        let mut rdr = csv::Reader::from_path("tests/data/iris.csv")
+            .or_else(|_| csv::Reader::from_path("sci/tests/data/iris.csv"))
+            .unwrap();
 
         let mut sepal_length = Vec::new();
         let mut sepal_width = Vec::new();

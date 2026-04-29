@@ -1,14 +1,13 @@
 ﻿import { useRef, useEffect } from "react";
-import { useViewportStore } from "@/features/core/viewport";
-import { DEFAULT_VIEWPORT, GRID } from "@/app/appConfig/default";
+import { getViewport, subscribeToViewport } from "@/features/core/viewport";
+import { GRID } from "@/app/appConfig/default";
 
 export const ViewportGrid = ({ groupId }: { groupId: string }) => {
     const gridRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         // 零 React 重绘：直接订阅 Store 并同步 DOM 样式
-        return useViewportStore.subscribe(state => {
-            const canvas = state.viewports[groupId] || DEFAULT_VIEWPORT;
+        return subscribeToViewport(groupId, (canvas) => {
             const el = gridRef.current;
             if (el) {
                 el.style.backgroundSize = `${GRID * canvas.scale}px ${GRID * canvas.scale}px`;
@@ -17,7 +16,7 @@ export const ViewportGrid = ({ groupId }: { groupId: string }) => {
         });
     }, [groupId]);
 
-    const initial = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+    const initial = getViewport(groupId);
     return (
         <div
             ref={gridRef}

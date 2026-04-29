@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { THUMB_MIN_SIZE, TRACK_SIZE } from "@/app/appConfig/default";
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 
 type Direction = "vertical" | "horizontal" | "both";
 
@@ -29,11 +30,12 @@ function ArrowButton({
   }, []);
 
   const startScroll = useCallback(() => {
+    stopScroll();
     onScroll();
     timerRef.current = setTimeout(() => {
       intervalRef.current = setInterval(onScroll, SCROLL_INTERVAL);
     }, SCROLL_INITIAL_DELAY);
-  }, [onScroll]);
+  }, [onScroll, stopScroll]);
 
   useEffect(() => stopScroll, [stopScroll]);
 
@@ -50,17 +52,25 @@ function ArrowButton({
   }
 
   return (
-    <div
+    <button
+      type="button"
+      aria-label={`Scroll ${direction}`}
       className="shrink-0 flex items-center justify-center cursor-pointer transition-opacity duration-100 hover:opacity-100 opacity-60"
       style={{ width: w, height: h }}
       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); startScroll(); }}
       onMouseUp={stopScroll}
       onMouseLeave={stopScroll}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        startScroll();
+      }}
+      onKeyUp={stopScroll}
     >
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
         <path d={d} stroke={ARROW_STROKE} fill="none" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    </div>
+    </button>
   );
 }
 
@@ -255,13 +265,18 @@ export const OverlayScrollbar = forwardRef<
       el.scrollTop = Math.max(0, Math.min(maxScroll, el.scrollTop + scrollDelta));
     };
 
+    let cleanupDragListeners: (() => void) | null = null;
     const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      cleanupDragListeners?.();
+      cleanupDragListeners = null;
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    const cleanupMouseMove = addGlobalEventListener(document, "mousemove", onMouseMove);
+    const cleanupMouseUp = addGlobalEventListener(document, "mouseup", onMouseUp);
+    cleanupDragListeners = () => {
+      cleanupMouseMove();
+      cleanupMouseUp();
+    };
   }, [scrollbarOffsetTop]);
 
   const handleThumbMouseDownH = useCallback((e: React.MouseEvent) => {
@@ -290,13 +305,18 @@ export const OverlayScrollbar = forwardRef<
       el.scrollLeft = Math.max(0, Math.min(maxScroll, el.scrollLeft + scrollDelta));
     };
 
+    let cleanupDragListeners: (() => void) | null = null;
     const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      cleanupDragListeners?.();
+      cleanupDragListeners = null;
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    const cleanupMouseMove = addGlobalEventListener(document, "mousemove", onMouseMove);
+    const cleanupMouseUp = addGlobalEventListener(document, "mouseup", onMouseUp);
+    cleanupDragListeners = () => {
+      cleanupMouseMove();
+      cleanupMouseUp();
+    };
   }, [direction, scrollbarOffsetLeft]);
 
   const showV = isVisible.v && isHovered;

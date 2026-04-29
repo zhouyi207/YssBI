@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { useTranslation } from "react-i18next";
 import { useDraggable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
@@ -22,44 +22,9 @@ import { useHistoryStore } from "@/features/core/history";
 import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
-import { PIN_COLORS, TYPE_ICON_COLORS } from "@/features/domain/sidebar";
-import type { DataType } from "@/shared/types/domain/dataType";
-import { dataTypeDisplay } from "@/shared/types/domain/dataType";
-import { logger } from "@/utils/appLogger";
-import { uiStore } from "@/features/core/ui/UIStore";
+import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import { Button } from "@/components/ui/button";
-
-async function openDataViewWindow(databaseId?: string): Promise<void> {
-  try {
-    const label = `dataview-${Math.random().toString(36).substring(7)}`;
-    const url = databaseId
-      ? `index.html?database=${encodeURIComponent(databaseId)}#/dataview`
-      : "index.html#/dataview";
-    new WebviewWindow(label, {
-      url,
-      title: "Data Viewer",
-      width: 1000,
-      height: 600,
-      decorations: false,
-      visible: false,
-    });
-  } catch (error) {
-    logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, "Sidebar");
-    uiStore.showToast("无法打开数据视图窗口", "error");
-  }
-}
-
-function safeDataTypeDisplay(dt: unknown): string {
-  if (typeof dt === "string") return dt;
-  if (dt && typeof dt === "object" && "kind" in dt) return dataTypeDisplay(dt as DataType);
-  return "";
-}
-
-function safeDataTypeColor(dt: unknown): string {
-  if (typeof dt === "string") return PIN_COLORS[dt] ?? "rgba(156,163,175,0.7)";
-  if (dt && typeof dt === "object" && "kind" in dt) return PIN_COLORS[(dt as DataType).kind] ?? "rgba(156,163,175,0.7)";
-  return "rgba(156,163,175,0.7)";
-}
+import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 
 /**
  * 可拖拽的侧边栏项 — 整行可拖拽。
@@ -131,7 +96,11 @@ const StackedCollapsibleSection = ({
         e.stopPropagation();
         onToggle();
       }}
-      onKeyDown={(e) => e.key === "Enter" && onToggle()}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onToggle();
+      }}
       className={`group flex items-center gap-2 px-2 py-1.5 cursor-pointer shrink-0 h-7 min-h-7 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-gray-500 hover:bg-[var(--sidebar-hover)]`}
     >
       <span
@@ -191,6 +160,8 @@ const CollapsibleSection = ({
 }) => (
   <div>
     <div
+      role="button"
+      tabIndex={0}
       className={`flex items-center gap-2 py-1 pl-4 pr-2 cursor-pointer group transition-colors duration-150 ease-out ${
         headerActive ? "bg-[var(--sidebar-item-active)]" : "hover:bg-[var(--sidebar-hover)]"
       }`}
@@ -198,6 +169,11 @@ const CollapsibleSection = ({
         if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
         if ((e.target as HTMLElement).closest("[data-draggable-header]")) return;
         e.stopPropagation();
+        onToggle();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
         onToggle();
       }}
     >
@@ -231,6 +207,7 @@ const CollapsibleSection = ({
 );
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
+  const { t } = useTranslation();
   useContext(GroupContext);
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
   const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null;
@@ -253,7 +230,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     openGraph,
   } = useEditorGroup();
 
-  const { toggleSection, isSectionExpanded } = useSidebarStore();
+  const toggleSection = useSidebarStore((s) => s.toggleSection);
+  const isSectionExpanded = useSidebarStore((s) => s.isSectionExpanded);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -410,7 +388,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               openGraph(id, name, type);
             }}
             className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-            title="Open"
+            title={t("sidebar.open")}
           >
             <VscChevronRight size={11} />
           </Button>
@@ -427,7 +405,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   promoteVariable(id);
                 }}
                 className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-                title="Promote to global"
+                title={t("sidebar.promoteToGlobal")}
               >
                 <VscEye size={11} />
               </Button>
@@ -441,7 +419,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   demoteVariable(id);
                 }}
                 className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-                title="Demote to local"
+                title={t("sidebar.demoteToLocal")}
               >
                 <VscEyeClosed size={11} />
               </Button>
@@ -628,7 +606,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                                 openDataViewWindow(id);
                               }}
                               className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
-                              title="在 Data Viewer 中查看"
+                              title={t("sidebar.viewInDataViewer")}
                             >
                               <VscEye size={12} />
                             </Button>
@@ -651,7 +629,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     );
                   })}
                   {Object.keys(dataframes || {}).length === 0 && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No data</div>
+                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">{t("sidebar.noData")}</div>
                   )}
               </StackedCollapsibleSection>
             </div>
@@ -683,6 +661,7 @@ function formatTime(ts: number): string {
 const EMPTY_STACK: HistoryEntry[] = [];
 
 function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
+  const { t } = useTranslation();
   const undoStack = useHistoryStore((s) =>
     activeTabId ? s.histories[activeTabId]?.undoStack ?? EMPTY_STACK : EMPTY_STACK
   );
@@ -693,7 +672,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   if (!activeTabId) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="text-[12px] text-gray-500/60 pl-4 py-3">No active graph</div>
+        <div className="text-[12px] text-gray-500/60 pl-4 py-3">{t("sidebar.noActiveGraph")}</div>
       </div>
     );
   }
@@ -703,7 +682,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <StackedCollapsibleSection
-        label={`Undo (${undoStack.length})`}
+        label={`${t("common.undo")} (${undoStack.length})`}
         expanded={true}
         onToggle={() => {}}
       >
@@ -714,7 +693,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
           >
             <VscDiscard size={11} className="shrink-0 text-gray-500" />
             <span className="flex-1 text-[12px] tracking-tight truncate">
-              {COMMAND_LABELS[entry.commandType] ?? entry.commandType}
+              {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
             <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
           </div>
@@ -724,7 +703,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
       </StackedCollapsibleSection>
 
       <StackedCollapsibleSection
-        label={`Redo (${redoStack.length})`}
+        label={`${t("common.redo")} (${redoStack.length})`}
         expanded={true}
         onToggle={() => {}}
       >
@@ -735,7 +714,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
           >
             <VscRedo size={11} className="shrink-0 text-gray-600" />
             <span className="flex-1 text-[12px] tracking-tight truncate">
-              {COMMAND_LABELS[entry.commandType] ?? entry.commandType}
+              {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
             <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
           </div>

@@ -17,6 +17,16 @@ import {
 import { SettingsService } from "@/services/settings";
 import { logger } from '@/utils/appLogger';
 
+function mergeSettings(settings: Partial<AppSettings>): AppSettings {
+    return {
+        theme: { ...DEFAULT_THEME, ...settings.theme },
+        editor: { ...DEFAULT_EDITOR, ...settings.editor },
+        appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance },
+        project: { ...DEFAULT_PROJECT, ...settings.project },
+        window: { ...DEFAULT_WINDOW, ...settings.window },
+    };
+}
+
 interface SettingsStore {
     theme: ThemeSettings;
     editor: EditorSettings;
@@ -88,9 +98,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
             set({ isLoading: true });
             const settings = await SettingsService.loadSettings();
             set({
-                ...settings,
-                theme: { ...DEFAULT_THEME, ...settings.theme },
-                appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance },
+                ...mergeSettings(settings),
                 isLoading: false,
             });
         },
@@ -154,7 +162,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
         resetAllToDefaults: async () => {
             const defaults = await SettingsService.resetToDefaults();
-            set(defaults);
+            set(mergeSettings(defaults));
         },
     };
 });

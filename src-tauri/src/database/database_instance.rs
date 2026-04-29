@@ -4,7 +4,7 @@ use super::DatabaseState;
 use super::DatabaseView;
 use polars::prelude::*;
 use std::sync::Arc;
-use yss_sci::database::{
+use yss_sci::api::database::{
     EditHistory, EditOperation, EditState, apply_operation, reverse_operation,
     anyvalue_to_json, capture_row_data, capture_column_data,
     cast_column as sci_cast_column, dtype_to_string,

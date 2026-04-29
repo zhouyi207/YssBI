@@ -8,6 +8,7 @@ mod info_nodes;
 mod df_adf_nodes;
 mod ols_nodes;
 mod var_nodes;
+mod var_types;
 mod vec_coint_nodes;
 mod vec_coint_vecrank_nodes;
 mod wls_nodes;

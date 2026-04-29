@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { VscDatabase, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export const SqliteTableSelectModal = ({
   options: SqliteTableSelectDialogOptions;
   onClose: () => void;
 }) => {
+  const { t } = useTranslation();
   const { dbPath, tables, onSelect } = options;
   const dbName = dbPath.replace(/^.*[/\\]/, "");
 
@@ -21,9 +23,9 @@ export const SqliteTableSelectModal = ({
         <DialogHeader className="border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="flex items-center gap-2">
-              <VscDatabase className="text-blue-400" size={18} /> 选择表
+              <VscDatabase className="text-blue-400" size={18} /> {t("importModal.selectTable")}
             </DialogTitle>
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭">
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
             <VscClose size={20} />
             </Button>
           </div>
@@ -56,7 +58,7 @@ export const SqliteTableSelectModal = ({
         </div>
 
         <DialogFooter className="justify-center">
-          <p className="text-[10px] font-medium text-muted-foreground">选择要导入的表</p>
+          <p className="text-[10px] font-medium text-muted-foreground">{t("importModal.tableHint")}</p>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -7,6 +7,7 @@ import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { logger } from '@/utils/appLogger';
+import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 
 export interface VariableDropMenu {
   x: number;
@@ -51,16 +52,27 @@ export function useCanvasDrop({
   useEffect(() => {
     const handleClickOutside = (e: PointerEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest(".menu-container") || target.closest(".sidebar-container")) {
+      if (
+        target.closest(".menu-container") ||
+        target.closest(".sidebar-container") ||
+        target.closest(".menubar-container")
+      ) {
         return;
       }
+
+      const canvasEl = canvasRef.current;
+      if (canvasEl && !canvasEl.contains(target)) {
+        return;
+      }
+
       setContextMenu(null);
       setPendingConnection(null);
-      setVariableDropMenu(null);
+      if (variableDropMenu) {
+        setVariableDropMenu(null);
+      }
     };
-    window.addEventListener("pointerdown", handleClickOutside, true);
-    return () => window.removeEventListener("pointerdown", handleClickOutside, true);
-  }, [setContextMenu, setPendingConnection]);
+    return addGlobalEventListener(window, "pointerdown", handleClickOutside, { capture: true });
+  }, [canvasRef, setContextMenu, setPendingConnection, variableDropMenu]);
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
@@ -96,8 +108,7 @@ export function useCanvasDrop({
       if (
         target.closest(".menubar-container") ||
         target.closest(".sidebar-container") ||
-        target.closest(".menu-container") ||
-        target.closest(".hud-container")
+        target.closest(".menu-container")
       ) {
         return;
       }

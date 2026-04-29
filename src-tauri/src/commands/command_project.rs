@@ -7,26 +7,18 @@ use crate::frontend::FrontendError;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{execute_project_data, load_project_from_file, save_project_to_file, ProjectState};
+use crate::application::database::name_from_path;
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO, GraphsWithValidationDTO,
     InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
 use polars::prelude::*;
-use std::path::Path;
 use tauri::{AppHandle, State, ipc::Channel};
 
 use serde_json::Value;
 
 fn dtype_to_string(dt: &DataType) -> String {
     format!("{:?}", dt)
-}
-
-fn name_from_path(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unnamed")
-        .to_string()
 }
 
 /// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
@@ -39,7 +31,6 @@ fn extract_database_schema(instance: &DatabaseInstance) -> Option<(String, Vec<C
             crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
             crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
             crate::database::DatabaseEngine::InMemory { name } => name.clone(),
-            _ => instance.decl.id.clone(),
         }
     });
 

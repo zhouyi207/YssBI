@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { InputDialogOptions } from "@/shared/types/ui";
 
 export const InputModal = ({ options, onClose }: { options: InputDialogOptions; onClose: () => void }) => {
+  const { t } = useTranslation();
   const [value, setValue] = useState(options.defaultValue ?? "");
 
   const handleCancel = () => {
@@ -48,10 +50,10 @@ export const InputModal = ({ options, onClose }: { options: InputDialogOptions; 
         </div>
         <DialogFooter>
           <Button type="button" onClick={handleCancel} variant="ghost" size="lg">
-            {options.cancelText || "取消"}
+            {options.cancelText || t("common.cancel")}
           </Button>
           <Button type="submit" size="lg">
-            {options.confirmText || "确定"}
+            {options.confirmText || t("common.confirm")}
           </Button>
         </DialogFooter>
       </form>

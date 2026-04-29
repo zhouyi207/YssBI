@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { executeCommand } from "@/features/core/history";
 import { logger } from '@/utils/appLogger';
 
@@ -44,6 +44,7 @@ export function usePinInput({
 }) {
   const [value, setValue] = useState<unknown>(initialValue ?? getDefaultValue(pinType));
   const [isFocused, setIsFocused] = useState(false);
+  const skipNextBlurSaveRef = useRef(false);
 
   useEffect(() => {
     if (initialValue !== undefined) {
@@ -76,21 +77,32 @@ export function usePinInput({
     [subgraphId, nodeId, pinId, pinType, value]
   );
 
+  const cancelBlurCommit = useCallback(() => {
+    if (!skipNextBlurSaveRef.current) return false;
+    skipNextBlurSaveRef.current = false;
+    setIsFocused(false);
+    return true;
+  }, []);
+
   const handleBlur = useCallback(async () => {
+    if (cancelBlurCommit()) return;
     setIsFocused(false);
     await savePinValue();
-  }, [savePinValue, setIsFocused]);
+  }, [cancelBlurCommit, savePinValue, setIsFocused]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") {
         (e.currentTarget as HTMLElement).blur();
       } else if (e.key === "Escape") {
-        setValue(initialValue ?? getDefaultValue(pinType));
+        const restored = initialValue ?? getDefaultValue(pinType);
+        skipNextBlurSaveRef.current = true;
+        setValue(restored);
+        onValueChange?.(restored);
         (e.currentTarget as HTMLElement).blur();
       }
     },
-    [initialValue, pinType]
+    [initialValue, onValueChange, pinType]
   );
 
   return {
@@ -100,6 +112,7 @@ export function usePinInput({
     handleChange,
     handleBlur,
     handleKeyDown,
+    cancelBlurCommit,
     savePinValue,
   };
 }

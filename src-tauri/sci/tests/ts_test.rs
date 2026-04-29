@@ -3,7 +3,9 @@
 use ndarray::Array2;
 use polars::prelude::*;
 use yss_sci::ts;
+use yss_sci::ts::unit_root::{adf_test, AdfRegression};
 use yss_sci::ts::var::var_varsoc;
+use yss_sci::ts::vec::{vec_estimate, VECConfig, VecTrendSpec};
 
 #[test]
 fn test_ts_diff() {
@@ -138,4 +140,60 @@ fn test_var_varsoc_shape_and_lr() {
     assert!(r.rows[1].lr.is_some());
     assert_eq!(r.rows[1].lr_df, Some(4));
     assert!(r.rows[1].lr_p.unwrap() >= 0.0 && r.rows[1].lr_p.unwrap() <= 1.0);
+}
+
+#[test]
+fn test_acf_pacf_and_breusch_godfrey_smoke() {
+    let residuals = vec![1.0, -0.5, 0.25, -0.125, 0.0625, -0.03125, 0.015625, -0.0078125];
+    let acf = ts::acf_pacf::acf(&residuals, 3);
+    let pacf = ts::acf_pacf::pacf(&residuals, 3);
+    assert_eq!(acf.len(), 4);
+    assert_eq!(pacf.len(), 3);
+    assert!((acf[0] - 1.0).abs() < 1e-12);
+    assert!(pacf.iter().all(|v| v.is_finite()));
+
+    let exog: Vec<Vec<f64>> = (0..residuals.len())
+        .map(|i| vec![1.0, i as f64])
+        .collect();
+    let (bg, p) = ts::serial_correlation::breusch_godfrey(&residuals, &exog, 1, false)
+        .expect("BG result");
+    assert!(bg.is_finite());
+    assert!((0.0..=1.0).contains(&p));
+}
+
+#[test]
+fn test_adf_drift_returns_regression_stats() {
+    let y: Vec<f64> = (0..100).map(|i| i as f64 + (i as f64 * 0.1).sin()).collect();
+    let result = adf_test(&y, 0, true, false).unwrap();
+
+    assert_eq!(result.lags, 0);
+    assert_eq!(result.regression, AdfRegression::Drift);
+    assert!(result.num_obs > 0);
+    assert!(result.test_statistic.is_finite());
+    assert!(result.p_value >= 0.0 && result.p_value <= 1.0);
+    assert!(!result.regression_table.is_empty());
+}
+
+#[test]
+fn test_vec_estimate_rejects_invalid_config() {
+    let n = 80usize;
+    let y = Array2::from_shape_fn((n, 2), |(i, j)| {
+        let t = i as f64;
+        let base = 0.05 * t + (0.1 * t).sin();
+        if j == 0 {
+            base
+        } else {
+            base + 0.2 + (0.13 * t).cos() * 0.01
+        }
+    });
+    let config = VECConfig {
+        trend_spec: VecTrendSpec::Constant,
+        lags: 0,
+        rank: 1,
+        mlag: 2,
+    };
+
+    let err = vec_estimate(&y, &config, Some(vec!["y1".into(), "y2".into()]), None)
+        .unwrap_err();
+    assert!(err.contains("lags must be >= 1"));
 }
