@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
@@ -85,6 +86,7 @@ function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
 
 export function Menubar() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const {
     saveGraphAs,
     importGraph,
@@ -130,6 +132,7 @@ export function Menubar() {
     { label: t("menubar.newFunction"), onClick: () => addFunction(undefined, { openAfterCreate: true }) },
     { label: "-" },
     { label: t("menubar.openProject"), shortcut: "Ctrl+O", onClick: () => importGraph() },
+    { label: t("menubar.closeProject"), onClick: () => navigate("/projects") },
     { label: "-" },
     { label: t("menubar.saveProject"), shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
     { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: activeTabId ? () => saveGraphAs() : undefined },

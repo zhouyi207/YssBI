@@ -33,8 +33,11 @@ export interface LayoutState {
     setDragging: (isDragging: boolean) => void;
     activeGroupId: string | null;
     activeEditorGroupId: string | null;
+    isSettingsOpen: boolean;
     setActiveGroup: (id: string | null) => void;
     openSettings: () => void;
+    closeSettings: () => void;
+    setSettingsOpen: (open: boolean) => void;
     isAltPressed: boolean;
     setAltPressed: (pressed: boolean) => void;
 }
@@ -614,15 +617,16 @@ export const useLayoutStore = create<LayoutState>()(
             };
         }),
 
-        openSettings: () => {
-            const targetId = get().activeEditorGroupId || 'default_editor';
-            get().addTab(targetId, {
-                id: 'settings',
-                title: 'Settings',
-                component: 'SettingsEditor',
-                type: 'setting'
-            });
-        },
+        isSettingsOpen: false,
+        openSettings: () => set((state) => {
+            state.isSettingsOpen = true;
+        }),
+        closeSettings: () => set((state) => {
+            state.isSettingsOpen = false;
+        }),
+        setSettingsOpen: (open) => set((state) => {
+            state.isSettingsOpen = open;
+        }),
 
         setDragging: (isDragging) => set((state) => {
             state.isDragging = isDragging;

@@ -10,11 +10,15 @@ import { useProjectSyncWithEditor } from "@/features/application/initialization"
 import { useEditorGroup } from "@/features/application/editor";
 import { useEditorKeyboard } from "@/features/application/editor";
 import { useMenubar } from "@/features/application/menubar";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { SettingsView } from "./Layout/SettingsView";
 
 
 export const EditorWindow = () => {
     const { t } = useTranslation();
     const rootId = useLayoutStore((s) => s.rootId);
+    const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
+    const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
     const { status, error } = useAppInitialization();
 
     // 启用项目同步（带编辑器回调，用于打开新 Tab 等 UI 扩展）
@@ -58,6 +62,11 @@ export const EditorWindow = () => {
                 <Workspace nodeId={rootId} />
             </div>
             <BottomBar />
+            <Dialog open={isSettingsOpen} onOpenChange={setSettingsOpen}>
+                <DialogContent className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0">
+                    <SettingsView />
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

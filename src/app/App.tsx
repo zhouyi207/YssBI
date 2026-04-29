@@ -12,16 +12,20 @@ const DataViewWindow = React.lazy(() => import("@/views/DataView/DataViewWindow"
 const LogWindow = React.lazy(() => import("@/views/LogView/LogWindow").then(m => ({ default: m.LogWindow })));
 const InfoWindow = React.lazy(() => import("@/views/InfoView/InfoWindow").then(m => ({ default: m.InfoWindow })));
 const EditorWindow = React.lazy(() => import("@/views/EditorView/EditorWindow").then(m => ({ default: m.EditorWindow })));
+const ProjectPickerScreen = React.lazy(() => import("@/views/ProjectView/ProjectPickerScreen").then(m => ({ default: m.ProjectPickerScreen })));
 
 function AppRouter() {
   return (
     <Suspense fallback={null}>
       <Routes>
+        <Route path="/" element={<ProjectPickerScreen />} />
+        <Route path="/projects" element={<ProjectPickerScreen />} />
+        <Route path="/editor" element={<EditorWindow />} />
         <Route path="/plot" element={<PlotWindow />} />
         <Route path="/dataview" element={<DataViewWindow />} />
         <Route path="/logs" element={<LogWindow />} />
         <Route path="/info" element={<InfoWindow />} />
-        <Route path="*" element={<EditorWindow />} />
+        <Route path="*" element={<ProjectPickerScreen />} />
       </Routes>
     </Suspense>
   );
