@@ -213,7 +213,7 @@ export const PlotWindow: React.FC = () => {
       {/* 自定义标题栏 - 与主窗口一致 */}
       <div
         data-tauri-drag-region
-        className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none rounded-tr-lg overflow-hidden"
+        className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none rounded-tr-lg overflow-hidden"
       >
         <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

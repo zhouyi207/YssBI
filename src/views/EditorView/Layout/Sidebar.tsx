@@ -23,6 +23,7 @@ import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
+import type { DataType } from "@/shared/types/domain/dataType";
 import { Button } from "@/components/ui/button";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 
@@ -147,6 +148,7 @@ const CollapsibleSection = ({
   onToggle,
   onAdd,
   headerContent,
+  headerContentToggles = true,
   headerActive,
   children,
 }: {
@@ -155,6 +157,7 @@ const CollapsibleSection = ({
   onToggle: () => void;
   onAdd?: () => void;
   headerContent?: React.ReactNode;
+  headerContentToggles?: boolean;
   headerActive?: boolean;
   children: React.ReactNode;
 }) => (
@@ -167,7 +170,7 @@ const CollapsibleSection = ({
       }`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
-        if ((e.target as HTMLElement).closest("[data-draggable-header]")) return;
+        if (!headerContentToggles && (e.target as HTMLElement).closest("[data-header-content]")) return;
         e.stopPropagation();
         onToggle();
       }}
@@ -180,7 +183,13 @@ const CollapsibleSection = ({
       <span className="text-gray-500 shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
         <VscChevronDown size={11} />
       </span>
-      {headerContent ?? <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>}
+      {headerContent ? (
+        <div data-header-content className="flex-1 min-w-0">
+          {headerContent}
+        </div>
+      ) : (
+        <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>
+      )}
       {onAdd && (
         <Button
           data-add-btn
@@ -231,7 +240,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   } = useEditorGroup();
 
   const toggleSection = useSidebarStore((s) => s.toggleSection);
-  const isSectionExpanded = useSidebarStore((s) => s.isSectionExpanded);
+  const expandedSections = useSidebarStore((s) => s.expandedSections);
+  const isSectionExpanded = useCallback(
+    (key: string, defaultExpanded = true) => expandedSections[key] ?? defaultExpanded,
+    [expandedSections]
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -458,7 +471,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
-        <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
+        <div className="px-3 border-b border-border bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
           <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
             {currentTab === "graphs" ? "Graphs" : currentTab === "variables" ? "Variables" : currentTab === "data" ? "Data" : currentTab === "commands" ? "Commands" : ""}
           </span>
@@ -576,16 +589,20 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                         label={name}
                         expanded={isSectionExpanded(sectionKey, false)}
                         onToggle={() => toggleSection(sectionKey)}
+                        headerContentToggles={false}
                         headerActive={isSelected}
                         headerContent={
-                          <div data-draggable-header className="flex-1 flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
                             <SidebarDraggableItem
                               id={id}
                               dragData={dragData}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleSection(sectionKey);
                                 setSelectedInfo(id, "data");
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                openDataViewWindow(id);
                               }}
                               className={`group flex items-center gap-2 flex-1 min-w-0 py-0 pr-0 transition-colors duration-150 ease-out ${isSelected ? "text-gray-200" : "text-gray-400"}`}
                             >

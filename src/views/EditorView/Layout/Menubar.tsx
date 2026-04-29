@@ -236,7 +236,7 @@ export function Menubar() {
           variant="ghost"
           size="icon-lg"
           onClick={toggleDetail}
-          className={isDetailVisible ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
+          className={isDetailVisible ? 'text-foreground' : 'text-muted-foreground'}
           title={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}

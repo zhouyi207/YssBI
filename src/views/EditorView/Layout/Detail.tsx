@@ -185,7 +185,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>(({ }, ref) 
       className="right-sidebar-container bg-[var(--sidebar-bg)] flex flex-col h-full w-full overflow-hidden select-none"
       onWheel={(e) => e.stopPropagation()}
     >
-      <div className="px-3 border-b border-[#2b2b2b] bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
+      <div className="px-3 border-b border-border bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
           Details {selectedItemType === 'log' ? ': Log' : selectedData ? `: ${selectedData.name}` : ''}
         </span>

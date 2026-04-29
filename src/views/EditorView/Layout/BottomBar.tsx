@@ -50,7 +50,13 @@ const StatusItem = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex h-full items-center gap-1.5 px-2", className)} {...props}>
+  <div
+    className={cn(
+      "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors hover:bg-[var(--hover-bg)] hover:text-foreground",
+      className,
+    )}
+    {...props}
+  >
     {children}
   </div>
 );
@@ -134,33 +140,33 @@ export function BottomBar() {
     <VscGraph size={13} />;
 
   return (
-    <footer className="flex h-6 shrink-0 items-center justify-between overflow-hidden bg-[var(--accent-color)] text-[11px] font-medium text-white shadow-[0_-1px_0_rgba(0,0,0,0.12)]">
+    <footer className="flex h-6 shrink-0 items-center justify-between overflow-hidden border-t border-[var(--strong-border)] bg-[var(--panel-bg)] text-[11px] font-medium text-[var(--panel-fg)] shadow-[0_-1px_0_rgba(0,0,0,0.06)]">
       <div className="flex h-full min-w-0 items-center">
-        <StatusItem className="bg-black/10">
-          <VscGitPullRequest size={13} />
+        <StatusItem className="bg-[var(--hover-bg)] text-foreground">
+          <VscGitPullRequest size={13} className="text-[var(--accent-color)]" />
           <span>{projectStatusLabel(project.status, project.error, t)}</span>
         </StatusItem>
         <StatusItem className="min-w-0">
-          <VscFile size={13} className="shrink-0" />
+          <VscFile size={13} className="shrink-0 text-[var(--accent-color)]" />
           <span className="truncate">{project.fileName}</span>
         </StatusItem>
-        <StatusItem className="min-w-0 border-l border-white/15">
-          {typeIcon}
+        <StatusItem className="min-w-0 border-l border-[var(--strong-border)]">
+          <span className="text-[var(--accent-color)]">{typeIcon}</span>
           <span className="truncate">{editor.activeTitle}</span>
         </StatusItem>
       </div>
 
       <div className="flex h-full shrink-0 items-center">
         <StatusItem title={t("bottomBar.nodeCount")}>
-          <VscGraph size={13} />
+          <VscGraph size={13} className="text-[var(--accent-color)]" />
           <span>{t("bottomBar.nodes", { count: graphStats.nodeCount })}</span>
         </StatusItem>
         <StatusItem title={t("bottomBar.connectionCount")}>
-          <VscRadioTower size={13} />
+          <VscRadioTower size={13} className="text-[var(--accent-color)]" />
           <span>{t("bottomBar.links", { count: graphStats.connectionCount })}</span>
         </StatusItem>
         <StatusItem title={t("bottomBar.selectedNodes")}>
-          <VscCircleFilled size={9} />
+          <VscCircleFilled size={9} className={editor.selectedCount > 0 ? "text-[var(--accent-color)]" : "text-muted-foreground"} />
           <span>{t("bottomBar.selected", { count: editor.selectedCount })}</span>
         </StatusItem>
         <StatusItem title={t("bottomBar.executionStatus")}>
@@ -173,16 +179,16 @@ export function BottomBar() {
               executionStatus !== "running" &&
                 executionStatus !== "completed" &&
                 executionStatus !== "error" &&
-                "bg-white/70",
+                "bg-muted-foreground/70",
             )}
           />
           <span>{executionLabel(executionStatus, t)}</span>
         </StatusItem>
         <StatusItem title={t("bottomBar.canvasViewport")}>
-          <VscZoomIn size={13} />
+          <VscZoomIn size={13} className="text-[var(--accent-color)]" />
           <ViewportStatus groupId={editor.groupId} />
         </StatusItem>
-        <StatusItem title={t("bottomBar.themeMode")} className="capitalize">
+        <StatusItem title={t("bottomBar.themeMode")} className="capitalize text-foreground">
           {themeMode}
         </StatusItem>
       </div>

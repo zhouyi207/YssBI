@@ -14,8 +14,9 @@ import {
     DEFAULT_WINDOW,
     DEFAULT_PROJECT,
 } from "@/app/appConfig/default";
-import { SettingsService } from "@/services/settings";
 import { logger } from '@/utils/appLogger';
+
+const SETTINGS_STORAGE_KEY = "yssbi-client-settings";
 
 function mergeSettings(settings: Partial<AppSettings>): AppSettings {
     return {
@@ -25,6 +26,32 @@ function mergeSettings(settings: Partial<AppSettings>): AppSettings {
         project: { ...DEFAULT_PROJECT, ...settings.project },
         window: { ...DEFAULT_WINDOW, ...settings.window },
     };
+}
+
+function loadLocalSettings(): AppSettings {
+    if (typeof localStorage === "undefined") {
+        return mergeSettings({});
+    }
+
+    try {
+        const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (!raw) return mergeSettings({});
+        return mergeSettings(JSON.parse(raw) as Partial<AppSettings>);
+    } catch (error) {
+        logger.app.warn(`Failed to load local settings: ${error instanceof Error ? error.message : String(error)}`, "Settings");
+        return mergeSettings({});
+    }
+}
+
+function saveLocalSettings(settings: AppSettings): void {
+    if (typeof localStorage === "undefined") return;
+
+    try {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (error) {
+        logger.app.error(`Failed to save local settings: ${error instanceof Error ? error.message : String(error)}`, "Settings");
+        throw error;
+    }
 }
 
 interface SettingsStore {
@@ -76,7 +103,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
             project: state.project,
             window: state.window,
         };
-        await SettingsService.saveSettings(settings);
+        saveLocalSettings(settings);
     };
 
     const scheduleSave = () => {
@@ -96,38 +123,46 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
         load: async () => {
             set({ isLoading: true });
-            const settings = await SettingsService.loadSettings();
             set({
-                ...mergeSettings(settings),
+                ...loadLocalSettings(),
                 isLoading: false,
             });
         },
 
-        // 仅更新状态，不保存
         updateTheme: (updates) =>
-            set((state) => ({
-                theme: { ...state.theme, ...updates }
-            })),
+            set((state) => {
+                const next = { theme: { ...state.theme, ...updates } };
+                queueMicrotask(scheduleSave);
+                return next;
+            }),
 
         updateEditor: (updates) =>
-            set((state) => ({
-                editor: { ...state.editor, ...updates }
-            })),
+            set((state) => {
+                const next = { editor: { ...state.editor, ...updates } };
+                queueMicrotask(scheduleSave);
+                return next;
+            }),
 
         updateAppearance: (updates) =>
-            set((state) => ({
-                appearance: { ...state.appearance, ...updates }
-            })),
+            set((state) => {
+                const next = { appearance: { ...state.appearance, ...updates } };
+                queueMicrotask(scheduleSave);
+                return next;
+            }),
 
         updateProject: (updates) =>
-            set((state) => ({
-                project: { ...state.project, ...updates }
-            })),
+            set((state) => {
+                const next = { project: { ...state.project, ...updates } };
+                queueMicrotask(scheduleSave);
+                return next;
+            }),
 
         updateWindow: (updates) =>
-            set((state) => ({
-                window: { ...state.window, ...updates }
-            })),
+            set((state) => {
+                const next = { window: { ...state.window, ...updates } };
+                queueMicrotask(scheduleSave);
+                return next;
+            }),
 
         // 立即保存当前状态
         save: saveImmediately,
@@ -161,8 +196,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         },
 
         resetAllToDefaults: async () => {
-            const defaults = await SettingsService.resetToDefaults();
-            set(mergeSettings(defaults));
+            const defaults = mergeSettings({});
+            set(defaults);
+            saveLocalSettings(defaults);
         },
     };
 });

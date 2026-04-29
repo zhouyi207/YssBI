@@ -3,8 +3,8 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
-import { SettingsService } from "@/services/settings/settingsService";
 import { DEFAULT_WINDOW } from "@/app/appConfig/default";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { i18n } from "@/app/i18n";
 import { logger } from '@/utils/appLogger';
@@ -32,33 +32,25 @@ export function useMenubar() {
       unlistenClose = await appWindow.onCloseRequested(async () => {
         try {
           const isMaximized = await appWindow.isMaximized();
+          const settings = useSettingsStore.getState();
           if (isMaximized) {
-            const settings = await SettingsService.loadSettings();
-            await SettingsService.saveSettings({
-              ...settings,
-              window: {
-                ...settings.window,
-                isMaximized: true,
-                width: DEFAULT_WINDOW.width,
-                height: DEFAULT_WINDOW.height,
-              },
+            settings.updateWindow({
+              isMaximized: true,
+              width: DEFAULT_WINDOW.width,
+              height: DEFAULT_WINDOW.height,
             });
           } else {
             const size = await appWindow.innerSize();
             const position = await appWindow.outerPosition();
-            const settings = await SettingsService.loadSettings();
-            await SettingsService.saveSettings({
-              ...settings,
-              window: {
-                ...settings.window,
-                width: size.width,
-                height: size.height,
-                x: position.x,
-                y: position.y,
-                isMaximized: false,
-              },
+            settings.updateWindow({
+              width: size.width,
+              height: size.height,
+              x: position.x,
+              y: position.y,
+              isMaximized: false,
             });
           }
+          await useSettingsStore.getState().save();
         } catch (e) {
           logger.app.error(`Failed to save window state on close: ${e instanceof Error ? e.message : String(e)}`, 'Menubar');
         }

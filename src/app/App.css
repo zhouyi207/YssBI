@@ -258,8 +258,26 @@ body.layout-sash-dragging canvas {
 }
 
 :root:not(.dark) [class*="border-gray-700"],
-:root:not(.dark) [class*="border-gray-800"] {
+:root:not(.dark) [class*="border-gray-800"],
+:root:not(.dark) [class*="border-[#2b2b2b]"],
+:root:not(.dark) [class*="border-[#3e3e3e]"],
+:root:not(.dark) [class*="border-black"] {
   border-color: var(--border) !important;
+}
+
+:root:not(.dark) [class*="bg-black/10"],
+:root:not(.dark) [class*="bg-black/20"],
+:root:not(.dark) [class*="bg-black/30"] {
+  background-color: color-mix(in oklab, var(--muted) 75%, transparent) !important;
+}
+
+:root:not(.dark) .shadow-xl,
+:root:not(.dark) .shadow-2xl {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06) !important;
+}
+
+:root:not(.dark) [class*="shadow-[0_-1px_0"] {
+  box-shadow: 0 -1px 0 var(--border) !important;
 }
 
 :root:not(.dark) .hover\:bg-white\/5:hover,

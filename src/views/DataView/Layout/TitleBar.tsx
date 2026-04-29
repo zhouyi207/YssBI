@@ -38,7 +38,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ isModified }) => {
   const handleClose = () => getCurrentWindow().close();
 
   return (
-    <div data-tauri-drag-region className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 shadow-xl select-none shrink-0">
+    <div data-tauri-drag-region className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none shrink-0">
       <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
         <VscDatabase className="text-[var(--accent-color)]" size={16} />
         <span className="text-foreground font-bold text-sm tracking-tight">{t("dataView.title")}</span>

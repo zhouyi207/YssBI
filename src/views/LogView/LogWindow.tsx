@@ -54,13 +54,13 @@ export const LogWindow = () => {
       {/* 自定义标题栏 - 与主窗口一致 */}
       <div
         data-tauri-drag-region
-        className="h-10 bg-[var(--workbench-bg)] border-b border-gray-800 flex items-center z-50 shadow-xl select-none shrink-0 rounded-tr-lg overflow-hidden"
+        className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none shrink-0 rounded-tr-lg overflow-hidden"
       >
         <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-white font-bold text-sm tracking-tight">{t("log.title")}</span>
+          <span className="text-foreground font-bold text-sm tracking-tight">{t("log.title")}</span>
         </div>
 
         {/* 窗口控制按钮 */}
