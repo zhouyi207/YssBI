@@ -90,7 +90,7 @@ pub fn run() {
             create_project,
             new_project,
             load_project,
-            save_project,
+            flush_project,
             execute_project,
             get_window_data,
             // ==================== 设置 ====================
@@ -98,7 +98,14 @@ pub fn run() {
             save_settings,
             // ==================== Graph CRUD ====================
             get_graph,
+            unload_project_graph,
+            save_project_graph,
             remove_graph,
+            create_graph_folder,
+            rename_graph_folder,
+            delete_graph_folder,
+            move_graph_to_folder,
+            duplicate_graph,
             create_event,
             update_event,
             create_function,

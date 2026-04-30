@@ -4,6 +4,7 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
@@ -27,6 +28,7 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
         payload.pins.forEach((pin) => {
             store.addPin(payload.nodeId, pin as PinData);
         });
+        markGraphTabDirty(payload.graphId);
         callbacks?.onNodeCreated?.(payload.graphId, payload.nodeId, payload.data);
     }
 }
@@ -67,6 +69,7 @@ export class NodesBatchCreatedHandler extends BaseEventHandler<NodesBatchCreated
         }));
 
         store.batchAddNodesAndPins(payload.graphId, items);
+        markGraphTabDirty(payload.graphId);
 
         if (callbacks?.onNodeCreated) {
             for (const [nodeId, data] of payload.nodes) {
@@ -82,6 +85,7 @@ export class NodeDeletedHandler extends BaseEventHandler<NodeDeletedPayload> {
     handle(payload: NodeDeletedPayload, callbacks?: EventCallbacks): void {
         this.log('Node deleted:', payload.nodeId, 'from graph:', payload.graphId);
         useGraphDataStore.getState().deleteNode(payload.nodeId);
+        markGraphTabDirty(payload.graphId);
         callbacks?.onNodeDeleted?.(payload.graphId, payload.nodeId);
     }
 }
@@ -93,6 +97,7 @@ export class NodesBatchDeletedHandler extends BaseEventHandler<NodesBatchDeleted
         this.log('Batch nodes deleted:', payload.nodeIds.length, 'from graph:', payload.graphId);
         const store = useGraphDataStore.getState();
         store.batchDeleteNodes(payload.nodeIds);
+        markGraphTabDirty(payload.graphId);
 
         if (callbacks?.onNodeDeleted) {
             for (const nodeId of payload.nodeIds) {
@@ -110,6 +115,7 @@ export class NodePositionsUpdatedHandler extends BaseEventHandler<NodePositionsU
 
         const updates = payload.updates.map(([nodeId, x, y]) => ({ nodeId, x, y }));
         useGraphDataStore.getState().batchUpdateNodePositions(updates);
+        markGraphTabDirty(payload.graphId);
     }
 }
 
@@ -132,6 +138,7 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
         if (payload.pinOrder) {
             store.reorderNodePins(payload.nodeId, payload.pinOrder);
         }
+        markGraphTabDirty(payload.graphId);
     }
 }
 
@@ -145,5 +152,6 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
         for (const { pinId, pinType, containerType, typeDisplay } of payload.pinTypes) {
             store.updatePin(pinId, { type: pinType, containerType: containerType ?? undefined, typeDisplay: typeDisplay ?? undefined });
         }
+        markGraphTabDirty(payload.graphId);
     }
 }

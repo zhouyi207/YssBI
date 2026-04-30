@@ -27,6 +27,7 @@ export interface LayoutState {
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
+    setTabDirty: (tabId: string, isDirty: boolean) => void;
 
     // UI State
     isDragging: boolean;
@@ -615,6 +616,14 @@ export const useLayoutStore = create<LayoutState>()(
                 activeTabId: tab.id,
                 component: node.data?.component || 'GraphEditor'
             };
+        }),
+
+        setTabDirty: (tabId, isDirty) => set((state) => {
+            for (const node of Object.values(state.nodes)) {
+                if (node.type !== 'component' || !node.data?.tabs) continue;
+                const tab = node.data.tabs.find(t => t.id === tabId);
+                if (tab) tab.isDirty = isDirty;
+            }
         }),
 
         isSettingsOpen: false,

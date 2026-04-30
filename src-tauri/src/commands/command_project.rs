@@ -400,22 +400,14 @@ pub async fn create_project(
 }
 
 #[tauri::command]
-pub fn save_project(
+pub fn flush_project(
     app: AppHandle,
     state: State<ProjectState>,
-    path: String,
-) -> Result<(), FrontendError> {
-    log_app!(
-        LogLevel::Info,
-        "[command.save_project] Saving project to: {}",
-        path
-    );
+) -> Result<(), String> {
+    let path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
+    log_app!(LogLevel::Info, "[command.flush_project] Flushing project");
 
-    let mut project_data = state.get_data();
-    project_data.update_metadata();
-
-    save_project_to_file(&project_data, &path)?;
-    state.set_path(Some(path.clone()));
+    state.persist_current_project()?;
 
     emit_project_event(&app, Event::Project(EventProject::ProjectSaved { path }));
     Ok(())

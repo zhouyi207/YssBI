@@ -87,7 +87,6 @@ pub fn update_pin_user_value(
 
     graph.set_pin_user_value_by_pin_id(pin_uuid, value)?;
     drop(bounding);
-    state.persist_current_project()?;
     Ok(())
 }
 
@@ -119,7 +118,6 @@ pub fn clear_pin_user_value(
 
     graph.clear_pin_user_value_by_pin_id(pin)?;
     drop(bounding);
-    state.persist_current_project()?;
     Ok(())
 }
 
@@ -184,7 +182,6 @@ pub fn add_repeatable_pin(
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
     emit_pin_change_events(&app, graph_id, &graph, all_sets);
-    state.persist_current_project()?;
 
     Ok(AddRepeatablePinResult {
         pin_id: pin_id_str,
@@ -243,7 +240,6 @@ pub fn remove_repeatable_pin(
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
     emit_pin_change_events(&app, graph_id, &graph, all_sets);
-    state.persist_current_project()?;
 
     Ok(RemoveRepeatablePinResult {
         removed_pin_id: pin_id,

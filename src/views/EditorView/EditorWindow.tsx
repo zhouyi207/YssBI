@@ -35,7 +35,6 @@ export const EditorWindow = () => {
         cut: editor.cut,
         paste: editor.paste,
         saveGraph: editor.saveGraph,
-        saveGraphAs: editor.saveGraphAs,
         importGraph: editor.importGraph,
         addEvent: editor.addEvent,
         closeTab: editor.closeTab,

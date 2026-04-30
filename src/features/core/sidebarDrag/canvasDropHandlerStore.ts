@@ -1,6 +1,6 @@
 /**
  * Store for registering the Canvas drop handler per group.
- * Workspace calls this when a node-template is dropped on the canvas.
+ * Workspace calls this when a sidebar node template is dropped on the canvas.
  */
 import { createStore } from "zustand/vanilla";
 

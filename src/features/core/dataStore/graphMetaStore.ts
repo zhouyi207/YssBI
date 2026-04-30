@@ -7,6 +7,13 @@ export interface GraphMeta {
   name: string;
   type: 'event' | 'function';
   entryNodeId?: NodeId;
+  folderPath?: string;
+}
+
+export interface GraphFolderMeta {
+  name: string;
+  type: 'event' | 'function';
+  folderPath: string;
 }
 
 interface GraphMetaStore {
@@ -14,6 +21,7 @@ interface GraphMetaStore {
   graphs: Record<GraphId, GraphMeta>;
   // 图顺序（用于 UI tab / 列表）
   graphOrder: GraphId[];
+  graphFolders: GraphFolderMeta[];
 
   // ==========================
   // CRUD
@@ -26,6 +34,7 @@ interface GraphMetaStore {
   // Project / 全清
   // ==========================
   setGraphs(graphs: Record<GraphId, GraphMeta>, order?: GraphId[]): void;
+  setGraphFolders(folders: GraphFolderMeta[]): void;
   clear(): void;
 }
 
@@ -35,6 +44,7 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
   // ==========================
   graphs: {},
   graphOrder: [],
+  graphFolders: [],
 
   // ==========================
   // CRUD
@@ -86,8 +96,13 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
     graphOrder: order ?? Object.keys(graphs ?? {}),
   }),
 
+  setGraphFolders: (folders) => set({
+    graphFolders: folders ?? [],
+  }),
+
   clear: () => set({
     graphs: {},
     graphOrder: [],
+    graphFolders: [],
   }),
 }));

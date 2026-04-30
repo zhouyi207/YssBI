@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
+import { GraphService } from '@/services/graph/graphService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -10,11 +11,10 @@ import { logger } from '@/utils/appLogger';
 
 /**
  * Project Operations Hook
- * Handles save, load, and execute operations
+ * Handles flush, load, and execute operations
  */
 export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void | Promise<void>) {
   const currentPath = useProjectIOStore((s) => s.currentPath);
-  const setCurrentPath = useProjectIOStore((s) => s.setCurrentPath);
 
   // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
   const syncActiveToCollection = useCallback(() => {
@@ -23,29 +23,31 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   }, []);
 
   const saveGraphAs = useCallback(async () => {
-    try {
-      syncActiveToCollection();
-      const path = await ProjectService.saveProjectFromState();
-      if (path) {
-        setCurrentPath(path);
-        uiStore.showToast("项目已保存", "success", 2000);
-      }
-    } catch (e) {
-      logger.app.error(String(e), 'ProjectOperations');
-    }
-  }, [syncActiveToCollection, setCurrentPath]);
+    uiStore.showToast("项目目录模式暂不支持另存为", "warning", 3000);
+  }, []);
 
   const saveGraph = useCallback(async () => {
-    if (!currentPath) return saveGraphAs();
+    if (!currentPath) {
+      uiStore.showToast("项目尚未加载", "warning", 2000);
+      return;
+    }
     syncActiveToCollection();
     try {
-      await ProjectService.saveProjectFromState(currentPath);
-      uiStore.showToast("项目已保存", "success", 2000);
+      const layoutStore = useLayoutStore.getState();
+      const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+      const activeTabId = editorGroupId ? layoutStore.nodes[editorGroupId]?.data?.activeTabId : null;
+      if (!activeTabId) {
+        uiStore.showToast("请先打开一个图", "warning", 2000);
+        return;
+      }
+      await GraphService.saveProjectGraph(activeTabId);
+      layoutStore.setTabDirty(activeTabId, false);
+      uiStore.showToast("图已保存", "success", 2000);
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast("保存失败", "error", 2000);
     }
-  }, [currentPath, saveGraphAs, syncActiveToCollection]);
+  }, [currentPath, syncActiveToCollection]);
 
   const importGraph = useCallback(async () => {
     try {

@@ -1,4 +1,4 @@
-import { save, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
@@ -25,6 +25,13 @@ export interface ProjectGraphIndexRow {
     id: string;
     name: string;
     type: "event" | "function";
+    folderPath: string;
+}
+
+export interface ProjectFolderIndexRow {
+    name: string;
+    type: "event" | "function";
+    folderPath: string;
 }
 
 export interface ProjectIndexRow {
@@ -32,6 +39,7 @@ export interface ProjectIndexRow {
     appVersion: string;
     exportTime: string;
     graphs: ProjectGraphIndexRow[];
+    folders: ProjectFolderIndexRow[];
 }
 
 export interface LoadedProjectGraphRow {
@@ -317,22 +325,13 @@ export class ProjectService {
     }
 
     /**
-     * 保存当前项目状态到文件
+     * Flush the current file-backed project to disk.
      */
-    static async saveProjectFromState(path?: string): Promise<string | null> {
+    static async flushProject(): Promise<void> {
         try {
-            let filePath: string | undefined = path;
-            if (!filePath) {
-                const selected = await save({
-                    filters: [{ name: "YssBI Project", extensions: ["yssbi"] }]
-                });
-                if (!selected) return null;
-                filePath = selected;
-            }
-            await invoke("save_project", { path: filePath });
-            return filePath;
+            await invoke("flush_project");
         } catch (e) {
-            logger.app.error(`Failed to save project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
+            logger.app.error(`Failed to flush project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
             throw e;
         }
     }

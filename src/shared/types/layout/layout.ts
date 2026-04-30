@@ -24,6 +24,7 @@ export interface LayoutTab {
     title: string;
     component: string;
     type?: "event" | "function" | "project" | "setting";
+    isDirty?: boolean;
     params?: Record<string, any>;
 }
 

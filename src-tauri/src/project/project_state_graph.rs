@@ -1,6 +1,7 @@
 use super::unique_name;
 use super::ProjectState;
 use crate::graph::{GraphId, GraphInstance, GraphKind};
+use crate::variable::VariableScope;
 use std::sync::Arc;
 
 impl ProjectState {
@@ -43,6 +44,17 @@ impl ProjectState {
 
     pub fn remove_graph(&self, graph_id: &GraphId) -> Option<GraphInstance> {
         self.project_data.write().unwrap().graphs.remove(graph_id)
+    }
+
+    pub fn unload_graph(&self, graph_id: &GraphId) {
+        let graph_id_string = graph_id.to_string();
+        let mut data = self.project_data.write().unwrap();
+        data.graphs.remove(graph_id);
+        data.variables.retain(|_, variable| match &variable.scope {
+            VariableScope::Global => true,
+            VariableScope::Event { event_id } => event_id != &graph_id_string,
+            VariableScope::Function { function_id } => function_id != &graph_id_string,
+        });
     }
 
     pub fn get_graph(&self, graph_id: &GraphId) -> Option<GraphInstance> {

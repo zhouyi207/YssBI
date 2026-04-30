@@ -3,6 +3,8 @@ import { Graph } from '@/shared/types/domain';
 import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
+import { releaseGraphCacheIfClosed } from './releaseGraphCache';
+import { closeGraphTab } from './closeGraphTab';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -83,21 +85,23 @@ export function useTabManagement() {
     handleSetActiveTabId("settings", "setting", undefined, targetGroupId);
   }, [handleSetActiveTabId]);
 
-  const closeTab = useCallback((id: string, e?: React.MouseEvent) => {
+  const closeTab = useCallback((id: string, e?: React.MouseEvent, options?: { skipDirtyPrompt?: boolean }) => {
     if (e) e.stopPropagation();
-    const nodes = useLayoutStore.getState().nodes;
-    const node = Object.values(nodes).find(n => n.data?.tabs?.find(t => t.id === id));
-    if (node) {
-      useLayoutStore.getState().removeTab(node.id, id);
-    }
+    void closeGraphTab(id, undefined, options?.skipDirtyPrompt);
   }, []);
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
     useLayoutStore.getState().splitNode(sourceGroupId, 'row', 'GraphEditor');
   }, []);
 
-  const closeGroup = useCallback((id: string) => {
+  const closeGroup = useCallback(async (id: string) => {
+    const tabIds = useLayoutStore.getState().nodes[id]?.data?.tabs?.map((tab) => tab.id) ?? [];
+    for (const tabId of tabIds) {
+      const closed = await closeGraphTab(tabId, id);
+      if (!closed) return;
+    }
     useLayoutStore.getState().removeNode(id);
+    tabIds.forEach(releaseGraphCacheIfClosed);
   }, []);
 
   return {

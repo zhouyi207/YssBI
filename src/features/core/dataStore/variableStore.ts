@@ -8,6 +8,7 @@ interface VariableStore {
   addVariable(id: VariableId, v: Variable): void;
   updateVariable(id: VariableId, patch: Partial<Variable>): void;
   deleteVariable(id: VariableId): void;
+  clearGraphVariables(graphId: string): void;
 
   setVariables(vars: Record<VariableId, Variable>): void;
   clear(): void;
@@ -48,6 +49,21 @@ export const useVariableStore = create<VariableStore>((set) => ({
       }
       const nextVars = { ...state.variables };
       delete nextVars[id];
+      return { variables: nextVars };
+    }),
+
+  clearGraphVariables: (graphId) =>
+    set((state) => {
+      const nextVars = { ...state.variables };
+      for (const [id, variable] of Object.entries(state.variables)) {
+        const scope = variable.scope;
+        if (
+          (scope.type === 'event' && scope.eventId === graphId) ||
+          (scope.type === 'function' && scope.functionId === graphId)
+        ) {
+          delete nextVars[id];
+        }
+      }
       return { variables: nextVars };
     }),
 

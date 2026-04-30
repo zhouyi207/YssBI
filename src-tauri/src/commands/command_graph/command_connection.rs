@@ -154,7 +154,6 @@ pub fn connect_pins(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    state.persist_current_project()?;
 
     let (ad_from, ad_to) = auto_disconnected_list
         .first()
@@ -223,7 +222,6 @@ pub fn disconnect_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    state.persist_current_project()?;
     Ok(result)
 }
 
@@ -282,7 +280,6 @@ pub fn delete_connection(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    state.persist_current_project()?;
     Ok(())
 }
 
@@ -372,7 +369,6 @@ pub fn delete_connections_for_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    state.persist_current_project()?;
 
     Ok(removed_ids)
 }
@@ -429,7 +425,6 @@ pub fn delete_connections_for_node(
     }
 
     emit_inferred_types(&app, graph_id, all_inferred);
-    state.persist_current_project()?;
 
     Ok(removed_ids)
 }
@@ -465,7 +460,6 @@ pub fn update_canvas(
         graph.position.scale = scale;
     }
     drop(data);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -533,6 +527,5 @@ pub fn rename_subgraph(state: State<ProjectState>, id: String, name: String) -> 
         .ok_or_else(|| format!("Graph '{}' not found", id))?;
     graph.name = crate::project::unique_name::unique_name(&name, existing);
     drop(data);
-    state.persist_current_project()?;
     Ok(())
 }

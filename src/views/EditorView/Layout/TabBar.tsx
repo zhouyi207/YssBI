@@ -8,6 +8,9 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
+import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
+import { closeGraphTab } from "@/features/application/editor/closeGraphTab";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -40,7 +43,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   // 为 TabBar 添加 droppable 区域，用于标签页移动（作为最后位置的 fallback）
   const { setNodeRef: setDropRef, isOver: isTabBarOver } = useDroppable({
     id: `tabbar-${layoutNodeId}`,
-    data: { dropType: 'tabbar', targetNodeId: layoutNodeId, targetTabIndex: tabs.length }
+    data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length }
   });
   
   // 当拖动到 TabBar 的空白区域时，显示在最后位置的指示器
@@ -62,7 +65,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    useLayoutStore.getState().removeTab(layoutNodeId, id);
+    void closeGraphTab(id, layoutNodeId);
   };
 
   const handleSplit = (e: React.MouseEvent) => {
@@ -80,9 +83,15 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     splitNode(layoutNodeId, direction, activeTab?.component || 'GraphEditor');
   };
 
-  const handleCloseGroup = (e: React.MouseEvent) => {
+  const handleCloseGroup = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    const tabIds = useLayoutStore.getState().nodes[layoutNodeId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+    for (const tabId of tabIds) {
+      const closed = await closeGraphTab(tabId, layoutNodeId);
+      if (!closed) return;
+    }
     removeNode(layoutNodeId);
+    tabIds.forEach(releaseGraphCacheIfClosed);
   };
 
   // Auto-scroll to active tab
@@ -236,12 +245,12 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
     
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `tab-${layoutNodeId}-${tab.id}`,
-        data: { type: 'tab', tabId: tab.id, sourceNodeId: layoutNodeId }
+        data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId }
     });
     
     const { setNodeRef: setDropRef, isOver } = useDroppable({
         id: `tab-drop-${layoutNodeId}-${index}`,
-        data: { dropType: 'tabbar', targetNodeId: layoutNodeId, targetTabIndex: index }
+        data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: index }
     });
     
     // 合并 draggable 和 droppable 的 refs
@@ -310,9 +319,13 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
                 onClick={onClose}
                 className="text-muted-foreground hover:text-foreground"
             >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                {tab.isDirty ? (
+                    <span className="h-2 w-2 rounded-full bg-current" />
+                ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                )}
             </Button>
         </div>
     );

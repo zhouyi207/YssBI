@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import type { MouseEvent } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
@@ -34,7 +35,7 @@ function toGraphMetaPatch(data: Partial<Graph>) {
  */
 export function useGraphManagement(
   openGraph: (id: string, name: string, type: any, data?: any) => void,
-  closeTab: (id: string) => void,
+  closeTab: (id: string, e?: MouseEvent, options?: { skipDirtyPrompt?: boolean }) => void,
   showToast?: (message: string, type: 'success' | 'error' | 'info') => void
 ) {
   const switchSidebarTab = useSidebarTab();
@@ -86,8 +87,6 @@ export function useGraphManagement(
         } as any);
         logger.graph.debug(`Opening newly created event: ${id}`, 'GraphManagement');
         openGraph(id, graph.name, "event", graph);
-      } else {
-        // Sidebar：不注册打开回调，事件到达后仅由 EventCreatedHandler 加入 store，不自动打开 tab
       }
 
       switchSidebarTab('graphs');
@@ -148,7 +147,7 @@ export function useGraphManagement(
       await GraphService.removeGraph(id);
       useGraphDataStore.getState().clearGraph(id);
       useGraphMetaStore.getState().deleteGraph(id);
-      closeTab(id);
+      closeTab(id, undefined, { skipDirtyPrompt: true });
     } catch (error) {
       logger.graph.error(`Failed to delete event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
@@ -238,7 +237,7 @@ export function useGraphManagement(
       await GraphService.removeGraph(id);
       useGraphDataStore.getState().clearGraph(id);
       useGraphMetaStore.getState().deleteGraph(id);
-      closeTab(id);
+      closeTab(id, undefined, { skipDirtyPrompt: true });
     } catch (error) {
       logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;

@@ -465,9 +465,7 @@ impl GraphInstance {
 
             data_state.connections.remove_node(node_id);
 
-            for pin in pins {
-                data_state.pins.remove(&pin.id);
-            }
+            data_state.remove_pins(pins.into_iter().map(|pin| pin.id).collect());
             data_state.nodes.remove(&node_id);
         }
 

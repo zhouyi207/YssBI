@@ -90,7 +90,6 @@ pub fn create_node(
             pins: pins_dto,
         }),
     );
-    state.persist_current_project()?;
 
     Ok(CreateNodeResult {
         node_id: node_id.to_string(),
@@ -177,7 +176,6 @@ pub fn batch_create_nodes(
         }),
     );
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(node_ids)
 }
@@ -209,7 +207,6 @@ pub fn delete_node(
         }
     }
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -257,7 +254,6 @@ pub fn batch_delete_nodes(
         }
     }
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -289,7 +285,6 @@ pub fn update_node_positions(
         }),
     );
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -376,7 +371,6 @@ pub fn create_node_with_id(
         }),
     );
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -590,7 +584,6 @@ pub fn restore_nodes(
 
     let _ = graph.infer_types();
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(())
 }
@@ -798,7 +791,6 @@ pub fn batch_create_with_connections(
 
     let _ = graph.infer_types();
     drop(bounding);
-    state.persist_current_project()?;
 
     Ok(BatchCreateWithConnectionsResult {
         node_ids: node_id_strings,

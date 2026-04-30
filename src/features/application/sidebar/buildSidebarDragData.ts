@@ -1,5 +1,6 @@
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import type { DataType } from "@/shared/types/domain";
+import { DRAG_TYPES } from "@/features/core/dnd";
 
 /**
  * Build drag data for sidebar items (variables, functions, events, data).
@@ -8,8 +9,12 @@ export function buildSidebarDragData(
   id: string,
   name: string,
   type: "variable" | "function" | "event" | "data",
-  extra?: { dataType?: DataType | string }
+  extra?: { dataType?: DataType | string; folderPath?: string }
 ) {
+  const sidebarResource = type === "event" || type === "function"
+    ? { id, name, type, folderPath: extra?.folderPath ?? "" }
+    : undefined;
+
   if (type === "variable") {
     const dt = extra?.dataType;
     const variableType = dt
@@ -21,8 +26,9 @@ export function buildSidebarDragData(
       ? dt.kind === "Array" ? "array" : dt.kind === "DataSeries" ? "dataseries" : undefined
       : undefined;
     return {
-      type: "node-template",
+      type: DRAG_TYPES.NODE_TEMPLATE,
       template: {
+        title: name,
         nodeType: "Variables:Get Variable",
         category: "Variable",
         variableId: id,
@@ -34,8 +40,10 @@ export function buildSidebarDragData(
   }
   if (type === "function") {
     return {
-      type: "node-template",
+      type: DRAG_TYPES.NODE_TEMPLATE,
+      sidebarResource,
       template: {
+        title: name,
         nodeType: "Functions:Call Function",
         category: "Functions",
         subGraphId: id,
@@ -43,10 +51,17 @@ export function buildSidebarDragData(
       },
     };
   }
+  if (type === "event") {
+    return {
+      type: DRAG_TYPES.GRAPH_RESOURCE,
+      sidebarResource,
+    };
+  }
   if (type === "data") {
     return {
-      type: "node-template",
+      type: DRAG_TYPES.NODE_TEMPLATE,
       template: {
+        title: name,
         nodeType: "Data:Get DataFrame",
         category: "Data",
         variableId: id,

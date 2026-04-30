@@ -1,8 +1,10 @@
 import { create } from "zustand";
+import type { GraphResourceDragData } from "@/features/core/dnd";
 
 export interface SidebarDragState {
   type: string;
   template: any;
+  sidebarResource?: GraphResourceDragData;
   x: number;
   y: number;
 }

@@ -1,14 +1,10 @@
 import { useDroppable } from "@dnd-kit/core";
-
-export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
-
-export function getCanvasDropZoneId(groupId: string) {
-  return `${CANVAS_DROP_ZONE_ID_PREFIX}${groupId}`;
-}
+import { useSidebarDragStore } from "@/features/core/sidebarDrag";
+import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
 
 /**
  * Invisible droppable zone that covers the canvas area.
- * Allows sidebar items to be dropped onto the canvas.
+ * Node templates are inserted into the canvas; graph resources are opened as tabs.
  */
 export function CanvasDropZone({
   groupId,
@@ -17,14 +13,26 @@ export function CanvasDropZone({
   groupId: string;
   children: React.ReactNode;
 }) {
-  const { setNodeRef } = useDroppable({
+  const { setNodeRef, isOver } = useDroppable({
     id: getCanvasDropZoneId(groupId),
-    data: { dropType: "canvas", groupId },
+    data: { dropType: DROP_TYPES.CANVAS, groupId },
   });
+  const sidebarResource = useSidebarDragStore((s) => s.activeDrag?.sidebarResource);
 
   return (
     <div ref={setNodeRef} className="absolute inset-0 pointer-events-none">
-      <div className="absolute inset-0 pointer-events-auto">{children}</div>
+      <div className="absolute inset-0 pointer-events-auto">
+        {children}
+        {sidebarResource && isOver && (
+          <div className="absolute inset-0 z-30 bg-blue-500/12 ring-2 ring-inset ring-blue-400/60 pointer-events-none">
+            <div className="absolute inset-3 border border-blue-300/60 bg-blue-500/10 flex items-center justify-center">
+              <div className="rounded bg-[var(--workbench-bg)]/90 border border-blue-300/50 px-3 py-1.5 text-[12px] font-medium text-blue-100 shadow-lg">
+                Open {sidebarResource.name}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

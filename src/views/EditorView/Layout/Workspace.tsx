@@ -1,9 +1,21 @@
 import { forwardRef, useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
+import { useProjectIOStore } from "@/features/core/dataStore";
+import { useEditorStore } from "@/features/core/editor";
+import {
+  DRAG_TYPES,
+  isCanvasDrop,
+  isGraphFolderDrop,
+  isLayoutRegionDrop,
+  isTabbarDrop,
+  type GraphResourceDragData,
+} from "@/features/core/dnd";
+import { GraphService } from "@/services/graph/graphService";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DropIndicator } from "../Renderer/DropIndicator";
 import { SidebarDragOverlay } from "./SidebarDragOverlay";
@@ -38,14 +50,50 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     };
   }, []);
 
+  const openSidebarGraphInEditor = async (
+    resource: { id: string; name: string; type: "event" | "function" },
+    targetGroupId: string
+  ) => {
+    const loaded = await useProjectIOStore.getState().loadGraph(resource.id);
+    if (!loaded) return;
+
+    const layoutStore = useLayoutStore.getState();
+    layoutStore.addTab(targetGroupId, {
+      id: resource.id,
+      title: resource.name,
+      component: "GraphEditor",
+      type: resource.type,
+    });
+    layoutStore.setActiveGroup(targetGroupId);
+    useEditorStore.getState().setSelectedInfo(resource.id, resource.type);
+  };
+
+  const finishSidebarDrag = () => {
+    pointerMoveCleanupRef.current?.();
+    pointerMoveCleanupRef.current = null;
+    setActiveDrag(null);
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setDragging(true);
     const activeData = event.active.data.current as any;
-    if (activeData?.type === "node-template") {
+    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE || activeData?.type === DRAG_TYPES.GRAPH_RESOURCE) {
       const activatorEvent = event.activatorEvent as PointerEvent;
       const x = activatorEvent?.clientX ?? 0;
       const y = activatorEvent?.clientY ?? 0;
-      setActiveDrag({ type: activeData.type, template: activeData.template, x, y });
+      const title =
+        activeData.sidebarResource?.name ??
+        activeData.template?.title ??
+        activeData.template?.variableName ??
+        activeData.template?.subName ??
+        activeData.template?.nodeType;
+      setActiveDrag({
+        type: activeData.type,
+        template: { ...activeData.template, title },
+        sidebarResource: activeData.sidebarResource,
+        x,
+        y,
+      });
       const onMove = (e: PointerEvent) => updatePosition(e.clientX, e.clientY);
       pointerMoveCleanupRef.current?.();
       pointerMoveCleanupRef.current = addGlobalEventListener(document, "pointermove", onMove);
@@ -56,8 +104,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const { over, active } = event;
     const activeData = active.data.current as any;
 
-    // node-template 拖拽不显示布局 DropIndicator（由 Canvas 处理）
-    if (activeData?.type === "node-template") {
+    // Sidebar drags are handled by canvas/folder drop zones, so hide layout docking preview.
+    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE || activeData?.sidebarResource) {
       setDropState(s => ({ ...s, visible: false }));
       return;
     }
@@ -67,16 +115,20 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       return;
     }
 
-    const overData = over.data.current as any;
-    const dropType = overData?.dropType;
+    const overData = over.data.current;
     
-    if (dropType === 'tabbar') {
+    if (isTabbarDrop(overData)) {
       setDropState(s => ({ ...s, visible: false }));
       return;
     }
 
-    const targetNodeId = overData?.targetNodeId;
-    const dropPosition = overData?.dropPosition || 'center';
+    if (!isLayoutRegionDrop(overData)) {
+      setDropState(s => ({ ...s, visible: false }));
+      return;
+    }
+
+    const targetNodeId = overData.targetNodeId;
+    const dropPosition = overData.dropPosition;
     
     // 找到目标叶子节点的完整 DOM 元素
     const targetElement = document.getElementById(`layout-node-${targetNodeId}`);
@@ -121,16 +173,44 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     setDropState(s => ({ ...s, visible: false }));
     const { active, over } = event;
     const activeData = active.data.current as any;
+    const overData = over?.data.current;
+    const sidebarResource = activeData?.sidebarResource as
+      | GraphResourceDragData
+      | undefined;
 
-    if (activeData?.type === "node-template") {
-      pointerMoveCleanupRef.current?.();
-      pointerMoveCleanupRef.current = null;
+    if (sidebarResource && isGraphFolderDrop(overData)) {
+      finishSidebarDrag();
+
+      const targetType = overData.graphType as "event" | "function" | undefined;
+      const targetFolderPath = typeof overData.folderPath === "string" ? overData.folderPath : "";
+      const currentFolderPath = sidebarResource.folderPath ?? "";
+
+      if (targetType === sidebarResource.type && targetFolderPath !== currentFolderPath) {
+        void GraphService.moveGraphToFolder(sidebarResource.id, targetFolderPath)
+          .then(() => useProjectIOStore.getState().syncFromBackend())
+          .catch((error) => toast.error(error instanceof Error ? error.message : String(error)));
+      }
+      return;
+    }
+
+    if (sidebarResource && isCanvasDrop(overData)) {
+      finishSidebarDrag();
+
+      const targetGroupId = overData.groupId || useLayoutStore.getState().activeEditorGroupId || "default_editor";
+      void openSidebarGraphInEditor(sidebarResource, targetGroupId)
+        .catch((error) => toast.error(error instanceof Error ? error.message : String(error)));
+      return;
+    }
+
+    if (activeData?.type === DRAG_TYPES.GRAPH_RESOURCE) {
+      finishSidebarDrag();
+      return;
+    }
+
+    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE) {
       const dragState = useSidebarDragStore.getState().activeDrag;
-      setActiveDrag(null);
-      const overId = typeof over?.id === "string" ? over.id : "";
-      const groupId: string | null = overId.startsWith("canvas-drop-zone-")
-        ? overId.replace("canvas-drop-zone-", "")
-        : null;
+      finishSidebarDrag();
+      const groupId = isCanvasDrop(overData) ? overData.groupId : null;
       if (groupId && dragState) {
         // 将目标 canvas 设为 active group（确保 variable drop menu 等 UI 正确显示）
         useLayoutStore.getState().setActiveGroup(groupId);
@@ -148,19 +228,21 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     }
 
     if (over && active.id !== over.id) {
-      const dropData = over.data.current as any;
-      const dropPosition = dropData?.dropPosition || 'center';
-      const targetNodeId = dropData?.targetNodeId || over.id;
+      const dropData = over.data.current;
+      const dropPosition = isLayoutRegionDrop(dropData) ? dropData.dropPosition : 'center';
+      const targetNodeId = isLayoutRegionDrop(dropData) || isTabbarDrop(dropData)
+        ? dropData.targetNodeId
+        : over.id;
 
-      if (activeData?.type === 'tab') {
+      if (activeData?.type === DRAG_TYPES.TAB) {
         // 处理 Tab 拖拽
         const sourceNodeId = activeData.sourceNodeId;
         const tabId = activeData.tabId;
-        const dropType = dropData?.dropType; // 'tabbar' 或 undefined
+        const isTabbarTarget = isTabbarDrop(dropData);
 
-        if (dropType === 'tabbar') {
+        if (isTabbarTarget) {
           // 拖到 TabBar：移动标签页（VSCode 行为 - 从源编辑器删除）
-          const targetTabIndex = dropData?.targetTabIndex;
+          const targetTabIndex = dropData.targetTabIndex;
           moveTab(sourceNodeId, tabId, targetNodeId as string, targetTabIndex);
         } else {
           // 拖到画布区域（center/top/bottom/left/right）：分屏（VSCode 行为 - 复制标签页）
@@ -239,7 +321,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
             });
           }
         }
-      } else if (activeData?.type === 'leaf') {
+      } else if (activeData?.type === DRAG_TYPES.LEAF) {
         // 处理节点拖拽
         moveNode(active.id as string, targetNodeId as string, dropPosition);
       }
@@ -261,8 +343,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
         {/* Local Drop Indicator for Workspace */}
         <DropIndicator {...dropState} />
 
-        {/* Drag overlay for sidebar items (node-template) */}
-        <DragOverlay>
+        {/* Drag overlay for sidebar items */}
+        <DragOverlay dropAnimation={null}>
           <SidebarDragOverlay />
         </DragOverlay>
       </div>

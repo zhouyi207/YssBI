@@ -5,7 +5,8 @@ use crate::graph::core::SchemaProvider;
 use crate::graph::{GraphId, GraphInstance};
 use crate::log::log_sys;
 use crate::project::{
-    load_project_graph_from_file, save_project_to_file, GraphDocument, ProjectData, ProjectStore,
+    load_project_graph_from_file, save_project_graph_to_file, save_project_to_file, GraphDocument,
+    ProjectData, ProjectStore,
 };
 use crate::variable::VariableInstance;
 use std::collections::HashMap;
@@ -185,5 +186,17 @@ impl ProjectState {
             data.clone()
         };
         save_project_to_file(&snapshot, &path).map_err(|e| e.to_string())
+    }
+
+    pub fn persist_loaded_graph(&self, graph_id: &GraphId) -> Result<(), String> {
+        let Some(path) = self.get_path() else {
+            return Err("项目尚未加载".to_string());
+        };
+        let snapshot = {
+            let mut data = self.project_data.write().unwrap();
+            data.update_metadata();
+            data.clone()
+        };
+        save_project_graph_to_file(&snapshot, &path, graph_id).map_err(|e| e.to_string())
     }
 }

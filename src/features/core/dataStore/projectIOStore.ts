@@ -176,10 +176,11 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
       const graphMetaMap = Object.fromEntries(
         index.graphs.map((graph) => [
           graph.id,
-          { id: graph.id, name: graph.name, type: graph.type },
+          { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
         ])
       );
       useGraphMetaStore.getState().setGraphs(graphMetaMap);
+      useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
       useGraphDataStore.getState().hydrateGraphs({});
       useHistoryStore.getState().clear();
 

@@ -3,7 +3,7 @@ use crate::graph::DataType;
 use crate::graph::TypeVarId;
 use crate::graph::{NodeId, NodeInstance, PinId, PinInstance};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// - 所有 Node 实例
 /// - 所有 Pin 实例
@@ -54,6 +54,12 @@ impl GraphDataState {
             self.pins.remove(&pin_id);
             self.pin_types.remove(&pin_id);
         }
+    }
+
+    pub fn prune_orphan_pin_types(&mut self) {
+        let live_pin_ids: HashSet<PinId> = self.pins.keys().copied().collect();
+        self.pin_types
+            .retain(|pin_id, _| live_pin_ids.contains(pin_id));
     }
 
     /// 替换节点的 pins（用于动态 pin 重建）

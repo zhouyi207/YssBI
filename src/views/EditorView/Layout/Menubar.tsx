@@ -88,7 +88,6 @@ export function Menubar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
-    saveGraphAs,
     importGraph,
     saveGraph,
     undo,
@@ -135,7 +134,7 @@ export function Menubar() {
     { label: t("menubar.closeProject"), onClick: () => navigate("/projects") },
     { label: "-" },
     { label: t("menubar.saveProject"), shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
-    { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: activeTabId ? () => saveGraphAs() : undefined },
+    { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: undefined },
   ];
 
   const editItems: MenuItem[] = [

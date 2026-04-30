@@ -25,5 +25,5 @@ pub fn sync_graph_state(
 
     graph.rebuild_from_snapshot(snapshot)?;
     drop(bounding);
-    state.persist_current_project()
+    Ok(())
 }

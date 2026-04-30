@@ -6,6 +6,7 @@ import {
     EventCallbacks,
 } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 
 export class ConnectionCreatedHandler extends BaseEventHandler<ConnectionCreatedPayload> {
     eventType = 'ConnectionCreated';
@@ -13,6 +14,7 @@ export class ConnectionCreatedHandler extends BaseEventHandler<ConnectionCreated
     handle(payload: ConnectionCreatedPayload, _callbacks?: EventCallbacks): void {
         this.log('Connection created:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
         useGraphDataStore.getState().connect(payload.fromPin, payload.toPin);
+        markGraphTabDirty(payload.graphId);
     }
 }
 
@@ -23,6 +25,7 @@ export class ConnectionDeletedHandler extends BaseEventHandler<ConnectionDeleted
         this.log('Connection deleted:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
         const connectionId = `${payload.fromPin}->${payload.toPin}`;
         useGraphDataStore.getState().disconnect(connectionId);
+        markGraphTabDirty(payload.graphId);
     }
 }
 
@@ -52,6 +55,7 @@ export class ConnectionsBatchDeletedHandler extends BaseEventHandler<Connections
         }
         if (connectionIds.size > 0) {
             store.batchDisconnect(Array.from(connectionIds));
+            markGraphTabDirty(payload.graphId);
             return;
         }
 

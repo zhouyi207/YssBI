@@ -7,6 +7,7 @@ import { LayoutNode } from '@/shared/types/ui';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { GroupContext } from '@/features/application/editor';
 import { TabBar } from '../Layout/TabBar';
+import { DROP_TYPES, DRAG_TYPES } from '@/features/core/dnd';
 
 /**
  * 布局引擎核心渲染器
@@ -147,7 +148,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
 
     const { attributes: _attributes, listeners: _listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
         id: node.id,
-        data: { type: 'leaf', node },
+        data: { type: DRAG_TYPES.LEAF, node },
         disabled: isFixed // 禁用固定节点的拖拽功能
     });
 
@@ -206,8 +207,8 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
 
 /**
  * 拖拽停靠区域覆盖层 (DND Drop Zones)
- * 仅在拖拽布局节点或 Tab 时显示，不在拖拽 sidebar node-template 时显示，
- * 避免遮挡 CanvasDropZone 导致 sidebar 拖拽失效。
+ * 仅在拖拽布局节点或 Tab 时显示。
+ * Sidebar 拖拽由 CanvasDropZone / sidebar folder drop target 单独处理。
  */
 const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
     const isDragging = useLayoutStore(s => s.isDragging);
@@ -230,7 +231,7 @@ const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
 const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: string, className: string }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: `${nodeId}-${zone}`,
-        data: { dropPosition: zone, targetNodeId: nodeId }
+        data: { dropType: DROP_TYPES.LAYOUT_REGION, dropPosition: zone, targetNodeId: nodeId }
     });
 
     return (

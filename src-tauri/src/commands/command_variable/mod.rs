@@ -20,7 +20,9 @@ pub fn create_variable(
 ) -> Result<String, String> {
     let variable = state.add_variable(name, data_type, data_value, description, scope, tags);
     let variable_id = variable.id.to_string();
-    state.persist_current_project()?;
+    if matches!(variable.scope, VariableScope::Global) {
+        state.persist_current_project()?;
+    }
     emit_project_event(
         &app,
         Event::Variable(EventVariable::VariableCreated {
@@ -61,6 +63,7 @@ pub fn update_variable(
     let updated = state
         .update_variable(&variable_id, name, data_type, data_value, description, tags)
         .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+    let persist_global = matches!(updated.scope, VariableScope::Global);
 
     emit_project_event(
         &app,
@@ -155,7 +158,9 @@ pub fn update_variable(
         }
     }
 
-    state.persist_current_project()?;
+    if persist_global {
+        state.persist_current_project()?;
+    }
     Ok(())
 }
 
@@ -167,7 +172,9 @@ pub fn delete_variable(
     variable_id: VariableId,
 ) -> Result<(), String> {
     let variable = state.remove_variable(&variable_id).unwrap();
-    state.persist_current_project()?;
+    if matches!(variable.scope, VariableScope::Global) {
+        state.persist_current_project()?;
+    }
     emit_project_event(
         &app,
         Event::Variable(EventVariable::VariableDeleted {

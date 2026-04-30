@@ -1,6 +1,6 @@
-import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import {
@@ -16,15 +16,25 @@ import {
   VscSymbolVariable,
   VscDiscard,
   VscRedo,
+  VscFolder,
+  VscNewFolder,
+  VscEdit,
+  VscTrash,
+  VscCopy,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useHistoryStore } from "@/features/core/history";
 import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
+import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ContextMenu, type ContextMenuSection } from "@/views/EditorView/ContextMenu/ContextMenu";
+import { GraphService } from "@/services/graph/graphService";
+import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 
 /**
@@ -40,13 +50,15 @@ const SidebarDraggableItem: React.FC<{
   dragData: { type: string; template?: unknown } | null;
   children: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
-}> = ({ id, dragData, children, className, onClick, onDoubleClick }) => {
+  onContextMenu?: (e: React.MouseEvent) => void;
+}> = ({ id, dragData, children, className, style, onClick, onDoubleClick, onContextMenu }) => {
   const canDrag = !!dragData;
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef } = useDraggable({
     id: `sidebar-item-${id}`,
-    data: dragData ?? { type: "node-template", template: {} },
+    data: dragData ?? { type: DRAG_TYPES.NODE_TEMPLATE, template: {} },
     disabled: !canDrag,
   });
 
@@ -57,9 +69,11 @@ const SidebarDraggableItem: React.FC<{
       {...(canDrag ? attributes : {})}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
       className={`${className ?? ""} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{
-        opacity: isDragging ? 0.5 : 1,
+        ...style,
+        opacity: 1,
         touchAction: canDrag ? "none" : undefined,
       }}
     >
@@ -77,66 +91,91 @@ const StackedCollapsibleSection = ({
   expanded,
   onToggle,
   onAdd,
+  dropTarget,
+  onHeaderContextMenu,
+  onContentContextMenu,
   children,
 }: {
   label: string;
   expanded: boolean;
   onToggle: () => void;
   onAdd?: () => void;
+  dropTarget?: GraphFolderDropTarget;
+  onHeaderContextMenu?: (e: React.MouseEvent) => void;
+  onContentContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
-}) => (
-  <div
-    className={`flex flex-col shrink-0 min-h-0 ${expanded ? "flex-1" : "flex-none"}`}
-    style={expanded ? { minHeight: 0 } : undefined}
-  >
+}) => {
+  const fallbackDropId = useId();
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropTarget
+      ? `graph-folder-drop-${dropTarget.graphType}-${dropTarget.folderPath || "root"}`
+      : `graph-folder-drop-disabled-${fallbackDropId}`,
+    data: dropTarget
+      ? { dropType: DROP_TYPES.GRAPH_FOLDER, graphType: dropTarget.graphType, folderPath: dropTarget.folderPath }
+      : undefined,
+    disabled: !dropTarget,
+  });
+
+  return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
-        e.stopPropagation();
-        onToggle();
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        onToggle();
-      }}
-      className={`group flex items-center gap-2 px-2 py-1.5 cursor-pointer shrink-0 h-7 min-h-7 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-gray-500 hover:bg-[var(--sidebar-hover)]`}
+      ref={setNodeRef}
+      className={`flex flex-col shrink-0 min-h-0 ${expanded ? "flex-1" : "flex-none"} ${
+        isOver ? "bg-[var(--sidebar-hover)]" : ""
+      }`}
+      style={expanded ? { minHeight: 0 } : undefined}
     >
-      <span
-        className="shrink-0 text-gray-500 transition-transform duration-150 ease-out"
-        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
+          e.stopPropagation();
+          onToggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          onToggle();
+        }}
+        onContextMenu={onHeaderContextMenu}
+        className={`group flex items-center gap-2 px-2 py-1.5 cursor-pointer shrink-0 h-7 min-h-7 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-gray-500 hover:bg-[var(--sidebar-hover)]`}
       >
-        <VscChevronDown size={12} />
-      </span>
-      <span className="flex-1 text-[12px] tracking-tight truncate">{label}</span>
-      {onAdd && (
-        <Button
-          data-add-btn
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAdd();
-          }}
-          className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
+        <span
+          className="shrink-0 text-gray-500 transition-transform duration-150 ease-out"
+          style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
         >
-          <VscAdd size={11} />
-        </Button>
-      )}
+          <VscChevronDown size={12} />
+        </span>
+        <span className="flex-1 text-[12px] tracking-tight truncate">{label}</span>
+        {onAdd && (
+          <Button
+            data-add-btn
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+            className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            <VscAdd size={11} />
+          </Button>
+        )}
+      </div>
+      <div
+        className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
+        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+      >
+        <OverlayScrollbar className="min-h-0 flex-1">
+          <div className="min-h-full" onContextMenu={onContentContextMenu}>
+            {children}
+          </div>
+        </OverlayScrollbar>
+      </div>
     </div>
-    <div
-      className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
-      style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-    >
-      <OverlayScrollbar className="min-h-0">
-        {children}
-      </OverlayScrollbar>
-    </div>
-  </div>
-);
+  );
+};
 
 /**
  * 可折叠分类区块（非堆叠模式，用于嵌套结构如 Local 下的 graphName）
@@ -150,6 +189,9 @@ const CollapsibleSection = ({
   headerContent,
   headerContentToggles = true,
   headerActive,
+  indentDepth = 0,
+  dropTarget,
+  onContextMenu,
   children,
 }: {
   label: string;
@@ -159,61 +201,131 @@ const CollapsibleSection = ({
   headerContent?: React.ReactNode;
   headerContentToggles?: boolean;
   headerActive?: boolean;
+  indentDepth?: number;
+  dropTarget?: GraphFolderDropTarget;
+  onContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
-}) => (
-  <div>
-    <div
-      role="button"
-      tabIndex={0}
-      className={`flex items-center gap-2 py-1 pl-4 pr-2 cursor-pointer group transition-colors duration-150 ease-out ${
-        headerActive ? "bg-[var(--sidebar-item-active)]" : "hover:bg-[var(--sidebar-hover)]"
-      }`}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
-        if (!headerContentToggles && (e.target as HTMLElement).closest("[data-header-content]")) return;
-        e.stopPropagation();
-        onToggle();
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        onToggle();
-      }}
-    >
-      <span className="text-gray-500 shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
-        <VscChevronDown size={11} />
-      </span>
-      {headerContent ? (
-        <div data-header-content className="flex-1 min-w-0">
-          {headerContent}
-        </div>
-      ) : (
-        <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>
-      )}
-      {onAdd && (
-        <Button
-          data-add-btn
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAdd();
-          }}
-          className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          <VscAdd size={11} />
-        </Button>
-      )}
+}) => {
+  const fallbackDropId = useId();
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropTarget
+      ? `graph-folder-drop-${dropTarget.graphType}-${dropTarget.folderPath || "root"}`
+      : `graph-folder-drop-disabled-${fallbackDropId}`,
+    data: dropTarget
+      ? { dropType: DROP_TYPES.GRAPH_FOLDER, graphType: dropTarget.graphType, folderPath: dropTarget.folderPath }
+      : undefined,
+    disabled: !dropTarget,
+  });
+
+  return (
+    <div ref={setNodeRef} className={isOver ? "bg-[var(--sidebar-hover)]" : undefined}>
+      <div
+        role="button"
+        tabIndex={0}
+        className={`flex items-center gap-2 py-1 pr-2 cursor-pointer group transition-colors duration-150 ease-out ${
+          headerActive ? "bg-[var(--sidebar-item-active)]" : "hover:bg-[var(--sidebar-hover)]"
+        }`}
+        style={{ paddingLeft: 16 + indentDepth * 16 }}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
+          if (!headerContentToggles && (e.target as HTMLElement).closest("[data-header-content]")) return;
+          e.stopPropagation();
+          onToggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          onToggle();
+        }}
+        onContextMenu={onContextMenu}
+      >
+        <span className="text-gray-500 shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
+          <VscChevronDown size={11} />
+        </span>
+        {headerContent ? (
+          <div data-header-content className="flex-1 min-w-0">
+            {headerContent}
+          </div>
+        ) : (
+          <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>
+        )}
+        {onAdd && (
+          <Button
+            data-add-btn
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+            className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            <VscAdd size={11} />
+          </Button>
+        )}
+      </div>
+      <div
+        className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
+        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+      >
+        <div className="min-h-0">{children}</div>
+      </div>
     </div>
-    <div
-      className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
-      style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-    >
-      <div className="min-h-0">{children}</div>
-    </div>
-  </div>
-);
+  );
+};
+
+type GraphResourceType = "event" | "function";
+
+interface GraphFolderDropTarget {
+  graphType: GraphResourceType;
+  folderPath: string;
+}
+
+interface GraphTreeNode {
+  name: string;
+  path: string;
+  folders: Map<string, GraphTreeNode>;
+  graphs: Array<[string, { name: string; folderPath?: string }]>;
+}
+
+function createGraphTreeNode(name = "", path = ""): GraphTreeNode {
+  return { name, path, folders: new Map(), graphs: [] };
+}
+
+function joinFolderPath(parent: string, name: string): string {
+  const cleanName = name.trim();
+  if (!cleanName) return parent;
+  return parent ? `${parent}/${cleanName}` : cleanName;
+}
+
+function ensureFolder(root: GraphTreeNode, folderPath: string): GraphTreeNode {
+  const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
+  let node = root;
+  let current = "";
+  for (const part of parts) {
+    current = joinFolderPath(current, part);
+    if (!node.folders.has(part)) {
+      node.folders.set(part, createGraphTreeNode(part, current));
+    }
+    node = node.folders.get(part)!;
+  }
+  return node;
+}
+
+function buildGraphTree(
+  graphs: Record<string, { name: string; folderPath?: string }>,
+  folders: Array<{ name: string; folderPath: string }>
+): GraphTreeNode {
+  const root = createGraphTreeNode();
+  for (const folder of folders) {
+    ensureFolder(root, folder.folderPath);
+  }
+  for (const [id, graph] of Object.entries(graphs)) {
+    ensureFolder(root, graph.folderPath ?? "").graphs.push([id, graph]);
+  }
+  return root;
+}
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
@@ -228,12 +340,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     selectedItemType,
     setSelectedInfo,
     addVariable,
+    updateVariable,
+    deleteVariable,
     promoteVariable,
     demoteVariable,
     functions,
     addFunction,
+    deleteFunction,
     events,
     addEvent,
+    deleteEvent,
     dataframes,
     triggerImportData,
     openGraph,
@@ -247,11 +363,48 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   );
 
   const listRef = useRef<HTMLDivElement>(null);
+  const graphFolders = useGraphMetaStore((s) => s.graphFolders);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target:
+      | { type: "graph"; id: string; name: string; graphType: GraphResourceType; folderPath?: string }
+      | { type: "folder"; graphType: GraphResourceType; folderPath: string; name: string }
+      | { type: "section"; graphType: GraphResourceType; folderPath?: string }
+      | { type: "variable"; id: string; name: string };
+  } | null>(null);
+  const [inputDialog, setInputDialog] = useState<{
+    title: string;
+    value: string;
+    submitLabel?: string;
+    onSubmit: (value: string) => void | Promise<void>;
+  } | null>(null);
 
   const activeEditorNode = useLayoutStore((s) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
+
+  const refreshProjectIndex = useCallback(async () => {
+    await useProjectIOStore.getState().syncFromBackend();
+  }, []);
+
+  const openInputDialog = useCallback((
+    title: string,
+    value: string,
+    onSubmit: (value: string) => void | Promise<void>,
+    submitLabel = "OK"
+  ) => {
+    setInputDialog({ title, value, onSubmit, submitLabel });
+  }, []);
+
+  const submitInputDialog = useCallback(async () => {
+    if (!inputDialog) return;
+    const value = inputDialog.value.trim();
+    if (!value) return;
+    await inputDialog.onSubmit(value);
+    setInputDialog(null);
+  }, [inputDialog]);
 
   // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
   const { Variables: globalVariables, graphScopeVariables } = (() => {
@@ -335,16 +488,159 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, graphVarsCount, dataframesCount]);
 
+  const openContextMenu = useCallback((
+    e: React.MouseEvent,
+    target: NonNullable<typeof contextMenu>["target"]
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, target });
+  }, []);
+
+  const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
+    if (type === "event") {
+      await GraphService.createEvent("New Event", folderPath);
+    } else {
+      await GraphService.createFunction("New Function", folderPath);
+    }
+    await refreshProjectIndex();
+  }, [refreshProjectIndex]);
+
+  const createFolderInFolder = useCallback((type: GraphResourceType, parentFolderPath = "") => {
+    openInputDialog("New Folder", "New Folder", async (name) => {
+      await GraphService.createGraphFolder(type, joinFolderPath(parentFolderPath, name));
+      await refreshProjectIndex();
+    }, "Create");
+  }, [openInputDialog, refreshProjectIndex]);
+
+  const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
+    openInputDialog("Rename", name, async (nextName) => {
+      if (type === "event") {
+        await GraphService.updateEvent(id, { name: nextName } as any);
+      } else {
+        await GraphService.updateFunction(id, { name: nextName } as any);
+      }
+      await refreshProjectIndex();
+    }, "Rename");
+  }, [openInputDialog, refreshProjectIndex]);
+
+  const deleteGraphItem = useCallback(async (id: string, type: GraphResourceType) => {
+    if (type === "event") {
+      await deleteEvent(id);
+    } else {
+      await deleteFunction(id);
+    }
+    await refreshProjectIndex();
+  }, [deleteEvent, deleteFunction, refreshProjectIndex]);
+
+  const duplicateGraphItem = useCallback(async (id: string) => {
+    await GraphService.duplicateGraph(id);
+    await refreshProjectIndex();
+  }, [refreshProjectIndex]);
+
+  const renameFolderItem = useCallback((type: GraphResourceType, folderPath: string, name: string) => {
+    openInputDialog("Rename Folder", name, async (nextName) => {
+      await GraphService.renameGraphFolder(type, folderPath, nextName);
+      await refreshProjectIndex();
+    }, "Rename");
+  }, [openInputDialog, refreshProjectIndex]);
+
+  const deleteFolderItem = useCallback(async (type: GraphResourceType, folderPath: string) => {
+    await GraphService.deleteGraphFolder(type, folderPath);
+    await refreshProjectIndex();
+  }, [refreshProjectIndex]);
+
+  const renameVariableItem = useCallback((id: string, name: string) => {
+    openInputDialog("Rename Variable", name, async (nextName) => {
+      await updateVariable(id, { name: nextName } as any);
+    }, "Rename");
+  }, [openInputDialog, updateVariable]);
+
+  const buildContextMenuSections = useCallback((): ContextMenuSection[] => {
+    if (!contextMenu) return [];
+    const target = contextMenu.target;
+    if (target.type === "graph") {
+      return [
+        {
+          items: [
+            { id: "open", label: "Open", icon: <VscChevronRight size={12} />, onClick: () => openGraph(target.id, target.name, target.graphType) },
+            { id: "rename", label: "Rename", icon: <VscEdit size={12} />, onClick: () => renameGraphItem(target.id, target.name, target.graphType) },
+            { id: "duplicate", label: "Duplicate", icon: <VscCopy size={12} />, onClick: () => void duplicateGraphItem(target.id) },
+          ],
+        },
+        {
+          items: [
+            { id: "delete", label: "Delete", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteGraphItem(target.id, target.graphType) },
+          ],
+        },
+      ];
+    }
+    if (target.type === "folder") {
+      return [
+        {
+          items: [
+            { id: "new-graph", label: target.graphType === "event" ? "New Event" : "New Function", icon: <VscAdd size={12} />, onClick: () => void createGraphInFolder(target.graphType, target.folderPath) },
+            { id: "new-folder", label: "New Folder", icon: <VscNewFolder size={12} />, onClick: () => createFolderInFolder(target.graphType, target.folderPath) },
+            { id: "rename-folder", label: "Rename Folder", icon: <VscEdit size={12} />, onClick: () => renameFolderItem(target.graphType, target.folderPath, target.name) },
+          ],
+        },
+        {
+          items: [
+            { id: "delete-folder", label: "Delete Folder", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteFolderItem(target.graphType, target.folderPath) },
+          ],
+        },
+      ];
+    }
+    if (target.type === "section") {
+      return [
+        {
+          items: [
+            { id: "new-graph", label: target.graphType === "event" ? "New Event" : "New Function", icon: <VscAdd size={12} />, onClick: () => void createGraphInFolder(target.graphType, target.folderPath ?? "") },
+            { id: "new-folder", label: "New Folder", icon: <VscNewFolder size={12} />, onClick: () => createFolderInFolder(target.graphType, target.folderPath ?? "") },
+          ],
+        },
+      ];
+    }
+    return [
+      {
+        items: [
+          { id: "new-variable", label: "New Variable", icon: <VscAdd size={12} />, onClick: () => void addVariable("New Variable", "Int32", false) },
+          { id: "rename-variable", label: "Rename", icon: <VscEdit size={12} />, onClick: () => renameVariableItem(target.id, target.name) },
+        ],
+      },
+      {
+        items: [
+          { id: "delete-variable", label: "Delete", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteVariable(target.id) },
+        ],
+      },
+    ];
+  }, [
+    addVariable,
+    contextMenu,
+    createFolderInFolder,
+    createGraphInFolder,
+    deleteFolderItem,
+    deleteGraphItem,
+    deleteVariable,
+    duplicateGraphItem,
+    openGraph,
+    renameFolderItem,
+    renameGraphItem,
+    renameVariableItem,
+  ]);
+
   const renderItem = (
     id: string,
     name: string,
     type: "variable" | "function" | "event" | "data",
-    extra?: { dataType?: unknown; isGlobal?: boolean },
+    extra?: { dataType?: unknown; isGlobal?: boolean; folderPath?: string },
     readOnly?: boolean,
-    nested?: boolean
+    nested?: boolean | number,
+    onContextMenu?: (e: React.MouseEvent) => void
   ) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
-    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string } | undefined);
+    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string; folderPath?: string } | undefined);
+    const indentDepth = typeof nested === "number" ? nested : nested ? 1 : 0;
 
     return (
       <SidebarDraggableItem
@@ -361,13 +657,14 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             openGraph(id, name, type);
           }
         }}
+        onContextMenu={onContextMenu}
         className={`
           group flex items-center gap-2 pr-2 py-1.5 transition-colors duration-150 ease-out
-          ${nested ? "pl-8" : "pl-4"}
           ${isSelected
             ? "bg-[var(--sidebar-item-active)] text-gray-200"
             : "hover:bg-[var(--sidebar-hover)] text-gray-400"}
         `}
+        style={{ paddingLeft: 16 + indentDepth * 16 }}
       >
         <span
           className="shrink-0 flex items-center justify-center"
@@ -463,6 +760,65 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     );
   };
 
+  const renderGraphTree = (
+    type: GraphResourceType,
+    graphs: Record<string, { name: string; folderPath?: string }>,
+    depth = 0,
+    node = buildGraphTree(
+      graphs,
+      graphFolders.filter((folder) => folder.type === type)
+    )
+  ): React.ReactNode => {
+    const folderEntries = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const graphEntries = [...node.graphs].sort((a, b) => a[1].name.localeCompare(b[1].name));
+    return (
+      <>
+        {folderEntries.map((folder) => (
+          <CollapsibleSection
+            key={`${type}-folder-${folder.path}`}
+            label={folder.name}
+            expanded={isSectionExpanded(`graphs_${type}_folder_${folder.path}`)}
+            onToggle={() => toggleSection(`graphs_${type}_folder_${folder.path}`)}
+            onAdd={() => void createGraphInFolder(type, folder.path)}
+            indentDepth={depth}
+            dropTarget={{ graphType: type, folderPath: folder.path }}
+            onContextMenu={(e) => openContextMenu(e, {
+              type: "folder",
+              graphType: type,
+              folderPath: folder.path,
+              name: folder.name,
+            })}
+            headerContent={
+              <div className="flex items-center gap-2 min-w-0 text-gray-500">
+                <VscFolder size={12} className="shrink-0" />
+                <span className="flex-1 text-[12px] tracking-tight truncate">{folder.name}</span>
+              </div>
+            }
+          >
+            {renderGraphTree(type, {}, depth + 1, folder)}
+          </CollapsibleSection>
+        ))}
+        {graphEntries.map(([id, data]) =>
+          renderItem(
+            id,
+            data.name,
+            type,
+            { folderPath: data.folderPath },
+            false,
+            depth,
+            (e) => openContextMenu(e, {
+              type: "graph",
+              id,
+              name: data.name,
+              graphType: type,
+              folderPath: data.folderPath,
+            })
+          )
+        )}
+      </>
+    );
+  };
+
   return (
     <div
       ref={ref}
@@ -485,13 +841,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("graphsEvent")}
                 onToggle={() => toggleSection("graphsEvent")}
                 onAdd={addEvent}
+                dropTarget={{ graphType: "event", folderPath: "" }}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
               >
-                  {Object.entries(events).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "event")
-                  )}
-                  {Object.keys(events).length === 0 && (
+                <div
+                  className="flex min-h-full flex-col"
+                  onContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
+                >
+                  {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
+                  {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
                     <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No events</div>
                   )}
+                </div>
               </StackedCollapsibleSection>
 
               <StackedCollapsibleSection
@@ -499,13 +861,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("graphsFunction")}
                 onToggle={() => toggleSection("graphsFunction")}
                 onAdd={addFunction}
+                dropTarget={{ graphType: "function", folderPath: "" }}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
               >
-                  {Object.entries(functions).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "function")
-                  )}
-                  {Object.keys(functions).length === 0 && (
+                <div
+                  className="flex min-h-full flex-col"
+                  onContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
+                >
+                  {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
+                  {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
                     <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No functions</div>
                   )}
+                </div>
               </StackedCollapsibleSection>
 
               <StackedCollapsibleSection
@@ -516,11 +884,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               >
                   {Object.keys(globalVariables).length > 0 &&
                     Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) =>
-                      renderItem(id, data.name, "variable", { ...data, isGlobal: true })
+                      renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, false, (e) =>
+                        openContextMenu(e, { type: "variable", id, name: data.name })
+                      )
                     )}
                   {Object.entries(graphScopeVariables).map(([id, data]: [string, { name: string }]) => {
                     if (id in globalVariables) return null;
-                    return renderItem(id, data.name, "variable", { ...data, isGlobal: false });
+                    return renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, false, (e) =>
+                      openContextMenu(e, { type: "variable", id, name: data.name })
+                    );
                   })}
                   {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
                     <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No variables</div>
@@ -656,6 +1028,44 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
         </div>
       </div>
+      {contextMenu && (
+        <ContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          sections={buildContextMenuSections()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+      {inputDialog && (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40"
+          onPointerDown={() => setInputDialog(null)}
+        >
+          <div
+            className="w-[280px] border border-border bg-[var(--workbench-bg)] p-3 shadow-xl"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-[12px] font-medium text-gray-300">{inputDialog.title}</div>
+            <Input
+              autoFocus
+              value={inputDialog.value}
+              onChange={(e) => setInputDialog({ ...inputDialog, value: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitInputDialog();
+                if (e.key === "Escape") setInputDialog(null);
+              }}
+              className="h-8 text-xs"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setInputDialog(null)}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={() => void submitInputDialog()}>
+                {inputDialog.submitLabel ?? "OK"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

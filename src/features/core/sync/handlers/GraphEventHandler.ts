@@ -3,6 +3,7 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
 import { useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
+import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import type { Graph } from '@/shared/types/domain';
 
 type GraphWithMeta = Graph & { entryNodeId?: string };
@@ -17,13 +18,6 @@ export class EventCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
         
         const g = payload.data as GraphWithMeta;
         useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'event', entryNodeId: g.entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(payload.id, {
-          ...g,
-          nodes: g.nodes ?? [],
-          pins: g.pins ?? [],
-          connections: g.connections ?? { connections: [] },
-          canvas: g.canvas ?? { x: 0, y: 0, scale: 1 },
-        } as unknown as import('@/shared/types/store/graph').GraphDataLike);
         
         callbacks?.onEventCreated?.(payload.id, payload.data);
     }
@@ -38,6 +32,7 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
         const meta = useGraphMetaStore.getState().graphs[payload.id];
         if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
         if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data, nodes: payload.data.nodes } as unknown as import('@/shared/types/store/graph').GraphDataLike);
+        markGraphTabDirty(payload.id);
     }
 }
 
@@ -72,13 +67,6 @@ export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload
         
         const g = payload.data as GraphWithMeta;
         useGraphMetaStore.getState().addGraph({ id: g.id, name: g.name, type: 'function', entryNodeId: g.entryNodeId });
-        useGraphDataStore.getState().addGraphFromData(payload.id, {
-          ...g,
-          nodes: g.nodes ?? [],
-          pins: g.pins ?? [],
-          connections: g.connections ?? { connections: [] },
-          canvas: g.canvas ?? { x: 0, y: 0, scale: 1 },
-        } as unknown as import('@/shared/types/store/graph').GraphDataLike);
         
         callbacks?.onFunctionCreated?.(payload.id, payload.data);
     }
@@ -93,6 +81,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
         const meta = useGraphMetaStore.getState().graphs[payload.id];
         if (meta && payload.data.name !== undefined) useGraphMetaStore.getState().updateGraph(payload.id, { name: payload.data.name });
         if (payload.data.nodes) useGraphDataStore.getState().addGraphFromData(payload.id, { ...meta, ...payload.data, nodes: payload.data.nodes } as unknown as import('@/shared/types/store/graph').GraphDataLike);
+        markGraphTabDirty(payload.id);
     }
 }
 
