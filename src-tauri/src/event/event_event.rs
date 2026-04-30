@@ -1,6 +1,6 @@
-use crate::graph::{GraphId};
-use serde::{Deserialize, Serialize};
+use crate::graph::GraphId;
 use crate::schema::GraphInstanceDTO;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]

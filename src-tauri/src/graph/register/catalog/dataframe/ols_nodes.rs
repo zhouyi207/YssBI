@@ -17,7 +17,11 @@ use yss_sci::regression::linear_model::{OLSConfig, OLS};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry};
+use super::info_nodes::{
+    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
+    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
+    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+};
 use std::time::Instant;
 
 // ======================== 结构体 ========================
@@ -26,11 +30,20 @@ use std::time::Instant;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum OLSCovarianceConfig {
-    FixedScale { scale: f64 },
-    Cluster { cluster_id: Vec<usize> },
-    HAC { kernel: String, bandwidth: Option<i64> },
+    FixedScale {
+        scale: f64,
+    },
+    Cluster {
+        cluster_id: Vec<usize>,
+    },
+    HAC {
+        kernel: String,
+        bandwidth: Option<i64>,
+    },
     /// Stata newey: Bartlett + n/(n-k)，与 HAC (ivreg2) 不同
-    Newey { lag: Option<i64> },
+    Newey {
+        lag: Option<i64>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +70,10 @@ impl Default for OLSConfigure {
 }
 
 /// 格式化 Covariance Type 用于窗口展示
-pub(super) fn format_covariance_type_display(cov_type: &str, cov_config: Option<&OLSCovarianceConfig>) -> String {
+pub(super) fn format_covariance_type_display(
+    cov_type: &str,
+    cov_config: Option<&OLSCovarianceConfig>,
+) -> String {
     if cov_type == "HAC" {
         if let Some(OLSCovarianceConfig::HAC { kernel, bandwidth }) = cov_config {
             let bw_str = match bandwidth {
@@ -181,10 +197,9 @@ fn ols_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -204,9 +219,7 @@ use std::collections::HashMap;
 
 fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitResult, String> {
     // ---- Extract endog ----
-    let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("y".to_string())),
-    )?;
+    let endog_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("y".to_string())))?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
         other => {
@@ -238,47 +251,51 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("OLS: cannot cast Y to Float64: {}", e))?;
 
     // ---- Get config (optional — falls back to OLSConfigure::default()) ----
-    let config = match ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("ols_config".to_string())),
-    ) {
-        Ok(config_value) => match config_value.as_handle_id() {
-            Some(id) => {
-                let handle = ctx.get_handle(&id.to_string())?;
-                handle
-                    .downcast_ref::<OLSConfigure>()
-                    .ok_or("OLS: config handle is not an OLSConfigure")?
-                    .clone()
-            }
-            None => OLSConfigure::default(),
-        },
-        Err(_) => OLSConfigure::default(),
-    };
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("ols_config".to_string()))) {
+            Ok(config_value) => match config_value.as_handle_id() {
+                Some(id) => {
+                    let handle = ctx.get_handle(&id.to_string())?;
+                    handle
+                        .downcast_ref::<OLSConfigure>()
+                        .ok_or("OLS: config handle is not an OLSConfigure")?
+                        .clone()
+                }
+                None => OLSConfigure::default(),
+            },
+            Err(_) => OLSConfigure::default(),
+        };
     let has_constant = config.constant;
 
     // ---- Extract exog (mixed numeric + categorical) ----
-    let exog_data_values = ctx.get_inputs_by_family(
-        &PinRole::Data(DataRole::Inputs(0)),
-    )?;
+    let exog_data_values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
 
     if exog_data_values.is_empty() {
         return Err("OLS: at least one X input is required".to_string());
     }
 
     // Optional time series for residual time info (from direct Time pin or from config)
-    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+    let time_series = match ctx
+        .get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string())))
+    {
         Ok(DataValue::DataSeries(v)) => {
             let ts = ctx.get_series(&v.id)?;
             if ts.len() != endog_f64_series.len() {
                 return Err(format!(
                     "OLS: Time has {} observations, expected {} (must match Y length)",
-                    ts.len(), endog_f64_series.len()
+                    ts.len(),
+                    endog_f64_series.len()
                 ));
             }
             Some(ts)
@@ -301,9 +318,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
 
     // Build DataFrame with endog + optional time + all exog, then drop rows with null/NaN
     let n_raw = endog_f64_series.len();
-    let mut df_cols: Vec<Column> = vec![
-        Column::from(endog_f64_series.with_name("__endog__".into())),
-    ];
+    let mut df_cols: Vec<Column> =
+        vec![Column::from(endog_f64_series.with_name("__endog__".into()))];
     if let Some(ref ts) = time_series {
         df_cols.push(Column::from(ts.clone().with_name("__time__".into())));
     }
@@ -316,12 +332,18 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let series = ctx.get_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
-            if raw.is_empty() { format!("x{}", i + 1) } else { raw }
+            if raw.is_empty() {
+                format!("x{}", i + 1)
+            } else {
+                raw
+            }
         };
         if series.len() != n_raw {
             return Err(format!(
                 "OLS: X '{}' has {} observations, expected {} (must match Y length)",
-                series_name, series.len(), n_raw
+                series_name,
+                series.len(),
+                n_raw
             ));
         }
         let is_categorical = matches!(
@@ -337,7 +359,9 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("OLS: cannot cast X {} to Float64: {}", i, e))?
         };
-        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        df_cols.push(Column::from(
+            col_series.with_name(series_name.as_str().into()),
+        ));
         exog_meta.push((series_name, is_categorical, dsv));
     }
     let df = DataFrame::new(n_raw, df_cols)
@@ -366,8 +390,13 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let col = df.column(&series_name).map_err(|e| format!("OLS: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("OLS: X '{}': {}", series_name, e))?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e| format!("OLS: X '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
                 if !unique_ordered.contains(v) {
@@ -407,18 +436,29 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
             for cat in &categories_to_include {
-                let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                let col: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
             variable_specs.push(VariableSpec::Categorical {
                 name: series_name,
                 categories: unique_ordered,
-                dropped: if drop_cat.is_empty() { String::new() } else { drop_cat },
+                dropped: if drop_cat.is_empty() {
+                    String::new()
+                } else {
+                    drop_cat
+                },
                 role,
             });
         } else {
-            let values: Vec<f64> = col.f64().map_err(|e| format!("OLS: X '{}': {}", series_name, e))?.into_no_null_iter().collect();
+            let values: Vec<f64> = col
+                .f64()
+                .map_err(|e| format!("OLS: X '{}': {}", series_name, e))?
+                .into_no_null_iter()
+                .collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
@@ -452,10 +492,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         .map_err(|e| format!("OLS: failed to build exog matrix: {}", e))?;
 
     // ---- Drop strictly collinear columns (prefer non-dummy) ----
-    let col_is_dummy: Vec<bool> = all_labels
-        .iter()
-        .map(|(_, cat)| cat.is_some())
-        .collect();
+    let col_is_dummy: Vec<bool> = all_labels.iter().map(|(_, cat)| cat.is_some()).collect();
     let intercept_col = if has_constant { Some(0) } else { None };
     let (exog_use, omitted_indices) =
         collinearity::drop_collinear_columns(&exog, &col_is_dummy, intercept_col)?;
@@ -480,20 +517,24 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
 
     // ---- Run OLS regression ----
     let cov_params = config.cov_config.as_ref().map(|c| match c {
-        OLSCovarianceConfig::FixedScale { scale } => yss_sci::regression::linear_model::CovParams::FixedScale {
-            scale: *scale,
-        },
-        OLSCovarianceConfig::Cluster { cluster_id } => yss_sci::regression::linear_model::CovParams::Cluster {
-            cluster_id: cluster_id.clone(),
-            xtreg_fe_style: false,
-        },
-        OLSCovarianceConfig::HAC { kernel, bandwidth } => yss_sci::regression::linear_model::CovParams::HAC {
-            kernel: kernel.clone(),
-            bandwidth: *bandwidth,
-        },
-        OLSCovarianceConfig::Newey { lag } => yss_sci::regression::linear_model::CovParams::Newey {
-            lag: *lag,
-        },
+        OLSCovarianceConfig::FixedScale { scale } => {
+            yss_sci::regression::linear_model::CovParams::FixedScale { scale: *scale }
+        }
+        OLSCovarianceConfig::Cluster { cluster_id } => {
+            yss_sci::regression::linear_model::CovParams::Cluster {
+                cluster_id: cluster_id.clone(),
+                xtreg_fe_style: false,
+            }
+        }
+        OLSCovarianceConfig::HAC { kernel, bandwidth } => {
+            yss_sci::regression::linear_model::CovParams::HAC {
+                kernel: kernel.clone(),
+                bandwidth: *bandwidth,
+            }
+        }
+        OLSCovarianceConfig::Newey { lag } => {
+            yss_sci::regression::linear_model::CovParams::Newey { lag: *lag }
+        }
     });
 
     let sci_config = OLSConfig {
@@ -512,7 +553,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            exog_use.row(i)
+            exog_use
+                .row(i)
                 .iter()
                 .zip(result.betas.iter())
                 .map(|(x, b)| x * b)
@@ -558,10 +600,26 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let ms = t_bp.elapsed().as_millis() as u64;
         (
             Some(BreuschPaganTests {
-                stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                stata: r_stata.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker: r_koenker.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
             }),
             Some(ms),
         )
@@ -573,30 +631,28 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         let t_im = Instant::now();
         let residuals_arr = Array1::from(residuals.clone());
         let im = match diagnostics::im_test(&exog_use, &residuals_arr) {
-            Ok(r) => {
-                Some(ImTest {
-                    heteroskedasticity: ImTestComponent {
-                        chi2: r.heteroskedasticity.chi2,
-                        df: r.heteroskedasticity.df,
-                        p_value: r.heteroskedasticity.p_value,
-                    },
-                    skewness: ImTestComponent {
-                        chi2: r.skewness.chi2,
-                        df: r.skewness.df,
-                        p_value: r.skewness.p_value,
-                    },
-                    kurtosis: ImTestComponent {
-                        chi2: r.kurtosis.chi2,
-                        df: r.kurtosis.df,
-                        p_value: r.kurtosis.p_value,
-                    },
-                    total: ImTestComponent {
-                        chi2: r.total.chi2,
-                        df: r.total.df,
-                        p_value: r.total.p_value,
-                    },
-                })
-            }
+            Ok(r) => Some(ImTest {
+                heteroskedasticity: ImTestComponent {
+                    chi2: r.heteroskedasticity.chi2,
+                    df: r.heteroskedasticity.df,
+                    p_value: r.heteroskedasticity.p_value,
+                },
+                skewness: ImTestComponent {
+                    chi2: r.skewness.chi2,
+                    df: r.skewness.df,
+                    p_value: r.skewness.p_value,
+                },
+                kurtosis: ImTestComponent {
+                    chi2: r.kurtosis.chi2,
+                    df: r.kurtosis.df,
+                    p_value: r.kurtosis.p_value,
+                },
+                total: ImTestComponent {
+                    chi2: r.total.chi2,
+                    df: r.total.df,
+                    p_value: r.total.p_value,
+                },
+            }),
             Err(_) => None,
         };
         let ms = t_im.elapsed().as_millis() as u64;
@@ -635,48 +691,53 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
 
     let normality_tests = if has_constant && residuals.len() >= 8 {
         let residuals_arr = Array1::from(residuals.clone());
-        diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
-            skewness: r.skewness,
-            kurtosis: r.kurtosis,
-            omnibus_stat: r.omnibus_stat,
-            omnibus_p_value: r.omnibus_p_value,
-            jarque_bera_stat: r.jarque_bera_stat,
-            jarque_bera_p_value: r.jarque_bera_p_value,
-        })
+        diagnostics::normality_tests(&residuals_arr)
+            .ok()
+            .map(|r| NormalityTests {
+                skewness: r.skewness,
+                kurtosis: r.kurtosis,
+                omnibus_stat: r.omnibus_stat,
+                omnibus_p_value: r.omnibus_p_value,
+                jarque_bera_stat: r.jarque_bera_stat,
+                jarque_bera_p_value: r.jarque_bera_p_value,
+            })
     } else {
         None
     };
 
-    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
-        let vif_entries: Vec<VifEntry> = entries
-            .into_iter()
-            .enumerate()
-            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
-            .map(|(j, e)| {
-                let (var_name, _) = all_labels_use
-                    .get(j)
-                    .cloned()
-                    .unwrap_or_else(|| (format!("x{}", j), None));
-                VifEntry {
-                    variable: var_name,
-                    vif: e.vif,
-                    tolerance: e.tolerance,
-                }
-            })
-            .collect();
-        if vif_entries.is_empty() {
-            None
-        } else {
-            Some(vif_entries)
-        }
-    });
+    let vif = diagnostics::vif_centered(&exog_use, has_constant)
+        .ok()
+        .and_then(|entries| {
+            let vif_entries: Vec<VifEntry> = entries
+                .into_iter()
+                .enumerate()
+                .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+                .map(|(j, e)| {
+                    let (var_name, _) = all_labels_use
+                        .get(j)
+                        .cloned()
+                        .unwrap_or_else(|| (format!("x{}", j), None));
+                    VifEntry {
+                        variable: var_name,
+                        vif: e.vif,
+                        tolerance: e.tolerance,
+                    }
+                })
+                .collect();
+            if vif_entries.is_empty() {
+                None
+            } else {
+                Some(vif_entries)
+            }
+        });
 
     // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
     // ts_lag 内部已做 align，返回 (full_times, aligned, lagged)
     let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
         let time_col = df.column("__time__").map_err(|e| format!("OLS: {}", e))?;
         let time_s = time_col.clone().take_materialized_series();
-        let residuals_s = Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
+        let residuals_s =
+            Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
 
         let interval = infer_interval(&time_s).unwrap_or(1);
         match ts_lag(&time_s, &residuals_s, 1, interval) {
@@ -744,16 +805,16 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 adj_r_squared: result.r2_adjusted,
                 f_statistic: result.fvalue,
                 prob_f_statistic: result.f_p_value,
-            wald_chi2: None,
-            prob_wald_chi2: None,
-            log_likelihood: None,
-            lr_chi2: None,
-            prob_lr_chi2: None,
-            chibar2: None,
-            prob_chibar2: None,
-            mle_iter_log_lik_const: None,
-            mle_iter_log_lik: None,
-            df_model: result.df_model,
+                wald_chi2: None,
+                prob_wald_chi2: None,
+                log_likelihood: None,
+                lr_chi2: None,
+                prob_lr_chi2: None,
+                chibar2: None,
+                prob_chibar2: None,
+                mle_iter_log_lik_const: None,
+                mle_iter_log_lik: None,
+                df_model: result.df_model,
                 df_residual: result.df_residual,
                 df_total: result.df_total,
                 ss_model: result.ss_model,
@@ -762,7 +823,10 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 ms_model: result.ms_model,
                 ms_residual: result.ms_residual,
                 ms_total: result.ms_total,
-                covariance_type: format_covariance_type_display(&result.covariance_type, config.cov_config.as_ref()),
+                covariance_type: format_covariance_type_display(
+                    &result.covariance_type,
+                    config.cov_config.as_ref(),
+                ),
                 aic,
                 bic,
             }
@@ -779,7 +843,11 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
             residuals,
             leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter,
-            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
+            exog: Some(
+                (0..n)
+                    .map(|i| exog_use.row(i).iter().cloned().collect())
+                    .collect(),
+            ),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -819,7 +887,10 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
         kept_indices,
     };
 
-    Ok(OLSFitResult { ols_result, ols_model })
+    Ok(OLSFitResult {
+        ols_result,
+        ols_model,
+    })
 }
 
 // ======================== 注册入口 ========================
@@ -901,7 +972,9 @@ fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Fixed scale covariance config — user-specified scale for cov_type 'fixed scale'")
+    .with_description(
+        "Fixed scale covariance config — user-specified scale for cov_type 'fixed scale'",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Scale",
@@ -915,7 +988,8 @@ fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let scale_val = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("scale".to_string())))?;
+        let scale_val =
+            ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("scale".to_string())))?;
         let scale = scale_val
             .as_f64()
             .ok_or("OLS Fixed Scale Config: Scale must be Float64".to_string())?;
@@ -934,7 +1008,10 @@ fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
 }
 
 /// 将 DataSeries 转为 group 索引 Vec<usize>（0-based，按首次出现顺序编号）
-fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &str) -> Result<Vec<usize>, String> {
+fn series_to_group_indices(
+    ctx: &mut dyn NodeExecutionContextTrait,
+    series_id: &str,
+) -> Result<Vec<usize>, String> {
     let series = ctx.get_series(series_id)?;
     let n = series.len();
 
@@ -972,7 +1049,10 @@ fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &
             indices.push(idx);
         }
     } else {
-        return Err("Config: Cluster/Entity/Time/Group ID must be Categorical or Int64 DataSeries".to_string());
+        return Err(
+            "Config: Cluster/Entity/Time/Group ID must be Categorical or Int64 DataSeries"
+                .to_string(),
+        );
     }
 
     Ok(indices)
@@ -1151,10 +1231,9 @@ fn register_ols_configure(registry: &NodeRegistry) {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Int64,
-                    DataType::Date,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Int64, DataType::Date],
+                )))),
             )
             .with_optional(true),
         ),
@@ -1261,43 +1340,53 @@ fn register_ols(registry: &NodeRegistry) {
         DataRole::Custom("ols_residuals".to_string()),
         PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
-    let definition = NodeDefinition::new(
-        "OLS",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Ordinary Least Squares regression — outputs the fitted model for prediction")
-    .with_pin_slots(slots)
-    .with_flow_processor(Arc::new(|ctx| {
-        let fit = run_ols_regression(ctx)?;
+    let definition = NodeDefinition::new("OLS", vec!["Data".to_string(), "Statistics".to_string()])
+        .with_ui_style("dataframe")
+        .with_description(
+            "Ordinary Least Squares regression — outputs the fitted model for prediction",
+        )
+        .with_pin_slots(slots)
+        .with_flow_processor(Arc::new(|ctx| {
+            let fit = run_ols_regression(ctx)?;
 
-        let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_model".to_string())),
-            DataValue::new_struct("OLSModel", model_handle_id),
-        )?;
+            let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_model".to_string())),
+                DataValue::new_struct("OLSModel", model_handle_id),
+            )?;
 
-        let fitted_series = Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
-            .with_name("fitted".into());
-        let fitted_id = ctx.put_series(fitted_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
-        )?;
+            let fitted_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
+                    .with_name("fitted".into());
+            let fitted_id = ctx.put_series(fitted_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    fitted_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        let residuals_series = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
-            .with_name("residuals".into());
-        let residuals_id = ctx.put_series(residuals_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(residuals_id, DataType::Float64)),
-        )?;
+            let residuals_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
+                    .with_name("residuals".into());
+            let residuals_id = ctx.put_series(residuals_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    residuals_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        ctx.log("OLS: regression completed".to_string());
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
+            ctx.log("OLS: regression completed".to_string());
+            Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+        }));
     registry.register(definition);
 }
 
@@ -1310,14 +1399,19 @@ fn register_ols_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "OLS Summary",
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Ordinary Least Squares regression — outputs results and opens the summary window")
+    .with_description(
+        "Ordinary Least Squares regression — outputs results and opens the summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_ols_regression(ctx)?;

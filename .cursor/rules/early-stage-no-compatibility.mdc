@@ -1,0 +1,18 @@
+---
+description: Early-stage project changes should not preserve unreleased compatibility
+alwaysApply: true
+---
+
+# Early Stage Compatibility
+
+This project is still in its initial development phase and has never been released.
+
+- Do not add compatibility layers, migrations, fallback readers, or shims for formats or APIs that only existed on the current unreleased branch.
+- When a storage format, API contract, command shape, or frontend state model is wrong, replace it directly instead of preserving the old behavior.
+- Preserve compatibility only for truly external or persisted user data after an actual release, or when the user explicitly requests a migration path.
+- Prefer clear, current architecture over supporting obsolete in-progress code.
+
+```rust
+// Bad: keep a legacy parser for an unreleased project format.
+// Good: update the format and tests to the current intended structure.
+```

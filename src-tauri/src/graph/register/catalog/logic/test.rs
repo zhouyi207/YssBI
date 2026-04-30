@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod tests {
     use crate::graph::{
-        GraphRuntime,
-        GraphInstance,
         pin::{DataRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
+        GraphInstance, GraphRuntime,
     };
     use std::sync::Arc;
 
@@ -21,7 +20,11 @@ mod tests {
     fn test_equal_node_int32() {
         // 测试 Equal 节点比较 Float64 类型
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建 Equal 节点
         let equal_node = graph
@@ -52,10 +55,15 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
         // 执行节点
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(equal_node);
         let evaluator = definition
             .data_evaluator
             .as_ref()
@@ -72,16 +80,28 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
+        let result_value = runtime
+            .lock()
+            .unwrap()
+            .get_pin_data_value_by_pin_id(result_pin.id)
+            .unwrap();
 
-        assert_eq!(result_value, DataValue::Boolean(true), "42 == 42 should be true");
+        assert_eq!(
+            result_value,
+            DataValue::Boolean(true),
+            "42 == 42 should be true"
+        );
     }
 
     #[test]
     fn test_equal_node_not_equal() {
         // 测试 Equal 节点比较不相等的值
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         let equal_node = graph
             .create_node("Logic:Comparison:Equal (==)")
@@ -109,10 +129,15 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
         // 执行节点
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(equal_node);
         let evaluator = definition
             .data_evaluator
             .as_ref()
@@ -129,9 +154,17 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
+        let result_value = runtime
+            .lock()
+            .unwrap()
+            .get_pin_data_value_by_pin_id(result_pin.id)
+            .unwrap();
 
-        assert_eq!(result_value, DataValue::Boolean(false), "10 == 20 should be false");
+        assert_eq!(
+            result_value,
+            DataValue::Boolean(false),
+            "10 == 20 should be false"
+        );
     }
 
     #[test]
@@ -144,7 +177,11 @@ mod tests {
     fn test_equal_node_float64() {
         // 测试 Equal 节点比较 Float64 类型
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         let equal_node = graph
             .create_node("Logic:Comparison:Equal (==)")
@@ -172,10 +209,15 @@ mod tests {
             .expect("Failed to set pin B value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
         // 执行节点
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(equal_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(equal_node);
         let evaluator = definition
             .data_evaluator
             .as_ref()
@@ -192,7 +234,11 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
             .expect("Result pin not found");
 
-        let result_value = runtime.lock().unwrap().get_pin_data_value_by_pin_id(result_pin.id).unwrap();
+        let result_value = runtime
+            .lock()
+            .unwrap()
+            .get_pin_data_value_by_pin_id(result_pin.id)
+            .unwrap();
 
         assert_eq!(
             result_value,

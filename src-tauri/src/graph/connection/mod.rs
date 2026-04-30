@@ -7,9 +7,9 @@ pub mod connection_validator;
 
 use crate::graph::NodeId;
 use crate::graph::PinId;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
 
 /// 连接（边）
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]

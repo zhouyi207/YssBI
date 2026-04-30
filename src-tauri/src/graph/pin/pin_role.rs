@@ -100,7 +100,9 @@ impl PinRole {
     /// 获取 role 的 index，仅对带 index 的 role 有效
     pub fn index(&self) -> Option<usize> {
         match self {
-            PinRole::Data(DataRole::Inputs(i) | DataRole::Outputs(i) | DataRole::Operands(i)) => Some(*i),
+            PinRole::Data(DataRole::Inputs(i) | DataRole::Outputs(i) | DataRole::Operands(i)) => {
+                Some(*i)
+            }
             PinRole::Exec(ExecRole::Steps(i)) => Some(*i),
             _ => None,
         }

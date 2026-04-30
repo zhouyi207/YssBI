@@ -1,5 +1,5 @@
 //! 日志宏模块
-//! 
+//!
 //! 提供类似标准库 log crate 的宏接口：
 //! - log_app::trace!(), log_app::debug!(), log_app::info!(), log_app::warn!(), log_app::error!()
 //! - log_exec::trace!(), log_exec::debug!(), log_exec::info!(), log_exec::warn!(), log_exec::error!()
@@ -58,11 +58,11 @@ pub mod log_app {
     }
 
     // 重新导出宏，使其可以通过 log_app::info! 调用
-    pub use crate::log_app_trace as trace;
     pub use crate::log_app_debug as debug;
-    pub use crate::log_app_info as info;
-    pub use crate::log_app_warn as warn;
     pub use crate::log_app_error as error;
+    pub use crate::log_app_info as info;
+    pub use crate::log_app_trace as trace;
+    pub use crate::log_app_warn as warn;
 }
 
 /// 执行日志宏
@@ -118,11 +118,11 @@ pub mod log_exec {
     }
 
     // 重新导出宏
-    pub use crate::log_exec_trace as trace;
     pub use crate::log_exec_debug as debug;
-    pub use crate::log_exec_info as info;
-    pub use crate::log_exec_warn as warn;
     pub use crate::log_exec_error as error;
+    pub use crate::log_exec_info as info;
+    pub use crate::log_exec_trace as trace;
+    pub use crate::log_exec_warn as warn;
 }
 
 /// 系统日志宏
@@ -178,9 +178,9 @@ pub mod log_sys {
     }
 
     // 重新导出宏
-    pub use crate::log_sys_trace as trace;
     pub use crate::log_sys_debug as debug;
-    pub use crate::log_sys_info as info;
-    pub use crate::log_sys_warn as warn;
     pub use crate::log_sys_error as error;
+    pub use crate::log_sys_info as info;
+    pub use crate::log_sys_trace as trace;
+    pub use crate::log_sys_warn as warn;
 }

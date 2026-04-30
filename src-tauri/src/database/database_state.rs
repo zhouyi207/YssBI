@@ -3,7 +3,9 @@ use std::sync::Arc;
 use yss_sci::api::database::EditHistory;
 
 pub enum DatabaseState {
-    Lazy { lazy_frame: LazyFrame },
+    Lazy {
+        lazy_frame: LazyFrame,
+    },
 
     Loaded {
         dataframe: Arc<DataFrame>,
@@ -11,5 +13,7 @@ pub enum DatabaseState {
         history: EditHistory,
     },
 
-    Failed { error: String },
+    Failed {
+        error: String,
+    },
 }

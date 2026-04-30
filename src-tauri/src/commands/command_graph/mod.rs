@@ -1,5 +1,5 @@
-pub mod command_graph;
 pub mod command_connection;
+pub mod command_graph;
 pub mod command_history;
 pub mod command_node;
 pub mod command_pin;

@@ -2,7 +2,9 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
+use crate::graph::pin::{
+    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;

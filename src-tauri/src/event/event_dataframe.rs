@@ -4,11 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "payload")]
 pub enum EventDataframe {
     #[serde(rename_all = "camelCase")]
-    DataFrameCreated {
-        id: String,
-    },
+    DataFrameCreated { id: String },
     #[serde(rename_all = "camelCase")]
-    DataFrameDeleted {
-        id: String,
-    },
+    DataFrameDeleted { id: String },
 }

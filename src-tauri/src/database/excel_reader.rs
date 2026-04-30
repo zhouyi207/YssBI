@@ -7,7 +7,8 @@ use std::path::Path;
 /// 列出 Excel 文件中的 Sheet 名称
 pub fn list_sheets(file_path: &str) -> Result<Vec<String>, String> {
     let path = Path::new(file_path);
-    let workbook: Xlsx<_> = open_workbook(path).map_err(|e| format!("Failed to open Excel: {}", e))?;
+    let workbook: Xlsx<_> =
+        open_workbook(path).map_err(|e| format!("Failed to open Excel: {}", e))?;
     let names = workbook.sheet_names().to_vec();
     Ok(names)
 }
@@ -30,7 +31,8 @@ fn calamine_data_to_anyvalue(d: &Data) -> AnyValue<'static> {
 /// 从 Excel 指定 Sheet 读取数据并构建 Polars DataFrame
 pub fn read_sheet_to_dataframe(file_path: &str, sheet_name: &str) -> Result<DataFrame, String> {
     let path = Path::new(file_path);
-    let mut workbook: Xlsx<_> = open_workbook(path).map_err(|e| format!("Failed to open Excel: {}", e))?;
+    let mut workbook: Xlsx<_> =
+        open_workbook(path).map_err(|e| format!("Failed to open Excel: {}", e))?;
 
     let range = workbook
         .worksheet_range(sheet_name)
@@ -54,7 +56,8 @@ pub fn read_sheet_to_dataframe(file_path: &str, sheet_name: &str) -> Result<Data
         .collect();
 
     let column_count = column_names.len();
-    let mut columns_data: Vec<Vec<AnyValue<'static>>> = (0..column_count).map(|_| Vec::new()).collect();
+    let mut columns_data: Vec<Vec<AnyValue<'static>>> =
+        (0..column_count).map(|_| Vec::new()).collect();
 
     for row in rows {
         for (i, col_data) in columns_data.iter_mut().enumerate() {
@@ -73,7 +76,10 @@ pub fn read_sheet_to_dataframe(file_path: &str, sheet_name: &str) -> Result<Data
         })
         .collect();
 
-    let columns: Vec<polars::prelude::Column> = series.into_iter().map(polars::prelude::Column::from).collect();
+    let columns: Vec<polars::prelude::Column> = series
+        .into_iter()
+        .map(polars::prelude::Column::from)
+        .collect();
     let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
     DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
 }

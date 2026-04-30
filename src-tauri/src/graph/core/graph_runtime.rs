@@ -60,7 +60,8 @@ impl GraphRuntime {
         if let Some(pin_runtime_state) = pin_runtime_state {
             pin_runtime_state.current_value = Some(value);
         } else {
-            let pin_runtime_state = PinRuntimeState::from_instance(pin_instance).with_current_value(Some(value));
+            let pin_runtime_state =
+                PinRuntimeState::from_instance(pin_instance).with_current_value(Some(value));
             self.pins_runtime_state.insert(pin_id, pin_runtime_state);
         }
     }
@@ -91,7 +92,11 @@ impl GraphRuntime {
         self.graph_instance.get_pin_instances_by_node_id(node_id)
     }
 
-    pub fn get_pin_data_value_by_pin_role(&self, node_id: NodeId, role: &PinRole) -> Result<DataValue, String> {
+    pub fn get_pin_data_value_by_pin_role(
+        &self,
+        node_id: NodeId,
+        role: &PinRole,
+    ) -> Result<DataValue, String> {
         let pin_instance = self
             .graph_instance
             .get_pin_instance_by_pin_role(node_id, role)
@@ -125,7 +130,8 @@ impl GraphRuntime {
                 return Err(format!("Pin {:?} is not a data pin", pin_instance.id));
             }
             let id = pin_instance.id;
-            let value = self.resolve_pin_value(id)
+            let value = self
+                .resolve_pin_value(id)
                 .ok_or_else(|| format!("No value available for pin {:?}", id))?;
             user_values.push(value);
         }
@@ -187,7 +193,7 @@ impl GraphRuntime {
     /// 返回前，如果 pin 有已推断的具体类型，自动将值强制转换以保证类型一致。
     pub fn resolve_pin_value(&self, pin_id: PinId) -> Option<DataValue> {
         let pin_instance = self.get_pin_instance_by_pin_id(pin_id)?;
-        
+
         // 1. 检查上游连接值（最高优先级）
         let raw_value = if let Some(upstream_pin_id) = self.get_upstream_by_pin_id(pin_id) {
             self.resolve_pin_value(upstream_pin_id)
@@ -211,7 +217,9 @@ impl GraphRuntime {
         // 5. 检查类型默认值
         let raw_value = raw_value.or_else(|| {
             if let Some(pin_data_type_def) = &pin_instance.definition.data_type {
-                if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) = pin_data_type_def {
+                if let crate::graph::pin::PinDataTypeDefinition::Concrete(data_type) =
+                    pin_data_type_def
+                {
                     return Some(data_type.default_value());
                 }
             }
@@ -308,11 +316,7 @@ impl GraphRuntime {
     }
 
     /// 写入变量值
-    pub fn set_variable_value(
-        &self,
-        variable_id: &str,
-        value: DataValue,
-    ) -> Result<(), String> {
+    pub fn set_variable_value(&self, variable_id: &str, value: DataValue) -> Result<(), String> {
         let var_id = Self::parse_variable_id(variable_id)?;
         let mut data = self.project_data.write().map_err(|e| e.to_string())?;
         let var = data
@@ -324,8 +328,8 @@ impl GraphRuntime {
     }
 
     fn parse_variable_id(id: &str) -> Result<VariableId, String> {
-        let uuid = Uuid::parse_str(id)
-            .map_err(|e| format!("Invalid variable ID '{}': {}", id, e))?;
+        let uuid =
+            Uuid::parse_str(id).map_err(|e| format!("Invalid variable ID '{}': {}", id, e))?;
         Ok(VariableId::from(uuid))
     }
 }

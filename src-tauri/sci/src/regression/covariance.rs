@@ -6,7 +6,9 @@ use ndarray::{Array1, Array2};
 /// 协方差计算所需的额外参数（cluster、HAC、fixed scale 等）
 #[derive(Debug, Clone)]
 pub enum CovParams {
-    FixedScale { scale: f64 },
+    FixedScale {
+        scale: f64,
+    },
     Cluster {
         cluster_id: Vec<usize>,
         /// When true, use Stata xtreg,fe style: denom = (N-k-1) instead of (N-k).
@@ -14,11 +16,21 @@ pub enum CovParams {
         /// For LSDV: use false — x already includes all dummies, (N-k) is correct.
         xtreg_fe_style: bool,
     },
-    HAC { kernel: String, bandwidth: Option<i64> },
+    HAC {
+        kernel: String,
+        bandwidth: Option<i64>,
+    },
     /// Stata newey: Bartlett kernel + n/(n-k) finite-sample adjustment (与 ivreg2 HAC 不同)
-    Newey { lag: Option<i64> },
-    HacPanel { entity_id: Vec<usize>, time_id: Vec<usize> },
-    HacGroupsum { group_id: Vec<usize> },
+    Newey {
+        lag: Option<i64>,
+    },
+    HacPanel {
+        entity_id: Vec<usize>,
+        time_id: Vec<usize>,
+    },
+    HacGroupsum {
+        group_id: Vec<usize>,
+    },
 }
 
 /// 计算参数协方差矩阵 cov_beta
@@ -47,14 +59,16 @@ pub fn compute_cov_beta(
         "cluster" => cov_cluster(x, xtx_inv, u, cov_params),
         "HAC" => cov_hac(x, xtx_inv, u, n, k, cov_params),
         "newey" => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
-        "hac-panel" | "hac-groupsum" => {
-            Err(format!("cov_type '{}' not yet implemented", cov_type))
-        }
+        "hac-panel" | "hac-groupsum" => Err(format!("cov_type '{}' not yet implemented", cov_type)),
         _ => cov_nonrobust(xtx_inv, u, df_residual),
     }
 }
 
-fn cov_nonrobust(xtx_inv: &Array2<f64>, u: &Array1<f64>, df_residual: usize) -> Result<Array2<f64>, String> {
+fn cov_nonrobust(
+    xtx_inv: &Array2<f64>,
+    u: &Array1<f64>,
+    df_residual: usize,
+) -> Result<Array2<f64>, String> {
     let sigma2 = u.dot(u) / df_residual as f64;
     Ok(sigma2 * xtx_inv)
 }
@@ -66,7 +80,11 @@ fn cov_fixed_scale(
 ) -> Result<Array2<f64>, String> {
     let scale = match cov_params {
         Some(CovParams::FixedScale { scale }) => *scale,
-        _ => return Err("fixed scale cov_type requires CovParams::FixedScale with scale".to_string()),
+        _ => {
+            return Err(
+                "fixed scale cov_type requires CovParams::FixedScale with scale".to_string(),
+            );
+        }
     };
     if scale <= 0.0 {
         return Err("fixed scale: scale must be positive".to_string());
@@ -75,7 +93,13 @@ fn cov_fixed_scale(
 }
 
 /// HC0: (X'X)⁻¹ X' diag(u²) X (X'X)⁻¹
-fn cov_hc0(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize) -> Result<Array2<f64>, String> {
+fn cov_hc0(
+    x: &Array2<f64>,
+    xtx_inv: &Array2<f64>,
+    u: &Array1<f64>,
+    n: usize,
+    k: usize,
+) -> Result<Array2<f64>, String> {
     let mut meat = Array2::zeros((k, k));
     for i in 0..n {
         let u2 = u[i] * u[i];
@@ -91,14 +115,28 @@ fn cov_hc0(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k:
 }
 
 /// HC1: HC0 × n / (n - k)
-fn cov_hc1(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize, df_residual: usize) -> Result<Array2<f64>, String> {
+fn cov_hc1(
+    x: &Array2<f64>,
+    xtx_inv: &Array2<f64>,
+    u: &Array1<f64>,
+    n: usize,
+    k: usize,
+    df_residual: usize,
+) -> Result<Array2<f64>, String> {
     let hc0 = cov_hc0(x, xtx_inv, u, n, k)?;
     let scale = n as f64 / df_residual as f64;
     Ok(scale * hc0)
 }
 
 /// HC2: 权重 w_i = 1 / (1 - h_ii)
-fn cov_hc2(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize, _df_residual: usize) -> Result<Array2<f64>, String> {
+fn cov_hc2(
+    x: &Array2<f64>,
+    xtx_inv: &Array2<f64>,
+    u: &Array1<f64>,
+    n: usize,
+    k: usize,
+    _df_residual: usize,
+) -> Result<Array2<f64>, String> {
     let mut meat = Array2::zeros((k, k));
     for i in 0..n {
         let h_ii = hat_diag_i(x, xtx_inv, i);
@@ -116,7 +154,14 @@ fn cov_hc2(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k:
 }
 
 /// HC3: 权重 w_i = 1 / (1 - h_ii)²
-fn cov_hc3(x: &Array2<f64>, xtx_inv: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize, _df_residual: usize) -> Result<Array2<f64>, String> {
+fn cov_hc3(
+    x: &Array2<f64>,
+    xtx_inv: &Array2<f64>,
+    u: &Array1<f64>,
+    n: usize,
+    k: usize,
+    _df_residual: usize,
+) -> Result<Array2<f64>, String> {
     let mut meat = Array2::zeros((k, k));
     for i in 0..n {
         let h_ii = hat_diag_i(x, xtx_inv, i);
@@ -182,7 +227,13 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
 /// Newey-West (1994) automatic bandwidth selection (ivreg2 bw(auto) / abw).
 /// Returns bandwidth = optlag + 1. Per NW(1994) p.639, mstar = trunc(20*(T/100)^expo).
 /// f = (u .* X) * h with h=1 for exog cols, h=0 for constant (last col).
-fn newey_west_1994_bandwidth(x: &Array2<f64>, u: &Array1<f64>, n: usize, k: usize, kernel: &str) -> usize {
+fn newey_west_1994_bandwidth(
+    x: &Array2<f64>,
+    u: &Array1<f64>,
+    n: usize,
+    k: usize,
+    kernel: &str,
+) -> usize {
     let t = n as f64;
     let one_t = 1.0 / t;
     let (expo, q, cgamma) = match kernel.to_lowercase().as_str() {
@@ -246,7 +297,11 @@ fn cov_hac(
 ) -> Result<Array2<f64>, String> {
     let (kernel, bandwidth) = match cov_params {
         Some(CovParams::HAC { kernel, bandwidth }) => (kernel.as_str(), *bandwidth),
-        _ => return Err("HAC cov_type requires CovParams::HAC with kernel and bandwidth".to_string()),
+        _ => {
+            return Err(
+                "HAC cov_type requires CovParams::HAC with kernel and bandwidth".to_string(),
+            );
+        }
     };
 
     // ivreg2 bw(b): max lag = b-1, weight = 1 - j/b.
@@ -466,7 +521,9 @@ mod tests {
             exog_data.push(i as f64 / n as f64);
         }
         let exog = Array2::from_shape_vec((n, k), exog_data).unwrap();
-        let endog = Array1::from_shape_fn(n, |i| (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos());
+        let endog = Array1::from_shape_fn(n, |i| {
+            (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos()
+        });
 
         let ols = OLS {
             endog,

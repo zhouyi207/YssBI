@@ -1,7 +1,7 @@
 //! 预测节点：基于模型进行预测，输入 pin 根据连接的上游节点（如 OLS 的 Exog 连接）动态生成
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::{NodeDefinition, PinResolverContext};
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot,
@@ -84,7 +84,8 @@ fn register_predict(registry: &NodeRegistry) {
 }
 
 fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> {
-    let model_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string())))?;
+    let model_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string())))?;
     let handle_id = model_value
         .as_handle_id()
         .ok_or("Predict: Model input is not connected or invalid".to_string())?;
@@ -104,15 +105,24 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Predict: Exog '{}' is not connected", name)),
+                    DataValue::Null => {
+                        return Err(format!("Predict: Exog '{}' is not connected", name))
+                    }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
                 let series = ctx.get_series(&series_id)?;
-                let f64_ca = series.f64().map_err(|e| format!("Predict: Exog '{}' cannot cast to Float64: {}", name, e))?;
+                let f64_ca = series.f64().map_err(|e| {
+                    format!("Predict: Exog '{}' cannot cast to Float64: {}", name, e)
+                })?;
                 let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
                 if let Some(nn) = n {
                     if values.len() != nn {
-                        return Err(format!("Predict: Exog '{}' has {} rows, expected {}", name, values.len(), nn));
+                        return Err(format!(
+                            "Predict: Exog '{}' has {} rows, expected {}",
+                            name,
+                            values.len(),
+                            nn
+                        ));
                     }
                 } else {
                     n = Some(values.len());
@@ -129,14 +139,20 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Predict: Exog '{}' is not connected", name)),
+                    DataValue::Null => {
+                        return Err(format!("Predict: Exog '{}' is not connected", name))
+                    }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
                 let series = ctx.get_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
-                    .map_err(|e| format!("Predict: Exog '{}' cannot cast to String: {}", name, e))?;
-                let str_ca = str_series.str().map_err(|e| format!("Predict: Exog '{}' cannot cast to String: {}", name, e))?;
+                    .map_err(|e| {
+                        format!("Predict: Exog '{}' cannot cast to String: {}", name, e)
+                    })?;
+                let str_ca = str_series.str().map_err(|e| {
+                    format!("Predict: Exog '{}' cannot cast to String: {}", name, e)
+                })?;
                 let values: Vec<String> = str_ca
                     .into_iter()
                     .map(|o| o.map(|s| s.to_string()).unwrap_or_default())
@@ -149,10 +165,18 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                 };
 
                 for cat in &categories_to_include {
-                    let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                    let col: Vec<f64> = values
+                        .iter()
+                        .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                        .collect();
                     if let Some(nn) = n {
                         if col.len() != nn {
-                            return Err(format!("Predict: Exog '{}' has {} rows, expected {}", name, col.len(), nn));
+                            return Err(format!(
+                                "Predict: Exog '{}' has {} rows, expected {}",
+                                name,
+                                col.len(),
+                                nn
+                            ));
                         }
                     } else {
                         n = Some(col.len());
@@ -199,7 +223,10 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
     let result_id = ctx.put_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
-        DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
+        DataValue::DataSeries(DataSeriesValue::with_element_type(
+            result_id,
+            DataType::Float64,
+        )),
     )?;
 
     ctx.log("Predict: completed".to_string());
@@ -234,10 +261,9 @@ fn register_logit_predict(registry: &NodeRegistry) {
         PinSlot::derived_from_input(
             model_role.clone(),
             PinDirection::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Categorical,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Categorical],
+            )))),
         ),
         PinSlot::fixed(PinDefinition::data_output(
             "Probability",
@@ -248,14 +274,18 @@ fn register_logit_predict(registry: &NodeRegistry) {
     ])
     .with_pin_resolver(Arc::new(|ctx: &PinResolverContext| {
         let mut pins = vec![];
-        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(LOGIT_MODEL_ROLE.to_string()))) {
+        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(
+            LOGIT_MODEL_ROLE.to_string(),
+        ))) {
             for col in &schema.columns {
                 let role = prediction_input_role(&col.name);
                 pins.push(
                     PinDefinition::data_input(
                         &col.name,
                         role.clone(),
-                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(col.data_type.clone()))),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
+                            col.data_type.clone(),
+                        ))),
                     )
                     .with_dynamic(true),
                 );
@@ -268,7 +298,9 @@ fn register_logit_predict(registry: &NodeRegistry) {
 }
 
 fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> {
-    let model_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(LOGIT_MODEL_ROLE.to_string())))?;
+    let model_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(
+        LOGIT_MODEL_ROLE.to_string(),
+    )))?;
     let handle_id = model_value
         .as_handle_id()
         .ok_or("Logit Predict: Model input is not connected or invalid".to_string())?;
@@ -288,15 +320,32 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Logit Predict: Exog '{}' is not connected", name)),
-                    _ => return Err(format!("Logit Predict: Exog '{}' is not a DataSeries", name)),
+                    DataValue::Null => {
+                        return Err(format!("Logit Predict: Exog '{}' is not connected", name))
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Logit Predict: Exog '{}' is not a DataSeries",
+                            name
+                        ))
+                    }
                 };
                 let series = ctx.get_series(&series_id)?;
-                let f64_ca = series.f64().map_err(|e| format!("Logit Predict: Exog '{}' cannot cast to Float64: {}", name, e))?;
+                let f64_ca = series.f64().map_err(|e| {
+                    format!(
+                        "Logit Predict: Exog '{}' cannot cast to Float64: {}",
+                        name, e
+                    )
+                })?;
                 let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
                 if let Some(nn) = n {
                     if values.len() != nn {
-                        return Err(format!("Logit Predict: Exog '{}' has {} rows, expected {}", name, values.len(), nn));
+                        return Err(format!(
+                            "Logit Predict: Exog '{}' has {} rows, expected {}",
+                            name,
+                            values.len(),
+                            nn
+                        ));
                     }
                 } else {
                     n = Some(values.len());
@@ -313,14 +362,31 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Logit Predict: Exog '{}' is not connected", name)),
-                    _ => return Err(format!("Logit Predict: Exog '{}' is not a DataSeries", name)),
+                    DataValue::Null => {
+                        return Err(format!("Logit Predict: Exog '{}' is not connected", name))
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Logit Predict: Exog '{}' is not a DataSeries",
+                            name
+                        ))
+                    }
                 };
                 let series = ctx.get_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
-                    .map_err(|e| format!("Logit Predict: Exog '{}' cannot cast to String: {}", name, e))?;
-                let str_ca = str_series.str().map_err(|e| format!("Logit Predict: Exog '{}' cannot cast to String: {}", name, e))?;
+                    .map_err(|e| {
+                        format!(
+                            "Logit Predict: Exog '{}' cannot cast to String: {}",
+                            name, e
+                        )
+                    })?;
+                let str_ca = str_series.str().map_err(|e| {
+                    format!(
+                        "Logit Predict: Exog '{}' cannot cast to String: {}",
+                        name, e
+                    )
+                })?;
                 let values: Vec<String> = str_ca
                     .into_iter()
                     .map(|o| o.map(|s| s.to_string()).unwrap_or_default())
@@ -333,10 +399,18 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                 };
 
                 for cat in &categories_to_include {
-                    let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                    let col: Vec<f64> = values
+                        .iter()
+                        .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                        .collect();
                     if let Some(nn) = n {
                         if col.len() != nn {
-                            return Err(format!("Logit Predict: Exog '{}' has {} rows, expected {}", name, col.len(), nn));
+                            return Err(format!(
+                                "Logit Predict: Exog '{}' has {} rows, expected {}",
+                                name,
+                                col.len(),
+                                nn
+                            ));
                         }
                     } else {
                         n = Some(col.len());
@@ -381,7 +455,10 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
     let result_id = ctx.put_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
-        DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
+        DataValue::DataSeries(DataSeriesValue::with_element_type(
+            result_id,
+            DataType::Float64,
+        )),
     )?;
 
     ctx.log("Logit Predict: completed".to_string());
@@ -407,10 +484,9 @@ fn register_probit_predict(registry: &NodeRegistry) {
         PinSlot::derived_from_input(
             model_role.clone(),
             PinDirection::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Categorical,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Categorical],
+            )))),
         ),
         PinSlot::fixed(PinDefinition::data_output(
             "Probability",
@@ -421,14 +497,18 @@ fn register_probit_predict(registry: &NodeRegistry) {
     ])
     .with_pin_resolver(Arc::new(|ctx: &PinResolverContext| {
         let mut pins = vec![];
-        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(PROBIT_MODEL_ROLE.to_string()))) {
+        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(
+            PROBIT_MODEL_ROLE.to_string(),
+        ))) {
             for col in &schema.columns {
                 let role = prediction_input_role(&col.name);
                 pins.push(
                     PinDefinition::data_input(
                         &col.name,
                         role.clone(),
-                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(col.data_type.clone()))),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
+                            col.data_type.clone(),
+                        ))),
                     )
                     .with_dynamic(true),
                 );
@@ -441,7 +521,9 @@ fn register_probit_predict(registry: &NodeRegistry) {
 }
 
 fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> {
-    let model_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(PROBIT_MODEL_ROLE.to_string())))?;
+    let model_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(
+        PROBIT_MODEL_ROLE.to_string(),
+    )))?;
     let handle_id = model_value
         .as_handle_id()
         .ok_or("Probit Predict: Model input is not connected or invalid".to_string())?;
@@ -461,15 +543,32 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Probit Predict: Exog '{}' is not connected", name)),
-                    _ => return Err(format!("Probit Predict: Exog '{}' is not a DataSeries", name)),
+                    DataValue::Null => {
+                        return Err(format!("Probit Predict: Exog '{}' is not connected", name))
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Probit Predict: Exog '{}' is not a DataSeries",
+                            name
+                        ))
+                    }
                 };
                 let series = ctx.get_series(&series_id)?;
-                let f64_ca = series.f64().map_err(|e| format!("Probit Predict: Exog '{}' cannot cast to Float64: {}", name, e))?;
+                let f64_ca = series.f64().map_err(|e| {
+                    format!(
+                        "Probit Predict: Exog '{}' cannot cast to Float64: {}",
+                        name, e
+                    )
+                })?;
                 let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
                 if let Some(nn) = n {
                     if values.len() != nn {
-                        return Err(format!("Probit Predict: Exog '{}' has {} rows, expected {}", name, values.len(), nn));
+                        return Err(format!(
+                            "Probit Predict: Exog '{}' has {} rows, expected {}",
+                            name,
+                            values.len(),
+                            nn
+                        ));
                     }
                 } else {
                     n = Some(values.len());
@@ -486,14 +585,31 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                 let val = ctx.get_input_by_role(&PinRole::Data(role))?;
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    DataValue::Null => return Err(format!("Probit Predict: Exog '{}' is not connected", name)),
-                    _ => return Err(format!("Probit Predict: Exog '{}' is not a DataSeries", name)),
+                    DataValue::Null => {
+                        return Err(format!("Probit Predict: Exog '{}' is not connected", name))
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Probit Predict: Exog '{}' is not a DataSeries",
+                            name
+                        ))
+                    }
                 };
                 let series = ctx.get_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
-                    .map_err(|e| format!("Probit Predict: Exog '{}' cannot cast to String: {}", name, e))?;
-                let str_ca = str_series.str().map_err(|e| format!("Probit Predict: Exog '{}' cannot cast to String: {}", name, e))?;
+                    .map_err(|e| {
+                        format!(
+                            "Probit Predict: Exog '{}' cannot cast to String: {}",
+                            name, e
+                        )
+                    })?;
+                let str_ca = str_series.str().map_err(|e| {
+                    format!(
+                        "Probit Predict: Exog '{}' cannot cast to String: {}",
+                        name, e
+                    )
+                })?;
                 let values: Vec<String> = str_ca
                     .into_iter()
                     .map(|o| o.map(|s| s.to_string()).unwrap_or_default())
@@ -506,10 +622,18 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                 };
 
                 for cat in &categories_to_include {
-                    let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                    let col: Vec<f64> = values
+                        .iter()
+                        .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                        .collect();
                     if let Some(nn) = n {
                         if col.len() != nn {
-                            return Err(format!("Probit Predict: Exog '{}' has {} rows, expected {}", name, col.len(), nn));
+                            return Err(format!(
+                                "Probit Predict: Exog '{}' has {} rows, expected {}",
+                                name,
+                                col.len(),
+                                nn
+                            ));
                         }
                     } else {
                         n = Some(col.len());
@@ -556,7 +680,10 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
     let result_id = ctx.put_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
-        DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
+        DataValue::DataSeries(DataSeriesValue::with_element_type(
+            result_id,
+            DataType::Float64,
+        )),
     )?;
 
     ctx.log("Probit Predict: completed".to_string());

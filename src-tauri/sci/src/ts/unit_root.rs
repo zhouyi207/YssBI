@@ -45,7 +45,7 @@ const MACKINNON_COEFFS: [[[f64; 3]; 3]; 3] = [
     [
         [-3.4304, -6.0773, -24.2350], // 1%
         [-2.8615, -3.5225, -6.6700],  // 5%
-        [-2.5668, -2.6148, -4.4800], // 10%
+        [-2.5668, -2.6148, -4.4800],  // 10%
     ],
     // Trend
     [
@@ -108,7 +108,6 @@ fn mackinnon_critical_value(reg: AdfRegression, n: usize, level_idx: usize) -> f
     phi_inf + phi_1 / t + phi_2 / (t * t)
 }
 
-
 /// 回归表单行
 #[derive(Debug, Clone)]
 pub struct AdfRegRow {
@@ -158,12 +157,7 @@ pub struct AdfResult {
 /// * `lags` - 滞后阶数，0 为 DF，>0 为 ADF
 /// * `constant` - 是否含常数 (drift)
 /// * `trend` - 是否含时间趋势
-pub fn adf_test(
-    y: &[f64],
-    lags: usize,
-    constant: bool,
-    trend: bool,
-) -> Result<AdfResult, String> {
+pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<AdfResult, String> {
     let n_raw = y.len();
     if n_raw < 4 {
         return Err("ADF: 至少需要 4 个观测值".to_string());
@@ -268,7 +262,8 @@ pub fn adf_test(
     // drift 情形用 t 分布临界值和 p-value（Stata 第三情形）
     let (cv_1, cv_5, cv_10, p_value, use_t_dist) = if reg == AdfRegression::Drift {
         let df = df_resid as f64;
-        let t_dist = StudentsT::new(0.0, 1.0, df).unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
+        let t_dist =
+            StudentsT::new(0.0, 1.0, df).unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
         let cv_1 = t_dist.inverse_cdf(0.01);
         let cv_5 = t_dist.inverse_cdf(0.05);
         let cv_10 = t_dist.inverse_cdf(0.10);
@@ -302,7 +297,8 @@ pub fn adf_test(
         let coef = betas_nd[c];
         let se = cov_beta[[c, c]].sqrt().max(1e-15);
         let t_val = coef / se;
-        let dist = StudentsT::new(0.0, 1.0, df_resid as f64).unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
+        let dist = StudentsT::new(0.0, 1.0, df_resid as f64)
+            .unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
         let p_val = 2.0 * (1.0 - dist.cdf(t_val.abs()));
         let t_crit = dist.inverse_cdf(0.975);
         let ci_lower = coef - t_crit * se;
@@ -341,7 +337,9 @@ mod tests {
     #[test]
     fn test_adf_random_walk() {
         // 随机游走应不拒绝单位根
-        let y: Vec<f64> = (0..100).map(|i| i as f64 + (i as f64 * 0.1).sin()).collect();
+        let y: Vec<f64> = (0..100)
+            .map(|i| i as f64 + (i as f64 * 0.1).sin())
+            .collect();
         let r = adf_test(&y, 0, true, false).unwrap();
         assert!(r.test_statistic.is_finite());
         assert!(r.critical_value_5pct.is_finite());

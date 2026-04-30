@@ -2,14 +2,14 @@
 //!
 //! 对应 Stata vec x y z, lags(#) rank(#) trend(none|constant|trend) sindicators(varlist)
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataValue, DataType};
+use crate::graph::value::{DataType, DataValue};
 use ndarray::Array2;
 use polars::prelude::DataType as PolarsDataType;
 use serde::{Deserialize, Serialize};
@@ -107,9 +107,13 @@ fn sindicators_dataframe_to_array2(
         if !numeric_dtypes.contains(&col.dtype()) {
             continue;
         }
-        let s = col
-            .cast(&PolarsDataType::Float64)
-            .map_err(|e| format!("VEC: sindicators column '{}' cast failed: {}", col.name(), e))?;
+        let s = col.cast(&PolarsDataType::Float64).map_err(|e| {
+            format!(
+                "VEC: sindicators column '{}' cast failed: {}",
+                col.name(),
+                e
+            )
+        })?;
         let f64_ca = s.f64().map_err(|e| format!("VEC: sindicators: {}", e))?;
         if f64_ca.null_count() > 0 {
             return Err(format!(
@@ -257,7 +261,10 @@ fn run_vec(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VECSummaryResult, 
         if s.len() != n {
             return Err(format!(
                 "VEC: variable '{}' has {} rows, expected {}",
-                var_names.get(i).cloned().unwrap_or_else(|| format!("y{}", i)),
+                var_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("y{}", i)),
                 s.len(),
                 n
             ));
@@ -272,22 +279,19 @@ fn run_vec(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VECSummaryResult, 
         ));
     }
 
-    let _sindicators = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(
-        "sindicators".to_string(),
-    ))) {
-        Ok(DataValue::DataFrame(id)) => {
-            let df = ctx.get_dataframe(&id)?;
-            let (cols, _names) = sindicators_dataframe_to_array2(df.as_ref(), n)?;
-            Some(cols)
-        }
-        Ok(DataValue::Null) | Err(_) => None,
-        _ => None,
-    };
+    let _sindicators =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("sindicators".to_string()))) {
+            Ok(DataValue::DataFrame(id)) => {
+                let df = ctx.get_dataframe(&id)?;
+                let (cols, _names) = sindicators_dataframe_to_array2(df.as_ref(), n)?;
+                Some(cols)
+            }
+            Ok(DataValue::Null) | Err(_) => None,
+            _ => None,
+        };
 
     if _sindicators.is_some() && !constant && !trend {
-        return Err(
-            "VEC: sindicators cannot be specified with trend(none)".to_string(),
-        );
+        return Err("VEC: sindicators cannot be specified with trend(none)".to_string());
     }
 
     let trend_spec = match (constant, trend) {
@@ -381,19 +385,39 @@ fn run_vec(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VECSummaryResult, 
 
     // beta_std_err 等与 beta 同结构，转置为 r×n_vars（n_vars 含 const）
     let beta_std_err_t: Vec<Vec<Option<f64>>> = (0..result.rank)
-        .map(|j| (0..result.beta_std_err.len()).map(|i| result.beta_std_err[i][j]).collect())
+        .map(|j| {
+            (0..result.beta_std_err.len())
+                .map(|i| result.beta_std_err[i][j])
+                .collect()
+        })
         .collect();
     let beta_z_value_t: Vec<Vec<Option<f64>>> = (0..result.rank)
-        .map(|j| (0..result.beta_z_value.len()).map(|i| result.beta_z_value[i][j]).collect())
+        .map(|j| {
+            (0..result.beta_z_value.len())
+                .map(|i| result.beta_z_value[i][j])
+                .collect()
+        })
         .collect();
     let beta_p_value_t: Vec<Vec<Option<f64>>> = (0..result.rank)
-        .map(|j| (0..result.beta_p_value.len()).map(|i| result.beta_p_value[i][j]).collect())
+        .map(|j| {
+            (0..result.beta_p_value.len())
+                .map(|i| result.beta_p_value[i][j])
+                .collect()
+        })
         .collect();
     let beta_ci_lower_t: Vec<Vec<Option<f64>>> = (0..result.rank)
-        .map(|j| (0..result.beta_ci_lower.len()).map(|i| result.beta_ci_lower[i][j]).collect())
+        .map(|j| {
+            (0..result.beta_ci_lower.len())
+                .map(|i| result.beta_ci_lower[i][j])
+                .collect()
+        })
         .collect();
     let beta_ci_upper_t: Vec<Vec<Option<f64>>> = (0..result.rank)
-        .map(|j| (0..result.beta_ci_upper.len()).map(|i| result.beta_ci_upper[i][j]).collect())
+        .map(|j| {
+            (0..result.beta_ci_upper.len())
+                .map(|i| result.beta_ci_upper[i][j])
+                .collect()
+        })
         .collect();
 
     Ok(VECSummaryResult {

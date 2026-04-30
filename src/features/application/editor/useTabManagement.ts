@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
-import { getGraphById } from '@/features/core/dataStore';
+import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
 import { logger } from '@/utils/appLogger';
@@ -45,13 +45,17 @@ export function useTabManagement() {
     if (type) setSelectedInfo(newId, type as any);
   }, [setActiveTabId, setSelectedInfo]);
 
-  const openGraph = useCallback((
+  const openGraph = useCallback(async (
     id: string,
     name: string,
     type: "event" | "function",
     initialData?: Graph
   ) => {
     logger.graph.trace(`openGraph called: id=${id}, name=${name}, type=${type}`, 'TabManagement');
+    if (!initialData) {
+      const loaded = await useProjectIOStore.getState().loadGraph(id);
+      if (!loaded) return;
+    }
     
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';

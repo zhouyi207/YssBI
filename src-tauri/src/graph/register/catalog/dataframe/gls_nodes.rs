@@ -1,7 +1,7 @@
 //! GLS (Generalized Least Squares) 回归节点
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -14,13 +14,17 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{GLS, GLSConfig};
+use yss_sci::regression::linear_model::{GLSConfig, GLS};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry};
-use std::time::Instant;
+use super::info_nodes::{
+    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
+    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
+    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+};
 use super::ols_nodes::VariableSpec;
+use std::time::Instant;
 
 /// Re-export OLSModel for Predict compatibility (GLS outputs same structure)
 pub use super::ols_nodes::OLSModel;
@@ -66,14 +70,13 @@ fn dataframe_to_array2(df: &DataFrame) -> Result<Array2<f64>, String> {
         let s = col
             .cast(&polars::prelude::DataType::Float64)
             .map_err(|e| format!("GLS: Sigma column '{}' must be numeric: {}", col.name(), e))?;
-        let f64_ca = s
-            .f64()
-            .map_err(|e| format!("GLS: Sigma: {}", e))?;
+        let f64_ca = s.f64().map_err(|e| format!("GLS: Sigma: {}", e))?;
         let vec: Vec<f64> = f64_ca.into_no_null_iter().collect();
         if vec.len() != nrows {
             return Err(format!(
                 "GLS: Sigma column has {} rows, expected {}",
-                vec.len(), nrows
+                vec.len(),
+                nrows
             ));
         }
         columns.push(vec);
@@ -123,10 +126,9 @@ fn gls_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -143,9 +145,7 @@ fn gls_input_slots() -> Vec<PinSlot> {
 
 fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitResult, String> {
     // ---- Extract endog ----
-    let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("y".to_string())),
-    )?;
+    let endog_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("y".to_string())))?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
         other => {
@@ -177,20 +177,26 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("GLS: cannot cast Y to Float64: {}", e))?;
 
     // ---- Extract Sigma (DataFrame -> Array2) ----
-    let sigma_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("sigma".to_string())),
-    )?;
+    let sigma_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("sigma".to_string())))?;
     let sigma_df_id = match &sigma_value {
         DataValue::DataFrame(id) => id.clone(),
         DataValue::Null => {
-            return Err("GLS: Sigma input is not connected. Connect a DataFrame (n×n covariance matrix).".to_string());
+            return Err(
+                "GLS: Sigma input is not connected. Connect a DataFrame (n×n covariance matrix)."
+                    .to_string(),
+            );
         }
         _ => {
             return Err("GLS: Sigma must be a DataFrame (n×n covariance matrix)".to_string());
@@ -207,40 +213,40 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     }
 
     // ---- Get config (optional — falls back to GLSConfigure::default()) ----
-    let config = match ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("gls_config".to_string())),
-    ) {
-        Ok(config_value) => match config_value.as_handle_id() {
-            Some(id) => {
-                let handle = ctx.get_handle(&id.to_string())?;
-                handle
-                    .downcast_ref::<GLSConfigure>()
-                    .ok_or("GLS: config handle is not a GLSConfigure")?
-                    .clone()
-            }
-            None => GLSConfigure::default(),
-        },
-        Err(_) => GLSConfigure::default(),
-    };
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("gls_config".to_string()))) {
+            Ok(config_value) => match config_value.as_handle_id() {
+                Some(id) => {
+                    let handle = ctx.get_handle(&id.to_string())?;
+                    handle
+                        .downcast_ref::<GLSConfigure>()
+                        .ok_or("GLS: config handle is not a GLSConfigure")?
+                        .clone()
+                }
+                None => GLSConfigure::default(),
+            },
+            Err(_) => GLSConfigure::default(),
+        };
     let has_constant = config.constant;
 
     // ---- Extract exog (mixed numeric + categorical) ----
-    let exog_data_values = ctx.get_inputs_by_family(
-        &PinRole::Data(DataRole::Inputs(0)),
-    )?;
+    let exog_data_values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
 
     if exog_data_values.is_empty() {
         return Err("GLS: at least one X input is required".to_string());
     }
 
     // Optional time series for residual time info (from direct Time pin or from config)
-    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+    let time_series = match ctx
+        .get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string())))
+    {
         Ok(DataValue::DataSeries(v)) => {
             let ts = ctx.get_series(&v.id)?;
             if ts.len() != n_raw {
                 return Err(format!(
                     "GLS: Time has {} observations, expected {} (must match Y length)",
-                    ts.len(), n_raw
+                    ts.len(),
+                    n_raw
                 ));
             }
             Some(ts)
@@ -263,7 +269,10 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
 
     // Build DataFrame with __idx__ + endog + optional time + all exog, then drop rows with null/NaN
     let mut df_cols: Vec<Column> = vec![
-        Column::from(Series::new("__idx__".into(), (0..n_raw).map(|i| i as u32).collect::<Vec<u32>>())),
+        Column::from(Series::new(
+            "__idx__".into(),
+            (0..n_raw).map(|i| i as u32).collect::<Vec<u32>>(),
+        )),
         Column::from(endog_f64_series.with_name("__endog__".into())),
     ];
     if let Some(ref ts) = time_series {
@@ -278,12 +287,18 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         let series = ctx.get_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
-            if raw.is_empty() { format!("x{}", i + 1) } else { raw }
+            if raw.is_empty() {
+                format!("x{}", i + 1)
+            } else {
+                raw
+            }
         };
         if series.len() != n_raw {
             return Err(format!(
                 "GLS: X '{}' has {} observations, expected {} (must match Y length)",
-                series_name, series.len(), n_raw
+                series_name,
+                series.len(),
+                n_raw
             ));
         }
         let is_categorical = matches!(
@@ -299,7 +314,9 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("GLS: cannot cast X {} to Float64: {}", i, e))?
         };
-        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        df_cols.push(Column::from(
+            col_series.with_name(series_name.as_str().into()),
+        ));
         exog_meta.push((series_name, is_categorical, dsv));
     }
     let df = DataFrame::new(n_raw, df_cols)
@@ -320,7 +337,9 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         .into_no_null_iter()
         .map(|i| i as usize)
         .collect();
-    let sigma = ndarray::Array2::from_shape_fn((n, n), |(i, j)| sigma_full[[valid_indices[i], valid_indices[j]]]);
+    let sigma = ndarray::Array2::from_shape_fn((n, n), |(i, j)| {
+        sigma_full[[valid_indices[i], valid_indices[j]]]
+    });
 
     let endog = Array1::from(
         df.column("__endog__")
@@ -339,8 +358,13 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         let col = df.column(&series_name).map_err(|e| format!("GLS: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("GLS: X '{}': {}", series_name, e))?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e| format!("GLS: X '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
                 if !unique_ordered.contains(v) {
@@ -380,18 +404,29 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
             for cat in &categories_to_include {
-                let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                let col: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
             variable_specs.push(VariableSpec::Categorical {
                 name: series_name,
                 categories: unique_ordered,
-                dropped: if drop_cat.is_empty() { String::new() } else { drop_cat },
+                dropped: if drop_cat.is_empty() {
+                    String::new()
+                } else {
+                    drop_cat
+                },
                 role,
             });
         } else {
-            let values: Vec<f64> = col.f64().map_err(|e| format!("GLS: X '{}': {}", series_name, e))?.into_no_null_iter().collect();
+            let values: Vec<f64> = col
+                .f64()
+                .map_err(|e| format!("GLS: X '{}': {}", series_name, e))?
+                .into_no_null_iter()
+                .collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
@@ -464,7 +499,8 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            exog_use.row(i)
+            exog_use
+                .row(i)
                 .iter()
                 .zip(result.betas.iter())
                 .map(|(x, b)| x * b)
@@ -510,10 +546,26 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         let ms = t_bp.elapsed().as_millis() as u64;
         (
             Some(BreuschPaganTests {
-                stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                stata: r_stata.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker: r_koenker.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
             }),
             Some(ms),
         )
@@ -530,8 +582,18 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         let ms = t_ov.elapsed().as_millis() as u64;
         (
             Some(OvTests {
-                default: r_default.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
-                rhs: r_rhs.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
+                default: r_default.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
+                rhs: r_rhs.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
             }),
             Some(ms),
         )
@@ -573,35 +635,38 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         (None, None)
     };
 
-    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
-        let vif_entries: Vec<VifEntry> = entries
-            .into_iter()
-            .enumerate()
-            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
-            .map(|(j, e)| {
-                let (var_name, _) = all_labels_use
-                    .get(j)
-                    .cloned()
-                    .unwrap_or_else(|| (format!("x{}", j), None));
-                VifEntry {
-                    variable: var_name,
-                    vif: e.vif,
-                    tolerance: e.tolerance,
-                }
-            })
-            .collect();
-        if vif_entries.is_empty() {
-            None
-        } else {
-            Some(vif_entries)
-        }
-    });
+    let vif = diagnostics::vif_centered(&exog_use, has_constant)
+        .ok()
+        .and_then(|entries| {
+            let vif_entries: Vec<VifEntry> = entries
+                .into_iter()
+                .enumerate()
+                .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+                .map(|(j, e)| {
+                    let (var_name, _) = all_labels_use
+                        .get(j)
+                        .cloned()
+                        .unwrap_or_else(|| (format!("x{}", j), None));
+                    VifEntry {
+                        variable: var_name,
+                        vif: e.vif,
+                        tolerance: e.tolerance,
+                    }
+                })
+                .collect();
+            if vif_entries.is_empty() {
+                None
+            } else {
+                Some(vif_entries)
+            }
+        });
 
     // Build residual_scatter (e vs e_lag1) using ts_lag when time is provided
     let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
         let time_col = df.column("__time__").map_err(|e| format!("GLS: {}", e))?;
         let time_s = time_col.clone().take_materialized_series();
-        let residuals_s = Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
+        let residuals_s =
+            Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
 
         let interval = infer_interval(&time_s).unwrap_or(1);
         match ts_lag(&time_s, &residuals_s, 1, interval) {
@@ -654,14 +719,16 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
 
     let normality_tests = if has_constant && residuals.len() >= 8 {
         let residuals_arr = Array1::from(residuals.clone());
-        diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
-            skewness: r.skewness,
-            kurtosis: r.kurtosis,
-            omnibus_stat: r.omnibus_stat,
-            omnibus_p_value: r.omnibus_p_value,
-            jarque_bera_stat: r.jarque_bera_stat,
-            jarque_bera_p_value: r.jarque_bera_p_value,
-        })
+        diagnostics::normality_tests(&residuals_arr)
+            .ok()
+            .map(|r| NormalityTests {
+                skewness: r.skewness,
+                kurtosis: r.kurtosis,
+                omnibus_stat: r.omnibus_stat,
+                omnibus_p_value: r.omnibus_p_value,
+                jarque_bera_stat: r.jarque_bera_stat,
+                jarque_bera_p_value: r.jarque_bera_p_value,
+            })
     } else {
         None
     };
@@ -718,7 +785,11 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
             residuals,
             leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter,
-            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
+            exog: Some(
+                (0..n)
+                    .map(|i| exog_use.row(i).iter().cloned().collect())
+                    .collect(),
+            ),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -758,7 +829,10 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
         kept_indices,
     };
 
-    Ok(GLSFitResult { ols_result, ols_model })
+    Ok(GLSFitResult {
+        ols_result,
+        ols_model,
+    })
 }
 
 // ======================== 注册入口 ========================
@@ -791,10 +865,9 @@ fn register_gls_configure(registry: &NodeRegistry) {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Int64,
-                    DataType::Date,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Int64, DataType::Date],
+                )))),
             )
             .with_optional(true),
         ),
@@ -852,43 +925,53 @@ fn register_gls(registry: &NodeRegistry) {
         DataRole::Custom("ols_residuals".to_string()),
         PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
-    let definition = NodeDefinition::new(
-        "GLS",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Generalized Least Squares regression — outputs the fitted model for prediction")
-    .with_pin_slots(slots)
-    .with_flow_processor(Arc::new(|ctx| {
-        let fit = run_gls_regression(ctx)?;
+    let definition = NodeDefinition::new("GLS", vec!["Data".to_string(), "Statistics".to_string()])
+        .with_ui_style("dataframe")
+        .with_description(
+            "Generalized Least Squares regression — outputs the fitted model for prediction",
+        )
+        .with_pin_slots(slots)
+        .with_flow_processor(Arc::new(|ctx| {
+            let fit = run_gls_regression(ctx)?;
 
-        let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_model".to_string())),
-            DataValue::new_struct("OLSModel", model_handle_id),
-        )?;
+            let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_model".to_string())),
+                DataValue::new_struct("OLSModel", model_handle_id),
+            )?;
 
-        let fitted_series = Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
-            .with_name("fitted".into());
-        let fitted_id = ctx.put_series(fitted_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
-        )?;
+            let fitted_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
+                    .with_name("fitted".into());
+            let fitted_id = ctx.put_series(fitted_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    fitted_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        let residuals_series = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
-            .with_name("residuals".into());
-        let residuals_id = ctx.put_series(residuals_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(residuals_id, DataType::Float64)),
-        )?;
+            let residuals_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
+                    .with_name("residuals".into());
+            let residuals_id = ctx.put_series(residuals_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    residuals_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        ctx.log("GLS: regression completed".to_string());
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
+            ctx.log("GLS: regression completed".to_string());
+            Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+        }));
     registry.register(definition);
 }
 
@@ -901,14 +984,19 @@ fn register_gls_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "GLS Summary",
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Generalized Least Squares regression — outputs results and opens the summary window")
+    .with_description(
+        "Generalized Least Squares regression — outputs results and opens the summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_gls_regression(ctx)?;

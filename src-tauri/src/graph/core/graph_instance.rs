@@ -8,17 +8,21 @@
 
 use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::connection::Connection;
-use crate::graph::node::{ColumnSchema, DataSchema, NodeDefinition, NodeId, NodeInstance, NodeInstanceParams, PinResolverContext};
-pub use crate::graph::node::SchemaProvider;
 use crate::graph::node::OutputSchemaContext;
-use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinId, PinInstance, PinKind, PinRole, PinDirection, PinSlot};
+pub use crate::graph::node::SchemaProvider;
+use crate::graph::node::{
+    ColumnSchema, DataSchema, NodeDefinition, NodeId, NodeInstance, NodeInstanceParams,
+    PinResolverContext,
+};
+use crate::graph::pin::{
+    DataRole, PinDataTypeDefinition, PinDirection, PinId, PinInstance, PinKind, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::DataValue;
 use crate::graph::value::DataType;
-use crate::graph::{GraphId};
+use crate::graph::value::DataValue;
+use crate::graph::GraphId;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
-
 
 /// 动态 pin 重建的变更集
 #[derive(Debug, Clone, Default)]
@@ -48,7 +52,6 @@ pub struct GraphInstance {
 
     // 位置
     pub position: GraphPosition,
-
 
     // 数据状态 (node, pin, connection)
     pub data_state: Arc<RwLock<GraphDataState>>,
@@ -156,10 +159,9 @@ impl GraphInstance {
         *data_state = GraphDataState::default();
 
         for node_snap in &snapshot.nodes {
-            let definition = self
-                .registry
-                .get(&node_snap.node_type)
-                .ok_or_else(|| format!("Node type '{}' not found in registry", node_snap.node_type))?;
+            let definition = self.registry.get(&node_snap.node_type).ok_or_else(|| {
+                format!("Node type '{}' not found in registry", node_snap.node_type)
+            })?;
 
             let result = NodeInstance::from_definition(definition.clone())
                 .map_err(|e| format!("Failed to create node '{}': {}", node_snap.node_type, e))?;
@@ -168,7 +170,10 @@ impl GraphInstance {
 
             let mut node = result.node;
             node.id = target_node_id;
-            node.position = crate::graph::NodePosition { x: node_snap.x, y: node_snap.y };
+            node.position = crate::graph::NodePosition {
+                x: node_snap.x,
+                y: node_snap.y,
+            };
             if let Some(ref params) = node_snap.params {
                 node.instance_params = params.clone();
             }
@@ -189,7 +194,9 @@ impl GraphInstance {
 
             node.pin_ids = pins.iter().map(|p| p.id).collect();
 
-            if let Some(dt) = node_snap.params.as_ref()
+            if let Some(dt) = node_snap
+                .params
+                .as_ref()
                 .and_then(|p| p.variable_type())
                 .and_then(|vt| vt.parse::<DataType>().ok())
             {
@@ -425,7 +432,10 @@ impl GraphInstance {
     ///
     /// Returns the set of neighbor node IDs whose connections were affected,
     /// so the caller can run `resolve_dynamic_pins` on them after deletion.
-    pub fn remove_node_raw(&self, node_id: NodeId) -> Result<std::collections::HashSet<NodeId>, String> {
+    pub fn remove_node_raw(
+        &self,
+        node_id: NodeId,
+    ) -> Result<std::collections::HashSet<NodeId>, String> {
         let pins = self.get_pin_instances_by_node_id(node_id);
 
         let mut neighbor_node_ids = std::collections::HashSet::new();
@@ -531,7 +541,7 @@ impl GraphInstance {
                 return Err(format!("Pin {:?} not found", pin_id));
             }
         }
-        
+
         let _ = self.infer_types();
         Ok(())
     }
@@ -599,7 +609,16 @@ impl GraphInstance {
         &self,
         pin_a: PinId,
         pin_b: PinId,
-    ) -> Result<(PinId, PinId, Vec<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+    ) -> Result<
+        (
+            PinId,
+            PinId,
+            Vec<(PinId, PinId)>,
+            Vec<PinChangeSet>,
+            Vec<(PinId, DataType)>,
+        ),
+        String,
+    > {
         use crate::graph::connection::connection_validator::validate_connection;
         use crate::graph::pin::PinKind;
 
@@ -620,7 +639,9 @@ impl GraphInstance {
             to_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
 
             // Exec output: enforce single outgoing connection
-            let is_exec = data_state.pins.get(&from_pin)
+            let is_exec = data_state
+                .pins
+                .get(&from_pin)
                 .map(|p| p.definition.kind == PinKind::Exec)
                 .unwrap_or(false);
 
@@ -694,8 +715,18 @@ impl GraphInstance {
     /// 断开连接，自动运行类型推断和动态 pin 重建
     ///
     /// 返回 (动态 pin 变更集, 推断出的 pin 类型)
-    pub fn disconnect(&self, from_pin: PinId, to_pin: PinId) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
-        let to_node_id = self.data_state.read().unwrap().pins.get(&to_pin).map(|p| p.node_id);
+    pub fn disconnect(
+        &self,
+        from_pin: PinId,
+        to_pin: PinId,
+    ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
+        let to_node_id = self
+            .data_state
+            .read()
+            .unwrap()
+            .pins
+            .get(&to_pin)
+            .map(|p| p.node_id);
         {
             let mut data_state = self.data_state.write().unwrap();
             data_state.connections.disconnect(from_pin, to_pin);
@@ -719,7 +750,14 @@ impl GraphInstance {
     /// 断开指定 Pin 的所有连接（输入和输出）
     ///
     /// 返回 (被删除的连接对列表, 动态 pin 变更集, 推断出的 pin 类型)
-    pub fn disconnect_pin(&self, pin_id: PinId) -> (Vec<(PinId, PinId)>, Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
+    pub fn disconnect_pin(
+        &self,
+        pin_id: PinId,
+    ) -> (
+        Vec<(PinId, PinId)>,
+        Vec<PinChangeSet>,
+        Vec<(PinId, DataType)>,
+    ) {
         let mut removed_connections = Vec::new();
         let mut nodes_to_resolve = std::collections::HashSet::new();
         {
@@ -767,7 +805,7 @@ impl GraphInstance {
 /// 类型推断
 impl GraphInstance {
     /// 运行类型推断
-    /// 
+    ///
     /// 这个方法会：
     /// 1. 注册所有节点的类型变量
     /// 2. 注册所有 Pin 的类型
@@ -787,7 +825,9 @@ impl GraphInstance {
         let (definition, instance_params, current_pin_ids);
         {
             let data_state = self.data_state.read().unwrap();
-            let node = data_state.nodes.get(&node_id)
+            let node = data_state
+                .nodes
+                .get(&node_id)
                 .ok_or_else(|| format!("Node {:?} not found", node_id))?;
             definition = node.definition.clone();
             instance_params = node.instance_params.clone();
@@ -829,7 +869,8 @@ impl GraphInstance {
                 .iter()
                 .filter(|pid| {
                     if let Some(pin) = data_state.pins.get(pid) {
-                        !static_keys.contains(&(pin.definition.name.clone(), pin.definition.direction))
+                        !static_keys
+                            .contains(&(pin.definition.name.clone(), pin.definition.direction))
                     } else {
                         false
                     }
@@ -843,9 +884,7 @@ impl GraphInstance {
         let new_pin_instances: Vec<PinInstance> = dynamic_new_defs
             .iter()
             .enumerate()
-            .map(|(i, pd)| {
-                PinInstance::from_definition(pd, node_id, base_order + i as i32)
-            })
+            .map(|(i, pd)| PinInstance::from_definition(pd, node_id, base_order + i as i32))
             .collect();
 
         // 如果动态部分没有实质变化，跳过
@@ -940,9 +979,12 @@ impl GraphInstance {
                     if let Some(pin) = data_state.pins.get_mut(&pin_id) {
                         if pin.is_output()
                             && pin.definition.data_type.as_ref().map_or(false, |dt| {
-                                matches!(dt, crate::graph::pin::PinDataTypeDefinition::Concrete(
-                                    crate::graph::DataType::DataFrame
-                                ))
+                                matches!(
+                                    dt,
+                                    crate::graph::pin::PinDataTypeDefinition::Concrete(
+                                        crate::graph::DataType::DataFrame
+                                    )
+                                )
                             })
                         {
                             pin.resolved_schema = Some(schema);
@@ -971,11 +1013,11 @@ impl GraphInstance {
         change_sets
     }
 
-
     /// 拓扑序：保证上游节点先于下游
     fn topological_node_order(&self) -> Vec<NodeId> {
         let data_state = self.data_state.read().unwrap();
-        let mut in_degree: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
+        let mut in_degree: std::collections::HashMap<NodeId, usize> =
+            std::collections::HashMap::new();
         for node_id in data_state.nodes.keys() {
             in_degree.entry(*node_id).or_insert(0);
         }
@@ -1118,7 +1160,11 @@ impl GraphInstance {
             }
         })?;
         let upstream_pin_id = data_state.connections.get_upstream(input_pin)?;
-        data_state.pins.get(&upstream_pin_id)?.resolved_schema.clone()
+        data_state
+            .pins
+            .get(&upstream_pin_id)?
+            .resolved_schema
+            .clone()
     }
 
     /// 节点输入变化时，获取需额外解析的下游节点（消费该节点所有 output 的节点）
@@ -1228,7 +1274,12 @@ impl GraphInstance {
 
         let template_role = match slot {
             PinSlot::Repeatable { template, .. } => &template.role,
-            _ => return Err(format!("Slot index {} is not a Repeatable slot", slot_index)),
+            _ => {
+                return Err(format!(
+                    "Slot index {} is not a Repeatable slot",
+                    slot_index
+                ))
+            }
         };
 
         let family_pins = self.get_pin_instances_by_pin_role_family(node_id, template_role);
@@ -1237,10 +1288,7 @@ impl GraphInstance {
         if let PinSlot::Repeatable { max_count, .. } = slot {
             if let Some(max) = max_count {
                 if current_count >= *max {
-                    return Err(format!(
-                        "Repeatable slot already at max count ({})",
-                        max
-                    ));
+                    return Err(format!("Repeatable slot already at max count ({})", max));
                 }
             }
         }
@@ -1398,11 +1446,7 @@ impl GraphInstance {
 
     /// Re-index all pins belonging to a Repeatable slot so their roles and names
     /// are contiguous (Operands(0), Operands(1), ...; A, B, C, ...).
-    fn reindex_repeatable_pins(
-        &self,
-        node_id: NodeId,
-        slot_index: usize,
-    ) -> Result<(), String> {
+    fn reindex_repeatable_pins(&self, node_id: NodeId, slot_index: usize) -> Result<(), String> {
         let definition;
         {
             let data_state = self.data_state.read().unwrap();

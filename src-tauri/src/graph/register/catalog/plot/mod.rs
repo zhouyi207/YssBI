@@ -1,10 +1,10 @@
-mod scatter;
-mod line;
-mod ecdf;
-mod kde;
-mod histogram;
 mod correlation_plot;
 mod correlogram;
+mod ecdf;
+mod histogram;
+mod kde;
+mod line;
+mod scatter;
 
 use crate::graph::register::NodeRegistry;
 

@@ -38,11 +38,7 @@ pub fn t_test(
         return Err("t 检验仅支持单约束 (q=1)".to_string());
     }
     if betas.len() != k {
-        return Err(format!(
-            "betas 长度 {} 与 R 列数 {} 不一致",
-            betas.len(),
-            k
-        ));
+        return Err(format!("betas 长度 {} 与 R 列数 {} 不一致", betas.len(), k));
     }
 
     let contrast = r.dot(betas) - r_vec;

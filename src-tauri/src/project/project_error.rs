@@ -14,4 +14,7 @@ pub enum ProjectError {
 
     #[error("project file not found: {0}")]
     FileNotFound(PathBuf),
+
+    #[error("invalid project format: {0}")]
+    InvalidProjectFormat(String),
 }

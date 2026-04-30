@@ -16,9 +16,9 @@ pub mod pin_id;
 pub mod pin_instance;
 pub mod pin_order;
 pub mod pin_role;
+pub mod pin_runtime_state;
 pub mod pin_slot;
 pub mod pin_state;
-pub mod pin_runtime_state;
 
 pub use pin_data_type::*;
 pub use pin_definition::*;
@@ -26,6 +26,6 @@ pub use pin_id::*;
 pub use pin_instance::*;
 pub use pin_order::*;
 pub use pin_role::*;
+pub use pin_runtime_state::*;
 pub use pin_slot::*;
 pub use pin_state::*;
-pub use pin_runtime_state::*;

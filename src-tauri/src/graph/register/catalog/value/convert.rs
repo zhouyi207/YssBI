@@ -26,7 +26,9 @@ pub fn register(registry: &NodeRegistry) {
     register_series_categorical_to_float64(registry);
 }
 
-fn series_input_id(ctx: &mut dyn crate::execution::NodeExecutionContextTrait) -> Result<String, String> {
+fn series_input_id(
+    ctx: &mut dyn crate::execution::NodeExecutionContextTrait,
+) -> Result<String, String> {
     let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
     match &series_value {
         DataValue::DataSeries(v) => Ok(v.id.clone()),
@@ -61,40 +63,51 @@ fn ensure_categorical_or_enum(s: &Series, node: &str) -> Result<(), String> {
 fn register_convert(registry: &NodeRegistry) {
     let input_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Input".to_string()),
-        constraints: vec![TypeConstraint::ConvertibleTo(TypeVarKey("T_Output".to_string()))],
+        constraints: vec![TypeConstraint::ConvertibleTo(TypeVarKey(
+            "T_Output".to_string(),
+        ))],
         bound: None,
     };
 
     let output_type_var = TypeVarDefinition {
         id: TypeVarKey("T_Output".to_string()),
-        constraints: vec![TypeConstraint::ConvertibleFrom(TypeVarKey("T_Input".to_string()))],
+        constraints: vec![TypeConstraint::ConvertibleFrom(TypeVarKey(
+            "T_Input".to_string(),
+        ))],
         bound: None,
     };
 
-    let definition = NodeDefinition::new("Convert", vec!["Value".to_string(), "Conversion".to_string()])
-        .with_ui_style("value")
-        .with_description("Convert value from one type to another")
-        .with_type_vars(vec![input_type_var, output_type_var])
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "Input", DataRole::Input, PinDataTypeDefinition::type_var(TypeVarKey("T_Input".to_string())),
-            )),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Output", DataRole::Output, PinDataTypeDefinition::type_var(TypeVarKey("T_Output".to_string())),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(move |ctx| {
-            let input_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let output_type = ctx.get_pin_type_by_role(&PinRole::Data(DataRole::Output))?;
-            ctx.log(format!(
-                "Convert: {} -> {}",
-                input_value.value_type().expect("None").to_string(),
-                output_type
-            ));
-            let converted_value = convert_to_type(input_value, &output_type)?;
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), converted_value)?;
-            Ok(())
-        }));
+    let definition = NodeDefinition::new(
+        "Convert",
+        vec!["Value".to_string(), "Conversion".to_string()],
+    )
+    .with_ui_style("value")
+    .with_description("Convert value from one type to another")
+    .with_type_vars(vec![input_type_var, output_type_var])
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Input",
+            DataRole::Input,
+            PinDataTypeDefinition::type_var(TypeVarKey("T_Input".to_string())),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Output",
+            DataRole::Output,
+            PinDataTypeDefinition::type_var(TypeVarKey("T_Output".to_string())),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(move |ctx| {
+        let input_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let output_type = ctx.get_pin_type_by_role(&PinRole::Data(DataRole::Output))?;
+        ctx.log(format!(
+            "Convert: {} -> {}",
+            input_value.value_type().expect("None").to_string(),
+            output_type
+        ));
+        let converted_value = convert_to_type(input_value, &output_type)?;
+        ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), converted_value)?;
+        Ok(())
+    }));
 
     registry.register(definition);
 }
@@ -123,7 +136,10 @@ fn convert_to_boolean(value: DataValue) -> Result<DataValue, String> {
             .map(DataValue::Boolean)
             .ok_or_else(|| format!("Cannot convert string '{}' to Boolean", s)),
         DataValue::Null => Ok(DataValue::Boolean(false)),
-        _ => Err(format!("Cannot convert {:?} to Boolean", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Boolean",
+            value.value_type()
+        )),
     }
 }
 
@@ -140,7 +156,10 @@ fn convert_to_int32(value: DataValue) -> Result<DataValue, String> {
         }
         DataValue::Float32(f) => Ok(DataValue::Int32(f as i32)),
         DataValue::Float64(f) => Ok(DataValue::Int32(f as i32)),
-        DataValue::String(s) => s.parse::<i32>().map(DataValue::Int32).map_err(|_| format!("Cannot parse string '{}' as Int32", s)),
+        DataValue::String(s) => s
+            .parse::<i32>()
+            .map(DataValue::Int32)
+            .map_err(|_| format!("Cannot parse string '{}' as Int32", s)),
         DataValue::Null => Ok(DataValue::Int32(i32::zero())),
         _ => Err(format!("Cannot convert {:?} to Int32", value.value_type())),
     }
@@ -153,7 +172,10 @@ fn convert_to_int64(value: DataValue) -> Result<DataValue, String> {
         DataValue::Int64(i) => Ok(DataValue::Int64(i)),
         DataValue::Float32(f) => Ok(DataValue::Int64(f as i64)),
         DataValue::Float64(f) => Ok(DataValue::Int64(f as i64)),
-        DataValue::String(s) => s.parse::<i64>().map(DataValue::Int64).map_err(|_| format!("Cannot parse string '{}' as Int64", s)),
+        DataValue::String(s) => s
+            .parse::<i64>()
+            .map(DataValue::Int64)
+            .map_err(|_| format!("Cannot parse string '{}' as Int64", s)),
         DataValue::Null => Ok(DataValue::Int64(i64::zero())),
         _ => Err(format!("Cannot convert {:?} to Int64", value.value_type())),
     }
@@ -166,9 +188,15 @@ fn convert_to_float32(value: DataValue) -> Result<DataValue, String> {
         DataValue::Int64(i) => Ok(DataValue::Float32(i as f32)),
         DataValue::Float32(f) => Ok(DataValue::Float32(f)),
         DataValue::Float64(f) => Ok(DataValue::Float32(f as f32)),
-        DataValue::String(s) => s.parse::<f32>().map(DataValue::Float32).map_err(|_| format!("Cannot parse string '{}' as Float32", s)),
+        DataValue::String(s) => s
+            .parse::<f32>()
+            .map(DataValue::Float32)
+            .map_err(|_| format!("Cannot parse string '{}' as Float32", s)),
         DataValue::Null => Ok(DataValue::Float32(f32::zero())),
-        _ => Err(format!("Cannot convert {:?} to Float32", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Float32",
+            value.value_type()
+        )),
     }
 }
 
@@ -179,9 +207,15 @@ fn convert_to_float64(value: DataValue) -> Result<DataValue, String> {
         DataValue::Int64(i) => Ok(DataValue::Float64(i as f64)),
         DataValue::Float32(f) => Ok(DataValue::Float64(f as f64)),
         DataValue::Float64(f) => Ok(DataValue::Float64(f)),
-        DataValue::String(s) => s.parse::<f64>().map(DataValue::Float64).map_err(|_| format!("Cannot parse string '{}' as Float64", s)),
+        DataValue::String(s) => s
+            .parse::<f64>()
+            .map(DataValue::Float64)
+            .map_err(|_| format!("Cannot parse string '{}' as Float64", s)),
         DataValue::Null => Ok(DataValue::Float64(f64::zero())),
-        _ => Err(format!("Cannot convert {:?} to Float64", value.value_type())),
+        _ => Err(format!(
+            "Cannot convert {:?} to Float64",
+            value.value_type()
+        )),
     }
 }
 
@@ -198,7 +232,13 @@ fn convert_to_string_value(value: DataValue) -> Result<DataValue, String> {
         DataValue::Object(_) => Ok(DataValue::String(format!("{:?}", value))),
         DataValue::DataFrame(id) => Ok(DataValue::String(format!("DataFrame({})", id))),
         DataValue::DataSeries(v) => Ok(DataValue::String(format!("DataSeries({})", v.id))),
-        DataValue::Struct { type_key, handle_id } => Ok(DataValue::String(format!("Struct<{}>({})", type_key, handle_id))),
+        DataValue::Struct {
+            type_key,
+            handle_id,
+        } => Ok(DataValue::String(format!(
+            "Struct<{}>({})",
+            type_key, handle_id
+        ))),
     }
 }
 
@@ -230,7 +270,8 @@ fn register_series_string_to_categorical(registry: &NodeRegistry) {
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("String to Categorical: {}", e))?;
+        let series_id =
+            series_input_id(ctx).map_err(|e| format!("String to Categorical: {}", e))?;
         let series = ctx.get_series(&series_id)?;
         let target_dtype = dtype_from_string("categorical");
         let casted = series
@@ -265,10 +306,14 @@ fn register_series_string_to_float64(registry: &NodeRegistry) {
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id = series_input_id(ctx).map_err(|e| format!("String to Float64: {}", e))?;
         let series = ctx.get_series(&series_id)?;
-        let casted = series
-            .cast(&PDataType::Float64)
-            .map_err(|e: polars::error::PolarsError| format!("String to Float64: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Float64).map_err(|e| format!("String to Float64: {}", e))?;
+        let casted =
+            series
+                .cast(&PDataType::Float64)
+                .map_err(|e: polars::error::PolarsError| {
+                    format!("String to Float64: cast failed: {}", e)
+                })?;
+        emit_series_output(ctx, casted, DataType::Float64)
+            .map_err(|e| format!("String to Float64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -298,8 +343,11 @@ fn register_series_string_to_int64(registry: &NodeRegistry) {
         let series = ctx.get_series(&series_id)?;
         let casted = series
             .cast(&PDataType::Int64)
-            .map_err(|e: polars::error::PolarsError| format!("String to Int64: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Int64).map_err(|e| format!("String to Int64: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("String to Int64: cast failed: {}", e)
+            })?;
+        emit_series_output(ctx, casted, DataType::Int64)
+            .map_err(|e| format!("String to Int64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -329,8 +377,11 @@ fn register_series_int64_to_string(registry: &NodeRegistry) {
         let series = ctx.get_series(&series_id)?;
         let casted = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Int64 to String: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::String).map_err(|e| format!("Int64 to String: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Int64 to String: cast failed: {}", e)
+            })?;
+        emit_series_output(ctx, casted, DataType::String)
+            .map_err(|e| format!("Int64 to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -360,8 +411,11 @@ fn register_series_float64_to_string(registry: &NodeRegistry) {
         let series = ctx.get_series(&series_id)?;
         let casted = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Float64 to String: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::String).map_err(|e| format!("Float64 to String: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Float64 to String: cast failed: {}", e)
+            })?;
+        emit_series_output(ctx, casted, DataType::String)
+            .map_err(|e| format!("Float64 to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -389,10 +443,14 @@ fn register_series_int64_to_float64(registry: &NodeRegistry) {
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to Float64: {}", e))?;
         let series = ctx.get_series(&series_id)?;
-        let casted = series
-            .cast(&PDataType::Float64)
-            .map_err(|e: polars::error::PolarsError| format!("Int64 to Float64: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Float64).map_err(|e| format!("Int64 to Float64: {}", e))?;
+        let casted =
+            series
+                .cast(&PDataType::Float64)
+                .map_err(|e: polars::error::PolarsError| {
+                    format!("Int64 to Float64: cast failed: {}", e)
+                })?;
+        emit_series_output(ctx, casted, DataType::Float64)
+            .map_err(|e| format!("Int64 to Float64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -435,7 +493,9 @@ fn register_series_int64_to_bool(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Convert a DataSeries of Int64 to Boolean (0 → false, non-zero → true; null stays null)")
+    .with_description(
+        "Convert a DataSeries of Int64 to Boolean (0 → false, non-zero → true; null stays null)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -451,10 +511,14 @@ fn register_series_int64_to_bool(registry: &NodeRegistry) {
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to Boolean: {}", e))?;
         let series = ctx.get_series(&series_id)?;
-        let casted = series
-            .cast(&PDataType::Boolean)
-            .map_err(|e: polars::error::PolarsError| format!("Int64 to Boolean: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Boolean).map_err(|e| format!("Int64 to Boolean: {}", e))?;
+        let casted =
+            series
+                .cast(&PDataType::Boolean)
+                .map_err(|e: polars::error::PolarsError| {
+                    format!("Int64 to Boolean: cast failed: {}", e)
+                })?;
+        emit_series_output(ctx, casted, DataType::Boolean)
+            .map_err(|e| format!("Int64 to Boolean: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -513,13 +577,17 @@ fn register_series_categorical_to_string(registry: &NodeRegistry) {
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Categorical to String: {}", e))?;
+        let series_id =
+            series_input_id(ctx).map_err(|e| format!("Categorical to String: {}", e))?;
         let series = ctx.get_series(&series_id)?;
         ensure_categorical_or_enum(&series, "Categorical to String")?;
         let casted = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Categorical to String: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::String).map_err(|e| format!("Categorical to String: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Categorical to String: cast failed: {}", e)
+            })?;
+        emit_series_output(ctx, casted, DataType::String)
+            .map_err(|e| format!("Categorical to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -531,7 +599,9 @@ fn register_series_int64_to_categorical(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Convert Int64 to Categorical (via String encoding, same category pool as other cat casts)")
+    .with_description(
+        "Convert Int64 to Categorical (via String encoding, same category pool as other cat casts)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -549,12 +619,15 @@ fn register_series_int64_to_categorical(registry: &NodeRegistry) {
         let series = ctx.get_series(&series_id)?;
         let as_str = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Int64 to Categorical: to string: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Int64 to Categorical: to string: {}", e)
+            })?;
         let cat_dtype = dtype_from_string("categorical");
         let casted = as_str
             .cast(&cat_dtype)
             .map_err(|e| format!("Int64 to Categorical: to categorical: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Categorical).map_err(|e| format!("Int64 to Categorical: {}", e))?;
+        emit_series_output(ctx, casted, DataType::Categorical)
+            .map_err(|e| format!("Int64 to Categorical: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -566,7 +639,9 @@ fn register_series_categorical_to_int64(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Convert Categorical to Int64 (category labels must parse as integers; invalid → null)")
+    .with_description(
+        "Convert Categorical to Int64 (category labels must parse as integers; invalid → null)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -585,11 +660,16 @@ fn register_series_categorical_to_int64(registry: &NodeRegistry) {
         ensure_categorical_or_enum(&series, "Categorical to Int64")?;
         let as_str = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Categorical to Int64: to string: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Categorical to Int64: to string: {}", e)
+            })?;
         let casted = as_str
             .cast(&PDataType::Int64)
-            .map_err(|e: polars::error::PolarsError| format!("Categorical to Int64: to int64: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Int64).map_err(|e| format!("Categorical to Int64: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Categorical to Int64: to int64: {}", e)
+            })?;
+        emit_series_output(ctx, casted, DataType::Int64)
+            .map_err(|e| format!("Categorical to Int64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -615,16 +695,20 @@ fn register_series_float64_to_categorical(registry: &NodeRegistry) {
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Float64 to Categorical: {}", e))?;
+        let series_id =
+            series_input_id(ctx).map_err(|e| format!("Float64 to Categorical: {}", e))?;
         let series = ctx.get_series(&series_id)?;
         let as_str = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Float64 to Categorical: to string: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Float64 to Categorical: to string: {}", e)
+            })?;
         let cat_dtype = dtype_from_string("categorical");
         let casted = as_str
             .cast(&cat_dtype)
             .map_err(|e| format!("Float64 to Categorical: to categorical: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Categorical).map_err(|e| format!("Float64 to Categorical: {}", e))?;
+        emit_series_output(ctx, casted, DataType::Categorical)
+            .map_err(|e| format!("Float64 to Categorical: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
@@ -636,7 +720,9 @@ fn register_series_categorical_to_float64(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Convert Categorical to Float64 (category labels must parse as floats; invalid → null)")
+    .with_description(
+        "Convert Categorical to Float64 (category labels must parse as floats; invalid → null)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -650,16 +736,23 @@ fn register_series_categorical_to_float64(registry: &NodeRegistry) {
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Categorical to Float64: {}", e))?;
+        let series_id =
+            series_input_id(ctx).map_err(|e| format!("Categorical to Float64: {}", e))?;
         let series = ctx.get_series(&series_id)?;
         ensure_categorical_or_enum(&series, "Categorical to Float64")?;
         let as_str = series
             .cast(&PDataType::String)
-            .map_err(|e: polars::error::PolarsError| format!("Categorical to Float64: to string: {}", e))?;
-        let casted = as_str
-            .cast(&PDataType::Float64)
-            .map_err(|e: polars::error::PolarsError| format!("Categorical to Float64: to float64: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Float64).map_err(|e| format!("Categorical to Float64: {}", e))?;
+            .map_err(|e: polars::error::PolarsError| {
+                format!("Categorical to Float64: to string: {}", e)
+            })?;
+        let casted =
+            as_str
+                .cast(&PDataType::Float64)
+                .map_err(|e: polars::error::PolarsError| {
+                    format!("Categorical to Float64: to float64: {}", e)
+                })?;
+        emit_series_output(ctx, casted, DataType::Float64)
+            .map_err(|e| format!("Categorical to Float64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);

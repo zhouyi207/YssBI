@@ -2,8 +2,8 @@
 //!
 //! Stata: prais y x1 x2 [, corc]
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -16,12 +16,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{
-    Prais, PraisConfig, PraisTransform,
-};
+use yss_sci::regression::linear_model::{Prais, PraisConfig, PraisTransform};
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PraisInfo, VifEntry,
+    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo,
+    OmittedVariable, PraisInfo, VifEntry,
 };
 use super::ols_nodes::VariableSpec;
 
@@ -86,10 +85,9 @@ fn prais_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -105,9 +103,7 @@ fn prais_input_slots() -> Vec<PinSlot> {
 }
 
 fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<PraisFitResult, String> {
-    let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("y".to_string())),
-    )?;
+    let endog_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("y".to_string())))?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
         other => {
@@ -127,26 +123,29 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("Prais: cannot cast Y to Float64: {}", e))?;
 
-    let config = match ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("prais_config".to_string())),
-    ) {
-        Ok(v) => match v.as_handle_id() {
-            Some(id) => {
-                let h = ctx.get_handle(&id.to_string())?;
-                h.downcast_ref::<PraisConfigure>()
-                    .ok_or("Prais: config is not PraisConfigure")?
-                    .clone()
-            }
-            None => PraisConfigure::default(),
-        },
-        Err(_) => PraisConfigure::default(),
-    };
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("prais_config".to_string()))) {
+            Ok(v) => match v.as_handle_id() {
+                Some(id) => {
+                    let h = ctx.get_handle(&id.to_string())?;
+                    h.downcast_ref::<PraisConfigure>()
+                        .ok_or("Prais: config is not PraisConfigure")?
+                        .clone()
+                }
+                None => PraisConfigure::default(),
+            },
+            Err(_) => PraisConfigure::default(),
+        };
 
     let has_constant = config.constant;
     let transform = if config.transform.eq_ignore_ascii_case("corc") {
@@ -161,9 +160,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     }
 
     let n_raw = endog_f64.len();
-    let mut df_cols: Vec<Column> = vec![
-        Column::from(endog_f64.with_name("__endog__".into())),
-    ];
+    let mut df_cols: Vec<Column> = vec![Column::from(endog_f64.with_name("__endog__".into()))];
 
     let mut exog_meta: Vec<(String, bool, DataSeriesValue)> = Vec::new();
     for (i, val) in exog_values.iter().enumerate() {
@@ -174,12 +171,18 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         let s = ctx.get_series(&dsv.id)?;
         let name = {
             let r = s.name().to_string();
-            if r.is_empty() { format!("x{}", i + 1) } else { r }
+            if r.is_empty() {
+                format!("x{}", i + 1)
+            } else {
+                r
+            }
         };
         if s.len() != n_raw {
             return Err(format!(
                 "Prais: X '{}' has {} obs, expected {}",
-                name, s.len(), n_raw
+                name,
+                s.len(),
+                n_raw
             ));
         }
         let is_cat = matches!(
@@ -223,7 +226,10 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         let col = df.column(&name).map_err(|e| format!("Prais: {}", e))?;
         if is_cat {
             let str_ca = col.str().map_err(|e| format!("Prais: {}", e))?;
-            let vals: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let vals: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut uniq: Vec<String> = Vec::new();
             for v in &vals {
                 if !uniq.contains(v) {
@@ -231,12 +237,20 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
                 }
             }
             if uniq.len() < 2 {
-                return Err(format!("Prais: categorical '{}' needs ≥2 unique values", name));
+                return Err(format!(
+                    "Prais: categorical '{}' needs ≥2 unique values",
+                    name
+                ));
             }
             let dummy_info = dsv.dummy_info.as_ref();
-            let role = dummy_info.map(|d| d.role.clone()).unwrap_or(CategoricalRole::General);
+            let role = dummy_info
+                .map(|d| d.role.clone())
+                .unwrap_or(CategoricalRole::General);
             let drop_cat = if let Some(di) = dummy_info {
-                di.drop_category.as_ref().cloned().filter(|c| uniq.contains(c))
+                di.drop_category
+                    .as_ref()
+                    .cloned()
+                    .filter(|c| uniq.contains(c))
                     .unwrap_or_else(|| uniq[0].clone())
             } else if has_constant {
                 uniq[0].clone()
@@ -249,7 +263,10 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
                 uniq.iter().filter(|c| **c != drop_cat).collect()
             };
             for cat in &to_include {
-                let vec: Vec<f64> = vals.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                let vec: Vec<f64> = vals
+                    .iter()
+                    .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(vec);
                 col_labels.push((name.clone(), Some((*cat).clone())));
             }
@@ -260,7 +277,11 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
                 role,
             });
         } else {
-            let vec: Vec<f64> = col.f64().map_err(|e| format!("Prais: {}", e))?.into_no_null_iter().collect();
+            let vec: Vec<f64> = col
+                .f64()
+                .map_err(|e| format!("Prais: {}", e))?
+                .into_no_null_iter()
+                .collect();
             exog_columns.push(vec);
             col_labels.push((name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name });
@@ -330,7 +351,14 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let result = prais.fit()?;
 
     let fitted_values: Vec<f64> = (0..n)
-        .map(|i| exog_use.row(i).iter().zip(result.betas.iter()).map(|(x, b)| x * b).sum())
+        .map(|i| {
+            exog_use
+                .row(i)
+                .iter()
+                .zip(result.betas.iter())
+                .map(|(x, b)| x * b)
+                .sum()
+        })
         .collect();
     let residuals: Vec<f64> = endog
         .iter()
@@ -341,7 +369,10 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let num_coeff = result.betas.len();
     let mut coefficients = Vec::with_capacity(num_coeff);
     for i in 0..num_coeff {
-        let (var, cat) = all_labels_use.get(i).cloned().unwrap_or_else(|| (format!("x{}", i), None));
+        let (var, cat) = all_labels_use
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| (format!("x{}", i), None));
         coefficients.push(Coefficient {
             variable: var,
             category: cat,
@@ -361,29 +392,31 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         result.ss_residual,
     );
 
-    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
-        let vif_entries: Vec<VifEntry> = entries
-            .into_iter()
-            .enumerate()
-            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
-            .map(|(j, e)| {
-                let (var_name, _) = all_labels_use
-                    .get(j)
-                    .cloned()
-                    .unwrap_or_else(|| (format!("x{}", j), None));
-                VifEntry {
-                    variable: var_name,
-                    vif: e.vif,
-                    tolerance: e.tolerance,
-                }
-            })
-            .collect();
-        if vif_entries.is_empty() {
-            None
-        } else {
-            Some(vif_entries)
-        }
-    });
+    let vif = diagnostics::vif_centered(&exog_use, has_constant)
+        .ok()
+        .and_then(|entries| {
+            let vif_entries: Vec<VifEntry> = entries
+                .into_iter()
+                .enumerate()
+                .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+                .map(|(j, e)| {
+                    let (var_name, _) = all_labels_use
+                        .get(j)
+                        .cloned()
+                        .unwrap_or_else(|| (format!("x{}", j), None));
+                    VifEntry {
+                        variable: var_name,
+                        vif: e.vif,
+                        tolerance: e.tolerance,
+                    }
+                })
+                .collect();
+            if vif_entries.is_empty() {
+                None
+            } else {
+                Some(vif_entries)
+            }
+        });
 
     let method = match result.covariance_type.as_str() {
         s if s.starts_with("Cochrane") => "Cochrane-Orcutt",
@@ -435,7 +468,11 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             residuals: residuals.clone(),
             leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter: None,
-            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
+            exog: Some(
+                (0..n)
+                    .map(|i| exog_use.row(i).iter().cloned().collect())
+                    .collect(),
+            ),
             timing: None,
             prais_info: Some(PraisInfo {
                 rho: result.rho,
@@ -560,39 +597,46 @@ fn register_prais(registry: &NodeRegistry) {
         DataRole::Custom("prais_residuals".to_string()),
         PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
-    let def = NodeDefinition::new(
-        "Prais",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Prais-Winsten / Cochrane-Orcutt AR(1) regression — Stata prais")
-    .with_pin_slots(slots)
-    .with_flow_processor(Arc::new(|ctx| {
-        let fit = run_prais_regression(ctx)?;
-        let model_id = ctx.put_handle(Box::new(fit.prais_model));
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("prais_model".to_string())),
-            DataValue::new_struct("PraisModel", model_id),
-        )?;
-        let fitted_s = Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
-            .with_name("fitted".into());
-        let fitted_id = ctx.put_series(fitted_s)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("prais_fitted".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
-        )?;
-        let res_s = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
-            .with_name("residuals".into());
-        let res_id = ctx.put_series(res_s)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("prais_residuals".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(res_id, DataType::Float64)),
-        )?;
-        ctx.log("Prais: regression completed".to_string());
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
+    let def = NodeDefinition::new("Prais", vec!["Data".to_string(), "Statistics".to_string()])
+        .with_ui_style("dataframe")
+        .with_description("Prais-Winsten / Cochrane-Orcutt AR(1) regression — Stata prais")
+        .with_pin_slots(slots)
+        .with_flow_processor(Arc::new(|ctx| {
+            let fit = run_prais_regression(ctx)?;
+            let model_id = ctx.put_handle(Box::new(fit.prais_model));
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("prais_model".to_string())),
+                DataValue::new_struct("PraisModel", model_id),
+            )?;
+            let fitted_s =
+                Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
+                    .with_name("fitted".into());
+            let fitted_id = ctx.put_series(fitted_s)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("prais_fitted".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    fitted_id,
+                    DataType::Float64,
+                )),
+            )?;
+            let res_s = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
+                .with_name("residuals".into());
+            let res_id = ctx.put_series(res_s)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("prais_residuals".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    res_id,
+                    DataType::Float64,
+                )),
+            )?;
+            ctx.log("Prais: regression completed".to_string());
+            Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+        }));
     registry.register(def);
 }
 
@@ -603,7 +647,10 @@ fn register_prais_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let def = NodeDefinition::new(
         "Prais Summary",

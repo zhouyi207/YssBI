@@ -1,8 +1,14 @@
 //! 单期 DID（2×2）— **双向固定效应**（entity + time），与 Stata `reghdfe Y x i.treat#i.post, absorb(id t)` 一类设定一致。
 //! 回归项：**可选 X + Treat×Post**（及截距）。`treat`、`post` 主效应在 TWFE 下通常被个体/时间 FE 吸收，不放入设计矩阵以免 within 后全零列。
 
-use crate::execution::ExecutionEffect;
+use super::info_nodes::{OLSResult, OmitInfo, OmittedVariable};
+use super::panel_did_auxiliary::{
+    adoption_time_ord, run_parallel_trends_test, run_placebo_test, DidEventStudyPoint,
+};
+use super::panel_did_engine::{DidFakeGroupEnginePayload, ExogLabelEntry};
+use super::panel_nodes::{panel_result_to_ols_result, series_to_group_indices, PanelConfigure};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -16,10 +22,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::panel::fit_panel_fe_twoway;
-use super::info_nodes::{OLSResult, OmitInfo, OmittedVariable};
-use super::panel_did_auxiliary::{adoption_time_ord, run_parallel_trends_test, run_placebo_test, DidEventStudyPoint};
-use super::panel_did_engine::{DidFakeGroupEnginePayload, ExogLabelEntry};
-use super::panel_nodes::{panel_result_to_ols_result, series_to_group_indices, PanelConfigure};
 
 /// Parallel trends: Wald χ² on pre-policy event-study interactions (Stata `test` on leads).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,10 +103,9 @@ fn panel_did_input_slots() -> Vec<PinSlot> {
         PinSlot::fixed(PinDefinition::data_input(
             "Y",
             DataRole::Custom("y".to_string()),
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Int64,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Int64],
+            )))),
         )),
         PinSlot::repeatable(
             PinDefinition::data_input(
@@ -187,21 +188,24 @@ fn build_panel_did_data(
         .cast(&PDataType::Float64)
         .map_err(|e| format!("DID: Y cast: {}", e))?;
 
-    let entity_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("entity_id".to_string())))?;
+    let entity_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("entity_id".to_string())))?;
     let entity_id_str = match &entity_value {
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Entity ID must be a DataSeries".to_string()),
     };
     let entity_id = series_to_group_indices(ctx, &entity_id_str)?;
 
-    let time_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_id".to_string())))?;
+    let time_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_id".to_string())))?;
     let time_id_str = match &time_value {
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Time ID must be a DataSeries".to_string()),
     };
     let time_id = series_to_group_indices(ctx, &time_id_str)?;
 
-    let treat_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("treat".to_string())))?;
+    let treat_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("treat".to_string())))?;
     let treat_id = match &treat_value {
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Treat must be a DataSeries".to_string()),
@@ -268,18 +272,23 @@ fn build_panel_did_data(
             }
         };
         if series.len() != n_raw {
-            return Err(format!("DID: X '{}' len {} != Y len {}", name, series.len(), n_raw));
+            return Err(format!(
+                "DID: X '{}' len {} != Y len {}",
+                name,
+                series.len(),
+                n_raw
+            ));
         }
         let is_cat = matches!(
             series.dtype(),
             PDataType::Categorical(_, _) | PDataType::Enum(_, _)
         );
         let col_series = if is_cat {
-            series
-                .cast(&PDataType::String)
-                .map_err(|e| e.to_string())?
+            series.cast(&PDataType::String).map_err(|e| e.to_string())?
         } else {
-            series.cast(&PDataType::Float64).map_err(|e| e.to_string())?
+            series
+                .cast(&PDataType::Float64)
+                .map_err(|e| e.to_string())?
         };
         df_cols.push(Column::from(col_series.with_name(name.as_str().into())));
         exog_meta.push((name, is_cat, dsv));
@@ -295,8 +304,7 @@ fn build_panel_did_data(
             .with_name("__entity__".into()),
     ));
     df_cols.push(Column::from(
-        ctx.get_series(&time_id_str)?
-            .with_name("__time__".into()),
+        ctx.get_series(&time_id_str)?.with_name("__time__".into()),
     ));
 
     let df = DataFrame::new(n_raw, df_cols)
@@ -324,11 +332,16 @@ fn build_panel_did_data(
         let mut m: HashMap<String, usize> = HashMap::new();
         let mut idx_to_name: Vec<String> = Vec::new();
         let mut out = Vec::with_capacity(n);
-        if matches!(s.dtype(), PDataType::Categorical(_, _) | PDataType::Enum(_, _)) {
+        if matches!(
+            s.dtype(),
+            PDataType::Categorical(_, _) | PDataType::Enum(_, _)
+        ) {
             let str_s = s
                 .cast(&PDataType::String)
                 .map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let ca = str_s.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = str_s
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             for opt in ca.into_iter() {
                 let key: String = opt.ok_or("null")?.to_string();
                 let idx = *m.entry(key.clone()).or_insert_with(|| {
@@ -339,7 +352,9 @@ fn build_panel_did_data(
                 out.push(idx);
             }
         } else {
-            let ca = s.i64().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = s
+                .i64()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             for opt in ca.into_iter() {
                 let key: String = opt.ok_or("null")?.to_string();
                 let idx = *m.entry(key.clone()).or_insert_with(|| {
@@ -355,11 +370,16 @@ fn build_panel_did_data(
 
     let time_after: Vec<usize> = {
         let s = df.column("__time__").map_err(|e| format!("DID: {}", e))?;
-        if matches!(s.dtype(), PDataType::Categorical(_, _) | PDataType::Enum(_, _)) {
+        if matches!(
+            s.dtype(),
+            PDataType::Categorical(_, _) | PDataType::Enum(_, _)
+        ) {
             let str_s = s
                 .cast(&PDataType::String)
                 .map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let ca = str_s.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = str_s
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             let values: Vec<String> = ca
                 .into_iter()
                 .map(|opt| opt.ok_or("null").map(|s: &str| s.to_string()))
@@ -372,10 +392,16 @@ fn build_panel_did_data(
                 }
             }
             unique.sort();
-            let m: HashMap<String, usize> = unique.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect();
+            let m: HashMap<String, usize> = unique
+                .iter()
+                .enumerate()
+                .map(|(i, k)| (k.clone(), i))
+                .collect();
             values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
         } else if s.dtype() == &PDataType::Int64 {
-            let ca = s.i64().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = s
+                .i64()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             let values: Vec<i64> = ca
                 .into_iter()
                 .map(|opt| opt.ok_or("DID: time contains null"))
@@ -390,7 +416,9 @@ fn build_panel_did_data(
             let m: HashMap<i64, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
             values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
         } else if s.dtype() == &PDataType::Date {
-            let ca = s.date().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = s
+                .date()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             let physical = ca.physical();
             let values: Vec<i32> = physical
                 .into_iter()
@@ -417,8 +445,13 @@ fn build_panel_did_data(
     for (series_name, is_categorical, _) in exog_meta {
         let col = df.column(&series_name).map_err(|e| format!("DID: {}", e))?;
         if is_categorical {
-            let str_ca = col.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique: Vec<String> = Vec::new();
             for v in &values {
                 if !unique.contains(v) {
@@ -433,7 +466,10 @@ fn build_panel_did_data(
             }
             let drop_cat = unique[0].clone();
             for cat in unique.iter().filter(|c| **c != drop_cat) {
-                let col_vec: Vec<f64> = values.iter().map(|v| if v == cat { 1.0 } else { 0.0 }).collect();
+                let col_vec: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col_vec);
                 all_labels.push((series_name.clone(), Some(cat.clone())));
             }
@@ -489,7 +525,8 @@ fn build_panel_did_data(
             exog_raw.push(col[i]);
         }
     }
-    let exog = Array2::from_shape_vec((n, k), exog_raw).map_err(|e| format!("DID: exog shape: {:?}", e))?;
+    let exog = Array2::from_shape_vec((n, k), exog_raw)
+        .map_err(|e| format!("DID: exog shape: {:?}", e))?;
 
     let endog = Array1::from(endog_vec);
     let post_f = p_col;
@@ -516,7 +553,10 @@ pub fn register(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("PanelDidResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "Panel DID (TWFE)",

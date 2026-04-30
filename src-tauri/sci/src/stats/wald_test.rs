@@ -46,18 +46,10 @@ pub fn wald_test(
         return Err("约束个数不能为 0".to_string());
     }
     if betas.len() != k {
-        return Err(format!(
-            "betas 长度 {} 与 R 列数 {} 不一致",
-            betas.len(),
-            k
-        ));
+        return Err(format!("betas 长度 {} 与 R 列数 {} 不一致", betas.len(), k));
     }
     if r_vec.len() != q {
-        return Err(format!(
-            "r_vec 长度 {} 与 R 行数 {} 不一致",
-            r_vec.len(),
-            q
-        ));
+        return Err(format!("r_vec 长度 {} 与 R 行数 {} 不一致", r_vec.len(), q));
     }
 
     let r_faer = r.view().into_faer();

@@ -2,12 +2,17 @@
 
 use crate::database::{dataframe_to_schema, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
+use crate::graph::{GraphId, GraphInstance};
 use crate::log::log_sys;
-use crate::project::{ProjectData, ProjectStore};
+use crate::project::{
+    load_project_graph_from_file, save_project_to_file, GraphDocument, ProjectData, ProjectStore,
+};
+use crate::variable::VariableInstance;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// 项目状态
-/// 
+///
 /// 是不需要 序列化的
 #[derive(Default)]
 pub struct ProjectState {
@@ -34,7 +39,10 @@ impl ProjectState {
     /// 设置 项目数据 并清空 项目存储
     /// 方案一：从 project_data.databases 重建 project_store.databases，恢复 schema 能力
     pub fn set_data(&self, project_data: ProjectData) {
-        log_sys::info!("[ProjectState.set_data] ProjectData: {}", project_data.info());
+        log_sys::info!(
+            "[ProjectState.set_data] ProjectData: {}",
+            project_data.info()
+        );
 
         *self.project_data.write().unwrap() = project_data.clone();
 
@@ -106,6 +114,50 @@ impl ProjectState {
         }
     }
 
+    fn prepare_graph_runtime(&self, graph: &mut GraphInstance) {
+        let registry = {
+            let store = self.project_store.read().unwrap();
+            Arc::clone(&store.node_register)
+        };
+        graph.set_registry(registry);
+        graph.set_schema_provider(self.build_schema_provider());
+        graph.propagate_schemas();
+        let _ = graph.resolve_all_dynamic_pins();
+    }
+
+    pub fn insert_loaded_graph(
+        &self,
+        mut graph: GraphInstance,
+        local_variables: HashMap<crate::variable::VariableId, VariableInstance>,
+    ) -> GraphInstance {
+        self.prepare_graph_runtime(&mut graph);
+        let graph_id = graph.id;
+        {
+            let mut data = self.project_data.write().unwrap();
+            data.variables.extend(local_variables);
+            data.graphs.insert(graph_id, graph.clone());
+        }
+        graph
+    }
+
+    pub fn load_graph_from_current_project(
+        &self,
+        graph_id: &GraphId,
+    ) -> Result<GraphDocument, String> {
+        if let Some(existing) = self.get_graph(graph_id) {
+            return Ok(GraphDocument {
+                schema_version: crate::project::SCHEMA_VERSION,
+                kind: (&existing.kind).into(),
+                graph: existing,
+                local_variables: HashMap::new(),
+            });
+        }
+        let path = self.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
+        let document = load_project_graph_from_file(&path, graph_id).map_err(|e| e.to_string())?;
+        self.insert_loaded_graph(document.graph.clone(), document.local_variables.clone());
+        Ok(document)
+    }
+
     /// 获取当前路径
     pub fn get_path(&self) -> Option<String> {
         self.project_path.read().unwrap().clone()
@@ -121,5 +173,17 @@ impl ProjectState {
         *self.project_data.write().unwrap() = ProjectData::default();
         *self.project_path.write().unwrap() = None;
         *self.project_store.write().unwrap() = ProjectStore::default();
+    }
+
+    pub fn persist_current_project(&self) -> Result<(), String> {
+        let Some(path) = self.get_path() else {
+            return Ok(());
+        };
+        let snapshot = {
+            let mut data = self.project_data.write().unwrap();
+            data.update_metadata();
+            data.clone()
+        };
+        save_project_to_file(&snapshot, &path).map_err(|e| e.to_string())
     }
 }

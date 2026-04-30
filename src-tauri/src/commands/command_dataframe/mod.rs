@@ -18,14 +18,14 @@ pub fn load_database(
 #[tauri::command]
 pub fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, String> {
     use crate::database::DatabaseEngineSql;
-    crate::database::sql_reader::list_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, &db_path)
+    crate::database::sql_reader::list_tables(
+        &DatabaseEngineSql::Sqlite { auto_create: false },
+        &db_path,
+    )
 }
 
 #[tauri::command]
-pub fn list_sql_tables(
-    engine: String,
-    connection_string: String,
-) -> Result<Vec<String>, String> {
+pub fn list_sql_tables(engine: String, connection_string: String) -> Result<Vec<String>, String> {
     use crate::database::DatabaseEngineSql;
     let engine_enum = match engine.as_str() {
         "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
@@ -80,11 +80,9 @@ pub fn get_database_rows(
             sliced
                 .columns()
                 .iter()
-                .map(|s| {
-                    match s.get(row_idx) {
-                        Ok(v) => polars_value_to_json(v),
-                        Err(_) => serde_json::Value::Null,
-                    }
+                .map(|s| match s.get(row_idx) {
+                    Ok(v) => polars_value_to_json(v),
+                    Err(_) => serde_json::Value::Null,
                 })
                 .collect()
         })
@@ -145,9 +143,7 @@ pub fn edit_cell(
     col_name: String,
     value: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.edit_cell(row, &col_name, value)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.edit_cell(row, &col_name, value))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -157,9 +153,7 @@ pub fn add_row(
     id: String,
     index: Option<usize>,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.add_row(index)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.add_row(index))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -169,9 +163,7 @@ pub fn delete_rows(
     id: String,
     indices: Vec<usize>,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.delete_rows(&indices)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.delete_rows(&indices))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -182,9 +174,7 @@ pub fn add_column(
     name: String,
     dtype: String,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.add_column(&name, &dtype)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.add_column(&name, &dtype))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -194,9 +184,7 @@ pub fn delete_column(
     id: String,
     name: String,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.delete_column(&name)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.delete_column(&name))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -221,42 +209,25 @@ pub fn rename_column(
     old_name: String,
     new_name: String,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.rename_column(&old_name, &new_name)
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| db.rename_column(&old_name, &new_name))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn undo_edit(
-    state: State<ProjectState>,
-    id: String,
-) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.undo_edit()
-    })?;
+pub fn undo_edit(state: State<ProjectState>, id: String) -> Result<serde_json::Value, String> {
+    let edit_state = state.with_database_mut(&id, |db| db.undo_edit())?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn redo_edit(
-    state: State<ProjectState>,
-    id: String,
-) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.redo_edit()
-    })?;
+pub fn redo_edit(state: State<ProjectState>, id: String) -> Result<serde_json::Value, String> {
+    let edit_state = state.with_database_mut(&id, |db| db.redo_edit())?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn reset_database(
-    state: State<ProjectState>,
-    id: String,
-) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.reset_to_original()
-    })?;
+pub fn reset_database(state: State<ProjectState>, id: String) -> Result<serde_json::Value, String> {
+    let edit_state = state.with_database_mut(&id, |db| db.reset_to_original())?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -276,14 +247,10 @@ pub fn export_database(
 }
 
 #[tauri::command]
-pub fn get_edit_state(
-    state: State<ProjectState>,
-    id: String,
-) -> Result<serde_json::Value, String> {
+pub fn get_edit_state(state: State<ProjectState>, id: String) -> Result<serde_json::Value, String> {
     let edit_state = state.with_database_mut(&id, |db| {
         db.ensure_loaded().map_err(|e| e.to_string())?;
         Ok(db.edit_state())
     })?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
-

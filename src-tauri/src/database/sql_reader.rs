@@ -59,7 +59,10 @@ pub fn list_mysql_tables(connection_string: &str) -> Result<Vec<String>, String>
 }
 
 /// PostgreSQL 行值转 Polars AnyValue
-fn pg_value_to_anyvalue(row: &sqlx::postgres::PgRow, i: usize) -> Result<AnyValue<'static>, String> {
+fn pg_value_to_anyvalue(
+    row: &sqlx::postgres::PgRow,
+    i: usize,
+) -> Result<AnyValue<'static>, String> {
     let val_ref = row
         .try_get_raw(i)
         .map_err(|e| format!("Column {}: {}", i, e))?;
@@ -88,7 +91,10 @@ fn pg_value_to_anyvalue(row: &sqlx::postgres::PgRow, i: usize) -> Result<AnyValu
 }
 
 /// MySQL 行值转 Polars AnyValue
-fn mysql_value_to_anyvalue(row: &sqlx::mysql::MySqlRow, i: usize) -> Result<AnyValue<'static>, String> {
+fn mysql_value_to_anyvalue(
+    row: &sqlx::mysql::MySqlRow,
+    i: usize,
+) -> Result<AnyValue<'static>, String> {
     let val_ref = row
         .try_get_raw(i)
         .map_err(|e| format!("Column {}: {}", i, e))?;
@@ -191,9 +197,8 @@ fn build_dataframe_from_pg_rows(rows: Vec<sqlx::postgres::PgRow>) -> Result<Data
         .map(|c| SqlxColumn::name(c).to_string())
         .collect();
 
-    let mut columns_data: Vec<Vec<AnyValue<'static>>> = (0..column_count)
-        .map(|_| Vec::new())
-        .collect();
+    let mut columns_data: Vec<Vec<AnyValue<'static>>> =
+        (0..column_count).map(|_| Vec::new()).collect();
 
     for row in &rows {
         for (i, col_data) in columns_data.iter_mut().enumerate() {
@@ -218,9 +223,8 @@ fn build_dataframe_from_mysql_rows(rows: Vec<sqlx::mysql::MySqlRow>) -> Result<D
         .map(|c| SqlxColumn::name(c).to_string())
         .collect();
 
-    let mut columns_data: Vec<Vec<AnyValue<'static>>> = (0..column_count)
-        .map(|_| Vec::new())
-        .collect();
+    let mut columns_data: Vec<Vec<AnyValue<'static>>> =
+        (0..column_count).map(|_| Vec::new()).collect();
 
     for row in &rows {
         for (i, col_data) in columns_data.iter_mut().enumerate() {
@@ -246,14 +250,19 @@ fn build_dataframe(
         })
         .collect();
 
-    let columns: Vec<polars::prelude::Column> =
-        series.into_iter().map(polars::prelude::Column::from).collect();
+    let columns: Vec<polars::prelude::Column> = series
+        .into_iter()
+        .map(polars::prelude::Column::from)
+        .collect();
     let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
     DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
 }
 
 /// 根据引擎类型列出表
-pub fn list_tables(engine: &DatabaseEngineSql, connection_string: &str) -> Result<Vec<String>, String> {
+pub fn list_tables(
+    engine: &DatabaseEngineSql,
+    connection_string: &str,
+) -> Result<Vec<String>, String> {
     match engine {
         DatabaseEngineSql::Sqlite { .. } => super::sqlite_reader::list_tables(connection_string),
         DatabaseEngineSql::Postgres { .. } => list_postgres_tables(connection_string),

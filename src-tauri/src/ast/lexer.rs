@@ -118,7 +118,9 @@ impl<'a> Lexer<'a> {
         } else {
             s.clone()
         };
-        s_normalized.parse::<f64>().map_err(|_| LexError::InvalidNumber(s))
+        s_normalized
+            .parse::<f64>()
+            .map_err(|_| LexError::InvalidNumber(s))
     }
 
     /// 获取下一个 Token

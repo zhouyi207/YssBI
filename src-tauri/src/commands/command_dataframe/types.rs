@@ -16,7 +16,9 @@ pub(super) fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         AnyValue::Date(days) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+                .unwrap()
+                .num_days_from_ce();
             NaiveDate::from_num_days_from_ce_opt(epoch + days as i32)
                 .map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
                 .unwrap_or_else(|| serde_json::Value::String(days.to_string()))
@@ -24,7 +26,9 @@ pub(super) fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
         AnyValue::Datetime(ts, unit, _) | AnyValue::DatetimeOwned(ts, unit, _) => {
             let (secs, nsecs) = match unit {
                 TimeUnit::Nanoseconds => ((ts / 1_000_000_000) as i64, (ts % 1_000_000_000) as u32),
-                TimeUnit::Microseconds => ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32),
+                TimeUnit::Microseconds => {
+                    ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32)
+                }
                 TimeUnit::Milliseconds => ((ts / 1000) as i64, ((ts % 1000) * 1_000_000) as u32),
             };
             DateTime::from_timestamp(secs, nsecs)
@@ -43,10 +47,10 @@ pub(super) fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
             serde_json::Value::String(format!("{:02}:{:02}:{:02}", h, m, s))
         }
         AnyValue::Duration(ns, _) => serde_json::Value::String(ns.to_string()),
-        AnyValue::Categorical(_, _) | AnyValue::CategoricalOwned(_, _)
-        | AnyValue::Enum(_, _) | AnyValue::EnumOwned(_, _) => {
-            serde_json::Value::String(format!("{}", v))
-        }
+        AnyValue::Categorical(_, _)
+        | AnyValue::CategoricalOwned(_, _)
+        | AnyValue::Enum(_, _)
+        | AnyValue::EnumOwned(_, _) => serde_json::Value::String(format!("{}", v)),
         _ => serde_json::Value::String(format!("{}", v)),
     }
 }

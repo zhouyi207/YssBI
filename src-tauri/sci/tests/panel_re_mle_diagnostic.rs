@@ -14,18 +14,56 @@ fn load_lin_csv() -> Result<(Array1<f64>, Array2<f64>, Vec<usize>), Box<dyn std:
     let mut records: Vec<csv::StringRecord> = rdr.records().filter_map(|r| r.ok()).collect();
 
     // Find column indices (Stata: xtset province year)
-    let prov_idx = headers.iter().position(|h| h == "province").or_else(|| headers.iter().position(|h| h == "prov")).ok_or("prov/province not found")?;
-    let year_idx = headers.iter().position(|h| h == "year").or_else(|| headers.iter().position(|h| h == "t")).ok_or("year/t not found")?;
-    let ltvfo_idx = headers.iter().position(|h| h == "ltvfo").ok_or("ltvfo not found")?;
-    let ltlan_idx = headers.iter().position(|h| h == "ltlan").ok_or("ltlan not found")?;
-    let ltwlab_idx = headers.iter().position(|h| h == "ltwlab").ok_or("ltwlab not found")?;
-    let ltpow_idx = headers.iter().position(|h| h == "ltpow").ok_or("ltpow not found")?;
-    let ltfer_idx = headers.iter().position(|h| h == "ltfer").ok_or("ltfer not found")?;
-    let hrs_idx = headers.iter().position(|h| h == "hrs").ok_or("hrs not found")?;
-    let mipric1_idx = headers.iter().position(|h| h == "mipric1").ok_or("mipric1 not found")?;
-    let giprice_idx = headers.iter().position(|h| h == "giprice").ok_or("giprice not found")?;
-    let mci_idx = headers.iter().position(|h| h == "mci").ok_or("mci not found")?;
-    let ngca_idx = headers.iter().position(|h| h == "ngca").ok_or("ngca not found")?;
+    let prov_idx = headers
+        .iter()
+        .position(|h| h == "province")
+        .or_else(|| headers.iter().position(|h| h == "prov"))
+        .ok_or("prov/province not found")?;
+    let year_idx = headers
+        .iter()
+        .position(|h| h == "year")
+        .or_else(|| headers.iter().position(|h| h == "t"))
+        .ok_or("year/t not found")?;
+    let ltvfo_idx = headers
+        .iter()
+        .position(|h| h == "ltvfo")
+        .ok_or("ltvfo not found")?;
+    let ltlan_idx = headers
+        .iter()
+        .position(|h| h == "ltlan")
+        .ok_or("ltlan not found")?;
+    let ltwlab_idx = headers
+        .iter()
+        .position(|h| h == "ltwlab")
+        .ok_or("ltwlab not found")?;
+    let ltpow_idx = headers
+        .iter()
+        .position(|h| h == "ltpow")
+        .ok_or("ltpow not found")?;
+    let ltfer_idx = headers
+        .iter()
+        .position(|h| h == "ltfer")
+        .ok_or("ltfer not found")?;
+    let hrs_idx = headers
+        .iter()
+        .position(|h| h == "hrs")
+        .ok_or("hrs not found")?;
+    let mipric1_idx = headers
+        .iter()
+        .position(|h| h == "mipric1")
+        .ok_or("mipric1 not found")?;
+    let giprice_idx = headers
+        .iter()
+        .position(|h| h == "giprice")
+        .ok_or("giprice not found")?;
+    let mci_idx = headers
+        .iter()
+        .position(|h| h == "mci")
+        .ok_or("mci not found")?;
+    let ngca_idx = headers
+        .iter()
+        .position(|h| h == "ngca")
+        .ok_or("ngca not found")?;
 
     let mut entity_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut entity_id: Vec<usize> = Vec::new();
@@ -101,7 +139,11 @@ fn load_lin_csv() -> Result<(Array1<f64>, Array2<f64>, Vec<usize>), Box<dyn std:
 fn panel_re_mle_lin() {
     let (endog, exog, entity_id) = load_lin_csv().expect("load lin.csv");
     let n = endog.len();
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
 
     let result = fit_panel_re_mle(&endog, &exog, &entity_id, true).expect("fit_panel_re_mle");
 
@@ -117,7 +159,12 @@ fn panel_re_mle_lin() {
     writeln!(out, "Our results:").ok();
     writeln!(out, "  Log likelihood = {:?}", result.log_likelihood).ok();
     if let Some(ref fe) = result.fe_stats {
-        writeln!(out, "  sigma_u = {:.4}, sigma_e = {:.4}", fe.sigma.sigma_u, fe.sigma.sigma_e).ok();
+        writeln!(
+            out,
+            "  sigma_u = {:.4}, sigma_e = {:.4}",
+            fe.sigma.sigma_u, fe.sigma.sigma_e
+        )
+        .ok();
         writeln!(out, "  rho = {:.4}", fe.sigma.rho).ok();
     }
     writeln!(out, "  LR chi2 = {:?}", result.lr_chi2).ok();
@@ -137,7 +184,9 @@ fn panel_re_mle_lin() {
     }
     writeln!(out, "").ok();
     writeln!(out, "Coefficients:").ok();
-    let names = ["const", "ltlan", "ltwlab", "ltpow", "ltfer", "hrs", "mipric1", "giprice", "mci", "ngca"];
+    let names = [
+        "const", "ltlan", "ltwlab", "ltpow", "ltfer", "hrs", "mipric1", "giprice", "mci", "ngca",
+    ];
     for (i, &b) in result.betas.iter().enumerate() {
         let name = names.get(i).unwrap_or(&"");
         let se = result.stds.get(i).copied().unwrap_or(0.0);

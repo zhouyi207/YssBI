@@ -8,7 +8,11 @@ use sqlx::{Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
 fn sqlite_url(db_path: &str) -> String {
     let path = db_path.replace('\\', "/");
     let url = if path.len() >= 2
-        && path.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+        && path
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
         && path.chars().nth(1) == Some(':')
     {
         format!("sqlite:///{}?mode=ro", path)
@@ -64,9 +68,7 @@ fn sqlite_value_to_anyvalue(row: &SqliteRow, i: usize) -> Result<AnyValue<'stati
         return Ok(AnyValue::StringOwned(v.into()));
     }
     if let Ok(v) = owned.try_decode::<Vec<u8>>() {
-        return Ok(AnyValue::StringOwned(
-            format!("<{} bytes>", v.len()).into(),
-        ));
+        return Ok(AnyValue::StringOwned(format!("<{} bytes>", v.len()).into()));
     }
     Ok(AnyValue::Null)
 }
@@ -93,10 +95,11 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
 
         if rows.is_empty() {
             let pragma_sql = format!("PRAGMA table_info({})", escaped_table);
-            let pragma_rows: Vec<SqliteRow> = sqlx::query(&pragma_sql)
-                .fetch_all(&mut conn)
-                .await
-                .map_err(|e| format!("Failed to get table info: {}", e))?;
+            let pragma_rows: Vec<SqliteRow> =
+                sqlx::query(&pragma_sql)
+                    .fetch_all(&mut conn)
+                    .await
+                    .map_err(|e| format!("Failed to get table info: {}", e))?;
             let column_names: Vec<String> = pragma_rows
                 .iter()
                 .filter_map(|r| r.try_get::<String, _>(1).ok())
@@ -108,9 +111,12 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
                     Series::new_null(name_ss, 0)
                 })
                 .collect();
-            let columns: Vec<polars::prelude::Column> =
-                series.into_iter().map(polars::prelude::Column::from).collect();
-            return DataFrame::new(0, columns).map_err(|e| format!("Failed to build DataFrame: {}", e));
+            let columns: Vec<polars::prelude::Column> = series
+                .into_iter()
+                .map(polars::prelude::Column::from)
+                .collect();
+            return DataFrame::new(0, columns)
+                .map_err(|e| format!("Failed to build DataFrame: {}", e));
         }
 
         let column_count = rows[0].len();
@@ -124,9 +130,8 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
             return Err("Table has no columns".into());
         }
 
-        let mut columns_data: Vec<Vec<AnyValue<'static>>> = (0..column_count)
-            .map(|_| Vec::new())
-            .collect();
+        let mut columns_data: Vec<Vec<AnyValue<'static>>> =
+            (0..column_count).map(|_| Vec::new()).collect();
 
         for row in &rows {
             for (i, col_data) in columns_data.iter_mut().enumerate() {
@@ -145,8 +150,10 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
             })
             .collect();
 
-        let columns: Vec<polars::prelude::Column> =
-            series.into_iter().map(polars::prelude::Column::from).collect();
+        let columns: Vec<polars::prelude::Column> = series
+            .into_iter()
+            .map(polars::prelude::Column::from)
+            .collect();
         let height = columns_data.first().map(|d| d.len()).unwrap_or(0);
         DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {}", e))
     })

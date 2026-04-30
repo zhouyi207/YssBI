@@ -43,60 +43,46 @@ fn scalar_to_f64(v: &DataValue) -> Option<f64> {
     }
 }
 
-fn register_unary_fn(
-    registry: &NodeRegistry,
-    name: &str,
-    description: &str,
-    f: fn(f64) -> f64,
-) {
+fn register_unary_fn(registry: &NodeRegistry, name: &str, description: &str, f: fn(f64) -> f64) {
     let name_owned = name.to_string();
-    let definition =
-        NodeDefinition::new(name, vec!["Math".to_string(), "Functions".to_string()])
-            .with_ui_style("math")
-            .with_description(description)
-            .with_pin_slots(vec![
-                PinSlot::fixed(PinDefinition::data_input(
-                    "X",
-                    DataRole::Input,
-                    PinDataTypeDefinition::concrete(numeric_input_type()),
-                )),
-                PinSlot::fixed(PinDefinition::data_output(
-                    "Result",
-                    DataRole::Output,
-                    PinDataTypeDefinition::concrete(numeric_output_type()),
-                )),
-            ])
-            .with_data_evaluator(Arc::new(move |ctx| {
-                let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-                let result = match &input {
-                    DataValue::DataSeries(dsv) => {
-                        let series = ctx.get_series(&dsv.id)?;
-                        let cast = series
-                            .cast(&polars::prelude::DataType::Float64)
-                            .map_err(|e| format!("{}: cannot cast to Float64: {}", name_owned, e))?;
-                        let ca = cast
-                            .f64()
-                            .map_err(|e| format!("{}: {}", name_owned, e))?;
-                        let result_series: polars::prelude::Float64Chunked = ca
-                            .into_iter()
-                            .map(|opt| opt.map(f))
-                            .collect();
-                        let id = ctx.put_series(result_series.into_series())?;
-                        DataValue::DataSeries(DataSeriesValue::with_element_type(
-                            id,
-                            DataType::Float64,
-                        ))
-                    }
-                    _ => {
-                        let x = scalar_to_f64(&input).ok_or_else(|| {
-                            format!("{}: input is not numeric", name_owned)
-                        })?;
-                        DataValue::Float64(f(x))
-                    }
-                };
-                ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), result)?;
-                Ok(())
-            }));
+    let definition = NodeDefinition::new(name, vec!["Math".to_string(), "Functions".to_string()])
+        .with_ui_style("math")
+        .with_description(description)
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "X",
+                DataRole::Input,
+                PinDataTypeDefinition::concrete(numeric_input_type()),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Result",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(numeric_output_type()),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(move |ctx| {
+            let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+            let result = match &input {
+                DataValue::DataSeries(dsv) => {
+                    let series = ctx.get_series(&dsv.id)?;
+                    let cast = series
+                        .cast(&polars::prelude::DataType::Float64)
+                        .map_err(|e| format!("{}: cannot cast to Float64: {}", name_owned, e))?;
+                    let ca = cast.f64().map_err(|e| format!("{}: {}", name_owned, e))?;
+                    let result_series: polars::prelude::Float64Chunked =
+                        ca.into_iter().map(|opt| opt.map(f)).collect();
+                    let id = ctx.put_series(result_series.into_series())?;
+                    DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
+                }
+                _ => {
+                    let x = scalar_to_f64(&input)
+                        .ok_or_else(|| format!("{}: input is not numeric", name_owned))?;
+                    DataValue::Float64(f(x))
+                }
+            };
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), result)?;
+            Ok(())
+        }));
     registry.register(definition);
 }
 
@@ -125,16 +111,8 @@ pub fn register(registry: &NodeRegistry) {
         "Exponential (e^x) of each element",
         f64::exp,
     );
-    register_unary_fn(
-        registry,
-        "Sqrt",
-        "Square root of each element",
-        f64::sqrt,
-    );
-    register_unary_fn(
-        registry,
-        "Square",
-        "Square (x²) of each element",
-        |x| x * x,
-    );
+    register_unary_fn(registry, "Sqrt", "Square root of each element", f64::sqrt);
+    register_unary_fn(registry, "Square", "Square (x²) of each element", |x| {
+        x * x
+    });
 }

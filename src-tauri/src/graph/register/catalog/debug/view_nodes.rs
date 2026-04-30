@@ -4,7 +4,9 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataTypeDefinition, PinSlot};
+use crate::graph::pin::{
+    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::DataFrame;
@@ -28,9 +30,7 @@ fn scalar_to_json(v: &DataValue) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         DataValue::String(s) => serde_json::Value::String(s.clone()),
-        DataValue::Array(arr) => serde_json::Value::Array(
-            arr.iter().map(scalar_to_json).collect(),
-        ),
+        DataValue::Array(arr) => serde_json::Value::Array(arr.iter().map(scalar_to_json).collect()),
         DataValue::Object(obj) => {
             let map: serde_json::Map<String, serde_json::Value> = obj
                 .iter()

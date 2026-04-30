@@ -48,9 +48,14 @@ fn run_parse_at_values(req: ParseAtRequest) -> Result<ParseAtResponse, String> {
     };
 
     let param_order = collect_param_order(&constraints);
-    let (r_ols, r_vec) =
-        crate::ast::reorder_r_to_ols_columns(&r, &r_vec, &param_order, &param_registry, &req.param_names)
-            .map_err(|e| format!("参数映射失败: {}", e))?;
+    let (r_ols, r_vec) = crate::ast::reorder_r_to_ols_columns(
+        &r,
+        &r_vec,
+        &param_order,
+        &param_registry,
+        &req.param_names,
+    )
+    .map_err(|e| format!("参数映射失败: {}", e))?;
 
     let mut values = std::collections::HashMap::new();
     for i in 0..r_ols.nrows() {

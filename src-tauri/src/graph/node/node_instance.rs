@@ -173,7 +173,9 @@ impl NodeInstance {
                 // 如果 pin 使用了类型变量，设置 type_var_id
                 if let Some(type_var_key) = pin_definition.get_type_var_key() {
                     // 从 NodeDefinition.type_vars 中找到对应的 TypeVarDefinition
-                    if let Some(type_var_def) = definition.type_vars.iter().find(|tv| tv.id == type_var_key) {
+                    if let Some(type_var_def) =
+                        definition.type_vars.iter().find(|tv| tv.id == type_var_key)
+                    {
                         // 从 type_var_map_reverse 中获取对应的 TypeVarId
                         if let Some(&type_var_id) = type_var_map_reverse.get(type_var_def) {
                             pin = pin.with_type_var_id(Some(type_var_id));
@@ -236,7 +238,9 @@ impl NodeInstance {
                 pin.id = pin_ids[index];
 
                 if let Some(type_var_key) = pin_definition.get_type_var_key() {
-                    if let Some(type_var_def) = definition.type_vars.iter().find(|tv| tv.id == type_var_key) {
+                    if let Some(type_var_def) =
+                        definition.type_vars.iter().find(|tv| tv.id == type_var_key)
+                    {
                         if let Some(&type_var_id) = type_var_map_reverse.get(type_var_def) {
                             pin = pin.with_type_var_id(Some(type_var_id));
                         }
@@ -288,7 +292,9 @@ impl NodeInstance {
                 let mut pin = PinInstance::from_definition(pin_definition, node_id, order);
 
                 if let Some(type_var_key) = pin_definition.get_type_var_key() {
-                    if let Some(type_var_def) = definition.type_vars.iter().find(|tv| tv.id == type_var_key) {
+                    if let Some(type_var_def) =
+                        definition.type_vars.iter().find(|tv| tv.id == type_var_key)
+                    {
                         if let Some(&type_var_id) = type_var_map_reverse.get(type_var_def) {
                             pin = pin.with_type_var_id(Some(type_var_id));
                         }

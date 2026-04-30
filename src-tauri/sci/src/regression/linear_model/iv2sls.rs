@@ -8,7 +8,7 @@
 //! Stage 1: Regress each endogenous on Z = [exog, instruments] → endog_hat
 //! Stage 2: Regress Y on X = [exog, endog_hat] → β. VCE uses structural residuals u = y - X_struct*β.
 
-use crate::regression::covariance::{compute_cov_beta, CovParams};
+use crate::regression::covariance::{CovParams, compute_cov_beta};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -239,8 +239,8 @@ pub(crate) fn compute_first_stage_summary(
             x1_raw.push(exog[[i, j]]);
         }
     }
-    let x1 = Array2::from_shape_vec((n, k1), x1_raw)
-        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+    let x1 =
+        Array2::from_shape_vec((n, k1), x1_raw).map_err(|e| format!("IV2SLS firststage: {}", e))?;
 
     let x1tx1 = x1.t().dot(&x1);
     let x1tx1_inv = x1tx1
@@ -322,7 +322,9 @@ pub(crate) fn compute_first_stage_summary(
     }
     let y_mx1 = Array2::from_shape_vec((n, k_endog), y_mx1_data)
         .map_err(|e| format!("IV2SLS firststage: {}", e))?;
-    let inner = (y_mx1.t().dot(&x2_mx1)).dot(&x2_mx1_x2_inv_nd).dot(&x2_mx1.t().dot(&y_mx1));
+    let inner = (y_mx1.t().dot(&x2_mx1))
+        .dot(&x2_mx1_x2_inv_nd)
+        .dot(&x2_mx1.t().dot(&y_mx1));
     // Cragg-Donald uses k_iv (excluded instruments), not k_z. For k_endog=1, min_eig = F stat.
     // F = (inner/k_iv) / sigma_vv => min_eig = inner/(k_iv*sigma_vv). Wrong: inner/(k_z*sigma_vv) gave F/2 when k_z=1+k_iv.
     let inner_scaled = inner / k_iv.max(1) as f64;
@@ -342,7 +344,11 @@ pub(crate) fn compute_first_stage_summary(
             .llt(Side::Lower)
             .map_err(|_| "IV2SLS firststage: sigma_vv not pd".to_string())?
             .solve(Mat::identity(sigma_vv.nrows(), sigma_vv.ncols()));
-        let g_mat = sigma_inv.as_ref().into_ndarray().to_owned().dot(&inner_scaled);
+        let g_mat = sigma_inv
+            .as_ref()
+            .into_ndarray()
+            .to_owned()
+            .dot(&inner_scaled);
         let g_faer = g_mat.view().into_faer();
         let evd = faer::linalg::solvers::SelfAdjointEigen::new(g_faer, Side::Lower)
             .map_err(|_| "IV2SLS firststage: EVD failed".to_string())?;
@@ -381,201 +387,249 @@ pub(crate) fn compute_first_stage_summary(
         None
     };
 
-    let (r2, r2_adj, partial_r2, f_stat, f_p_value, f_df1, f_df2, shea_partial_r2, shea_adj_partial_r2) =
-        if k_endog == 1 {
-            // Single endog: R2, Adj R2, Partial R2, F
-            let y_col = endog_reg.column(0).into_owned();
-            let y_hat = endog_hat.column(0).into_owned();
-            let ss_tot = y_col.iter().map(|v| (v - y_col.iter().mean()).powi(2)).sum::<f64>();
-            let ss_resid = y_col.iter().zip(y_hat.iter()).map(|(a, b)| (a - b).powi(2)).sum::<f64>();
-            let r2 = if ss_tot > 1e-300 {
-                1.0 - ss_resid / ss_tot
-            } else {
-                0.0
-            };
-            let r2_adj = if df_z > 0 && n > 1 {
-                1.0 - (ss_resid / df_z as f64) / (ss_tot / (n - 1) as f64)
-            } else {
-                r2
-            };
+    let (
+        r2,
+        r2_adj,
+        partial_r2,
+        f_stat,
+        f_p_value,
+        f_df1,
+        f_df2,
+        shea_partial_r2,
+        shea_adj_partial_r2,
+    ) = if k_endog == 1 {
+        // Single endog: R2, Adj R2, Partial R2, F
+        let y_col = endog_reg.column(0).into_owned();
+        let y_hat = endog_hat.column(0).into_owned();
+        let ss_tot = y_col
+            .iter()
+            .map(|v| (v - y_col.iter().mean()).powi(2))
+            .sum::<f64>();
+        let ss_resid = y_col
+            .iter()
+            .zip(y_hat.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f64>();
+        let r2 = if ss_tot > 1e-300 {
+            1.0 - ss_resid / ss_tot
+        } else {
+            0.0
+        };
+        let r2_adj = if df_z > 0 && n > 1 {
+            1.0 - (ss_resid / df_z as f64) / (ss_tot / (n - 1) as f64)
+        } else {
+            r2
+        };
 
-            // Partial R2: regress M_X1*Y on M_X1*X2
-            let my = mx1_y.column(0).into_owned();
-            let mx2 = mx1_x2;
-            let mx2t_mx2 = mx2.t().dot(&mx2);
-            let mx2t_my = mx2.t().dot(&my);
-            let mx2t_mx2_inv = mx2t_mx2
+        // Partial R2: regress M_X1*Y on M_X1*X2
+        let my = mx1_y.column(0).into_owned();
+        let mx2 = mx1_x2;
+        let mx2t_mx2 = mx2.t().dot(&mx2);
+        let mx2t_my = mx2.t().dot(&my);
+        let mx2t_mx2_inv = mx2t_mx2
+            .view()
+            .into_faer()
+            .to_owned()
+            .llt(Side::Lower)
+            .map_err(|_| "IV2SLS firststage: M_X2'M_X2 not pd".to_string())?
+            .solve(Mat::identity(mx2t_mx2.nrows(), mx2t_mx2.ncols()));
+        let xi = mx2t_mx2_inv
+            .as_ref()
+            .into_ndarray()
+            .to_owned()
+            .dot(&mx2t_my);
+        let fitted = mx2.dot(&xi);
+        let ss_resid_partial: f64 = my
+            .iter()
+            .zip(fitted.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum();
+        let ss_tot_partial: f64 = my.iter().map(|v| v.powi(2)).sum();
+        let partial_r2 = if ss_tot_partial > 1e-300 {
+            1.0 - ss_resid_partial / ss_tot_partial
+        } else {
+            0.0
+        };
+
+        // F: H0: π2=0. Nonrobust: F = (R2_full - R2_r)/(1-R2_full) * (n-k_z)/k_iv
+        // Robust: Wald/k_iv for F-like
+        let (f_stat, f_p_value, f_df1, f_df2) = if is_robust {
+            let first_stage_resid = &y_col
+                - &z.dot(&{
+                    let zty = z.t().dot(&y_col);
+                    ztz_inv_nd.dot(&zty)
+                });
+            let sigma2_df = if small { df_z } else { n };
+            let cov_gamma = compute_cov_beta(
+                z,
+                &ztz_inv_nd,
+                &first_stage_resid,
+                sigma2_df,
+                cov_type,
+                cov_params,
+            )?;
+            let gamma = ztz_inv_nd.dot(&z.t().dot(&y_col));
+            let gamma2 = gamma.slice(ndarray::s![k1..]).into_owned();
+            let cov_gamma2 = cov_gamma.slice(ndarray::s![k1.., k1..]).into_owned();
+            let cov_gamma2_inv = cov_gamma2
                 .view()
                 .into_faer()
                 .to_owned()
                 .llt(Side::Lower)
-                .map_err(|_| "IV2SLS firststage: M_X2'M_X2 not pd".to_string())?
-                .solve(Mat::identity(mx2t_mx2.nrows(), mx2t_mx2.ncols()));
-            let xi = mx2t_mx2_inv.as_ref().into_ndarray().to_owned().dot(&mx2t_my);
-            let fitted = mx2.dot(&xi);
-            let ss_resid_partial: f64 = my.iter().zip(fitted.iter()).map(|(a, b)| (a - b).powi(2)).sum();
-            let ss_tot_partial: f64 = my.iter().map(|v| v.powi(2)).sum();
-            let partial_r2 = if ss_tot_partial > 1e-300 {
-                1.0 - ss_resid_partial / ss_tot_partial
+                .map_err(|_| "IV2SLS firststage: cov_gamma2 not pd".to_string())?
+                .solve(Mat::identity(cov_gamma2.nrows(), cov_gamma2.ncols()));
+            let wald = gamma2.dot(
+                &cov_gamma2_inv
+                    .as_ref()
+                    .into_ndarray()
+                    .to_owned()
+                    .dot(&gamma2),
+            );
+            let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
+            let f_p = 1.0 - chi2.cdf(wald);
+            (wald / k_iv as f64, f_p, k_iv, df_z)
+        } else {
+            let ssr_r: f64 = y_col
+                .iter()
+                .zip(x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y_col))).iter())
+                .map(|(a, b)| (a - b).powi(2))
+                .sum();
+            let ssr_u = ss_resid;
+            let f_val = if ssr_u > 1e-300 && df_z > 0 {
+                ((ssr_r - ssr_u) / k_iv as f64) / (ssr_u / df_z as f64)
             } else {
                 0.0
             };
+            let f_dist =
+                FisherSnedecor::new(k_iv as f64, df_z as f64).map_err(|e| format!("{}", e))?;
+            let f_p = 1.0 - f_dist.cdf(f_val);
+            (f_val, f_p, k_iv, df_z)
+        };
 
-            // F: H0: π2=0. Nonrobust: F = (R2_full - R2_r)/(1-R2_full) * (n-k_z)/k_iv
-            // Robust: Wald/k_iv for F-like
-            let (f_stat, f_p_value, f_df1, f_df2) = if is_robust {
-                let first_stage_resid = &y_col - &z.dot(&{
-                    let zty = z.t().dot(&y_col);
-                    ztz_inv_nd.dot(&zty)
-                });
-                let sigma2_df = if small { df_z } else { n };
-                let cov_gamma = compute_cov_beta(
-                    z,
-                    &ztz_inv_nd,
-                    &first_stage_resid,
-                    sigma2_df,
-                    cov_type,
-                    cov_params,
-                )?;
-                let gamma = ztz_inv_nd.dot(&z.t().dot(&y_col));
-                let gamma2 = gamma.slice(ndarray::s![k1..]).into_owned();
-                let cov_gamma2 = cov_gamma.slice(ndarray::s![k1.., k1..]).into_owned();
-                let cov_gamma2_inv = cov_gamma2
+        (
+            Some(r2),
+            Some(r2_adj),
+            Some(partial_r2),
+            Some(f_stat),
+            Some(f_p_value),
+            Some(f_df1),
+            Some(f_df2),
+            vec![],
+            vec![],
+        )
+    } else {
+        // Multi endog: Shea's partial R2 for each
+        let mut shea_partial = Vec::with_capacity(k_endog);
+        let mut shea_adj = Vec::with_capacity(k_endog);
+        for j in 0..k_endog {
+            let y1 = endog_reg.column(j).into_owned();
+            let y1_hat = endog_hat.column(j).into_owned();
+            let (y0, y0_hat) = if k_endog > 1 {
+                let mut y0_data = Vec::with_capacity(n * (k_endog - 1));
+                let mut y0_hat_data = Vec::with_capacity(n * (k_endog - 1));
+                for jj in 0..k_endog {
+                    if jj != j {
+                        for i in 0..n {
+                            y0_data.push(endog_reg[[i, jj]]);
+                            y0_hat_data.push(endog_hat[[i, jj]]);
+                        }
+                    }
+                }
+                let y0_mat = Array2::from_shape_vec((n, k_endog - 1), y0_data)
+                    .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+                let y0_hat_mat = Array2::from_shape_vec((n, k_endog - 1), y0_hat_data)
+                    .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+                (Some(y0_mat), Some(y0_hat_mat))
+            } else {
+                (None, None)
+            };
+
+            let w = if let Some(ref y0) = y0 {
+                let mut w = Array2::zeros((n, k1 + y0.ncols()));
+                for i in 0..n {
+                    for c in 0..k1 {
+                        w[[i, c]] = x1[[i, c]];
+                    }
+                    for c in 0..y0.ncols() {
+                        w[[i, k1 + c]] = y0[[i, c]];
+                    }
+                }
+                w
+            } else {
+                x1.clone()
+            };
+            let wtw = w.t().dot(&w);
+            let wtw_inv = wtw
+                .view()
+                .into_faer()
+                .to_owned()
+                .llt(Side::Lower)
+                .map_err(|_| "IV2SLS firststage: W'W not pd".to_string())?
+                .solve(Mat::identity(wtw.nrows(), wtw.ncols()));
+            let wtw_inv_nd = wtw_inv.as_ref().into_ndarray().to_owned();
+
+            let y1_tilde = &y1 - &w.dot(&wtw_inv_nd.dot(&w.t().dot(&y1)));
+            let y1_hat_tilde = if let Some(ref y0h) = y0_hat {
+                let mut w_hat = Array2::zeros((n, k1 + y0h.ncols()));
+                for i in 0..n {
+                    for c in 0..k1 {
+                        w_hat[[i, c]] = x1[[i, c]];
+                    }
+                    for c in 0..y0h.ncols() {
+                        w_hat[[i, k1 + c]] = y0h[[i, c]];
+                    }
+                }
+                let w_hat_t_w_hat = w_hat.t().dot(&w_hat);
+                let w_hat_t_w_hat_inv = w_hat_t_w_hat
                     .view()
                     .into_faer()
                     .to_owned()
                     .llt(Side::Lower)
-                    .map_err(|_| "IV2SLS firststage: cov_gamma2 not pd".to_string())?
-                    .solve(Mat::identity(cov_gamma2.nrows(), cov_gamma2.ncols()));
-                let wald = gamma2.dot(&cov_gamma2_inv.as_ref().into_ndarray().to_owned().dot(&gamma2));
-                let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
-                let f_p = 1.0 - chi2.cdf(wald);
-                (wald / k_iv as f64, f_p, k_iv, df_z)
+                    .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
+                    .solve(Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.ncols()));
+                let proj = w_hat.dot(
+                    &w_hat_t_w_hat_inv
+                        .as_ref()
+                        .into_ndarray()
+                        .to_owned()
+                        .dot(&w_hat.t().dot(&y1_hat)),
+                );
+                &y1_hat - &proj
             } else {
-                let ssr_r: f64 = y_col.iter().zip(x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y_col))).iter())
-                    .map(|(a, b)| (a - b).powi(2)).sum();
-                let ssr_u = ss_resid;
-                let f_val = if ssr_u > 1e-300 && df_z > 0 {
-                    ((ssr_r - ssr_u) / k_iv as f64) / (ssr_u / df_z as f64)
-                } else {
-                    0.0
-                };
-                let f_dist = FisherSnedecor::new(k_iv as f64, df_z as f64).map_err(|e| format!("{}", e))?;
-                let f_p = 1.0 - f_dist.cdf(f_val);
-                (f_val, f_p, k_iv, df_z)
+                &y1_hat - &x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y1_hat)))
             };
 
-            (
-                Some(r2),
-                Some(r2_adj),
-                Some(partial_r2),
-                Some(f_stat),
-                Some(f_p_value),
-                Some(f_df1),
-                Some(f_df2),
-                vec![],
-                vec![],
-            )
-        } else {
-            // Multi endog: Shea's partial R2 for each
-            let mut shea_partial = Vec::with_capacity(k_endog);
-            let mut shea_adj = Vec::with_capacity(k_endog);
-            for j in 0..k_endog {
-                let y1 = endog_reg.column(j).into_owned();
-                let y1_hat = endog_hat.column(j).into_owned();
-                let (y0, y0_hat) = if k_endog > 1 {
-                    let mut y0_data = Vec::with_capacity(n * (k_endog - 1));
-                    let mut y0_hat_data = Vec::with_capacity(n * (k_endog - 1));
-                    for jj in 0..k_endog {
-                        if jj != j {
-                            for i in 0..n {
-                                y0_data.push(endog_reg[[i, jj]]);
-                                y0_hat_data.push(endog_hat[[i, jj]]);
-                            }
-                        }
-                    }
-                    let y0_mat = Array2::from_shape_vec((n, k_endog - 1), y0_data)
-                        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
-                    let y0_hat_mat = Array2::from_shape_vec((n, k_endog - 1), y0_hat_data)
-                        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
-                    (Some(y0_mat), Some(y0_hat_mat))
-                } else {
-                    (None, None)
-                };
-
-                let w = if let Some(ref y0) = y0 {
-                    let mut w = Array2::zeros((n, k1 + y0.ncols()));
-                    for i in 0..n {
-                        for c in 0..k1 {
-                            w[[i, c]] = x1[[i, c]];
-                        }
-                        for c in 0..y0.ncols() {
-                            w[[i, k1 + c]] = y0[[i, c]];
-                        }
-                    }
-                    w
-                } else {
-                    x1.clone()
-                };
-                let wtw = w.t().dot(&w);
-                let wtw_inv = wtw.view().into_faer().to_owned().llt(Side::Lower)
-                    .map_err(|_| "IV2SLS firststage: W'W not pd".to_string())?
-                    .solve(Mat::identity(wtw.nrows(), wtw.ncols()));
-                let wtw_inv_nd = wtw_inv.as_ref().into_ndarray().to_owned();
-
-                let y1_tilde = &y1 - &w.dot(&wtw_inv_nd.dot(&w.t().dot(&y1)));
-                let y1_hat_tilde = if let Some(ref y0h) = y0_hat {
-                    let mut w_hat = Array2::zeros((n, k1 + y0h.ncols()));
-                    for i in 0..n {
-                        for c in 0..k1 {
-                            w_hat[[i, c]] = x1[[i, c]];
-                        }
-                        for c in 0..y0h.ncols() {
-                            w_hat[[i, k1 + c]] = y0h[[i, c]];
-                        }
-                    }
-                    let w_hat_t_w_hat = w_hat.t().dot(&w_hat);
-                    let w_hat_t_w_hat_inv = w_hat_t_w_hat
-                        .view()
-                        .into_faer()
-                        .to_owned()
-                        .llt(Side::Lower)
-                        .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
-                        .solve(Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.ncols()));
-                    let proj = w_hat.dot(&w_hat_t_w_hat_inv.as_ref().into_ndarray().to_owned().dot(&w_hat.t().dot(&y1_hat)));
-                    &y1_hat - &proj
-                } else {
-                    &y1_hat - &x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y1_hat)))
-                };
-
-                let ss_tot = y1_tilde.iter().map(|v| v.powi(2)).sum::<f64>();
-                let ss_resid = y1_tilde.iter().zip(y1_hat_tilde.iter())
-                    .map(|(a, b)| (a - b).powi(2)).sum::<f64>();
-                let r2_s = if ss_tot > 1e-300 {
-                    1.0 - ss_resid / ss_tot
-                } else {
-                    0.0
-                };
-                let r2_s_adj = if has_constant {
-                    1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z + 1) as f64
-                } else {
-                    1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z) as f64
-                };
-                shea_partial.push(r2_s);
-                shea_adj.push(r2_s_adj);
-            }
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                shea_partial,
-                shea_adj,
-            )
-        };
+            let ss_tot = y1_tilde.iter().map(|v| v.powi(2)).sum::<f64>();
+            let ss_resid = y1_tilde
+                .iter()
+                .zip(y1_hat_tilde.iter())
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f64>();
+            let r2_s = if ss_tot > 1e-300 {
+                1.0 - ss_resid / ss_tot
+            } else {
+                0.0
+            };
+            let r2_s_adj = if has_constant {
+                1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z + 1) as f64
+            } else {
+                1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z) as f64
+            };
+            shea_partial.push(r2_s);
+            shea_adj.push(r2_s_adj);
+        }
+        (
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            shea_partial,
+            shea_adj,
+        )
+    };
 
     Ok(FirstStageSummary {
         k_included_instruments: k_exog,
@@ -608,79 +662,275 @@ fn is_robust_cov_type(cov_type: &str) -> bool {
 /// bias 在 k2=1,2 时为 None（Stock-Yogo 未提供）
 fn stock_yogo_cv_1_endog(k2: usize) -> Option<StockYogoCriticalValues> {
     let (bias, size) = match k2 {
-        1 => (None, StockYogoSizeRow { pct_10: 16.38, pct_15: 8.96, pct_20: 6.66, pct_25: 5.53 }),
-        2 => (None, StockYogoSizeRow { pct_10: 19.93, pct_15: 11.59, pct_20: 8.75, pct_25: 7.25 }),
+        1 => (
+            None,
+            StockYogoSizeRow {
+                pct_10: 16.38,
+                pct_15: 8.96,
+                pct_20: 6.66,
+                pct_25: 5.53,
+            },
+        ),
+        2 => (
+            None,
+            StockYogoSizeRow {
+                pct_10: 19.93,
+                pct_15: 11.59,
+                pct_20: 8.75,
+                pct_25: 7.25,
+            },
+        ),
         3 => (
-            Some(StockYogoBiasRow { pct_5: 22.30, pct_10: 12.83, pct_20: 7.80, pct_30: 5.91 }),
-            StockYogoSizeRow { pct_10: 22.30, pct_15: 12.83, pct_20: 9.54, pct_25: 7.80 },
+            Some(StockYogoBiasRow {
+                pct_5: 22.30,
+                pct_10: 12.83,
+                pct_20: 7.80,
+                pct_30: 5.91,
+            }),
+            StockYogoSizeRow {
+                pct_10: 22.30,
+                pct_15: 12.83,
+                pct_20: 9.54,
+                pct_25: 7.80,
+            },
         ),
         4 => (
-            Some(StockYogoBiasRow { pct_5: 16.85, pct_10: 10.27, pct_20: 6.71, pct_30: 5.34 }),
-            StockYogoSizeRow { pct_10: 24.58, pct_15: 13.96, pct_20: 10.26, pct_25: 8.31 },
+            Some(StockYogoBiasRow {
+                pct_5: 16.85,
+                pct_10: 10.27,
+                pct_20: 6.71,
+                pct_30: 5.34,
+            }),
+            StockYogoSizeRow {
+                pct_10: 24.58,
+                pct_15: 13.96,
+                pct_20: 10.26,
+                pct_25: 8.31,
+            },
         ),
         5 => (
-            Some(StockYogoBiasRow { pct_5: 18.37, pct_10: 10.91, pct_20: 7.03, pct_30: 5.54 }),
-            StockYogoSizeRow { pct_10: 26.87, pct_15: 15.09, pct_20: 10.98, pct_25: 8.84 },
+            Some(StockYogoBiasRow {
+                pct_5: 18.37,
+                pct_10: 10.91,
+                pct_20: 7.03,
+                pct_30: 5.54,
+            }),
+            StockYogoSizeRow {
+                pct_10: 26.87,
+                pct_15: 15.09,
+                pct_20: 10.98,
+                pct_25: 8.84,
+            },
         ),
         6 => (
-            Some(StockYogoBiasRow { pct_5: 19.86, pct_10: 11.52, pct_20: 7.34, pct_30: 5.73 }),
-            StockYogoSizeRow { pct_10: 29.18, pct_15: 16.23, pct_20: 11.72, pct_25: 9.38 },
+            Some(StockYogoBiasRow {
+                pct_5: 19.86,
+                pct_10: 11.52,
+                pct_20: 7.34,
+                pct_30: 5.73,
+            }),
+            StockYogoSizeRow {
+                pct_10: 29.18,
+                pct_15: 16.23,
+                pct_20: 11.72,
+                pct_25: 9.38,
+            },
         ),
         7 => (
-            Some(StockYogoBiasRow { pct_5: 21.33, pct_10: 12.12, pct_20: 7.64, pct_30: 5.91 }),
-            StockYogoSizeRow { pct_10: 31.50, pct_15: 17.38, pct_20: 12.48, pct_25: 9.93 },
+            Some(StockYogoBiasRow {
+                pct_5: 21.33,
+                pct_10: 12.12,
+                pct_20: 7.64,
+                pct_30: 5.91,
+            }),
+            StockYogoSizeRow {
+                pct_10: 31.50,
+                pct_15: 17.38,
+                pct_20: 12.48,
+                pct_25: 9.93,
+            },
         ),
         8 => (
-            Some(StockYogoBiasRow { pct_5: 22.78, pct_10: 12.70, pct_20: 7.93, pct_30: 6.08 }),
-            StockYogoSizeRow { pct_10: 33.84, pct_15: 18.54, pct_20: 13.24, pct_25: 10.50 },
+            Some(StockYogoBiasRow {
+                pct_5: 22.78,
+                pct_10: 12.70,
+                pct_20: 7.93,
+                pct_30: 6.08,
+            }),
+            StockYogoSizeRow {
+                pct_10: 33.84,
+                pct_15: 18.54,
+                pct_20: 13.24,
+                pct_25: 10.50,
+            },
         ),
         9 => (
-            Some(StockYogoBiasRow { pct_5: 24.21, pct_10: 13.27, pct_20: 8.21, pct_30: 6.25 }),
-            StockYogoSizeRow { pct_10: 36.19, pct_15: 19.71, pct_20: 14.01, pct_25: 11.07 },
+            Some(StockYogoBiasRow {
+                pct_5: 24.21,
+                pct_10: 13.27,
+                pct_20: 8.21,
+                pct_30: 6.25,
+            }),
+            StockYogoSizeRow {
+                pct_10: 36.19,
+                pct_15: 19.71,
+                pct_20: 14.01,
+                pct_25: 11.07,
+            },
         ),
         10 => (
-            Some(StockYogoBiasRow { pct_5: 25.63, pct_10: 13.83, pct_20: 8.48, pct_30: 6.41 }),
-            StockYogoSizeRow { pct_10: 38.54, pct_15: 20.88, pct_20: 14.78, pct_25: 11.65 },
+            Some(StockYogoBiasRow {
+                pct_5: 25.63,
+                pct_10: 13.83,
+                pct_20: 8.48,
+                pct_30: 6.41,
+            }),
+            StockYogoSizeRow {
+                pct_10: 38.54,
+                pct_15: 20.88,
+                pct_20: 14.78,
+                pct_25: 11.65,
+            },
         ),
         11 => (
-            Some(StockYogoBiasRow { pct_5: 27.03, pct_10: 14.38, pct_20: 8.75, pct_30: 6.57 }),
-            StockYogoSizeRow { pct_10: 40.90, pct_15: 22.06, pct_20: 15.56, pct_25: 12.23 },
+            Some(StockYogoBiasRow {
+                pct_5: 27.03,
+                pct_10: 14.38,
+                pct_20: 8.75,
+                pct_30: 6.57,
+            }),
+            StockYogoSizeRow {
+                pct_10: 40.90,
+                pct_15: 22.06,
+                pct_20: 15.56,
+                pct_25: 12.23,
+            },
         ),
         12 => (
-            Some(StockYogoBiasRow { pct_5: 28.42, pct_10: 14.92, pct_20: 9.01, pct_30: 6.72 }),
-            StockYogoSizeRow { pct_10: 43.27, pct_15: 23.24, pct_20: 16.35, pct_25: 12.82 },
+            Some(StockYogoBiasRow {
+                pct_5: 28.42,
+                pct_10: 14.92,
+                pct_20: 9.01,
+                pct_30: 6.72,
+            }),
+            StockYogoSizeRow {
+                pct_10: 43.27,
+                pct_15: 23.24,
+                pct_20: 16.35,
+                pct_25: 12.82,
+            },
         ),
         13 => (
-            Some(StockYogoBiasRow { pct_5: 29.80, pct_10: 15.45, pct_20: 9.26, pct_30: 6.87 }),
-            StockYogoSizeRow { pct_10: 45.64, pct_15: 24.42, pct_20: 17.14, pct_25: 13.41 },
+            Some(StockYogoBiasRow {
+                pct_5: 29.80,
+                pct_10: 15.45,
+                pct_20: 9.26,
+                pct_30: 6.87,
+            }),
+            StockYogoSizeRow {
+                pct_10: 45.64,
+                pct_15: 24.42,
+                pct_20: 17.14,
+                pct_25: 13.41,
+            },
         ),
         14 => (
-            Some(StockYogoBiasRow { pct_5: 31.16, pct_10: 15.97, pct_20: 9.51, pct_30: 7.01 }),
-            StockYogoSizeRow { pct_10: 48.01, pct_15: 25.61, pct_20: 17.93, pct_25: 14.00 },
+            Some(StockYogoBiasRow {
+                pct_5: 31.16,
+                pct_10: 15.97,
+                pct_20: 9.51,
+                pct_30: 7.01,
+            }),
+            StockYogoSizeRow {
+                pct_10: 48.01,
+                pct_15: 25.61,
+                pct_20: 17.93,
+                pct_25: 14.00,
+            },
         ),
         15 => (
-            Some(StockYogoBiasRow { pct_5: 32.52, pct_10: 16.49, pct_20: 9.75, pct_30: 7.15 }),
-            StockYogoSizeRow { pct_10: 50.39, pct_15: 26.80, pct_20: 18.72, pct_25: 14.60 },
+            Some(StockYogoBiasRow {
+                pct_5: 32.52,
+                pct_10: 16.49,
+                pct_20: 9.75,
+                pct_30: 7.15,
+            }),
+            StockYogoSizeRow {
+                pct_10: 50.39,
+                pct_15: 26.80,
+                pct_20: 18.72,
+                pct_25: 14.60,
+            },
         ),
         16 => (
-            Some(StockYogoBiasRow { pct_5: 33.86, pct_10: 17.00, pct_20: 9.99, pct_30: 7.28 }),
-            StockYogoSizeRow { pct_10: 52.77, pct_15: 27.99, pct_20: 19.51, pct_25: 15.19 },
+            Some(StockYogoBiasRow {
+                pct_5: 33.86,
+                pct_10: 17.00,
+                pct_20: 9.99,
+                pct_30: 7.28,
+            }),
+            StockYogoSizeRow {
+                pct_10: 52.77,
+                pct_15: 27.99,
+                pct_20: 19.51,
+                pct_25: 15.19,
+            },
         ),
         17 => (
-            Some(StockYogoBiasRow { pct_5: 35.20, pct_10: 17.50, pct_20: 10.22, pct_30: 7.41 }),
-            StockYogoSizeRow { pct_10: 55.15, pct_15: 29.19, pct_20: 20.31, pct_25: 15.79 },
+            Some(StockYogoBiasRow {
+                pct_5: 35.20,
+                pct_10: 17.50,
+                pct_20: 10.22,
+                pct_30: 7.41,
+            }),
+            StockYogoSizeRow {
+                pct_10: 55.15,
+                pct_15: 29.19,
+                pct_20: 20.31,
+                pct_25: 15.79,
+            },
         ),
         18 => (
-            Some(StockYogoBiasRow { pct_5: 36.52, pct_10: 18.00, pct_20: 10.45, pct_30: 7.54 }),
-            StockYogoSizeRow { pct_10: 57.53, pct_15: 30.38, pct_20: 21.10, pct_25: 16.39 },
+            Some(StockYogoBiasRow {
+                pct_5: 36.52,
+                pct_10: 18.00,
+                pct_20: 10.45,
+                pct_30: 7.54,
+            }),
+            StockYogoSizeRow {
+                pct_10: 57.53,
+                pct_15: 30.38,
+                pct_20: 21.10,
+                pct_25: 16.39,
+            },
         ),
         19 => (
-            Some(StockYogoBiasRow { pct_5: 37.84, pct_10: 18.49, pct_20: 10.67, pct_30: 7.66 }),
-            StockYogoSizeRow { pct_10: 59.92, pct_15: 31.58, pct_20: 21.90, pct_25: 16.99 },
+            Some(StockYogoBiasRow {
+                pct_5: 37.84,
+                pct_10: 18.49,
+                pct_20: 10.67,
+                pct_30: 7.66,
+            }),
+            StockYogoSizeRow {
+                pct_10: 59.92,
+                pct_15: 31.58,
+                pct_20: 21.90,
+                pct_25: 16.99,
+            },
         ),
         20 => (
-            Some(StockYogoBiasRow { pct_5: 39.15, pct_10: 18.97, pct_20: 10.89, pct_30: 7.78 }),
-            StockYogoSizeRow { pct_10: 62.30, pct_15: 32.77, pct_20: 22.70, pct_25: 17.60 },
+            Some(StockYogoBiasRow {
+                pct_5: 39.15,
+                pct_10: 18.97,
+                pct_20: 10.89,
+                pct_30: 7.78,
+            }),
+            StockYogoSizeRow {
+                pct_10: 62.30,
+                pct_15: 32.77,
+                pct_20: 22.70,
+                pct_25: 17.60,
+            },
         ),
         _ => return None,
     };
@@ -692,75 +942,261 @@ fn stock_yogo_cv_1_endog(k2: usize) -> Option<StockYogoCriticalValues> {
 /// bias 在 k2=2,3 时为 None（Stock-Yogo 未提供）
 fn stock_yogo_cv_2_endog(k2: usize) -> Option<StockYogoCriticalValues> {
     let (bias, size) = match k2 {
-        2 => (None, StockYogoSizeRow { pct_10: 7.03, pct_15: 4.58, pct_20: 3.95, pct_25: 3.63 }),
-        3 => (None, StockYogoSizeRow { pct_10: 13.43, pct_15: 8.18, pct_20: 6.40, pct_25: 5.45 }),
+        2 => (
+            None,
+            StockYogoSizeRow {
+                pct_10: 7.03,
+                pct_15: 4.58,
+                pct_20: 3.95,
+                pct_25: 3.63,
+            },
+        ),
+        3 => (
+            None,
+            StockYogoSizeRow {
+                pct_10: 13.43,
+                pct_15: 8.18,
+                pct_20: 6.40,
+                pct_25: 5.45,
+            },
+        ),
         4 => (
-            Some(StockYogoBiasRow { pct_5: 11.04, pct_10: 7.56, pct_20: 5.57, pct_30: 4.73 }),
-            StockYogoSizeRow { pct_10: 16.87, pct_15: 9.93, pct_20: 7.54, pct_25: 6.28 },
+            Some(StockYogoBiasRow {
+                pct_5: 11.04,
+                pct_10: 7.56,
+                pct_20: 5.57,
+                pct_30: 4.73,
+            }),
+            StockYogoSizeRow {
+                pct_10: 16.87,
+                pct_15: 9.93,
+                pct_20: 7.54,
+                pct_25: 6.28,
+            },
         ),
         5 => (
-            Some(StockYogoBiasRow { pct_5: 12.16, pct_10: 8.18, pct_20: 5.91, pct_30: 4.96 }),
-            StockYogoSizeRow { pct_10: 19.45, pct_15: 11.22, pct_20: 8.38, pct_25: 6.89 },
+            Some(StockYogoBiasRow {
+                pct_5: 12.16,
+                pct_10: 8.18,
+                pct_20: 5.91,
+                pct_30: 4.96,
+            }),
+            StockYogoSizeRow {
+                pct_10: 19.45,
+                pct_15: 11.22,
+                pct_20: 8.38,
+                pct_25: 6.89,
+            },
         ),
         6 => (
-            Some(StockYogoBiasRow { pct_5: 13.27, pct_10: 8.79, pct_20: 6.23, pct_30: 5.18 }),
-            StockYogoSizeRow { pct_10: 21.68, pct_15: 12.33, pct_20: 9.10, pct_25: 7.42 },
+            Some(StockYogoBiasRow {
+                pct_5: 13.27,
+                pct_10: 8.79,
+                pct_20: 6.23,
+                pct_30: 5.18,
+            }),
+            StockYogoSizeRow {
+                pct_10: 21.68,
+                pct_15: 12.33,
+                pct_20: 9.10,
+                pct_25: 7.42,
+            },
         ),
         7 => (
-            Some(StockYogoBiasRow { pct_5: 14.36, pct_10: 9.39, pct_20: 6.54, pct_30: 5.39 }),
-            StockYogoSizeRow { pct_10: 23.72, pct_15: 13.34, pct_20: 9.77, pct_25: 7.91 },
+            Some(StockYogoBiasRow {
+                pct_5: 14.36,
+                pct_10: 9.39,
+                pct_20: 6.54,
+                pct_30: 5.39,
+            }),
+            StockYogoSizeRow {
+                pct_10: 23.72,
+                pct_15: 13.34,
+                pct_20: 9.77,
+                pct_25: 7.91,
+            },
         ),
         8 => (
-            Some(StockYogoBiasRow { pct_5: 15.45, pct_10: 9.98, pct_20: 6.84, pct_30: 5.59 }),
-            StockYogoSizeRow { pct_10: 25.64, pct_15: 14.31, pct_20: 10.41, pct_25: 8.39 },
+            Some(StockYogoBiasRow {
+                pct_5: 15.45,
+                pct_10: 9.98,
+                pct_20: 6.84,
+                pct_30: 5.59,
+            }),
+            StockYogoSizeRow {
+                pct_10: 25.64,
+                pct_15: 14.31,
+                pct_20: 10.41,
+                pct_25: 8.39,
+            },
         ),
         9 => (
-            Some(StockYogoBiasRow { pct_5: 16.53, pct_10: 10.56, pct_20: 7.13, pct_30: 5.78 }),
-            StockYogoSizeRow { pct_10: 27.51, pct_15: 15.24, pct_20: 11.03, pct_25: 8.85 },
+            Some(StockYogoBiasRow {
+                pct_5: 16.53,
+                pct_10: 10.56,
+                pct_20: 7.13,
+                pct_30: 5.78,
+            }),
+            StockYogoSizeRow {
+                pct_10: 27.51,
+                pct_15: 15.24,
+                pct_20: 11.03,
+                pct_25: 8.85,
+            },
         ),
         10 => (
-            Some(StockYogoBiasRow { pct_5: 17.60, pct_10: 11.13, pct_20: 7.41, pct_30: 5.97 }),
-            StockYogoSizeRow { pct_10: 29.32, pct_15: 16.16, pct_20: 11.65, pct_25: 9.31 },
+            Some(StockYogoBiasRow {
+                pct_5: 17.60,
+                pct_10: 11.13,
+                pct_20: 7.41,
+                pct_30: 5.97,
+            }),
+            StockYogoSizeRow {
+                pct_10: 29.32,
+                pct_15: 16.16,
+                pct_20: 11.65,
+                pct_25: 9.31,
+            },
         ),
         11 => (
-            Some(StockYogoBiasRow { pct_5: 18.66, pct_10: 11.70, pct_20: 7.69, pct_30: 6.15 }),
-            StockYogoSizeRow { pct_10: 31.11, pct_15: 17.06, pct_20: 12.25, pct_25: 9.77 },
+            Some(StockYogoBiasRow {
+                pct_5: 18.66,
+                pct_10: 11.70,
+                pct_20: 7.69,
+                pct_30: 6.15,
+            }),
+            StockYogoSizeRow {
+                pct_10: 31.11,
+                pct_15: 17.06,
+                pct_20: 12.25,
+                pct_25: 9.77,
+            },
         ),
         12 => (
-            Some(StockYogoBiasRow { pct_5: 19.72, pct_10: 12.26, pct_20: 7.96, pct_30: 6.33 }),
-            StockYogoSizeRow { pct_10: 32.88, pct_15: 17.95, pct_20: 12.86, pct_25: 10.22 },
+            Some(StockYogoBiasRow {
+                pct_5: 19.72,
+                pct_10: 12.26,
+                pct_20: 7.96,
+                pct_30: 6.33,
+            }),
+            StockYogoSizeRow {
+                pct_10: 32.88,
+                pct_15: 17.95,
+                pct_20: 12.86,
+                pct_25: 10.22,
+            },
         ),
         13 => (
-            Some(StockYogoBiasRow { pct_5: 20.77, pct_10: 12.81, pct_20: 8.23, pct_30: 6.50 }),
-            StockYogoSizeRow { pct_10: 34.62, pct_15: 18.84, pct_20: 13.45, pct_25: 10.68 },
+            Some(StockYogoBiasRow {
+                pct_5: 20.77,
+                pct_10: 12.81,
+                pct_20: 8.23,
+                pct_30: 6.50,
+            }),
+            StockYogoSizeRow {
+                pct_10: 34.62,
+                pct_15: 18.84,
+                pct_20: 13.45,
+                pct_25: 10.68,
+            },
         ),
         14 => (
-            Some(StockYogoBiasRow { pct_5: 21.81, pct_10: 13.36, pct_20: 8.49, pct_30: 6.67 }),
-            StockYogoSizeRow { pct_10: 36.36, pct_15: 19.72, pct_20: 14.05, pct_25: 11.13 },
+            Some(StockYogoBiasRow {
+                pct_5: 21.81,
+                pct_10: 13.36,
+                pct_20: 8.49,
+                pct_30: 6.67,
+            }),
+            StockYogoSizeRow {
+                pct_10: 36.36,
+                pct_15: 19.72,
+                pct_20: 14.05,
+                pct_25: 11.13,
+            },
         ),
         15 => (
-            Some(StockYogoBiasRow { pct_5: 22.84, pct_10: 13.90, pct_20: 8.75, pct_30: 6.83 }),
-            StockYogoSizeRow { pct_10: 38.08, pct_15: 20.60, pct_20: 14.65, pct_25: 11.58 },
+            Some(StockYogoBiasRow {
+                pct_5: 22.84,
+                pct_10: 13.90,
+                pct_20: 8.75,
+                pct_30: 6.83,
+            }),
+            StockYogoSizeRow {
+                pct_10: 38.08,
+                pct_15: 20.60,
+                pct_20: 14.65,
+                pct_25: 11.58,
+            },
         ),
         16 => (
-            Some(StockYogoBiasRow { pct_5: 23.87, pct_10: 14.44, pct_20: 9.00, pct_30: 6.99 }),
-            StockYogoSizeRow { pct_10: 39.80, pct_15: 21.48, pct_20: 15.24, pct_25: 12.03 },
+            Some(StockYogoBiasRow {
+                pct_5: 23.87,
+                pct_10: 14.44,
+                pct_20: 9.00,
+                pct_30: 6.99,
+            }),
+            StockYogoSizeRow {
+                pct_10: 39.80,
+                pct_15: 21.48,
+                pct_20: 15.24,
+                pct_25: 12.03,
+            },
         ),
         17 => (
-            Some(StockYogoBiasRow { pct_5: 24.89, pct_10: 14.97, pct_20: 9.25, pct_30: 7.15 }),
-            StockYogoSizeRow { pct_10: 41.51, pct_15: 22.35, pct_20: 15.83, pct_25: 12.49 },
+            Some(StockYogoBiasRow {
+                pct_5: 24.89,
+                pct_10: 14.97,
+                pct_20: 9.25,
+                pct_30: 7.15,
+            }),
+            StockYogoSizeRow {
+                pct_10: 41.51,
+                pct_15: 22.35,
+                pct_20: 15.83,
+                pct_25: 12.49,
+            },
         ),
         18 => (
-            Some(StockYogoBiasRow { pct_5: 25.91, pct_10: 15.50, pct_20: 9.49, pct_30: 7.30 }),
-            StockYogoSizeRow { pct_10: 43.22, pct_15: 23.22, pct_20: 16.42, pct_25: 12.94 },
+            Some(StockYogoBiasRow {
+                pct_5: 25.91,
+                pct_10: 15.50,
+                pct_20: 9.49,
+                pct_30: 7.30,
+            }),
+            StockYogoSizeRow {
+                pct_10: 43.22,
+                pct_15: 23.22,
+                pct_20: 16.42,
+                pct_25: 12.94,
+            },
         ),
         19 => (
-            Some(StockYogoBiasRow { pct_5: 26.92, pct_10: 16.02, pct_20: 9.73, pct_30: 7.45 }),
-            StockYogoSizeRow { pct_10: 44.92, pct_15: 24.09, pct_20: 17.02, pct_25: 13.39 },
+            Some(StockYogoBiasRow {
+                pct_5: 26.92,
+                pct_10: 16.02,
+                pct_20: 9.73,
+                pct_30: 7.45,
+            }),
+            StockYogoSizeRow {
+                pct_10: 44.92,
+                pct_15: 24.09,
+                pct_20: 17.02,
+                pct_25: 13.39,
+            },
         ),
         20 => (
-            Some(StockYogoBiasRow { pct_5: 27.93, pct_10: 16.54, pct_20: 9.97, pct_30: 7.60 }),
-            StockYogoSizeRow { pct_10: 46.62, pct_15: 24.96, pct_20: 17.61, pct_25: 13.84 },
+            Some(StockYogoBiasRow {
+                pct_5: 27.93,
+                pct_10: 16.54,
+                pct_20: 9.97,
+                pct_30: 7.60,
+            }),
+            StockYogoSizeRow {
+                pct_10: 46.62,
+                pct_15: 24.96,
+                pct_20: 17.61,
+                pct_25: 13.84,
+            },
         ),
         _ => return None,
     };
@@ -771,26 +1207,126 @@ fn stock_yogo_cv_2_endog(k2: usize) -> Option<StockYogoCriticalValues> {
 /// 来源: ivreg2.ado cdsy type(limlsize10|15|20|25). LIML 无 bias 行。
 fn stock_yogo_cv_liml_1_endog(k2: usize) -> Option<StockYogoCriticalValues> {
     let size = match k2 {
-        1 => StockYogoSizeRow { pct_10: 16.38, pct_15: 8.96, pct_20: 6.66, pct_25: 5.53 },
-        2 => StockYogoSizeRow { pct_10: 8.68, pct_15: 5.33, pct_20: 4.42, pct_25: 3.92 },
-        3 => StockYogoSizeRow { pct_10: 6.46, pct_15: 4.36, pct_20: 3.69, pct_25: 3.32 },
-        4 => StockYogoSizeRow { pct_10: 5.44, pct_15: 3.87, pct_20: 3.30, pct_25: 2.98 },
-        5 => StockYogoSizeRow { pct_10: 4.84, pct_15: 3.56, pct_20: 3.05, pct_25: 2.77 },
-        6 => StockYogoSizeRow { pct_10: 4.45, pct_15: 3.34, pct_20: 2.87, pct_25: 2.61 },
-        7 => StockYogoSizeRow { pct_10: 4.18, pct_15: 3.18, pct_20: 2.73, pct_25: 2.49 },
-        8 => StockYogoSizeRow { pct_10: 3.97, pct_15: 3.04, pct_20: 2.63, pct_25: 2.39 },
-        9 => StockYogoSizeRow { pct_10: 3.81, pct_15: 2.93, pct_20: 2.54, pct_25: 2.32 },
-        10 => StockYogoSizeRow { pct_10: 3.68, pct_15: 2.84, pct_20: 2.46, pct_25: 2.25 },
-        11 => StockYogoSizeRow { pct_10: 3.58, pct_15: 2.76, pct_20: 2.40, pct_25: 2.19 },
-        12 => StockYogoSizeRow { pct_10: 3.50, pct_15: 2.69, pct_20: 2.34, pct_25: 2.14 },
-        13 => StockYogoSizeRow { pct_10: 3.42, pct_15: 2.63, pct_20: 2.29, pct_25: 2.10 },
-        14 => StockYogoSizeRow { pct_10: 3.36, pct_15: 2.57, pct_20: 2.25, pct_25: 2.06 },
-        15 => StockYogoSizeRow { pct_10: 3.31, pct_15: 2.52, pct_20: 2.21, pct_25: 2.03 },
-        16 => StockYogoSizeRow { pct_10: 3.27, pct_15: 2.48, pct_20: 2.18, pct_25: 2.00 },
-        17 => StockYogoSizeRow { pct_10: 3.24, pct_15: 2.44, pct_20: 2.14, pct_25: 1.97 },
-        18 => StockYogoSizeRow { pct_10: 3.20, pct_15: 2.41, pct_20: 2.11, pct_25: 1.94 },
-        19 => StockYogoSizeRow { pct_10: 3.18, pct_15: 2.37, pct_20: 2.09, pct_25: 1.92 },
-        20 => StockYogoSizeRow { pct_10: 3.21, pct_15: 2.34, pct_20: 2.06, pct_25: 1.90 },
+        1 => StockYogoSizeRow {
+            pct_10: 16.38,
+            pct_15: 8.96,
+            pct_20: 6.66,
+            pct_25: 5.53,
+        },
+        2 => StockYogoSizeRow {
+            pct_10: 8.68,
+            pct_15: 5.33,
+            pct_20: 4.42,
+            pct_25: 3.92,
+        },
+        3 => StockYogoSizeRow {
+            pct_10: 6.46,
+            pct_15: 4.36,
+            pct_20: 3.69,
+            pct_25: 3.32,
+        },
+        4 => StockYogoSizeRow {
+            pct_10: 5.44,
+            pct_15: 3.87,
+            pct_20: 3.30,
+            pct_25: 2.98,
+        },
+        5 => StockYogoSizeRow {
+            pct_10: 4.84,
+            pct_15: 3.56,
+            pct_20: 3.05,
+            pct_25: 2.77,
+        },
+        6 => StockYogoSizeRow {
+            pct_10: 4.45,
+            pct_15: 3.34,
+            pct_20: 2.87,
+            pct_25: 2.61,
+        },
+        7 => StockYogoSizeRow {
+            pct_10: 4.18,
+            pct_15: 3.18,
+            pct_20: 2.73,
+            pct_25: 2.49,
+        },
+        8 => StockYogoSizeRow {
+            pct_10: 3.97,
+            pct_15: 3.04,
+            pct_20: 2.63,
+            pct_25: 2.39,
+        },
+        9 => StockYogoSizeRow {
+            pct_10: 3.81,
+            pct_15: 2.93,
+            pct_20: 2.54,
+            pct_25: 2.32,
+        },
+        10 => StockYogoSizeRow {
+            pct_10: 3.68,
+            pct_15: 2.84,
+            pct_20: 2.46,
+            pct_25: 2.25,
+        },
+        11 => StockYogoSizeRow {
+            pct_10: 3.58,
+            pct_15: 2.76,
+            pct_20: 2.40,
+            pct_25: 2.19,
+        },
+        12 => StockYogoSizeRow {
+            pct_10: 3.50,
+            pct_15: 2.69,
+            pct_20: 2.34,
+            pct_25: 2.14,
+        },
+        13 => StockYogoSizeRow {
+            pct_10: 3.42,
+            pct_15: 2.63,
+            pct_20: 2.29,
+            pct_25: 2.10,
+        },
+        14 => StockYogoSizeRow {
+            pct_10: 3.36,
+            pct_15: 2.57,
+            pct_20: 2.25,
+            pct_25: 2.06,
+        },
+        15 => StockYogoSizeRow {
+            pct_10: 3.31,
+            pct_15: 2.52,
+            pct_20: 2.21,
+            pct_25: 2.03,
+        },
+        16 => StockYogoSizeRow {
+            pct_10: 3.27,
+            pct_15: 2.48,
+            pct_20: 2.18,
+            pct_25: 2.00,
+        },
+        17 => StockYogoSizeRow {
+            pct_10: 3.24,
+            pct_15: 2.44,
+            pct_20: 2.14,
+            pct_25: 1.97,
+        },
+        18 => StockYogoSizeRow {
+            pct_10: 3.20,
+            pct_15: 2.41,
+            pct_20: 2.11,
+            pct_25: 1.94,
+        },
+        19 => StockYogoSizeRow {
+            pct_10: 3.18,
+            pct_15: 2.37,
+            pct_20: 2.09,
+            pct_25: 1.92,
+        },
+        20 => StockYogoSizeRow {
+            pct_10: 3.21,
+            pct_15: 2.34,
+            pct_20: 2.06,
+            pct_25: 1.90,
+        },
         _ => return None,
     };
     Some(StockYogoCriticalValues { bias: None, size })
@@ -799,25 +1335,120 @@ fn stock_yogo_cv_liml_1_endog(k2: usize) -> Option<StockYogoCriticalValues> {
 /// Stock-Yogo (2005) LIML size of nominal 5% Wald test，2 内生变量。
 fn stock_yogo_cv_liml_2_endog(k2: usize) -> Option<StockYogoCriticalValues> {
     let size = match k2 {
-        2 => StockYogoSizeRow { pct_10: 7.03, pct_15: 4.58, pct_20: 3.95, pct_25: 3.63 },
-        3 => StockYogoSizeRow { pct_10: 5.44, pct_15: 3.81, pct_20: 3.32, pct_25: 3.09 },
-        4 => StockYogoSizeRow { pct_10: 4.72, pct_15: 3.39, pct_20: 2.99, pct_25: 2.79 },
-        5 => StockYogoSizeRow { pct_10: 4.32, pct_15: 3.13, pct_20: 2.78, pct_25: 2.60 },
-        6 => StockYogoSizeRow { pct_10: 4.06, pct_15: 2.95, pct_20: 2.63, pct_25: 2.46 },
-        7 => StockYogoSizeRow { pct_10: 3.90, pct_15: 2.83, pct_20: 2.52, pct_25: 2.35 },
-        8 => StockYogoSizeRow { pct_10: 3.78, pct_15: 2.73, pct_20: 2.43, pct_25: 2.27 },
-        9 => StockYogoSizeRow { pct_10: 3.70, pct_15: 2.66, pct_20: 2.36, pct_25: 2.20 },
-        10 => StockYogoSizeRow { pct_10: 3.64, pct_15: 2.60, pct_20: 2.30, pct_25: 2.14 },
-        11 => StockYogoSizeRow { pct_10: 3.60, pct_15: 2.55, pct_20: 2.25, pct_25: 2.09 },
-        12 => StockYogoSizeRow { pct_10: 3.58, pct_15: 2.52, pct_20: 2.21, pct_25: 2.05 },
-        13 => StockYogoSizeRow { pct_10: 3.56, pct_15: 2.48, pct_20: 2.17, pct_25: 2.02 },
-        14 => StockYogoSizeRow { pct_10: 3.55, pct_15: 2.46, pct_20: 2.14, pct_25: 1.99 },
-        15 => StockYogoSizeRow { pct_10: 3.54, pct_15: 2.44, pct_20: 2.11, pct_25: 1.96 },
-        16 => StockYogoSizeRow { pct_10: 3.55, pct_15: 2.42, pct_20: 2.09, pct_25: 1.93 },
-        17 => StockYogoSizeRow { pct_10: 3.55, pct_15: 2.41, pct_20: 2.07, pct_25: 1.91 },
-        18 => StockYogoSizeRow { pct_10: 3.56, pct_15: 2.40, pct_20: 2.05, pct_25: 1.89 },
-        19 => StockYogoSizeRow { pct_10: 3.57, pct_15: 2.39, pct_20: 2.03, pct_25: 1.87 },
-        20 => StockYogoSizeRow { pct_10: 3.58, pct_15: 2.38, pct_20: 2.02, pct_25: 1.86 },
+        2 => StockYogoSizeRow {
+            pct_10: 7.03,
+            pct_15: 4.58,
+            pct_20: 3.95,
+            pct_25: 3.63,
+        },
+        3 => StockYogoSizeRow {
+            pct_10: 5.44,
+            pct_15: 3.81,
+            pct_20: 3.32,
+            pct_25: 3.09,
+        },
+        4 => StockYogoSizeRow {
+            pct_10: 4.72,
+            pct_15: 3.39,
+            pct_20: 2.99,
+            pct_25: 2.79,
+        },
+        5 => StockYogoSizeRow {
+            pct_10: 4.32,
+            pct_15: 3.13,
+            pct_20: 2.78,
+            pct_25: 2.60,
+        },
+        6 => StockYogoSizeRow {
+            pct_10: 4.06,
+            pct_15: 2.95,
+            pct_20: 2.63,
+            pct_25: 2.46,
+        },
+        7 => StockYogoSizeRow {
+            pct_10: 3.90,
+            pct_15: 2.83,
+            pct_20: 2.52,
+            pct_25: 2.35,
+        },
+        8 => StockYogoSizeRow {
+            pct_10: 3.78,
+            pct_15: 2.73,
+            pct_20: 2.43,
+            pct_25: 2.27,
+        },
+        9 => StockYogoSizeRow {
+            pct_10: 3.70,
+            pct_15: 2.66,
+            pct_20: 2.36,
+            pct_25: 2.20,
+        },
+        10 => StockYogoSizeRow {
+            pct_10: 3.64,
+            pct_15: 2.60,
+            pct_20: 2.30,
+            pct_25: 2.14,
+        },
+        11 => StockYogoSizeRow {
+            pct_10: 3.60,
+            pct_15: 2.55,
+            pct_20: 2.25,
+            pct_25: 2.09,
+        },
+        12 => StockYogoSizeRow {
+            pct_10: 3.58,
+            pct_15: 2.52,
+            pct_20: 2.21,
+            pct_25: 2.05,
+        },
+        13 => StockYogoSizeRow {
+            pct_10: 3.56,
+            pct_15: 2.48,
+            pct_20: 2.17,
+            pct_25: 2.02,
+        },
+        14 => StockYogoSizeRow {
+            pct_10: 3.55,
+            pct_15: 2.46,
+            pct_20: 2.14,
+            pct_25: 1.99,
+        },
+        15 => StockYogoSizeRow {
+            pct_10: 3.54,
+            pct_15: 2.44,
+            pct_20: 2.11,
+            pct_25: 1.96,
+        },
+        16 => StockYogoSizeRow {
+            pct_10: 3.55,
+            pct_15: 2.42,
+            pct_20: 2.09,
+            pct_25: 1.93,
+        },
+        17 => StockYogoSizeRow {
+            pct_10: 3.55,
+            pct_15: 2.41,
+            pct_20: 2.07,
+            pct_25: 1.91,
+        },
+        18 => StockYogoSizeRow {
+            pct_10: 3.56,
+            pct_15: 2.40,
+            pct_20: 2.05,
+            pct_25: 1.89,
+        },
+        19 => StockYogoSizeRow {
+            pct_10: 3.57,
+            pct_15: 2.39,
+            pct_20: 2.03,
+            pct_25: 1.87,
+        },
+        20 => StockYogoSizeRow {
+            pct_10: 3.58,
+            pct_15: 2.38,
+            pct_20: 2.02,
+            pct_25: 1.86,
+        },
         _ => return None,
     };
     Some(StockYogoCriticalValues { bias: None, size })
@@ -894,7 +1525,11 @@ impl IV2SLS {
             } else {
                 0.0
             };
-            let ms_resid = if df_z > 0 { ss_resid / df_z as f64 } else { 0.0 };
+            let ms_resid = if df_z > 0 {
+                ss_resid / df_z as f64
+            } else {
+                0.0
+            };
             let ms_tot = if n > 1 { ss_tot / (n - 1) as f64 } else { 0.0 };
             let r2_adj = if ms_tot > 1e-300 {
                 1.0 - ms_resid / ms_tot
@@ -910,10 +1545,9 @@ impl IV2SLS {
             let cov_gamma = sigma2 * &ztz_inv_nd;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[[i, i]].sqrt()).collect();
             let gamma_nd = gamma.as_ref().into_ndarray().to_owned();
-            let t_dist = StudentsT::new(0.0, 1.0, df_z as f64).unwrap_or(StudentsT::new(0.0, 1.0, 1.0).unwrap());
-            let t_values: Vec<f64> = (0..k_z)
-                .map(|i| gamma_nd[i] / stds[i])
-                .collect();
+            let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
+                .unwrap_or(StudentsT::new(0.0, 1.0, 1.0).unwrap());
+            let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
             let p_values: Vec<f64> = t_values
                 .iter()
                 .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
@@ -973,11 +1607,7 @@ impl IV2SLS {
 
         let (rank, cond_no) = matrix_rank(x.view().into_faer().to_owned());
         let df_residual = n - rank;
-        let df_model = if self.config.constant {
-            rank - 1
-        } else {
-            rank
-        };
+        let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
 
         let covariance_type = if self.config.cov_type.is_empty() {
@@ -994,7 +1624,8 @@ impl IV2SLS {
         let xtx_inv = xtx
             .llt(Side::Lower)
             .map_err(|_| {
-                "IV2SLS: X'X is not positive definite (stage 2). Check for collinearity.".to_string()
+                "IV2SLS: X'X is not positive definite (stage 2). Check for collinearity."
+                    .to_string()
             })?
             .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
         let betas_faer = xtx_inv.as_ref() * xty;
@@ -1046,11 +1677,7 @@ impl IV2SLS {
         let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
 
         // Stata: s² = ESS/(n-k) if small, else ESS/n. Affects VCE and robust scale.
-        let sigma2_df = if self.config.small {
-            df_residual
-        } else {
-            n
-        };
+        let sigma2_df = if self.config.small { df_residual } else { n };
 
         let cov_beta = compute_cov_beta(
             &x_nd,
@@ -1104,7 +1731,8 @@ impl IV2SLS {
                 .solve(beta_s_faer.as_ref());
             let x_nd = x.as_ref().into_ndarray();
             let wald = beta_s.dot(&x_nd);
-            let chi2_dist = ChiSquared::new(df_wald as f64).map_err(|e| format!("IV2SLS Wald: {}", e))?;
+            let chi2_dist =
+                ChiSquared::new(df_wald as f64).map_err(|e| format!("IV2SLS Wald: {}", e))?;
             let wald_p = 1.0 - chi2_dist.cdf(wald);
             (wald, wald_p)
         };
@@ -1150,9 +1778,7 @@ impl IV2SLS {
                     .into_faer()
                     .to_owned()
                     .llt(Side::Lower)
-                    .map_err(|_| {
-                        "IV2SLS Wooldridge overid: W'W not positive definite".to_string()
-                    })?
+                    .map_err(|_| "IV2SLS Wooldridge overid: W'W not positive definite".to_string())?
                     .solve(Mat::identity(wtw.nrows(), wtw.ncols()));
                 let wtw_inv_nd = wtw_inv.as_ref().into_ndarray().to_owned();
 
@@ -1178,13 +1804,15 @@ impl IV2SLS {
                     .into_faer()
                     .to_owned()
                     .llt(Side::Lower)
-                    .map_err(|_| {
-                        "IV2SLS Wooldridge overid: K'K not positive definite".to_string()
-                    })?
+                    .map_err(|_| "IV2SLS Wooldridge overid: K'K not positive definite".to_string())?
                     .solve(Mat::identity(ktk.nrows(), ktk.ncols()));
                 let theta = ktk_inv.as_ref().into_ndarray().to_owned().dot(&kt1);
                 let fitted = k_mat.dot(&theta);
-                let rss: f64 = ones.iter().zip(fitted.iter()).map(|(a, b)| (a - b).powi(2)).sum();
+                let rss: f64 = ones
+                    .iter()
+                    .zip(fitted.iter())
+                    .map(|(a, b)| (a - b).powi(2))
+                    .sum();
                 let wooldridge_stat = n as f64 - rss;
                 let wooldridge_p = 1.0 - chi2_dist.cdf(wooldridge_stat);
                 Some(OveridTest {
@@ -1241,21 +1869,22 @@ impl IV2SLS {
                 .llt(Side::Lower)
                 .ok()
                 .map(|llt| llt.solve(Mat::identity(x_struct_tx.nrows(), x_struct_tx.ncols())));
-            let (beta_ols, u_ols, sigma2_ols, xtx_struct_inv_nd) = if let Some(ref inv) = x_struct_tx_inv {
-                let inv_nd = inv.as_ref().into_ndarray().to_owned();
-                let xty_struct = x_struct.t().dot(&self.endog);
-                let beta_ols_nd = inv_nd.dot(&xty_struct);
-                let u_ols: Array1<f64> = &self.endog - &x_struct.dot(&beta_ols_nd);
-                let sigma2_ols = u_ols.dot(&u_ols) / df_residual as f64;
-                (beta_ols_nd, u_ols, sigma2_ols, inv_nd)
-            } else {
-                (
-                    Array1::<f64>::zeros(k_x),
-                    Array1::<f64>::zeros(n),
-                    0.0,
-                    Array2::<f64>::zeros((k_x, k_x)),
-                )
-            };
+            let (beta_ols, u_ols, sigma2_ols, xtx_struct_inv_nd) =
+                if let Some(ref inv) = x_struct_tx_inv {
+                    let inv_nd = inv.as_ref().into_ndarray().to_owned();
+                    let xty_struct = x_struct.t().dot(&self.endog);
+                    let beta_ols_nd = inv_nd.dot(&xty_struct);
+                    let u_ols: Array1<f64> = &self.endog - &x_struct.dot(&beta_ols_nd);
+                    let sigma2_ols = u_ols.dot(&u_ols) / df_residual as f64;
+                    (beta_ols_nd, u_ols, sigma2_ols, inv_nd)
+                } else {
+                    (
+                        Array1::<f64>::zeros(k_x),
+                        Array1::<f64>::zeros(n),
+                        0.0,
+                        Array2::<f64>::zeros((k_x, k_x)),
+                    )
+                };
 
             // Traditional Hausman (sigmamore): H = (β_iv - β_ols)'(V_iv - V_ols)^{-1}(β_iv - β_ols)
             // V_iv = σ²_ols * (X̂'X̂)^{-1}, V_ols = σ²_ols * (X_struct'X_struct)^{-1}
@@ -1294,9 +1923,7 @@ impl IV2SLS {
                     (0.0, 0)
                 };
                 let chi2_h = ChiSquared::new(h_df as f64).ok();
-                let p_val = chi2_h
-                    .map(|c| 1.0 - c.cdf(h_stat))
-                    .unwrap_or(f64::NAN);
+                let p_val = chi2_h.map(|c| 1.0 - c.cdf(h_stat)).unwrap_or(f64::NAN);
                 Some(HausmanTest {
                     stat: h_stat,
                     p_value: p_val,
@@ -1311,8 +1938,15 @@ impl IV2SLS {
             // Testing all endog: Y1 = Y, [Z Y1] = [Z endog_reg]
             let endogenous = if sigma2_ols > 1e-300 && u_ols.dot(&u_ols) > 1e-300 {
                 let p1 = k_endog;
-                let k1 = if self.config.constant { k_exog + 1 } else { k_exog };
-                let wudf_denom = n.saturating_sub(k1).saturating_sub(k_endog).saturating_sub(p1);
+                let k1 = if self.config.constant {
+                    k_exog + 1
+                } else {
+                    k_exog
+                };
+                let wudf_denom = n
+                    .saturating_sub(k1)
+                    .saturating_sub(k_endog)
+                    .saturating_sub(p1);
 
                 // Build [Z Y1] = [Z, endog_reg] = [exog, instruments, endog_reg] with constant
                 let mut zy1_raw = Vec::with_capacity(n * (k_z + k_endog));

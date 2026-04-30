@@ -182,7 +182,7 @@ impl PinDefinition {
         self.meta_data.widget_options = Some(options);
         self
     }
-    
+
     pub fn get_type_var_key(&self) -> Option<TypeVarKey> {
         // Extract TypeVarKey from PinDataTypeDefinition if it's a TypeVar
         if let Some(data_type) = &self.data_type {

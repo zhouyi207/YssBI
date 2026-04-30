@@ -20,5 +20,5 @@ pub use spec::{
 };
 pub use types::{Expr, HypothesisExpr, ParamId};
 pub use validator::{
-    validate_hypothesis, validate_hypotheses, ConstraintDirection, ValidationError,
+    validate_hypotheses, validate_hypothesis, ConstraintDirection, ValidationError,
 };

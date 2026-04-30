@@ -19,7 +19,7 @@ fn create_test_registry() -> Arc<NodeRegistry> {
 #[test]
 fn test_complex_node_graph() {
     // 综合测试：sequence + branch + add + equal + print 节点的组合
-    // 
+    //
     // 图结构：
     // sequence1 (3 个输出)
     //   ├─ Step 0 -> sequence2 (3 个输出)
@@ -34,7 +34,11 @@ fn test_complex_node_graph() {
     //                └─ False -> print("Branch2-False")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphInstance::new("Complex Test Graph", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new(
+        "Complex Test Graph",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
 
     println!("\n=== Creating Nodes ===");
 
@@ -360,15 +364,13 @@ fn test_complex_node_graph() {
 
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
-    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
     let mut executor = common::executor_for_test(runtime);
     let result = executor.start(seq1_node);
 
-    assert!(
-        result.is_ok(),
-        "Executor failed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Executor failed: {:?}", result.err());
 
     println!("\n=== Execution Logs ===");
     for log in executor.logs() {
@@ -387,7 +389,7 @@ fn test_complex_node_graph() {
 #[test]
 fn test_nested_sequence_tree() {
     // 测试嵌套的 sequence 树形结构
-    // 
+    //
     // 图结构：
     // root_sequence (3 个输出)
     //   ├─ Step 0 -> seq_1_0 (3 个输出)
@@ -431,10 +433,14 @@ fn test_nested_sequence_tree() {
     //                             └─ Step 2 -> print("Position: 1-2, 2-8, Step-2")
 
     let registry = create_test_registry();
-    let graph = Arc::new(GraphInstance::new("Nested Sequence Tree Test", yssbi_lib::graph::GraphKind::Event, registry.clone()));
+    let graph = Arc::new(GraphInstance::new(
+        "Nested Sequence Tree Test",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
 
     println!("\n=== Creating Root Sequence Node ===");
-    
+
     // 创建根 sequence 节点
     let root_seq = graph
         .create_node("Control Flow:Sequence")
@@ -442,7 +448,7 @@ fn test_nested_sequence_tree() {
     println!("Created root sequence node");
 
     println!("\n=== Creating Level 1 Sequence Nodes (3 nodes) ===");
-    
+
     // 创建第一层的 3 个 sequence 节点
     let mut level1_nodes = Vec::new();
     for i in 0..3 {
@@ -454,7 +460,7 @@ fn test_nested_sequence_tree() {
     }
 
     println!("\n=== Creating Level 2 Sequence Nodes (9 nodes) ===");
-    
+
     // 创建第二层的 9 个 sequence 节点
     let mut level2_nodes = Vec::new();
     for i in 0..9 {
@@ -466,7 +472,7 @@ fn test_nested_sequence_tree() {
     }
 
     println!("\n=== Creating Print Nodes (27 nodes) ===");
-    
+
     // 创建 27 个 print 节点（每个 level2 sequence 有 3 个输出）
     let mut print_nodes = Vec::new();
     for i in 0..27 {
@@ -478,15 +484,18 @@ fn test_nested_sequence_tree() {
     println!("Created 27 print nodes");
 
     println!("\n=== Setting Print Messages ===");
-    
+
     // 设置 print 节点的消息
     for (idx, print_node) in print_nodes.iter().enumerate() {
-        let level1_idx = idx / 9;  // 0, 1, 2
-        let level2_idx = idx / 3;  // 0-8
-        let step_idx = idx % 3;    // 0, 1, 2
-        
-        let message = format!("Position: 1-{}, 2-{}, Step-{}", level1_idx, level2_idx, step_idx);
-        
+        let level1_idx = idx / 9; // 0, 1, 2
+        let level2_idx = idx / 3; // 0-8
+        let step_idx = idx % 3; // 0, 1, 2
+
+        let message = format!(
+            "Position: 1-{}, 2-{}, Step-{}",
+            level1_idx, level2_idx, step_idx
+        );
+
         let pins = graph.get_pin_instances_by_node_id(*print_node);
         let message_pin = pins
             .iter()
@@ -500,7 +509,7 @@ fn test_nested_sequence_tree() {
     println!("Set all 27 print messages");
 
     println!("\n=== Connecting Root Sequence to Level 1 Sequences ===");
-    
+
     // 连接 root sequence 到 level1 sequences
     let root_pins = graph.get_pin_instances_by_node_id(root_seq);
     for i in 0..3 {
@@ -508,13 +517,13 @@ fn test_nested_sequence_tree() {
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(i)))
             .expect(&format!("Root step {} not found", i));
-        
+
         let level1_pins = graph.get_pin_instances_by_node_id(level1_nodes[i]);
         let level1_exec_in = level1_pins
             .iter()
             .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
             .expect(&format!("Level1 node {} exec in not found", i));
-        
+
         graph
             .connect(root_step.id, level1_exec_in.id)
             .expect(&format!("Failed to connect root to level1 node {}", i));
@@ -522,53 +531,62 @@ fn test_nested_sequence_tree() {
     }
 
     println!("\n=== Connecting Level 1 Sequences to Level 2 Sequences ===");
-    
+
     // 连接 level1 sequences 到 level2 sequences
     for i in 0..3 {
         let level1_pins = graph.get_pin_instances_by_node_id(level1_nodes[i]);
-        
+
         for j in 0..3 {
             let level1_step = level1_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(j)))
                 .expect(&format!("Level1[{}] step {} not found", i, j));
-            
+
             let level2_idx = i * 3 + j;
             let level2_pins = graph.get_pin_instances_by_node_id(level2_nodes[level2_idx]);
             let level2_exec_in = level2_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
                 .expect(&format!("Level2 node {} exec in not found", level2_idx));
-            
+
             graph
                 .connect(level1_step.id, level2_exec_in.id)
-                .expect(&format!("Failed to connect level1[{}] to level2[{}]", i, level2_idx));
-            println!("Connected: Level1[{}].Step{} -> Level2[{}].In", i, j, level2_idx);
+                .expect(&format!(
+                    "Failed to connect level1[{}] to level2[{}]",
+                    i, level2_idx
+                ));
+            println!(
+                "Connected: Level1[{}].Step{} -> Level2[{}].In",
+                i, j, level2_idx
+            );
         }
     }
 
     println!("\n=== Connecting Level 2 Sequences to Print Nodes ===");
-    
+
     // 连接 level2 sequences 到 print 节点
     for i in 0..9 {
         let level2_pins = graph.get_pin_instances_by_node_id(level2_nodes[i]);
-        
+
         for j in 0..3 {
             let level2_step = level2_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::Steps(j)))
                 .expect(&format!("Level2[{}] step {} not found", i, j));
-            
+
             let print_idx = i * 3 + j;
             let print_pins = graph.get_pin_instances_by_node_id(print_nodes[print_idx]);
             let print_exec_in = print_pins
                 .iter()
                 .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
                 .expect(&format!("Print node {} exec in not found", print_idx));
-            
+
             graph
                 .connect(level2_step.id, print_exec_in.id)
-                .expect(&format!("Failed to connect level2[{}] to print[{}]", i, print_idx));
+                .expect(&format!(
+                    "Failed to connect level2[{}] to print[{}]",
+                    i, print_idx
+                ));
             println!("Connected: Level2[{}].Step{} -> Print[{}]", i, j, print_idx);
         }
     }
@@ -577,15 +595,13 @@ fn test_nested_sequence_tree() {
 
     // 使用 Executor 执行整个图
     use yssbi_lib::graph::core::GraphRuntime;
-    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
     let mut executor = common::executor_for_test(runtime);
     let result = executor.start(root_seq);
 
-    assert!(
-        result.is_ok(),
-        "Executor failed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "Executor failed: {:?}", result.err());
 
     println!("\n=== Execution Logs ===");
     for log in executor.logs() {

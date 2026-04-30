@@ -2,14 +2,14 @@
 //!
 //! 对应 Stata dfuller y, lags(p) regress noconstant drift trend
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
-use crate::graph::value::{DataValue, DataType};
+use crate::graph::value::{DataType, DataValue};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::ts::unit_root::{adf_test, AdfRegression};
@@ -103,8 +103,8 @@ pub fn register(registry: &NodeRegistry) {
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_df_adf(ctx)?;
 
-        let json_data =
-            serde_json::to_string(&result).map_err(|e| format!("DF & ADF: serialize failed: {}", e))?;
+        let json_data = serde_json::to_string(&result)
+            .map_err(|e| format!("DF & ADF: serialize failed: {}", e))?;
 
         let result_handle_id = ctx.put_handle(Box::new(result.clone()));
         ctx.emit_output_by_role(
@@ -142,8 +142,8 @@ pub fn register(registry: &NodeRegistry) {
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_df_adf_summary(ctx)?;
 
-        let json_data =
-            serde_json::to_string(&result).map_err(|e| format!("DF & ADF Summary: serialize failed: {}", e))?;
+        let json_data = serde_json::to_string(&result)
+            .map_err(|e| format!("DF & ADF Summary: serialize failed: {}", e))?;
 
         let result_handle_id = ctx.put_handle(Box::new(result.clone()));
         ctx.emit_output_by_role(
@@ -318,7 +318,9 @@ fn max_lags_stata(t: usize) -> usize {
     (12.0 * (t_f / 100.0).powf(0.25)).floor() as usize
 }
 
-fn run_df_adf_summary(ctx: &mut dyn NodeExecutionContextTrait) -> Result<DFADFSummaryListResult, String> {
+fn run_df_adf_summary(
+    ctx: &mut dyn NodeExecutionContextTrait,
+) -> Result<DFADFSummaryListResult, String> {
     let y_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("y".to_string())))?;
     let dsv = match &y_value {
         DataValue::DataSeries(s) => s.clone(),
@@ -357,7 +359,10 @@ fn run_df_adf_summary(ctx: &mut dyn NodeExecutionContextTrait) -> Result<DFADFSu
                 }
                 Err(e) => {
                     // 某些 lags 可能因样本不足失败，跳过
-                    ctx.log(format!("DF & ADF Summary: skip constant={} trend={} lags={}: {}", constant, trend, lags, e));
+                    ctx.log(format!(
+                        "DF & ADF Summary: skip constant={} trend={} lags={}: {}",
+                        constant, trend, lags, e
+                    ));
                 }
             }
         }

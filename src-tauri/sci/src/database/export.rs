@@ -6,7 +6,8 @@ pub fn export_dataframe(df: &mut DataFrame, path: &str, format: &str) -> Result<
     let p = Path::new(path);
 
     if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
     match format.to_lowercase().as_str() {

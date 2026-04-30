@@ -23,6 +23,7 @@ interface ProjectIOStore {
   loadProject(): Promise<void>;
   loadProjectFromData(project: ProjectData, path: string | null): void;
   syncFromBackend(): Promise<ProjectData | null>;
+  loadGraph(graphId: string): Promise<boolean>;
   exportSnapshot(): ProjectData;
 }
 
@@ -166,37 +167,59 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     try {
       const path = await ProjectService.getProjectPath();
 
-      // 分阶段加载：先 databases + variables，再 graphs（根据前者校验引用）
+      // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
       const { databases, variables } = await ProjectService.getDatabasesVariables();
       useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
       useDatabaseStore.getState().setDatabases(normalizeDatabases(databases as Record<string, DatabaseRecord>));
 
-      const { graphs, invalidReferences } = await ProjectService.getProjectGraphs();
-      const graphMap = Object.fromEntries(
-        Object.entries(graphs).map(([id, dto]) => [id, toFrontendGraph(dto)])
+      const index = await ProjectService.getProjectIndex();
+      const graphMetaMap = Object.fromEntries(
+        index.graphs.map((graph) => [
+          graph.id,
+          { id: graph.id, name: graph.name, type: graph.type },
+        ])
       );
-      useGraphMetaStore.getState().setGraphs(toGraphMetaMap(graphMap));
-      useGraphDataStore.getState().hydrateGraphs(graphMap);
+      useGraphMetaStore.getState().setGraphs(graphMetaMap);
+      useGraphDataStore.getState().hydrateGraphs({});
       useHistoryStore.getState().clear();
 
-      const invalidCount = Object.values(invalidReferences).reduce((s, arr) => s + arr.length, 0);
-      if (invalidCount > 0) {
-        logger.sys.warn(`发现无效引用: ${JSON.stringify(invalidReferences)}, 共 ${invalidCount} 处`, 'ProjectIOStore');
-      }
-
       set({ status: LoadStatus.Ready, currentPath: path });
-      logger.sys.debug('Synced from backend (staged load)', 'ProjectIOStore');
+      logger.sys.debug('Synced from backend (project index load)', 'ProjectIOStore');
       return {
         variables,
         databases,
-        graphs: graphMap,
-        metadata: { exportTime: '', appVersion: '' },
+        graphs: {},
+        metadata: { exportTime: index.exportTime, appVersion: index.appVersion },
       } as ProjectData;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       set({ status: LoadStatus.Error, error: errorMessage });
       logger.sys.error('Failed to sync: ' + errorMessage, 'ProjectIOStore');
       return null;
+    }
+  },
+
+  loadGraph: async (graphId) => {
+    const dataStore = useGraphDataStore.getState();
+    if (dataStore.graphNodes[graphId]) return true;
+    try {
+      const { graph, variables } = await ProjectService.loadProjectGraph(graphId);
+      const frontendGraph = toFrontendGraph(graph);
+      useVariableStore.getState().setVariables({
+        ...useVariableStore.getState().variables,
+        ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
+      });
+      useGraphMetaStore.getState().updateGraph(graphId, {
+        name: frontendGraph.name,
+        type: frontendGraph.type,
+      });
+      useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.sys.error('Failed to load graph: ' + errorMessage, 'ProjectIOStore');
+      set({ error: errorMessage });
+      return false;
     }
   },
 

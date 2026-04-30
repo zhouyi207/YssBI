@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useProjectIOStore } from "@/features/core/dataStore";
-import { ProjectService } from "@/services/project/projectService";
+import { ProjectService, type ProjectRecordRow } from "@/services/project/projectService";
 
 const RECENT_PROJECTS_STORAGE_KEY = "yssbi-recent-projects";
 
@@ -18,7 +18,12 @@ type BusyState = "idle" | "new" | "open";
 
 function pathFileName(path: string): string {
   const normalized = path.replace(/\\/g, "/");
-  const file = normalized.split("/").filter(Boolean).pop() ?? path;
+  const parts = normalized.split("/").filter(Boolean);
+  const file = parts.length > 0 ? parts[parts.length - 1] : path;
+  if (file.toLowerCase() === "metadata.yssbi") {
+    const parent = parts.length > 1 ? parts[parts.length - 2] : undefined;
+    return parent || file.replace(/\.[^.]+$/, "") || file;
+  }
   return file.replace(/\.[^.]+$/, "") || file;
 }
 
@@ -36,26 +41,19 @@ function readRecentProjects(): ManagedProject[] {
   }
 }
 
-function writeRecentProjects(projects: ManagedProject[]): void {
+function clearLegacyRecentProjects(): void {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(RECENT_PROJECTS_STORAGE_KEY, JSON.stringify(projects.slice(0, 40)));
+  localStorage.removeItem(RECENT_PROJECTS_STORAGE_KEY);
 }
 
-function upsertRecentProject(path: string): ManagedProject[] {
-  const trimmedPath = path.trim();
-  const now = new Date().toISOString();
-  const previous = readRecentProjects();
-  const existing = previous.find((project) => project.path === trimmedPath);
-  const nextProject: ManagedProject = {
-    id: trimmedPath,
-    name: existing?.name ?? pathFileName(trimmedPath),
-    path: trimmedPath,
-    lastOpenedAt: now,
-    isFavorite: existing?.isFavorite ?? false,
+function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
+  return {
+    id: row.id,
+    name: row.name,
+    path: row.path,
+    lastOpenedAt: row.lastOpenedAt ?? row.createdAt,
+    isFavorite: row.isFavorite,
   };
-  const next = [nextProject, ...previous.filter((project) => project.path !== trimmedPath)];
-  writeRecentProjects(next);
-  return next;
 }
 
 export function useProjectPicker() {
@@ -65,29 +63,65 @@ export function useProjectPicker() {
   const [projects, setProjects] = useState<ManagedProject[]>([]);
   const [busy, setBusy] = useState<BusyState>("idle");
 
-  const refresh = useCallback(() => {
-    setProjects(readRecentProjects());
+  const refresh = useCallback(async () => {
+    try {
+      const rows = await ProjectService.listRegisteredProjects();
+      setProjects(rows.map(rowToManagedProject));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
   }, []);
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    (async () => {
+      const legacyProjects = readRecentProjects();
+      if (legacyProjects.length > 0) {
+        try {
+          await ProjectService.migrateLegacyRegisteredProjects(legacyProjects);
+          clearLegacyRecentProjects();
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (!cancelled) {
+        await refresh();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   useEffect(() => {
     if (!currentPath) return;
-    setProjects(upsertRecentProject(currentPath));
-  }, [currentPath]);
+    void (async () => {
+      try {
+        const row = await ProjectService.registerProject(pathFileName(currentPath), currentPath);
+        setProjects((previous) => [
+          rowToManagedProject(row),
+          ...previous.filter((project) => project.id !== row.id),
+        ]);
+      } catch {
+        await refresh();
+      }
+    })();
+  }, [currentPath, refresh]);
 
   const currentProjectId = useMemo(
     () => projects.find((project) => project.path === currentPath)?.id ?? null,
     [currentPath, projects],
   );
 
-  const createProject = useCallback(async () => {
+  const createProject = useCallback(async (name: string, path: string) => {
     setBusy("new");
     try {
-      await ProjectService.newProject();
+      const row = await ProjectService.createProject(name, path);
       await syncFromBackend();
+      setProjects((previous) => [
+        rowToManagedProject(row),
+        ...previous.filter((project) => project.id !== row.id),
+      ]);
       navigate("/editor");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -101,8 +135,12 @@ export function useProjectPicker() {
     try {
       const result = await ProjectService.loadProjectToState();
       if (!result) return;
+      const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
       await syncFromBackend();
-      setProjects(upsertRecentProject(result.path));
+      setProjects((previous) => [
+        rowToManagedProject(row),
+        ...previous.filter((project) => project.id !== row.id),
+      ]);
       navigate("/editor");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -116,8 +154,12 @@ export function useProjectPicker() {
     try {
       const result = await ProjectService.loadProjectToState(path);
       if (!result) return;
+      const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
       await syncFromBackend();
-      setProjects(upsertRecentProject(result.path));
+      setProjects((previous) => [
+        rowToManagedProject(row),
+        ...previous.filter((project) => project.id !== row.id),
+      ]);
       navigate("/editor");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -127,17 +169,29 @@ export function useProjectPicker() {
   }, [navigate, syncFromBackend]);
 
   const removeProject = useCallback((id: string) => {
-    const next = readRecentProjects().filter((project) => project.id !== id);
-    writeRecentProjects(next);
-    setProjects(next);
+    void (async () => {
+      try {
+        await ProjectService.removeRegisteredProject(id);
+        setProjects((previous) => previous.filter((project) => project.id !== id));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    })();
   }, []);
 
   const toggleFavorite = useCallback((id: string) => {
-    const next = readRecentProjects().map((project) =>
-      project.id === id ? { ...project, isFavorite: !project.isFavorite } : project,
-    );
-    writeRecentProjects(next);
-    setProjects(next);
+    void (async () => {
+      try {
+        const isFavorite = await ProjectService.toggleRegisteredProjectFavorite(id);
+        setProjects((previous) =>
+          previous.map((project) =>
+            project.id === id ? { ...project, isFavorite } : project,
+          ),
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    })();
   }, []);
 
   return {

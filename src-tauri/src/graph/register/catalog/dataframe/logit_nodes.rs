@@ -1,7 +1,7 @@
 //! Logit (binary logistic regression) nodes
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::discrete::{Logit, LogitConfig};
 
-use super::info_nodes::{compute_classification_table, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult};
+use super::info_nodes::{
+    compute_classification_table, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult,
+};
 use super::ols_nodes::VariableSpec;
 
 // ======================== 结构体 ========================
@@ -56,11 +58,9 @@ fn logit_input_slots() -> Vec<PinSlot> {
         PinSlot::fixed(PinDefinition::data_input(
             "Y",
             DataRole::Custom("y".to_string()),
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Int64,
-                DataType::Boolean,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Int64, DataType::Boolean],
+            )))),
         )),
         PinSlot::repeatable(
             PinDefinition::data_input(
@@ -76,10 +76,9 @@ fn logit_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -129,19 +128,20 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
         .map_err(|e| format!("Logit: cannot cast Y to Float64: {}", e))?;
 
     // ---- Get config ----
-    let config = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("logit_config".to_string()))) {
-        Ok(config_value) => match config_value.as_handle_id() {
-            Some(id) => {
-                let handle = ctx.get_handle(&id.to_string())?;
-                handle
-                    .downcast_ref::<LogitConfigure>()
-                    .ok_or("Logit: config handle is not a LogitConfigure")?
-                    .clone()
-            }
-            None => LogitConfigure::default(),
-        },
-        Err(_) => LogitConfigure::default(),
-    };
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("logit_config".to_string()))) {
+            Ok(config_value) => match config_value.as_handle_id() {
+                Some(id) => {
+                    let handle = ctx.get_handle(&id.to_string())?;
+                    handle
+                        .downcast_ref::<LogitConfigure>()
+                        .ok_or("Logit: config handle is not a LogitConfigure")?
+                        .clone()
+                }
+                None => LogitConfigure::default(),
+            },
+            Err(_) => LogitConfigure::default(),
+        };
     let has_constant = config.constant;
 
     // ---- Extract exog (same as OLS) ----
@@ -151,23 +151,25 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
         return Err("Logit: at least one X input is required".to_string());
     }
 
-    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
-        Ok(DataValue::DataSeries(v)) => {
-            let ts = ctx.get_series(&v.id)?;
-            if ts.len() != endog_f64_series.len() {
-                return Err(format!(
-                    "Logit: Time has {} observations, expected {}",
-                    ts.len(),
-                    endog_f64_series.len()
-                ));
+    let time_series =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+            Ok(DataValue::DataSeries(v)) => {
+                let ts = ctx.get_series(&v.id)?;
+                if ts.len() != endog_f64_series.len() {
+                    return Err(format!(
+                        "Logit: Time has {} observations, expected {}",
+                        ts.len(),
+                        endog_f64_series.len()
+                    ));
+                }
+                Some(ts)
             }
-            Some(ts)
-        }
-        _ => None,
-    };
+            _ => None,
+        };
 
     let n_raw = endog_f64_series.len();
-    let mut df_cols: Vec<Column> = vec![Column::from(endog_f64_series.with_name("__endog__".into()))];
+    let mut df_cols: Vec<Column> =
+        vec![Column::from(endog_f64_series.with_name("__endog__".into()))];
     if let Some(ref ts) = time_series {
         df_cols.push(Column::from(ts.clone().with_name("__time__".into())));
     }
@@ -207,7 +209,9 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("Logit: cannot cast X {} to Float64: {}", i, e))?
         };
-        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        df_cols.push(Column::from(
+            col_series.with_name(series_name.as_str().into()),
+        ));
         exog_meta.push((series_name, is_categorical, dsv));
     }
     let df = DataFrame::new(n_raw, df_cols)
@@ -245,11 +249,18 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
     let mut variable_specs: Vec<VariableSpec> = Vec::new();
 
     for (series_name, is_categorical, dsv) in exog_meta {
-        let col = df.column(&series_name).map_err(|e| format!("Logit: {}", e))?;
+        let col = df
+            .column(&series_name)
+            .map_err(|e| format!("Logit: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("Logit: X '{}': {}", series_name, e))?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e| format!("Logit: X '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
                 if !unique_ordered.contains(v) {
@@ -289,7 +300,10 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
             for cat in &categories_to_include {
-                let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                let col: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
@@ -311,9 +325,7 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
                 .collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
-            variable_specs.push(VariableSpec::Numeric {
-                name: series_name,
-            });
+            variable_specs.push(VariableSpec::Numeric { name: series_name });
         }
     }
 
@@ -356,7 +368,12 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
     // Fitted = probabilities
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            let eta: f64 = exog.row(i).iter().zip(result.betas.iter()).map(|(x, b)| x * b).sum();
+            let eta: f64 = exog
+                .row(i)
+                .iter()
+                .zip(result.betas.iter())
+                .map(|(x, b)| x * b)
+                .sum();
             1.0 / (1.0 + (-eta).exp())
         })
         .collect();
@@ -390,11 +407,8 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
     let df_residual = n - k;
     let df_total = n;
 
-    let classification_table = compute_classification_table(
-        endog.as_slice().unwrap_or(&[]),
-        &fitted_values,
-        0.5,
-    );
+    let classification_table =
+        compute_classification_table(endog.as_slice().unwrap_or(&[]), &fitted_values, 0.5);
 
     // exog_means for margins at means; exog for average marginal effects
     let exog_means: Vec<f64> = (0..k)
@@ -548,47 +562,54 @@ fn register_logit(registry: &NodeRegistry) {
         DataRole::Custom("logit_residuals".to_string()),
         PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
-    let definition = NodeDefinition::new(
-        "Logit",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Binary logistic regression (IRLS) — outputs fitted model for prediction")
-    .with_pin_slots(slots)
-    .with_flow_processor(Arc::new(|ctx| {
-        let fit = run_logit_regression(ctx)?;
+    let definition =
+        NodeDefinition::new("Logit", vec!["Data".to_string(), "Statistics".to_string()])
+            .with_ui_style("dataframe")
+            .with_description(
+                "Binary logistic regression (IRLS) — outputs fitted model for prediction",
+            )
+            .with_pin_slots(slots)
+            .with_flow_processor(Arc::new(|ctx| {
+                let fit = run_logit_regression(ctx)?;
 
-        let model_handle_id = ctx.put_handle(Box::new(fit.logit_model));
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("logit_model".to_string())),
-            DataValue::new_struct("LogitModel", model_handle_id),
-        )?;
+                let model_handle_id = ctx.put_handle(Box::new(fit.logit_model));
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Custom("logit_model".to_string())),
+                    DataValue::new_struct("LogitModel", model_handle_id),
+                )?;
 
-        let fitted_series = Series::from_iter(
-            fit.logit_result.diagnostic_info.fitted_values.into_iter(),
-        )
-        .with_name("fitted".into());
-        let fitted_id = ctx.put_series(fitted_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("logit_fitted".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
-        )?;
+                let fitted_series =
+                    Series::from_iter(fit.logit_result.diagnostic_info.fitted_values.into_iter())
+                        .with_name("fitted".into());
+                let fitted_id = ctx.put_series(fitted_series)?;
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Custom("logit_fitted".to_string())),
+                    DataValue::DataSeries(DataSeriesValue::with_element_type(
+                        fitted_id,
+                        DataType::Float64,
+                    )),
+                )?;
 
-        let residuals_series = Series::from_iter(
-            fit.logit_result.diagnostic_info.residuals.into_iter(),
-        )
-        .with_name("residuals".into());
-        let residuals_id = ctx.put_series(residuals_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("logit_residuals".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(residuals_id, DataType::Float64)),
-        )?;
+                let residuals_series =
+                    Series::from_iter(fit.logit_result.diagnostic_info.residuals.into_iter())
+                        .with_name("residuals".into());
+                let residuals_id = ctx.put_series(residuals_series)?;
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Custom("logit_residuals".to_string())),
+                    DataValue::DataSeries(DataSeriesValue::with_element_type(
+                        residuals_id,
+                        DataType::Float64,
+                    )),
+                )?;
 
-        ctx.log("Logit: regression completed".to_string());
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
+                ctx.log("Logit: regression completed".to_string());
+                Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+            }));
     registry.register(definition);
 }
 
@@ -599,7 +620,10 @@ fn register_logit_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "Logit Summary",

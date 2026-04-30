@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
+import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -12,7 +12,7 @@ import { logger } from '@/utils/appLogger';
  * Project Operations Hook
  * Handles save, load, and execute operations
  */
-export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void) {
+export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void | Promise<void>) {
   const currentPath = useProjectIOStore((s) => s.currentPath);
   const setCurrentPath = useProjectIOStore((s) => s.setCurrentPath);
 
@@ -68,8 +68,9 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         });
       }
 
-      const first = Object.values(projectData.graphs)[0] as any;
-      if (first) openGraph(first.id, first.name, first.type as any, first);
+      const firstId = useGraphMetaStore.getState().graphOrder[0];
+      const first = firstId ? useGraphMetaStore.getState().graphs[firstId] : null;
+      if (first) void openGraph(first.id, first.name, first.type);
 
       uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {

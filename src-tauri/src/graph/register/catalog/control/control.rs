@@ -2,7 +2,9 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDefinition, PinRole, PinDataTypeDefinition, PinSlot};
+use crate::graph::pin::{
+    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use std::sync::Arc;
@@ -19,8 +21,12 @@ fn register_if_else(registry: &NodeRegistry) {
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(
-                PinDefinition::data_input("Condition", DataRole::Condition, PinDataTypeDefinition::concrete(DataType::Boolean))
-                    .with_optional(true),
+                PinDefinition::data_input(
+                    "Condition",
+                    DataRole::Condition,
+                    PinDataTypeDefinition::concrete(DataType::Boolean),
+                )
+                .with_optional(true),
             ),
             PinSlot::fixed(PinDefinition::exec_output("True", ExecRole::ExecTrue)),
             PinSlot::fixed(PinDefinition::exec_output("False", ExecRole::ExecFalse)),

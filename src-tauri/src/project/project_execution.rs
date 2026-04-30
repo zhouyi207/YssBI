@@ -1,4 +1,4 @@
-use crate::execution::{ChannelEventEmitter, Executor, ExecutionEvent, WindowDataStore};
+use crate::execution::{ChannelEventEmitter, ExecutionEvent, Executor, WindowDataStore};
 use crate::graph::{GraphId, GraphKind};
 use crate::log::LogLevel;
 use crate::log_exec;

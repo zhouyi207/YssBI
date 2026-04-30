@@ -6,7 +6,7 @@
 
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLSConfig, OLS};
+use crate::regression::linear_model::{OLS, OLSConfig};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
 use faer::{Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -50,14 +50,22 @@ fn compute_fe_stats(
         entry.1 += 1;
     }
 
-    let mut eids: Vec<usize> = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut eids: Vec<usize> = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     eids.sort_unstable();
     let mut y_bar = Vec::with_capacity(n_entities);
     let mut x_bar = Vec::with_capacity(n_entities);
     let mut obs_per_entity = Vec::with_capacity(n_entities);
     for &eid in &eids {
         let (sy, cy) = sums_y.get(&eid).copied().unwrap_or((0.0, 0));
-        let (sx, cx) = sums_x.get(&eid).cloned().unwrap_or_else(|| (vec![0.0; k], 0));
+        let (sx, cx) = sums_x
+            .get(&eid)
+            .cloned()
+            .unwrap_or_else(|| (vec![0.0; k], 0));
         y_bar.push(if cy > 0 { sy / cy as f64 } else { 0.0 });
         x_bar.push(if cx > 0 {
             sx.iter().map(|v| v / cx as f64).collect()
@@ -80,12 +88,20 @@ fn compute_fe_stats(
             xb_entity.iter().sum::<f64>() / n_entities as f64,
             y_bar.iter().sum::<f64>() / n_entities as f64,
         );
-        let cov = xb_entity.iter().zip(y_bar.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_entity
+            .iter()
+            .zip(y_bar.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n_entities as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
-            xb_entity.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_entities as f64 - 1.0).max(1.0),
-            y_bar.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_entities as f64 - 1.0).max(1.0),
+            xb_entity
+                .iter()
+                .map(|xb| (xb - xb_mean).powi(2))
+                .sum::<f64>()
+                / (n_entities as f64 - 1.0).max(1.0),
+            y_bar.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>()
+                / (n_entities as f64 - 1.0).max(1.0),
         );
         if (var_xb * var_y).sqrt() > 1e-300 {
             (cov / (var_xb * var_y).sqrt()).powi(2).clamp(0.0, 1.0)
@@ -97,19 +113,29 @@ fn compute_fe_stats(
     // R2 Overall = corr(x_it β̂, y_it)² (Stata: correlation squared)
     let n_total = endog.len();
     let xb_obs: Vec<f64> = (0..n_total)
-        .map(|i| const_coef + (0..k_vars).map(|c| exog[[i, c + 1]] * betas[c]).sum::<f64>())
+        .map(|i| {
+            const_coef
+                + (0..k_vars)
+                    .map(|c| exog[[i, c + 1]] * betas[c])
+                    .sum::<f64>()
+        })
         .collect();
     let r2_overall = {
         let (xb_mean, y_mean) = (
             xb_obs.iter().sum::<f64>() / n_total as f64,
             endog.iter().sum::<f64>() / n_total as f64,
         );
-        let cov = xb_obs.iter().zip(endog.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_obs
+            .iter()
+            .zip(endog.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n_total as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
-            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
-            endog.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
+            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
+            endog.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
         );
         if (var_xb * var_y).sqrt() > 1e-300 {
             (cov / (var_xb * var_y).sqrt()).powi(2).clamp(0.0, 1.0)
@@ -123,11 +149,10 @@ fn compute_fe_stats(
     let sigma_e = (ss_residual / df_sigma_e as f64).max(0.0).sqrt();
 
     // u_i = ȳ_i - ̂α - x̄_i'β̂ (Stata formula)
-    let u_i: Vec<f64> = (0..n_entities)
-        .map(|i| y_bar[i] - xb_entity[i])
-        .collect();
+    let u_i: Vec<f64> = (0..n_entities).map(|i| y_bar[i] - xb_entity[i]).collect();
     let u_mean = u_i.iter().sum::<f64>() / n_entities as f64;
-    let u_var = u_i.iter().map(|u| (u - u_mean).powi(2)).sum::<f64>() / (n_entities as f64 - 1.0).max(1.0);
+    let u_var =
+        u_i.iter().map(|u| (u - u_mean).powi(2)).sum::<f64>() / (n_entities as f64 - 1.0).max(1.0);
     let sigma_u = u_var.max(0.0).sqrt();
 
     let rho = {
@@ -141,19 +166,26 @@ fn compute_fe_stats(
     };
 
     // corr(u_i, Xb): Stata e(corr) = corr(u_i, x_it β) at observation level
-    let eid_to_idx: HashMap<usize, usize> = eids.iter().enumerate().map(|(i, &eid)| (eid, i)).collect();
-    let u_expanded: Vec<f64> = entity_id.iter()
-        .map(|&eid| u_i[eid_to_idx[&eid]])
-        .collect();
+    let eid_to_idx: HashMap<usize, usize> =
+        eids.iter().enumerate().map(|(i, &eid)| (eid, i)).collect();
+    let u_expanded: Vec<f64> = entity_id.iter().map(|&eid| u_i[eid_to_idx[&eid]]).collect();
     let corr_u_i_xb = {
         let u_exp_mean = u_expanded.iter().sum::<f64>() / n_total as f64;
         let xb_mean = xb_obs.iter().sum::<f64>() / n_total as f64;
-        let cov = u_expanded.iter().zip(xb_obs.iter())
-            .map(|(u, xb)| (u - u_exp_mean) * (xb - xb_mean)).sum::<f64>()
+        let cov = u_expanded
+            .iter()
+            .zip(xb_obs.iter())
+            .map(|(u, xb)| (u - u_exp_mean) * (xb - xb_mean))
+            .sum::<f64>()
             / (n_total as f64 - 1.0).max(1.0);
         let (var_u, var_xb) = (
-            u_expanded.iter().map(|u| (u - u_exp_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
-            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
+            u_expanded
+                .iter()
+                .map(|u| (u - u_exp_mean).powi(2))
+                .sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
+            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
         );
         if (var_u * var_xb).sqrt() > 1e-300 {
             (cov / (var_u * var_xb).sqrt()).clamp(-1.0, 1.0)
@@ -163,9 +195,21 @@ fn compute_fe_stats(
     };
 
     Ok(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        r2: Some(super::PanelR2Stats {
+            r2_within,
+            r2_between,
+            r2_overall,
+        }),
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb,
         theta: None,
     })
@@ -209,14 +253,22 @@ fn compute_fe_stats_time(
         entry.1 += 1;
     }
 
-    let mut tids: Vec<usize> = time_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut tids: Vec<usize> = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     tids.sort_unstable();
     let mut y_bar = Vec::with_capacity(n_times);
     let mut x_bar = Vec::with_capacity(n_times);
     let mut obs_per_time = Vec::with_capacity(n_times);
     for &tid in &tids {
         let (sy, cy) = sums_y.get(&tid).copied().unwrap_or((0.0, 0));
-        let (sx, cx) = sums_x.get(&tid).cloned().unwrap_or_else(|| (vec![0.0; k], 0));
+        let (sx, cx) = sums_x
+            .get(&tid)
+            .cloned()
+            .unwrap_or_else(|| (vec![0.0; k], 0));
         y_bar.push(if cy > 0 { sy / cy as f64 } else { 0.0 });
         x_bar.push(if cx > 0 {
             sx.iter().map(|v| v / cx as f64).collect()
@@ -239,12 +291,17 @@ fn compute_fe_stats_time(
             xb_time.iter().sum::<f64>() / n_times as f64,
             y_bar.iter().sum::<f64>() / n_times as f64,
         );
-        let cov = xb_time.iter().zip(y_bar.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_time
+            .iter()
+            .zip(y_bar.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n_times as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
-            xb_time.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_times as f64 - 1.0).max(1.0),
-            y_bar.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_times as f64 - 1.0).max(1.0),
+            xb_time.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>()
+                / (n_times as f64 - 1.0).max(1.0),
+            y_bar.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>()
+                / (n_times as f64 - 1.0).max(1.0),
         );
         if (var_xb * var_y).sqrt() > 1e-300 {
             (cov / (var_xb * var_y).sqrt()).powi(2).clamp(0.0, 1.0)
@@ -255,19 +312,29 @@ fn compute_fe_stats_time(
 
     // R2 Overall = corr(x_it β̂, y_it)²
     let xb_obs: Vec<f64> = (0..n_total)
-        .map(|i| const_coef + (0..k_vars).map(|c| exog[[i, c + 1]] * betas[c]).sum::<f64>())
+        .map(|i| {
+            const_coef
+                + (0..k_vars)
+                    .map(|c| exog[[i, c + 1]] * betas[c])
+                    .sum::<f64>()
+        })
         .collect();
     let r2_overall = {
         let (xb_mean, y_mean) = (
             xb_obs.iter().sum::<f64>() / n_total as f64,
             endog.iter().sum::<f64>() / n_total as f64,
         );
-        let cov = xb_obs.iter().zip(endog.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_obs
+            .iter()
+            .zip(endog.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n_total as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
-            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
-            endog.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
+            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
+            endog.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
         );
         if (var_xb * var_y).sqrt() > 1e-300 {
             (cov / (var_xb * var_y).sqrt()).powi(2).clamp(0.0, 1.0)
@@ -281,11 +348,13 @@ fn compute_fe_stats_time(
     let sigma_e = (ss_residual / df_sigma_e as f64).max(0.0).sqrt();
 
     // λ_t = ȳ_t - ̂α - x̄_t'β̂ (time effects)
-    let lambda_t: Vec<f64> = (0..n_times)
-        .map(|i| y_bar[i] - xb_time[i])
-        .collect();
+    let lambda_t: Vec<f64> = (0..n_times).map(|i| y_bar[i] - xb_time[i]).collect();
     let lambda_mean = lambda_t.iter().sum::<f64>() / n_times as f64;
-    let lambda_var = lambda_t.iter().map(|u| (u - lambda_mean).powi(2)).sum::<f64>() / (n_times as f64 - 1.0).max(1.0);
+    let lambda_var = lambda_t
+        .iter()
+        .map(|u| (u - lambda_mean).powi(2))
+        .sum::<f64>()
+        / (n_times as f64 - 1.0).max(1.0);
     let sigma_u = lambda_var.max(0.0).sqrt();
 
     let rho = {
@@ -299,19 +368,29 @@ fn compute_fe_stats_time(
     };
 
     // corr(λ_t, Xb) at observation level
-    let tid_to_idx: HashMap<usize, usize> = tids.iter().enumerate().map(|(i, &tid)| (tid, i)).collect();
-    let lambda_expanded: Vec<f64> = time_id.iter()
+    let tid_to_idx: HashMap<usize, usize> =
+        tids.iter().enumerate().map(|(i, &tid)| (tid, i)).collect();
+    let lambda_expanded: Vec<f64> = time_id
+        .iter()
         .map(|&tid| lambda_t[tid_to_idx[&tid]])
         .collect();
     let corr_u_i_xb = {
         let u_exp_mean = lambda_expanded.iter().sum::<f64>() / n_total as f64;
         let xb_mean = xb_obs.iter().sum::<f64>() / n_total as f64;
-        let cov = lambda_expanded.iter().zip(xb_obs.iter())
-            .map(|(u, xb)| (u - u_exp_mean) * (xb - xb_mean)).sum::<f64>()
+        let cov = lambda_expanded
+            .iter()
+            .zip(xb_obs.iter())
+            .map(|(u, xb)| (u - u_exp_mean) * (xb - xb_mean))
+            .sum::<f64>()
             / (n_total as f64 - 1.0).max(1.0);
         let (var_u, var_xb) = (
-            lambda_expanded.iter().map(|u| (u - u_exp_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
-            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n_total as f64 - 1.0).max(1.0),
+            lambda_expanded
+                .iter()
+                .map(|u| (u - u_exp_mean).powi(2))
+                .sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
+            xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>()
+                / (n_total as f64 - 1.0).max(1.0),
         );
         if (var_u * var_xb).sqrt() > 1e-300 {
             (cov / (var_u * var_xb).sqrt()).clamp(-1.0, 1.0)
@@ -321,9 +400,21 @@ fn compute_fe_stats_time(
     };
 
     Ok(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        r2: Some(super::PanelR2Stats {
+            r2_within,
+            r2_between,
+            r2_overall,
+        }),
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb,
         theta: None,
     })
@@ -388,7 +479,11 @@ fn within_transform_twoway(
             total_cnt += 1;
         }
     }
-    let z_bar = if total_cnt > 0 { total / total_cnt as f64 } else { 0.0 };
+    let z_bar = if total_cnt > 0 {
+        total / total_cnt as f64
+    } else {
+        0.0
+    };
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let (es, ec) = e_sums.get(&entity_id[i]).copied().unwrap_or((0.0, 0));
@@ -425,7 +520,11 @@ pub fn fit_panel_fe(
         ));
     }
 
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 {
         return Err("Panel FE: need at least 2 entities".to_string());
     }
@@ -521,16 +620,22 @@ pub fn fit_panel_fe(
             let x = v_faer
                 .as_ref()
                 .llt(Side::Lower)
-                .map_err(|_| "Panel FE: cluster cov_beta not positive definite for Wald F".to_string())?
+                .map_err(|_| {
+                    "Panel FE: cluster cov_beta not positive definite for Wald F".to_string()
+                })?
                 .solve(beta_faer.as_ref());
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let f = if df_model > 0 {
+            (wald / df_model as f64).max(0.0)
+        } else {
+            0.0
+        };
         let df1 = (df_model as f64).max(1.0);
         let df2 = (df_residual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
+        let dist =
+            FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -546,13 +651,12 @@ pub fn fit_panel_fe(
         .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
-        + result.ms_residual / n as f64;
+    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);
@@ -684,8 +788,16 @@ pub fn fit_panel_fe_time(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Time): lengths must match".to_string());
     }
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_times < 2 {
         return Err("Panel FE (Time): need at least 2 time periods".to_string());
     }
@@ -788,11 +900,15 @@ pub fn fit_panel_fe_time(
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let f = if df_model > 0 {
+            (wald / df_model as f64).max(0.0)
+        } else {
+            0.0
+        };
         let df1 = (df_model as f64).max(1.0);
         let df2 = (df_residual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
+        let dist =
+            FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -804,13 +920,12 @@ pub fn fit_panel_fe_time(
         .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
-        + result.ms_residual / n as f64;
+    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);
@@ -938,8 +1053,16 @@ pub fn fit_panel_fe_twoway(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Two-Way): lengths must match".to_string());
     }
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 || n_times < 2 {
         return Err("Panel FE (Two-Way): need at least 2 entities and 2 time periods".to_string());
     }
@@ -1039,11 +1162,15 @@ pub fn fit_panel_fe_twoway(
             let x_nd = x.as_ref().into_ndarray();
             beta_s.dot(&x_nd)
         };
-        let f = if df_model > 0 { (wald / df_model as f64).max(0.0) } else { 0.0 };
+        let f = if df_model > 0 {
+            (wald / df_model as f64).max(0.0)
+        } else {
+            0.0
+        };
         let df1 = (df_model as f64).max(1.0);
         let df2 = (df_residual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
+        let dist =
+            FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
         (f, 1.0 - dist.cdf(f))
     } else {
         (result.fvalue, result.f_p_value)
@@ -1055,13 +1182,12 @@ pub fn fit_panel_fe_twoway(
         .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
     let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean)
-        + result.ms_residual / n as f64;
+    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel FE StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
     let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
     let t_crit = t_dist.inverse_cdf(0.975);

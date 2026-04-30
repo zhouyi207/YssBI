@@ -7,12 +7,12 @@ use std::collections::HashSet;
 
 /// 根据已有名称列表生成唯一名称
 ///
-/// 规则：baseName 或 baseName_N (N 为数字)
+/// 规则：baseName 或 baseName N (N 为数字)
 /// - 若 baseName 未被占用，返回 baseName
-/// - 若 baseName 已占用，返回 baseName_1, baseName_2, ...
+/// - 若 baseName 已占用，返回 baseName 1, baseName 2, ...
 pub fn unique_name(base_name: &str, existing: impl IntoIterator<Item = impl AsRef<str>>) -> String {
     let escaped = regex::escape(base_name);
-    let pattern = format!(r"^{}(?:_(\d+))?$", escaped);
+    let pattern = format!(r"^{}(?:[ _](\d+))?$", escaped);
     let re = Regex::new(&pattern).expect("regex valid");
 
     let mut used = HashSet::new();
@@ -40,7 +40,7 @@ pub fn unique_name(base_name: &str, existing: impl IntoIterator<Item = impl AsRe
     while used.contains(&i) {
         i += 1;
     }
-    format!("{}_{}", base_name, i)
+    format!("{} {}", base_name, i)
 }
 
 #[cfg(test)]
@@ -54,8 +54,15 @@ mod tests {
 
     #[test]
     fn test_unique_name_base_exists() {
-        assert_eq!(unique_name("New Event", ["New Event"]), "New Event_1");
-        assert_eq!(unique_name("New Event", ["New Event", "New Event_1"]), "New Event_2");
+        assert_eq!(unique_name("New Event", ["New Event"]), "New Event 1");
+        assert_eq!(
+            unique_name("New Event", ["New Event", "New Event 1"]),
+            "New Event 2"
+        );
+        assert_eq!(
+            unique_name("New Event", ["New Event", "New Event_1"]),
+            "New Event 2"
+        );
     }
 
     #[test]

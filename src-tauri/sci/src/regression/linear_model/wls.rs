@@ -1,4 +1,4 @@
-use crate::regression::covariance::{compute_cov_beta, CovParams};
+use crate::regression::covariance::{CovParams, compute_cov_beta};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -95,7 +95,10 @@ impl WLS {
         } else {
             z.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (z.as_ref() - z_hat.as_ref()).iter().map(|v| v.powi(2)).sum::<f64>();
+        let ss_residual = (z.as_ref() - z_hat.as_ref())
+            .iter()
+            .map(|v| v.powi(2))
+            .sum::<f64>();
         let ss_model = ss_total - ss_residual;
 
         let r2 = 1.0 - ss_residual / ss_total;
@@ -108,8 +111,8 @@ impl WLS {
         let f_safe = f.max(0.0);
         let df1 = (df_model as f64).max(1.0);
         let df2 = (df_residual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("WLS: FisherSnedecor: {}", e))?;
+        let dist =
+            FisherSnedecor::new(df1, df2).map_err(|e| format!("WLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
         let u = z - z_hat.as_ref();

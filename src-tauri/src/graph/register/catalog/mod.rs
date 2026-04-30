@@ -1,14 +1,14 @@
 //! 内置节点目录
 
-pub mod math;
 pub mod control;
-pub mod debug;
-pub mod logic;
-pub mod value;
 pub mod dataframe;
-pub mod event;
-pub mod plot;
+pub mod debug;
 pub mod distribution;
+pub mod event;
+pub mod logic;
+pub mod math;
+pub mod plot;
+pub mod value;
 
 use super::NodeRegistry;
 

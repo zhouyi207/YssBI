@@ -9,7 +9,7 @@ use std::str::FromStr;
 pub enum DataType {
     // 基础类型
     Boolean,
-    
+
     // 为数据库展示预留的类型
     Int32,
     Float32,
@@ -96,7 +96,9 @@ impl fmt::Display for DataType {
             DataType::Struct(key) => write!(f, "Struct<{}>", key),
             DataType::OneOf(types) => {
                 for (i, t) in types.iter().enumerate() {
-                    if i > 0 { write!(f, " | ")?; }
+                    if i > 0 {
+                        write!(f, " | ")?;
+                    }
                     write!(f, "{}", t)?;
                 }
                 Ok(())
@@ -133,15 +135,24 @@ impl FromStr for DataType {
             "DataSeries" => Ok(DataType::DataSeries(Box::new(DataType::Any))),
             "Any" => Ok(DataType::Any),
             _ => {
-                if let Some(inner) = trimmed.strip_prefix("Array<").and_then(|s| s.strip_suffix('>')) {
+                if let Some(inner) = trimmed
+                    .strip_prefix("Array<")
+                    .and_then(|s| s.strip_suffix('>'))
+                {
                     let inner = inner.parse()?;
                     return Ok(DataType::Array(Box::new(inner)));
                 }
-                if let Some(inner) = trimmed.strip_prefix("DataSeries<").and_then(|s| s.strip_suffix('>')) {
+                if let Some(inner) = trimmed
+                    .strip_prefix("DataSeries<")
+                    .and_then(|s| s.strip_suffix('>'))
+                {
                     let inner = inner.parse()?;
                     return Ok(DataType::DataSeries(Box::new(inner)));
                 }
-                if let Some(key) = trimmed.strip_prefix("Struct<").and_then(|s| s.strip_suffix('>')) {
+                if let Some(key) = trimmed
+                    .strip_prefix("Struct<")
+                    .and_then(|s| s.strip_suffix('>'))
+                {
                     return Ok(DataType::Struct(key.to_string()));
                 }
                 Err(format!("Unknown DataType: {}", trimmed))
@@ -188,15 +199,23 @@ impl DataType {
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),
             DataType::OneOf(types) => types.first().map_or(DataValue::Null, |t| t.default_value()),
-            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => DataValue::Null,
+            DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => {
+                DataValue::Null
+            }
         }
     }
 
     /// 是否为标量/基础类型（非复合、非 Any）
     pub fn is_primitive(&self) -> bool {
         match self {
-            DataType::Boolean | DataType::Int32 | DataType::Int64
-            | DataType::Float32 | DataType::Float64 | DataType::String | DataType::Date | DataType::Categorical => true,
+            DataType::Boolean
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::Float32
+            | DataType::Float64
+            | DataType::String
+            | DataType::Date
+            | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_primitive()),
             _ => false,
         }
@@ -214,8 +233,14 @@ impl DataType {
     /// 是否支持比较运算（==, !=, <, > 等）
     pub fn is_comparable(&self) -> bool {
         match self {
-            DataType::Boolean | DataType::Int32 | DataType::Int64
-            | DataType::Float32 | DataType::Float64 | DataType::String | DataType::Date | DataType::Categorical => true,
+            DataType::Boolean
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::Float32
+            | DataType::Float64
+            | DataType::String
+            | DataType::Date
+            | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_comparable()),
             _ => false,
         }
@@ -258,9 +283,16 @@ impl DataType {
             (_, DataType::OneOf(targets)) => targets.iter().any(|t| DataType::can_convert(from, t)),
             // OneOf 源：任一成员能转为 to 即可
             (DataType::OneOf(sources), _) => sources.iter().any(|s| DataType::can_convert(s, to)),
-            (_, DataType::Boolean | DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64 | DataType::Date | DataType::Categorical) => {
-                from.is_primitive()
-            }
+            (
+                _,
+                DataType::Boolean
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Date
+                | DataType::Categorical,
+            ) => from.is_primitive(),
             _ => false,
         }
     }

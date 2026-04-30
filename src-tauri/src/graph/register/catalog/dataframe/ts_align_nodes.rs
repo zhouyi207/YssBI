@@ -25,59 +25,66 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_ts_align(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("TS Align", vec!["Data".to_string(), "Time Series".to_string()])
-        .with_ui_style("dataframe")
-        .with_description("对齐时间序列：补齐缺失时间点，拒绝重复时间。时间列需为 Int64 或 Date。")
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "DataFrame",
-                DataRole::Input,
-                PinDataTypeDefinition::concrete(DataType::DataFrame),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Time Series Name",
-                DataRole::Custom("time_series_name".to_string()),
-                PinDataTypeDefinition::concrete(DataType::String),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Interval",
-                DataRole::Custom("interval".to_string()),
-                PinDataTypeDefinition::concrete(DataType::Int64),
-            )),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Aligned",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(DataType::DataFrame),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let df_id = match &df_value {
-                DataValue::DataFrame(id) => id.clone(),
-                DataValue::Null => {
-                    return Err("TS Align: 请连接 DataFrame 输入".to_string());
-                }
-                _ => return Err("TS Align: 输入必须是 DataFrame".to_string()),
-            };
+    let definition = NodeDefinition::new(
+        "TS Align",
+        vec!["Data".to_string(), "Time Series".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("对齐时间序列：补齐缺失时间点，拒绝重复时间。时间列需为 Int64 或 Date。")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "DataFrame",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataFrame),
+        )),
+        PinSlot::fixed(PinDefinition::data_input(
+            "Time Series Name",
+            DataRole::Custom("time_series_name".to_string()),
+            PinDataTypeDefinition::concrete(DataType::String),
+        )),
+        PinSlot::fixed(PinDefinition::data_input(
+            "Interval",
+            DataRole::Custom("interval".to_string()),
+            PinDataTypeDefinition::concrete(DataType::Int64),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Aligned",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataFrame),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let df_id = match &df_value {
+            DataValue::DataFrame(id) => id.clone(),
+            DataValue::Null => {
+                return Err("TS Align: 请连接 DataFrame 输入".to_string());
+            }
+            _ => return Err("TS Align: 输入必须是 DataFrame".to_string()),
+        };
 
-            let name_value =
-                ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_series_name".to_string())))?;
-            let time_series_name = match &name_value {
-                DataValue::String(s) if !s.is_empty() => s.clone(),
-                DataValue::String(_) => return Err("TS Align: 时间列名不能为空".to_string()),
-                DataValue::Null => return Err("TS Align: 请提供时间列名（或连接 String 常量）".to_string()),
-                _ => return Err("TS Align: 时间列名必须是 String".to_string()),
-            };
+        let name_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(
+            "time_series_name".to_string(),
+        )))?;
+        let time_series_name = match &name_value {
+            DataValue::String(s) if !s.is_empty() => s.clone(),
+            DataValue::String(_) => return Err("TS Align: 时间列名不能为空".to_string()),
+            DataValue::Null => {
+                return Err("TS Align: 请提供时间列名（或连接 String 常量）".to_string())
+            }
+            _ => return Err("TS Align: 时间列名必须是 String".to_string()),
+        };
 
-            let df = ctx.get_dataframe(&df_id)?;
-            let time_col = df.column(&time_series_name).map_err(|e| {
-                format!("TS Align: 列 '{}' 不存在: {}", time_series_name, e)
-            })?;
-            let time_series = time_col.clone().take_materialized_series();
+        let df = ctx.get_dataframe(&df_id)?;
+        let time_col = df
+            .column(&time_series_name)
+            .map_err(|e| format!("TS Align: 列 '{}' 不存在: {}", time_series_name, e))?;
+        let time_series = time_col.clone().take_materialized_series();
 
-            check_no_duplicate_times(&time_series).map_err(|e| e.to_string())?;
+        check_no_duplicate_times(&time_series).map_err(|e| e.to_string())?;
 
-            let interval = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string()))) {
+        let interval =
+            match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string()))) {
                 Ok(DataValue::Int64(i)) => {
                     if i > 0 {
                         Some(i)
@@ -88,21 +95,19 @@ fn register_ts_align(registry: &NodeRegistry) {
                 _ => None,
             };
 
-            let interval = interval.unwrap_or_else(|| {
-                infer_interval(&time_series).unwrap_or(1)
-            });
+        let interval = interval.unwrap_or_else(|| infer_interval(&time_series).unwrap_or(1));
 
-            let aligned = align_dataframe(&df, &time_series_name, interval)
-                .map_err(|e| format!("TS Align: {}", e))?;
+        let aligned = align_dataframe(&df, &time_series_name, interval)
+            .map_err(|e| format!("TS Align: {}", e))?;
 
-            let result_id = ctx.put_dataframe(aligned)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataFrame(result_id),
-            )?;
+        let result_id = ctx.put_dataframe(aligned)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataFrame(result_id),
+        )?;
 
-            Ok(())
-        }));
+        Ok(())
+    }));
     registry.register(definition);
 }
 
@@ -186,92 +191,109 @@ fn register_ts_diff(registry: &NodeRegistry) {
 }
 
 fn register_ts_pct_change(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("TS Pct Change", vec!["Data".to_string(), "Time Series".to_string()])
-        .with_ui_style("dataframe")
-        .with_description("百分比变化：(y_t - y_{t-lag}) / y_{t-lag}，前 lag 个为 null")
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "Series",
-                DataRole::Input,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+    let definition = NodeDefinition::new(
+        "TS Pct Change",
+        vec!["Data".to_string(), "Time Series".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("百分比变化：(y_t - y_{t-lag}) / y_{t-lag}，前 lag 个为 null")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Series",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+        PinSlot::fixed(PinDefinition::data_input(
+            "Lag",
+            DataRole::Custom("lag".to_string()),
+            PinDataTypeDefinition::concrete(DataType::Int64),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Pct Change",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &series_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            DataValue::Null => return Err("TS Pct Change: 请连接 DataSeries".to_string()),
+            _ => return Err("TS Pct Change: 输入必须是 DataSeries".to_string()),
+        };
+        let lag = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string()))) {
+            Ok(DataValue::Int64(i)) if i >= 0 => i as usize,
+            Ok(DataValue::Int64(_)) => return Err("TS Pct Change: Lag 必须为非负整数".to_string()),
+            _ => 1,
+        };
+        let series = ctx.get_series(&series_id)?;
+        let result =
+            pct_change::ts_pct_change(&series, lag).map_err(|e| format!("TS Pct Change: {}", e))?;
+        let result_id = ctx.put_series(result)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(
+                result_id,
+                DataType::Float64,
             )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Lag",
-                DataRole::Custom("lag".to_string()),
-                PinDataTypeDefinition::concrete(DataType::Int64),
-            )),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Pct Change",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let series_id = match &series_value {
-                DataValue::DataSeries(v) => v.id.clone(),
-                DataValue::Null => return Err("TS Pct Change: 请连接 DataSeries".to_string()),
-                _ => return Err("TS Pct Change: 输入必须是 DataSeries".to_string()),
-            };
-            let lag = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string()))) {
-                Ok(DataValue::Int64(i)) if i >= 0 => i as usize,
-                Ok(DataValue::Int64(_)) => return Err("TS Pct Change: Lag 必须为非负整数".to_string()),
-                _ => 1,
-            };
-            let series = ctx.get_series(&series_id)?;
-            let result = pct_change::ts_pct_change(&series, lag).map_err(|e| format!("TS Pct Change: {}", e))?;
-            let result_id = ctx.put_series(result)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
-            )?;
-            Ok(())
-        }));
+        )?;
+        Ok(())
+    }));
     registry.register(definition);
 }
 
 fn register_ts_rolling_mean(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("TS Rolling Mean", vec!["Data".to_string(), "Time Series".to_string()])
-        .with_ui_style("dataframe")
-        .with_description("滚动均值：前 (window-1) 个为 null")
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "Series",
-                DataRole::Input,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
-            )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Window",
-                DataRole::Custom("window".to_string()),
-                PinDataTypeDefinition::concrete(DataType::Int64),
-            )),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Rolling Mean",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let series_id = match &series_value {
-                DataValue::DataSeries(v) => v.id.clone(),
-                DataValue::Null => return Err("TS Rolling Mean: 请连接 DataSeries".to_string()),
-                _ => return Err("TS Rolling Mean: 输入必须是 DataSeries".to_string()),
-            };
-            let window = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("window".to_string()))) {
+    let definition = NodeDefinition::new(
+        "TS Rolling Mean",
+        vec!["Data".to_string(), "Time Series".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_description("滚动均值：前 (window-1) 个为 null")
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Series",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+        PinSlot::fixed(PinDefinition::data_input(
+            "Window",
+            DataRole::Custom("window".to_string()),
+            PinDataTypeDefinition::concrete(DataType::Int64),
+        )),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Rolling Mean",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &series_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            DataValue::Null => return Err("TS Rolling Mean: 请连接 DataSeries".to_string()),
+            _ => return Err("TS Rolling Mean: 输入必须是 DataSeries".to_string()),
+        };
+        let window =
+            match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("window".to_string()))) {
                 Ok(DataValue::Int64(i)) if i > 0 => i as usize,
-                Ok(DataValue::Int64(_)) => return Err("TS Rolling Mean: Window 必须为正整数".to_string()),
+                Ok(DataValue::Int64(_)) => {
+                    return Err("TS Rolling Mean: Window 必须为正整数".to_string())
+                }
                 _ => return Err("TS Rolling Mean: 请提供 Window（正整数）".to_string()),
             };
-            let series = ctx.get_series(&series_id)?;
-            let result = rolling::rolling_mean(&series, window).map_err(|e| format!("TS Rolling Mean: {}", e))?;
-            let result_id = ctx.put_series(result)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
-            )?;
-            Ok(())
-        }));
+        let series = ctx.get_series(&series_id)?;
+        let result = rolling::rolling_mean(&series, window)
+            .map_err(|e| format!("TS Rolling Mean: {}", e))?;
+        let result_id = ctx.put_series(result)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(
+                result_id,
+                DataType::Float64,
+            )),
+        )?;
+        Ok(())
+    }));
     registry.register(definition);
 }
 

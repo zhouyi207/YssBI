@@ -102,14 +102,20 @@ impl EditHistory {
 
 /// Converts JSON value to Polars AnyValue, strictly preserving column dtype.
 /// Returns Err if the value cannot be converted to the target type (e.g. "abc" for Float64).
-pub fn json_to_anyvalue(val: &serde_json::Value, dtype: &DataType) -> Result<AnyValue<'static>, String> {
+pub fn json_to_anyvalue(
+    val: &serde_json::Value,
+    dtype: &DataType,
+) -> Result<AnyValue<'static>, String> {
     match val {
         serde_json::Value::Null => Ok(AnyValue::Null),
         serde_json::Value::Bool(b) => {
             if matches!(dtype, DataType::Boolean) {
                 Ok(AnyValue::Boolean(*b))
             } else {
-                Err(format!("Boolean value not compatible with column type {:?}", dtype))
+                Err(format!(
+                    "Boolean value not compatible with column type {:?}",
+                    dtype
+                ))
             }
         }
         serde_json::Value::Number(n) => {
@@ -136,29 +142,45 @@ pub fn json_to_anyvalue(val: &serde_json::Value, dtype: &DataType) -> Result<Any
                 return Ok(AnyValue::Null);
             }
             match dtype {
-                DataType::Float32 => {
-                    s.parse::<f32>().map(AnyValue::Float32)
-                        .map_err(|_| format!("Cannot parse \"{}\" as Float32", s))
-                }
-                DataType::Float64 => {
-                    s.parse::<f64>().map(AnyValue::Float64)
-                        .map_err(|_| format!("Cannot parse \"{}\" as Float64", s))
-                }
-                DataType::Int8 => s.parse::<i8>().map(AnyValue::Int8)
+                DataType::Float32 => s
+                    .parse::<f32>()
+                    .map(AnyValue::Float32)
+                    .map_err(|_| format!("Cannot parse \"{}\" as Float32", s)),
+                DataType::Float64 => s
+                    .parse::<f64>()
+                    .map(AnyValue::Float64)
+                    .map_err(|_| format!("Cannot parse \"{}\" as Float64", s)),
+                DataType::Int8 => s
+                    .parse::<i8>()
+                    .map(AnyValue::Int8)
                     .map_err(|_| format!("Cannot parse \"{}\" as Int8", s)),
-                DataType::Int16 => s.parse::<i16>().map(AnyValue::Int16)
+                DataType::Int16 => s
+                    .parse::<i16>()
+                    .map(AnyValue::Int16)
                     .map_err(|_| format!("Cannot parse \"{}\" as Int16", s)),
-                DataType::Int32 => s.parse::<i32>().map(AnyValue::Int32)
+                DataType::Int32 => s
+                    .parse::<i32>()
+                    .map(AnyValue::Int32)
                     .map_err(|_| format!("Cannot parse \"{}\" as Int32", s)),
-                DataType::Int64 => s.parse::<i64>().map(AnyValue::Int64)
+                DataType::Int64 => s
+                    .parse::<i64>()
+                    .map(AnyValue::Int64)
                     .map_err(|_| format!("Cannot parse \"{}\" as Int64", s)),
-                DataType::UInt8 => s.parse::<u8>().map(AnyValue::UInt8)
+                DataType::UInt8 => s
+                    .parse::<u8>()
+                    .map(AnyValue::UInt8)
                     .map_err(|_| format!("Cannot parse \"{}\" as UInt8", s)),
-                DataType::UInt16 => s.parse::<u16>().map(AnyValue::UInt16)
+                DataType::UInt16 => s
+                    .parse::<u16>()
+                    .map(AnyValue::UInt16)
                     .map_err(|_| format!("Cannot parse \"{}\" as UInt16", s)),
-                DataType::UInt32 => s.parse::<u32>().map(AnyValue::UInt32)
+                DataType::UInt32 => s
+                    .parse::<u32>()
+                    .map(AnyValue::UInt32)
                     .map_err(|_| format!("Cannot parse \"{}\" as UInt32", s)),
-                DataType::UInt64 => s.parse::<u64>().map(AnyValue::UInt64)
+                DataType::UInt64 => s
+                    .parse::<u64>()
+                    .map(AnyValue::UInt64)
                     .map_err(|_| format!("Cannot parse \"{}\" as UInt64", s)),
                 DataType::Boolean => {
                     let lower = s.to_lowercase();
@@ -167,23 +189,30 @@ pub fn json_to_anyvalue(val: &serde_json::Value, dtype: &DataType) -> Result<Any
                     } else if lower == "false" || lower == "0" || lower == "" {
                         Ok(AnyValue::Boolean(false))
                     } else {
-                        Err(format!("Cannot parse \"{}\" as Boolean (use true/false)", s))
+                        Err(format!(
+                            "Cannot parse \"{}\" as Boolean (use true/false)",
+                            s
+                        ))
                     }
                 }
                 DataType::String => Ok(AnyValue::StringOwned(s.clone().into())),
-                DataType::Date => {
-                    NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                        .map(|d| {
-                            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
-                            AnyValue::Date((d.num_days_from_ce() - epoch) as i32)
-                        })
-                        .map_err(|e| format!("Cannot parse \"{}\" as Date (use YYYY-MM-DD): {}", s, e))
-                }
+                DataType::Date => NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                    .map(|d| {
+                        let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+                            .unwrap()
+                            .num_days_from_ce();
+                        AnyValue::Date((d.num_days_from_ce() - epoch) as i32)
+                    })
+                    .map_err(|e| format!("Cannot parse \"{}\" as Date (use YYYY-MM-DD): {}", s, e)),
                 DataType::Datetime(_, _) => {
-                    let dt = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f")
-                        .or_else(|_| NaiveDate::parse_from_str(s, "%Y-%m-%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap()));
+                    let dt =
+                        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").or_else(|_| {
+                            NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                                .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
+                        });
                     dt.map(|ndt| {
-                        let ts = chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc).timestamp_micros();
+                        let ts = chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc)
+                            .timestamp_micros();
                         AnyValue::DatetimeOwned(ts, TimeUnit::Microseconds, None)
                     })
                     .map_err(|e| format!("Cannot parse \"{}\" as DateTime: {}", s, e))
@@ -217,7 +246,9 @@ pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
         AnyValue::Date(days) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().num_days_from_ce();
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+                .unwrap()
+                .num_days_from_ce();
             NaiveDate::from_num_days_from_ce_opt(epoch + days as i32)
                 .map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
                 .unwrap_or_else(|| serde_json::Value::String(days.to_string()))
@@ -225,7 +256,9 @@ pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
         AnyValue::Datetime(ts, unit, _) | AnyValue::DatetimeOwned(ts, unit, _) => {
             let (secs, nsecs) = match unit {
                 TimeUnit::Nanoseconds => ((ts / 1_000_000_000) as i64, (ts % 1_000_000_000) as u32),
-                TimeUnit::Microseconds => ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32),
+                TimeUnit::Microseconds => {
+                    ((ts / 1_000_000) as i64, ((ts % 1_000_000) * 1000) as u32)
+                }
                 TimeUnit::Milliseconds => ((ts / 1000) as i64, ((ts % 1000) * 1_000_000) as u32),
             };
             chrono::DateTime::from_timestamp(secs, nsecs)
@@ -249,8 +282,14 @@ pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
     }
 }
 
-fn set_cell(df: &mut DataFrame, row: usize, col: &str, val: &serde_json::Value) -> Result<(), String> {
-    let col_idx = df.get_column_index(col)
+fn set_cell(
+    df: &mut DataFrame,
+    row: usize,
+    col: &str,
+    val: &serde_json::Value,
+) -> Result<(), String> {
+    let col_idx = df
+        .get_column_index(col)
         .ok_or_else(|| format!("Column '{}' not found", col))?;
     let dtype = df.columns()[col_idx].dtype().clone();
     let av = json_to_anyvalue(val, &dtype)?;
@@ -268,7 +307,8 @@ fn set_cell(df: &mut DataFrame, row: usize, col: &str, val: &serde_json::Value) 
     let new_series = Series::from_any_values(series.name().clone(), &new_vec, false)
         .map_err(|e| e.to_string())?;
     let new_col = Column::from(new_series);
-    df.replace_column(col_idx, new_col).map_err(|e| e.to_string())?;
+    df.replace_column(col_idx, new_col)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -339,33 +379,46 @@ pub fn dtype_to_string(dt: &DataType) -> String {
 
 pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), String> {
     match op {
-        EditOperation::EditCell { row, col, new_value, .. } => {
-            set_cell(df, *row, col, new_value)
-        }
+        EditOperation::EditCell {
+            row,
+            col,
+            new_value,
+            ..
+        } => set_cell(df, *row, col, new_value),
         EditOperation::AddRow { index } => {
             let height = df.height();
             let idx = (*index).min(height);
 
-            let null_row: Vec<Column> = df.columns().iter().map(|c| {
-                let s = Series::new_null(c.name().clone(), 1);
-                let casted = s.cast(c.dtype()).unwrap_or(s);
-                Column::from(casted)
-            }).collect();
+            let null_row: Vec<Column> = df
+                .columns()
+                .iter()
+                .map(|c| {
+                    let s = Series::new_null(c.name().clone(), 1);
+                    let casted = s.cast(c.dtype()).unwrap_or(s);
+                    Column::from(casted)
+                })
+                .collect();
 
-            let null_df = DataFrame::new(1, null_row).map_err(|e: polars::prelude::PolarsError| e.to_string())?;
+            let null_df = DataFrame::new(1, null_row)
+                .map_err(|e: polars::prelude::PolarsError| e.to_string())?;
 
             let top = df.slice(0, idx);
             let bottom = df.slice(idx as i64, height - idx);
 
             *df = top
-                .vstack(&null_df).map_err(|e| e.to_string())?
-                .vstack(&bottom).map_err(|e| e.to_string())?;
+                .vstack(&null_df)
+                .map_err(|e| e.to_string())?
+                .vstack(&bottom)
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         EditOperation::DeleteRow { index, .. } => {
             let height = df.height();
             if *index >= height {
-                return Err(format!("Row index {} out of bounds (height={})", index, height));
+                return Err(format!(
+                    "Row index {} out of bounds (height={})",
+                    index, height
+                ));
             }
             let top = df.slice(0, *index);
             let bottom = df.slice((*index + 1) as i64, height - *index - 1);
@@ -376,31 +429,35 @@ pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), Str
             let dt = dtype_from_string(dtype);
             let s = Series::new_null(PlSmallStr::from(name.as_str()), df.height());
             let casted = s.cast(&dt).unwrap_or(s);
-            df.with_column(Column::from(casted)).map_err(|e| e.to_string())?;
+            df.with_column(Column::from(casted))
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         EditOperation::DeleteColumn { name, .. } => {
-            df.drop_in_place(&PlSmallStr::from(name.as_str())).map_err(|e| e.to_string())?;
+            df.drop_in_place(&PlSmallStr::from(name.as_str()))
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         EditOperation::RenameColumn { old_name, new_name } => {
             df.rename(
                 &PlSmallStr::from(old_name.as_str()),
                 PlSmallStr::from(new_name.as_str()),
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
             Ok(())
         }
-        EditOperation::CastColumn { col, new_dtype, .. } => {
-            cast_column(df, col, new_dtype, true)
-        }
+        EditOperation::CastColumn { col, new_dtype, .. } => cast_column(df, col, new_dtype, true),
     }
 }
 
 pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), String> {
     match op {
-        EditOperation::EditCell { row, col, old_value, .. } => {
-            set_cell(df, *row, col, old_value)
-        }
+        EditOperation::EditCell {
+            row,
+            col,
+            old_value,
+            ..
+        } => set_cell(df, *row, col, old_value),
         EditOperation::AddRow { index } => {
             let del_op = EditOperation::DeleteRow {
                 index: *index,
@@ -430,11 +487,14 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             let s = if data.is_empty() {
                 Series::new_null(PlSmallStr::from(name.as_str()), df.height())
             } else {
-                let values: Vec<AnyValue<'static>> = data.iter()
+                let values: Vec<AnyValue<'static>> = data
+                    .iter()
                     .map(|v| json_to_anyvalue(v, &DataType::String).unwrap_or(AnyValue::Null))
                     .collect();
                 Series::from_any_values(PlSmallStr::from(name.as_str()), &values, false)
-                    .unwrap_or_else(|_| Series::new_null(PlSmallStr::from(name.as_str()), df.height()))
+                    .unwrap_or_else(|_| {
+                        Series::new_null(PlSmallStr::from(name.as_str()), df.height())
+                    })
             };
             df.with_column(Column::from(s)).map_err(|e| e.to_string())?;
             Ok(())
@@ -461,8 +521,7 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
                 .map(|v| json_to_anyvalue(v, &dt).unwrap_or(AnyValue::Null))
                 .collect();
             let name = df.columns()[col_idx].name().clone();
-            let s = Series::from_any_values(name, &values, false)
-                .map_err(|e| e.to_string())?;
+            let s = Series::from_any_values(name, &values, false).map_err(|e| e.to_string())?;
             df.replace_column(col_idx, Column::from(s))
                 .map_err(|e| e.to_string())?;
             Ok(())
@@ -482,9 +541,7 @@ pub fn cast_column(
     let col_idx = df
         .get_column_index(col_name)
         .ok_or_else(|| format!("Column '{}' not found", col_name))?;
-    let series = df
-        .columns()[col_idx]
-        .as_materialized_series();
+    let series = df.columns()[col_idx].as_materialized_series();
     let target_dtype = dtype_from_string(new_dtype_str);
 
     let casted = if force {
@@ -492,7 +549,9 @@ pub fn cast_column(
             .cast_with_options(&target_dtype, CastOptions::NonStrict)
             .map_err(|e| e.to_string())?
     } else {
-        series.strict_cast(&target_dtype).map_err(|e| e.to_string())?
+        series
+            .strict_cast(&target_dtype)
+            .map_err(|e| e.to_string())?
     };
 
     let new_col = Column::from(casted);
@@ -516,7 +575,11 @@ pub fn capture_column_data(df: &DataFrame, col_name: &str) -> Vec<serde_json::Va
     df.column(col_name)
         .map(|c| {
             (0..c.len())
-                .map(|i| c.get(i).map(|v| anyvalue_to_json(v)).unwrap_or(serde_json::Value::Null))
+                .map(|i| {
+                    c.get(i)
+                        .map(|v| anyvalue_to_json(v))
+                        .unwrap_or(serde_json::Value::Null)
+                })
                 .collect()
         })
         .unwrap_or_default()

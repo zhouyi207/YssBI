@@ -1,15 +1,10 @@
-use crate::log::log_manager::{get_log_manager, read_logs_from_file, count_logs_in_file};
-use crate::log::{LogMessage, LogLevel, LogType};
+use crate::log::log_manager::{count_logs_in_file, get_log_manager, read_logs_from_file};
+use crate::log::{LogLevel, LogMessage, LogType};
 
 /// 前端日志入口：前端所有日志通过此命令发送到 Rust LogManager，
 /// 统一写入文件 + 终端 + emit("log-message") 返回给前端 LogWindow。
 #[tauri::command]
-pub fn frontend_log(
-    level: LogLevel,
-    log_type: LogType,
-    message: String,
-    source: Option<String>,
-) {
+pub fn frontend_log(level: LogLevel, log_type: LogType, message: String, source: Option<String>) {
     if let Some(manager) = get_log_manager() {
         let log = LogMessage {
             timestamp: chrono::Local::now()
@@ -30,10 +25,10 @@ pub fn frontend_log(
 /// limit: 要读取的条数（默认 100）
 #[tauri::command]
 pub fn get_logs(offset: Option<usize>, limit: Option<usize>) -> Result<Vec<LogMessage>, String> {
-    let manager = get_log_manager()
-        .ok_or_else(|| "Log manager not initialized".to_string())?;
+    let manager = get_log_manager().ok_or_else(|| "Log manager not initialized".to_string())?;
 
-    let file_path = manager.get_log_file_path()
+    let file_path = manager
+        .get_log_file_path()
         .ok_or_else(|| "No log file available".to_string())?;
 
     read_logs_from_file(&file_path, offset.unwrap_or(0), limit.unwrap_or(100))
@@ -42,10 +37,10 @@ pub fn get_logs(offset: Option<usize>, limit: Option<usize>) -> Result<Vec<LogMe
 /// 获取当前日志文件路径
 #[tauri::command]
 pub fn get_log_file_path() -> Result<String, String> {
-    let manager = get_log_manager()
-        .ok_or_else(|| "Log manager not initialized".to_string())?;
+    let manager = get_log_manager().ok_or_else(|| "Log manager not initialized".to_string())?;
 
-    manager.get_log_file_path()
+    manager
+        .get_log_file_path()
         .map(|p| p.to_string_lossy().to_string())
         .ok_or_else(|| "No log file available".to_string())
 }
@@ -53,10 +48,10 @@ pub fn get_log_file_path() -> Result<String, String> {
 /// 获取日志文件中的总日志条数
 #[tauri::command]
 pub fn get_log_count() -> Result<usize, String> {
-    let manager = get_log_manager()
-        .ok_or_else(|| "Log manager not initialized".to_string())?;
+    let manager = get_log_manager().ok_or_else(|| "Log manager not initialized".to_string())?;
 
-    let file_path = manager.get_log_file_path()
+    let file_path = manager
+        .get_log_file_path()
         .ok_or_else(|| "No log file available".to_string())?;
 
     count_logs_in_file(&file_path)

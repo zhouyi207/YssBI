@@ -2,8 +2,8 @@
 //!
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
-pub mod ast;
 pub mod application;
+pub mod ast;
 pub mod commands;
 pub mod database;
 pub mod editor;
@@ -17,6 +17,7 @@ pub mod schema;
 pub mod variable;
 
 use commands::*;
+use tauri::Manager;
 
 // ==================== 应用入口 ====================
 
@@ -61,6 +62,10 @@ pub fn run() {
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
+            let app_dir = app.path().app_data_dir()?;
+            let project_registry =
+                tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir))?;
+            app.manage(project_registry);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -72,6 +77,17 @@ pub fn run() {
             get_project_databases_variables,
             get_project_graphs,
             get_project_path,
+            get_project_index,
+            load_project_graph,
+            default_project_parent_directory,
+            validate_new_project_path,
+            list_registered_projects,
+            register_project,
+            remove_registered_project,
+            toggle_registered_project_favorite,
+            migrate_legacy_registered_projects,
+            get_project_registry_path,
+            create_project,
             new_project,
             load_project,
             save_project,

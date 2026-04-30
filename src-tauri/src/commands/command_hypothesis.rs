@@ -64,10 +64,7 @@ fn format_linear_forms(
     let mut h0_rows = Vec::new();
     let mut h1_rows = Vec::new();
     for i in 0..r.nrows() {
-        let h1_op = constraints
-            .get(i)
-            .map(h1_display_op)
-            .unwrap_or(" ≠ ");
+        let h1_op = constraints.get(i).map(h1_display_op).unwrap_or(" ≠ ");
         let flip = constraints.get(i).map_or(false, |h| {
             matches!(h, HypothesisExpr::Lt(_, _) | HypothesisExpr::Le(_, _))
         });
@@ -171,10 +168,7 @@ fn run_hypothesis_test(req: HypothesisTestRequest) -> Result<HypothesisTestRespo
     let betas = Array1::from_vec(req.betas);
     let cov_beta = Array2::from_shape_vec(
         (k, k),
-        req.cov_beta
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>(),
+        req.cov_beta.into_iter().flatten().collect::<Vec<_>>(),
     )
     .map_err(|e| format!("cov_beta 形状错误: {}", e))?;
 

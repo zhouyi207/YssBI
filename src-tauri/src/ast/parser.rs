@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::lexer::{Lexer, LexError, Token};
+use crate::ast::lexer::{LexError, Lexer, Token};
 use crate::ast::types::{Expr, HypothesisExpr, ParamId};
 
 /// 参数名到 ID 的注册表
@@ -224,7 +224,12 @@ impl<'a> Parser<'a> {
                     let e = match name.to_lowercase().as_str() {
                         "exp" => Expr::exp(arg),
                         "log" => Expr::log(arg),
-                        _ => return Err(ParseError::UnexpectedToken(format!("unknown function: {}", name))),
+                        _ => {
+                            return Err(ParseError::UnexpectedToken(format!(
+                                "unknown function: {}",
+                                name
+                            )))
+                        }
                     };
                     Ok(e)
                 } else {
@@ -295,7 +300,11 @@ pub fn parse_hypothesis_with_registry(
     input: &str,
     param_registry: &mut ParamRegistry,
 ) -> Result<Vec<HypothesisExpr>, ParseError> {
-    let segments: Vec<&str> = input.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let segments: Vec<&str> = input
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
 
     if segments.is_empty() {
         return Err(ParseError::ExpectedExpr);

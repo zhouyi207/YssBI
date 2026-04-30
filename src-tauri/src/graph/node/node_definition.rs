@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub type FlowProcessor =
-    Arc<dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> + Send + Sync>;
+pub type FlowProcessor = Arc<
+    dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffect, String> + Send + Sync,
+>;
 
 pub type DataEvaluator =
     Arc<dyn Fn(&mut dyn NodeExecutionContextTrait) -> Result<(), String> + Send + Sync>;
@@ -125,10 +126,22 @@ impl std::fmt::Debug for NodeDefinition {
             .field("node_type", &self.node_type)
             .field("type_vars", &self.type_vars)
             .field("pin_slots", &self.pin_slots)
-            .field("flow_processor", &self.flow_processor.as_ref().map(|_| "<function>"))
-            .field("data_evaluator", &self.data_evaluator.as_ref().map(|_| "<function>"))
-            .field("pin_resolver", &self.pin_resolver.as_ref().map(|_| "<function>"))
-            .field("output_schema_resolver", &self.output_schema_resolver.as_ref().map(|_| "<function>"))
+            .field(
+                "flow_processor",
+                &self.flow_processor.as_ref().map(|_| "<function>"),
+            )
+            .field(
+                "data_evaluator",
+                &self.data_evaluator.as_ref().map(|_| "<function>"),
+            )
+            .field(
+                "pin_resolver",
+                &self.pin_resolver.as_ref().map(|_| "<function>"),
+            )
+            .field(
+                "output_schema_resolver",
+                &self.output_schema_resolver.as_ref().map(|_| "<function>"),
+            )
             .field("metadata", &self.metadata)
             .finish()
     }

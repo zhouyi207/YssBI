@@ -82,10 +82,7 @@ pub fn load_database(
     })
 }
 
-pub fn get_database_meta(
-    state: &ProjectState,
-    id: &str,
-) -> Result<DatabaseMetaResult, String> {
+pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaResult, String> {
     let view = state
         .access_database(id, crate::database::DatabaseAccess::Preview)
         .map_err(|e| format!("Failed to access database: {}", e))?;
@@ -142,10 +139,7 @@ fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
     unique_name::unique_name(base_name, existing.iter().map(|s| s.as_str()))
 }
 
-fn database_name_and_row_count(
-    state: &ProjectState,
-    id: &str,
-) -> Result<(String, usize), String> {
+fn database_name_and_row_count(state: &ProjectState, id: &str) -> Result<(String, usize), String> {
     let store = state.project_store.read().unwrap();
     let db = store.databases.get(id).ok_or("Database not found")?;
     let name = db

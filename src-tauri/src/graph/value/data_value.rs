@@ -4,7 +4,7 @@ use super::DataType;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{Add, Div, Mul, Sub};
 
 /// 分类变量的语义角色
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -83,7 +83,10 @@ impl Serialize for DataSeriesValue {
     where
         S: serde::Serializer,
     {
-        if self.element_type.is_none() && self.dummy_info.is_none() && self.time_series_state.is_none() {
+        if self.element_type.is_none()
+            && self.dummy_info.is_none()
+            && self.time_series_state.is_none()
+        {
             serializer.serialize_str(&self.id)
         } else {
             use serde::ser::SerializeStruct;
@@ -134,7 +137,12 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
                 dummy_info: None,
                 time_series_state: None,
             }),
-            Payload::Full { id, element_type, dummy_info, time_series_state } => Ok(DataSeriesValue {
+            Payload::Full {
+                id,
+                element_type,
+                dummy_info,
+                time_series_state,
+            } => Ok(DataSeriesValue {
                 id,
                 element_type,
                 dummy_info,
@@ -158,8 +166,8 @@ pub enum DataValue {
     // 复合类型
     Array(Vec<DataValue>),
     Object(HashMap<String, DataValue>),
-    DataFrame(String),   // DataFrame ID
-    DataSeries(DataSeriesValue),  // DataSeries ID + 可选元素类型
+    DataFrame(String),           // DataFrame ID
+    DataSeries(DataSeriesValue), // DataSeries ID + 可选元素类型
 
     /// 用户定义结构体的不透明句柄
     ///
@@ -320,7 +328,10 @@ impl DataValue {
                     DataValue::Null => "null".to_string(),
                     DataValue::DataFrame(id) => format!("DataFrame({})", id),
                     DataValue::DataSeries(v) => format!("DataSeries({})", v.id),
-                    DataValue::Struct { type_key, handle_id } => format!("Struct<{}>({})", type_key, handle_id),
+                    DataValue::Struct {
+                        type_key,
+                        handle_id,
+                    } => format!("Struct<{}>({})", type_key, handle_id),
                     _ => return self.clone(),
                 };
                 DataValue::String(s)
@@ -335,11 +346,9 @@ impl DataValue {
                 _ => self.clone(),
             },
             DataType::Array(target_inner) => match self {
-                DataValue::Array(arr) => DataValue::Array(
-                    arr.iter()
-                        .map(|v| v.coerce_to(target_inner))
-                        .collect(),
-                ),
+                DataValue::Array(arr) => {
+                    DataValue::Array(arr.iter().map(|v| v.coerce_to(target_inner)).collect())
+                }
                 _ => self.clone(),
             },
             DataType::Object => match self {
@@ -373,8 +382,10 @@ impl Add for DataValue {
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a + b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a + b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a + b)),
-            (DataValue::String(a), DataValue::String(b)) => Ok(DataValue::String(format!("{}{}", a, b))),
-            
+            (DataValue::String(a), DataValue::String(b)) => {
+                Ok(DataValue::String(format!("{}{}", a, b)))
+            }
+
             (a, b) => Err(format!(
                 "Cannot add {:?} and {:?}: incompatible types",
                 a.value_type(),
@@ -395,7 +406,7 @@ impl Sub for DataValue {
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a - b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a - b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a - b)),
-            
+
             (a, b) => Err(format!(
                 "Cannot subtract {:?} from {:?}: incompatible types",
                 b.value_type(),
@@ -416,7 +427,7 @@ impl Mul for DataValue {
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a * b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a * b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a * b)),
-            
+
             (a, b) => Err(format!(
                 "Cannot multiply {:?} and {:?}: incompatible types",
                 a.value_type(),
@@ -438,18 +449,18 @@ impl Div for DataValue {
             DataValue::Float64(v) => v.is_zero(),
             _ => false,
         };
-        
+
         if is_zero {
             return Err("Division by zero".to_string());
         }
-        
+
         match (self, rhs) {
             // 仅同类型运算，类型转换需使用 convert 节点
             (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a / b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a / b)),
             (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a / b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a / b)),
-            
+
             (a, b) => Err(format!(
                 "Cannot divide {:?} by {:?}: incompatible types",
                 a.value_type(),
@@ -464,17 +475,17 @@ impl DataValue {
     pub fn add(&self, other: &DataValue) -> Result<DataValue, String> {
         self.clone() + other.clone()
     }
-    
+
     /// 辅助方法：执行减法运算
     pub fn sub(&self, other: &DataValue) -> Result<DataValue, String> {
         self.clone() - other.clone()
     }
-    
+
     /// 辅助方法：执行乘法运算
     pub fn mul(&self, other: &DataValue) -> Result<DataValue, String> {
         self.clone() * other.clone()
     }
-    
+
     /// 辅助方法：执行除法运算
     pub fn div(&self, other: &DataValue) -> Result<DataValue, String> {
         self.clone() / other.clone()

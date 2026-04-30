@@ -1,7 +1,7 @@
 //! WLS (Weighted Least Squares) 回归节点
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -13,13 +13,19 @@ use polars::prelude::{Column, DataFrame, Series};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
+use yss_sci::regression::linear_model::{CovParams, WLSConfig, WLS};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
-use super::info_nodes::{compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry};
+use super::info_nodes::{
+    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
+    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
+    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+};
+use super::ols_nodes::{
+    format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec,
+};
 use std::time::Instant;
-use super::ols_nodes::{format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec};
 
 /// Re-export OLSModel for Predict compatibility (WLS outputs same structure)
 pub use super::ols_nodes::OLSModel;
@@ -66,10 +72,9 @@ fn wls_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -86,9 +91,7 @@ fn wls_input_slots() -> Vec<PinSlot> {
 
 fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitResult, String> {
     // ---- Extract endog ----
-    let endog_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("y".to_string())),
-    )?;
+    let endog_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("y".to_string())))?;
     let endog_id = match &endog_value {
         DataValue::DataSeries(v) => v.id.clone(),
         other => {
@@ -120,16 +123,19 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("WLS: cannot cast Y to Float64: {}", e))?;
 
     // ---- Extract weights ----
-    let weights_value = ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("weights".to_string())),
-    )?;
+    let weights_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("weights".to_string())))?;
     let weights_id = match &weights_value {
         DataValue::DataSeries(v) => v.id.clone(),
         other => {
@@ -150,45 +156,46 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     if weights_f64_series.len() != endog_f64_series.len() {
         return Err(format!(
             "WLS: Weights has {} observations, expected {} (must match Y length)",
-            weights_f64_series.len(), endog_f64_series.len()
+            weights_f64_series.len(),
+            endog_f64_series.len()
         ));
     }
 
     // ---- Get config (optional — falls back to OLSConfigure::default()) ----
-    let config = match ctx.get_input_by_role(
-        &PinRole::Data(DataRole::Custom("ols_config".to_string())),
-    ) {
-        Ok(config_value) => match config_value.as_handle_id() {
-            Some(id) => {
-                let handle = ctx.get_handle(&id.to_string())?;
-                handle
-                    .downcast_ref::<OLSConfigure>()
-                    .ok_or("WLS: config handle is not an OLSConfigure")?
-                    .clone()
-            }
-            None => OLSConfigure::default(),
-        },
-        Err(_) => OLSConfigure::default(),
-    };
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("ols_config".to_string()))) {
+            Ok(config_value) => match config_value.as_handle_id() {
+                Some(id) => {
+                    let handle = ctx.get_handle(&id.to_string())?;
+                    handle
+                        .downcast_ref::<OLSConfigure>()
+                        .ok_or("WLS: config handle is not an OLSConfigure")?
+                        .clone()
+                }
+                None => OLSConfigure::default(),
+            },
+            Err(_) => OLSConfigure::default(),
+        };
     let has_constant = config.constant;
 
     // ---- Extract exog (mixed numeric + categorical) ----
-    let exog_data_values = ctx.get_inputs_by_family(
-        &PinRole::Data(DataRole::Inputs(0)),
-    )?;
+    let exog_data_values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
 
     if exog_data_values.is_empty() {
         return Err("WLS: at least one X input is required".to_string());
     }
 
     // Optional time series for residual time info (from direct Time pin or from config)
-    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+    let time_series = match ctx
+        .get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string())))
+    {
         Ok(DataValue::DataSeries(v)) => {
             let ts = ctx.get_series(&v.id)?;
             if ts.len() != endog_f64_series.len() {
                 return Err(format!(
                     "WLS: Time has {} observations, expected {} (must match Y length)",
-                    ts.len(), endog_f64_series.len()
+                    ts.len(),
+                    endog_f64_series.len()
                 ));
             }
             Some(ts)
@@ -227,12 +234,18 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let series = ctx.get_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
-            if raw.is_empty() { format!("x{}", i + 1) } else { raw }
+            if raw.is_empty() {
+                format!("x{}", i + 1)
+            } else {
+                raw
+            }
         };
         if series.len() != n_raw {
             return Err(format!(
                 "WLS: X '{}' has {} observations, expected {} (must match Y length)",
-                series_name, series.len(), n_raw
+                series_name,
+                series.len(),
+                n_raw
             ));
         }
         let is_categorical = matches!(
@@ -248,7 +261,9 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("WLS: cannot cast X {} to Float64: {}", i, e))?
         };
-        df_cols.push(Column::from(col_series.with_name(series_name.as_str().into())));
+        df_cols.push(Column::from(
+            col_series.with_name(series_name.as_str().into()),
+        ));
         exog_meta.push((series_name, is_categorical, dsv));
     }
     let df = DataFrame::new(n_raw, df_cols)
@@ -294,8 +309,13 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let col = df.column(&series_name).map_err(|e| format!("WLS: {}", e))?;
 
         if is_categorical {
-            let str_ca = col.str().map_err(|e| format!("WLS: X '{}': {}", series_name, e))?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e| format!("WLS: X '{}': {}", series_name, e))?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique_ordered: Vec<String> = Vec::new();
             for v in &values {
                 if !unique_ordered.contains(v) {
@@ -335,18 +355,29 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 unique_ordered.iter().filter(|c| **c != drop_cat).collect()
             };
             for cat in &categories_to_include {
-                let col: Vec<f64> = values.iter().map(|v| if v == *cat { 1.0 } else { 0.0 }).collect();
+                let col: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == *cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col);
                 col_labels.push((series_name.clone(), Some((*cat).clone())));
             }
             variable_specs.push(VariableSpec::Categorical {
                 name: series_name,
                 categories: unique_ordered,
-                dropped: if drop_cat.is_empty() { String::new() } else { drop_cat },
+                dropped: if drop_cat.is_empty() {
+                    String::new()
+                } else {
+                    drop_cat
+                },
                 role,
             });
         } else {
-            let values: Vec<f64> = col.f64().map_err(|e| format!("WLS: X '{}': {}", series_name, e))?.into_no_null_iter().collect();
+            let values: Vec<f64> = col
+                .f64()
+                .map_err(|e| format!("WLS: X '{}': {}", series_name, e))?
+                .into_no_null_iter()
+                .collect();
             exog_columns.push(values);
             col_labels.push((series_name.clone(), None));
             variable_specs.push(VariableSpec::Numeric { name: series_name });
@@ -405,9 +436,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
 
     // ---- Run WLS regression ----
     let cov_params = config.cov_config.as_ref().map(|c| match c {
-        OLSCovarianceConfig::FixedScale { scale } => CovParams::FixedScale {
-            scale: *scale,
-        },
+        OLSCovarianceConfig::FixedScale { scale } => CovParams::FixedScale { scale: *scale },
         OLSCovarianceConfig::Cluster { cluster_id } => CovParams::Cluster {
             cluster_id: cluster_id.clone(),
             xtreg_fe_style: false,
@@ -436,7 +465,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let t_fitted = Instant::now();
     let fitted_values: Vec<f64> = (0..n)
         .map(|i| {
-            exog_use.row(i)
+            exog_use
+                .row(i)
                 .iter()
                 .zip(result.betas.iter())
                 .map(|(x, b)| x * b)
@@ -483,17 +513,38 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             weights.clone()
         };
 
-        let r_stata_rhs = diagnostics::breusch_pagan_stata_rhs_weighted(&exog_use, &residuals_arr, &w_norm).ok();
-        let r_koenker_rhs = diagnostics::breusch_pagan_koenker_rhs_weighted(&exog_use, &residuals_arr, &w_norm).ok();
-        let r_stata = diagnostics::breusch_pagan_stata_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
-        let r_koenker = diagnostics::breusch_pagan_koenker_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
+        let r_stata_rhs =
+            diagnostics::breusch_pagan_stata_rhs_weighted(&exog_use, &residuals_arr, &w_norm).ok();
+        let r_koenker_rhs =
+            diagnostics::breusch_pagan_koenker_rhs_weighted(&exog_use, &residuals_arr, &w_norm)
+                .ok();
+        let r_stata =
+            diagnostics::breusch_pagan_stata_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
+        let r_koenker =
+            diagnostics::breusch_pagan_koenker_weighted(&residuals_arr, &fitted_arr, &w_norm).ok();
         let ms = t_bp.elapsed().as_millis() as u64;
         (
             Some(BreuschPaganTests {
-                stata: r_stata.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker: r_koenker.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
-                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest { lm_stat: r.lm_stat, df: r.df, p_value: r.p_value }),
+                stata: r_stata.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker: r_koenker.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                stata_rhs: r_stata_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
+                koenker_rhs: r_koenker_rhs.map(|r| BreuschPaganTest {
+                    lm_stat: r.lm_stat,
+                    df: r.df,
+                    p_value: r.p_value,
+                }),
             }),
             Some(ms),
         )
@@ -516,8 +567,18 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         let ms = t_ov.elapsed().as_millis() as u64;
         (
             Some(OvTests {
-                default: r_default.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
-                rhs: r_rhs.map(|r| OvTest { f_stat: r.f_stat, df1: r.df1, df2: r.df2, p_value: r.p_value }),
+                default: r_default.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
+                rhs: r_rhs.map(|r| OvTest {
+                    f_stat: r.f_stat,
+                    df1: r.df1,
+                    df2: r.df2,
+                    p_value: r.p_value,
+                }),
             }),
             Some(ms),
         )
@@ -565,29 +626,31 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         (None, None)
     };
 
-    let vif = diagnostics::vif_centered(&exog_use, has_constant).ok().and_then(|entries| {
-        let vif_entries: Vec<VifEntry> = entries
-            .into_iter()
-            .enumerate()
-            .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
-            .map(|(j, e)| {
-                let (var_name, _) = all_labels_use
-                    .get(j)
-                    .cloned()
-                    .unwrap_or_else(|| (format!("x{}", j), None));
-                VifEntry {
-                    variable: var_name,
-                    vif: e.vif,
-                    tolerance: e.tolerance,
-                }
-            })
-            .collect();
-        if vif_entries.is_empty() {
-            None
-        } else {
-            Some(vif_entries)
-        }
-    });
+    let vif = diagnostics::vif_centered(&exog_use, has_constant)
+        .ok()
+        .and_then(|entries| {
+            let vif_entries: Vec<VifEntry> = entries
+                .into_iter()
+                .enumerate()
+                .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
+                .map(|(j, e)| {
+                    let (var_name, _) = all_labels_use
+                        .get(j)
+                        .cloned()
+                        .unwrap_or_else(|| (format!("x{}", j), None));
+                    VifEntry {
+                        variable: var_name,
+                        vif: e.vif,
+                        tolerance: e.tolerance,
+                    }
+                })
+                .collect();
+            if vif_entries.is_empty() {
+                None
+            } else {
+                Some(vif_entries)
+            }
+        });
 
     // WLS: 与 statsmodels 一致，使用加权残差 wresid_i = sqrt(w_i) * r_i 做正态性检验
     // 未加权残差具异方差，会扭曲 Skew/Kurtosis/JB/Omnibus
@@ -595,7 +658,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let residual_scatter = if time_series.is_some() && residuals.len() >= 2 {
         let time_col = df.column("__time__").map_err(|e| format!("WLS: {}", e))?;
         let time_s = time_col.clone().take_materialized_series();
-        let residuals_s = Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
+        let residuals_s =
+            Series::from_iter(residuals.iter().cloned()).with_name("residuals".into());
 
         let interval = infer_interval(&time_s).unwrap_or(1);
         match ts_lag(&time_s, &residuals_s, 1, interval) {
@@ -653,14 +717,16 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             .map(|(i, r)| r * weights[i].sqrt())
             .collect();
         let residuals_arr = Array1::from(weighted_residuals);
-        diagnostics::normality_tests(&residuals_arr).ok().map(|r| NormalityTests {
-            skewness: r.skewness,
-            kurtosis: r.kurtosis,
-            omnibus_stat: r.omnibus_stat,
-            omnibus_p_value: r.omnibus_p_value,
-            jarque_bera_stat: r.jarque_bera_stat,
-            jarque_bera_p_value: r.jarque_bera_p_value,
-        })
+        diagnostics::normality_tests(&residuals_arr)
+            .ok()
+            .map(|r| NormalityTests {
+                skewness: r.skewness,
+                kurtosis: r.kurtosis,
+                omnibus_stat: r.omnibus_stat,
+                omnibus_p_value: r.omnibus_p_value,
+                jarque_bera_stat: r.jarque_bera_stat,
+                jarque_bera_p_value: r.jarque_bera_p_value,
+            })
     } else {
         None
     };
@@ -709,7 +775,10 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 ms_model: result.ms_model,
                 ms_residual: result.ms_residual,
                 ms_total: result.ms_total,
-                covariance_type: format_covariance_type_display(&result.covariance_type, config.cov_config.as_ref()),
+                covariance_type: format_covariance_type_display(
+                    &result.covariance_type,
+                    config.cov_config.as_ref(),
+                ),
                 aic,
                 bic,
             }
@@ -726,7 +795,11 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             residuals,
             leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
             residual_scatter,
-            exog: Some((0..n).map(|i| exog_use.row(i).iter().cloned().collect()).collect()),
+            exog: Some(
+                (0..n)
+                    .map(|i| exog_use.row(i).iter().cloned().collect())
+                    .collect(),
+            ),
             timing: Some(DiagnosticTiming {
                 fitted_residuals_ms: Some(fitted_residuals_ms),
                 bp_tests_ms,
@@ -766,7 +839,10 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         kept_indices,
     };
 
-    Ok(WLSFitResult { ols_result, ols_model })
+    Ok(WLSFitResult {
+        ols_result,
+        ols_model,
+    })
 }
 
 // ======================== 注册入口 ========================
@@ -795,43 +871,53 @@ fn register_wls(registry: &NodeRegistry) {
         DataRole::Custom("ols_residuals".to_string()),
         PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
-    let definition = NodeDefinition::new(
-        "WLS",
-        vec!["Data".to_string(), "Statistics".to_string()],
-    )
-    .with_ui_style("dataframe")
-    .with_description("Weighted Least Squares regression — outputs the fitted model for prediction")
-    .with_pin_slots(slots)
-    .with_flow_processor(Arc::new(|ctx| {
-        let fit = run_wls_regression(ctx)?;
+    let definition = NodeDefinition::new("WLS", vec!["Data".to_string(), "Statistics".to_string()])
+        .with_ui_style("dataframe")
+        .with_description(
+            "Weighted Least Squares regression — outputs the fitted model for prediction",
+        )
+        .with_pin_slots(slots)
+        .with_flow_processor(Arc::new(|ctx| {
+            let fit = run_wls_regression(ctx)?;
 
-        let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_model".to_string())),
-            DataValue::new_struct("OLSModel", model_handle_id),
-        )?;
+            let model_handle_id = ctx.put_handle(Box::new(fit.ols_model));
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_model".to_string())),
+                DataValue::new_struct("OLSModel", model_handle_id),
+            )?;
 
-        let fitted_series = Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
-            .with_name("fitted".into());
-        let fitted_id = ctx.put_series(fitted_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(fitted_id, DataType::Float64)),
-        )?;
+            let fitted_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
+                    .with_name("fitted".into());
+            let fitted_id = ctx.put_series(fitted_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    fitted_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        let residuals_series = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
-            .with_name("residuals".into());
-        let residuals_id = ctx.put_series(residuals_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(residuals_id, DataType::Float64)),
-        )?;
+            let residuals_series =
+                Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
+                    .with_name("residuals".into());
+            let residuals_id = ctx.put_series(residuals_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    residuals_id,
+                    DataType::Float64,
+                )),
+            )?;
 
-        ctx.log("WLS: regression completed".to_string());
-        Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
-    }));
+            ctx.log("WLS: regression completed".to_string());
+            Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+        }));
     registry.register(definition);
 }
 
@@ -844,14 +930,19 @@ fn register_wls_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "WLS Summary",
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Weighted Least Squares regression — outputs results and opens the summary window")
+    .with_description(
+        "Weighted Least Squares regression — outputs results and opens the summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_wls_regression(ctx)?;

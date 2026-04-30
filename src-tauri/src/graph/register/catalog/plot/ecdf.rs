@@ -2,7 +2,9 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
+use crate::graph::pin::{
+    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
@@ -24,18 +26,22 @@ struct EcdfPoint {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("ECDF", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_description("Plot empirical cumulative distribution function from a numeric DataSeries")
+        .with_description(
+            "Plot empirical cumulative distribution function from a numeric DataSeries",
+        )
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
                 "Values",
                 DataRole::Inputs(0),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Float64,
-                    DataType::Int64,
-                    DataType::Int32,
-                    DataType::Float32,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![
+                        DataType::Float64,
+                        DataType::Int64,
+                        DataType::Int32,
+                        DataType::Float32,
+                    ],
+                )))),
             )),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
@@ -51,7 +57,9 @@ pub fn register(registry: &NodeRegistry) {
             let cast = series
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("ECDF: cannot cast to Float64: {}", e))?;
-            let f64_chunk = cast.f64().map_err(|e| format!("ECDF: not numeric: {}", e))?;
+            let f64_chunk = cast
+                .f64()
+                .map_err(|e| format!("ECDF: not numeric: {}", e))?;
 
             let mut values: Vec<f64> = f64_chunk
                 .into_iter()
@@ -87,8 +95,8 @@ pub fn register(registry: &NodeRegistry) {
                 y_label: Some("Cumulative Proportion".to_string()),
             };
 
-            let json =
-                serde_json::to_string(&plot_data).map_err(|e| format!("ECDF: serialize failed: {}", e))?;
+            let json = serde_json::to_string(&plot_data)
+                .map_err(|e| format!("ECDF: serialize failed: {}", e))?;
             ctx.open_window("ecdf".to_string(), json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

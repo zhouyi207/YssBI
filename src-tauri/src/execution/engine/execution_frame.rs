@@ -56,7 +56,7 @@ pub struct ExecutionFrame {
     pub state: FrameState,
 
     /// 剩余的 continuation（用于 Sequence）
-    /// 
+    ///
     /// 当节点返回 TriggerAndContinue 时，remaining 会被保存到这里
     /// 当子流程完成后，执行器会继续执行这些 continuation
     pub remaining_continuations: Vec<ExecRole>,
@@ -138,7 +138,10 @@ impl fmt::Debug for ExecutionFrame {
             .field("node_id", &self.node_id)
             .field("state", &self.state)
             .field("parent_frame", &self.parent_frame)
-            .field("remaining_continuations", &self.remaining_continuations.len())
+            .field(
+                "remaining_continuations",
+                &self.remaining_continuations.len(),
+            )
             .field("debug_info", &self.debug_info)
             .finish()
     }

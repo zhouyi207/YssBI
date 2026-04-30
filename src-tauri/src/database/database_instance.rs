@@ -5,9 +5,9 @@ use super::DatabaseView;
 use polars::prelude::*;
 use std::sync::Arc;
 use yss_sci::api::database::{
-    EditHistory, EditOperation, EditState, apply_operation, reverse_operation,
-    anyvalue_to_json, capture_row_data, capture_column_data,
-    cast_column as sci_cast_column, dtype_to_string,
+    anyvalue_to_json, apply_operation, capture_column_data, capture_row_data,
+    cast_column as sci_cast_column, dtype_to_string, reverse_operation, EditHistory, EditOperation,
+    EditState,
 };
 
 pub struct DatabaseInstance {
@@ -76,12 +76,15 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
         let df = Arc::make_mut(dataframe);
-        let col_idx = df.get_column_index(col_name)
+        let col_idx = df
+            .get_column_index(col_name)
             .ok_or_else(|| format!("Column '{}' not found", col_name))?;
         let old_value = df.columns()[col_idx]
             .get(row)
@@ -104,7 +107,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -121,7 +126,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -133,7 +140,10 @@ impl DatabaseInstance {
         for (offset, &idx) in sorted_indices.iter().enumerate() {
             let actual_idx = idx - offset;
             let data = capture_row_data(df, actual_idx);
-            let op = EditOperation::DeleteRow { index: actual_idx, data };
+            let op = EditOperation::DeleteRow {
+                index: actual_idx,
+                data,
+            };
             apply_operation(df, &op)?;
             history.push(op);
         }
@@ -145,7 +155,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -164,7 +176,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -184,7 +198,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -208,7 +224,9 @@ impl DatabaseInstance {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -233,7 +251,9 @@ impl DatabaseInstance {
 
     pub fn undo_edit(&mut self) -> Result<EditState, String> {
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -246,7 +266,9 @@ impl DatabaseInstance {
 
     pub fn redo_edit(&mut self) -> Result<EditState, String> {
         let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded { dataframe, history, .. } => (dataframe, history),
+            DatabaseState::Loaded {
+                dataframe, history, ..
+            } => (dataframe, history),
             _ => return Err("Database not loaded".into()),
         };
 
@@ -259,7 +281,11 @@ impl DatabaseInstance {
 
     pub fn reset_to_original(&mut self) -> Result<EditState, String> {
         match &mut self.state {
-            DatabaseState::Loaded { dataframe, original, history } => {
+            DatabaseState::Loaded {
+                dataframe,
+                original,
+                history,
+            } => {
                 *dataframe = original.clone();
                 history.clear();
                 Ok(history.state())

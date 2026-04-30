@@ -4,7 +4,7 @@
 //! κ-class estimator with κ = minimum eigenvalue of (Ỹ'MZ Ỹ)^{-1/2} Ỹ'MX1 Ỹ (Ỹ'MZ Ỹ)^{-1/2}
 //! β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
 
-use crate::regression::covariance::{compute_cov_beta, CovParams};
+use crate::regression::covariance::{CovParams, compute_cov_beta};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -116,7 +116,11 @@ impl IVLIML {
         } else {
             k_exog + k_iv
         };
-        let k1 = if self.config.constant { k_exog + 1 } else { k_exog };
+        let k1 = if self.config.constant {
+            k_exog + 1
+        } else {
+            k_exog
+        };
 
         // Z = [const?, exog, instruments]
         let mut z_raw = Vec::with_capacity(n * k_z);
@@ -216,11 +220,9 @@ impl IVLIML {
         let ytmx1_nd: Array2<f64> = &ytmz - &x1ty_nd.t().dot(&x1tx1_inv_nd).dot(&x1ty_nd);
 
         // G = (Ỹ'MZ Ỹ)^{-1/2} Ỹ'MX1 Ỹ (Ỹ'MZ Ỹ)^{-1/2}
-        let evd = faer::linalg::solvers::SelfAdjointEigen::new(
-            ytmz_nd.view().into_faer(),
-            Side::Lower,
-        )
-        .map_err(|_| "IVLIML: EVD of Ỹ'MZ Ỹ failed".to_string())?;
+        let evd =
+            faer::linalg::solvers::SelfAdjointEigen::new(ytmz_nd.view().into_faer(), Side::Lower)
+                .map_err(|_| "IVLIML: EVD of Ỹ'MZ Ỹ failed".to_string())?;
         let s_col = evd.S().column_vector();
         let u = evd.U();
         let size = k_endog + 1;
@@ -232,21 +234,16 @@ impl IVLIML {
             }
         }
         let ytmz_inv_sqrt = u.as_ref() * lambda_inv_sqrt.as_ref() * u.transpose();
-        let g = ytmz_inv_sqrt.as_ref() * (ytmx1_nd.view().into_faer().to_owned() * ytmz_inv_sqrt.as_ref());
+        let g = ytmz_inv_sqrt.as_ref()
+            * (ytmx1_nd.view().into_faer().to_owned() * ytmz_inv_sqrt.as_ref());
 
         // κ = minimum eigenvalue of G
         let g_nd = g.as_ref().into_ndarray().to_owned();
-        let evd_g = faer::linalg::solvers::SelfAdjointEigen::new(
-            g_nd.view().into_faer(),
-            Side::Lower,
-        )
-        .map_err(|_| "IVLIML: EVD of G failed".to_string())?;
+        let evd_g =
+            faer::linalg::solvers::SelfAdjointEigen::new(g_nd.view().into_faer(), Side::Lower)
+                .map_err(|_| "IVLIML: EVD of G failed".to_string())?;
         let s_g = evd_g.S().column_vector();
-        let kappa = s_g
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min)
-            .max(0.0);
+        let kappa = s_g.iter().cloned().fold(f64::INFINITY, f64::min).max(0.0);
 
         // β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
         // X'(I−κMZ)X = (1-κ)X'X + κ X'Z(Z'Z)^{-1}Z'X
@@ -263,10 +260,10 @@ impl IVLIML {
         let ztx_nd = ztx.as_ref().into_ndarray().to_owned();
         let zty_y_nd = zty_y.as_ref().into_ndarray().to_owned();
 
-        let xt_ikmz_x_nd: Array2<f64> = (1.0 - kappa) * &xtx_nd
-            + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&ztx_nd);
-        let xt_ikmz_y_nd: Array1<f64> = (1.0 - kappa) * &xty_nd
-            + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&zty_y_nd);
+        let xt_ikmz_x_nd: Array2<f64> =
+            (1.0 - kappa) * &xtx_nd + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&ztx_nd);
+        let xt_ikmz_y_nd: Array1<f64> =
+            (1.0 - kappa) * &xty_nd + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&zty_y_nd);
 
         let xt_ikmz_x_faer = xt_ikmz_x_nd.view().into_faer().to_owned();
         let xt_ikmz_y_faer = xt_ikmz_y_nd.view().into_faer_col().to_owned();
@@ -357,7 +354,8 @@ impl IVLIML {
                 .map_err(|_| "IVLIML: V_s not pd for Wald".to_string())?
                 .solve(beta_s_faer.as_ref());
             let wald = beta_s.dot(&x_sol.as_ref().into_ndarray());
-            let chi2_dist = ChiSquared::new(df_wald as f64).map_err(|e| format!("IVLIML Wald: {}", e))?;
+            let chi2_dist =
+                ChiSquared::new(df_wald as f64).map_err(|e| format!("IVLIML Wald: {}", e))?;
             (wald, 1.0 - chi2_dist.cdf(wald))
         };
 
@@ -378,26 +376,57 @@ impl IVLIML {
             let resid = &endog_col - &hat_arr;
             let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
             let y_mean_j = endog_col.iter().mean();
-            let ss_tot = endog_col.iter().map(|v| (v - y_mean_j).powi(2)).sum::<f64>();
-            let r2_j = if ss_tot > 1e-300 { 1.0 - ss_resid / ss_tot } else { 0.0 };
-            let sigma2_j = if df_z > 0 { (ss_resid / df_z as f64).max(1e-300) } else { 1e-300 };
+            let ss_tot = endog_col
+                .iter()
+                .map(|v| (v - y_mean_j).powi(2))
+                .sum::<f64>();
+            let r2_j = if ss_tot > 1e-300 {
+                1.0 - ss_resid / ss_tot
+            } else {
+                0.0
+            };
+            let sigma2_j = if df_z > 0 {
+                (ss_resid / df_z as f64).max(1e-300)
+            } else {
+                1e-300
+            };
             let cov_gamma = sigma2_j * &ztz_inv_nd;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[[i, i]].sqrt()).collect();
             let gamma_nd = gamma.as_ref().into_ndarray().to_owned();
             let t_dist = statrs::distribution::StudentsT::new(0.0, 1.0, df_z as f64)
                 .unwrap_or(statrs::distribution::StudentsT::new(0.0, 1.0, 1.0).unwrap());
             let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
-            let p_values: Vec<f64> = t_values.iter().map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs()))).collect();
+            let p_values: Vec<f64> = t_values
+                .iter()
+                .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
+                .collect();
             let t_crit = t_dist.inverse_cdf(0.975);
             let ci_left: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] - t_crit * stds[i]).collect();
             let ci_right: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] + t_crit * stds[i]).collect();
-            let name = self.endog_names.as_ref().and_then(|n| n.get(j).cloned()).unwrap_or_else(|| format!("endog_{}", j + 1));
+            let name = self
+                .endog_names
+                .as_ref()
+                .and_then(|n| n.get(j).cloned())
+                .unwrap_or_else(|| format!("endog_{}", j + 1));
             let var_names: Vec<String> = (0..k_z)
-                .map(|i| self.z_var_names.as_ref().and_then(|v| v.get(i).cloned()).unwrap_or_else(|| format!("z{}", i + 1)))
+                .map(|i| {
+                    self.z_var_names
+                        .as_ref()
+                        .and_then(|v| v.get(i).cloned())
+                        .unwrap_or_else(|| format!("z{}", i + 1))
+                })
                 .collect();
-            let ms_resid = if df_z > 0 { ss_resid / df_z as f64 } else { 0.0 };
+            let ms_resid = if df_z > 0 {
+                ss_resid / df_z as f64
+            } else {
+                0.0
+            };
             let ms_tot = if n > 1 { ss_tot / (n - 1) as f64 } else { 0.0 };
-            let r2_adj = if ms_tot > 1e-300 { 1.0 - ms_resid / ms_tot } else { 0.0 };
+            let r2_adj = if ms_tot > 1e-300 {
+                1.0 - ms_resid / ms_tot
+            } else {
+                0.0
+            };
             first_stage.push(super::iv2sls::FirstStageResult {
                 endog_name: name,
                 var_names,
@@ -485,7 +514,9 @@ impl IVLIML {
             r2_adjusted,
             wald_chi2,
             wald_chi2_p_value: wald_p,
-            model: IVLIMLModel { params: betas_nd.clone() },
+            model: IVLIMLModel {
+                params: betas_nd.clone(),
+            },
             betas: betas_nd,
             stds: std_err,
             zvalues: Array1::from_vec(z_values),

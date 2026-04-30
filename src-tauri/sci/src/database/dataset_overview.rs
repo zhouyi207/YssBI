@@ -62,7 +62,10 @@ fn is_string(dt: &DataType) -> bool {
 }
 
 fn is_datetime(dt: &DataType) -> bool {
-    matches!(dt, DataType::Date | DataType::Time | DataType::Datetime(_, _) | DataType::Duration(_))
+    matches!(
+        dt,
+        DataType::Date | DataType::Time | DataType::Datetime(_, _) | DataType::Duration(_)
+    )
 }
 
 fn is_bool(dt: &DataType) -> bool {

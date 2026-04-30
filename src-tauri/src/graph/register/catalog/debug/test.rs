@@ -2,10 +2,10 @@
 mod tests {
     use crate::execution::{Executor, NoopEmitter, WindowDataStore};
     use crate::graph::{
-        GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
+        GraphInstance, GraphRuntime,
     };
     use std::sync::{Arc, Mutex};
 
@@ -26,7 +26,11 @@ mod tests {
     fn test_print_node_basic() {
         // 测试 Print 节点的基本功能
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建 Print 节点
         let print_node = graph
@@ -44,7 +48,10 @@ mod tests {
 
         // 设置消息
         graph
-            .set_pin_user_value_by_pin_id(message_pin.id, DataValue::String("Hello from test!".to_string()))
+            .set_pin_user_value_by_pin_id(
+                message_pin.id,
+                DataValue::String("Hello from test!".to_string()),
+            )
             .expect("Failed to set message value");
 
         // 创建 GraphRuntime 并使用 Executor 执行
@@ -52,11 +59,7 @@ mod tests {
         let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print_node);
 
-        assert!(
-            result.is_ok(),
-            "Executor failed: {:?}",
-            result.err()
-        );
+        assert!(result.is_ok(), "Executor failed: {:?}", result.err());
 
         // 打印执行日志
         println!("\n=== Execution Logs ===");
@@ -72,7 +75,11 @@ mod tests {
     fn test_print_node_default_message() {
         // 测试 Print 节点使用默认消息
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建 Print 节点（不设置消息，使用默认值）
         let print_node = graph
@@ -84,11 +91,7 @@ mod tests {
         let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print_node);
 
-        assert!(
-            result.is_ok(),
-            "Executor failed: {:?}",
-            result.err()
-        );
+        assert!(result.is_ok(), "Executor failed: {:?}", result.err());
 
         // 打印执行日志
         println!("\n=== Execution Logs ===");
@@ -104,7 +107,11 @@ mod tests {
     fn test_print_node_chain() {
         // 测试多个 Print 节点的链式执行
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建三个 Print 节点
         let print1_node = graph
@@ -137,7 +144,10 @@ mod tests {
             .expect("Print2 message pin not found");
 
         graph
-            .set_pin_user_value_by_pin_id(print2_message.id, DataValue::String("Second".to_string()))
+            .set_pin_user_value_by_pin_id(
+                print2_message.id,
+                DataValue::String("Second".to_string()),
+            )
             .expect("Failed to set print2 message");
 
         let print3_pins = graph.get_pin_instances_by_node_id(print3_node);
@@ -184,11 +194,7 @@ mod tests {
         let mut executor = executor_for_test(graph_runtime);
         let result = executor.start(print1_node);
 
-        assert!(
-            result.is_ok(),
-            "Executor failed: {:?}",
-            result.err()
-        );
+        assert!(result.is_ok(), "Executor failed: {:?}", result.err());
 
         // 打印执行日志
         println!("\n=== Execution Logs ===");

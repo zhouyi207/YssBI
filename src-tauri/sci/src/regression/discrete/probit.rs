@@ -72,7 +72,8 @@ impl Probit {
             if yi != 0.0 && yi != 1.0 {
                 return Err(format!(
                     "Probit: endog must be 0/1, got {} at observation {}",
-                    yi, i + 1
+                    yi,
+                    i + 1
                 ));
             }
         }
@@ -98,9 +99,8 @@ impl Probit {
             });
 
             // z = η + (y-p)/w
-            let z: Array1<f64> = Array1::from_shape_fn(n, |i| {
-                eta[i] + (self.endog[i] - p[i]) / w[i]
-            });
+            let z: Array1<f64> =
+                Array1::from_shape_fn(n, |i| eta[i] + (self.endog[i] - p[i]) / w[i]);
 
             let sqrt_w: Array1<f64> = w.mapv(|wi| wi.sqrt());
 
@@ -108,7 +108,11 @@ impl Probit {
             for (i, mut row) in xw.outer_iter_mut().enumerate() {
                 row *= sqrt_w[i];
             }
-            let zw: Array1<f64> = z.iter().zip(sqrt_w.iter()).map(|(zi, sw)| zi * sw).collect();
+            let zw: Array1<f64> = z
+                .iter()
+                .zip(sqrt_w.iter())
+                .map(|(zi, sw)| zi * sw)
+                .collect();
 
             let xw_faer = xw.view().into_faer().to_owned();
             let zw_faer = zw.view().into_faer_col().to_owned();
@@ -175,24 +179,28 @@ impl Probit {
                     .zip(p_final.iter())
                     .map(|(yi, pi)| {
                         let pi = pi.clamp(1e-300, 1.0 - 1e-300);
-                        if *yi > 0.5 {
-                            pi.ln()
-                        } else {
-                            (1.0 - pi).ln()
-                        }
+                        if *yi > 0.5 { pi.ln() } else { (1.0 - pi).ln() }
                     })
                     .sum();
 
                 let y_mean = self.endog.mean().unwrap();
                 let p_null = y_mean.clamp(EPS, 1.0 - EPS);
-                let ll_null: f64 = self.endog.iter().map(|yi| {
-                    let p = if *yi > 0.5 { p_null } else { 1.0 - p_null };
-                    p.ln()
-                }).sum();
+                let ll_null: f64 = self
+                    .endog
+                    .iter()
+                    .map(|yi| {
+                        let p = if *yi > 0.5 { p_null } else { 1.0 - p_null };
+                        p.ln()
+                    })
+                    .sum();
 
                 let pseudo_r2 = 1.0 - ll / ll_null;
                 let lr_chi2 = 2.0 * (ll - ll_null);
-                let df_model = if self.config.constant { k.saturating_sub(1) } else { k };
+                let df_model = if self.config.constant {
+                    k.saturating_sub(1)
+                } else {
+                    k
+                };
                 let lr_p_value = if df_model <= 0 {
                     1.0
                 } else {
@@ -206,7 +214,9 @@ impl Probit {
 
                 return Ok(ProbitResult {
                     num_observation: n,
-                    model: ProbitModel { params: beta.clone() },
+                    model: ProbitModel {
+                        params: beta.clone(),
+                    },
                     betas: beta,
                     stds: std_err,
                     zvalues: Array1::from_vec(z_values),

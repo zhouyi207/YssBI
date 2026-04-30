@@ -84,8 +84,7 @@ mod tests {
     #[test]
     fn test_chained_a_lt_b_lt_c() {
         let mut reg = ParamRegistry::new();
-        let result =
-            crate::ast::parse_hypothesis_with_registry("a < b < c", &mut reg).unwrap();
+        let result = crate::ast::parse_hypothesis_with_registry("a < b < c", &mut reg).unwrap();
         assert_eq!(result.len(), 2);
         match &result[0] {
             HypothesisExpr::Lt(e, k) => {
@@ -151,8 +150,7 @@ mod tests {
     #[test]
     fn test_validate_div_by_var_err() {
         let mut reg = ParamRegistry::new();
-        let constraints =
-            crate::ast::parse_hypothesis_with_registry("s/t = 1", &mut reg).unwrap();
+        let constraints = crate::ast::parse_hypothesis_with_registry("s/t = 1", &mut reg).unwrap();
         let err = validate_hypotheses(&constraints).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("除法") || msg.contains("常数"));
@@ -162,17 +160,16 @@ mod tests {
     fn test_validate_exp_err() {
         let constraints = parse_hypothesis("exp(s) = 2").unwrap();
         let err = validate_hypotheses(&constraints).unwrap_err();
-        assert!(matches!(
-            err,
-            ValidationError::ConstraintFailed { .. }
-        ));
+        assert!(matches!(err, ValidationError::ConstraintFailed { .. }));
         let msg = err.to_string();
         assert!(msg.contains("exp"));
     }
 
     // ==================== 线性展开测试 ====================
 
-    use crate::ast::{linear_expand, Alternative, HypothesisSpec, LinearConstraintKind, TestMethod};
+    use crate::ast::{
+        linear_expand, Alternative, HypothesisSpec, LinearConstraintKind, TestMethod,
+    };
 
     #[test]
     fn test_linear_expand_s_eq_0_1() {
@@ -277,8 +274,7 @@ mod tests {
     #[test]
     fn test_linear_expand_s_gt_t() {
         let mut reg = ParamRegistry::new();
-        let constraints =
-            crate::ast::parse_hypothesis_with_registry("s > t", &mut reg).unwrap();
+        let constraints = crate::ast::parse_hypothesis_with_registry("s > t", &mut reg).unwrap();
         let spec = linear_expand(&constraints).unwrap();
         match &spec.hypothesis {
             HypothesisSpec::Linear { r, r_vec, kind } => {

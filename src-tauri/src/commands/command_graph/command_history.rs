@@ -2,9 +2,9 @@
 //!
 //! 提供图状态同步命令，用于 undo/redo 后将前端快照重建到后端。
 
+use crate::graph::GraphId;
 use crate::project::ProjectState;
 use crate::schema::GraphRebuildSnapshot;
-use crate::graph::GraphId;
 use tauri::State;
 
 /// 从前端快照同步后端 Graph 状态（undo/redo 后调用）
@@ -18,8 +18,12 @@ pub fn sync_graph_state(
     snapshot: GraphRebuildSnapshot,
 ) -> Result<(), String> {
     let bounding = state.project_data.write().unwrap();
-    let graph = bounding.graphs.get(&graph_id)
+    let graph = bounding
+        .graphs
+        .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
 
-    graph.rebuild_from_snapshot(snapshot)
+    graph.rebuild_from_snapshot(snapshot)?;
+    drop(bounding);
+    state.persist_current_project()
 }

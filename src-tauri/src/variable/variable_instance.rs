@@ -1,5 +1,5 @@
 use super::{VariableId, VariableScope};
-use crate::graph::value::{DataValue, DataType};
+use crate::graph::value::{DataType, DataValue};
 use serde::{Deserialize, Serialize};
 
 /// 变量定义（持久化到项目文件）

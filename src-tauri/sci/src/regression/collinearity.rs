@@ -119,7 +119,12 @@ mod tests {
 
     #[test]
     fn test_full_rank_no_drop() {
-        let x = array![[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0]];
+        let x = array![
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0]
+        ];
         let is_dummy = vec![false, true, true];
         let (reduced, omitted) = drop_collinear_columns(&x, &is_dummy, Some(0)).unwrap();
         assert!(omitted.is_empty());
@@ -129,11 +134,7 @@ mod tests {
     #[test]
     fn test_collinear_drop_non_dummy_first() {
         // col2 = col1, so rank 2. Prefer to drop col1 (continuous) over col2 (dummy)
-        let x = array![
-            [1.0, 1.0, 1.0],
-            [1.0, 2.0, 2.0],
-            [1.0, 3.0, 3.0],
-        ];
+        let x = array![[1.0, 1.0, 1.0], [1.0, 2.0, 2.0], [1.0, 3.0, 3.0],];
         let is_dummy = vec![false, false, true]; // const, x1, x2; x2=x1
         let (reduced, omitted) = drop_collinear_columns(&x, &is_dummy, Some(0)).unwrap();
         assert_eq!(omitted.len(), 1);

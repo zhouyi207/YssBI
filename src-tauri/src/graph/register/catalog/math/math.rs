@@ -6,7 +6,7 @@
 //! - DataSeries + scalar / scalar + DataSeries → DataSeries（标量广播）
 
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, PinDefinition, PinDataTypeDefinition, PinRole, PinSlot};
+use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::Series;
@@ -47,7 +47,9 @@ fn scalar_to_f64(v: &DataValue) -> Option<f64> {
 }
 
 fn has_any_series(operands: &[DataValue]) -> bool {
-    operands.iter().any(|v| matches!(v, DataValue::DataSeries(_)))
+    operands
+        .iter()
+        .any(|v| matches!(v, DataValue::DataSeries(_)))
 }
 
 /// 将 DataValue 转为 Float64 Series（用于运算）
@@ -68,15 +70,16 @@ fn value_to_f64_series(
             let scalar = scalar_to_f64(v)
                 .ok_or_else(|| format!("Math: cannot convert {:?} to scalar", v.value_type()))?;
             let n = len.unwrap_or(1);
-            Ok(Series::from_iter(
-                std::iter::repeat(scalar).take(n),
-            ))
+            Ok(Series::from_iter(std::iter::repeat(scalar).take(n)))
         }
     }
 }
 
 /// 获取首个 DataSeries 的长度，用于构造标量 Series
-fn get_series_len(operands: &[DataValue], ctx: &dyn crate::execution::NodeExecutionContextTrait) -> Option<usize> {
+fn get_series_len(
+    operands: &[DataValue],
+    ctx: &dyn crate::execution::NodeExecutionContextTrait,
+) -> Option<usize> {
     for v in operands {
         if let DataValue::DataSeries(dsv) = v {
             if let Ok(s) = ctx.get_series(&dsv.id) {
@@ -95,161 +98,205 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_add(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Add (+)", vec!["Math".to_string(), "Operators".to_string()])
-        .with_ui_style("math")
-        .with_description("Add numbers or DataSeries (element-wise / broadcast)")
-        .with_pin_slots(vec![
-            PinSlot::repeatable(
-                PinDefinition::data_input("", DataRole::Operands(0), PinDataTypeDefinition::concrete(operable_input_type()))
+    let definition =
+        NodeDefinition::new("Add (+)", vec!["Math".to_string(), "Operators".to_string()])
+            .with_ui_style("math")
+            .with_description("Add numbers or DataSeries (element-wise / broadcast)")
+            .with_pin_slots(vec![
+                PinSlot::repeatable(
+                    PinDefinition::data_input(
+                        "",
+                        DataRole::Operands(0),
+                        PinDataTypeDefinition::concrete(operable_input_type()),
+                    )
                     .with_optional(true),
-                "",
-                2,
-                None,
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Result",
-                DataRole::Result,
-                PinDataTypeDefinition::concrete(operable_output_type()),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
-            let result = if has_any_series(&operands) {
-                let len = get_series_len(&operands, ctx);
-                let mut acc: Option<Series> = None;
-                for v in operands {
-                    let s = value_to_f64_series(&v, len, ctx)?;
-                    acc = Some(match acc {
-                        None => s,
-                        Some(a) => {
-                            let out = (&a + &s).map_err(|e| format!("Add: {}", e))?;
-                            out
-                        }
-                    });
-                }
-                let series = acc.ok_or("Add: no operands".to_string())?;
-                let id = ctx.put_series(series)?;
-                DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
-            } else {
-                operands
-                    .into_iter()
-                    .reduce(|acc, v| (acc.clone() + v).unwrap_or(acc))
-                    .ok_or_else(|| "Add: no operands".to_string())?
-            };
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
-            Ok(())
-        }));
+                    "",
+                    2,
+                    None,
+                ),
+                PinSlot::fixed(PinDefinition::data_output(
+                    "Result",
+                    DataRole::Result,
+                    PinDataTypeDefinition::concrete(operable_output_type()),
+                )),
+            ])
+            .with_data_evaluator(Arc::new(|ctx| {
+                let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
+                let result = if has_any_series(&operands) {
+                    let len = get_series_len(&operands, ctx);
+                    let mut acc: Option<Series> = None;
+                    for v in operands {
+                        let s = value_to_f64_series(&v, len, ctx)?;
+                        acc = Some(match acc {
+                            None => s,
+                            Some(a) => {
+                                let out = (&a + &s).map_err(|e| format!("Add: {}", e))?;
+                                out
+                            }
+                        });
+                    }
+                    let series = acc.ok_or("Add: no operands".to_string())?;
+                    let id = ctx.put_series(series)?;
+                    DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
+                } else {
+                    operands
+                        .into_iter()
+                        .reduce(|acc, v| (acc.clone() + v).unwrap_or(acc))
+                        .ok_or_else(|| "Add: no operands".to_string())?
+                };
+                ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+                Ok(())
+            }));
 
     registry.register(definition);
 }
 
 fn register_subtract(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Subtract (-)", vec!["Math".to_string(), "Operators".to_string()])
-        .with_ui_style("math")
-        .with_description("Subtract B from A (scalar or DataSeries)")
-        .with_pin_slots(vec![
-            PinSlot::fixed(
-                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(
-                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Result", DataRole::Result, PinDataTypeDefinition::concrete(operable_output_type()),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
-            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
-            let result = if has_any_series(&[a.clone(), b.clone()]) {
-                let len = get_series_len(&[a.clone(), b.clone()], ctx);
-                let sa = value_to_f64_series(&a, len, ctx)?;
-                let sb = value_to_f64_series(&b, len, ctx)?;
-                let out = (&sa - &sb).map_err(|e| format!("Subtract: {}", e))?;
-                let id = ctx.put_series(out)?;
-                DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
-            } else {
-                (a - b)?
-            };
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
-            Ok(())
-        }));
+    let definition = NodeDefinition::new(
+        "Subtract (-)",
+        vec!["Math".to_string(), "Operators".to_string()],
+    )
+    .with_ui_style("math")
+    .with_description("Subtract B from A (scalar or DataSeries)")
+    .with_pin_slots(vec![
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "A",
+                DataRole::Operands(0),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "B",
+                DataRole::Operands(1),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Result",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(operable_output_type()),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+        let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+        let result = if has_any_series(&[a.clone(), b.clone()]) {
+            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let sa = value_to_f64_series(&a, len, ctx)?;
+            let sb = value_to_f64_series(&b, len, ctx)?;
+            let out = (&sa - &sb).map_err(|e| format!("Subtract: {}", e))?;
+            let id = ctx.put_series(out)?;
+            DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
+        } else {
+            (a - b)?
+        };
+        ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+        Ok(())
+    }));
 
     registry.register(definition);
 }
 
 fn register_multiply(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Multiply (*)", vec!["Math".to_string(), "Operators".to_string()])
-        .with_ui_style("math")
-        .with_description("Multiply A and B (scalar or DataSeries)")
-        .with_pin_slots(vec![
-            PinSlot::fixed(
-                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(
-                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Result", DataRole::Result, PinDataTypeDefinition::concrete(operable_output_type()),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
-            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
-            let result = if has_any_series(&[a.clone(), b.clone()]) {
-                let len = get_series_len(&[a.clone(), b.clone()], ctx);
-                let sa = value_to_f64_series(&a, len, ctx)?;
-                let sb = value_to_f64_series(&b, len, ctx)?;
-                let out = (&sa * &sb).map_err(|e| format!("Multiply: {}", e))?;
-                let id = ctx.put_series(out)?;
-                DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
-            } else {
-                (a * b)?
-            };
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
-            Ok(())
-        }));
+    let definition = NodeDefinition::new(
+        "Multiply (*)",
+        vec!["Math".to_string(), "Operators".to_string()],
+    )
+    .with_ui_style("math")
+    .with_description("Multiply A and B (scalar or DataSeries)")
+    .with_pin_slots(vec![
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "A",
+                DataRole::Operands(0),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "B",
+                DataRole::Operands(1),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Result",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(operable_output_type()),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+        let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+        let result = if has_any_series(&[a.clone(), b.clone()]) {
+            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let sa = value_to_f64_series(&a, len, ctx)?;
+            let sb = value_to_f64_series(&b, len, ctx)?;
+            let out = (&sa * &sb).map_err(|e| format!("Multiply: {}", e))?;
+            let id = ctx.put_series(out)?;
+            DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
+        } else {
+            (a * b)?
+        };
+        ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+        Ok(())
+    }));
 
     registry.register(definition);
 }
 
 fn register_divide(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Divide (/)", vec!["Math".to_string(), "Operators".to_string()])
-        .with_ui_style("math")
-        .with_description("Divide A by B (scalar or DataSeries)")
-        .with_pin_slots(vec![
-            PinSlot::fixed(
-                PinDefinition::data_input("A", DataRole::Operands(0), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(
-                PinDefinition::data_input("B", DataRole::Operands(1), PinDataTypeDefinition::concrete(operable_input_type()))
-                    .with_optional(true),
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Result", DataRole::Result, PinDataTypeDefinition::concrete(operable_output_type()),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
-            let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
-            let result = if has_any_series(&[a.clone(), b.clone()]) {
-                let len = get_series_len(&[a.clone(), b.clone()], ctx);
-                let sa = value_to_f64_series(&a, len, ctx)?;
-                let sb = value_to_f64_series(&b, len, ctx)?;
-                let out = (&sa / &sb).map_err(|e| format!("Divide: {}", e))?;
-                let id = ctx.put_series(out)?;
-                DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
-            } else {
-                (a / b)?
-            };
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
-            Ok(())
-        }));
+    let definition = NodeDefinition::new(
+        "Divide (/)",
+        vec!["Math".to_string(), "Operators".to_string()],
+    )
+    .with_ui_style("math")
+    .with_description("Divide A by B (scalar or DataSeries)")
+    .with_pin_slots(vec![
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "A",
+                DataRole::Operands(0),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "B",
+                DataRole::Operands(1),
+                PinDataTypeDefinition::concrete(operable_input_type()),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Result",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(operable_output_type()),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
+        let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
+        let result = if has_any_series(&[a.clone(), b.clone()]) {
+            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let sa = value_to_f64_series(&a, len, ctx)?;
+            let sb = value_to_f64_series(&b, len, ctx)?;
+            let out = (&sa / &sb).map_err(|e| format!("Divide: {}", e))?;
+            let id = ctx.put_series(out)?;
+            DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
+        } else {
+            (a / b)?
+        };
+        ctx.emit_output_by_role(&PinRole::Data(DataRole::Result), result)?;
+        Ok(())
+    }));
 
     registry.register(definition);
 }

@@ -154,8 +154,11 @@ pub fn collect_param_order(constraints: &[HypothesisExpr]) -> Vec<ParamId> {
         .iter()
         .flat_map(|h| {
             let expr = match h {
-                HypothesisExpr::Eq(e, _) | HypothesisExpr::Lt(e, _) | HypothesisExpr::Le(e, _)
-                | HypothesisExpr::Gt(e, _) | HypothesisExpr::Ge(e, _) => e,
+                HypothesisExpr::Eq(e, _)
+                | HypothesisExpr::Lt(e, _)
+                | HypothesisExpr::Le(e, _)
+                | HypothesisExpr::Gt(e, _)
+                | HypothesisExpr::Ge(e, _) => e,
             };
             collect_params_from_expr(expr)
         })
@@ -215,8 +218,10 @@ pub fn linear_expand(constraints: &[HypothesisExpr]) -> Result<TestSpec, LinearE
     for (i, h) in constraints.iter().enumerate() {
         let (expr, k) = match h {
             HypothesisExpr::Eq(e, rhs) => (e, *rhs),
-            HypothesisExpr::Lt(e, rhs) | HypothesisExpr::Le(e, rhs)
-            | HypothesisExpr::Gt(e, rhs) | HypothesisExpr::Ge(e, rhs) => (e, *rhs),
+            HypothesisExpr::Lt(e, rhs)
+            | HypothesisExpr::Le(e, rhs)
+            | HypothesisExpr::Gt(e, rhs)
+            | HypothesisExpr::Ge(e, rhs) => (e, *rhs),
         };
 
         let (coeffs, constant) = expr_to_linear_form(expr);
@@ -283,12 +288,7 @@ pub fn reorder_r_to_ols_columns(
     for j in 0..param_order.len() {
         let name = param_registry
             .get_name(param_order[j])
-            .ok_or_else(|| {
-                format!(
-                    "参数 ID {:?} 在 registry 中无名称",
-                    param_order[j]
-                )
-            })?;
+            .ok_or_else(|| format!("参数 ID {:?} 在 registry 中无名称", param_order[j]))?;
         let ols_col = param_names
             .iter()
             .position(|n| n.as_ref() == name)

@@ -1,9 +1,6 @@
 use crate::log::log_app;
 use crate::schema::NodeDefinitionDTO;
-use crate::{
-    project::ProjectState,
-    schema::EditorSchema,
-};
+use crate::{project::ProjectState, schema::EditorSchema};
 use tauri::State;
 
 // 获取所有节点定义

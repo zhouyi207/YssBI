@@ -95,7 +95,9 @@ impl ExecutionDataStore {
 
     /// 按 ID 获取句柄并 downcast 为具体类型
     pub fn get_handle_as<T: Any + Send + Sync>(&self, id: &str) -> Option<Arc<T>> {
-        self.handles.get(id).and_then(|v| v.clone().downcast::<T>().ok())
+        self.handles
+            .get(id)
+            .and_then(|v| v.clone().downcast::<T>().ok())
     }
 
     /// 清除所有缓存

@@ -5,7 +5,8 @@ export function getUniqueName(
   const used = new Set<number>();
   let hasBase = false;
 
-  const pattern = new RegExp(`^${baseName}(?:_(\\d+))?$`);
+  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedBaseName}(?:[ _](\\d+))?$`);
 
   for (const { name } of items) {
     const match = name.match(pattern);
@@ -23,5 +24,5 @@ export function getUniqueName(
   let i = 1;
   while (used.has(i)) i++;
 
-  return `${baseName}_${i}`;
+  return `${baseName} ${i}`;
 }

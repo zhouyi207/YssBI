@@ -22,7 +22,7 @@ impl<'g> TypeInferenceSession<'g> {
     /// 可以根据需要改成增量注册
     pub fn register_all(&mut self) {
         let data_state = self.graph.data_state.read().unwrap();
-        
+
         // 1. 先注册所有节点的类型变量 + 兄弟映射
         for node_instance in data_state.nodes.values() {
             let mut sibling_map: HashMap<TypeVarKey, TypeVarId> = HashMap::new();
@@ -39,7 +39,7 @@ impl<'g> TypeInferenceSession<'g> {
                 self.ctx.register_sibling_map(sibling_map);
             }
         }
-        
+
         // 2. 然后注册所有 Pin（只注册有类型描述的 Data Pin）
         for pin_instance in data_state.pins.values() {
             self.ctx.register_pin_type(pin_instance.clone());

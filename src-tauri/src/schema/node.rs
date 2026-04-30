@@ -1,6 +1,6 @@
-use crate::graph::{NodeDefinition, NodeMetaData, NodePosition, NodeInstanceParams};
-use crate::graph::{NodeId, NodeInstance};
 use crate::graph::pin::{PinSlot, PinTypeCapability};
+use crate::graph::{NodeDefinition, NodeInstanceParams, NodeMetaData, NodePosition};
+use crate::graph::{NodeId, NodeInstance};
 use serde::{Deserialize, Serialize};
 
 /// Node instance DTO - 对应前端 Node 类型
@@ -25,7 +25,11 @@ impl From<&NodeInstance> for NodeInstanceDTO {
         let p = &value.instance_params;
         let title = match value.definition.node_type.as_str() {
             "Variables:Get Variable" | "Variables:Set Variable" => {
-                let prefix = if value.definition.node_type == "Variables:Get Variable" { "Get" } else { "Set" };
+                let prefix = if value.definition.node_type == "Variables:Get Variable" {
+                    "Get"
+                } else {
+                    "Set"
+                };
                 p.variable_name()
                     .map(|n| format!("{} {}", prefix, n))
                     .unwrap_or_else(|| value.definition.name.clone())

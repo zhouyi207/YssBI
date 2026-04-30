@@ -2,7 +2,9 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::pin::{DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
+use crate::graph::pin::{
+    DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
@@ -39,12 +41,14 @@ pub fn register(registry: &NodeRegistry) {
             PinSlot::fixed(PinDefinition::data_input(
                 "Values",
                 DataRole::Inputs(0),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Float64,
-                    DataType::Int64,
-                    DataType::Int32,
-                    DataType::Float32,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![
+                        DataType::Float64,
+                        DataType::Int64,
+                        DataType::Int32,
+                        DataType::Float32,
+                    ],
+                )))),
             )),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
@@ -60,7 +64,9 @@ pub fn register(registry: &NodeRegistry) {
             let cast = series
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("Histogram: cannot cast to Float64: {}", e))?;
-            let f64_chunk = cast.f64().map_err(|e| format!("Histogram: not numeric: {}", e))?;
+            let f64_chunk = cast
+                .f64()
+                .map_err(|e| format!("Histogram: not numeric: {}", e))?;
 
             let values: Vec<f64> = f64_chunk
                 .into_iter()
@@ -123,8 +129,8 @@ pub fn register(registry: &NodeRegistry) {
                 y_label: Some("Frequency".to_string()),
             };
 
-            let json =
-                serde_json::to_string(&plot_data).map_err(|e| format!("Histogram: serialize failed: {}", e))?;
+            let json = serde_json::to_string(&plot_data)
+                .map_err(|e| format!("Histogram: serialize failed: {}", e))?;
             ctx.open_window("histogram".to_string(), json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

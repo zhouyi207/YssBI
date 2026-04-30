@@ -1,10 +1,10 @@
-use crate::graph::{DataType, GraphId, NodeId, PinId, PinChangeSet};
-use crate::event::{emit_project_event, Event, EventNode, EventConnection};
 use crate::event::event_node::InferredPinType;
-use crate::schema::pin::{data_type_to_pin_type, data_type_to_container};
-use crate::schema::PinInstanceDTO;
-use crate::project::ProjectState;
+use crate::event::{emit_project_event, Event, EventConnection, EventNode};
+use crate::graph::{DataType, GraphId, NodeId, PinChangeSet, PinId};
 use crate::log::log_app;
+use crate::project::{read_project_index, GraphDocumentKind, ProjectState};
+use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
+use crate::schema::PinInstanceDTO;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, State};
@@ -18,7 +18,9 @@ pub fn emit_pin_change_events(
     change_sets: Vec<PinChangeSet>,
 ) {
     for cs in change_sets {
-        let added_dtos: Vec<PinInstanceDTO> = cs.added_pins.iter()
+        let added_dtos: Vec<PinInstanceDTO> = cs
+            .added_pins
+            .iter()
             .map(|pin| {
                 let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
                 PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref(), Vec::new())
@@ -27,7 +29,8 @@ pub fn emit_pin_change_events(
 
         let removed_pin_ids: Vec<PinId> = cs.removed_pin_ids;
 
-        let pin_order = graph.get_node_instance(cs.node_id)
+        let pin_order = graph
+            .get_node_instance(cs.node_id)
             .map(|node| node.pin_ids.clone());
 
         emit_project_event(
@@ -45,11 +48,7 @@ pub fn emit_pin_change_events(
 }
 
 /// 将推断出的 pin 类型转为事件并发送
-pub fn emit_inferred_types(
-    app: &AppHandle,
-    graph_id: GraphId,
-    inferred: Vec<(PinId, DataType)>,
-) {
+pub fn emit_inferred_types(app: &AppHandle, graph_id: GraphId, inferred: Vec<(PinId, DataType)>) {
     if inferred.is_empty() {
         return;
     }
@@ -64,7 +63,10 @@ pub fn emit_inferred_types(
         .collect();
     emit_project_event(
         app,
-        Event::Node(EventNode::PinTypesInferred { graph_id, pin_types }),
+        Event::Node(EventNode::PinTypesInferred {
+            graph_id,
+            pin_types,
+        }),
     );
 }
 
@@ -113,16 +115,14 @@ pub fn connect_pins(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
-    let id_a = PinId::from(
-        Uuid::parse_str(&pin_a).map_err(|e| format!("Invalid pin_a: {}", e))?,
-    );
-    let id_b = PinId::from(
-        Uuid::parse_str(&pin_b).map_err(|e| format!("Invalid pin_b: {}", e))?,
-    );
+    let id_a = PinId::from(Uuid::parse_str(&pin_a).map_err(|e| format!("Invalid pin_a: {}", e))?);
+    let id_b = PinId::from(Uuid::parse_str(&pin_b).map_err(|e| format!("Invalid pin_b: {}", e))?);
 
     log_app::info!(
         "[command.connect_pins] graph={}, a={}, b={}",
-        subgraph_id, pin_a, pin_b
+        subgraph_id,
+        pin_a,
+        pin_b
     );
 
     let graph = state
@@ -154,12 +154,18 @@ pub fn connect_pins(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
+    state.persist_current_project()?;
 
-    let (ad_from, ad_to) = auto_disconnected_list.first()
+    let (ad_from, ad_to) = auto_disconnected_list
+        .first()
         .map(|(f, t)| (Some(f.to_string()), Some(t.to_string())))
         .unwrap_or((None, None));
-    let auto_disconnected = auto_disconnected_list.iter()
-        .map(|(f, t)| AutoDisconnected { from_pin: f.to_string(), to_pin: t.to_string() })
+    let auto_disconnected = auto_disconnected_list
+        .iter()
+        .map(|(f, t)| AutoDisconnected {
+            from_pin: f.to_string(),
+            to_pin: t.to_string(),
+        })
         .collect();
     Ok(ConnectPinsResult {
         from_pin: from_pin.to_string(),
@@ -183,13 +189,12 @@ pub fn disconnect_pin(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
-    let pin = PinId::from(
-        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
-    );
+    let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.disconnect_pin] graph={}, pin={}",
-        subgraph_id, pin_id
+        subgraph_id,
+        pin_id
     );
 
     let graph = state
@@ -218,6 +223,7 @@ pub fn disconnect_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
+    state.persist_current_project()?;
     Ok(result)
 }
 
@@ -240,10 +246,14 @@ pub fn delete_connection(
     // connectionId 格式："{from_pin_uuid}->{to_pin_uuid}"
     let parts: Vec<&str> = connection_id.split("->").collect();
     if parts.len() != 2 {
-        return Err(format!("Invalid connection_id format: '{}', expected 'from->to'", connection_id));
+        return Err(format!(
+            "Invalid connection_id format: '{}', expected 'from->to'",
+            connection_id
+        ));
     }
     let from_pin = PinId::from(
-        Uuid::parse_str(parts[0]).map_err(|e| format!("Invalid from_pin in connection_id: {}", e))?,
+        Uuid::parse_str(parts[0])
+            .map_err(|e| format!("Invalid from_pin in connection_id: {}", e))?,
     );
     let to_pin = PinId::from(
         Uuid::parse_str(parts[1]).map_err(|e| format!("Invalid to_pin in connection_id: {}", e))?,
@@ -251,7 +261,8 @@ pub fn delete_connection(
 
     log_app::info!(
         "[command.delete_connection] graph={}, connection={}",
-        subgraph_id, connection_id
+        subgraph_id,
+        connection_id
     );
 
     let graph = state
@@ -271,6 +282,7 @@ pub fn delete_connection(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
+    state.persist_current_project()?;
     Ok(())
 }
 
@@ -299,7 +311,8 @@ pub fn get_connections(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let connections: Vec<ConnectionDTO> = graph.all_connections()
+    let connections: Vec<ConnectionDTO> = graph
+        .all_connections()
         .into_iter()
         .map(|c| {
             let from_str = c.from_pin.to_string();
@@ -328,13 +341,12 @@ pub fn delete_connections_for_pin(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
-    let pin = PinId::from(
-        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
-    );
+    let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.delete_connections_for_pin] graph={}, pin={}",
-        subgraph_id, pin_id
+        subgraph_id,
+        pin_id
     );
 
     let graph = state
@@ -343,7 +355,8 @@ pub fn delete_connections_for_pin(
 
     let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
 
-    let removed_ids: Vec<String> = removed_connections.iter()
+    let removed_ids: Vec<String> = removed_connections
+        .iter()
         .map(|(from, to)| format!("{}->{}", from, to))
         .collect();
 
@@ -359,6 +372,7 @@ pub fn delete_connections_for_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
+    state.persist_current_project()?;
 
     Ok(removed_ids)
 }
@@ -376,13 +390,13 @@ pub fn delete_connections_for_node(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
-    let nid = NodeId::from(
-        Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?,
-    );
+    let nid =
+        NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
 
     log_app::info!(
         "[command.delete_connections_for_node] graph={}, node={}",
-        subgraph_id, node_id
+        subgraph_id,
+        node_id
     );
 
     let graph = state
@@ -415,6 +429,7 @@ pub fn delete_connections_for_node(
     }
 
     emit_inferred_types(&app, graph_id, all_inferred);
+    state.persist_current_project()?;
 
     Ok(removed_ids)
 }
@@ -432,10 +447,7 @@ pub fn update_canvas(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
 
-    log_app::info!(
-        "[command.update_canvas] graph={}",
-        subgraph_id
-    );
+    log_app::info!("[command.update_canvas] graph={}", subgraph_id);
 
     let mut data = state.project_data.write().unwrap();
     let graph = data
@@ -452,6 +464,8 @@ pub fn update_canvas(
     if let Some(scale) = canvas.get("scale").and_then(|v| v.as_f64()) {
         graph.position.scale = scale;
     }
+    drop(data);
+    state.persist_current_project()?;
 
     Ok(())
 }
@@ -470,26 +484,55 @@ pub fn update_subgraph_io(
 
 /// 重命名子图
 #[tauri::command]
-pub fn rename_subgraph(
-    state: State<ProjectState>,
-    id: String,
-    name: String,
-) -> Result<(), String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+pub fn rename_subgraph(state: State<ProjectState>, id: String, name: String) -> Result<(), String> {
+    let graph_id =
+        GraphId::from(Uuid::parse_str(&id).map_err(|e| format!("Invalid graph_id: {}", e))?);
 
-    log_app::info!(
-        "[command.rename_subgraph] graph={}, new_name={}",
-        id, name
-    );
+    log_app::info!("[command.rename_subgraph] graph={}, new_name={}", id, name);
+
+    if state.get_graph(&graph_id).is_none() {
+        state.load_graph_from_current_project(&graph_id)?;
+    }
+
+    let graph_kind = state
+        .project_data
+        .read()
+        .unwrap()
+        .graphs
+        .get(&graph_id)
+        .map(|graph| graph.kind.clone())
+        .ok_or_else(|| format!("Graph '{}' not found", id))?;
+
+    let mut existing: Vec<String> = state
+        .project_data
+        .read()
+        .unwrap()
+        .graphs
+        .values()
+        .filter(|item| item.kind == graph_kind && item.id != graph_id)
+        .map(|item| item.name.clone())
+        .collect();
+    if let Some(path) = state.get_path() {
+        let expected_kind = GraphDocumentKind::from(&graph_kind);
+        existing.extend(
+            read_project_index(&path)
+                .map_err(|e| e.to_string())?
+                .graphs
+                .into_iter()
+                .filter(|item| item.graph_type == expected_kind && item.id != graph_id)
+                .map(|item| item.name),
+        );
+    }
+    existing.sort();
+    existing.dedup();
 
     let mut data = state.project_data.write().unwrap();
     let graph = data
         .graphs
         .get_mut(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", id))?;
-
-    graph.name = name;
+    graph.name = crate::project::unique_name::unique_name(&name, existing);
+    drop(data);
+    state.persist_current_project()?;
     Ok(())
 }

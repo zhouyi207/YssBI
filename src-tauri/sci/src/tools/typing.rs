@@ -1,6 +1,5 @@
 // 这个玩意最好不要使用，因为编辑器会默认严格定义类型，因此让只能使用 ndarray 来执行就好了
 
-
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
 // 定义 1D 2D array like input

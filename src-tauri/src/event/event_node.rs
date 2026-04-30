@@ -13,10 +13,7 @@ pub enum EventNode {
         pins: Vec<PinInstanceDTO>,
     },
     #[serde(rename_all = "camelCase")]
-    NodeDeleted {
-        graph_id: GraphId,
-        node_id: NodeId,
-    },
+    NodeDeleted { graph_id: GraphId, node_id: NodeId },
     #[serde(rename_all = "camelCase")]
     NodesBatchDeleted {
         graph_id: GraphId,
@@ -33,9 +30,7 @@ pub enum EventNode {
         nodes: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)>,
     },
     #[serde(rename_all = "camelCase")]
-    NodesUpdated {
-        subgraph_id: String,
-    },
+    NodesUpdated { subgraph_id: String },
     /// 节点的动态 pins 发生变化（由 PinResolver 触发）
     #[serde(rename_all = "camelCase")]
     NodePinsUpdated {

@@ -60,8 +60,11 @@ impl std::error::Error for ValidationError {}
 /// 验证单个假设约束的 Expr 为线性
 pub fn validate_hypothesis(h: &HypothesisExpr) -> Result<(), ValidationError> {
     let expr = match h {
-        HypothesisExpr::Eq(e, _) | HypothesisExpr::Lt(e, _) | HypothesisExpr::Le(e, _)
-        | HypothesisExpr::Gt(e, _) | HypothesisExpr::Ge(e, _) => e,
+        HypothesisExpr::Eq(e, _)
+        | HypothesisExpr::Lt(e, _)
+        | HypothesisExpr::Le(e, _)
+        | HypothesisExpr::Gt(e, _)
+        | HypothesisExpr::Ge(e, _) => e,
     };
     validate_expr_linear(expr)
 }
@@ -129,4 +132,3 @@ fn validate_expr_linear(expr: &Expr) -> Result<(), ValidationError> {
         )),
     }
 }
-

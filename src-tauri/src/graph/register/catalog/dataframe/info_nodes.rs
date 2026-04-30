@@ -364,12 +364,36 @@ pub fn compute_classification_table(
     let total_nd = tn + fp;
     let total_pos = tp + fp;
     let total_neg = tn + fn_;
-    let sensitivity = if total_d > 0 { tp as f64 / total_d as f64 } else { 0.0 };
-    let specificity = if total_nd > 0 { tn as f64 / total_nd as f64 } else { 0.0 };
-    let ppv = if total_pos > 0 { tp as f64 / total_pos as f64 } else { 0.0 };
-    let npv = if total_neg > 0 { tn as f64 / total_neg as f64 } else { 0.0 };
-    let false_pos_rate = if total_nd > 0 { fp as f64 / total_nd as f64 } else { 0.0 };
-    let false_neg_rate = if total_d > 0 { fn_ as f64 / total_d as f64 } else { 0.0 };
+    let sensitivity = if total_d > 0 {
+        tp as f64 / total_d as f64
+    } else {
+        0.0
+    };
+    let specificity = if total_nd > 0 {
+        tn as f64 / total_nd as f64
+    } else {
+        0.0
+    };
+    let ppv = if total_pos > 0 {
+        tp as f64 / total_pos as f64
+    } else {
+        0.0
+    };
+    let npv = if total_neg > 0 {
+        tn as f64 / total_neg as f64
+    } else {
+        0.0
+    };
+    let false_pos_rate = if total_nd > 0 {
+        fp as f64 / total_nd as f64
+    } else {
+        0.0
+    };
+    let false_neg_rate = if total_d > 0 {
+        fn_ as f64 / total_d as f64
+    } else {
+        0.0
+    };
     let pct_correct = if n > 0 {
         (tp + tn) as f64 / n as f64 * 100.0
     } else {

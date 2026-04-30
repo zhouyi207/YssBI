@@ -7,7 +7,7 @@
 
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLSConfig, OLS};
+use crate::regression::linear_model::{OLS, OLSConfig};
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
@@ -37,7 +37,12 @@ pub fn fit_panel_lsdv(
         ));
     }
 
-    let mut eids: Vec<usize> = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut eids: Vec<usize> = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     eids.sort_unstable();
     let n_entities = eids.len();
     if n_entities < 2 {
@@ -66,8 +71,7 @@ pub fn fit_panel_lsdv(
 
     // col_is_dummy: exog cols = false, entity dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
-    let (x_reduced, omitted_indices) =
-        drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
+    let (x_reduced, omitted_indices) = drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
     let omitted_indices = if omitted_indices.is_empty() {
         None
     } else {
@@ -99,7 +103,12 @@ pub fn fit_panel_lsdv(
     let result = ols.fit()?;
 
     let kept_indices: Vec<usize> = (0..k + n_dummies)
-        .filter(|i| !omitted_indices.as_ref().map(|o| o.contains(i)).unwrap_or(false))
+        .filter(|i| {
+            !omitted_indices
+                .as_ref()
+                .map(|o| o.contains(i))
+                .unwrap_or(false)
+        })
         .collect();
     let const_pos = kept_indices.iter().position(|&x| x == 0);
     let (const_coef, const_std_err) = match const_pos {
@@ -120,8 +129,8 @@ pub fn fit_panel_lsdv(
     let use_cluster_df = cov_type == "cluster";
     use statrs::distribution::{ContinuousCDF, StudentsT};
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
@@ -142,7 +151,10 @@ pub fn fit_panel_lsdv(
             result.conf_int_right.clone(),
         )
     };
-    let cov_slope = result.cov_beta.slice(ndarray::s![..n_report, ..n_report]).to_owned();
+    let cov_slope = result
+        .cov_beta
+        .slice(ndarray::s![..n_report, ..n_report])
+        .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
@@ -240,10 +252,19 @@ pub fn fit_panel_lsdv_time(
         return Err("Panel LSDV (Time): lengths must match".to_string());
     }
 
-    let mut tids: Vec<usize> = time_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut tids: Vec<usize> = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     tids.sort_unstable();
     let n_times = tids.len();
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_times < 2 {
         return Err("Panel LSDV (Time): need at least 2 time periods".to_string());
     }
@@ -270,8 +291,7 @@ pub fn fit_panel_lsdv_time(
 
     // col_is_dummy: exog cols = false, time dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
-    let (x_reduced, omitted_indices) =
-        drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
+    let (x_reduced, omitted_indices) = drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
     let omitted_indices = if omitted_indices.is_empty() {
         None
     } else {
@@ -303,7 +323,12 @@ pub fn fit_panel_lsdv_time(
     let result = ols.fit()?;
 
     let kept_indices: Vec<usize> = (0..k + n_dummies)
-        .filter(|i| !omitted_indices.as_ref().map(|o| o.contains(i)).unwrap_or(false))
+        .filter(|i| {
+            !omitted_indices
+                .as_ref()
+                .map(|o| o.contains(i))
+                .unwrap_or(false)
+        })
         .collect();
     let const_pos = kept_indices.iter().position(|&x| x == 0);
     let (const_coef, const_std_err) = match const_pos {
@@ -324,8 +349,8 @@ pub fn fit_panel_lsdv_time(
     let use_cluster_df = cov_type == "cluster";
     use statrs::distribution::{ContinuousCDF, StudentsT};
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
@@ -346,7 +371,10 @@ pub fn fit_panel_lsdv_time(
             result.conf_int_right.clone(),
         )
     };
-    let cov_slope = result.cov_beta.slice(ndarray::s![..n_report, ..n_report]).to_owned();
+    let cov_slope = result
+        .cov_beta
+        .slice(ndarray::s![..n_report, ..n_report])
+        .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
@@ -444,14 +472,26 @@ pub fn fit_panel_lsdv_twoway(
         return Err("Panel LSDV (Two-Way): lengths must match".to_string());
     }
 
-    let mut eids: Vec<usize> = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut eids: Vec<usize> = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     eids.sort_unstable();
-    let mut tids: Vec<usize> = time_id.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut tids: Vec<usize> = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     tids.sort_unstable();
     let n_entities = eids.len();
     let n_times = tids.len();
     if n_entities < 2 || n_times < 2 {
-        return Err("Panel LSDV (Two-Way): need at least 2 entities and 2 time periods".to_string());
+        return Err(
+            "Panel LSDV (Two-Way): need at least 2 entities and 2 time periods".to_string(),
+        );
     }
 
     let eid_to_idx: HashMap<usize, usize> = eids.iter().enumerate().map(|(i, &e)| (e, i)).collect();
@@ -483,8 +523,7 @@ pub fn fit_panel_lsdv_twoway(
         .map_err(|e| format!("Panel LSDV (Two-Way): shape {:?}", e))?;
 
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
-    let (x_reduced, omitted_indices) =
-        drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
+    let (x_reduced, omitted_indices) = drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
     let omitted_indices = if omitted_indices.is_empty() {
         None
     } else {
@@ -516,7 +555,12 @@ pub fn fit_panel_lsdv_twoway(
     let result = ols.fit()?;
 
     let kept_indices: Vec<usize> = (0..k + n_dummies)
-        .filter(|i| !omitted_indices.as_ref().map(|o| o.contains(i)).unwrap_or(false))
+        .filter(|i| {
+            !omitted_indices
+                .as_ref()
+                .map(|o| o.contains(i))
+                .unwrap_or(false)
+        })
         .collect();
     let const_pos = kept_indices.iter().position(|&x| x == 0);
     let (const_coef, const_std_err) = match const_pos {
@@ -537,8 +581,8 @@ pub fn fit_panel_lsdv_twoway(
     let use_cluster_df = cov_type == "cluster";
     use statrs::distribution::{ContinuousCDF, StudentsT};
     let t_df = (df_residual as f64).max(1.0);
-    let t_dist = StudentsT::new(0.0, 1.0, t_df)
-        .map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
+    let t_dist =
+        StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
@@ -559,7 +603,10 @@ pub fn fit_panel_lsdv_twoway(
             result.conf_int_right.clone(),
         )
     };
-    let cov_slope = result.cov_beta.slice(ndarray::s![..n_report, ..n_report]).to_owned();
+    let cov_slope = result
+        .cov_beta
+        .slice(ndarray::s![..n_report, ..n_report])
+        .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {

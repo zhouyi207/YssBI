@@ -1,10 +1,10 @@
+use crate::commands::command_graph::command_connection::emit_pin_change_events;
 use crate::graph::pin::PinDataTypeDefinition;
-use crate::graph::value::{DataValue, DataType};
+use crate::graph::value::{DataType, DataValue};
 use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
 use crate::project::ProjectState;
 use crate::schema::PinInstanceDTO;
-use crate::commands::command_graph::command_connection::emit_pin_change_events;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
@@ -50,9 +50,8 @@ pub fn update_pin_user_value(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
     );
-    let pin_uuid = PinId::from(
-        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
-    );
+    let pin_uuid =
+        PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     let bounding = state.project_data.read().unwrap();
     let graph = bounding
@@ -64,32 +63,31 @@ pub fn update_pin_user_value(
         .get_pin_instance_by_pin_id(pin_uuid)
         .ok_or_else(|| format!("Pin '{}' not found", pin_id))?;
 
-    let expected_type = pin
-        .definition
-        .data_type
-        .as_ref()
-        .and_then(|dt| match dt {
-            PinDataTypeDefinition::Concrete(t) => Some(t.clone()),
-            _ => None,
-        });
+    let expected_type = pin.definition.data_type.as_ref().and_then(|dt| match dt {
+        PinDataTypeDefinition::Concrete(t) => Some(t.clone()),
+        _ => None,
+    });
 
     if let Some(ref expected) = expected_type {
         let value_type = value.value_type();
         if !is_type_compatible(value_type.clone(), expected) {
             return Err(format!(
                 "Type mismatch: pin expects {:?}, got {:?}",
-                expected,
-                value_type
+                expected, value_type
             ));
         }
     }
 
     log_app::info!(
         "[command.update_pin_user_value] graph={}, pin={}, value={:?}",
-        subgraph_id, pin_id, value
+        subgraph_id,
+        pin_id,
+        value
     );
 
     graph.set_pin_user_value_by_pin_id(pin_uuid, value)?;
+    drop(bounding);
+    state.persist_current_project()?;
     Ok(())
 }
 
@@ -105,13 +103,12 @@ pub fn clear_pin_user_value(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
     );
-    let pin = PinId::from(
-        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
-    );
+    let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.clear_pin_user_value] graph={}, pin={}",
-        subgraph_id, pin_id
+        subgraph_id,
+        pin_id
     );
 
     let bounding = state.project_data.read().unwrap();
@@ -121,6 +118,8 @@ pub fn clear_pin_user_value(
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
     graph.clear_pin_user_value_by_pin_id(pin)?;
+    drop(bounding);
+    state.persist_current_project()?;
     Ok(())
 }
 
@@ -156,13 +155,14 @@ pub fn add_repeatable_pin(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
     );
-    let nid = NodeId::from(
-        Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?,
-    );
+    let nid =
+        NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
 
     log_app::info!(
         "[command.add_repeatable_pin] graph={}, node={}, slot={}",
-        subgraph_id, node_id, slot_index
+        subgraph_id,
+        node_id,
+        slot_index
     );
 
     let graph = state
@@ -177,12 +177,14 @@ pub fn add_repeatable_pin(
         .ok_or_else(|| "No pin was created".to_string())?;
 
     let resolved_type = graph.get_pin_data_type_by_pin_id(added_pin.id);
-    let pin_dto = PinInstanceDTO::from_pin_with_context(added_pin, resolved_type.as_ref(), Vec::new());
+    let pin_dto =
+        PinInstanceDTO::from_pin_with_context(added_pin, resolved_type.as_ref(), Vec::new());
     let pin_id_str = added_pin.id.to_string();
 
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
     emit_pin_change_events(&app, graph_id, &graph, all_sets);
+    state.persist_current_project()?;
 
     Ok(AddRepeatablePinResult {
         pin_id: pin_id_str,
@@ -204,16 +206,15 @@ pub fn remove_repeatable_pin(
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
     );
-    let nid = NodeId::from(
-        Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?,
-    );
-    let pid = PinId::from(
-        Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?,
-    );
+    let nid =
+        NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
+    let pid = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.remove_repeatable_pin] graph={}, node={}, pin={}",
-        subgraph_id, node_id, pin_id
+        subgraph_id,
+        node_id,
+        pin_id
     );
 
     let graph = state
@@ -242,6 +243,7 @@ pub fn remove_repeatable_pin(
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
     emit_pin_change_events(&app, graph_id, &graph, all_sets);
+    state.persist_current_project()?;
 
     Ok(RemoveRepeatablePinResult {
         removed_pin_id: pin_id,

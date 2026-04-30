@@ -93,14 +93,8 @@ fn build_histogram(ca: &Float64Chunked, num_bins: usize) -> Vec<HistogramBin> {
         return vec![];
     }
 
-    let min = values
-        .iter()
-        .cloned()
-        .fold(f64::infinity(), f64::min);
-    let max = values
-        .iter()
-        .cloned()
-        .fold(f64::neg_infinity(), f64::max);
+    let min = values.iter().cloned().fold(f64::infinity(), f64::min);
+    let max = values.iter().cloned().fold(f64::neg_infinity(), f64::max);
 
     if (max - min).abs() < f64::epsilon() {
         return vec![HistogramBin {

@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod tests {
     use crate::graph::{
-        GraphInstance,
         pin::{DataRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
-        GraphKind,
+        GraphInstance, GraphKind,
     };
     use std::sync::Arc;
 

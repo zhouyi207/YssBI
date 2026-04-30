@@ -74,11 +74,12 @@ impl LogManager {
     pub fn emit_log(&self, log: LogMessage) {
         // 输出到终端（使用 Tauri 日志插件）
         // 格式：[类型] 消息
-        let message = format!("[{}] {}", 
+        let message = format!(
+            "[{}] {}",
             log.log_type.to_string().to_uppercase(),
             log.message
         );
-        
+
         // 根据日志级别选择对应的输出宏
         match log.level {
             LogLevel::Trace => tauri_plugin_log::log::trace!("{}", message),
@@ -87,7 +88,7 @@ impl LogManager {
             LogLevel::Warn => tauri_plugin_log::log::warn!("{}", message),
             LogLevel::Error => tauri_plugin_log::log::error!("{}", message),
         }
-        
+
         // 写入文件
         self.write_to_file(&log);
 

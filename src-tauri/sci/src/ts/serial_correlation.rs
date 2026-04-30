@@ -3,7 +3,7 @@
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{linalg::solvers::Solve, Side};
+use faer::{Side, linalg::solvers::Solve};
 use ndarray::Array1;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 
@@ -14,7 +14,9 @@ pub fn durbin_watson(residuals: &[f64]) -> f64 {
     if n < 2 {
         return 2.0;
     }
-    let sum_sq_diff: f64 = (1..n).map(|t| (residuals[t] - residuals[t - 1]).powi(2)).sum();
+    let sum_sq_diff: f64 = (1..n)
+        .map(|t| (residuals[t] - residuals[t - 1]).powi(2))
+        .sum();
     let sum_sq: f64 = residuals.iter().map(|e| e.powi(2)).sum();
     if sum_sq <= 0.0 {
         return 2.0;

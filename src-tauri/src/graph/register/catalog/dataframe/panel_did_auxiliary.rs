@@ -51,11 +51,7 @@ pub(crate) fn wald_chi2_linear(
     }
     let v_faer = v.view().into_faer().to_owned();
     let b_col = Mat::from_fn(q, 1, |r, _| b[r]);
-    let solved = v_faer
-        .as_ref()
-        .llt(Side::Lower)
-        .ok()?
-        .solve(b_col.as_ref());
+    let solved = v_faer.as_ref().llt(Side::Lower).ok()?.solve(b_col.as_ref());
     let x_nd = solved.as_ref().into_ndarray();
     let chi2: f64 = b.iter().enumerate().map(|(i, bi)| bi * x_nd[[i, 0]]).sum();
     if !chi2.is_finite() || chi2 < 0.0 {
@@ -68,7 +64,10 @@ fn event_study_label(k: i32) -> String {
     format!("rel_time[{}]#c.treat", k)
 }
 
-fn x_labels_or_fallback(x_labels: &[(String, Option<String>)], x_ncols: usize) -> Vec<(String, Option<String>)> {
+fn x_labels_or_fallback(
+    x_labels: &[(String, Option<String>)],
+    x_ncols: usize,
+) -> Vec<(String, Option<String>)> {
     if x_labels.len() == x_ncols {
         x_labels.to_vec()
     } else {
@@ -108,10 +107,7 @@ pub(crate) fn build_event_study_exog(
         return Err("DID event study: unexpected exog shape".to_string());
     }
     let ta = t_adopt as i32;
-    let rel: Vec<i32> = time_ord
-        .iter()
-        .map(|&t| t as i32 - ta)
-        .collect();
+    let rel: Vec<i32> = time_ord.iter().map(|&t| t as i32 - ta).collect();
     let mut ks_set = std::collections::BTreeSet::new();
     for &r in &rel {
         ks_set.insert(r);
@@ -246,7 +242,18 @@ pub(crate) fn run_parallel_trends_test(
     treat: &[f64],
     constant: bool,
     cov_type: &str,
-) -> Result<(f64, usize, f64, i32, Vec<i32>, String, Vec<DidEventStudyPoint>), String> {
+) -> Result<
+    (
+        f64,
+        usize,
+        f64,
+        i32,
+        Vec<i32>,
+        String,
+        Vec<DidEventStudyPoint>,
+    ),
+    String,
+> {
     let n = endog.len();
     let (exog_evt, labels_evt, k_ref, event_ks) =
         build_event_study_exog(n, exog_main, x_ncols, x_labels, treat, time_ord, t_adopt)?;
@@ -254,13 +261,8 @@ pub(crate) fn run_parallel_trends_test(
     let kcols = exog_evt.ncols();
     let col_is_dummy = vec![false; kcols];
     let intercept_col = if constant { Some(0) } else { None };
-    let (exog_u, omitted) =
-        drop_collinear_columns(&exog_evt, &col_is_dummy, intercept_col).map_err(|e| {
-            format!(
-                "DID parallel trends: collinearity drop failed: {}",
-                e
-            )
-        })?;
+    let (exog_u, omitted) = drop_collinear_columns(&exog_evt, &col_is_dummy, intercept_col)
+        .map_err(|e| format!("DID parallel trends: collinearity drop failed: {}", e))?;
 
     let labels_u: Vec<(String, Option<String>)> = (0..kcols)
         .filter(|i| !omitted.contains(i))
@@ -269,13 +271,7 @@ pub(crate) fn run_parallel_trends_test(
 
     let cov_params: Option<yss_sci::regression::covariance::CovParams> = None;
     let pr = fit_panel_fe_twoway(
-        endog,
-        &exog_u,
-        entity_id,
-        time_id,
-        constant,
-        cov_type,
-        cov_params,
+        endog, &exog_u, entity_id, time_id, constant, cov_type, cov_params,
     )
     .map_err(|e| format!("DID parallel trends TWFE: {}", e))?;
 
@@ -375,8 +371,8 @@ pub(crate) fn run_placebo_test(
         }
         raw.push(placebo_col[i]);
     }
-    let exog_pb =
-        Array2::from_shape_vec((n, ncols), raw).map_err(|e| format!("DID placebo exog: {:?}", e))?;
+    let exog_pb = Array2::from_shape_vec((n, ncols), raw)
+        .map_err(|e| format!("DID placebo exog: {:?}", e))?;
 
     let mut labels: Vec<(String, Option<String>)> = vec![("const".to_string(), None)];
     labels.extend(x_labels_or_fallback(x_labels, x_ncols));
@@ -395,23 +391,14 @@ pub(crate) fn run_placebo_test(
 
     let cov_params: Option<yss_sci::regression::covariance::CovParams> = None;
     let pr = fit_panel_fe_twoway(
-        endog,
-        &exog_u,
-        entity_id,
-        time_id,
-        constant,
-        cov_type,
-        cov_params,
+        endog, &exog_u, entity_id, time_id, constant, cov_type, cov_params,
     )
     .map_err(|e| format!("DID placebo TWFE: {}", e))?;
 
     let kept = merge_labels_after_fe_omit(&labels_u, pr.omitted_indices.as_deref());
-    let idx = kept
-        .iter()
-        .position(|(n, _)| n == &plabel)
-        .ok_or_else(|| {
-            "DID placebo: interaction absorbed or collinear; cannot report placebo coef".to_string()
-        })?;
+    let idx = kept.iter().position(|(n, _)| n == &plabel).ok_or_else(|| {
+        "DID placebo: interaction absorbed or collinear; cannot report placebo coef".to_string()
+    })?;
 
     if idx >= pr.betas.len() {
         return Err("DID placebo: label index mismatch".to_string());
@@ -449,7 +436,12 @@ pub fn run_placebo_fake_treatment_ri(
     seed: u64,
 ) -> Result<(usize, usize, f64, f64, f64, String), String> {
     let n = endog.len();
-    if exog_use.nrows() != n || entity_id.len() != n || time_id.len() != n || post.len() != n || treat.len() != n {
+    if exog_use.nrows() != n
+        || entity_id.len() != n
+        || time_id.len() != n
+        || post.len() != n
+        || treat.len() != n
+    {
         return Err("DID fake-group placebo: length mismatch".to_string());
     }
     let ncols = exog_use.ncols();
@@ -469,9 +461,12 @@ pub fn run_placebo_fake_treatment_ri(
         ));
     }
 
-    let n_entities = entity_id.iter().copied().max().map(|m| m + 1).ok_or_else(|| {
-        "DID fake-group placebo: empty entity_id".to_string()
-    })?;
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .max()
+        .map(|m| m + 1)
+        .ok_or_else(|| "DID fake-group placebo: empty entity_id".to_string())?;
 
     let mut ever_treat = vec![false; n_entities];
     for i in 0..n {
@@ -482,12 +477,14 @@ pub fn run_placebo_fake_treatment_ri(
     let n_treat_e = ever_treat.iter().filter(|&&t| t).count();
     if n_treat_e == 0 {
         return Err(
-            "DID fake-group placebo: no entity is ever treated (cannot fix fake treated count)".to_string(),
+            "DID fake-group placebo: no entity is ever treated (cannot fix fake treated count)"
+                .to_string(),
         );
     }
     if n_treat_e >= n_entities {
         return Err(
-            "DID fake-group placebo: every entity is treated — no pool to reassign fake treatment".to_string(),
+            "DID fake-group placebo: every entity is treated — no pool to reassign fake treatment"
+                .to_string(),
         );
     }
 
@@ -511,13 +508,7 @@ pub fn run_placebo_fake_treatment_ri(
         }
 
         let pr = match fit_panel_fe_twoway(
-            endog,
-            &exog_perm,
-            entity_id,
-            time_id,
-            constant,
-            cov_type,
-            None,
+            endog, &exog_perm, entity_id, time_id, constant, cov_type, None,
         ) {
             Ok(p) => p,
             Err(_) => continue,

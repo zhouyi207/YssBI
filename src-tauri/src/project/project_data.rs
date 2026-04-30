@@ -1,8 +1,8 @@
 use super::ProjectError;
 use super::ProjectMetadata;
 use crate::database::DatabaseDecl;
-use crate::graph::{GraphInstance, GraphId};
-use crate::variable::{VariableInstance, VariableId};
+use crate::graph::{GraphId, GraphInstance};
+use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -1,4 +1,4 @@
-use crate::regression::covariance::{compute_cov_beta, CovParams};
+use crate::regression::covariance::{CovParams, compute_cov_beta};
 use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
@@ -25,7 +25,7 @@ pub struct OLSConfig {
 pub struct OLS {
     pub endog: Array1<f64>, // 因变量 y
     pub exog: Array2<f64>,  // 自变量 X (n × k)
-    pub config: OLSConfig
+    pub config: OLSConfig,
 }
 
 #[derive(Debug)]
@@ -78,11 +78,7 @@ impl OLS {
 
         let num_obversion = x.nrows();
         let df_redidual = num_obversion - rank;
-        let df_model = if self.config.constant {
-            rank - 1
-        } else {
-            rank
-        };
+        let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_redidual + df_model;
 
         let covariance_type = if self.config.cov_type.is_empty() {
@@ -103,13 +99,15 @@ impl OLS {
 
         let y_mean = y.iter().mean();
 
-
         let ss_total = if self.config.constant {
             y.iter().map(|v| (v - y_mean).pow(2)).sum::<f64>()
         } else {
             y.iter().map(|v| v.pow(2)).sum::<f64>()
         };
-        let ss_residual = (y.as_ref() - y_hat.as_ref()).iter().map(|v| v.pow(2)).sum::<f64>();
+        let ss_residual = (y.as_ref() - y_hat.as_ref())
+            .iter()
+            .map(|v| v.pow(2))
+            .sum::<f64>();
         let ss_model = ss_total - ss_residual;
 
         let r2 = 1.0 - ss_residual / ss_total;
@@ -167,15 +165,23 @@ impl OLS {
                 let f_val = (wald / df_model as f64).max(0.0);
                 let df1 = (df_model as f64).max(1.0);
                 let df2 = (df_redidual as f64).max(1.0);
-                let dist = FisherSnedecor::new(df1, df2)
-                    .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
+                let dist = FisherSnedecor::new(df1, df2).map_err(|e| {
+                    format!(
+                        "OLS F-distribution: df_model={} df_residual={} {}",
+                        df_model, df_redidual, e
+                    )
+                })?;
                 (f_val, 1.0 - dist.cdf(f_val))
             } else {
                 let f_val = (ms_model / ms_residual).max(0.0);
                 let df1 = (df_model as f64).max(1.0);
                 let df2 = (df_redidual as f64).max(1.0);
-                let dist = FisherSnedecor::new(df1, df2)
-                    .map_err(|e| format!("OLS F-distribution: df_model={} df_residual={} {}", df_model, df_redidual, e))?;
+                let dist = FisherSnedecor::new(df1, df2).map_err(|e| {
+                    format!(
+                        "OLS F-distribution: df_model={} df_residual={} {}",
+                        df_model, df_redidual, e
+                    )
+                })?;
                 (f_val, 1.0 - dist.cdf(f_val))
             }
         } else {
@@ -281,7 +287,11 @@ mod tests {
             cov_type: "nonrobust".to_string(),
             cov_params: None,
         };
-        let ols = OLS { endog, exog, config: ols_config};
+        let ols = OLS {
+            endog,
+            exog,
+            config: ols_config,
+        };
         let result = ols.fit().unwrap();
 
         // 打印结果

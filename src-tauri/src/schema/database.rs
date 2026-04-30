@@ -78,10 +78,7 @@ pub enum DatabaseEngineDTO {
     },
 
     /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
-    Excel {
-        path: String,
-        sheet: String,
-    },
+    Excel { path: String, sheet: String },
 
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
@@ -91,37 +88,38 @@ pub enum DatabaseEngineDTO {
 impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
     fn from(value: &crate::database::DatabaseEngine) -> Self {
         match value {
-            crate::database::DatabaseEngine::Sql { engine, connection_string, table } => {
-                DatabaseEngineDTO::Sql {
-                    engine: engine.into(),
-                    connection_string: connection_string.clone(),
-                    table: table.clone(),
-                }
-            }
-            crate::database::DatabaseEngine::Csv { path, delimiter, has_header, infer_schema_length } => {
-                DatabaseEngineDTO::Csv {
-                    path: path.clone(),
-                    delimiter: *delimiter,
-                    has_header: *has_header,
-                    infer_schema_length: *infer_schema_length,
-                }
-            }
+            crate::database::DatabaseEngine::Sql {
+                engine,
+                connection_string,
+                table,
+            } => DatabaseEngineDTO::Sql {
+                engine: engine.into(),
+                connection_string: connection_string.clone(),
+                table: table.clone(),
+            },
+            crate::database::DatabaseEngine::Csv {
+                path,
+                delimiter,
+                has_header,
+                infer_schema_length,
+            } => DatabaseEngineDTO::Csv {
+                path: path.clone(),
+                delimiter: *delimiter,
+                has_header: *has_header,
+                infer_schema_length: *infer_schema_length,
+            },
             crate::database::DatabaseEngine::Parquet { path, columns } => {
                 DatabaseEngineDTO::Parquet {
                     path: path.clone(),
                     columns: columns.clone(),
                 }
             }
-            crate::database::DatabaseEngine::Excel { path, sheet } => {
-                DatabaseEngineDTO::Excel {
-                    path: path.clone(),
-                    sheet: sheet.clone(),
-                }
-            }
+            crate::database::DatabaseEngine::Excel { path, sheet } => DatabaseEngineDTO::Excel {
+                path: path.clone(),
+                sheet: sheet.clone(),
+            },
             crate::database::DatabaseEngine::InMemory { name } => {
-                DatabaseEngineDTO::InMemory {
-                    name: name.clone(),
-                }
+                DatabaseEngineDTO::InMemory { name: name.clone() }
             }
         }
     }
@@ -134,22 +132,28 @@ pub enum DatabaseEngineSqlDTO {
         #[serde(default, rename = "autoCreate", alias = "auto_create")]
         auto_create: bool,
     },
-    Postgres { ssl: bool },
-    Mysql { charset: String },
+    Postgres {
+        ssl: bool,
+    },
+    Mysql {
+        charset: String,
+    },
 }
 
 impl From<&crate::database::DatabaseEngineSql> for DatabaseEngineSqlDTO {
     fn from(value: &crate::database::DatabaseEngineSql) -> Self {
         match value {
             crate::database::DatabaseEngineSql::Sqlite { auto_create } => {
-                DatabaseEngineSqlDTO::Sqlite { auto_create: *auto_create }
+                DatabaseEngineSqlDTO::Sqlite {
+                    auto_create: *auto_create,
+                }
             }
             crate::database::DatabaseEngineSql::Postgres { ssl } => {
                 DatabaseEngineSqlDTO::Postgres { ssl: *ssl }
             }
-            crate::database::DatabaseEngineSql::Mysql { charset } => {
-                DatabaseEngineSqlDTO::Mysql { charset: charset.clone() }
-            }
+            crate::database::DatabaseEngineSql::Mysql { charset } => DatabaseEngineSqlDTO::Mysql {
+                charset: charset.clone(),
+            },
         }
     }
 }

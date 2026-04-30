@@ -30,10 +30,7 @@ pub enum DatabaseEngine {
     },
 
     /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
-    Excel {
-        path: String,
-        sheet: String,
-    },
+    Excel { path: String, sheet: String },
 
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
@@ -69,9 +66,14 @@ impl DatabaseEngine {
                 Ok(reader)
             }
 
-            DatabaseEngine::Sql { engine, connection_string, table } => {
-                let df = super::sql_reader::read_table_to_dataframe(engine, connection_string, table)
-                    .map_err(|e| PolarsError::ComputeError(e.into()))?;
+            DatabaseEngine::Sql {
+                engine,
+                connection_string,
+                table,
+            } => {
+                let df =
+                    super::sql_reader::read_table_to_dataframe(engine, connection_string, table)
+                        .map_err(|e| PolarsError::ComputeError(e.into()))?;
                 Ok(df.lazy())
             }
 

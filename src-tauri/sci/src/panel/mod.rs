@@ -5,4 +5,4 @@
 
 pub mod align;
 
-pub use align::{align_dataframe, align_panel, diff_dataframe, panel_diff, AlignedPanel};
+pub use align::{AlignedPanel, align_dataframe, align_panel, diff_dataframe, panel_diff};

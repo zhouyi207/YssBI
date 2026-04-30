@@ -85,7 +85,8 @@ impl Logit {
             if yi != 0.0 && yi != 1.0 {
                 return Err(format!(
                     "Logit: endog must be 0/1, got {} at observation {}",
-                    yi, i + 1
+                    yi,
+                    i + 1
                 ));
             }
         }
@@ -106,9 +107,8 @@ impl Logit {
             let w: Array1<f64> = p.mapv(|pi| (pi * (1.0 - pi)).max(1e-10));
 
             // z = η + W^{-1}(y - p) = η + (y-p)/w
-            let z: Array1<f64> = Array1::from_shape_fn(n, |i| {
-                eta[i] + (self.endog[i] - p[i]) / w[i]
-            });
+            let z: Array1<f64> =
+                Array1::from_shape_fn(n, |i| eta[i] + (self.endog[i] - p[i]) / w[i]);
 
             // WLS: β_new = (X'WX)^{-1} X'Wz
             // Weight X and z by sqrt(w): Xw = X * sqrt(w), zw = z * sqrt(w)
@@ -119,7 +119,11 @@ impl Logit {
             for (i, mut row) in xw.outer_iter_mut().enumerate() {
                 row *= sqrt_w[i];
             }
-            let zw: Array1<f64> = z.iter().zip(sqrt_w.iter()).map(|(zi, sw)| zi * sw).collect();
+            let zw: Array1<f64> = z
+                .iter()
+                .zip(sqrt_w.iter())
+                .map(|(zi, sw)| zi * sw)
+                .collect();
 
             let xw_faer = xw.view().into_faer().to_owned();
             let zw_faer = zw.view().into_faer_col().to_owned();
@@ -129,7 +133,10 @@ impl Logit {
 
             let xtx_inv = xtx
                 .llt(Side::Lower)
-                .map_err(|_| "Logit: X'WX not positive definite (check for separation or collinearity)".to_string())?
+                .map_err(|_| {
+                    "Logit: X'WX not positive definite (check for separation or collinearity)"
+                        .to_string()
+                })?
                 .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
 
             let beta_new = xtx_inv.as_ref() * xtz;
@@ -165,8 +172,7 @@ impl Logit {
 
                 let std_err = cov_beta_nd.diag().mapv(f64::sqrt);
 
-                let normal = Normal::new(0.0, 1.0)
-                    .map_err(|e| format!("Logit: Normal: {}", e))?;
+                let normal = Normal::new(0.0, 1.0).map_err(|e| format!("Logit: Normal: {}", e))?;
                 let z_values: Vec<f64> = beta
                     .iter()
                     .zip(std_err.iter())
@@ -187,25 +193,29 @@ impl Logit {
                     .zip(p_final.iter())
                     .map(|(yi, pi)| {
                         let pi = pi.clamp(1e-300, 1.0 - 1e-300);
-                        if *yi > 0.5 {
-                            pi.ln()
-                        } else {
-                            (1.0 - pi).ln()
-                        }
+                        if *yi > 0.5 { pi.ln() } else { (1.0 - pi).ln() }
                     })
                     .sum();
 
                 // Null model (constant only): p = mean(y)
                 let y_mean = self.endog.mean().unwrap();
                 let p_null = y_mean.clamp(EPS, 1.0 - EPS);
-                let ll_null: f64 = self.endog.iter().map(|yi| {
-                    let p = if *yi > 0.5 { p_null } else { 1.0 - p_null };
-                    p.ln()
-                }).sum();
+                let ll_null: f64 = self
+                    .endog
+                    .iter()
+                    .map(|yi| {
+                        let p = if *yi > 0.5 { p_null } else { 1.0 - p_null };
+                        p.ln()
+                    })
+                    .sum();
 
                 let pseudo_r2 = 1.0 - ll / ll_null;
                 let lr_chi2 = 2.0 * (ll - ll_null);
-                let df_model = if self.config.constant { k.saturating_sub(1) } else { k };
+                let df_model = if self.config.constant {
+                    k.saturating_sub(1)
+                } else {
+                    k
+                };
                 let lr_p_value = if df_model <= 0 {
                     1.0
                 } else {
@@ -219,7 +229,9 @@ impl Logit {
 
                 return Ok(LogitResult {
                     num_observation: n,
-                    model: LogitModel { params: beta.clone() },
+                    model: LogitModel {
+                        params: beta.clone(),
+                    },
                     betas: beta,
                     stds: std_err,
                     zvalues: Array1::from_vec(z_values),
@@ -255,8 +267,8 @@ mod tests {
     fn test_logit_constant_only() {
         // Constant-only: 50% y=0, 50% y=1 -> should give intercept ~0, p ~ 0.5
         let endog = Array1::from_vec(vec![
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            1.0, 1.0, 1.0,
         ]);
         let exog = Array2::from_shape_vec((20, 1), vec![1.0; 20]).unwrap();
 
@@ -286,11 +298,7 @@ mod tests {
             } else if x > 0.65 {
                 1.0
             } else {
-                if (i - 28) % 3 == 0 {
-                    1.0
-                } else {
-                    0.0
-                }
+                if (i - 28) % 3 == 0 { 1.0 } else { 0.0 }
             };
             endog.push(y);
             exog_raw.push(1.0);

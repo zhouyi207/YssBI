@@ -97,7 +97,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         }
 
         graph.set_pin_current_value(pin.id, value);
-        
+
         Ok(())
     }
 
@@ -149,7 +149,8 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             .get_pin_instance_by_pin_role(self.node_id, role)
             .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
 
-        graph.get_pin_data_type_by_pin_role(pin.id)
+        graph
+            .get_pin_data_type_by_pin_role(pin.id)
             .ok_or_else(|| format!("Pin {:?} has no resolved type", role))
     }
 
@@ -216,7 +217,8 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
 
     fn get_handle(&self, id: &str) -> Result<Arc<dyn Any + Send + Sync>, String> {
         let graph = self.graph.lock().unwrap();
-        graph.get_handle(id)
+        graph
+            .get_handle(id)
             .ok_or_else(|| format!("Handle '{}' not found", id))
     }
 
@@ -225,10 +227,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     // ====================================================================
 
     fn open_window(&mut self, window_type: String, data: String) {
-        self.window_actions.push(WindowAction {
-            window_type,
-            data,
-        });
+        self.window_actions.push(WindowAction { window_type, data });
     }
 
     fn log(&mut self, message: String) {

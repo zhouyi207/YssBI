@@ -26,8 +26,8 @@ pub fn series_to_time_values(series: &Series) -> PolarsResult<Vec<TimeValue>> {
         DataType::Date => {
             let ca = series.date()?;
             let physical = ca.physical();
-            let epoch = chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE)
-                .unwrap_or_default();
+            let epoch =
+                chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE).unwrap_or_default();
             Ok(physical
                 .into_iter()
                 .filter_map(|v: Option<i32>| {
@@ -61,8 +61,8 @@ pub fn time_values_to_series(name: &str, times: &[TimeValue]) -> PolarsResult<Se
             Ok(Series::new(name.into(), vals))
         }
         TimeValue::Date(_) => {
-            let epoch = chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE)
-                .unwrap_or_default();
+            let epoch =
+                chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE).unwrap_or_default();
             let vals: Vec<i32> = times
                 .iter()
                 .filter_map(|t| {
@@ -153,7 +153,11 @@ fn full_time_range_series(
             Ok(s.with_name(time_series_name.into()))
         }
         _ => Err(PolarsError::SchemaMismatch(
-            format!("align_dataframe: time column must be Int64 or Date, got {:?}", dtype).into(),
+            format!(
+                "align_dataframe: time column must be Int64 or Date, got {:?}",
+                dtype
+            )
+            .into(),
         )),
     }
 }
@@ -190,11 +194,7 @@ pub fn infer_interval(series: &Series) -> PolarsResult<i64> {
             if sorted.len() < 2 {
                 return Ok(1);
             }
-            let min_gap = sorted
-                .windows(2)
-                .map(|w| w[1] - w[0])
-                .min()
-                .unwrap_or(1);
+            let min_gap = sorted.windows(2).map(|w| w[1] - w[0]).min().unwrap_or(1);
             Ok(min_gap.max(1))
         }
         DataType::Date => {
@@ -214,7 +214,11 @@ pub fn infer_interval(series: &Series) -> PolarsResult<i64> {
             Ok(min_gap.max(1))
         }
         _ => Err(PolarsError::SchemaMismatch(
-            format!("infer_interval: time column must be Int64 or Date, got {:?}", dtype).into(),
+            format!(
+                "infer_interval: time column must be Int64 or Date, got {:?}",
+                dtype
+            )
+            .into(),
         )),
     }
 }
@@ -239,10 +243,7 @@ pub fn align_dataframe(
     let time_series = time_col.clone().take_materialized_series();
 
     let full_times = full_time_range_series(&time_series, time_series_name, interval)?;
-    let full_df = DataFrame::new(
-        full_times.len(),
-        vec![Column::from(full_times)],
-    )?;
+    let full_df = DataFrame::new(full_times.len(), vec![Column::from(full_times)])?;
 
     full_df.join(
         df,

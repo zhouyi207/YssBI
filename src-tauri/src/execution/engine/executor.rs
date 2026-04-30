@@ -10,9 +10,9 @@ use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
 use crate::execution::NodeExecutionContext;
 use crate::execution::WindowDataStore;
-use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
+use crate::graph::GraphRuntime;
 use crate::log_exec;
 use serde_json;
 use std::collections::HashMap;
@@ -125,7 +125,12 @@ impl<E: EventEmitter> Executor<E> {
                 Err((err, duration_ms)) => {
                     has_error = true;
                     self.log(format!("Node {:?} failed: {}", frame.node_id, err));
-                    log_exec!(crate::log::LogLevel::Error, "Node {} failed: {}", node_id_str, err);
+                    log_exec!(
+                        crate::log::LogLevel::Error,
+                        "Node {} failed: {}",
+                        node_id_str,
+                        err
+                    );
                     self.emit(ExecutionEvent::NodeError {
                         node_id: node_id_str,
                         error: err,
@@ -142,7 +147,10 @@ impl<E: EventEmitter> Executor<E> {
     }
 
     /// 执行节点并返回 (ExecutionEffect, duration_ms)
-    fn execute_node(&mut self, frame: &ExecutionFrame) -> Result<(ExecutionEffect, u64), (String, u64)> {
+    fn execute_node(
+        &mut self,
+        frame: &ExecutionFrame,
+    ) -> Result<(ExecutionEffect, u64), (String, u64)> {
         let node_id = frame.node_id;
 
         // 获取节点定义
@@ -152,7 +160,8 @@ impl<E: EventEmitter> Executor<E> {
         };
 
         // 在执行节点之前，先执行所有上游的纯数据节点
-        self.execute_upstream_data_nodes(node_id).map_err(|e| (e, 0u64))?;
+        self.execute_upstream_data_nodes(node_id)
+            .map_err(|e| (e, 0u64))?;
 
         // 创建执行上下文
         let mut ctx = NodeExecutionContext::new(self.graph.clone(), node_id);
@@ -166,7 +175,8 @@ impl<E: EventEmitter> Executor<E> {
         } else {
             // 执行节点的 DataEvaluator（如果有）
             if let Some(data_evaluator) = &definition.data_evaluator {
-                data_evaluator(&mut ctx).map_err(|e| (e, node_start.elapsed().as_millis() as u64))?;
+                data_evaluator(&mut ctx)
+                    .map_err(|e| (e, node_start.elapsed().as_millis() as u64))?;
             }
             // 如果没有 FlowProcessor，返回 Done
             Ok(ExecutionEffect::Done)
@@ -181,7 +191,8 @@ impl<E: EventEmitter> Executor<E> {
             let data_key = format!("win_{}", uuid::Uuid::new_v4().simple());
             // 注入 executionTimeMs 到窗口数据，供前端 summary 页面做性能分析
             let data_with_timing = inject_execution_time(&action.data, node_duration_ms);
-            self.window_data_store.insert(data_key.clone(), data_with_timing);
+            self.window_data_store
+                .insert(data_key.clone(), data_with_timing);
             self.emit(ExecutionEvent::OpenWindow {
                 window_type: action.window_type,
                 data_key,
@@ -208,13 +219,13 @@ impl<E: EventEmitter> Executor<E> {
                 graph
                     .get_upstream_by_pin_id(pin.id)
                     .and_then(|upstream_pin_id| {
-                        graph.get_node_id_by_pin_id(upstream_pin_id).map(
-                            |upstream_node_id| {
+                        graph
+                            .get_node_id_by_pin_id(upstream_pin_id)
+                            .map(|upstream_node_id| {
                                 let upstream_definition =
                                     graph.get_node_definition_by_node_id(upstream_node_id);
                                 (upstream_node_id, upstream_pin_id, upstream_definition)
-                            },
-                        )
+                            })
                     })
             };
 
@@ -241,8 +252,7 @@ impl<E: EventEmitter> Executor<E> {
                     });
 
                     let upstream_start = Instant::now();
-                    let mut ctx =
-                        NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
+                    let mut ctx = NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
 
                     let eval_result = if let Some(evaluator) = &upstream_definition.data_evaluator {
                         evaluator(&mut ctx)

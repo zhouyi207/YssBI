@@ -77,9 +77,10 @@ fn compute_numeric_stats(
     count: usize,
     null_count: usize,
 ) -> ColumnStats {
-    let ca = col.cast(&DataType::Float64).ok().and_then(|c| {
-        c.f64().ok().cloned()
-    });
+    let ca = col
+        .cast(&DataType::Float64)
+        .ok()
+        .and_then(|c| c.f64().ok().cloned());
 
     let (min, max, mean, median_val, std_val) = match &ca {
         Some(f64_ca) => {

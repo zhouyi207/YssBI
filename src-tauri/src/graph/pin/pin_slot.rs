@@ -11,9 +11,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "slotKind", rename_all = "camelCase")]
 pub enum PinSlot {
     /// 固定 pin，始终存在于节点上
-    Fixed {
-        pin: PinDefinition,
-    },
+    Fixed { pin: PinDefinition },
 
     /// 可重复 pin 槽位，用户可以增删同类型的 pin 实例
     ///

@@ -9,15 +9,11 @@ pub enum ExecutionEvent {
 
     /// 执行完成
     #[serde(rename_all = "camelCase")]
-    ExecutionComplete {
-        has_error: bool,
-    },
+    ExecutionComplete { has_error: bool },
 
     /// 节点开始执行
     #[serde(rename_all = "camelCase")]
-    NodeStart {
-        node_id: String,
-    },
+    NodeStart { node_id: String },
 
     /// 节点执行完成
     #[serde(rename_all = "camelCase")]

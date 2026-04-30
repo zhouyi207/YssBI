@@ -1,7 +1,7 @@
 //! VECRANK — Johansen 协整秩检验（Stata vecrank）
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -137,7 +137,10 @@ fn run_vecrank(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VecRankResult,
         if s.len() != n {
             return Err(format!(
                 "VECRANK: variable '{}' has {} rows, expected {}",
-                var_names.get(i).cloned().unwrap_or_else(|| format!("y{}", i)),
+                var_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("y{}", i)),
                 s.len(),
                 n
             ));

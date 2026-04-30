@@ -1,7 +1,7 @@
 //! Panel Summary node — runs FE, FD, RE and displays all results
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -11,19 +11,23 @@ use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame};
 use serde::{Deserialize, Serialize};
+use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use std::collections::HashMap;
 use std::sync::Arc;
-use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci::regression::collinearity;
-use yss_sci::regression::panel::{
-    fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_fd, fit_panel_lsdv,
-    fit_panel_lsdv_time, fit_panel_lsdv_twoway,     fit_panel_re_be, fit_panel_re_be_time, fit_panel_re_fgls, fit_panel_re_fgls_time, fit_panel_re_fgls_twoway,
-    fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
-};
 use yss_sci::regression::linear_model::{OLSConfig, OLS};
+use yss_sci::regression::panel::{
+    fit_panel_fd, fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_lsdv,
+    fit_panel_lsdv_time, fit_panel_lsdv_twoway, fit_panel_re_be, fit_panel_re_be_time,
+    fit_panel_re_fgls, fit_panel_re_fgls_time, fit_panel_re_fgls_twoway, fit_panel_re_mle,
+    fit_panel_re_mle_time, fit_panel_re_mle_twoway,
+};
 use yss_sci::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
 
-use super::info_nodes::{compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, ObsPerGroupInfo, OmitInfo, OmittedVariable, PanelFEInfo, SigmaInfo, ThetaInfo};
+use super::info_nodes::{
+    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, ObsPerGroupInfo,
+    OmitInfo, OmittedVariable, PanelFEInfo, SigmaInfo, ThetaInfo,
+};
 
 // ======================== 结构体 ========================
 
@@ -168,7 +172,10 @@ pub struct PanelSelectionTest {
 
 // ======================== 辅助函数 ========================
 
-pub(crate) fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, series_id: &str) -> Result<Vec<usize>, String> {
+pub(crate) fn series_to_group_indices(
+    ctx: &mut dyn NodeExecutionContextTrait,
+    series_id: &str,
+) -> Result<Vec<usize>, String> {
     let series = ctx.get_series(series_id)?;
     let n = series.len();
     let mut indices = Vec::with_capacity(n);
@@ -205,7 +212,9 @@ pub(crate) fn series_to_group_indices(ctx: &mut dyn NodeExecutionContextTrait, s
             indices.push(idx);
         }
     } else {
-        return Err("Panel: Entity ID and Time ID must be Categorical or Int64 DataSeries".to_string());
+        return Err(
+            "Panel: Entity ID and Time ID must be Categorical or Int64 DataSeries".to_string(),
+        );
     }
     Ok(indices)
 }
@@ -225,10 +234,9 @@ fn panel_input_slots() -> Vec<PinSlot> {
         PinSlot::fixed(PinDefinition::data_input(
             "Y",
             DataRole::Custom("y".to_string()),
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Int64,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Int64],
+            )))),
         )),
         PinSlot::repeatable(
             PinDefinition::data_input(
@@ -261,7 +269,10 @@ fn panel_input_slots() -> Vec<PinSlot> {
     ]
 }
 
-fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> Result<
+fn build_panel_data(
+    ctx: &mut dyn NodeExecutionContextTrait,
+    constant: bool,
+) -> Result<
     (
         Array1<f64>,
         Array2<f64>,
@@ -286,20 +297,26 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("Panel: Y cast: {}", e))?;
 
-    let entity_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("entity_id".to_string())))?;
+    let entity_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("entity_id".to_string())))?;
     let entity_id_str = match &entity_value {
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("Panel: Entity ID must be a DataSeries".to_string()),
     };
     let entity_id = series_to_group_indices(ctx, &entity_id_str)?;
 
-    let time_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_id".to_string())))?;
+    let time_value =
+        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_id".to_string())))?;
     let time_id_str = match &time_value {
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("Panel: Time ID must be a DataSeries".to_string()),
@@ -331,19 +348,32 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         let series = ctx.get_series(&dsv.id)?;
         let name = {
             let raw = series.name().to_string();
-            if raw.is_empty() { format!("x{}", i + 1) } else { raw }
+            if raw.is_empty() {
+                format!("x{}", i + 1)
+            } else {
+                raw
+            }
         };
         if series.len() != n_raw {
-            return Err(format!("Panel: X '{}' len {} != Y len {}", name, series.len(), n_raw));
+            return Err(format!(
+                "Panel: X '{}' len {} != Y len {}",
+                name,
+                series.len(),
+                n_raw
+            ));
         }
         let is_cat = matches!(
             series.dtype(),
             polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
         );
         let col_series = if is_cat {
-            series.cast(&polars::prelude::DataType::String).map_err(|e| e.to_string())?
+            series
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e| e.to_string())?
         } else {
-            series.cast(&polars::prelude::DataType::Float64).map_err(|e| e.to_string())?
+            series
+                .cast(&polars::prelude::DataType::Float64)
+                .map_err(|e| e.to_string())?
         };
         df_cols.push(Column::from(col_series.with_name(name.as_str().into())));
         exog_meta.push((name, is_cat, dsv));
@@ -352,12 +382,20 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
     let entity_series = ctx.get_series(&entity_id_str)?;
     let entity_series_name = {
         let raw = entity_series.name().to_string();
-        if raw.is_empty() { "Entity ID".to_string() } else { raw }
+        if raw.is_empty() {
+            "Entity ID".to_string()
+        } else {
+            raw
+        }
     };
     let time_series = ctx.get_series(&time_id_str)?;
     let time_series_name = {
         let raw = time_series.name().to_string();
-        if raw.is_empty() { "Time ID".to_string() } else { raw }
+        if raw.is_empty() {
+            "Time ID".to_string()
+        } else {
+            raw
+        }
     };
     df_cols.push(Column::from(entity_series.with_name("__entity__".into())));
     df_cols.push(Column::from(time_series.with_name("__time__".into())));
@@ -383,13 +421,22 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         .collect();
 
     let (entity_after, entity_names): (Vec<usize>, Vec<String>) = {
-        let s = df.column("__entity__").map_err(|e| format!("Panel: {}", e))?;
+        let s = df
+            .column("__entity__")
+            .map_err(|e| format!("Panel: {}", e))?;
         let mut m: HashMap<String, usize> = HashMap::new();
         let mut idx_to_name: Vec<String> = Vec::new();
         let mut out = Vec::with_capacity(n);
-        if matches!(s.dtype(), polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)) {
-            let str_s = s.cast(&polars::prelude::DataType::String).map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let ca = str_s.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
+        if matches!(
+            s.dtype(),
+            polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
+        ) {
+            let str_s = s
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = str_s
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             for opt in ca.into_iter() {
                 let key: String = opt.ok_or("null")?.to_string();
                 let idx = *m.entry(key.clone()).or_insert_with(|| {
@@ -400,7 +447,9 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
                 out.push(idx);
             }
         } else {
-            let ca = s.i64().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = s
+                .i64()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             for opt in ca.into_iter() {
                 let key: String = opt.ok_or("null")?.to_string();
                 let idx = *m.entry(key.clone()).or_insert_with(|| {
@@ -416,10 +465,18 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
 
     let (time_after, time_values, time_names): (Vec<usize>, Vec<i64>, Vec<String>) = {
         let s = df.column("__time__").map_err(|e| format!("Panel: {}", e))?;
-        if matches!(s.dtype(), polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)) {
-            let str_s = s.cast(&polars::prelude::DataType::String).map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let ca = str_s.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let values: Vec<String> = ca.into_iter()
+        if matches!(
+            s.dtype(),
+            polars::prelude::DataType::Categorical(_, _) | polars::prelude::DataType::Enum(_, _)
+        ) {
+            let str_s = s
+                .cast(&polars::prelude::DataType::String)
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = str_s
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let values: Vec<String> = ca
+                .into_iter()
                 .map(|opt| opt.ok_or("null").map(|s: &str| s.to_string()))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|_| "Panel: time contains null")?;
@@ -430,13 +487,20 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
                 }
             }
             unique.sort();
-            let m: HashMap<String, usize> = unique.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect();
+            let m: HashMap<String, usize> = unique
+                .iter()
+                .enumerate()
+                .map(|(i, k)| (k.clone(), i))
+                .collect();
             let indices: Vec<usize> = values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect();
             let vals: Vec<i64> = indices.iter().map(|&i| i as i64).collect();
             (indices, vals, unique)
         } else if s.dtype() == &polars::prelude::DataType::Int64 {
-            let ca = s.i64().map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let values: Vec<i64> = ca.into_iter()
+            let ca = s
+                .i64()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let values: Vec<i64> = ca
+                .into_iter()
                 .map(|opt| opt.ok_or("Panel: time contains null"))
                 .collect::<Result<Vec<_>, _>>()?;
             let mut unique: Vec<i64> = Vec::new();
@@ -451,7 +515,9 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
             let names: Vec<String> = unique.iter().map(|v| v.to_string()).collect();
             (indices, values, names)
         } else if s.dtype() == &polars::prelude::DataType::Date {
-            let ca = s.date().map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let ca = s
+                .date()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
             let physical = ca.physical();
             let values: Vec<i32> = physical
                 .into_iter()
@@ -479,10 +545,17 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
     let mut all_labels: Vec<(String, Option<String>)> = vec![("const".to_string(), None)];
 
     for (series_name, is_categorical, _dsv) in exog_meta {
-        let col = df.column(&series_name).map_err(|e| format!("Panel: {}", e))?;
+        let col = df
+            .column(&series_name)
+            .map_err(|e| format!("Panel: {}", e))?;
         if is_categorical {
-            let str_ca = col.str().map_err(|e: polars::error::PolarsError| e.to_string())?;
-            let values: Vec<String> = str_ca.into_no_null_iter().map(|s: &str| s.to_string()).collect();
+            let str_ca = col
+                .str()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?;
+            let values: Vec<String> = str_ca
+                .into_no_null_iter()
+                .map(|s: &str| s.to_string())
+                .collect();
             let mut unique: Vec<String> = Vec::new();
             for v in &values {
                 if !unique.contains(v) {
@@ -490,16 +563,26 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
                 }
             }
             if unique.len() < 2 {
-                return Err(format!("Panel: categorical '{}' needs >= 2 unique values", series_name));
+                return Err(format!(
+                    "Panel: categorical '{}' needs >= 2 unique values",
+                    series_name
+                ));
             }
             let drop_cat = unique[0].clone();
             for cat in unique.iter().filter(|c| **c != drop_cat) {
-                let col_vec: Vec<f64> = values.iter().map(|v| if v == cat { 1.0 } else { 0.0 }).collect();
+                let col_vec: Vec<f64> = values
+                    .iter()
+                    .map(|v| if v == cat { 1.0 } else { 0.0 })
+                    .collect();
                 exog_columns.push(col_vec);
                 all_labels.push((series_name.clone(), Some(cat.clone())));
             }
         } else {
-            let col_vec: Vec<f64> = col.f64().map_err(|e: polars::error::PolarsError| e.to_string())?.into_no_null_iter().collect();
+            let col_vec: Vec<f64> = col
+                .f64()
+                .map_err(|e: polars::error::PolarsError| e.to_string())?
+                .into_no_null_iter()
+                .collect();
             exog_columns.push(col_vec);
             all_labels.push((series_name, None));
         }
@@ -517,7 +600,20 @@ fn build_panel_data(ctx: &mut dyn NodeExecutionContextTrait, constant: bool) -> 
         .map_err(|e| format!("Panel: exog shape: {:?}", e))?;
 
     let endog = Array1::from(endog_vec);
-    Ok((endog, exog, entity_after, time_after, time_values, all_labels, endog_name, has_constant, entity_names, entity_series_name, time_names, time_series_name))
+    Ok((
+        endog,
+        exog,
+        entity_after,
+        time_after,
+        time_values,
+        all_labels,
+        endog_name,
+        has_constant,
+        entity_names,
+        entity_series_name,
+        time_names,
+        time_series_name,
+    ))
 }
 
 pub(crate) fn panel_result_to_ols_result(
@@ -588,9 +684,11 @@ pub(crate) fn panel_result_to_ols_result(
             num_observation: pr.num_observation,
             r_squared: pr.r2,
             adj_r_squared: pr.r2_adjusted,
-            f_statistic: pr.lr_chi2
+            f_statistic: pr
+                .lr_chi2
                 .unwrap_or_else(|| pr.wald_chi2.unwrap_or(pr.fvalue)),
-            prob_f_statistic: pr.prob_lr_chi2
+            prob_f_statistic: pr
+                .prob_lr_chi2
                 .unwrap_or_else(|| pr.prob_wald_chi2.unwrap_or(pr.f_p_value)),
             wald_chi2: pr.wald_chi2,
             prob_wald_chi2: pr.prob_wald_chi2,
@@ -975,21 +1073,30 @@ fn breusch_pagan_lm_test(
 ) -> PanelSelectionTest {
     let Some(resid) = residuals else {
         return unavailable_test(
-            id, group, label, h0, "chibar2(01)",
+            id,
+            group,
+            label,
+            h0,
+            "chibar2(01)",
             "Cannot decide because pooled OLS residuals are unavailable.",
             "Pooled OLS fit failed",
         );
     };
     if resid.len() != group_id.len() {
         return unavailable_test(
-            id, group, label, h0, "chibar2(01)",
+            id,
+            group,
+            label,
+            h0,
+            "chibar2(01)",
             "Cannot decide due to length mismatch.",
             "residuals.len() != group_id.len()",
         );
     }
 
     let n_total = resid.len() as f64;
-    let mut group_sums: std::collections::HashMap<usize, (f64, usize)> = std::collections::HashMap::new();
+    let mut group_sums: std::collections::HashMap<usize, (f64, usize)> =
+        std::collections::HashMap::new();
     let mut b_total = 0.0f64;
     for (i, &g) in group_id.iter().enumerate() {
         let e = resid[i];
@@ -1001,21 +1108,32 @@ fn breusch_pagan_lm_test(
 
     if b_total <= 0.0 || !b_total.is_finite() {
         return unavailable_test(
-            id, group, label, h0, "chibar2(01)",
+            id,
+            group,
+            label,
+            h0,
+            "chibar2(01)",
             "Cannot decide because RSS is zero or non-finite.",
             "e'e <= 0",
         );
     }
 
     let a_total: f64 = group_sums.values().map(|(s, _)| s * s).sum();
-    let sum_ti_ti_minus_1: f64 = group_sums.values().map(|(_, ti)| {
-        let t = *ti as f64;
-        t * (t - 1.0)
-    }).sum();
+    let sum_ti_ti_minus_1: f64 = group_sums
+        .values()
+        .map(|(_, ti)| {
+            let t = *ti as f64;
+            t * (t - 1.0)
+        })
+        .sum();
 
     if sum_ti_ti_minus_1 <= 0.0 {
         return unavailable_test(
-            id, group, label, h0, "chibar2(01)",
+            id,
+            group,
+            label,
+            h0,
+            "chibar2(01)",
             "Cannot decide because all groups have only 1 observation.",
             "sum T_i(T_i-1) = 0",
         );
@@ -1029,8 +1147,13 @@ fn breusch_pagan_lm_test(
         Ok(d) => d,
         Err(_) => {
             return unavailable_test(
-                id, group, label, h0, "chibar2(01)",
-                "Cannot compute p-value.", "Invalid chi2 distribution",
+                id,
+                group,
+                label,
+                h0,
+                "chibar2(01)",
+                "Cannot compute p-value.",
+                "Invalid chi2 distribution",
             );
         }
     };
@@ -1047,8 +1170,16 @@ fn breusch_pagan_lm_test(
         df1: Some(1),
         df2: None,
         p_value: Some(p),
-        decision: if significant { "significant".to_string() } else { "not_significant".to_string() },
-        recommendation: if significant { sig_recommendation.to_string() } else { nsig_recommendation.to_string() },
+        decision: if significant {
+            "significant".to_string()
+        } else {
+            "not_significant".to_string()
+        },
+        recommendation: if significant {
+            sig_recommendation.to_string()
+        } else {
+            nsig_recommendation.to_string()
+        },
         note: None,
     }
 }
@@ -1131,13 +1262,23 @@ fn hausman_test(
     // Use nonrobust VCE for Hausman test (Stata hausman, sigmamore).
     // With cluster-robust VCE, the standard Hausman formula is invalid because
     // V(b_FE - b_RE) ≠ V_FE - V_RE under robust variance estimation.
-    let fe_vcov = fe_res.cov_beta_nonrobust.as_ref().unwrap_or(&fe_res.cov_beta);
-    let re_vcov = re_res.cov_beta_nonrobust.as_ref().unwrap_or(&re_res.cov_beta);
+    let fe_vcov = fe_res
+        .cov_beta_nonrobust
+        .as_ref()
+        .unwrap_or(&fe_res.cov_beta);
+    let re_vcov = re_res
+        .cov_beta_nonrobust
+        .as_ref()
+        .unwrap_or(&re_res.cov_beta);
 
     // sigmamore: rescale FE nonrobust VCE using RE's sigma² so V_FE - V_RE ≥ 0
     let sigma2_fe = fe_res.model_basic_info.ms_residual;
     let sigma2_re = re_res.model_basic_info.ms_residual;
-    let sigmamore_scale = if sigma2_fe > 1e-300 { sigma2_re / sigma2_fe } else { 1.0 };
+    let sigmamore_scale = if sigma2_fe > 1e-300 {
+        sigma2_re / sigma2_fe
+    } else {
+        1.0
+    };
 
     for (i, (i_fe, i_re)) in common.iter().enumerate() {
         for (j, (j_fe, j_re)) in common.iter().enumerate() {
@@ -1145,7 +1286,8 @@ fn hausman_test(
                 .get(*i_fe)
                 .and_then(|row| row.get(*j_fe))
                 .copied()
-                .unwrap_or(0.0) * sigmamore_scale;
+                .unwrap_or(0.0)
+                * sigmamore_scale;
             let v_re = re_vcov
                 .get(*i_re)
                 .and_then(|row| row.get(*j_re))
@@ -1271,7 +1413,9 @@ fn register_panel_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Panel regression configuration — Constant and VCE (cluster by entity default)")
+    .with_description(
+        "Panel regression configuration — Constant and VCE (cluster by entity default)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1308,21 +1452,23 @@ fn register_panel_configure(registry: &NodeRegistry) {
             .and_then(|v| v.as_handle_id().map(|s| s.to_string()))
             .and_then(|id| ctx.get_handle(&id).ok())
             .and_then(|h| {
-                Some(if h.downcast_ref::<super::ols_nodes::VCENonRobust>().is_some() {
-                    "nonrobust".to_string()
-                } else if h.downcast_ref::<super::ols_nodes::VCEHC0>().is_some() {
-                    "HC0".to_string()
-                } else if h.downcast_ref::<super::ols_nodes::VCEHC1>().is_some() {
-                    "HC1".to_string()
-                } else if h.downcast_ref::<super::ols_nodes::VCEHC2>().is_some() {
-                    "HC2".to_string()
-                } else if h.downcast_ref::<super::ols_nodes::VCEHC3>().is_some() {
-                    "HC3".to_string()
-                } else if h.downcast_ref::<PanelVCECluster>().is_some() {
-                    "cluster".to_string()
-                } else {
-                    return None;
-                })
+                Some(
+                    if h.downcast_ref::<super::ols_nodes::VCENonRobust>().is_some() {
+                        "nonrobust".to_string()
+                    } else if h.downcast_ref::<super::ols_nodes::VCEHC0>().is_some() {
+                        "HC0".to_string()
+                    } else if h.downcast_ref::<super::ols_nodes::VCEHC1>().is_some() {
+                        "HC1".to_string()
+                    } else if h.downcast_ref::<super::ols_nodes::VCEHC2>().is_some() {
+                        "HC2".to_string()
+                    } else if h.downcast_ref::<super::ols_nodes::VCEHC3>().is_some() {
+                        "HC3".to_string()
+                    } else if h.downcast_ref::<PanelVCECluster>().is_some() {
+                        "cluster".to_string()
+                    } else {
+                        return None;
+                    },
+                )
             })
             .unwrap_or_else(|| "cluster".to_string());
 
@@ -1378,7 +1524,10 @@ pub fn register(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("PanelSummaryResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "Panel Summary",

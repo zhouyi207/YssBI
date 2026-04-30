@@ -2,6 +2,10 @@
 //!
 //! 实现与 Stata varbasic 一致：VAR(p) 估计、正交化 IRF、FEVD。
 
+use super::var_types::{
+    VARCoefDisplay, VAREquationDisplay, VARGrangerDisplay, VARLmarDisplay, VARStableDisplay,
+    VARSummaryResult, VARWleDisplay,
+};
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -9,15 +13,11 @@ use crate::graph::pin::{
 };
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataValue;
-use super::var_types::{
-    VARCoefDisplay, VAREquationDisplay, VARGrangerDisplay, VARLmarDisplay,
-    VARStableDisplay, VARSummaryResult, VARWleDisplay,
-};
 use ndarray::Array2;
 use polars::prelude::DataType;
 use std::sync::Arc;
 use yss_sci::api::time_series::{
-    var_regression_times_stata, var_varsoc, VAR, VARConfig, VARSocResult,
+    var_regression_times_stata, var_varsoc, VARConfig, VARSocResult, VAR,
 };
 
 // ======================== 辅助 ========================
@@ -158,9 +158,7 @@ fn run_var(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSummaryResult, 
         let s_f64 = s
             .cast(&polars::prelude::DataType::Float64)
             .map_err(|e| format!("VAR: cannot cast to Float64: {}", e))?;
-        let ca = s_f64
-            .f64()
-            .map_err(|e| format!("VAR: {}", e))?;
+        let ca = s_f64.f64().map_err(|e| format!("VAR: {}", e))?;
         let len = ca.len();
         match n {
             None => n = Some(len),
@@ -181,106 +179,97 @@ fn run_var(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSummaryResult, 
     let n = n.ok_or_else(|| "VAR: no variables".to_string())?;
     let k = y_cols.len();
 
-    let exog_df_id: Option<String> = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("exog_df".to_string())))
-    {
-        Ok(DataValue::DataFrame(id)) => Some(id.clone()),
-        Ok(DataValue::Null) | Err(_) => None,
-        _ => None,
-    };
+    let exog_df_id: Option<String> =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("exog_df".to_string()))) {
+            Ok(DataValue::DataFrame(id)) => Some(id.clone()),
+            Ok(DataValue::Null) | Err(_) => None,
+            _ => None,
+        };
 
-    let (y, exog, exog_names, regression_times, complete_sample_rows) =
-        if let Some(ref id) = exog_df_id {
-            let df = ctx.get_dataframe(id)?;
-            let df = df.as_ref();
-            if df.height() != n {
-                return Err(format!(
-                    "VAR: exog DataFrame has {} rows, expected {} (must align with Variables length)",
-                    df.height(),
-                    n
-                ));
+    let (y, exog, exog_names, regression_times, complete_sample_rows) = if let Some(ref id) =
+        exog_df_id
+    {
+        let df = ctx.get_dataframe(id)?;
+        let df = df.as_ref();
+        if df.height() != n {
+            return Err(format!(
+                "VAR: exog DataFrame has {} rows, expected {} (must align with Variables length)",
+                df.height(),
+                n
+            ));
+        }
+        let mut y_data = Vec::with_capacity(n * k);
+        for i in 0..n {
+            for col in &y_cols {
+                y_data.push(col[i].filter(|x| x.is_finite()).unwrap_or(f64::NAN));
             }
-            let mut y_data = Vec::with_capacity(n * k);
-            for i in 0..n {
-                for col in &y_cols {
-                    y_data.push(
-                        col[i]
-                            .filter(|x| x.is_finite())
-                            .unwrap_or(f64::NAN),
-                    );
-                }
-            }
-            let y = Array2::from_shape_vec((n, k), y_data)
-                .map_err(|e| format!("VAR: failed to build Y matrix: {}", e))?;
-            let (exog_mat, exog_names) = exog_dataframe_to_array2_full_nan(df, n)?;
-            let times = var_regression_times_stata(&y, &lags, Some(&exog_mat))?;
-            let n_reg = times.len();
-            if n_reg <= lags_p {
-                return Err(format!(
-                    "VAR: Stata-style sample has {} regression period(s); need more than {} (max lag)",
-                    n_reg, lags_p
-                ));
-            }
-            ctx.log(format!(
+        }
+        let y = Array2::from_shape_vec((n, k), y_data)
+            .map_err(|e| format!("VAR: failed to build Y matrix: {}", e))?;
+        let (exog_mat, exog_names) = exog_dataframe_to_array2_full_nan(df, n)?;
+        let times = var_regression_times_stata(&y, &lags, Some(&exog_mat))?;
+        let n_reg = times.len();
+        if n_reg <= lags_p {
+            return Err(format!(
+                "VAR: Stata-style sample has {} regression period(s); need more than {} (max lag)",
+                n_reg, lags_p
+            ));
+        }
+        ctx.log(format!(
                 "VAR: aligned timeline T={} rows (exog); VAR({}) effective regression n={} (t≥{} with finite y, lags, exog[t])",
                 n, lags_p, n_reg, lags_p
             ));
-            (
-                y,
-                Some(exog_mat),
-                Some(exog_names),
-                Some(times),
-                n,
-            )
-        } else {
-            let mut keep = vec![true; n];
-            for col in &y_cols {
-                for i in 0..n {
-                    if !finite_f64(col[i]) {
-                        keep[i] = false;
-                    }
+        (y, Some(exog_mat), Some(exog_names), Some(times), n)
+    } else {
+        let mut keep = vec![true; n];
+        for col in &y_cols {
+            for i in 0..n {
+                if !finite_f64(col[i]) {
+                    keep[i] = false;
                 }
             }
-            let row_pick: Vec<usize> = (0..n).filter(|&i| keep[i]).collect();
-            let n_keep = row_pick.len();
-            if n_keep == 0 {
-                return Err(
-                    "VAR: no complete observations (missing or non-finite endogenous values)"
-                        .to_string(),
-                );
-            }
-            if n_keep <= lags_p {
-                return Err(format!(
-                    "VAR: after listwise deletion, {} observations remain; need more than {} (lags)",
-                    n_keep, lags_p
-                ));
-            }
-            let dropped = n - n_keep;
-            if dropped > 0 {
-                ctx.log(format!(
+        }
+        let row_pick: Vec<usize> = (0..n).filter(|&i| keep[i]).collect();
+        let n_keep = row_pick.len();
+        if n_keep == 0 {
+            return Err(
+                "VAR: no complete observations (missing or non-finite endogenous values)"
+                    .to_string(),
+            );
+        }
+        if n_keep <= lags_p {
+            return Err(format!(
+                "VAR: after listwise deletion, {} observations remain; need more than {} (lags)",
+                n_keep, lags_p
+            ));
+        }
+        let dropped = n - n_keep;
+        if dropped > 0 {
+            ctx.log(format!(
                     "VAR: listwise deletion removed {} observation(s) with missing/non-finite endogenous (no exog)",
                     dropped
                 ));
+        }
+        ctx.log(format!(
+            "VAR: complete sample T={} rows; VAR({}) estimation n={} (= T − {})",
+            n_keep,
+            lags_p,
+            n_keep.saturating_sub(lags_p),
+            lags_p
+        ));
+        let mut y_data = Vec::with_capacity(n_keep * k);
+        for &i in &row_pick {
+            for col in &y_cols {
+                let v = col[i].ok_or_else(|| {
+                    "VAR: internal error: complete-case row has null endogenous".to_string()
+                })?;
+                y_data.push(v);
             }
-            ctx.log(format!(
-                "VAR: complete sample T={} rows; VAR({}) estimation n={} (= T − {})",
-                n_keep,
-                lags_p,
-                n_keep.saturating_sub(lags_p),
-                lags_p
-            ));
-            let mut y_data = Vec::with_capacity(n_keep * k);
-            for &i in &row_pick {
-                for col in &y_cols {
-                    let v = col[i].ok_or_else(|| {
-                        "VAR: internal error: complete-case row has null endogenous".to_string()
-                    })?;
-                    y_data.push(v);
-                }
-            }
-            let y = Array2::from_shape_vec((n_keep, k), y_data)
-                .map_err(|e| format!("VAR: failed to build Y matrix: {}", e))?;
-            (y, None, None, None, n_keep)
-        };
+        }
+        let y = Array2::from_shape_vec((n_keep, k), y_data)
+            .map_err(|e| format!("VAR: failed to build Y matrix: {}", e))?;
+        (y, None, None, None, n_keep)
+    };
 
     let var_config = VARConfig {
         constant: true,
@@ -304,17 +293,52 @@ fn run_var(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSummaryResult, 
 
     let mut coefficients = Vec::new();
     for eq in 0..result.var_names.len() {
-        for (j, label) in result.coef_labels.get(eq).unwrap_or(&vec![]).iter().enumerate() {
+        for (j, label) in result
+            .coef_labels
+            .get(eq)
+            .unwrap_or(&vec![])
+            .iter()
+            .enumerate()
+        {
             if j < result.coefficients[eq].len() {
                 coefficients.push(VARCoefDisplay {
-                    eq_name: result.equations.get(eq).map(|e| e.eq_name.clone()).unwrap_or_else(|| format!("eq{}", eq)),
+                    eq_name: result
+                        .equations
+                        .get(eq)
+                        .map(|e| e.eq_name.clone())
+                        .unwrap_or_else(|| format!("eq{}", eq)),
                     variable: label.clone(),
                     coef: result.coefficients[eq][j],
-                    std_err: result.std_errs.get(eq).and_then(|se| se.get(j)).copied().unwrap_or(0.0),
-                    z_value: result.z_values.get(eq).and_then(|zv| zv.get(j)).copied().unwrap_or(0.0),
-                    p_value: result.p_values.get(eq).and_then(|pv| pv.get(j)).copied().unwrap_or(1.0),
-                    ci_lower: result.ci_lower.get(eq).and_then(|c| c.get(j)).copied().unwrap_or(0.0),
-                    ci_upper: result.ci_upper.get(eq).and_then(|c| c.get(j)).copied().unwrap_or(0.0),
+                    std_err: result
+                        .std_errs
+                        .get(eq)
+                        .and_then(|se| se.get(j))
+                        .copied()
+                        .unwrap_or(0.0),
+                    z_value: result
+                        .z_values
+                        .get(eq)
+                        .and_then(|zv| zv.get(j))
+                        .copied()
+                        .unwrap_or(0.0),
+                    p_value: result
+                        .p_values
+                        .get(eq)
+                        .and_then(|pv| pv.get(j))
+                        .copied()
+                        .unwrap_or(1.0),
+                    ci_lower: result
+                        .ci_lower
+                        .get(eq)
+                        .and_then(|c| c.get(j))
+                        .copied()
+                        .unwrap_or(0.0),
+                    ci_upper: result
+                        .ci_upper
+                        .get(eq)
+                        .and_then(|c| c.get(j))
+                        .copied()
+                        .unwrap_or(0.0),
                 });
             }
         }
@@ -325,7 +349,10 @@ fn run_var(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSummaryResult, 
         .iter()
         .enumerate()
         .map(|(i, e)| VAREquationDisplay {
-            eq_name: var_names.get(i).cloned().unwrap_or_else(|| e.eq_name.clone()),
+            eq_name: var_names
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| e.eq_name.clone()),
             parms: e.parms,
             rmse: e.rmse,
             r_sq: e.r_sq,
@@ -475,7 +502,10 @@ fn run_varsoc(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSocResult, S
         if s.len() != n {
             return Err(format!(
                 "VAR varsoc: variable '{}' has {} rows, expected {}",
-                var_names.get(i).cloned().unwrap_or_else(|| format!("y{}", i)),
+                var_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("y{}", i)),
                 s.len(),
                 n
             ));
@@ -511,7 +541,10 @@ fn register_varsoc(registry: &NodeRegistry) {
             "VARSocResult".to_string(),
         )),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "VAR Lag Order (varsoc)",
@@ -556,7 +589,10 @@ fn register_var_summary(registry: &NodeRegistry) {
             "VARSummaryResult".to_string(),
         )),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "VAR Summary",

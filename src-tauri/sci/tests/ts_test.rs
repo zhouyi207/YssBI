@@ -3,9 +3,9 @@
 use ndarray::Array2;
 use polars::prelude::*;
 use yss_sci::ts;
-use yss_sci::ts::unit_root::{adf_test, AdfRegression};
+use yss_sci::ts::unit_root::{AdfRegression, adf_test};
 use yss_sci::ts::var::var_varsoc;
-use yss_sci::ts::vec::{vec_estimate, VECConfig, VecTrendSpec};
+use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
 
 #[test]
 fn test_ts_diff() {
@@ -83,13 +83,21 @@ fn test_align_dataframe() {
     let aligned = yss_sci::ts::align::align_dataframe(&df, "t", 1).unwrap();
 
     assert_eq!(aligned.height(), 5); // t=1,2,3,4,5
-    assert_eq!(aligned.width(), 3);  // t, x, y
+    assert_eq!(aligned.width(), 3); // t, x, y
 
-    let t_col = aligned.column("t").unwrap().clone().take_materialized_series();
+    let t_col = aligned
+        .column("t")
+        .unwrap()
+        .clone()
+        .take_materialized_series();
     let t_vals: Vec<i64> = t_col.i64().unwrap().into_iter().filter_map(|v| v).collect();
     assert_eq!(t_vals, vec![1, 2, 3, 4, 5]);
 
-    let x_col = aligned.column("x").unwrap().clone().take_materialized_series();
+    let x_col = aligned
+        .column("x")
+        .unwrap()
+        .clone()
+        .take_materialized_series();
     let x_vals: Vec<Option<f64>> = x_col.f64().unwrap().into_iter().map(|v| v).collect();
     assert_eq!(x_vals[0], Some(10.0));
     assert_eq!(x_vals[1], Some(20.0));
@@ -144,7 +152,9 @@ fn test_var_varsoc_shape_and_lr() {
 
 #[test]
 fn test_acf_pacf_and_breusch_godfrey_smoke() {
-    let residuals = vec![1.0, -0.5, 0.25, -0.125, 0.0625, -0.03125, 0.015625, -0.0078125];
+    let residuals = vec![
+        1.0, -0.5, 0.25, -0.125, 0.0625, -0.03125, 0.015625, -0.0078125,
+    ];
     let acf = ts::acf_pacf::acf(&residuals, 3);
     let pacf = ts::acf_pacf::pacf(&residuals, 3);
     assert_eq!(acf.len(), 4);
@@ -152,18 +162,18 @@ fn test_acf_pacf_and_breusch_godfrey_smoke() {
     assert!((acf[0] - 1.0).abs() < 1e-12);
     assert!(pacf.iter().all(|v| v.is_finite()));
 
-    let exog: Vec<Vec<f64>> = (0..residuals.len())
-        .map(|i| vec![1.0, i as f64])
-        .collect();
-    let (bg, p) = ts::serial_correlation::breusch_godfrey(&residuals, &exog, 1, false)
-        .expect("BG result");
+    let exog: Vec<Vec<f64>> = (0..residuals.len()).map(|i| vec![1.0, i as f64]).collect();
+    let (bg, p) =
+        ts::serial_correlation::breusch_godfrey(&residuals, &exog, 1, false).expect("BG result");
     assert!(bg.is_finite());
     assert!((0.0..=1.0).contains(&p));
 }
 
 #[test]
 fn test_adf_drift_returns_regression_stats() {
-    let y: Vec<f64> = (0..100).map(|i| i as f64 + (i as f64 * 0.1).sin()).collect();
+    let y: Vec<f64> = (0..100)
+        .map(|i| i as f64 + (i as f64 * 0.1).sin())
+        .collect();
     let result = adf_test(&y, 0, true, false).unwrap();
 
     assert_eq!(result.lags, 0);
@@ -193,7 +203,6 @@ fn test_vec_estimate_rejects_invalid_config() {
         mlag: 2,
     };
 
-    let err = vec_estimate(&y, &config, Some(vec!["y1".into(), "y2".into()]), None)
-        .unwrap_err();
+    let err = vec_estimate(&y, &config, Some(vec!["y1".into(), "y2".into()]), None).unwrap_err();
     assert!(err.contains("lags must be >= 1"));
 }

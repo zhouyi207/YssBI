@@ -89,7 +89,10 @@ impl GLS {
         } else {
             endog.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (endog.as_ref() - y_hat.as_ref()).iter().map(|v| v.powi(2)).sum::<f64>();
+        let ss_residual = (endog.as_ref() - y_hat.as_ref())
+            .iter()
+            .map(|v| v.powi(2))
+            .sum::<f64>();
         let ss_model = ss_total - ss_residual;
 
         let r2 = 1.0 - ss_residual / ss_total;
@@ -102,8 +105,8 @@ impl GLS {
         let f_safe = f.max(0.0);
         let df1 = (df_model as f64).max(1.0);
         let df2 = (df_residual as f64).max(1.0);
-        let dist = FisherSnedecor::new(df1, df2)
-            .map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
+        let dist =
+            FisherSnedecor::new(df1, df2).map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
         let cov_beta = xtx_inv.as_ref().into_ndarray().to_owned();

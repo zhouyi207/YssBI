@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
     use crate::graph::{
-        GraphInstance, GraphRuntime,
-        pin::{PinRole, DataRole},
+        pin::{DataRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
+        GraphInstance, GraphRuntime,
     };
     use std::sync::{Arc, Mutex};
 
@@ -20,16 +20,22 @@ mod tests {
     #[test]
     fn test_add_node_float64() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
-        let add_node = graph.create_node("Math:Operators:Add (+)").expect("Failed to create add node");
+        let add_node = graph
+            .create_node("Math:Operators:Add (+)")
+            .expect("Failed to create add node");
         let pins = graph.get_pin_instances_by_node_id(add_node);
 
         let pin_a = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(0)))
             .expect("Pin A not found");
-        
+
         let pin_b = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(1)))
@@ -38,7 +44,7 @@ mod tests {
         graph
             .set_pin_user_value_by_pin_id(pin_a.id, DataValue::Float64(3.14))
             .expect("Failed to set pin A value");
-        
+
         graph
             .set_pin_user_value_by_pin_id(pin_b.id, DataValue::Float64(2.86))
             .expect("Failed to set pin B value");
@@ -46,14 +52,17 @@ mod tests {
         // 使用 Executor 执行节点
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
         let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), add_node);
-        
+
         // 获取节点定义并执行 data_evaluator
         let definition = {
             let runtime = graph_runtime.lock().unwrap();
             runtime.get_node_definition_by_node_id(add_node)
         };
-        
-        let evaluator = definition.data_evaluator.as_ref().expect("Data evaluator not found");
+
+        let evaluator = definition
+            .data_evaluator
+            .as_ref()
+            .expect("Data evaluator not found");
         let result = evaluator(&mut ctx);
 
         assert!(result.is_ok(), "Data evaluator failed: {:?}", result.err());
@@ -79,16 +88,22 @@ mod tests {
     #[test]
     fn test_subtract_node() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
-        let subtract_node = graph.create_node("Math:Operators:Subtract (-)").expect("Failed to create subtract node");
+        let subtract_node = graph
+            .create_node("Math:Operators:Subtract (-)")
+            .expect("Failed to create subtract node");
         let pins = graph.get_pin_instances_by_node_id(subtract_node);
 
         let pin_a = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(0)))
             .expect("Pin A not found");
-        
+
         let pin_b = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(1)))
@@ -97,22 +112,26 @@ mod tests {
         graph
             .set_pin_user_value_by_pin_id(pin_a.id, DataValue::Float64(10.0))
             .expect("Failed to set pin A value");
-        
+
         graph
             .set_pin_user_value_by_pin_id(pin_b.id, DataValue::Float64(3.0))
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), subtract_node);
-        
+        let mut ctx =
+            crate::execution::NodeExecutionContext::new(graph_runtime.clone(), subtract_node);
+
         // 获取节点定义并执行 data_evaluator
         let definition = {
             let runtime = graph_runtime.lock().unwrap();
             runtime.get_node_definition_by_node_id(subtract_node)
         };
-        
-        let evaluator = definition.data_evaluator.as_ref().expect("Data evaluator not found");
+
+        let evaluator = definition
+            .data_evaluator
+            .as_ref()
+            .expect("Data evaluator not found");
         let result = evaluator(&mut ctx);
 
         assert!(result.is_ok(), "Data evaluator failed: {:?}", result.err());
@@ -138,16 +157,22 @@ mod tests {
     #[test]
     fn test_multiply_node() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
-        let multiply_node = graph.create_node("Math:Operators:Multiply (*)").expect("Failed to create multiply node");
+        let multiply_node = graph
+            .create_node("Math:Operators:Multiply (*)")
+            .expect("Failed to create multiply node");
         let pins = graph.get_pin_instances_by_node_id(multiply_node);
 
         let pin_a = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(0)))
             .expect("Pin A not found");
-        
+
         let pin_b = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(1)))
@@ -156,22 +181,26 @@ mod tests {
         graph
             .set_pin_user_value_by_pin_id(pin_a.id, DataValue::Float64(4.0))
             .expect("Failed to set pin A value");
-        
+
         graph
             .set_pin_user_value_by_pin_id(pin_b.id, DataValue::Float64(2.5))
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), multiply_node);
-        
+        let mut ctx =
+            crate::execution::NodeExecutionContext::new(graph_runtime.clone(), multiply_node);
+
         // 获取节点定义并执行 data_evaluator
         let definition = {
             let runtime = graph_runtime.lock().unwrap();
             runtime.get_node_definition_by_node_id(multiply_node)
         };
-        
-        let evaluator = definition.data_evaluator.as_ref().expect("Data evaluator not found");
+
+        let evaluator = definition
+            .data_evaluator
+            .as_ref()
+            .expect("Data evaluator not found");
         let result = evaluator(&mut ctx);
 
         assert!(result.is_ok(), "Data evaluator failed: {:?}", result.err());
@@ -197,16 +226,22 @@ mod tests {
     #[test]
     fn test_divide_node() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
-        let divide_node = graph.create_node("Math:Operators:Divide (/)").expect("Failed to create divide node");
+        let divide_node = graph
+            .create_node("Math:Operators:Divide (/)")
+            .expect("Failed to create divide node");
         let pins = graph.get_pin_instances_by_node_id(divide_node);
 
         let pin_a = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(0)))
             .expect("Pin A not found");
-        
+
         let pin_b = pins
             .iter()
             .find(|p| p.definition.role == PinRole::Data(DataRole::Operands(1)))
@@ -215,22 +250,26 @@ mod tests {
         graph
             .set_pin_user_value_by_pin_id(pin_a.id, DataValue::Float64(20.0))
             .expect("Failed to set pin A value");
-        
+
         graph
             .set_pin_user_value_by_pin_id(pin_b.id, DataValue::Float64(4.0))
             .expect("Failed to set pin B value");
 
         // 使用 Executor 执行节点
         let graph_runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
-        let mut ctx = crate::execution::NodeExecutionContext::new(graph_runtime.clone(), divide_node);
-        
+        let mut ctx =
+            crate::execution::NodeExecutionContext::new(graph_runtime.clone(), divide_node);
+
         // 获取节点定义并执行 data_evaluator
         let definition = {
             let runtime = graph_runtime.lock().unwrap();
             runtime.get_node_definition_by_node_id(divide_node)
         };
-        
-        let evaluator = definition.data_evaluator.as_ref().expect("Data evaluator not found");
+
+        let evaluator = definition
+            .data_evaluator
+            .as_ref()
+            .expect("Data evaluator not found");
         let result = evaluator(&mut ctx);
 
         assert!(result.is_ok(), "Data evaluator failed: {:?}", result.err());

@@ -20,6 +20,7 @@ pub fn create_variable(
 ) -> Result<String, String> {
     let variable = state.add_variable(name, data_type, data_value, description, scope, tags);
     let variable_id = variable.id.to_string();
+    state.persist_current_project()?;
     emit_project_event(
         &app,
         Event::Variable(EventVariable::VariableCreated {
@@ -82,10 +83,7 @@ pub fn update_variable(
             let mut inferred_pins = Vec::new();
 
             for node in data_state.nodes.values() {
-                let refs_this_var = node
-                    .instance_params
-                    .variable_id()
-                    == Some(&var_id_str);
+                let refs_this_var = node.instance_params.variable_id() == Some(&var_id_str);
                 if !refs_this_var {
                     continue;
                 }
@@ -157,6 +155,7 @@ pub fn update_variable(
         }
     }
 
+    state.persist_current_project()?;
     Ok(())
 }
 
@@ -168,6 +167,7 @@ pub fn delete_variable(
     variable_id: VariableId,
 ) -> Result<(), String> {
     let variable = state.remove_variable(&variable_id).unwrap();
+    state.persist_current_project()?;
     emit_project_event(
         &app,
         Event::Variable(EventVariable::VariableDeleted {

@@ -42,7 +42,6 @@ impl NodeRegistry {
 
     /// 注册节点定义
     pub fn register(&self, definition: NodeDefinition) {
-
         self.definitions
             .write()
             .unwrap()

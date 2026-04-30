@@ -2,7 +2,9 @@
 
 use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::{NodeDefinition, PinResolverContext};
-use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot};
+use crate::graph::pin::{
+    DataRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot,
+};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::{Column, DataFrame};
@@ -19,11 +21,11 @@ fn register_get_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
         .with_description("Get a DataFrame by ID")
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_output(
-                "DataFrame", DataRole::Output, PinDataTypeDefinition::concrete(DataType::DataFrame),
-            )),
-        ])
+        .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
+            "DataFrame",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataFrame),
+        ))])
         .with_output_schema_resolver(Arc::new(|ctx| {
             let df_id = ctx.instance_params.dataframe_id()?;
             let provider = ctx.schema_provider.as_ref()?;
@@ -31,7 +33,9 @@ fn register_get_dataframe(registry: &NodeRegistry) {
         }))
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
-            let dataframe_id = params.dataframe_id().ok_or("Get DataFrame: dataframe_id not set")?;
+            let dataframe_id = params
+                .dataframe_id()
+                .ok_or("Get DataFrame: dataframe_id not set")?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Output),
                 DataValue::DataFrame(dataframe_id.to_string()),
@@ -173,7 +177,10 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
                 .collect();
 
             if series_vec.is_empty() {
-                return Err("Combine DataFrame: at least one DataSeries input must be connected".to_string());
+                return Err(
+                    "Combine DataFrame: at least one DataSeries input must be connected"
+                        .to_string(),
+                );
             }
 
             let max_len = series_vec.iter().map(|s| s.len()).max().unwrap_or(0);
@@ -200,10 +207,7 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
             let df = DataFrame::new(max_len, columns)
                 .map_err(|e| format!("Combine DataFrame: {}", e))?;
             let id = ctx.put_dataframe(df)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataFrame(id),
-            )?;
+            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), DataValue::DataFrame(id))?;
             Ok(())
         }));
     registry.register(definition);

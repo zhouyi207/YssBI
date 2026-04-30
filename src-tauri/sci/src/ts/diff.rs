@@ -11,10 +11,7 @@ fn time_series_to_i64(time_series: &Series) -> PolarsResult<Vec<i64>> {
     match dtype {
         DataType::Int64 => {
             let ca = time_series.i64()?;
-            Ok(ca
-                .into_iter()
-                .map(|v| v.unwrap_or(0))
-                .collect())
+            Ok(ca.into_iter().map(|v| v.unwrap_or(0)).collect())
         }
         DataType::Date => {
             let ca = time_series.date()?;
@@ -25,7 +22,11 @@ fn time_series_to_i64(time_series: &Series) -> PolarsResult<Vec<i64>> {
                 .collect())
         }
         _ => Err(PolarsError::SchemaMismatch(
-            format!("ts_diff_with_time: time must be Int64 or Date, got {:?}", dtype).into(),
+            format!(
+                "ts_diff_with_time: time must be Int64 or Date, got {:?}",
+                dtype
+            )
+            .into(),
         )),
     }
 }

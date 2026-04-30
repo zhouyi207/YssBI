@@ -7,6 +7,38 @@ import { logger } from '@/utils/appLogger';
 
 type CanvasState = GraphPosition;
 
+export interface ProjectRecordRow {
+    id: string;
+    name: string;
+    path: string;
+    createdAt: string;
+    lastOpenedAt: string | null;
+    isFavorite: boolean;
+}
+
+export interface ProjectPathValidation {
+    ok: boolean;
+    message?: string | null;
+}
+
+export interface ProjectGraphIndexRow {
+    id: string;
+    name: string;
+    type: "event" | "function";
+}
+
+export interface ProjectIndexRow {
+    projectName: string;
+    appVersion: string;
+    exportTime: string;
+    graphs: ProjectGraphIndexRow[];
+}
+
+export interface LoadedProjectGraphRow {
+    graph: GraphInstanceDTO;
+    variables: Record<string, unknown>;
+}
+
 /**
  * 将后端 Graph 数据转换为前端格式（供 connectPins 等复用）
  */
@@ -206,11 +238,57 @@ export class ProjectService {
         return await invoke("get_project_path");
     }
 
+    static async getProjectIndex(): Promise<ProjectIndexRow> {
+        return await invoke("get_project_index");
+    }
+
+    static async loadProjectGraph(graphId: string): Promise<LoadedProjectGraphRow> {
+        return await invoke("load_project_graph", { graphId });
+    }
+
     /**
      * 新建项目（清空当前状态）
      */
     static async newProject(): Promise<void> {
         await invoke("new_project");
+    }
+
+    static async defaultProjectParentDirectory(): Promise<string> {
+        return await invoke("default_project_parent_directory");
+    }
+
+    static async validateNewProjectPath(path: string): Promise<ProjectPathValidation> {
+        return await invoke("validate_new_project_path", { path });
+    }
+
+    static async createProject(name: string, path: string): Promise<ProjectRecordRow> {
+        return await invoke("create_project", { name, path });
+    }
+
+    static async listRegisteredProjects(): Promise<ProjectRecordRow[]> {
+        return await invoke("list_registered_projects");
+    }
+
+    static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {
+        return await invoke("register_project", { name, path });
+    }
+
+    static async removeRegisteredProject(id: string): Promise<void> {
+        await invoke("remove_registered_project", { id });
+    }
+
+    static async toggleRegisteredProjectFavorite(id: string): Promise<boolean> {
+        return await invoke("toggle_registered_project_favorite", { id });
+    }
+
+    static async migrateLegacyRegisteredProjects(projects: Array<{
+        id: string;
+        name: string;
+        path: string;
+        lastOpenedAt: string;
+        isFavorite?: boolean;
+    }>): Promise<void> {
+        await invoke("migrate_legacy_registered_projects", { projects });
     }
 
     /**
@@ -224,7 +302,7 @@ export class ProjectService {
                 // 弹出文件选择对话框
                 const selected = await open({
                     multiple: false,
-                    filters: [{ name: "YssBI Project", extensions: ["json"] }]
+                    filters: [{ name: "YssBI Project", extensions: ["yssbi"] }]
                 });
                 if (!selected || Array.isArray(selected)) return null;
                 filePath = selected as string;
@@ -246,7 +324,7 @@ export class ProjectService {
             let filePath: string | undefined = path;
             if (!filePath) {
                 const selected = await save({
-                    filters: [{ name: "YssBI Project", extensions: ["json"] }]
+                    filters: [{ name: "YssBI Project", extensions: ["yssbi"] }]
                 });
                 if (!selected) return null;
                 filePath = selected;

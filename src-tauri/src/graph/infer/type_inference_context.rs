@@ -104,7 +104,7 @@ impl TypeInferenceContext {
                             bound: Some(concrete_type.clone()),
                         };
                         self.type_vars.insert(temp_type_var_id, type_var_inference);
-                        
+
                         let data_type_inference = PinDataTypeInference::Concrete(concrete_type);
                         self.pin_types.insert(pin_instance.id, data_type_inference);
                     }
@@ -174,7 +174,8 @@ impl TypeInferenceContext {
             }
             // DataSeries<OneOf([A, B])> + DataSeries<A> → 细化目标为 DataSeries<A>
             (DataType::DataSeries(t_inner), DataType::DataSeries(s_inner))
-                if matches!(t_inner.as_ref(), DataType::OneOf(_)) && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
+                if matches!(t_inner.as_ref(), DataType::OneOf(_))
+                    && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
             {
                 if let DataType::OneOf(members) = t_inner.as_ref() {
                     if members.iter().any(|m| m.can_accept(s_inner)) {
@@ -187,7 +188,8 @@ impl TypeInferenceContext {
                 }
             }
             (DataType::Array(t_inner), DataType::Array(s_inner))
-                if matches!(t_inner.as_ref(), DataType::OneOf(_)) && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
+                if matches!(t_inner.as_ref(), DataType::OneOf(_))
+                    && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
             {
                 if let DataType::OneOf(members) = t_inner.as_ref() {
                     if members.iter().any(|m| m.can_accept(s_inner)) {
@@ -207,7 +209,9 @@ impl TypeInferenceContext {
     /// 用于 +-/* 等运算节点：连接 Float64 后 pin 显示 Float64 而非 OneOf(Float64|DataSeries|...)
     fn refine_oneof(target: &DataType, source: &DataType) -> Option<DataType> {
         match (target, source) {
-            (DataType::OneOf(members), _) if !matches!(source, DataType::OneOf(_) | DataType::Any) => {
+            (DataType::OneOf(members), _)
+                if !matches!(source, DataType::OneOf(_) | DataType::Any) =>
+            {
                 if members.iter().any(|m| m.can_accept(source)) {
                     Some(source.clone())
                 } else {
@@ -407,8 +411,12 @@ impl TypeInferenceContext {
             return true;
         }
         match (from, to) {
-            (_, DataType::OneOf(targets)) => targets.iter().any(|t| self.is_value_type_compatible(from, t)),
-            (DataType::OneOf(sources), _) => sources.iter().any(|s| self.is_value_type_compatible(s, to)),
+            (_, DataType::OneOf(targets)) => targets
+                .iter()
+                .any(|t| self.is_value_type_compatible(from, t)),
+            (DataType::OneOf(sources), _) => {
+                sources.iter().any(|s| self.is_value_type_compatible(s, to))
+            }
             (DataType::Array(a), DataType::Array(b)) => self.is_value_type_compatible(a, b),
             (DataType::DataSeries(a), DataType::DataSeries(b)) => {
                 self.is_value_type_compatible(a, b)
@@ -418,8 +426,15 @@ impl TypeInferenceContext {
     }
 
     /// 为指定 TypeVarId 构建 TypeVarKey → 已绑定类型 的解析器
-    fn build_resolver(&mut self, var_id: TypeVarId) -> Box<dyn Fn(&TypeVarKey) -> Option<DataType>> {
-        let siblings = self.type_var_siblings.get(&var_id).cloned().unwrap_or_default();
+    fn build_resolver(
+        &mut self,
+        var_id: TypeVarId,
+    ) -> Box<dyn Fn(&TypeVarKey) -> Option<DataType>> {
+        let siblings = self
+            .type_var_siblings
+            .get(&var_id)
+            .cloned()
+            .unwrap_or_default();
         let mut resolved: HashMap<TypeVarKey, Option<DataType>> = HashMap::new();
         for (key, &sibling_id) in &siblings {
             let root = self.find_root(sibling_id);

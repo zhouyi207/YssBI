@@ -24,7 +24,8 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
                 "neq" => series.not_equal(*v),
                 _ => return Err(format!("Compare: unknown op {}", op)),
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
         DataValue::Int64(v) => {
             let r = match op {
@@ -36,7 +37,8 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
                 "neq" => series.not_equal(*v),
                 _ => return Err(format!("Compare: unknown op {}", op)),
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
         DataValue::Int32(v) => {
             let r = match op {
@@ -48,11 +50,15 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
                 "neq" => series.not_equal(*v),
                 _ => return Err(format!("Compare: unknown op {}", op)),
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
         DataValue::Boolean(v) => {
             if op != "eq" && op != "neq" {
-                return Err(format!("Compare: Boolean only supports == and !=, not {}", op));
+                return Err(format!(
+                    "Compare: Boolean only supports == and !=, not {}",
+                    op
+                ));
             }
             let scalar_series = Series::from_iter(std::iter::repeat(*v).take(series.len()));
             let r = if op == "eq" {
@@ -60,21 +66,24 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
             } else {
                 series.not_equal(&scalar_series)
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
         DataValue::String(s) => {
             if op != "eq" && op != "neq" {
-                return Err(format!("Compare: String only supports == and !=, not {}", op));
+                return Err(format!(
+                    "Compare: String only supports == and !=, not {}",
+                    op
+                ));
             }
-            let scalar_series = Series::from_iter(
-                std::iter::repeat(s.as_str()).take(series.len()),
-            );
+            let scalar_series = Series::from_iter(std::iter::repeat(s.as_str()).take(series.len()));
             let r = if op == "eq" {
                 series.equal(&scalar_series)
             } else {
                 series.not_equal(&scalar_series)
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
         DataValue::Float32(v) => {
             let r = match op {
@@ -86,9 +95,12 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
                 "neq" => series.not_equal(*v),
                 _ => return Err(format!("Compare: unknown op {}", op)),
             };
-            r.map_err(|e| format!("Compare {}: {}", op, e)).and_then(to_series)
+            r.map_err(|e| format!("Compare {}: {}", op, e))
+                .and_then(to_series)
         }
-        _ => Err("Compare: Value must be scalar (Boolean, Int, Float, String) or DataSeries".to_string()),
+        _ => Err(
+            "Compare: Value must be scalar (Boolean, Int, Float, String) or DataSeries".to_string(),
+        ),
     }
 }
 
@@ -116,18 +128,17 @@ fn compare_series_series(a: &Series, b: &Series, op: &str) -> Result<Series, Str
         .map(|ca: BooleanChunked| ca.into_series())
 }
 
-fn register_compare_node(
-    registry: &NodeRegistry,
-    name: &str,
-    op: &str,
-    description: &str,
-) {
+fn register_compare_node(registry: &NodeRegistry, name: &str, op: &str, description: &str) {
     let name = name.to_string();
     let op = op.to_string();
     let description = description.to_string();
     let definition = NodeDefinition::new(
         name.clone(),
-        vec!["Data".to_string(), "Series".to_string(), "Comparison".to_string()],
+        vec![
+            "Data".to_string(),
+            "Series".to_string(),
+            "Comparison".to_string(),
+        ],
     )
     .with_ui_style("dataframe")
     .with_description(description)
@@ -173,7 +184,8 @@ fn register_compare_node(
             }
         };
 
-        let value_input = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
+        let value_input =
+            ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
 
         let series = ctx.get_series(&series_id)?;
 
@@ -194,7 +206,10 @@ fn register_compare_node(
         let result_id = ctx.put_series(result_series)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Boolean)),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(
+                result_id,
+                DataType::Boolean,
+            )),
         )?;
         Ok(())
     }));

@@ -4,7 +4,7 @@
 //! 与 Stata D. 算子一致：仅在原始数据中相邻时间点之间差分（delta=1），不跨 gap。
 
 use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLSConfig, OLS};
+use crate::regression::linear_model::{OLS, OLSConfig};
 use ndarray::{Array1, Array2};
 
 /// Panel First Difference estimator

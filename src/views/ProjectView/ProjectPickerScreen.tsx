@@ -46,6 +46,7 @@ import { useProjectIOStore } from "@/features/core/dataStore";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import type { ThemeSettings } from "@/shared/types/settings";
+import { NewProjectModal } from "./NewProjectModal";
 
 type SortMode = "lastOpened" | "name";
 
@@ -419,6 +420,7 @@ export function ProjectPickerScreen() {
   const [filterQuery, setFilterQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("lastOpened");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const filtered = useMemo(
     () => sortAndFilter(projects, filterQuery, sortMode),
@@ -445,13 +447,18 @@ export function ProjectPickerScreen() {
         busy={busy}
         filterQuery={filterQuery}
         sortMode={sortMode}
-        onCreateProject={() => void createProject()}
+        onCreateProject={() => setNewProjectOpen(true)}
         onGoEditor={() => navigate("/editor")}
         onOpenProject={() => void openProjectFromDisk()}
         onOpenSettings={() => setSettingsOpen(true)}
-        onRefresh={refresh}
+        onRefresh={() => void refresh()}
         onSetFilterQuery={setFilterQuery}
         onSetSortMode={setSortMode}
+      />
+      <NewProjectModal
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        onCreate={createProject}
       />
       <ProjectSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 

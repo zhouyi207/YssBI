@@ -95,9 +95,12 @@ impl PinInstanceDTO {
     ) -> Self {
         let dt = match pin.definition.kind {
             PinKind::Exec => None,
-            PinKind::Data => resolved_type
-                .cloned()
-                .or_else(|| pin.definition.data_type.as_ref().and_then(definition_to_data_type)),
+            PinKind::Data => resolved_type.cloned().or_else(|| {
+                pin.definition
+                    .data_type
+                    .as_ref()
+                    .and_then(definition_to_data_type)
+            }),
         };
 
         let pin_type = match pin.definition.kind {
@@ -108,7 +111,9 @@ impl PinInstanceDTO {
             },
         };
 
-        let container_type = dt.as_ref().and_then(|d| data_type_to_container(d).map(|s| s.to_string()));
+        let container_type = dt
+            .as_ref()
+            .and_then(|d| data_type_to_container(d).map(|s| s.to_string()));
         let type_display = dt.as_ref().map(|d| d.to_string());
 
         Self {

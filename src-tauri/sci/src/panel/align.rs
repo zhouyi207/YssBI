@@ -54,10 +54,7 @@ pub fn align_panel(
     for i in 0..n {
         let eid = entity_id[i];
         let tid = time_id[i];
-        entity_times
-            .entry(eid)
-            .or_default()
-            .push((tid, i));
+        entity_times.entry(eid).or_default().push((tid, i));
     }
 
     // 对每个 entity 排序并生成完整时间网格
@@ -123,7 +120,9 @@ pub fn align_panel(
 /// 支持时间有缺失时仍正确计算 Δy_t = y_t - y_{t'}，其中 t' 为上一期有效观测时间。
 ///
 /// 返回 (diff_entity, diff_time_id, diff_cols)，其中 diff_time_id 为每个 diff 行对应的 time_id（当前观测时间）
-pub fn panel_diff(aligned: &AlignedPanel) -> Result<(Vec<usize>, Vec<usize>, Vec<Vec<f64>>), String> {
+pub fn panel_diff(
+    aligned: &AlignedPanel,
+) -> Result<(Vec<usize>, Vec<usize>, Vec<Vec<f64>>), String> {
     let n = aligned.entity_id.len();
     if n == 0 {
         return Err("panel_diff: empty aligned panel".to_string());
@@ -204,7 +203,9 @@ pub fn align_dataframe(
 
     // 映射 entity 到 usize
     let (entity_id, entity_names): (Vec<usize>, Vec<String>) = {
-        let s = entity_series.cast(&DataType::String).map_err(|e| e.to_string())?;
+        let s = entity_series
+            .cast(&DataType::String)
+            .map_err(|e| e.to_string())?;
         let ca = s.str().map_err(|e| e.to_string())?;
         let mut m: HashMap<String, usize> = HashMap::new();
         let mut idx_to_name: Vec<String> = Vec::new();
@@ -232,9 +233,15 @@ pub fn align_dataframe(
                     .map(|o| o.ok_or("XT Align: time 列含 null"))
                     .collect::<Result<_, _>>()
                     .map_err(|e| e.to_string())?;
-                let mut unique: Vec<i64> = values.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+                let mut unique: Vec<i64> = values
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
                 unique.sort_unstable();
-                let m: HashMap<i64, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+                let m: HashMap<i64, usize> =
+                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
                 values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
             }
             DataType::Date => {
@@ -245,12 +252,23 @@ pub fn align_dataframe(
                     .map(|o| o.ok_or("XT Align: time 列含 null"))
                     .collect::<Result<_, _>>()
                     .map_err(|e| e.to_string())?;
-                let mut unique: Vec<i32> = values.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+                let mut unique: Vec<i32> = values
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
                 unique.sort_unstable();
-                let m: HashMap<i32, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+                let m: HashMap<i32, usize> =
+                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
                 values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
             }
-            _ => return Err(format!("XT Align: time 列需为 Int64 或 Date，当前为 {:?}", dtype)),
+            _ => {
+                return Err(format!(
+                    "XT Align: time 列需为 Int64 或 Date，当前为 {:?}",
+                    dtype
+                ));
+            }
         }
     };
 
@@ -284,14 +302,22 @@ pub fn align_dataframe(
     let unique_times: Vec<i64> = match time_dtype {
         DataType::Int64 => {
             let ca = time_series.i64().map_err(|e| e.to_string())?;
-            let mut unique: Vec<i64> = ca.into_no_null_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+            let mut unique: Vec<i64> = ca
+                .into_no_null_iter()
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
             unique.sort_unstable();
             unique
         }
         DataType::Date => {
             let ca = time_series.date().map_err(|e| e.to_string())?;
             let physical = ca.physical();
-            let mut unique: Vec<i32> = physical.into_no_null_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+            let mut unique: Vec<i32> = physical
+                .into_no_null_iter()
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
             unique.sort_unstable();
             unique.iter().map(|&v| v as i64).collect()
         }
@@ -311,27 +337,28 @@ pub fn align_dataframe(
 
     let mut out_cols: Vec<Column> = vec![
         Column::from(Series::from_iter(entity_out).with_name(entity_col.into())),
-        Column::from(
-            match time_dtype {
-                DataType::Int64 => Series::from_iter(time_orig.iter().map(|&v| Some(v))).with_name(time_col.into()),
-                DataType::Date => {
-                    Int32Chunked::from_vec(
-                        time_col.into(),
-                        time_orig.iter().map(|&v| v as i32).collect::<Vec<_>>(),
-                    )
-                    .into_series()
-                    .cast(&DataType::Date)
-                    .map_err(|e| e.to_string())?
-                }
-                _ => return Err("XT Align: time 类型异常".to_string()),
-            },
-        ),
+        Column::from(match time_dtype {
+            DataType::Int64 => {
+                Series::from_iter(time_orig.iter().map(|&v| Some(v))).with_name(time_col.into())
+            }
+            DataType::Date => Int32Chunked::from_vec(
+                time_col.into(),
+                time_orig.iter().map(|&v| v as i32).collect::<Vec<_>>(),
+            )
+            .into_series()
+            .cast(&DataType::Date)
+            .map_err(|e| e.to_string())?,
+            _ => return Err("XT Align: time 类型异常".to_string()),
+        }),
     ];
 
     for (c, col_name) in value_cols.iter().enumerate() {
         let vals = &aligned.columns[c];
-        let s = Series::from_iter(vals.iter().map(|&v| if v.is_nan() { None } else { Some(v) }))
-            .with_name(col_name.as_str().into());
+        let s = Series::from_iter(
+            vals.iter()
+                .map(|&v| if v.is_nan() { None } else { Some(v) }),
+        )
+        .with_name(col_name.as_str().into());
         out_cols.push(Column::from(s));
     }
 
@@ -357,7 +384,9 @@ pub fn diff_dataframe(
     let n = aligned_df.height();
 
     let entity_id: Vec<usize> = {
-        let s = entity_series.cast(&DataType::String).map_err(|e| e.to_string())?;
+        let s = entity_series
+            .cast(&DataType::String)
+            .map_err(|e| e.to_string())?;
         let ca = s.str().map_err(|e| e.to_string())?;
         let mut m: HashMap<String, usize> = HashMap::new();
         let mut idx = 0usize;
@@ -380,18 +409,30 @@ pub fn diff_dataframe(
             DataType::Int64 => {
                 let ca = time_series.i64().map_err(|e| e.to_string())?;
                 let values: Vec<i64> = ca.into_iter().map(|o| o.unwrap_or(0)).collect();
-                let mut unique: Vec<i64> = values.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+                let mut unique: Vec<i64> = values
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
                 unique.sort_unstable();
-                let m: HashMap<i64, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+                let m: HashMap<i64, usize> =
+                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
                 values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
             }
             DataType::Date => {
                 let ca = time_series.date().map_err(|e| e.to_string())?;
                 let physical = ca.physical();
                 let values: Vec<i32> = physical.into_iter().map(|o| o.unwrap_or(0)).collect();
-                let mut unique: Vec<i32> = values.iter().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+                let mut unique: Vec<i32> = values
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
                 unique.sort_unstable();
-                let m: HashMap<i32, usize> = unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+                let m: HashMap<i32, usize> =
+                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
                 values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
             }
             _ => return Err(format!("XT Diff: time 需为 Int64 或 Date")),
@@ -428,7 +469,9 @@ pub fn diff_dataframe(
 
     let n_fd = diff_entity.len();
     let entity_names: Vec<String> = {
-        let s = entity_series.cast(&DataType::String).map_err(|e| e.to_string())?;
+        let s = entity_series
+            .cast(&DataType::String)
+            .map_err(|e| e.to_string())?;
         let ca = s.str().map_err(|e| e.to_string())?;
         let mut seen: HashMap<String, ()> = HashMap::new();
         let mut idx_to_name: Vec<String> = Vec::new();
@@ -448,7 +491,10 @@ pub fn diff_dataframe(
         .collect();
 
     let time_dtype = time_series.dtype().clone();
-    let time_col_series = aligned_df.column(time_col).map_err(|e| e.to_string())?.clone();
+    let time_col_series = aligned_df
+        .column(time_col)
+        .map_err(|e| e.to_string())?
+        .clone();
     let unique_times: Vec<i64> = match time_dtype {
         DataType::Int64 => {
             let ca = time_col_series.i64().map_err(|e| e.to_string())?;

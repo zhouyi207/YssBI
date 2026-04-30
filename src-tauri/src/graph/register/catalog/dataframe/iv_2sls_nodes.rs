@@ -7,8 +7,8 @@
 //!
 //! Configure 与 OLS 一致：Constant, VCE, Time
 
-use crate::execution::ExecutionEffect;
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -18,9 +18,13 @@ use crate::graph::value::{DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, NamedFrom, Series};
 use std::sync::Arc;
-use yss_sci::regression::linear_model::{CovParams, IV2SLS, IV2SLSConfig};
+use yss_sci::regression::linear_model::{CovParams, IV2SLSConfig, IV2SLS};
 
-use super::info_nodes::{compute_aic_bic, Coefficient, Iv2slsEndogenousTest, Iv2slsFirstStageResult, Iv2slsFirstStageSummary, Iv2slsHausmanTest, Iv2slsOveridDims, Iv2slsOveridTest, Iv2slsStockYogoBiasRow, Iv2slsStockYogoCv, Iv2slsStockYogoSizeRow, ModelBasicInfo, OLSResult};
+use super::info_nodes::{
+    compute_aic_bic, Coefficient, Iv2slsEndogenousTest, Iv2slsFirstStageResult,
+    Iv2slsFirstStageSummary, Iv2slsHausmanTest, Iv2slsOveridDims, Iv2slsOveridTest,
+    Iv2slsStockYogoBiasRow, Iv2slsStockYogoCv, Iv2slsStockYogoSizeRow, ModelBasicInfo, OLSResult,
+};
 use super::ols_nodes::{
     format_covariance_type_display, OLSClusterConfig, OLSConfigure, OLSCovarianceConfig,
     OLSFixedScaleConfig, OLSHACConfig, OLSNeweyConfig, VCENonRobust, VCEHC0, VCEHC1, VCEHC2,
@@ -80,10 +84,9 @@ pub(crate) fn iv_2sls_input_slots() -> Vec<PinSlot> {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Date,
-                    DataType::Int64,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Date, DataType::Int64],
+                )))),
             )
             .with_optional(true),
         ),
@@ -121,7 +124,11 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() { "y".to_string() } else { raw }
+        if raw.is_empty() {
+            "y".to_string()
+        } else {
+            raw
+        }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -130,27 +137,28 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
 
     // ---- Get config (optional) ----
     // Stata ivregress default: small=false (no df adjustment, Wald/z). Override default when no config.
-    let config = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("ols_config".to_string()))) {
-        Ok(config_value) => match config_value.as_handle_id() {
-            Some(id) => {
-                let handle = ctx.get_handle(&id.to_string())?;
-                handle
-                    .downcast_ref::<OLSConfigure>()
-                    .ok_or("IV:2SLS: config handle is not an OLSConfigure")?
-                    .clone()
-            }
-            None => {
+    let config =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("ols_config".to_string()))) {
+            Ok(config_value) => match config_value.as_handle_id() {
+                Some(id) => {
+                    let handle = ctx.get_handle(&id.to_string())?;
+                    handle
+                        .downcast_ref::<OLSConfigure>()
+                        .ok_or("IV:2SLS: config handle is not an OLSConfigure")?
+                        .clone()
+                }
+                None => {
+                    let mut c = OLSConfigure::default();
+                    c.small = false;
+                    c
+                }
+            },
+            Err(_) => {
                 let mut c = OLSConfigure::default();
                 c.small = false;
                 c
             }
-        },
-        Err(_) => {
-            let mut c = OLSConfigure::default();
-            c.small = false;
-            c
-        }
-    };
+        };
     let has_constant = config.constant;
 
     // ---- Extract X:endog (DataFrame, endogenous variables) ----
@@ -168,17 +176,21 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
     if endog_df.height() != n_raw {
         return Err(format!(
             "IV:2SLS: X:endog has {} rows, expected {} (must match Y length)",
-            endog_df.height(), n_raw
+            endog_df.height(),
+            n_raw
         ));
     }
 
     // ---- Extract x_instruments (DataFrame) ----
-    let x_instruments_value =
-        ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("x_instruments".to_string())))?;
+    let x_instruments_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom(
+        "x_instruments".to_string(),
+    )))?;
     let x_instruments_id = match &x_instruments_value {
         DataValue::DataFrame(id) => id.clone(),
         DataValue::Null => {
-            return Err("IV:2SLS: x_instruments is not connected. Connect a DataFrame.".to_string());
+            return Err(
+                "IV:2SLS: x_instruments is not connected. Connect a DataFrame.".to_string(),
+            );
         }
         _ => return Err("IV:2SLS: x_instruments must be a DataFrame.".to_string()),
     };
@@ -187,7 +199,8 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
     if inst_df.height() != n_raw {
         return Err(format!(
             "IV:2SLS: x_instruments has {} rows, expected {} (must match Y length)",
-            inst_df.height(), n_raw
+            inst_df.height(),
+            n_raw
         ));
     }
 
@@ -199,9 +212,10 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
 
     // ---- Build combined DataFrame ----
     let mut df_cols: Vec<Column> = vec![
-        Column::from(
-            Series::new("__idx__".into(), (0..n_raw).map(|i| i as u32).collect::<Vec<u32>>()),
-        ),
+        Column::from(Series::new(
+            "__idx__".into(),
+            (0..n_raw).map(|i| i as u32).collect::<Vec<u32>>(),
+        )),
         Column::from(endog_f64.with_name("__endog__".into())),
     ];
 
@@ -223,13 +237,22 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         if series.len() != n_raw {
             return Err(format!(
                 "IV:2SLS: X:exogs '{}' has {} obs, expected {}",
-                series_name, series.len(), n_raw
+                series_name,
+                series.len(),
+                n_raw
             ));
         }
         let col_f64 = series
             .cast(&polars::prelude::DataType::Float64)
-            .map_err(|e| format!("IV:2SLS: cannot cast X:exogs '{}' to Float64: {}", series_name, e))?;
-        df_cols.push(Column::from(col_f64.with_name(series_name.to_string().into())));
+            .map_err(|e| {
+                format!(
+                    "IV:2SLS: cannot cast X:exogs '{}' to Float64: {}",
+                    series_name, e
+                )
+            })?;
+        df_cols.push(Column::from(
+            col_f64.with_name(series_name.to_string().into()),
+        ));
     }
 
     // Add x_instruments columns
@@ -238,10 +261,15 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         if name == "__endog__" {
             continue;
         }
-        let col_f64 = col
-            .cast(&polars::prelude::DataType::Float64)
-            .map_err(|e| format!("IV:2SLS: x_instruments column '{}' must be numeric: {}", name, e))?;
-        df_cols.push(Column::from(col_f64.with_name(format!("__inst_{}", name).into())));
+        let col_f64 = col.cast(&polars::prelude::DataType::Float64).map_err(|e| {
+            format!(
+                "IV:2SLS: x_instruments column '{}' must be numeric: {}",
+                name, e
+            )
+        })?;
+        df_cols.push(Column::from(
+            col_f64.with_name(format!("__inst_{}", name).into()),
+        ));
     }
 
     // Add X:endog columns from DataFrame
@@ -253,36 +281,41 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         let col_f64 = col
             .cast(&polars::prelude::DataType::Float64)
             .map_err(|e| format!("IV:2SLS: X:endog column '{}' must be numeric: {}", name, e))?;
-        df_cols.push(Column::from(col_f64.with_name(format!("__endog_{}", name).into())));
+        df_cols.push(Column::from(
+            col_f64.with_name(format!("__endog_{}", name).into()),
+        ));
     }
 
     // Optional time
-    let time_series = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
-        Ok(DataValue::DataSeries(v)) => {
-            let ts = ctx.get_series(&v.id)?;
-            if ts.len() != n_raw {
-                return Err(format!(
-                    "IV:2SLS: Time has {} obs, expected {}",
-                    ts.len(), n_raw
-                ));
-            }
-            Some(ts)
-        }
-        _ => {
-            if let Some(ref id) = config.time_series_id {
-                let ts = ctx.get_series(id)?;
+    let time_series =
+        match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
+            Ok(DataValue::DataSeries(v)) => {
+                let ts = ctx.get_series(&v.id)?;
                 if ts.len() != n_raw {
                     return Err(format!(
-                        "IV:2SLS: Time from config has {} obs, expected {}",
-                        ts.len(), n_raw
+                        "IV:2SLS: Time has {} obs, expected {}",
+                        ts.len(),
+                        n_raw
                     ));
                 }
                 Some(ts)
-            } else {
-                None
             }
-        }
-    };
+            _ => {
+                if let Some(ref id) = config.time_series_id {
+                    let ts = ctx.get_series(id)?;
+                    if ts.len() != n_raw {
+                        return Err(format!(
+                            "IV:2SLS: Time from config has {} obs, expected {}",
+                            ts.len(),
+                            n_raw
+                        ));
+                    }
+                    Some(ts)
+                } else {
+                    None
+                }
+            }
+        };
     if let Some(ref ts) = time_series {
         df_cols.push(Column::from(ts.clone().with_name("__time__".into())));
     }
@@ -322,7 +355,9 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
                 raw
             }
         };
-        let col = df.column(&series_name).map_err(|e| format!("IV:2SLS: {}", e))?;
+        let col = df
+            .column(&series_name)
+            .map_err(|e| format!("IV:2SLS: {}", e))?;
         let vec: Vec<f64> = col
             .f64()
             .map_err(|e| format!("IV:2SLS: X:exogs '{}': {}", series_name, e))?
@@ -340,7 +375,9 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         .collect();
     let mut inst_cols: Vec<Vec<f64>> = Vec::new();
     for name in &inst_col_names {
-        let col = df.column(&format!("__inst_{}", name)).map_err(|e| format!("IV:2SLS: {}", e))?;
+        let col = df
+            .column(&format!("__inst_{}", name))
+            .map_err(|e| format!("IV:2SLS: {}", e))?;
         let vec: Vec<f64> = col
             .f64()
             .map_err(|e| format!("IV:2SLS: x_instruments '{}': {}", name, e))?
@@ -357,7 +394,9 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
         .collect();
     let mut endog_cols: Vec<Vec<f64>> = Vec::new();
     for name in &endog_col_names {
-        let col = df.column(&format!("__endog_{}", name)).map_err(|e| format!("IV:2SLS: {}", e))?;
+        let col = df
+            .column(&format!("__endog_{}", name))
+            .map_err(|e| format!("IV:2SLS: {}", e))?;
         let vec: Vec<f64> = col
             .f64()
             .map_err(|e| format!("IV:2SLS: X:endog '{}': {}", name, e))?
@@ -604,20 +643,22 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
                 shea_adj_partial_r2: result.first_stage_summary.shea_adj_partial_r2.clone(),
                 min_eigenvalue: result.first_stage_summary.min_eigenvalue,
                 min_eigenvalue_cv_note: result.first_stage_summary.min_eigenvalue_cv_note.clone(),
-                min_eigenvalue_cv: result.first_stage_summary.min_eigenvalue_cv.as_ref().map(|cv| Iv2slsStockYogoCv {
-                    bias: cv.bias.as_ref().map(|b| Iv2slsStockYogoBiasRow {
-                        pct_5: b.pct_5,
-                        pct_10: b.pct_10,
-                        pct_20: b.pct_20,
-                        pct_30: b.pct_30,
-                    }),
-                    size: Iv2slsStockYogoSizeRow {
-                        pct_10: cv.size.pct_10,
-                        pct_15: cv.size.pct_15,
-                        pct_20: cv.size.pct_20,
-                        pct_25: cv.size.pct_25,
+                min_eigenvalue_cv: result.first_stage_summary.min_eigenvalue_cv.as_ref().map(
+                    |cv| Iv2slsStockYogoCv {
+                        bias: cv.bias.as_ref().map(|b| Iv2slsStockYogoBiasRow {
+                            pct_5: b.pct_5,
+                            pct_10: b.pct_10,
+                            pct_20: b.pct_20,
+                            pct_30: b.pct_30,
+                        }),
+                        size: Iv2slsStockYogoSizeRow {
+                            pct_10: cv.size.pct_10,
+                            pct_15: cv.size.pct_15,
+                            pct_20: cv.size.pct_20,
+                            pct_25: cv.size.pct_25,
+                        },
                     },
-                }),
+                ),
             }),
             iv2sls_overid: result.overid.as_ref().map(|o| Iv2slsOveridTest {
                 test_type: o.test_type.clone(),
@@ -697,10 +738,9 @@ fn register_iv_2sls_configure(registry: &NodeRegistry) {
             PinDefinition::data_input(
                 "Time",
                 DataRole::Custom("time".to_string()),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Int64,
-                    DataType::Date,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Int64, DataType::Date],
+                )))),
             )
             .with_optional(true),
         ),
@@ -800,7 +840,10 @@ fn register_iv_2sls_summary(registry: &NodeRegistry) {
         DataRole::Result,
         PinDataTypeDefinition::concrete(DataType::Struct("OLSResult".to_string())),
     )));
-    slots.push(PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)));
+    slots.push(PinSlot::fixed(PinDefinition::exec_output(
+        "Out",
+        ExecRole::ExecOut,
+    )));
 
     let definition = NodeDefinition::new(
         "IV:2SLS Summary",

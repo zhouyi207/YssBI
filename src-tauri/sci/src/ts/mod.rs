@@ -10,13 +10,13 @@ pub(crate) mod distributions;
 
 pub mod acf_pacf;
 pub mod align;
-pub mod serial_correlation;
 pub mod diff;
 pub mod lag;
 pub mod pct_change;
 pub mod rolling;
+pub mod serial_correlation;
 pub mod types;
 pub mod unit_root;
 pub mod var;
-pub mod vec_vecrank_cv;
 pub mod vec;
+pub mod vec_vecrank_cv;

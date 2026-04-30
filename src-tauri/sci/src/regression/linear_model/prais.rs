@@ -128,7 +128,9 @@ impl Prais {
         let xty = x.as_ref().transpose() * y.as_ref();
         let xtx_inv = xtx
             .llt(Side::Lower)
-            .map_err(|_| "Prais: X'X is singular (rank-deficient). Check for multicollinearity.".to_string())?
+            .map_err(|_| {
+                "Prais: X'X is singular (rank-deficient). Check for multicollinearity.".to_string()
+            })?
             .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
         let betas_init = xtx_inv.as_ref() * xty.as_ref();
         let y_hat_init = x.as_ref() * betas_init.as_ref();
@@ -188,8 +190,7 @@ impl Prais {
                 }
                 (
                     Array1::from_vec(y_star),
-                    Array2::from_shape_vec((n, k), x_star)
-                        .map_err(|e| format!("Prais: {}", e))?,
+                    Array2::from_shape_vec((n, k), x_star).map_err(|e| format!("Prais: {}", e))?,
                 )
             };
 
@@ -222,7 +223,8 @@ impl Prais {
 
             iterations += 1;
 
-            let converged = (rho - rho_old).abs() < self.config.tol || iterations >= self.config.max_iter;
+            let converged =
+                (rho - rho_old).abs() < self.config.tol || iterations >= self.config.max_iter;
 
             if converged {
                 let df_residual = n_star - rank;
@@ -332,7 +334,9 @@ mod tests {
     #[test]
     fn test_prais_basic() {
         let n = 30;
-        let mut y: Vec<f64> = (0..n).map(|i| 10.0 + 0.5 * i as f64 + (i as f64 * 0.3).sin()).collect();
+        let mut y: Vec<f64> = (0..n)
+            .map(|i| 10.0 + 0.5 * i as f64 + (i as f64 * 0.3).sin())
+            .collect();
         let x: Vec<f64> = (0..n).map(|i| i as f64 * 1.2 + 2.0).collect();
         let mut exog = Vec::with_capacity(n * 2);
         for i in 0..n {

@@ -1,5 +1,5 @@
-mod column_stats;
 mod column_distribution;
+mod column_stats;
 mod dataset_overview;
 mod edit_operation;
 mod export;

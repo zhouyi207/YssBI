@@ -1,6 +1,6 @@
-use crate::graph::{ConnectionManager};
-use crate::graph::TypeVarId;
+use crate::graph::ConnectionManager;
 use crate::graph::DataType;
+use crate::graph::TypeVarId;
 use crate::graph::{NodeId, NodeInstance, PinId, PinInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

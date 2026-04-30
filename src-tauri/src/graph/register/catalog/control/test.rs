@@ -2,10 +2,10 @@
 mod tests {
     use crate::execution::{ExecutionEffect, Executor, NoopEmitter, WindowDataStore};
     use crate::graph::{
-        GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
+        GraphInstance, GraphRuntime,
     };
     use std::sync::{Arc, Mutex};
 
@@ -63,7 +63,11 @@ mod tests {
     #[test]
     fn test_branch_node_true_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建 Branch 节点
         let branch_node = graph
@@ -85,17 +89,21 @@ mod tests {
             .expect("Failed to set condition value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
         // 执行节点（使用 flow_processor）
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
-        let mut ctx =
-            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -108,7 +116,11 @@ mod tests {
     #[test]
     fn test_branch_node_false_path() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         let branch_node = graph
             .create_node("Control Flow:Branch")
@@ -127,16 +139,20 @@ mod tests {
             .expect("Failed to set condition value");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
-        let mut ctx =
-            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -150,23 +166,31 @@ mod tests {
     fn test_branch_node_default_value() {
         // 测试不设置值时使用默认值（false）
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         let branch_node = graph
             .create_node("Control Flow:Branch")
             .expect("Failed to create branch node");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(branch_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(branch_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
             .expect("Flow processor not found");
 
-        let mut ctx =
-            crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), branch_node);
         let result = flow_processor(&mut ctx);
 
         assert!(result.is_ok(), "Flow processor failed: {:?}", result.err());
@@ -181,7 +205,11 @@ mod tests {
     #[test]
     fn test_sequence_node_basic() {
         let registry = create_test_registry();
-        let graph = GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone());
+        let graph = GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        );
 
         // 创建 Sequence 节点
         let seq_node = graph
@@ -221,17 +249,26 @@ mod tests {
     #[test]
     fn test_sequence_node_execution() {
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         let seq_node = graph
             .create_node("Control Flow:Sequence")
             .expect("Failed to create sequence node");
 
         // 创建 GraphRuntime
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
 
         // 执行节点
-        let definition = runtime.lock().unwrap().get_node_definition_by_node_id(seq_node);
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(seq_node);
         let flow_processor = definition
             .flow_processor
             .as_ref()
@@ -259,9 +296,12 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence exec input
         // 验证：Executor 自动执行整个链路，最终触发 sequence
 
-
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建节点
         let branch1_node = graph
@@ -330,7 +370,9 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
         let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
@@ -355,9 +397,12 @@ mod tests {
         // branch1 (condition=true) -> false output -> branch2 exec input (不会执行)
         // 验证：只有 sequence1 会被执行
 
-
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建节点
         let branch1_node = graph
@@ -416,7 +461,9 @@ mod tests {
             .expect("Failed to connect branch1 false to branch2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
         let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
@@ -448,9 +495,12 @@ mod tests {
         // branch2 (condition=true) -> false output -> sequence exec input
         // 验证：branch1 走 false 分支，branch2 走 true 分支（不会触发 sequence）
 
-
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建第一个 Branch 节点
         let branch1_node = graph
@@ -521,7 +571,9 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
         let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
@@ -566,9 +618,12 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence exec input
         // 验证：branch1 走 false 分支，branch2 也走 false 分支，最终触发 sequence
 
-
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建节点
         let branch1_node = graph
@@ -637,7 +692,9 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
         let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 
@@ -668,9 +725,12 @@ mod tests {
         // branch2 (condition=false) -> false output -> sequence2 exec input (不会执行)
         // 验证：只有 sequence1 会被触发
 
-
         let registry = create_test_registry();
-        let graph = Arc::new(GraphInstance::new("Test Graph", crate::graph::GraphKind::Event,  registry.clone()));
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
 
         // 创建节点
         let branch1_node = graph
@@ -759,7 +819,9 @@ mod tests {
             .expect("Failed to connect branch2 false to sequence2 exec in");
 
         // === 使用 Executor 自动执行 ===
-        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
         let mut executor = executor_for_test(runtime);
         let result = executor.start(branch1_node);
 

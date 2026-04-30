@@ -17,29 +17,29 @@ pub struct ResumeToken(pub String);
 #[derive(Debug, Clone)]
 pub enum ExecutionEffect {
     /// 完成执行，没有后续控制流
-    /// 
+    ///
     /// 适用于：
     /// - 纯数据节点（Add, Multiply）
     /// - 没有输出 exec pin 的节点
     Done,
 
     /// 触发单个输出 Exec Pin
-    /// 
+    ///
     /// 适用于：
     /// - 简单控制流节点（Branch 的 True/False）
     /// - 只有一个输出的节点
-    /// 
+    ///
     /// 执行器会：
     /// 1. 查找该输出连接的下游节点
     /// 2. 将下游节点压入执行栈
     TriggerOutput(ExecRole),
 
     /// 触发输出并等待子流程完成后继续
-    /// 
+    ///
     /// 适用于：
     /// - Sequence 节点
     /// - 需要按顺序执行多个输出的节点
-    /// 
+    ///
     /// 执行器会：
     /// 1. 保存当前帧（标记为 WaitingForChild）
     /// 2. 将 remaining 保存为 continuation
@@ -53,20 +53,20 @@ pub enum ExecutionEffect {
     },
 
     /// 触发多个输出（并行或顺序，由执行器决定）
-    /// 
+    ///
     /// 适用于：
     /// - 需要触发多个输出但不关心顺序的节点
-    /// 
+    ///
     /// 注意：当前实现会按顺序执行（逆序压栈）
     TriggerSequence(Vec<ExecRole>),
 
     /// 暂停执行，等待外部事件
-    /// 
+    ///
     /// 适用于：
     /// - Delay 节点
     /// - Async / Await 节点
     /// - 等待用户输入的节点
-    /// 
+    ///
     /// 执行器会：
     /// 1. 将当前帧保存到挂起队列
     /// 2. 继续执行栈中的其他帧
@@ -78,12 +78,12 @@ pub enum ExecutionEffect {
     },
 
     /// 循环执行
-    /// 
+    ///
     /// 适用于：
     /// - Loop 节点
     /// - While 节点
     /// - For 节点
-    /// 
+    ///
     /// 执行器会：
     /// 1. 触发 body 输出
     /// 2. 当 body 完成后，重新评估条件

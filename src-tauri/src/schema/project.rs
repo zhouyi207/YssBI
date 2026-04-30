@@ -1,6 +1,6 @@
-use super::{GraphInstanceDTO, VariableInstanceDTO, DatabaseDeclDTO};
+use super::{DatabaseDeclDTO, GraphInstanceDTO, VariableInstanceDTO};
 use crate::graph::GraphId;
-use crate::project::{ProjectMetadata, ProjectData};
+use crate::project::{ProjectData, ProjectMetadata};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
