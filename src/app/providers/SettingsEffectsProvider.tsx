@@ -30,6 +30,11 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
                 mutedForeground: "#a1a1aa",
                 border: "rgba(255, 255, 255, 0.10)",
                 hoverBackground: "rgba(255, 255, 255, 0.05)",
+                nodeBase: theme.nodeBase,
+                nodeBorder: "rgba(255, 255, 255, 0.12)",
+                nodeHeaderBackground: "rgba(255, 255, 255, 0.05)",
+                nodeHeaderForeground: "#d4d4d8",
+                nodeShadow: "0 18px 40px rgb(0 0 0 / 0.35)",
             }
             : {
                 workbenchForeground: "#111827",
@@ -38,6 +43,11 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
                 mutedForeground: "#64748b",
                 border: "#e5e7eb",
                 hoverBackground: "rgba(15, 23, 42, 0.06)",
+                nodeBase: theme.nodeBase === theme.workbenchBackground ? "#f8fafc" : theme.nodeBase,
+                nodeBorder: "#cbd5e1",
+                nodeHeaderBackground: "#eef2ff",
+                nodeHeaderForeground: "#1e293b",
+                nodeShadow: "0 16px 32px rgb(15 23 42 / 0.12)",
             };
 
         root.classList.toggle("dark", isDark);
@@ -52,7 +62,11 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--strong-border", surface.border);
         root.style.setProperty("--accent-color", theme.accentColor);
         root.style.setProperty("--grid-lines", theme.gridLines);
-        root.style.setProperty("--node-base", theme.nodeBase);
+        root.style.setProperty("--node-base", surface.nodeBase);
+        root.style.setProperty("--node-border", surface.nodeBorder);
+        root.style.setProperty("--node-header-bg", surface.nodeHeaderBackground);
+        root.style.setProperty("--node-header-fg", surface.nodeHeaderForeground);
+        root.style.setProperty("--node-shadow", surface.nodeShadow);
         root.style.setProperty("--connection-lines", theme.connectionLines);
         root.style.setProperty("--selection-region", theme.selectionRegion);
 

@@ -67,7 +67,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   return (
     <div className="relative flex flex-col min-h-full">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold bg-white/5 rounded-t border-b border-black/20 text-[#cccccc]">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold rounded-t border-b border-[var(--node-border)] bg-[var(--node-header-bg)] text-[var(--node-header-fg)]">
         <div className="flex items-center gap-2">
           <span>{node.title}</span>
         </div>

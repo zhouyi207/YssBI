@@ -38,22 +38,26 @@ export const TitleBar: React.FC<TitleBarProps> = ({ isModified }) => {
   const handleClose = () => getCurrentWindow().close();
 
   return (
-    <div data-tauri-drag-region className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none shrink-0">
-      <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
-        <VscDatabase className="text-[var(--accent-color)]" size={16} />
-        <span className="text-foreground font-bold text-sm tracking-tight">{t("dataView.title")}</span>
+    <div data-tauri-drag-region className="h-9 bg-background/95 border-b border-border flex items-center z-50 select-none shrink-0">
+      <div className="flex items-center gap-2 px-3 flex-1" data-tauri-drag-region>
+        <span className="flex size-5 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
+          <VscDatabase size={14} />
+        </span>
+        <span className="text-foreground font-semibold text-[13px] tracking-tight">{t("dataView.title")}</span>
         {isModified && (
-          <span className="text-[9px] text-yellow-500 font-mono ml-1">({t("dataView.modified")})</span>
+          <span className="rounded-sm bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-medium text-yellow-600 dark:text-yellow-400">
+            {t("dataView.modified")}
+          </span>
         )}
       </div>
       <div className="flex items-center h-full">
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMinimize} className="h-10 rounded-none text-muted-foreground" title={t("common.minimize")}>
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMinimize} className="h-9 rounded-none text-muted-foreground" title={t("common.minimize")}>
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
         </Button>
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMaximize} className="h-10 rounded-none text-muted-foreground" title={isMaximized ? t("common.restore") : t("common.maximize")}>
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMaximize} className="h-9 rounded-none text-muted-foreground" title={isMaximized ? t("common.restore") : t("common.maximize")}>
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" strokeWidth={2} /></svg>
         </Button>
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleClose} className="h-10 w-12 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white" title={t("common.close")}>
+        <Button type="button" variant="ghost" size="icon-lg" onClick={handleClose} className="h-9 w-11 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white" title={t("common.close")}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </Button>
       </div>

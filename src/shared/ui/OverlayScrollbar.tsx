@@ -9,8 +9,8 @@ const SCROLL_STEP = 40;
 const SCROLL_INTERVAL = 50;
 const SCROLL_INITIAL_DELAY = 300;
 
-const THUMB_COLOR = "rgba(255,255,255,0.24)";
-const ARROW_STROKE = "rgba(255,255,255,0.45)";
+const THUMB_COLOR = "var(--overlay-scrollbar-thumb)";
+const ARROW_STROKE = "var(--overlay-scrollbar-arrow)";
 
 function ArrowButton({
   direction,
@@ -360,7 +360,7 @@ export const OverlayScrollbar = forwardRef<
             >
               {thumbStyle.v && (
                 <div
-                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/40"
+                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)]"
                   style={{
                     top: thumbStyle.v.top,
                     height: thumbStyle.v.height,
@@ -391,7 +391,7 @@ export const OverlayScrollbar = forwardRef<
             >
               {thumbStyle.h && (
                 <div
-                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-white/40"
+                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)]"
                   style={{
                     left: thumbStyle.h.left,
                     width: thumbStyle.h.width,

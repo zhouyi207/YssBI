@@ -1,16 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
-import { useDatabaseStore, useColumnStatsStore, useColumnDistributionStore, useDatasetOverviewStore } from '@/features/core/dataStore';
+import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
 import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard } from '@/features/application/dataView';
-import { DATA_VIEW_ROW_HEIGHT } from '@/app/appConfig/default';
-import { TitleBar, Toolbar } from './Layout';
+import { DataTabs, TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
 import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
-import { RightPanel } from './Stats';
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
@@ -24,15 +21,13 @@ function getDatabaseIdFromUrl(): string | null {
 }
 
 export const DataViewWindow: React.FC = () => {
-  const { t } = useTranslation();
   const dataframes = useDatabaseStore(s => s.databases);
-  const statsByDatabase = useColumnStatsStore(s => s.statsByDatabase);
-  const distByDatabase = useColumnDistributionStore(s => s.distByDatabase);
-  const overviewByDatabase = useDatasetOverviewStore(s => s.overviewByDatabase);
+  const editStateByDatabase = useEditStateStore(s => s.editStateByDatabase);
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
+  const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const hasInitializedTabsRef = useRef(false);
 
   useProjectSync();
 
@@ -43,60 +38,68 @@ export const DataViewWindow: React.FC = () => {
 
   // Data loading
   const dataLoader = useDataLoader(selectedDfId);
+  const dismissContextMenu = useCallback(() => setContextMenu(null), []);
 
   // Edit actions
   const edit = useEditActions({
     selectedDfId,
     columns,
     loadedRows: dataLoader.loadedRows,
+    rowOffset: dataLoader.pageStartIndex,
     reloadAllData: dataLoader.reloadAllData,
-    loadColumnStats: dataLoader.loadColumnStats,
   });
 
   // Selection
   const sel = useSelection({
     columnCount: columns.length,
     rowCount: dataLoader.loadedRows.length,
-    isEditing: !!edit.editingCell,
   });
 
   // Keyboard shortcuts
   useDataViewKeyboard({
     handleUndo: edit.handleUndo,
     handleRedo: edit.handleRedo,
-    cancelEdit: edit.cancelEdit,
-    startEdit: edit.startEdit,
     handleDeleteRow: edit.handleDeleteRow,
     selectAll: sel.selectAll,
     clearSelection: sel.clearSelection,
-    setSelection: sel.setSelection,
-    dismissContextMenu: useCallback(() => setContextMenu(null), []),
+    dismissContextMenu,
     selection: sel.selection,
-    activeCell: sel.activeCell,
-    editingCell: edit.editingCell,
     selectedRowIndices: sel.selectedRowIndices,
-    rowCount: dataLoader.loadedRows.length,
-    columnCount: columns.length,
   });
 
-  // Auto-select first dataframe, or database from URL (?database=id) when opened from sidebar eye icon
+  // Auto-open the requested dataframe, or the first available dataframe.
   useEffect(() => {
     const ids = Object.keys(dataframes);
     if (ids.length === 0) {
+      hasInitializedTabsRef.current = false;
+      setOpenTabIds([]);
       setSelectedDfId(null);
       dataLoader.setLoadedRows([]);
       return;
     }
     const dbFromUrl = getDatabaseIdFromUrl();
     const preferred = dbFromUrl && dataframes[dbFromUrl] ? dbFromUrl : ids[0];
-    if (!selectedDfId || !dataframes[selectedDfId]) setSelectedDfId(preferred);
-  }, [dataframes, selectedDfId]);
+
+    if (!hasInitializedTabsRef.current) {
+      hasInitializedTabsRef.current = true;
+      setOpenTabIds([preferred]);
+      setSelectedDfId(preferred);
+      return;
+    }
+
+    const existing = openTabIds.filter((id) => dataframes[id]);
+    if (existing.length !== openTabIds.length) {
+      setOpenTabIds(existing);
+    }
+    if (selectedDfId && !dataframes[selectedDfId]) {
+      setSelectedDfId(existing[0] ?? null);
+    }
+  }, [dataframes, openTabIds, selectedDfId]);
 
   // Load data when selection changes
   useEffect(() => {
     if (selectedDfId) {
       dataLoader.loadInitialRows(selectedDfId);
-      dataLoader.loadColumnStats(selectedDfId);
     } else {
       dataLoader.setLoadedRows([]);
     }
@@ -135,98 +138,95 @@ export const DataViewWindow: React.FC = () => {
     return addGlobalEventListener(window, 'click', dismiss);
   }, []);
 
-  // Scroll handler for infinite loading（固定总高度下：当可见行接近已加载末尾时触发加载）
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const t = e.currentTarget;
-    const lastVisibleRow = Math.floor((t.scrollTop + t.clientHeight) / DATA_VIEW_ROW_HEIGHT);
-    if (lastVisibleRow >= dataLoader.loadedRows.length - 20) dataLoader.loadMoreRows();
-  }, [dataLoader.loadMoreRows, dataLoader.loadedRows.length]);
-
   // Context menu handler
-  const handleContextMenu = useCallback((e: React.MouseEvent, target: { type: 'cell' | 'header' | 'row'; rowIndex?: number; colIndex?: number; colName?: string }) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, ...target });
+  const handleContextMenu = useCallback((position: { x: number; y: number }, target: { type: 'cell' | 'header' | 'row'; rowIndex?: number; colIndex?: number; colName?: string }) => {
+    setContextMenu({ x: position.x, y: position.y, ...target });
   }, []);
 
   // Toolbar options
-  const dfOptions = Object.entries(dataframes).map(([id, df]) => {
+  const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
     const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string } } };
     let label = d.name;
     if (!label && d.engine?.csv?.path) { const p = d.engine.csv.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }
     if (!label && d.engine?.parquet?.path) { const p = d.engine.parquet.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }
     return { label: String(label ?? id), value: id };
-  });
+  }), [dataframes]);
 
-  const columnStatsMap = selectedDfId ? statsByDatabase[selectedDfId] : undefined;
-  const columnDistMap = selectedDfId ? distByDatabase[selectedDfId] : undefined;
-  const currentOverview = selectedDfId ? overviewByDatabase[selectedDfId] : undefined;
+  const labelByDfId = useMemo(() => new Map(dfOptions.map((option) => [option.value, option.label])), [dfOptions]);
+  const tabs = useMemo(() => openTabIds.map((id) => ({
+    id,
+    label: labelByDfId.get(id) ?? id,
+    isModified: Boolean(editStateByDatabase[id]?.isModified),
+  })), [editStateByDatabase, labelByDfId, openTabIds]);
+
+  const handleAddTab = useCallback((id: string) => {
+    if (!dataframes[id]) return;
+    setOpenTabIds((prev) => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedDfId(id);
+  }, [dataframes]);
+
+  const handleCloseTab = useCallback((id: string) => {
+    setOpenTabIds((prev) => {
+      const index = prev.indexOf(id);
+      const next = prev.filter((tabId) => tabId !== id);
+      if (selectedDfId === id) {
+        const fallback = next[Math.min(index, next.length - 1)] ?? next[0] ?? null;
+        setSelectedDfId(fallback);
+      }
+      return next;
+    });
+  }, [selectedDfId]);
 
   return (
-    <div className="flex flex-col w-full h-screen bg-[var(--workbench-bg)] text-[var(--workbench-fg)] overflow-hidden font-sans">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-muted/30 text-[var(--workbench-fg)] font-sans">
       <TitleBar isModified={edit.currentEditState.isModified} />
 
+      <DataTabs
+        tabs={tabs}
+        options={dfOptions}
+        activeTabId={selectedDfId}
+        onSelectTab={setSelectedDfId}
+        onAddTab={handleAddTab}
+        onCloseTab={handleCloseTab}
+      />
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <DataTable
+          columns={columns}
+          loadedRows={dataLoader.loadedRows}
+          pageStartIndex={dataLoader.pageStartIndex}
+          loading={dataLoader.loading}
+          selection={sel.selection}
+          onSelectionChange={sel.setSelection}
+          onCommitCellValue={edit.commitCellValue}
+          onContextMenu={handleContextMenu}
+        />
+      </div>
+
       <Toolbar
-        selectedDfId={selectedDfId}
-        options={dfOptions.length > 0 ? dfOptions : [{ label: t('dataView.noDataFrame'), value: '' }]}
         loading={dataLoader.loading}
         totalRowCount={totalRowCount}
         columnCount={(selectedDf as { columnCount?: number })?.columnCount ?? 0}
+        pageIndex={dataLoader.pageIndex}
+        pageSize={dataLoader.pageSize}
+        totalPages={dataLoader.totalPages}
+        lastFetchMs={dataLoader.lastFetchMs}
         hasSelection={!!selectedDf}
         currentEditState={edit.currentEditState}
-        onSelectDf={setSelectedDfId}
+        onPreviousPage={dataLoader.goToPreviousPage}
+        onNextPage={dataLoader.goToNextPage}
         onRefresh={dataLoader.refreshData}
+        onSave={edit.handleSave}
         onUndo={edit.handleUndo}
         onRedo={edit.handleRedo}
         onReset={edit.handleReset}
         onExport={edit.handleExport}
       />
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <DataTable
-          columns={columns}
-          loadedRows={dataLoader.loadedRows}
-          totalRowCount={totalRowCount}
-          loading={dataLoader.loading}
-          loadingMore={dataLoader.loadingMore}
-          scrollRef={dataLoader.scrollRef}
-          onHeaderHeightChange={setHeaderHeight}
-          selection={sel.selection}
-          activeCell={sel.activeCell}
-          editingCell={edit.editingCell}
-          isInSelection={sel.isInSelection}
-          onCellMouseDown={sel.handleCellMouseDown}
-          onCellMouseEnter={sel.handleCellMouseEnter}
-          onRowHeaderClick={sel.handleRowHeaderClick}
-          onColHeaderClick={sel.handleColHeaderClick}
-          onSelectAll={sel.selectAll}
-          editValue={edit.editValue}
-          editInputRef={edit.editInputRef}
-          onEditValueChange={edit.setEditValue}
-          onStartEdit={edit.startEdit}
-          onCommitEdit={edit.commitEdit}
-          onCancelEdit={edit.cancelEdit}
-          onContextMenu={handleContextMenu}
-          onCastColumn={edit.handleCastColumn}
-          onScroll={handleScroll}
-        />
-
-        {selectedDf && columns.length > 0 && (
-          <RightPanel
-            columns={columns}
-            overview={currentOverview}
-            columnStatsMap={columnStatsMap}
-            columnDistMap={columnDistMap}
-            statsLoading={dataLoader.statsLoading}
-            onCastColumn={edit.handleCastColumn}
-          />
-        )}
-      </div>
-
       {contextMenu && (
         <TableContextMenu
           menu={contextMenu}
           selectedRowIndices={sel.selectedRowIndices()}
-          onStartEdit={edit.startEdit}
           onAddRow={edit.handleAddRow}
           onDeleteRow={edit.handleDeleteRow}
           onRenameColumn={edit.handleRenameColumn}

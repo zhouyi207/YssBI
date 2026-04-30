@@ -162,6 +162,10 @@ export class DatabaseService {
         return await invoke("reset_database", { id });
     }
 
+    static async saveDatabaseChanges(id: string): Promise<EditState> {
+        return await invoke("save_database_changes", { id });
+    }
+
     static async exportDatabase(id: string, path: string, format: string): Promise<void> {
         await invoke("export_database", { id, path, format });
     }

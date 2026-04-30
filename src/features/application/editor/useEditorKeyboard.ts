@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useViewportStore } from '@/features/core/viewport';
-import { useModifierKeyStore } from '@/features/core/keyboard';
+import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
@@ -65,6 +65,10 @@ export function useEditorKeyboard({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
+
+      if (isAppModalOpen()) {
+        return;
+      }
 
       if (e.key === 'Alt') {
         e.preventDefault();

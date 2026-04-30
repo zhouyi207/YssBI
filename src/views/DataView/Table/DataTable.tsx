@@ -1,12 +1,38 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import {
+  CompactSelection,
+  DataEditor,
+  GridCellKind,
+  GridColumnIcon,
+  type EditableGridCell,
+  type GridCell,
+  type GridColumn,
+  type GridSelection,
+  type Item,
+  type Theme,
+} from '@glideapps/glide-data-grid';
+import '@glideapps/glide-data-grid/dist/index.css';
 import { VscDatabase } from 'react-icons/vsc';
-import type { ColumnMeta, CellPos, SelectionRange } from '@/features/application/dataView';
-import { selectionBounds, COLUMN_TYPE_OPTIONS } from '@/features/application/dataView';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
-import { Select } from '@/shared/ui';
+import type { ColumnMeta, SelectionRange } from '@/features/application/dataView';
+import { selectionBounds } from '@/features/application/dataView';
 import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_ROW_NUM_WIDTH, DATA_VIEW_MIN_COLUMNS } from '@/app/appConfig/default';
+
+interface DataGridThemeTokens {
+  accentColor: string;
+  accentFg: string;
+  accentLight: string;
+  workbenchBg: string;
+  sidebarBg: string;
+  foreground: string;
+  mutedForeground: string;
+  border: string;
+  hover: string;
+  active: string;
+  rowMarkerBg: string;
+  rowMarkerHover: string;
+  rowMarkerText: string;
+}
 
 interface ContextMenuTarget {
   type: 'cell' | 'header' | 'row';
@@ -18,266 +44,428 @@ interface ContextMenuTarget {
 interface DataTableProps {
   columns: ColumnMeta[];
   loadedRows: any[][];
-  totalRowCount: number;
+  pageStartIndex: number;
   loading: boolean;
-  loadingMore: boolean;
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  onHeaderHeightChange: (h: number) => void;
 
   // selection
   selection: SelectionRange | null;
-  activeCell: CellPos | null;
-  editingCell: { row: number; col: number } | null;
-  isInSelection: (row: number, col: number) => boolean;
-  onCellMouseDown: (row: number, col: number, e: React.MouseEvent) => void;
-  onCellMouseEnter: (row: number, col: number) => void;
-  onRowHeaderClick: (row: number, e: React.MouseEvent) => void;
-  onColHeaderClick: (col: number, e: React.MouseEvent) => void;
-  onSelectAll: () => void;
+  onSelectionChange: (selection: SelectionRange | null) => void;
 
-  // editing
-  editValue: string;
-  editInputRef: React.RefObject<HTMLInputElement | null>;
-  onEditValueChange: (v: string) => void;
-  onStartEdit: (row: number, col: number) => void;
-  onCommitEdit: () => Promise<void>;
-  onCancelEdit: () => void;
+  onCommitCellValue: (row: number, col: number, value: unknown) => Promise<void>;
 
   // context menu
-  onContextMenu: (e: React.MouseEvent, target: ContextMenuTarget) => void;
+  onContextMenu: (position: { x: number; y: number }, target: ContextMenuTarget) => void;
+}
 
-  // cast column type
-  onCastColumn?: (colName: string, newDtype: string) => void;
+function dtypeToIcon(dtype: string): GridColumnIcon {
+  const normalized = dtype.toLowerCase();
+  if (normalized.includes('int') || normalized.includes('float') || normalized.includes('double') || normalized.includes('number')) {
+    return GridColumnIcon.HeaderNumber;
+  }
+  if (normalized.includes('bool')) return GridColumnIcon.HeaderBoolean;
+  return GridColumnIcon.HeaderString;
+}
 
-  // scroll
-  onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+function cellToValue(cell: EditableGridCell): unknown {
+  switch (cell.kind) {
+    case GridCellKind.Number:
+      return cell.data;
+    case GridCellKind.Boolean:
+      return cell.data;
+    case GridCellKind.Text:
+    case GridCellKind.Markdown:
+    case GridCellKind.Uri:
+      return cell.data;
+    default:
+      return cell.copyData ?? '';
+  }
+}
+
+function selectionToGridSelection(selection: SelectionRange | null, columnCount: number, rowCount: number): GridSelection {
+  if (!selection) {
+    return {
+      columns: CompactSelection.empty(),
+      rows: CompactSelection.empty(),
+    };
+  }
+
+  const { r0, r1, c0, c1 } = selectionBounds(selection);
+  const fullRowsSelected = columnCount > 0 && c0 === 0 && c1 >= columnCount - 1;
+  const fullColumnsSelected = rowCount > 0 && r0 === 0 && r1 >= rowCount - 1;
+
+  return {
+    current: {
+      cell: [c0, r0],
+      range: { x: c0, y: r0, width: c1 - c0 + 1, height: r1 - r0 + 1 },
+      rangeStack: [],
+    },
+    columns: fullColumnsSelected ? CompactSelection.fromSingleSelection([c0, c1 + 1]) : CompactSelection.empty(),
+    rows: fullRowsSelected ? CompactSelection.fromSingleSelection([r0, r1 + 1]) : CompactSelection.empty(),
+  };
+}
+
+function gridSelectionToSelection(gridSelection: GridSelection, columnCount: number, rowCount: number): SelectionRange | null {
+  const firstRow = gridSelection.rows.first();
+  const lastRow = gridSelection.rows.last();
+  if (firstRow !== undefined && lastRow !== undefined && columnCount > 0) {
+    return {
+      anchor: { row: firstRow, col: 0 },
+      end: { row: lastRow, col: columnCount - 1 },
+    };
+  }
+
+  const firstCol = gridSelection.columns.first();
+  const lastCol = gridSelection.columns.last();
+  if (firstCol !== undefined && lastCol !== undefined && rowCount > 0) {
+    return {
+      anchor: { row: 0, col: firstCol },
+      end: { row: rowCount - 1, col: lastCol },
+    };
+  }
+
+  const current = gridSelection.current;
+  if (current) {
+    const range = current.range;
+    return {
+      anchor: { row: range.y, col: range.x },
+      end: { row: range.y + Math.max(0, range.height - 1), col: range.x + Math.max(0, range.width - 1) },
+    };
+  }
+
+  return null;
+}
+
+function readCssVar(style: CSSStyleDeclaration, name: string, fallback: string): string {
+  return style.getPropertyValue(name).trim() || fallback;
+}
+
+function toCanvasColor(value: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return fallback;
+  context.fillStyle = fallback;
+  context.fillStyle = value;
+  const resolved = context.fillStyle;
+  return resolved && resolved !== fallback ? resolved : fallback;
+}
+
+function readDataGridThemeTokens(): DataGridThemeTokens {
+  if (typeof window === 'undefined') {
+    return {
+      accentColor: '#2563eb',
+      accentFg: '#ffffff',
+      accentLight: 'rgba(37, 99, 235, 0.16)',
+      workbenchBg: '#ffffff',
+      sidebarBg: '#f8fafc',
+      foreground: '#111827',
+      mutedForeground: '#6b7280',
+      border: '#e5e7eb',
+      hover: 'rgba(37, 99, 235, 0.12)',
+      active: 'rgba(37, 99, 235, 0.16)',
+      rowMarkerBg: '#f8fafc',
+      rowMarkerHover: '#e2e8f0',
+      rowMarkerText: '#0f172a',
+    };
+  }
+
+  const style = window.getComputedStyle(document.documentElement);
+  const isDark = document.documentElement.classList.contains('dark');
+  const lightFallbacks = {
+    workbenchBg: '#ffffff',
+    sidebarBg: '#f8fafc',
+    foreground: '#0f172a',
+    mutedForeground: '#64748b',
+    border: '#e2e8f0',
+    rowMarkerBg: '#f8fafc',
+    rowMarkerHover: '#e2e8f0',
+  };
+  const darkFallbacks = {
+    workbenchBg: '#171717',
+    sidebarBg: '#262626',
+    foreground: '#f8fafc',
+    mutedForeground: '#a3a3a3',
+    border: 'rgba(255, 255, 255, 0.12)',
+    rowMarkerBg: '#262626',
+    rowMarkerHover: '#333333',
+  };
+  const fallbacks = isDark ? darkFallbacks : lightFallbacks;
+  const accentColor = toCanvasColor(readCssVar(style, '--accent-color', '#2563eb'), '#2563eb');
+
+  return {
+    accentColor,
+    accentFg: '#ffffff',
+    accentLight: readCssVar(style, '--interactive-active', 'rgba(37, 99, 235, 0.16)'),
+    workbenchBg: toCanvasColor(readCssVar(style, '--card', readCssVar(style, '--workbench-bg', fallbacks.workbenchBg)), fallbacks.workbenchBg),
+    sidebarBg: toCanvasColor(readCssVar(style, '--muted', readCssVar(style, '--sidebar-bg', fallbacks.sidebarBg)), fallbacks.sidebarBg),
+    foreground: toCanvasColor(readCssVar(style, '--workbench-fg', readCssVar(style, '--foreground', fallbacks.foreground)), fallbacks.foreground),
+    mutedForeground: toCanvasColor(readCssVar(style, '--text-secondary', readCssVar(style, '--muted-foreground', fallbacks.mutedForeground)), fallbacks.mutedForeground),
+    border: toCanvasColor(readCssVar(style, '--strong-border', readCssVar(style, '--border', fallbacks.border)), fallbacks.border),
+    hover: readCssVar(style, '--interactive-hover', 'rgba(37, 99, 235, 0.12)'),
+    active: readCssVar(style, '--interactive-active', 'rgba(37, 99, 235, 0.16)'),
+    rowMarkerBg: fallbacks.rowMarkerBg,
+    rowMarkerHover: fallbacks.rowMarkerHover,
+    rowMarkerText: fallbacks.foreground,
+  };
+}
+
+function useDataGridThemeTokens(): DataGridThemeTokens {
+  const [tokens, setTokens] = useState(readDataGridThemeTokens);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+    const update = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        setTokens(readDataGridThemeTokens());
+      });
+    };
+
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, []);
+
+  return tokens;
 }
 
 export const DataTable: React.FC<DataTableProps> = ({
-  columns, loadedRows, totalRowCount, loading, loadingMore, scrollRef, onHeaderHeightChange,
-  selection, activeCell, editingCell, isInSelection,
-  onCellMouseDown, onCellMouseEnter, onRowHeaderClick, onColHeaderClick, onSelectAll,
-  editValue, editInputRef, onEditValueChange, onStartEdit, onCommitEdit, onCancelEdit,
-  onContextMenu, onCastColumn, onScroll,
+  columns, loadedRows, pageStartIndex, loading,
+  selection,
+  onSelectionChange,
+  onCommitCellValue,
+  onContextMenu,
 }) => {
   const { t } = useTranslation();
-  const headerRef = useRef<HTMLTableSectionElement>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
+  const themeTokens = useDataGridThemeTokens();
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    const el = headerRef.current;
-    if (!el) { setHeaderHeight(0); onHeaderHeightChange(0); return; }
-    const update = () => { setHeaderHeight(el.offsetHeight); onHeaderHeightChange(el.offsetHeight); };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [columns.length, onHeaderHeightChange]);
-
-  /** 固定总高度：有 totalRowCount 时用其作为虚拟化数量，避免懒加载时高度变化 */
-  const virtualRowCount = totalRowCount > 0 ? totalRowCount : loadedRows.length;
-  const rowVirtualizer = useVirtualizer({
-    count: virtualRowCount,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => DATA_VIEW_ROW_HEIGHT,
-    overscan: 20,
-  });
-
-  const virtualRows = rowVirtualizer.getVirtualItems();
-  const totalTableHeight = virtualRowCount * DATA_VIEW_ROW_HEIGHT;
+  /** 分页模式下只渲染当前页数据，避免一次性绘制大数据集 */
+  const virtualRowCount = loadedRows.length;
   const hasData = columns.length > 0;
-  /** 显示列数：至少 20 列，不足时用空列填充 */
-  const displayColumnCount = Math.max(columns.length, DATA_VIEW_MIN_COLUMNS);
+  const gridColumns = useMemo<GridColumn[]>(() => {
+    const realColumns = columns.map((col) => ({
+      id: col.name,
+      title: col.name,
+      icon: dtypeToIcon(col.type),
+      hasMenu: true,
+      width: columnWidths[col.name] ?? Math.max(120, Math.min(280, col.name.length * 8 + 96)),
+    }));
+
+    if (realColumns.length >= DATA_VIEW_MIN_COLUMNS) return realColumns;
+    return [
+      ...realColumns,
+      ...Array.from({ length: DATA_VIEW_MIN_COLUMNS - realColumns.length }, (_, index) => ({
+        id: `__placeholder_${index}`,
+        title: '',
+        width: 96,
+      })),
+    ];
+  }, [columnWidths, columns]);
+
+  const gridSelection = useMemo(
+    () => selectionToGridSelection(selection, columns.length, virtualRowCount),
+    [columns.length, selection, virtualRowCount]
+  );
+
+  const theme = useMemo<Partial<Theme>>(() => ({
+    accentColor: themeTokens.accentColor,
+    accentFg: themeTokens.accentFg,
+    accentLight: themeTokens.accentLight,
+    bgCell: themeTokens.workbenchBg,
+    bgCellMedium: themeTokens.sidebarBg,
+    bgHeader: themeTokens.sidebarBg,
+    bgHeaderHovered: themeTokens.hover,
+    bgHeaderHasFocus: themeTokens.accentColor,
+    bgBubble: themeTokens.sidebarBg,
+    bgBubbleSelected: themeTokens.accentColor,
+    textDark: themeTokens.foreground,
+    textMedium: themeTokens.mutedForeground,
+    textLight: themeTokens.mutedForeground,
+    textBubble: themeTokens.foreground,
+    textHeader: themeTokens.foreground,
+    textHeaderSelected: themeTokens.accentFg,
+    bgIconHeader: themeTokens.sidebarBg,
+    fgIconHeader: themeTokens.mutedForeground,
+    borderColor: themeTokens.border,
+    horizontalBorderColor: themeTokens.border,
+    headerBottomBorderColor: themeTokens.border,
+    linkColor: themeTokens.accentColor,
+    fontFamily: 'var(--font-sans)',
+    baseFontStyle: '11px var(--font-sans)',
+    headerFontStyle: '600 11px var(--font-sans)',
+    editorFontSize: '11px',
+  }), [themeTokens]);
+
+  const rowMarkerTheme = useMemo<Partial<Theme>>(() => ({
+    bgCell: themeTokens.rowMarkerBg,
+    bgCellMedium: themeTokens.rowMarkerBg,
+    bgHeader: themeTokens.rowMarkerBg,
+    bgHeaderHovered: themeTokens.rowMarkerHover,
+    bgHeaderHasFocus: themeTokens.active,
+    accentLight: themeTokens.active,
+    textLight: themeTokens.rowMarkerText,
+    textMedium: themeTokens.rowMarkerText,
+  }), [themeTokens]);
+
+  const getCellContent = useCallback((cell: Item): GridCell => {
+    const [col, row] = cell;
+    if (col >= columns.length) {
+      return {
+        kind: GridCellKind.Text,
+        allowOverlay: false,
+        readonly: true,
+        displayData: '',
+        data: '',
+        style: 'faded',
+      };
+    }
+
+    const rowData = loadedRows[row];
+    if (!rowData) {
+      return {
+        kind: GridCellKind.Loading,
+        allowOverlay: false,
+      };
+    }
+
+    const value = rowData[col];
+    if (typeof value === 'number') {
+      return {
+        kind: GridCellKind.Number,
+        allowOverlay: true,
+        displayData: Number.isFinite(value) ? String(value) : '',
+        data: Number.isFinite(value) ? value : undefined,
+      };
+    }
+
+    if (typeof value === 'boolean') {
+      return {
+        kind: GridCellKind.Boolean,
+        allowOverlay: false,
+        data: value,
+      };
+    }
+
+    const displayData = value === null || value === undefined ? 'null' : String(value);
+    return {
+      kind: GridCellKind.Text,
+      allowOverlay: true,
+      displayData,
+      data: value === null || value === undefined ? '' : String(value),
+      style: value === null || value === undefined ? 'faded' : 'normal',
+    };
+  }, [columns.length, loadedRows]);
+
+  const handleGridSelectionChange = useCallback((next: GridSelection) => {
+    onSelectionChange(gridSelectionToSelection(next, columns.length, virtualRowCount));
+  }, [columns.length, onSelectionChange, virtualRowCount]);
+
+  const handleCellEdited = useCallback((cell: Item, newValue: EditableGridCell) => {
+    const [col, row] = cell;
+    if (col >= columns.length) return;
+    void onCommitCellValue(row, col, cellToValue(newValue));
+  }, [columns.length, onCommitCellValue]);
+
+  const handleColumnResize = useCallback((column: GridColumn, newSize: number, colIndex: number) => {
+    if (colIndex >= columns.length) return;
+    const columnId = column.id ?? columns[colIndex]?.name;
+    if (!columnId) return;
+    setColumnWidths((prev) => ({ ...prev, [columnId]: newSize }));
+  }, [columns]);
 
   if (!hasData) {
     return (
-      <div className="flex-1 min-h-0 min-w-0 flex flex-col items-center justify-center gap-4 bg-[var(--workbench-bg)]">
-        <VscDatabase className="text-gray-500/60" size={48} />
-        <span className="text-sm font-medium tracking-widest uppercase text-gray-500/70">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card">
+        <div className="flex size-14 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
+          <VscDatabase size={30} />
+        </div>
+        <span className="text-sm font-medium text-muted-foreground">
           {loading ? t('dataView.loadingProjectData') : t('dataView.noDataFrameSelected')}
         </span>
       </div>
     );
   }
 
-  const colSpanForSpacer = displayColumnCount + 1;
-
   return (
-    <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
-      <OverlayScrollbar
-        ref={scrollRef}
-        onScroll={onScroll}
-        direction="both"
-        className="flex-1 min-h-0 min-w-0 bg-[var(--workbench-bg)]"
-        scrollbarOffsetTop={headerHeight}
-        scrollbarOffsetLeft={DATA_VIEW_ROW_NUM_WIDTH}
-      >
-        <div
-          className="min-w-full inline-block align-middle"
-          style={{ minHeight: totalTableHeight }}
-          onMouseLeave={() => setHoveredCell(null)}
-        >
-          <table className="border-collapse min-w-full w-max" style={{ tableLayout: 'auto' }}>
-            <thead ref={headerRef} className="sticky top-0 z-10 bg-[var(--sidebar-bg)] border-b border-gray-700">
-              <tr>
-                <th
-                  className="p-2 text-left text-[10px] font-black uppercase text-gray-500 border-r border-gray-800 text-center shrink-0 invisible"
-                  style={{ width: DATA_VIEW_ROW_NUM_WIDTH, minWidth: DATA_VIEW_ROW_NUM_WIDTH }}
-                  aria-hidden
-                >#</th>
-              {Array.from({ length: displayColumnCount }, (_, i) => {
-                const col = columns[i];
-                const isPlaceholder = !col;
-                const colSelected = !isPlaceholder && selection && (() => {
-                  const { c0, c1 } = selectionBounds(selection);
-                  return i >= c0 && i <= c1;
-                })();
-                const colHovered = hoveredCell?.col === i;
-                return (
-                  <th
-                    key={i}
-                    className={`p-2 text-left border-r border-gray-800 group cursor-default min-w-[80px] ${colSelected ? 'bg-[var(--accent-color)]/10' : ''} ${colHovered && !colSelected ? 'bg-white/[0.02]' : ''}`}
-                    onClick={isPlaceholder ? undefined : (e) => onColHeaderClick(i, e)}
-                    onContextMenu={isPlaceholder ? undefined : (e) => onContextMenu(e, { type: 'header', colIndex: i, colName: col!.name })}
-                    onMouseEnter={isPlaceholder ? undefined : () => setHoveredCell({ row: -1, col: i })}
-                  >
-                    {isPlaceholder ? (
-                      <span className="text-[11px] text-gray-600/50">&nbsp;</span>
-                    ) : (
-                      <div className="grid grid-cols-[minmax(0,1fr)_80px] gap-2 items-center min-w-0">
-                        <span className="text-[11px] font-bold text-gray-300 truncate min-w-0">{col.name}</span>
-                        {onCastColumn ? (
-                          <div className="w-full min-w-0" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={col.type}
-                              onChange={(v) => { if (v !== col.type) onCastColumn(col.name, v); }}
-                              options={(() => {
-                                const opts = COLUMN_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.value }));
-                                if (col.type && !opts.some(o => o.value === col.type)) opts.unshift({ label: col.type, value: col.type });
-                                return opts;
-                              })()}
-                              className="text-[9px] h-5 font-mono !w-full"
-                            />
-                          </div>
-                        ) : (
-                          <span className="text-[9px] text-[var(--accent-color)]/60 font-mono shrink-0">{col.type}</span>
-                        )}
-                      </div>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {virtualRows.length > 0 && virtualRows[0].start > 0 && (
-              <tr aria-hidden>
-                <td colSpan={colSpanForSpacer} style={{ height: virtualRows[0].start, padding: 0, border: 'none' }} />
-              </tr>
-            )}
-            {virtualRows.map((virtualRow) => {
-              const row = loadedRows[virtualRow.index];
-              const hasData = row !== undefined;
-              const ri = virtualRow.index;
-              const rowData = hasData && Array.isArray(row) ? row : [];
-              const rowSelected = selection && (() => {
-                const { r0, r1 } = selectionBounds(selection);
-                return ri >= r0 && ri <= r1;
-              })();
-              const rowActive = activeCell?.row === ri;
-              const rowHovered = hoveredCell !== null && hoveredCell.row === ri;
-              return (
-                <tr
-                  key={virtualRow.key}
-                  data-index={ri}
-                  className="group transition-colors hover:bg-white/[0.02]"
-                  style={{ height: DATA_VIEW_ROW_HEIGHT }}
-                >
-                  <td
-                    className={`p-2 text-[11px] font-bold text-gray-300 border-r border-gray-800 text-center cursor-default select-none sticky left-0 z-10 shrink-0 bg-[var(--sidebar-bg)] ${rowHovered && !(rowSelected || rowActive) ? '!bg-white/[0.02]' : ''} ${!rowHovered && !(rowSelected || rowActive) ? 'group-hover:!bg-white/[0.02]' : ''}`}
-                    style={{
-                      width: DATA_VIEW_ROW_NUM_WIDTH,
-                      minWidth: DATA_VIEW_ROW_NUM_WIDTH,
-                      ...((rowSelected || rowActive) ? { background: 'color-mix(in srgb, var(--accent-color) 10%, var(--sidebar-bg))' } : {}),
-                    }}
-                    onClick={hasData ? (e) => onRowHeaderClick(ri, e) : undefined}
-                    onContextMenu={hasData ? (e) => onContextMenu(e, { type: 'row', rowIndex: ri }) : undefined}
-                    onMouseEnter={() => setHoveredCell({ row: ri, col: -1 })}
-                  >
-                    {ri + 1}
-                  </td>
-                  {Array.from({ length: displayColumnCount }, (_, j) => {
-                    const isPlaceholder = j >= columns.length;
-                    const val = rowData[j];
-                    const isEditingThis = editingCell?.row === ri && editingCell?.col === j;
-                    const isSel = !isPlaceholder && isInSelection(ri, j);
-                    const isActive = activeCell?.row === ri && activeCell?.col === j;
-                    const colHovered = hoveredCell !== null && hoveredCell.col === j;
-                    return (
-                      <td
-                        key={j}
-                        className={`p-0 text-[11px] text-gray-400 border-r border-gray-800/50 min-w-[80px] ${isSel ? 'bg-[var(--accent-color)]/8' : ''} ${isActive && !isEditingThis ? 'ring-1 ring-inset ring-[var(--accent-color)]/60' : ''} ${colHovered && !isSel ? 'bg-white/[0.02]' : ''}`}
-                        onMouseDown={isPlaceholder || !hasData ? undefined : (e) => onCellMouseDown(ri, j, e)}
-                        onMouseEnter={isPlaceholder || !hasData ? undefined : () => { setHoveredCell({ row: ri, col: j }); onCellMouseEnter(ri, j); }}
-                        onDoubleClick={isPlaceholder || !hasData ? undefined : () => onStartEdit(ri, j)}
-                        onContextMenu={isPlaceholder || !hasData ? undefined : (e) => onContextMenu(e, { type: 'cell', rowIndex: ri, colIndex: j, colName: columns[j]?.name })}
-                      >
-                        {isPlaceholder ? (
-                          <div className="px-2 py-1.5 cursor-default select-none">&nbsp;</div>
-                        ) : !hasData ? (
-                          <div className="px-2 py-1.5 truncate cursor-default select-none text-gray-600">…</div>
-                        ) : isEditingThis ? (
-                          <input
-                            ref={editInputRef}
-                            value={editValue}
-                            onChange={(e) => onEditValueChange(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); onCommitEdit(); }
-                              else if (e.key === 'Escape') onCancelEdit();
-                              else if (e.key === 'Tab') {
-                                e.preventDefault();
-                                onCommitEdit().then(() => {
-                                  const nextCol = e.shiftKey ? j - 1 : j + 1;
-                                  if (nextCol >= 0 && nextCol < columns.length) onStartEdit(ri, nextCol);
-                                });
-                              }
-                            }}
-                            onBlur={onCommitEdit}
-                            className="w-full h-full px-2 py-1.5 bg-[var(--accent-color)]/10 text-gray-200 text-[11px] outline-none border border-[var(--accent-color)]/40 font-mono"
-                            autoFocus
-                          />
-                        ) : (
-                          <div className="px-2 py-1.5 truncate cursor-default select-none">
-                            {val === null ? <span className="italic opacity-30">null</span> : String(val)}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-            {virtualRows.length > 0 && (
-              <tr aria-hidden>
-                <td
-                  colSpan={colSpanForSpacer}
-                  style={{ height: rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1]?.end ?? 0), padding: 0, border: 'none' }}
-                />
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </OverlayScrollbar>
-    {/* 固定在左上角的独立角格，不随滚动移动 */}
-    <div
-      className="absolute top-0 left-0 z-30 flex items-center justify-center cursor-pointer hover:bg-white/[0.02] bg-[var(--sidebar-bg)] border-r border-b border-gray-800 text-[11px] font-bold text-gray-300"
-      style={{ width: DATA_VIEW_ROW_NUM_WIDTH, height: headerHeight || 40 }}
-      onClick={onSelectAll}
-    >
-      #
+    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-card">
+      <DataEditor
+        className="h-full w-full"
+        width="100%"
+        height="100%"
+        columns={gridColumns}
+        rows={virtualRowCount}
+        getCellContent={getCellContent}
+        getCellsForSelection
+        rowHeight={DATA_VIEW_ROW_HEIGHT}
+        headerHeight={36}
+        rowMarkers={{
+          kind: 'clickable-number',
+          width: DATA_VIEW_ROW_NUM_WIDTH,
+          startIndex: pageStartIndex + 1,
+          theme: rowMarkerTheme,
+        }}
+        rowSelect="multi"
+        columnSelect="multi"
+        rangeSelect="multi-rect"
+        gridSelection={gridSelection}
+        onGridSelectionChange={handleGridSelectionChange}
+        onSelectionCleared={() => onSelectionChange(null)}
+        onCellEdited={handleCellEdited}
+        onColumnResize={handleColumnResize}
+        minColumnWidth={72}
+        maxColumnWidth={520}
+        cellActivationBehavior="double-click"
+        onHeaderMenuClick={(colIndex, bounds) => {
+          if (colIndex >= columns.length) return;
+          onContextMenu(
+            { x: bounds.x, y: bounds.y + bounds.height },
+            { type: 'header', colIndex, colName: columns[colIndex]?.name }
+          );
+        }}
+        onHeaderContextMenu={(colIndex, event) => {
+          if (colIndex >= columns.length) return;
+          event.preventDefault();
+          onContextMenu(
+            { x: event.bounds.x, y: event.bounds.y + event.bounds.height },
+            { type: 'header', colIndex, colName: columns[colIndex]?.name }
+          );
+        }}
+        onCellContextMenu={(cell, event) => {
+          const [col, row] = cell;
+          if (row >= loadedRows.length) return;
+          event.preventDefault();
+          if (col < 0) {
+            onContextMenu(
+              { x: event.bounds.x, y: event.bounds.y + event.bounds.height },
+              { type: 'row', rowIndex: row }
+            );
+            return;
+          }
+          if (col >= columns.length) return;
+          onContextMenu(
+            { x: event.bounds.x, y: event.bounds.y + event.bounds.height },
+            { type: 'cell', rowIndex: row, colIndex: col, colName: columns[col]?.name }
+          );
+        }}
+        theme={theme}
+        smoothScrollX
+        smoothScrollY
+        keybindings={{ search: false }}
+      />
+      {loading && (
+        <div className="pointer-events-none absolute bottom-3 right-4 rounded-md border border-border bg-popover/95 px-2.5 py-1.5 text-[11px] font-medium text-popover-foreground shadow-lg backdrop-blur">
+          {t('dataView.loadingProjectData')}
+        </div>
+      )}
     </div>
-  </div>
   );
 };

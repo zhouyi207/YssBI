@@ -87,8 +87,3 @@ export interface EditState {
   undoCount: number;
   redoCount: number;
 }
-
-export interface EditingCell {
-  row: number;
-  col: number;
-}

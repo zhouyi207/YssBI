@@ -22,7 +22,7 @@ export function getNodeClassName({
   hasError,
   isCompleted,
 }: NodeClassNameOptions): string {
-  const baseClasses = "absolute select-none rounded shadow-2xl border cursor-move";
+  const baseClasses = "absolute select-none rounded border cursor-move shadow-[var(--node-shadow)]";
   
   if (selected) {
     return `${baseClasses} border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/50 z-30`;
@@ -40,7 +40,7 @@ export function getNodeClassName({
     return `${baseClasses} border-green-500 ring-1 ring-green-500/30 z-20`;
   }
   
-  return `${baseClasses} border-[#2b2b2b] z-10`;
+  return `${baseClasses} border-[var(--node-border)] z-10`;
 }
 
 /**

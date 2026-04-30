@@ -2,7 +2,6 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 
 export interface ContextMenuState {
   x: number;
@@ -16,7 +15,6 @@ export interface ContextMenuState {
 interface TableContextMenuProps {
   menu: ContextMenuState;
   selectedRowIndices: number[];
-  onStartEdit: (row: number, col: number) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (indices: number[]) => void;
   onRenameColumn: (name: string) => void;
@@ -27,7 +25,7 @@ interface TableContextMenuProps {
 }
 
 export const TableContextMenu: React.FC<TableContextMenuProps> = ({
-  menu, selectedRowIndices, onStartEdit, onAddRow, onDeleteRow,
+  menu, selectedRowIndices, onAddRow, onDeleteRow,
   onRenameColumn, onAddColumn, onDeleteColumn, onClearSelection, onClose,
 }) => {
   const { t } = useTranslation();
@@ -41,10 +39,6 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
     >
       {menu.type === 'cell' && (
         <>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onStartEdit(menu.rowIndex!, menu.colIndex!); onClose(); }}>
-            {t("dataView.editCell")}
-          </Button>
-          <Separator className="my-1" />
           <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
             {t("dataView.insertRowAbove")}
           </Button>

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useRef, useCallback } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
@@ -13,15 +13,12 @@ interface UseEditActionsParams {
   selectedDfId: string | null;
   columns: ColumnMeta[];
   loadedRows: any[][];
+  rowOffset: number;
   reloadAllData: () => Promise<void>;
-  loadColumnStats: (id: string) => Promise<void>;
 }
 
-export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllData, loadColumnStats }: UseEditActionsParams) {
+export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, reloadAllData }: UseEditActionsParams) {
   const editStateByDatabase = useEditStateStore(s => s.editStateByDatabase);
-  const editingCell = useEditStateStore(s => s.editingCell);
-  const [editValue, setEditValue] = useState('');
-  const editInputRef = useRef<HTMLInputElement>(null);
   const commitInFlightRef = useRef(false);
 
   const currentEditState: EditState = selectedDfId
@@ -34,47 +31,33 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
     await reloadAllData();
   }, [selectedDfId, reloadAllData]);
 
-  const startEdit = useCallback((row: number, col: number) => {
-    const val = loadedRows[row]?.[col];
-    setEditValue(val === null || val === undefined ? '' : String(val));
-    useEditStateStore.getState().setEditingCell({ row, col });
-    setTimeout(() => editInputRef.current?.focus(), 0);
-  }, [loadedRows]);
-
-  const commitEdit = useCallback(async () => {
-    if (!selectedDfId || !editingCell) return;
+  const commitCellValue = useCallback(async (row: number, col: number, value: unknown) => {
+    if (!selectedDfId) return;
     if (commitInFlightRef.current) return;
-    const { row, col } = editingCell;
+    const globalRow = rowOffset + row;
     const colName = columns[col]?.name;
     if (!colName) return;
+
     const oldVal = loadedRows[row]?.[col];
     const oldStr = oldVal === null || oldVal === undefined ? '' : String(oldVal);
-    if (editValue === oldStr) {
-      useEditStateStore.getState().clearEditingCell();
-      return;
-    }
+    const nextStr = value === null || value === undefined ? '' : String(value);
+    if (nextStr === oldStr) return;
+
     try {
       commitInFlightRef.current = true;
-      let parsed: unknown = editValue;
-      if (editValue === '') parsed = null;
-      else if (!isNaN(Number(editValue)) && editValue.trim() !== '') parsed = Number(editValue);
-      else parsed = editValue;
-      const es = await DatabaseService.editCell(selectedDfId, row, colName, parsed);
-      useEditStateStore.getState().clearEditingCell();
+      let parsed: unknown = value;
+      if (nextStr === '') parsed = null;
+      else if (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '') parsed = Number(value);
+      const es = await DatabaseService.editCell(selectedDfId, globalRow, colName, parsed);
       await handleEditResult(es);
     } catch (e) {
       const msg = String(e);
       logger.data.error('editCell failed: ' + msg, 'DataViewWindow');
       uiStore.showToast(msg, 'error', 5000);
-      editInputRef.current?.focus();
     } finally {
       commitInFlightRef.current = false;
     }
-  }, [selectedDfId, editingCell, columns, loadedRows, editValue, handleEditResult]);
-
-  const cancelEdit = useCallback(() => {
-    useEditStateStore.getState().clearEditingCell();
-  }, []);
+  }, [selectedDfId, columns, loadedRows, rowOffset, handleEditResult]);
 
   const handleUndo = useCallback(async () => {
     if (!selectedDfId || !currentEditState.canUndo) return;
@@ -97,9 +80,21 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
     try {
       const es = await DatabaseService.resetDatabase(selectedDfId);
       await handleEditResult(es);
-      await loadColumnStats(selectedDfId);
     } catch (e) { logger.data.error('reset failed: ' + String(e), 'DataViewWindow'); }
-  }, [selectedDfId, currentEditState.isModified, handleEditResult, loadColumnStats]);
+  }, [selectedDfId, currentEditState.isModified, handleEditResult]);
+
+  const handleSave = useCallback(async () => {
+    if (!selectedDfId || !currentEditState.isModified) return;
+    try {
+      const es = await DatabaseService.saveDatabaseChanges(selectedDfId);
+      await handleEditResult(es);
+      uiStore.showToast('数据修改已保存', 'success', 3000);
+    } catch (e) {
+      const msg = String(e);
+      logger.data.error('save changes failed: ' + msg, 'DataViewWindow');
+      uiStore.showToast(msg, 'error', 5000);
+    }
+  }, [selectedDfId, currentEditState.isModified, handleEditResult]);
 
   const handleExport = useCallback(async () => {
     if (!selectedDfId) return;
@@ -120,18 +115,19 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
   const handleAddRow = useCallback(async (index?: number) => {
     if (!selectedDfId) return;
     try {
-      const es = await DatabaseService.addRow(selectedDfId, index);
+      const globalIndex = index === undefined ? undefined : rowOffset + index;
+      const es = await DatabaseService.addRow(selectedDfId, globalIndex);
       await handleEditResult(es);
     } catch (e) { logger.data.error('addRow failed: ' + String(e), 'DataViewWindow'); }
-  }, [selectedDfId, handleEditResult]);
+  }, [selectedDfId, rowOffset, handleEditResult]);
 
   const handleDeleteRow = useCallback(async (indices: number[]) => {
     if (!selectedDfId || indices.length === 0) return;
     try {
-      const es = await DatabaseService.deleteRows(selectedDfId, indices);
+      const es = await DatabaseService.deleteRows(selectedDfId, indices.map((index) => rowOffset + index));
       await handleEditResult(es);
     } catch (e) { logger.data.error('deleteRows failed: ' + String(e), 'DataViewWindow'); }
-  }, [selectedDfId, handleEditResult]);
+  }, [selectedDfId, rowOffset, handleEditResult]);
 
   const handleAddColumn = useCallback(async () => {
     if (!selectedDfId) return;
@@ -191,7 +187,6 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-      await loadColumnStats(selectedDfId);
     } catch (e) {
       const msg = String(e);
       const force = await uiStore.confirm({
@@ -206,7 +201,6 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
           await handleEditResult(es);
           const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
           useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-          await loadColumnStats(selectedDfId);
         } catch (e2) {
           const forceError = String(e2);
           logger.data.error('castColumn force failed: ' + forceError, 'DataViewWindow');
@@ -214,19 +208,14 @@ export function useEditActions({ selectedDfId, columns, loadedRows, reloadAllDat
         }
       }
     }
-  }, [selectedDfId, handleEditResult, loadColumnStats]);
+  }, [selectedDfId, handleEditResult]);
 
   return {
-    editingCell,
-    editValue,
-    setEditValue,
-    editInputRef,
     currentEditState,
-    startEdit,
-    commitEdit,
-    cancelEdit,
+    commitCellValue,
     handleUndo,
     handleRedo,
+    handleSave,
     handleReset,
     handleExport,
     handleAddRow,

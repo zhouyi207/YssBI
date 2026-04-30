@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload } from "react-icons/vsc";
+import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload, VscChevronRight } from "react-icons/vsc";
 import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
 import { OverlayScrollbar } from "./OverlayScrollbar";
@@ -12,33 +11,34 @@ import { OverlayScrollbar } from "./OverlayScrollbar";
 type ImportTypeConfig = {
   id: ImportDataSourceType;
   label: string;
+  description: string;
   icon: React.ReactNode;
-  color: string;
+  tone: string;
   comingSoon: boolean;
 };
 
 type CategoryId = "file" | "sql" | "other";
 
-const CATEGORIES: { id: CategoryId; label: string; icon: React.ReactNode; color: string }[] = [
-  { id: "file", label: "文件", icon: <VscFile className="text-green-500" size={20} />, color: "bg-green-500/20" },
-  { id: "sql", label: "SQL 数据库", icon: <BsDatabaseFill className="text-blue-500" size={20} />, color: "bg-blue-500/20" },
-  { id: "other", label: "其他", icon: <VscCloudDownload className="text-purple-500" size={20} />, color: "bg-purple-500/20" },
+const CATEGORIES: { id: CategoryId; label: string; icon: React.ReactNode; tone: string }[] = [
+  { id: "file", label: "文件", icon: <VscFile size={17} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300" },
+  { id: "sql", label: "SQL 数据库", icon: <BsDatabaseFill size={16} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300" },
+  { id: "other", label: "其他", icon: <VscCloudDownload size={17} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300" },
 ];
 
 const FILE_TYPES: ImportTypeConfig[] = [
-  { id: "csv", label: "CSV", icon: <VscFile className="text-green-500" size={24} />, color: "bg-green-500/10", comingSoon: false },
-  { id: "xlsx", label: "Excel", icon: <VscTable className="text-emerald-500" size={24} />, color: "bg-emerald-500/10", comingSoon: false },
+  { id: "csv", label: "CSV", description: "导入逗号分隔文本数据", icon: <VscFile size={22} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300", comingSoon: false },
+  { id: "xlsx", label: "Excel", description: "导入 Excel 工作簿或表格", icon: <VscTable size={22} />, tone: "text-green-600 bg-green-500/10 dark:text-green-300", comingSoon: false },
 ];
 
 const SQL_TYPES: ImportTypeConfig[] = [
-  { id: "sqlite", label: "SQLite", icon: <BsDatabaseFill className="text-blue-500" size={24} />, color: "bg-blue-500/10", comingSoon: false },
-  { id: "postgres", label: "PostgreSQL", icon: <BsDatabaseFill className="text-cyan-500" size={24} />, color: "bg-cyan-500/10", comingSoon: false },
-  { id: "mysql", label: "MySQL", icon: <BsDatabaseFill className="text-orange-500" size={24} />, color: "bg-orange-500/10", comingSoon: false },
-  { id: "mariadb", label: "MariaDB", icon: <BsDatabaseFill className="text-amber-500" size={24} />, color: "bg-amber-500/10", comingSoon: false },
+  { id: "sqlite", label: "SQLite", description: "连接本地 SQLite 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300", comingSoon: false },
+  { id: "postgres", label: "PostgreSQL", description: "连接 PostgreSQL 服务", icon: <BsDatabaseFill size={21} />, tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300", comingSoon: false },
+  { id: "mysql", label: "MySQL", description: "连接 MySQL 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300", comingSoon: false },
+  { id: "mariadb", label: "MariaDB", description: "连接 MariaDB 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300", comingSoon: false },
 ];
 
 const OTHER_TYPES: ImportTypeConfig[] = [
-  { id: "api", label: "REST API", icon: <VscCloudDownload className="text-purple-500" size={24} />, color: "bg-purple-500/10", comingSoon: true },
+  { id: "api", label: "REST API", description: "从远程接口拉取数据", icon: <VscCloudDownload size={22} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300", comingSoon: true },
 ];
 
 const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
@@ -59,32 +59,34 @@ function TypeOptionButton({
   const { t } = useTranslation();
 
   return (
-    <Button
+    <button
       type="button"
-      variant="outline"
+      disabled={type.comingSoon}
       onClick={() => {
         onSelect(type.id);
         if (!type.comingSoon) onClose();
       }}
-      className={`group h-auto flex-col items-center gap-2 p-3 ${
+      className={`group flex h-12 w-full items-center gap-3 rounded-md px-2.5 text-left transition-colors ${
         type.comingSoon
-          ? "cursor-default opacity-55"
-          : "hover:border-[var(--accent-color)] hover:bg-white/5"
+          ? "cursor-default opacity-50"
+          : "hover:bg-[var(--interactive-hover)]"
       }`}
       title={type.comingSoon ? t("importModal.comingSoon") : undefined}
     >
       <div
-        className={`flex items-center justify-center w-12 h-12 rounded-full ${type.color} transition-transform ${
-          !type.comingSoon && "group-hover:scale-110"
-        }`}
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${type.tone}`}
       >
         {type.icon}
       </div>
-      <span className={`text-[11px] font-bold uppercase tracking-tight ${type.comingSoon ? "text-muted-foreground" : "text-gray-300 group-hover:text-white"}`}>
-        {type.label}
-        {type.comingSoon && <Badge variant="outline" className="mt-1 block w-fit">{t("importModal.developing")}</Badge>}
-      </span>
-    </Button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium text-foreground">{type.label}</span>
+          {type.comingSoon && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{t("importModal.developing")}</Badge>}
+        </div>
+        <p className="truncate text-[11px] text-muted-foreground">{type.description}</p>
+      </div>
+      {!type.comingSoon && <VscChevronRight className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent-color)]" size={16} />}
+    </button>
   );
 }
 
@@ -95,42 +97,48 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="h-[340px] max-w-[460px]">
+      <DialogContent className="h-[332px] max-w-[520px]">
         <DialogHeader className="shrink-0 border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
-            <DialogTitle className="flex items-center gap-2">
-              <VscDatabase className="text-blue-400" size={18} /> {t("importModal.title")}
-            </DialogTitle>
+            <div>
+              <DialogTitle className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--accent-color)]/12 text-[var(--accent-color)]">
+                  <VscDatabase size={17} />
+                </span>
+                {t("importModal.title")}
+              </DialogTitle>
+            </div>
             <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
               <VscClose size={20} />
             </Button>
           </div>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
-          <Card className="w-[132px] shrink-0 rounded-none border-0 border-r border-border bg-muted/20">
-            <CardContent className="flex flex-col gap-1 p-2">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 gap-1 border-b border-border px-3 py-2">
             {CATEGORIES.map((cat) => (
-              <Button
+              <button
                 key={cat.id}
                 type="button"
-                variant={selectedCategory === cat.id ? "secondary" : "ghost"}
                 onClick={() => setSelectedCategory(cat.id)}
-                className="h-auto justify-start gap-2 px-2 py-2"
+                className={`flex h-8 items-center gap-2 rounded-md px-2.5 text-left transition-colors ${
+                  selectedCategory === cat.id
+                    ? "bg-[var(--interactive-active)] text-foreground"
+                    : "text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground"
+                }`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cat.color}`}>
+                <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded ${cat.tone}`}>
                   {cat.icon}
                 </div>
-                <span className="text-[11px] font-medium truncate">{t(`importModal.categories.${cat.id}`)}</span>
-              </Button>
+                <span className="truncate text-[12px] font-medium">{t(`importModal.categories.${cat.id}`)}</span>
+              </button>
             ))}
-            </CardContent>
-          </Card>
+          </div>
 
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="flex h-[232px] min-w-0 flex-col overflow-hidden">
             <OverlayScrollbar className="h-full">
-              <div className="p-4">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="p-2">
+                <div className="space-y-1">
                   {types.map((type) => (
                     <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
                   ))}

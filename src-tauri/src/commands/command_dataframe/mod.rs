@@ -232,6 +232,15 @@ pub fn reset_database(state: State<ProjectState>, id: String) -> Result<serde_js
 }
 
 #[tauri::command]
+pub fn save_database_changes(
+    state: State<ProjectState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let edit_state = state.with_database_mut(&id, |db| db.save_changes())?;
+    serde_json::to_value(edit_state).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn export_database(
     state: State<ProjectState>,
     id: String,

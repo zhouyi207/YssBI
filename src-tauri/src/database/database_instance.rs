@@ -294,6 +294,23 @@ impl DatabaseInstance {
         }
     }
 
+    pub fn save_changes(&mut self) -> Result<EditState, String> {
+        self.ensure_loaded().map_err(|e| e.to_string())?;
+
+        match &mut self.state {
+            DatabaseState::Loaded {
+                dataframe,
+                original,
+                history,
+            } => {
+                *original = dataframe.clone();
+                history.clear();
+                Ok(history.state())
+            }
+            _ => Err("Database not loaded".into()),
+        }
+    }
+
     pub fn edit_state(&self) -> EditState {
         match &self.state {
             DatabaseState::Loaded { history, .. } => history.state(),

@@ -164,6 +164,7 @@ pub fn run() {
             undo_edit,
             redo_edit,
             reset_database,
+            save_database_changes,
             export_database,
             get_edit_state,
             // ==================== 假设检验 ====================

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
@@ -17,10 +17,6 @@ import {
   VscDiscard,
   VscRedo,
   VscFolder,
-  VscNewFolder,
-  VscEdit,
-  VscTrash,
-  VscCopy,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useHistoryStore } from "@/features/core/history";
@@ -32,10 +28,22 @@ import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ContextMenu, type ContextMenuSection } from "@/views/EditorView/ContextMenu/ContextMenu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ContextMenu } from "@/shared/ui/contextMenu";
 import { GraphService } from "@/services/graph/graphService";
 import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
+import {
+  buildSidebarContextMenuSections,
+  useSidebarContextMenu,
+  type GraphResourceType,
+} from "./sidebarContextMenu";
 
 /**
  * 可拖拽的侧边栏项 — 整行可拖拽。
@@ -275,8 +283,6 @@ const CollapsibleSection = ({
   );
 };
 
-type GraphResourceType = "event" | "function";
-
 interface GraphFolderDropTarget {
   graphType: GraphResourceType;
   folderPath: string;
@@ -364,21 +370,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const listRef = useRef<HTMLDivElement>(null);
   const graphFolders = useGraphMetaStore((s) => s.graphFolders);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    target:
-      | { type: "graph"; id: string; name: string; graphType: GraphResourceType; folderPath?: string }
-      | { type: "folder"; graphType: GraphResourceType; folderPath: string; name: string }
-      | { type: "section"; graphType: GraphResourceType; folderPath?: string }
-      | { type: "variable"; id: string; name: string };
-  } | null>(null);
-  const [inputDialog, setInputDialog] = useState<{
-    title: string;
-    value: string;
-    submitLabel?: string;
-    onSubmit: (value: string) => void | Promise<void>;
-  } | null>(null);
+  const {
+    contextMenu,
+    closeContextMenu,
+    openContextMenu,
+    inputDialog,
+    setInputDialog,
+    openInputDialog,
+    submitInputDialog,
+  } = useSidebarContextMenu();
 
   const activeEditorNode = useLayoutStore((s) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
@@ -388,23 +388,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const refreshProjectIndex = useCallback(async () => {
     await useProjectIOStore.getState().syncFromBackend();
   }, []);
-
-  const openInputDialog = useCallback((
-    title: string,
-    value: string,
-    onSubmit: (value: string) => void | Promise<void>,
-    submitLabel = "OK"
-  ) => {
-    setInputDialog({ title, value, onSubmit, submitLabel });
-  }, []);
-
-  const submitInputDialog = useCallback(async () => {
-    if (!inputDialog) return;
-    const value = inputDialog.value.trim();
-    if (!value) return;
-    await inputDialog.onSubmit(value);
-    setInputDialog(null);
-  }, [inputDialog]);
 
   // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
   const { Variables: globalVariables, graphScopeVariables } = (() => {
@@ -488,15 +471,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, graphVarsCount, dataframesCount]);
 
-  const openContextMenu = useCallback((
-    e: React.MouseEvent,
-    target: NonNullable<typeof contextMenu>["target"]
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, target });
-  }, []);
-
   const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
     if (type === "event") {
       await GraphService.createEvent("New Event", folderPath);
@@ -556,78 +530,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     }, "Rename");
   }, [openInputDialog, updateVariable]);
 
-  const buildContextMenuSections = useCallback((): ContextMenuSection[] => {
-    if (!contextMenu) return [];
-    const target = contextMenu.target;
-    if (target.type === "graph") {
-      return [
-        {
-          items: [
-            { id: "open", label: "Open", icon: <VscChevronRight size={12} />, onClick: () => openGraph(target.id, target.name, target.graphType) },
-            { id: "rename", label: "Rename", icon: <VscEdit size={12} />, onClick: () => renameGraphItem(target.id, target.name, target.graphType) },
-            { id: "duplicate", label: "Duplicate", icon: <VscCopy size={12} />, onClick: () => void duplicateGraphItem(target.id) },
-          ],
-        },
-        {
-          items: [
-            { id: "delete", label: "Delete", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteGraphItem(target.id, target.graphType) },
-          ],
-        },
-      ];
-    }
-    if (target.type === "folder") {
-      return [
-        {
-          items: [
-            { id: "new-graph", label: target.graphType === "event" ? "New Event" : "New Function", icon: <VscAdd size={12} />, onClick: () => void createGraphInFolder(target.graphType, target.folderPath) },
-            { id: "new-folder", label: "New Folder", icon: <VscNewFolder size={12} />, onClick: () => createFolderInFolder(target.graphType, target.folderPath) },
-            { id: "rename-folder", label: "Rename Folder", icon: <VscEdit size={12} />, onClick: () => renameFolderItem(target.graphType, target.folderPath, target.name) },
-          ],
-        },
-        {
-          items: [
-            { id: "delete-folder", label: "Delete Folder", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteFolderItem(target.graphType, target.folderPath) },
-          ],
-        },
-      ];
-    }
-    if (target.type === "section") {
-      return [
-        {
-          items: [
-            { id: "new-graph", label: target.graphType === "event" ? "New Event" : "New Function", icon: <VscAdd size={12} />, onClick: () => void createGraphInFolder(target.graphType, target.folderPath ?? "") },
-            { id: "new-folder", label: "New Folder", icon: <VscNewFolder size={12} />, onClick: () => createFolderInFolder(target.graphType, target.folderPath ?? "") },
-          ],
-        },
-      ];
-    }
-    return [
-      {
-        items: [
-          { id: "new-variable", label: "New Variable", icon: <VscAdd size={12} />, onClick: () => void addVariable("New Variable", "Int32", false) },
-          { id: "rename-variable", label: "Rename", icon: <VscEdit size={12} />, onClick: () => renameVariableItem(target.id, target.name) },
-        ],
-      },
-      {
-        items: [
-          { id: "delete-variable", label: "Delete", icon: <VscTrash size={12} />, danger: true, onClick: () => void deleteVariable(target.id) },
-        ],
-      },
-    ];
-  }, [
-    addVariable,
-    contextMenu,
-    createFolderInFolder,
-    createGraphInFolder,
-    deleteFolderItem,
-    deleteGraphItem,
-    deleteVariable,
-    duplicateGraphItem,
+  const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
-    renameFolderItem,
+    createGraphInFolder,
+    createFolderInFolder,
     renameGraphItem,
+    deleteGraphItem,
+    duplicateGraphItem,
+    renameFolderItem,
+    deleteFolderItem,
+    addVariable,
     renameVariableItem,
-  ]);
+    deleteVariable,
+  });
 
   const renderItem = (
     id: string,
@@ -1031,41 +946,45 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       {contextMenu && (
         <ContextMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}
-          sections={buildContextMenuSections()}
-          onClose={() => setContextMenu(null)}
+          sections={contextMenuSections}
+          onClose={closeContextMenu}
         />
       )}
-      {inputDialog && (
-        <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40"
-          onPointerDown={() => setInputDialog(null)}
-        >
-          <div
-            className="w-[280px] border border-border bg-[var(--workbench-bg)] p-3 shadow-xl"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 text-[12px] font-medium text-gray-300">{inputDialog.title}</div>
+      <Dialog open={!!inputDialog} onOpenChange={(open) => !open && setInputDialog(null)}>
+        {inputDialog && (
+          <DialogContent className="max-w-[320px]">
+            <DialogHeader className="border-b border-border bg-muted/20">
+              <DialogTitle>{inputDialog.title}</DialogTitle>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitInputDialog();
+              }}
+            >
+              <div className="px-5 py-4">
             <Input
               autoFocus
               value={inputDialog.value}
               onChange={(e) => setInputDialog({ ...inputDialog, value: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void submitInputDialog();
                 if (e.key === "Escape") setInputDialog(null);
               }}
               className="h-8 text-xs"
             />
-            <div className="mt-3 flex justify-end gap-2">
+              </div>
+            <DialogFooter>
               <Button type="button" variant="ghost" size="sm" onClick={() => setInputDialog(null)}>
                 Cancel
               </Button>
-              <Button type="button" size="sm" onClick={() => void submitInputDialog()}>
+              <Button type="submit" size="sm">
                 {inputDialog.submitLabel ?? "OK"}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogFooter>
+            </form>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 });
