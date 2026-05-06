@@ -190,6 +190,7 @@
 
 - [x] 修复 dataView 界面
 - [x] 修复多窗口主题变化时其他窗口没有反应
+- [ ] Residuals vs Fitted 感觉可以切换数值显示为进度条
 
 # TODOLIST
 
