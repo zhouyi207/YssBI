@@ -125,13 +125,13 @@ export function useGraphData(activeTabId: string | null) {
  * - 如果已经 Ready，直接返回当前数据
  */
 export async function initProjectSync(): Promise<ProjectData | null> {
-  const { status, syncFromBackend, exportSnapshot } = useProjectIOStore.getState();
+  const { status, loadProject, exportSnapshot } = useProjectIOStore.getState();
 
   if (status === LoadStatus.Ready) {
     return exportSnapshot();
   }
 
-  return await syncFromBackend();
+  return await loadProject();
 }
 
 /**

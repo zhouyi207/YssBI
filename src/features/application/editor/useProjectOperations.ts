@@ -54,7 +54,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       const result = await ProjectService.loadProjectToState();
       if (!result) return; // 用户取消选择文件
 
-      const projectData = await useProjectIOStore.getState().syncFromBackend();
+      const projectData = await useProjectIOStore.getState().loadProject();
       if (!projectData) {
         uiStore.showToast("加载项目失败", "error", 3000);
         return;

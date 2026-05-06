@@ -22,6 +22,8 @@ export function useAppInitialization(): InitializationState {
 
     // 监听依赖状态变化
     useEffect(() => {
+        let cancelled = false;
+
         // 如果已经同步过项目，直接标记完成
         if (hasRestoredProjectRef.current) {
             setState({ status: LoadStatus.Ready, error: null });
@@ -52,9 +54,11 @@ export function useAppInitialization(): InitializationState {
         const syncProject = async () => {
             try {
                 await initProjectSync();
+                if (cancelled) return;
                 hasRestoredProjectRef.current = true;
                 setState({ status: LoadStatus.Ready, error: null });
             } catch (error) {
+                if (cancelled) return;
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 logger.sys.error('Failed to sync project: ' + errorMessage, 'AppInit');
                 setState({
@@ -65,6 +69,10 @@ export function useAppInitialization(): InitializationState {
         };
 
         syncProject();
+
+        return () => {
+            cancelled = true;
+        };
     }, [isSchemaReady, schemaError, schemaStatus, state.error]);
 
     return state;

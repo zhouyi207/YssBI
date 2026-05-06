@@ -301,7 +301,7 @@ export class ProjectService {
 
     /**
      * 从文件加载项目到状态管理器
-     * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 syncFromBackend 同步
+     * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
     static async loadProjectToState(path?: string): Promise<{ path: string } | null> {
         try {

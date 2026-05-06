@@ -75,14 +75,6 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
     } catch (e) { logger.data.error('redo failed: ' + String(e), 'DataViewWindow'); }
   }, [selectedDfId, currentEditState.canRedo, handleEditResult]);
 
-  const handleReset = useCallback(async () => {
-    if (!selectedDfId || !currentEditState.isModified) return;
-    try {
-      const es = await DatabaseService.resetDatabase(selectedDfId);
-      await handleEditResult(es);
-    } catch (e) { logger.data.error('reset failed: ' + String(e), 'DataViewWindow'); }
-  }, [selectedDfId, currentEditState.isModified, handleEditResult]);
-
   const handleSave = useCallback(async () => {
     if (!selectedDfId || !currentEditState.isModified) return;
     try {
@@ -216,7 +208,6 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
     handleUndo,
     handleRedo,
     handleSave,
-    handleReset,
     handleExport,
     handleAddRow,
     handleDeleteRow,

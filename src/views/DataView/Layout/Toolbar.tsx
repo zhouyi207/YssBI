@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { VscChevronLeft, VscChevronRight, VscRefresh, VscDiscard, VscExport, VscSave } from 'react-icons/vsc';
+import { VscChevronLeft, VscChevronRight, VscRefresh } from 'react-icons/vsc';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -13,7 +13,8 @@ interface ToolbarProps {
   pageSize: number;
   totalPages: number;
   lastFetchMs: number | null;
-  hasSelection: boolean;
+  /** 当前是否有打开的 DataFrame（用于导出等，与单元格是否选中无关） */
+  exportEnabled: boolean;
   currentEditState: EditState;
   onPreviousPage: () => void;
   onNextPage: () => void;
@@ -21,13 +22,12 @@ interface ToolbarProps {
   onSave: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onReset: () => void;
   onExport: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
-  loading, totalRowCount, columnCount, pageIndex, pageSize, totalPages, lastFetchMs, hasSelection,
-  currentEditState, onPreviousPage, onNextPage, onRefresh, onSave, onUndo, onRedo, onReset, onExport,
+  loading, totalRowCount, columnCount, pageIndex, pageSize, totalPages, lastFetchMs, exportEnabled,
+  currentEditState, onPreviousPage, onNextPage, onRefresh, onSave, onUndo, onRedo, onExport,
 }) => {
   const { t } = useTranslation();
   const pageStart = totalRowCount === 0 ? 0 : pageIndex * pageSize + 1;
@@ -40,11 +40,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <Button type="button" variant="ghost" size="icon-sm" onClick={onRefresh} title={t("common.refresh")}>
         <VscRefresh className={loading ? 'animate-spin' : ''} size={15} />
       </Button>
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onSave} disabled={!currentEditState.isModified} title="保存">
-        <VscSave size={15} />
-      </Button>
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onReset} disabled={!currentEditState.isModified} title={t("dataView.resetToOriginal")}>
-        <VscDiscard size={15} />
+      <Button type="button" variant="ghost" size="icon-sm" onClick={onSave} disabled={!currentEditState.isModified} title={t("common.save")}>
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
+        </svg>
       </Button>
       <Separator orientation="vertical" className="h-4" />
       <Button type="button" variant="ghost" size="icon-sm" onClick={onUndo} disabled={!currentEditState.canUndo} title={`${t("common.undo")} (Ctrl+Z)`}>
@@ -54,8 +55,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 000 8h6" /><path d="M21 10l-4-4M21 10l-4 4" /></svg>
       </Button>
       <Separator orientation="vertical" className="h-4" />
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onExport} disabled={!hasSelection} title={t("common.export")}>
-        <VscExport size={15} />
+      <Button type="button" variant="ghost" size="icon-sm" onClick={onExport} disabled={!exportEnabled} title={t("common.export")}>
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
       </Button>
     </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { subscribeClientSettingsCrossWindow, useSettingsStore } from "@/features/core/settings/settingsStore";
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const theme = useSettingsStore((s) => s.theme);
@@ -10,6 +10,18 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+        void subscribeClientSettingsCrossWindow().then((fn) => {
+            if (!cancelled) unlisten = fn;
+        });
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, []);
 
     useEffect(() => {
         if (i18n.language !== language) {

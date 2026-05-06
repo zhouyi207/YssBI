@@ -58,7 +58,7 @@ function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
 
 export function useProjectPicker() {
   const navigate = useNavigate();
-  const syncFromBackend = useProjectIOStore((state) => state.syncFromBackend);
+  const loadProject = useProjectIOStore((state) => state.loadProject);
   const currentPath = useProjectIOStore((state) => state.currentPath);
   const [projects, setProjects] = useState<ManagedProject[]>([]);
   const [busy, setBusy] = useState<BusyState>("idle");
@@ -117,7 +117,7 @@ export function useProjectPicker() {
     setBusy("new");
     try {
       const row = await ProjectService.createProject(name, path);
-      await syncFromBackend();
+      await loadProject();
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
@@ -128,7 +128,7 @@ export function useProjectPicker() {
     } finally {
       setBusy("idle");
     }
-  }, [navigate, syncFromBackend]);
+  }, [navigate, loadProject]);
 
   const openProjectFromDisk = useCallback(async () => {
     setBusy("open");
@@ -136,7 +136,7 @@ export function useProjectPicker() {
       const result = await ProjectService.loadProjectToState();
       if (!result) return;
       const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-      await syncFromBackend();
+      await loadProject();
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
@@ -147,7 +147,7 @@ export function useProjectPicker() {
     } finally {
       setBusy("idle");
     }
-  }, [navigate, syncFromBackend]);
+  }, [navigate, loadProject]);
 
   const openRecentProject = useCallback(async (path: string) => {
     setBusy("open");
@@ -155,7 +155,7 @@ export function useProjectPicker() {
       const result = await ProjectService.loadProjectToState(path);
       if (!result) return;
       const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-      await syncFromBackend();
+      await loadProject();
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
@@ -166,7 +166,7 @@ export function useProjectPicker() {
     } finally {
       setBusy("idle");
     }
-  }, [navigate, syncFromBackend]);
+  }, [navigate, loadProject]);
 
   const removeProject = useCallback((id: string) => {
     void (async () => {

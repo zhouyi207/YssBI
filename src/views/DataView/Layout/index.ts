@@ -1,4 +1,3 @@
 export { TitleBar } from './TitleBar';
+export type { DataframeOption } from './TitleBar';
 export { Toolbar } from './Toolbar';
-export { DataTabs } from './DataTabs';
-export type { DataframeOption } from './DataTabs';

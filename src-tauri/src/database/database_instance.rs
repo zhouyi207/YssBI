@@ -279,21 +279,6 @@ impl DatabaseInstance {
         Ok(history.state())
     }
 
-    pub fn reset_to_original(&mut self) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe,
-                original,
-                history,
-            } => {
-                *dataframe = original.clone();
-                history.clear();
-                Ok(history.state())
-            }
-            _ => Err("Database not loaded".into()),
-        }
-    }
-
     pub fn save_changes(&mut self) -> Result<EditState, String> {
         self.ensure_loaded().map_err(|e| e.to_string())?;
 

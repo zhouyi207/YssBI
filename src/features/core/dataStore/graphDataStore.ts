@@ -699,9 +699,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         const links = pinObj && Array.isArray(pinObj.links)
           ? pinObj.links
           : (state.pinConnections[pinId] ?? []).map((cid) => {
-              const conn = state.connections[cid];
-              return conn?.from === pinId ? conn?.to : conn?.from;
-            }).filter(Boolean);
+            const conn = state.connections[cid];
+            return conn?.from === pinId ? conn?.to : conn?.from;
+          }).filter(Boolean);
         links.forEach((toId) => connectionItems.push({ fromPin: pinId, toPin: toId }));
       });
 

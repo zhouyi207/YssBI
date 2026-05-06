@@ -54,14 +54,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[200] min-w-[190px] overflow-hidden rounded-lg border border-border bg-popover/95 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 backdrop-blur-md dark:shadow-black/45"
+      className="fixed z-[200] min-w-[190px] overflow-hidden rounded-sm border border-border bg-popover/95 py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 backdrop-blur-md dark:shadow-black/45"
       style={{ left: position.x, top: position.y }}
       onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       {sections.map((section, sectionIdx) => (
         <React.Fragment key={sectionIdx}>
           {sectionIdx > 0 && (
-            <div className="my-1 h-px bg-[var(--sidebar-divider)]" />
+            <div className="my-0 h-px bg-[var(--sidebar-divider)]" />
           )}
           {section.items.map((item) => (
             <button

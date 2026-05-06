@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ContextMenu, type ContextMenuSection } from '@/shared/ui/contextMenu';
 
 export interface ContextMenuState {
   x: number;
@@ -25,69 +24,131 @@ interface TableContextMenuProps {
 }
 
 export const TableContextMenu: React.FC<TableContextMenuProps> = ({
-  menu, selectedRowIndices, onAddRow, onDeleteRow,
-  onRenameColumn, onAddColumn, onDeleteColumn, onClearSelection, onClose,
+  menu,
+  selectedRowIndices,
+  onAddRow,
+  onDeleteRow,
+  onRenameColumn,
+  onAddColumn,
+  onDeleteColumn,
+  onClearSelection,
+  onClose,
 }) => {
   const { t } = useTranslation();
-  const multiRow = selectedRowIndices.length > 1 && menu.rowIndex !== undefined && selectedRowIndices.includes(menu.rowIndex);
+
+  const multiRow =
+    selectedRowIndices.length > 1
+    && menu.rowIndex !== undefined
+    && selectedRowIndices.includes(menu.rowIndex);
+
+  const sections = useMemo((): ContextMenuSection[] => {
+    if ((menu.type === 'cell' || menu.type === 'row') && menu.rowIndex !== undefined) {
+      const r = menu.rowIndex;
+      return [
+        {
+          items: [
+            {
+              id: 'insert-above',
+              label: t('dataView.insertRowAbove'),
+              onClick: () => {
+                void onAddRow(r);
+              },
+            },
+            {
+              id: 'insert-below',
+              label: t('dataView.insertRowBelow'),
+              onClick: () => {
+                void onAddRow(r + 1);
+              },
+            },
+          ],
+        },
+        {
+          items: [
+            multiRow
+              ? {
+                  id: 'delete-rows',
+                  label: t('dataView.deleteRows', { count: selectedRowIndices.length }),
+                  danger: true,
+                  onClick: () => {
+                    void onDeleteRow(selectedRowIndices);
+                    onClearSelection();
+                  },
+                }
+              : {
+                  id: 'delete-row',
+                  label: t('dataView.deleteRow'),
+                  danger: true,
+                  onClick: () => {
+                    void onDeleteRow([r]);
+                  },
+                },
+          ],
+        },
+      ];
+    }
+
+    if (menu.type === 'header' && menu.colName) {
+      const name = menu.colName;
+      return [
+        {
+          items: [
+            {
+              id: 'rename',
+              label: t('dataView.renameColumn'),
+              onClick: () => {
+                void onRenameColumn(name);
+              },
+            },
+            {
+              id: 'add-column',
+              label: t('dataView.addColumn'),
+              onClick: () => {
+                void onAddColumn();
+              },
+            },
+          ],
+        },
+        {
+          items: [
+            {
+              id: 'delete-column',
+              label: t('dataView.deleteColumn', { name }),
+              danger: true,
+              onClick: () => {
+                void onDeleteColumn(name);
+              },
+            },
+          ],
+        },
+      ];
+    }
+
+    return [];
+  }, [
+    menu.type,
+    menu.rowIndex,
+    menu.colName,
+    multiRow,
+    selectedRowIndices,
+    t,
+    onAddRow,
+    onDeleteRow,
+    onRenameColumn,
+    onAddColumn,
+    onDeleteColumn,
+    onClearSelection,
+  ]);
+
+  if (sections.length === 0) {
+    return null;
+  }
 
   return (
-    <Card
-      className="fixed z-[100] min-w-[160px] py-1 select-none shadow-xl"
-      style={{ left: menu.x, top: menu.y }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {menu.type === 'cell' && (
-        <>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
-            {t("dataView.insertRowAbove")}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
-            {t("dataView.insertRowBelow")}
-          </Button>
-          {multiRow ? (
-            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
-              {t("dataView.deleteRows", { count: selectedRowIndices.length })}
-            </Button>
-          ) : (
-            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
-              {t("dataView.deleteRow")}
-            </Button>
-          )}
-        </>
-      )}
-      {menu.type === 'row' && (
-        <>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex!); onClose(); }}>
-            {t("dataView.insertRowAbove")}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddRow(menu.rowIndex! + 1); onClose(); }}>
-            {t("dataView.insertRowBelow")}
-          </Button>
-          {multiRow ? (
-            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow(selectedRowIndices); onClearSelection(); onClose(); }}>
-              {t("dataView.deleteRows", { count: selectedRowIndices.length })}
-            </Button>
-          ) : (
-            <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteRow([menu.rowIndex!]); onClose(); }}>
-              {t("dataView.deleteRow")}
-            </Button>
-          )}
-        </>
-      )}
-      {menu.type === 'header' && (
-        <>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onRenameColumn(menu.colName!); onClose(); }}>
-            {t("dataView.renameColumn")}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onAddColumn(); onClose(); }}>
-            {t("dataView.addColumn")}
-          </Button>
-          <Button type="button" variant="destructive" size="sm" className="h-auto w-full justify-start rounded-none px-3 py-1.5 text-[11px]" onClick={() => { onDeleteColumn(menu.colName!); onClose(); }}>
-            {t("dataView.deleteColumn", { name: menu.colName })}
-          </Button>
-        </>
-      )}
-    </Card>
+    <ContextMenu
+      position={{ x: menu.x, y: menu.y }}
+      sections={sections}
+      onClose={onClose}
+    />
   );
 };

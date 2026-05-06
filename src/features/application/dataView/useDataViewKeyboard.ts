@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { SelectionRange } from './useSelection';
+import type { GridSelection } from '@glideapps/glide-data-grid';
+import { isEmptyGridSelection } from './useSelection';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { isAppModalOpen } from '@/features/core/keyboard';
 
@@ -10,7 +11,7 @@ interface UseDataViewKeyboardParams {
   selectAll: () => void;
   clearSelection: () => void;
   dismissContextMenu: () => void;
-  selection: SelectionRange | null;
+  selection: GridSelection | null;
   selectedRowIndices: () => number[];
 }
 
@@ -51,7 +52,7 @@ export function useDataViewKeyboard(params: UseDataViewKeyboardParams) {
         dismissContextMenu(); clearSelection();
       } else if (e.ctrlKey && e.key === 'a') {
         e.preventDefault(); selectAll();
-      } else if (e.key === 'Delete' && selection) {
+      } else if (e.key === 'Delete' && !isEmptyGridSelection(selection)) {
         const rows = selectedRowIndices();
         if (rows.length > 0) { e.preventDefault(); handleDeleteRow(rows); clearSelection(); }
       }

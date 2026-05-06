@@ -163,7 +163,6 @@ pub fn run() {
             rename_column,
             undo_edit,
             redo_edit,
-            reset_database,
             save_database_changes,
             export_database,
             get_edit_state,

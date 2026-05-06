@@ -187,7 +187,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
       if (targetType === sidebarResource.type && targetFolderPath !== currentFolderPath) {
         void GraphService.moveGraphToFolder(sidebarResource.id, targetFolderPath)
-          .then(() => useProjectIOStore.getState().syncFromBackend())
+          .then(() => useProjectIOStore.getState().loadProject())
           .catch((error) => toast.error(error instanceof Error ? error.message : String(error)));
       }
       return;

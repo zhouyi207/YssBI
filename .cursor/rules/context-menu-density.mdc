@@ -1,0 +1,40 @@
+---
+description: 右键菜单紧凑布局——上下无空隙、低圆角
+globs: "**/*ContextMenu*.tsx"
+alwaysApply: false
+---
+
+# 右键菜单（Context Menu）密度与圆角
+
+新建或修改应用内**右键菜单 / 上下文菜单**浮层时遵守：
+
+## 垂直方向不留空隙
+
+- 菜单**根容器**使用 **`py-0`**（以及需要时的 **`px-0`**），不要用 `py-1`、`py-2` 在整块菜单上下留白。
+- **分区线**（`Separator` 或 `h-px` 分隔条）不要用 **`my-1` / `my-2`** 制造上下空白；用 **`my-0`**，仅靠 1px 线分割。
+- 菜单项之间靠 **hover 背景** 区分即可；首项贴顶、末项贴底（根容器 `overflow-hidden` + 外层小圆角即可裁切）。
+
+## 圆角弧度要低
+
+- 浮层外框使用 **`rounded-sm`**（必要时 **`rounded-md`**），避免 **`rounded-lg` / `rounded-xl`** 作为菜单外壳。
+- 使用 `Card` 作菜单壳时，必须 **`overflow-hidden rounded-sm`** 覆盖 Card 默认的 **`rounded-xl`**（通过 `className` 传入，依赖 `cn`/`tailwind-merge` 覆盖）。
+- 菜单内按钮/行可继续 **`rounded-none`**，由外层小圆角统一收口。
+
+## 对照示例
+
+```tsx
+// ❌ BAD — 上下 padding + 大圆角 + 分隔条上下 margin
+<Card className="... py-1 rounded-xl">...</Card>
+<div className="my-1 h-px bg-border" />
+
+// ✅ GOOD — 贴边、低圆角、分隔无垂直 margin
+<Card className="fixed ... overflow-hidden rounded-sm border py-0 shadow-xl">...</Card>
+<div className="my-0 h-px bg-border" />
+```
+
+共享菜单容器同理：
+
+```tsx
+// ✅ GOOD
+<div className="... overflow-hidden rounded-sm ... py-0">...</div>
+```

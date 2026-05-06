@@ -2,9 +2,9 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
-import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
-import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard } from '@/features/application/dataView';
-import { DataTabs, TitleBar, Toolbar, type DataframeOption } from './Layout';
+import { useDatabaseStore } from '@/features/core/dataStore';
+import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard, getGridSelectionPrimaryCellText } from '@/features/application/dataView';
+import { TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
 import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
@@ -22,12 +22,10 @@ function getDatabaseIdFromUrl(): string | null {
 
 export const DataViewWindow: React.FC = () => {
   const dataframes = useDatabaseStore(s => s.databases);
-  const editStateByDatabase = useEditStateStore(s => s.editStateByDatabase);
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
-  const [openTabIds, setOpenTabIds] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const hasInitializedTabsRef = useRef(false);
+  const hasInitializedDfRef = useRef(false);
 
   useProjectSync();
 
@@ -67,12 +65,11 @@ export const DataViewWindow: React.FC = () => {
     selectedRowIndices: sel.selectedRowIndices,
   });
 
-  // Auto-open the requested dataframe, or the first available dataframe.
+  // 首次有数据时选中 URL 指定或第一个 DataFrame；之后仅在当前选中被删除时回退
   useEffect(() => {
     const ids = Object.keys(dataframes);
     if (ids.length === 0) {
-      hasInitializedTabsRef.current = false;
-      setOpenTabIds([]);
+      hasInitializedDfRef.current = false;
       setSelectedDfId(null);
       dataLoader.setLoadedRows([]);
       return;
@@ -80,23 +77,18 @@ export const DataViewWindow: React.FC = () => {
     const dbFromUrl = getDatabaseIdFromUrl();
     const preferred = dbFromUrl && dataframes[dbFromUrl] ? dbFromUrl : ids[0];
 
-    if (!hasInitializedTabsRef.current) {
-      hasInitializedTabsRef.current = true;
-      setOpenTabIds([preferred]);
+    if (!hasInitializedDfRef.current) {
+      hasInitializedDfRef.current = true;
       setSelectedDfId(preferred);
       return;
     }
 
-    const existing = openTabIds.filter((id) => dataframes[id]);
-    if (existing.length !== openTabIds.length) {
-      setOpenTabIds(existing);
-    }
     if (selectedDfId && !dataframes[selectedDfId]) {
-      setSelectedDfId(existing[0] ?? null);
+      setSelectedDfId(ids[0] ?? null);
     }
-  }, [dataframes, openTabIds, selectedDfId]);
+  }, [dataframes, selectedDfId]);
 
-  // Load data when selection changes
+  // Load data when dataframe changes
   useEffect(() => {
     if (selectedDfId) {
       dataLoader.loadInitialRows(selectedDfId);
@@ -105,6 +97,11 @@ export const DataViewWindow: React.FC = () => {
     }
     sel.clearSelection();
   }, [selectedDfId]);
+
+  /** 分页或列结构变化后，保留旧选择会与当前页/列错位 */
+  useEffect(() => {
+    sel.clearSelection();
+  }, [dataLoader.pageIndex, columns.length, sel.clearSelection]);
 
   // Auto-fetch meta if missing
   useEffect(() => {
@@ -143,7 +140,6 @@ export const DataViewWindow: React.FC = () => {
     setContextMenu({ x: position.x, y: position.y, ...target });
   }, []);
 
-  // Toolbar options
   const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
     const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string } } };
     let label = d.name;
@@ -152,42 +148,23 @@ export const DataViewWindow: React.FC = () => {
     return { label: String(label ?? id), value: id };
   }), [dataframes]);
 
-  const labelByDfId = useMemo(() => new Map(dfOptions.map((option) => [option.value, option.label])), [dfOptions]);
-  const tabs = useMemo(() => openTabIds.map((id) => ({
-    id,
-    label: labelByDfId.get(id) ?? id,
-    isModified: Boolean(editStateByDatabase[id]?.isModified),
-  })), [editStateByDatabase, labelByDfId, openTabIds]);
-
-  const handleAddTab = useCallback((id: string) => {
-    if (!dataframes[id]) return;
-    setOpenTabIds((prev) => prev.includes(id) ? prev : [...prev, id]);
-    setSelectedDfId(id);
-  }, [dataframes]);
-
-  const handleCloseTab = useCallback((id: string) => {
-    setOpenTabIds((prev) => {
-      const index = prev.indexOf(id);
-      const next = prev.filter((tabId) => tabId !== id);
-      if (selectedDfId === id) {
-        const fallback = next[Math.min(index, next.length - 1)] ?? next[0] ?? null;
-        setSelectedDfId(fallback);
-      }
-      return next;
-    });
-  }, [selectedDfId]);
+  const selectedCellPreview = useMemo(
+    () => getGridSelectionPrimaryCellText(
+      sel.selection,
+      columns.length,
+      dataLoader.loadedRows.length,
+      dataLoader.loadedRows,
+    ),
+    [sel.selection, columns.length, dataLoader.loadedRows],
+  );
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-muted/30 text-[var(--workbench-fg)] font-sans">
-      <TitleBar isModified={edit.currentEditState.isModified} />
-
-      <DataTabs
-        tabs={tabs}
-        options={dfOptions}
-        activeTabId={selectedDfId}
-        onSelectTab={setSelectedDfId}
-        onAddTab={handleAddTab}
-        onCloseTab={handleCloseTab}
+      <TitleBar
+        dataframes={dfOptions}
+        selectedDataframeId={selectedDfId}
+        onSelectDataframe={setSelectedDfId}
+        selectedCellText={selectedCellPreview}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -211,7 +188,7 @@ export const DataViewWindow: React.FC = () => {
         pageSize={dataLoader.pageSize}
         totalPages={dataLoader.totalPages}
         lastFetchMs={dataLoader.lastFetchMs}
-        hasSelection={!!selectedDf}
+        exportEnabled={Boolean(selectedDfId)}
         currentEditState={edit.currentEditState}
         onPreviousPage={dataLoader.goToPreviousPage}
         onNextPage={dataLoader.goToNextPage}
@@ -219,7 +196,6 @@ export const DataViewWindow: React.FC = () => {
         onSave={edit.handleSave}
         onUndo={edit.handleUndo}
         onRedo={edit.handleRedo}
-        onReset={edit.handleReset}
         onExport={edit.handleExport}
       />
 

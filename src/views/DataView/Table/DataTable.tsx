@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  CompactSelection,
   DataEditor,
   GridCellKind,
   GridColumnIcon,
@@ -10,29 +9,18 @@ import {
   type GridColumn,
   type GridSelection,
   type Item,
-  type Theme,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { VscDatabase } from 'react-icons/vsc';
-import type { ColumnMeta, SelectionRange } from '@/features/application/dataView';
-import { selectionBounds } from '@/features/application/dataView';
-import { DATA_VIEW_ROW_HEIGHT, DATA_VIEW_ROW_NUM_WIDTH, DATA_VIEW_MIN_COLUMNS } from '@/app/appConfig/default';
-
-interface DataGridThemeTokens {
-  accentColor: string;
-  accentFg: string;
-  accentLight: string;
-  workbenchBg: string;
-  sidebarBg: string;
-  foreground: string;
-  mutedForeground: string;
-  border: string;
-  hover: string;
-  active: string;
-  rowMarkerBg: string;
-  rowMarkerHover: string;
-  rowMarkerText: string;
-}
+import type { ColumnMeta } from '@/features/application/dataView';
+import { emptyGridSelection, isEmptyGridSelection } from '@/features/application/dataView';
+import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { buildDataGridThemeOverlay, buildRowMarkerThemeOverlay } from './dataGridTheme';
+import {
+  DATA_VIEW_ROW_HEIGHT,
+  DATA_VIEW_ROW_MARKER_WIDE_WIDTH,
+  DATA_VIEW_MIN_COLUMNS,
+} from '@/app/appConfig/default';
 
 interface ContextMenuTarget {
   type: 'cell' | 'header' | 'row';
@@ -47,9 +35,9 @@ interface DataTableProps {
   pageStartIndex: number;
   loading: boolean;
 
-  // selection
-  selection: SelectionRange | null;
-  onSelectionChange: (selection: SelectionRange | null) => void;
+  // selection：与 Glide `GridSelection` 一致（受控），无独立领域模型
+  selection: GridSelection | null;
+  onSelectionChange: (selection: GridSelection | null) => void;
 
   onCommitCellValue: (row: number, col: number, value: unknown) => Promise<void>;
 
@@ -81,162 +69,6 @@ function cellToValue(cell: EditableGridCell): unknown {
   }
 }
 
-function selectionToGridSelection(selection: SelectionRange | null, columnCount: number, rowCount: number): GridSelection {
-  if (!selection) {
-    return {
-      columns: CompactSelection.empty(),
-      rows: CompactSelection.empty(),
-    };
-  }
-
-  const { r0, r1, c0, c1 } = selectionBounds(selection);
-  const fullRowsSelected = columnCount > 0 && c0 === 0 && c1 >= columnCount - 1;
-  const fullColumnsSelected = rowCount > 0 && r0 === 0 && r1 >= rowCount - 1;
-
-  return {
-    current: {
-      cell: [c0, r0],
-      range: { x: c0, y: r0, width: c1 - c0 + 1, height: r1 - r0 + 1 },
-      rangeStack: [],
-    },
-    columns: fullColumnsSelected ? CompactSelection.fromSingleSelection([c0, c1 + 1]) : CompactSelection.empty(),
-    rows: fullRowsSelected ? CompactSelection.fromSingleSelection([r0, r1 + 1]) : CompactSelection.empty(),
-  };
-}
-
-function gridSelectionToSelection(gridSelection: GridSelection, columnCount: number, rowCount: number): SelectionRange | null {
-  const firstRow = gridSelection.rows.first();
-  const lastRow = gridSelection.rows.last();
-  if (firstRow !== undefined && lastRow !== undefined && columnCount > 0) {
-    return {
-      anchor: { row: firstRow, col: 0 },
-      end: { row: lastRow, col: columnCount - 1 },
-    };
-  }
-
-  const firstCol = gridSelection.columns.first();
-  const lastCol = gridSelection.columns.last();
-  if (firstCol !== undefined && lastCol !== undefined && rowCount > 0) {
-    return {
-      anchor: { row: 0, col: firstCol },
-      end: { row: rowCount - 1, col: lastCol },
-    };
-  }
-
-  const current = gridSelection.current;
-  if (current) {
-    const range = current.range;
-    return {
-      anchor: { row: range.y, col: range.x },
-      end: { row: range.y + Math.max(0, range.height - 1), col: range.x + Math.max(0, range.width - 1) },
-    };
-  }
-
-  return null;
-}
-
-function readCssVar(style: CSSStyleDeclaration, name: string, fallback: string): string {
-  return style.getPropertyValue(name).trim() || fallback;
-}
-
-function toCanvasColor(value: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback;
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  if (!context) return fallback;
-  context.fillStyle = fallback;
-  context.fillStyle = value;
-  const resolved = context.fillStyle;
-  return resolved && resolved !== fallback ? resolved : fallback;
-}
-
-function readDataGridThemeTokens(): DataGridThemeTokens {
-  if (typeof window === 'undefined') {
-    return {
-      accentColor: '#2563eb',
-      accentFg: '#ffffff',
-      accentLight: 'rgba(37, 99, 235, 0.16)',
-      workbenchBg: '#ffffff',
-      sidebarBg: '#f8fafc',
-      foreground: '#111827',
-      mutedForeground: '#6b7280',
-      border: '#e5e7eb',
-      hover: 'rgba(37, 99, 235, 0.12)',
-      active: 'rgba(37, 99, 235, 0.16)',
-      rowMarkerBg: '#f8fafc',
-      rowMarkerHover: '#e2e8f0',
-      rowMarkerText: '#0f172a',
-    };
-  }
-
-  const style = window.getComputedStyle(document.documentElement);
-  const isDark = document.documentElement.classList.contains('dark');
-  const lightFallbacks = {
-    workbenchBg: '#ffffff',
-    sidebarBg: '#f8fafc',
-    foreground: '#0f172a',
-    mutedForeground: '#64748b',
-    border: '#e2e8f0',
-    rowMarkerBg: '#f8fafc',
-    rowMarkerHover: '#e2e8f0',
-  };
-  const darkFallbacks = {
-    workbenchBg: '#171717',
-    sidebarBg: '#262626',
-    foreground: '#f8fafc',
-    mutedForeground: '#a3a3a3',
-    border: 'rgba(255, 255, 255, 0.12)',
-    rowMarkerBg: '#262626',
-    rowMarkerHover: '#333333',
-  };
-  const fallbacks = isDark ? darkFallbacks : lightFallbacks;
-  const accentColor = toCanvasColor(readCssVar(style, '--accent-color', '#2563eb'), '#2563eb');
-
-  return {
-    accentColor,
-    accentFg: '#ffffff',
-    accentLight: readCssVar(style, '--interactive-active', 'rgba(37, 99, 235, 0.16)'),
-    workbenchBg: toCanvasColor(readCssVar(style, '--card', readCssVar(style, '--workbench-bg', fallbacks.workbenchBg)), fallbacks.workbenchBg),
-    sidebarBg: toCanvasColor(readCssVar(style, '--muted', readCssVar(style, '--sidebar-bg', fallbacks.sidebarBg)), fallbacks.sidebarBg),
-    foreground: toCanvasColor(readCssVar(style, '--workbench-fg', readCssVar(style, '--foreground', fallbacks.foreground)), fallbacks.foreground),
-    mutedForeground: toCanvasColor(readCssVar(style, '--text-secondary', readCssVar(style, '--muted-foreground', fallbacks.mutedForeground)), fallbacks.mutedForeground),
-    border: toCanvasColor(readCssVar(style, '--strong-border', readCssVar(style, '--border', fallbacks.border)), fallbacks.border),
-    hover: readCssVar(style, '--interactive-hover', 'rgba(37, 99, 235, 0.12)'),
-    active: readCssVar(style, '--interactive-active', 'rgba(37, 99, 235, 0.16)'),
-    rowMarkerBg: fallbacks.rowMarkerBg,
-    rowMarkerHover: fallbacks.rowMarkerHover,
-    rowMarkerText: fallbacks.foreground,
-  };
-}
-
-function useDataGridThemeTokens(): DataGridThemeTokens {
-  const [tokens, setTokens] = useState(readDataGridThemeTokens);
-
-  useEffect(() => {
-    let rafId: number | null = null;
-    const update = () => {
-      if (rafId !== null) return;
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null;
-        setTokens(readDataGridThemeTokens());
-      });
-    };
-
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class', 'style'],
-    });
-
-    return () => {
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, []);
-
-  return tokens;
-}
-
 export const DataTable: React.FC<DataTableProps> = ({
   columns, loadedRows, pageStartIndex, loading,
   selection,
@@ -245,7 +77,9 @@ export const DataTable: React.FC<DataTableProps> = ({
   onContextMenu,
 }) => {
   const { t } = useTranslation();
-  const themeTokens = useDataGridThemeTokens();
+  const appTheme = useSettingsStore((s) => s.theme);
+  const dataGridTheme = useMemo(() => buildDataGridThemeOverlay(appTheme), [appTheme]);
+  const rowMarkerTheme = useMemo(() => buildRowMarkerThemeOverlay(appTheme), [appTheme]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
   /** 分页模式下只渲染当前页数据，避免一次性绘制大数据集 */
@@ -271,50 +105,24 @@ export const DataTable: React.FC<DataTableProps> = ({
     ];
   }, [columnWidths, columns]);
 
-  const gridSelection = useMemo(
-    () => selectionToGridSelection(selection, columns.length, virtualRowCount),
-    [columns.length, selection, virtualRowCount]
+  const handleGridSelectionChange = useCallback((next: GridSelection) => {
+    if (isEmptyGridSelection(next)) {
+      onSelectionChange(null);
+    } else {
+      onSelectionChange(next);
+    }
+  }, [onSelectionChange]);
+
+  const rowMarkers = useMemo(
+    () => ({
+      kind: 'both' as const,
+      checkboxStyle: 'square' as const,
+      width: DATA_VIEW_ROW_MARKER_WIDE_WIDTH,
+      startIndex: pageStartIndex + 1,
+      theme: rowMarkerTheme,
+    }),
+    [pageStartIndex, rowMarkerTheme],
   );
-
-  const theme = useMemo<Partial<Theme>>(() => ({
-    accentColor: themeTokens.accentColor,
-    accentFg: themeTokens.accentFg,
-    accentLight: themeTokens.accentLight,
-    bgCell: themeTokens.workbenchBg,
-    bgCellMedium: themeTokens.sidebarBg,
-    bgHeader: themeTokens.sidebarBg,
-    bgHeaderHovered: themeTokens.hover,
-    bgHeaderHasFocus: themeTokens.accentColor,
-    bgBubble: themeTokens.sidebarBg,
-    bgBubbleSelected: themeTokens.accentColor,
-    textDark: themeTokens.foreground,
-    textMedium: themeTokens.mutedForeground,
-    textLight: themeTokens.mutedForeground,
-    textBubble: themeTokens.foreground,
-    textHeader: themeTokens.foreground,
-    textHeaderSelected: themeTokens.accentFg,
-    bgIconHeader: themeTokens.sidebarBg,
-    fgIconHeader: themeTokens.mutedForeground,
-    borderColor: themeTokens.border,
-    horizontalBorderColor: themeTokens.border,
-    headerBottomBorderColor: themeTokens.border,
-    linkColor: themeTokens.accentColor,
-    fontFamily: 'var(--font-sans)',
-    baseFontStyle: '11px var(--font-sans)',
-    headerFontStyle: '600 11px var(--font-sans)',
-    editorFontSize: '11px',
-  }), [themeTokens]);
-
-  const rowMarkerTheme = useMemo<Partial<Theme>>(() => ({
-    bgCell: themeTokens.rowMarkerBg,
-    bgCellMedium: themeTokens.rowMarkerBg,
-    bgHeader: themeTokens.rowMarkerBg,
-    bgHeaderHovered: themeTokens.rowMarkerHover,
-    bgHeaderHasFocus: themeTokens.active,
-    accentLight: themeTokens.active,
-    textLight: themeTokens.rowMarkerText,
-    textMedium: themeTokens.rowMarkerText,
-  }), [themeTokens]);
 
   const getCellContent = useCallback((cell: Item): GridCell => {
     const [col, row] = cell;
@@ -365,10 +173,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     };
   }, [columns.length, loadedRows]);
 
-  const handleGridSelectionChange = useCallback((next: GridSelection) => {
-    onSelectionChange(gridSelectionToSelection(next, columns.length, virtualRowCount));
-  }, [columns.length, onSelectionChange, virtualRowCount]);
-
   const handleCellEdited = useCallback((cell: Item, newValue: EditableGridCell) => {
     const [col, row] = cell;
     if (col >= columns.length) return;
@@ -401,22 +205,20 @@ export const DataTable: React.FC<DataTableProps> = ({
         className="h-full w-full"
         width="100%"
         height="100%"
+        theme={dataGridTheme}
         columns={gridColumns}
         rows={virtualRowCount}
         getCellContent={getCellContent}
         getCellsForSelection
         rowHeight={DATA_VIEW_ROW_HEIGHT}
         headerHeight={36}
-        rowMarkers={{
-          kind: 'clickable-number',
-          width: DATA_VIEW_ROW_NUM_WIDTH,
-          startIndex: pageStartIndex + 1,
-          theme: rowMarkerTheme,
-        }}
+        rowMarkers={rowMarkers}
+        /** 与 Glide 文档一致：auto=鼠标下 Ctrl/Cmd 点行号追加、Shift 扩选连续区间；勿用 multi（等同始终按住 Ctrl） */
+        rowSelectionMode="auto"
         rowSelect="multi"
         columnSelect="multi"
         rangeSelect="multi-rect"
-        gridSelection={gridSelection}
+        gridSelection={selection ?? emptyGridSelection}
         onGridSelectionChange={handleGridSelectionChange}
         onSelectionCleared={() => onSelectionChange(null)}
         onCellEdited={handleCellEdited}
@@ -456,7 +258,6 @@ export const DataTable: React.FC<DataTableProps> = ({
             { type: 'cell', rowIndex: row, colIndex: col, colName: columns[col]?.name }
           );
         }}
-        theme={theme}
         smoothScrollX
         smoothScrollY
         keybindings={{ search: false }}

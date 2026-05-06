@@ -20,9 +20,9 @@ interface ProjectIOStore {
   currentPath: string | null;
 
   setCurrentPath(path: string | null): void;
-  loadProject(): Promise<void>;
+  /** 从 Rust 当前项目状态拉取并灌入前端 store（路径、变量、库、图索引）；合并并发调用 */
+  loadProject(): Promise<ProjectData | null>;
   loadProjectFromData(project: ProjectData, path: string | null): void;
-  syncFromBackend(): Promise<ProjectData | null>;
   loadGraph(graphId: string): Promise<boolean>;
   exportSnapshot(): ProjectData;
 }
@@ -126,6 +126,11 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
   ) as ProjectData['graphs'];
 }
 
+/** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
+let loadProjectInFlight: Promise<ProjectData | null> | null = null;
+
+const loadGraphInFlight = new Map<string, Promise<boolean>>();
+
 export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   status: LoadStatus.Idle,
   error: null,
@@ -135,20 +140,53 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   setCurrentPath: (path) => set({ currentPath: path }),
 
   loadProject: async () => {
-    if (get().status === LoadStatus.Loading) return;
-
-    set({ status: LoadStatus.Loading, error: null });
-
-    try {
-      const result = await get().syncFromBackend();
-      if (result) {
-        logger.sys.info('Project loaded successfully', 'ProjectIOStore');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      set({ status: LoadStatus.Error, error: errorMessage });
-      logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
+    if (loadProjectInFlight) {
+      return loadProjectInFlight;
     }
+
+    // 不因 Loading 提前返回，避免与 ProjectLoaded 事件 handler 竞态导致 importGraph 误判失败
+    loadProjectInFlight = (async () => {
+      set({ status: LoadStatus.Loading, error: null });
+
+      try {
+        const path = await ProjectService.getProjectPath();
+
+        // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
+        const { databases, variables } = await ProjectService.getDatabasesVariables();
+        useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
+        useDatabaseStore.getState().setDatabases(normalizeDatabases(databases as Record<string, DatabaseRecord>));
+
+        const index = await ProjectService.getProjectIndex();
+        const graphMetaMap = Object.fromEntries(
+          index.graphs.map((graph) => [
+            graph.id,
+            { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
+          ])
+        );
+        useGraphMetaStore.getState().setGraphs(graphMetaMap);
+        useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
+        useGraphDataStore.getState().hydrateGraphs({});
+        useHistoryStore.getState().clear();
+
+        set({ status: LoadStatus.Ready, currentPath: path });
+        logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
+        return {
+          variables,
+          databases,
+          graphs: {},
+          metadata: { exportTime: index.exportTime, appVersion: index.appVersion },
+        } as ProjectData;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        set({ status: LoadStatus.Error, error: errorMessage });
+        logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
+        return null;
+      } finally {
+        loadProjectInFlight = null;
+      }
+    })();
+
+    return loadProjectInFlight;
   },
 
   loadProjectFromData: (project, path) => {
@@ -160,68 +198,39 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     set({ status: LoadStatus.Ready, currentPath: path });
   },
 
-  syncFromBackend: async () => {
-    // 不因 Loading 提前返回，避免与 ProjectLoaded 事件 handler 竞态导致 importGraph 误判失败
-    set({ status: LoadStatus.Loading, error: null });
-
-    try {
-      const path = await ProjectService.getProjectPath();
-
-      // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
-      const { databases, variables } = await ProjectService.getDatabasesVariables();
-      useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
-      useDatabaseStore.getState().setDatabases(normalizeDatabases(databases as Record<string, DatabaseRecord>));
-
-      const index = await ProjectService.getProjectIndex();
-      const graphMetaMap = Object.fromEntries(
-        index.graphs.map((graph) => [
-          graph.id,
-          { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
-        ])
-      );
-      useGraphMetaStore.getState().setGraphs(graphMetaMap);
-      useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
-      useGraphDataStore.getState().hydrateGraphs({});
-      useHistoryStore.getState().clear();
-
-      set({ status: LoadStatus.Ready, currentPath: path });
-      logger.sys.debug('Synced from backend (project index load)', 'ProjectIOStore');
-      return {
-        variables,
-        databases,
-        graphs: {},
-        metadata: { exportTime: index.exportTime, appVersion: index.appVersion },
-      } as ProjectData;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      set({ status: LoadStatus.Error, error: errorMessage });
-      logger.sys.error('Failed to sync: ' + errorMessage, 'ProjectIOStore');
-      return null;
-    }
-  },
-
   loadGraph: async (graphId) => {
     const dataStore = useGraphDataStore.getState();
     if (dataStore.graphNodes[graphId]) return true;
-    try {
-      const { graph, variables } = await ProjectService.loadProjectGraph(graphId);
-      const frontendGraph = toFrontendGraph(graph);
-      useVariableStore.getState().setVariables({
-        ...useVariableStore.getState().variables,
-        ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
-      });
-      useGraphMetaStore.getState().updateGraph(graphId, {
-        name: frontendGraph.name,
-        type: frontendGraph.type,
-      });
-      useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logger.sys.error('Failed to load graph: ' + errorMessage, 'ProjectIOStore');
-      set({ error: errorMessage });
-      return false;
-    }
+
+    const existing = loadGraphInFlight.get(graphId);
+    if (existing) return existing;
+
+    const pending = (async (): Promise<boolean> => {
+      try {
+        const { graph, variables } = await ProjectService.loadProjectGraph(graphId);
+        const frontendGraph = toFrontendGraph(graph);
+        useVariableStore.getState().setVariables({
+          ...useVariableStore.getState().variables,
+          ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
+        });
+        useGraphMetaStore.getState().updateGraph(graphId, {
+          name: frontendGraph.name,
+          type: frontendGraph.type,
+        });
+        useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
+        return true;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        logger.sys.error('Failed to load graph: ' + errorMessage, 'ProjectIOStore');
+        set({ error: errorMessage });
+        return false;
+      } finally {
+        loadGraphInFlight.delete(graphId);
+      }
+    })();
+
+    loadGraphInFlight.set(graphId, pending);
+    return pending;
   },
 
   exportSnapshot: () => {

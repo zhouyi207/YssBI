@@ -386,7 +386,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
 
   const refreshProjectIndex = useCallback(async () => {
-    await useProjectIOStore.getState().syncFromBackend();
+    await useProjectIOStore.getState().loadProject();
   }, []);
 
   // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
