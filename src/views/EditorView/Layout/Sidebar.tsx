@@ -867,6 +867,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   {Object.entries(dataframes || {}).map(([id, data]) => {
                     const name = String((data as { name?: unknown }).name ?? "");
                     const columns = (data as { columns?: Array<{ name: string; type: string }> }).columns ?? [];
+                    const isLoading = (data as { loading?: unknown }).loading === true;
+                    const loadError = (data as { loadError?: unknown }).loadError;
                     const sectionKey = `dataData_${id}`;
                     const isSelected = selectedItemId === id && selectedItemType === "data";
                     const dragData = buildSidebarDragData(id, name, "data", data);
@@ -900,6 +902,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                                 <VscDatabase size={12} />
                               </span>
                               <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
+                              {isLoading && (
+                                <span className="shrink-0 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" title={t("sidebar.dataLoading")} />
+                              )}
+                              {!isLoading && typeof loadError === "string" && loadError.length > 0 && (
+                                <span className="shrink-0 inline-block h-1.5 w-1.5 rounded-full bg-red-500" title={String(loadError)} />
+                              )}
                             </SidebarDraggableItem>
                             <Button
                               type="button"
@@ -917,18 +925,29 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                           </div>
                         }
                       >
-                        {columns.map((col, idx) => (
-                          <div
-                            key={`${id}-col-${idx}`}
-                            className="flex items-center gap-2 py-1 pl-8 pr-2 hover:bg-[var(--sidebar-hover)] text-[12px] text-gray-500 group/col transition-colors"
-                          >
-                            <VscListUnordered size={10} className="opacity-40 shrink-0" />
-                            <span className="flex-1 truncate">{col.name}</span>
-                            <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-500 bg-white/[0.04] px-1 py-0.5">
-                              {col.type.replace("Owned", "")}
-                            </span>
+                        {isLoading ? (
+                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-gray-500/80">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            {t("sidebar.dataLoading")}
                           </div>
-                        ))}
+                        ) : typeof loadError === "string" && loadError.length > 0 ? (
+                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-red-400">
+                            <span>{t("sidebar.dataLoadFailed")}</span>
+                          </div>
+                        ) : (
+                          columns.map((col, idx) => (
+                            <div
+                              key={`${id}-col-${idx}`}
+                              className="flex items-center gap-2 py-1 pl-8 pr-2 hover:bg-[var(--sidebar-hover)] text-[12px] text-gray-500 group/col transition-colors"
+                            >
+                              <VscListUnordered size={10} className="opacity-40 shrink-0" />
+                              <span className="flex-1 truncate">{col.name}</span>
+                              <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-500 bg-white/[0.04] px-1 py-0.5">
+                                {col.type.replace("Owned", "")}
+                              </span>
+                            </div>
+                          ))
+                        )}
                       </CollapsibleSection>
                     );
                   })}

@@ -6,26 +6,15 @@ use tauri::Manager;
 
 use super::*;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// 持久化的客户端 UI 设置（主题/编辑器/外观/项目）。
+/// 窗口几何状态独立存储于 [`crate::window_state`]，不再混入此处。
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub theme: ThemeSettings,
     pub editor: EditorSettings,
     pub appearance: AppearanceSettings,
     pub project: ProjectSettings,
-    pub window: WindowSettings,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            theme: ThemeSettings::default(),
-            editor: EditorSettings::default(),
-            appearance: AppearanceSettings::default(),
-            project: ProjectSettings::default(),
-            window: WindowSettings::default(),
-        }
-    }
 }
 
 fn get_settings_path(app: &AppHandle) -> Result<PathBuf, String> {

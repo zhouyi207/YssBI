@@ -6,6 +6,8 @@ import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, Nodes
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
+import { isPending } from '../utils/echoSuppressor';
+import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
 
@@ -111,9 +113,23 @@ export class NodePositionsUpdatedHandler extends BaseEventHandler<NodePositionsU
     eventType = 'NodePositionsUpdated';
 
     handle(payload: NodePositionsUpdatedPayload, _callbacks?: EventCallbacks): void {
-        this.log('Node positions updated:', payload.graphId, payload.updates.length, 'nodes');
+        // Skip echoes for nodes whose move command issued by this client is
+        // still in-flight: we already applied the positions optimistically and
+        // re-applying a stale snapshot from the backend can briefly revert the
+        // UI when several drags overlap. Updates that arrive from another
+        // origin (other window, undo/redo from elsewhere) are still applied.
+        const updates = payload.updates
+            .filter(([nodeId]) => !isPending(NODE_POSITION_ECHO_DOMAIN, nodeId))
+            .map(([nodeId, x, y]) => ({ nodeId, x, y }));
 
-        const updates = payload.updates.map(([nodeId, x, y]) => ({ nodeId, x, y }));
+        if (updates.length === 0) {
+            this.log('Node positions updated (all suppressed as self-echo):', payload.graphId);
+            // Still mark dirty so save UI reflects the change.
+            markGraphTabDirty(payload.graphId);
+            return;
+        }
+
+        this.log('Node positions updated:', payload.graphId, updates.length, 'nodes');
         useGraphDataStore.getState().batchUpdateNodePositions(updates);
         markGraphTabDirty(payload.graphId);
     }

@@ -32,6 +32,13 @@ pub struct DatabaseDeclDTO {
     pub row_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub column_count: Option<usize>,
+    /// 后端正在异步物化该数据源（如 SQL / Excel），columns / rowCount 暂不
+    /// 可用。物化完成后会通过 `DataFrameSchemaUpdated` 事件补齐字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loading: Option<bool>,
+    /// 物化失败时的错误信息（与 `loading` 互斥）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_error: Option<String>,
 }
 
 impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
@@ -45,6 +52,8 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
             columns: None,
             row_count: None,
             column_count: None,
+            loading: None,
+            load_error: None,
         }
     }
 }

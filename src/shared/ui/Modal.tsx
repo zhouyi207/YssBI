@@ -17,10 +17,17 @@ export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: (
     onClose();
   };
 
+  const handleDiscard = () => {
+    options.onDiscard?.();
+    onClose();
+  };
+
   const handleConfirm = () => {
     options.onConfirm();
     onClose();
   };
+
+  const hasDiscard = !!options.discardText;
 
   return (
     <Dialog open onOpenChange={(open) => !open && handleCancel()}>
@@ -35,6 +42,11 @@ export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: (
           <Button onClick={handleCancel} variant="ghost" size="lg">
             {options.cancelText || t("common.cancel")}
           </Button>
+          {hasDiscard && (
+            <Button onClick={handleDiscard} variant="outline" size="lg">
+              {options.discardText}
+            </Button>
+          )}
           <Button onClick={handleConfirm} variant={options.type === "danger" ? "destructive" : "default"} size="lg">
             {options.confirmText || t("common.confirm")}
           </Button>

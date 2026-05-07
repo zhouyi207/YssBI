@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
 import { useProjectIOStore } from "@/features/core/dataStore";
+import { usePersistedWindow } from "@/features/application/window";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import type { ThemeSettings } from "@/shared/types/settings";
@@ -405,6 +406,8 @@ function ProjectSettingsDialog({
 export function ProjectPickerScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  // 主窗口几何状态：恢复尺寸/位置/最大化，并在关闭时持久化
+  usePersistedWindow("main");
   const {
     busy,
     currentProjectId,

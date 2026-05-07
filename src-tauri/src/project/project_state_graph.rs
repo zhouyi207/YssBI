@@ -27,15 +27,11 @@ impl ProjectState {
             let store = self.project_store.read().unwrap();
             Arc::clone(&store.node_register)
         };
-        let mut graph_data = GraphInstance::new(&unique_graph_name, graph_kind, graph_register);
-        graph_data.set_schema_provider(self.build_schema_provider());
-        let graph_id = graph_data.id;
-        self.project_data
-            .write()
-            .unwrap()
-            .graphs
-            .insert(graph_id, graph_data.clone());
-        graph_data
+        let graph_data = GraphInstance::new(&unique_graph_name, graph_kind, graph_register);
+        // Funnel through the single `insert_graph` entry point so registry +
+        // schema provider + schema propagation are bound consistently with the
+        // load / duplicate / import paths.
+        self.insert_graph(graph_data)
     }
 
     pub fn add_graph(&self, graph_name: &str, graph_kind: GraphKind) -> GraphInstance {

@@ -12,11 +12,12 @@
     "app": {
         "windows": [
             {
+                "label": "main",
                 "title": "yssbi",
                 "width": 1600,
                 "height": 900,
                 "decorations": false,
-                "visible": true,
+                "visible": false,
                 "dragDropEnabled": false
             }
         ],

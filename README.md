@@ -422,5 +422,27 @@ if (eventPayload && 'type' in eventPayload) {
 ```
 
 
+## 项目与图的生命周期约定
+
+整个生命周期（开 App → 开项目 → 开图 → 修改 → 关闭/保存）遵循
+**后端权威 + CQRS 推送** 模式：
+
+- **后端 `ProjectState.project_data` 是唯一权威**；前端 store 只是投影。
+- **App 启动**：拉一次 schema/node 注册表（全局只读）。
+- **打开项目**：`load_project` 命令先 `state.clear()` 再 `set_data(...)`，
+  emit `ProjectLoaded`；前端按阶段拉取 `databases+variables` 与
+  图索引（图体懒加载）。前端 `resetClientProjectState()` 同步清除
+  layout 图 tab、viewport、history、数据视图缓存。
+- **打开图**：`load_project_graph` 命令把图反序列化进
+  `project_data.graphs` 并通过 **统一入口 `ProjectState::insert_graph`**
+  绑定 registry / schema provider / schema 传播 / 动态 pin 解析。
+- **修改图**：所有修改走后端命令（mutate `project_data` → emit 事件 →
+  前端 handler 更新 store）。高频写命令（如节点拖拽）使用
+  `trackPending` + `isPending` 抑制自回声。
+- **关闭/保存图**：单图 `save_project_graph` / `unload_project_graph`；
+  关 tab 与关窗口都走应用内三态确认（Save All / Don't Save / Cancel）。
+
+> 完整规范见 `.cursor/rules/project-graph-lifecycle.mdc`。
+
 ## 科学计算相关
 

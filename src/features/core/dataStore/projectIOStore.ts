@@ -10,8 +10,13 @@ import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
+import { useEditStateStore } from './editStateStore';
+import { useColumnStatsStore } from './columnStatsStore';
+import { useColumnDistributionStore } from './columnDistributionStore';
+import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useHistoryStore } from '@/features/core/history';
-import { getViewport } from '@/features/core/viewport';
+import { getViewport, useViewportStore } from '@/features/core/viewport';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -126,6 +131,24 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
   ) as ProjectData['graphs'];
 }
 
+/**
+ * Drop every per-project frontend cache: open graph tabs, viewports, history,
+ * data-view caches. Called before hydrating a fresh project so the previous
+ * project leaves no residue behind.
+ *
+ * Variables / databases / graphMeta / graphData are intentionally NOT cleared
+ * here because the caller writes their replacement values immediately after.
+ */
+function resetClientProjectState(): void {
+  useLayoutStore.getState().closeAllGraphTabs();
+  useViewportStore.getState().clear();
+  useHistoryStore.getState().clear();
+  useEditStateStore.getState().clear();
+  useColumnStatsStore.getState().clear();
+  useColumnDistributionStore.getState().clear();
+  useDatasetOverviewStore.getState().clear();
+}
+
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
 let loadProjectInFlight: Promise<ProjectData | null> | null = null;
 
@@ -151,6 +174,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
       try {
         const path = await ProjectService.getProjectPath();
 
+        // Drop residue from any previously loaded project before hydrating new
+        // values. Backend authoritatively cleared its in-memory state already.
+        resetClientProjectState();
+
         // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
         const { databases, variables } = await ProjectService.getDatabasesVariables();
         useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
@@ -166,7 +193,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         useGraphMetaStore.getState().setGraphs(graphMetaMap);
         useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
         useGraphDataStore.getState().hydrateGraphs({});
-        useHistoryStore.getState().clear();
 
         set({ status: LoadStatus.Ready, currentPath: path });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -190,11 +216,11 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
   },
 
   loadProjectFromData: (project, path) => {
+    resetClientProjectState();
     useVariableStore.getState().setVariables(normalizeVariables(project.variables));
     useDatabaseStore.getState().setDatabases(normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>));
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
-    useHistoryStore.getState().clear();
     set({ status: LoadStatus.Ready, currentPath: path });
   },
 

@@ -57,6 +57,14 @@ export const zhCN = {
     removeFromList: "从列表移除",
     localOnlyHint: "当前列表保存在本机应用数据目录，不会删除磁盘上的项目文件。",
     settingsDescription: "调整项目选择界面的偏好设置。",
+    loading: {
+      creating: "正在新建项目",
+      opening: "正在打开项目",
+      readingFile: "正在读取项目文件…",
+      loadingData: "正在加载项目数据…",
+      preparingEditor: "正在准备编辑器…",
+      done: "完成",
+    },
     newProjectModal: {
       title: "新建项目",
       defaultName: "新项目",
@@ -272,6 +280,8 @@ export const zhCN = {
     demoteToLocal: "降级为局部变量",
     viewInDataViewer: "在数据视图中查看",
     noData: "无数据",
+    dataLoading: "正在加载数据…",
+    dataLoadFailed: "数据加载失败",
     noActiveGraph: "无活动图",
     commands: {
       MoveNodes: "移动节点",

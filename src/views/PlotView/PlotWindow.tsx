@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
+import { usePersistedWindow } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import Scatter, { type ScatterPoint } from '@/views/PlotView/Scatter';
 import Line, { type LinePoint } from '@/views/PlotView/Line';
@@ -68,6 +69,8 @@ export const PlotWindow: React.FC = () => {
   const [correlogramData, setCorrelogramData] = useState<CorrelogramData | null>(null);
   const [plotType, setPlotType] = useState<string>(() => getPlotTypeFromHash());
   const [error, setError] = useState<string | null>(null);
+
+  usePersistedWindow('plot');
 
   useEffect(() => {
     let cleanup: (() => void) | null = null;

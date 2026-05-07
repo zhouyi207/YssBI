@@ -38,6 +38,22 @@ pub enum DatabaseEngine {
 }
 
 impl DatabaseEngine {
+    /// 是否拥有「真正」的惰性读取实现：即 `build_lazy()` 仅做轻量的元数据
+    /// 解析（如 CSV header / Parquet footer），不会同步把整个数据集拉进内存。
+    ///
+    /// 当前 polars 对 SQL / Excel 不提供 lazy adapter，我们的 `build_lazy()`
+    /// 实际是同步 `read_*_to_dataframe` 后再 `df.lazy()`，所以它们返回 false。
+    /// 不属于真·lazy 的引擎在 `ProjectState::set_data` 中会被置为
+    /// `DatabaseState::Pending`，由后台任务延后物化。
+    pub fn is_lazy_friendly(&self) -> bool {
+        match self {
+            DatabaseEngine::Csv { .. }
+            | DatabaseEngine::Parquet { .. }
+            | DatabaseEngine::InMemory { .. } => true,
+            DatabaseEngine::Sql { .. } | DatabaseEngine::Excel { .. } => false,
+        }
+    }
+
     pub fn build_lazy(&self) -> PolarsResult<LazyFrame> {
         match self {
             DatabaseEngine::Csv {

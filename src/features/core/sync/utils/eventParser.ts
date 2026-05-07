@@ -48,7 +48,7 @@ export function isValidEventType(type: string): boolean {
         // Variable
         'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame
-        'DataFrameCreated', 'DataFrameDeleted',
+        'DataFrameCreated', 'DataFrameDeleted', 'DataFrameSchemaUpdated',
         // Node
         'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred',
         // Connection

@@ -5,6 +5,7 @@ import {
   ExcelSheetSelectModal,
   ImportModal,
   InputModal,
+  LoadingOverlay,
   Modal,
   SqlConnectionModal,
   SqliteTableSelectModal,
@@ -15,6 +16,7 @@ import {
 export const UIHost = () => {
   const messages = useUIStore((s) => s.messages);
   const modals = useUIStore((s) => s.modals);
+  const progress = useUIStore((s) => s.progress);
   const top = modals[modals.length - 1];
 
   return (
@@ -23,6 +25,8 @@ export const UIHost = () => {
       {messages.map((message) => (
         <Toast key={message.id} message={message} onClose={() => uiStore.closeToast(message.id)} />
       ))}
+
+      {progress && <LoadingOverlay progress={progress} />}
 
       {top?.type === "confirm" && (
         <Modal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />

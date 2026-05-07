@@ -1,7 +1,12 @@
 // src/features/core/sync/handlers/DataFrameEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { DataFrameCreatedPayload, DataFrameDeletedPayload, EventCallbacks } from '../types';
+import {
+    DataFrameCreatedPayload,
+    DataFrameDeletedPayload,
+    DataFrameSchemaUpdatedPayload,
+    EventCallbacks,
+} from '../types';
 import { useDatabaseStore } from '@/features/core/dataStore';
 
 export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPayload> {
@@ -25,5 +30,32 @@ export class DataFrameDeletedHandler extends BaseEventHandler<DataFrameDeletedPa
         useDatabaseStore.getState().deleteDatabase(payload.id);
         
         callbacks?.onDataFrameDeleted?.(payload.id);
+    }
+}
+
+/**
+ * SQL / Excel 等非真·lazy 数据源在项目打开后由后端后台物化。
+ * 收到事件即把 schema 字段补到对应 db record 上，并清掉 loading 标记。
+ */
+export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSchemaUpdatedPayload> {
+    eventType = 'DataFrameSchemaUpdated';
+
+    handle(payload: DataFrameSchemaUpdatedPayload): void {
+        this.log('DataFrame schema updated:', payload.id, payload.error ? `error=${payload.error}` : `rows=${payload.rowCount}`);
+
+        const patch: Record<string, unknown> = {
+            loading: false,
+        };
+
+        if (payload.error) {
+            patch.loadError = payload.error;
+        } else {
+            patch.columns = payload.columns;
+            patch.rowCount = payload.rowCount;
+            patch.columnCount = payload.columnCount;
+            patch.loadError = undefined;
+        }
+
+        useDatabaseStore.getState().updateDatabase(payload.id, patch);
     }
 }

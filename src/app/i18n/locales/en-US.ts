@@ -57,6 +57,14 @@ export const enUS = {
     removeFromList: "Remove from List",
     localOnlyHint: "This list is stored in the local app data directory and does not delete project files from disk.",
     settingsDescription: "Adjust preferences for the project picker.",
+    loading: {
+      creating: "Creating Project",
+      opening: "Opening Project",
+      readingFile: "Reading project file…",
+      loadingData: "Loading project data…",
+      preparingEditor: "Preparing editor…",
+      done: "Done",
+    },
     newProjectModal: {
       title: "New Project",
       defaultName: "New Project",
@@ -272,6 +280,8 @@ export const enUS = {
     demoteToLocal: "Demote to local",
     viewInDataViewer: "View in Data Viewer",
     noData: "No data",
+    dataLoading: "Loading data…",
+    dataLoadFailed: "Failed to load data",
     noActiveGraph: "No active graph",
     commands: {
       MoveNodes: "Move Nodes",

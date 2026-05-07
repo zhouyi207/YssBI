@@ -1,7 +1,7 @@
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PIN_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import { createPersistedWindow } from "@/features/application/window";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
 import { i18n } from "@/app/i18n";
@@ -12,13 +12,11 @@ export async function openDataViewWindow(databaseId?: string): Promise<void> {
     const url = databaseId
       ? `index.html?database=${encodeURIComponent(databaseId)}#/dataview`
       : "index.html#/dataview";
-    new WebviewWindow(label, {
+    await createPersistedWindow({
+      kind: "dataView",
+      label,
       url,
       title: "Data Viewer",
-      width: 1000,
-      height: 600,
-      decorations: false,
-      visible: false,
     });
   } catch (error) {
     logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, "Sidebar");

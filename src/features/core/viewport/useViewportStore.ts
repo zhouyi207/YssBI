@@ -5,6 +5,8 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 interface ViewportStore {
   viewports: Record<string, GraphPosition>;
   setViewport: (groupId: string, updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition)) => void;
+  /** Drop all per-graph viewports (used when switching projects). */
+  clear: () => void;
 }
 
 
@@ -26,6 +28,11 @@ export const useViewportStore = create<ViewportStore>((set) => ({
         [groupId]: next,
       },
     };
+  }),
+  clear: () => set({
+    viewports: {
+      'main-group': { ...DEFAULT_VIEWPORT },
+    },
   }),
 }));
 

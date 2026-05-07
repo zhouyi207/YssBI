@@ -5,14 +5,12 @@ import {
     EditorSettings,
     AppearanceSettings,
     ProjectSettings,
-    WindowSettings,
     AppSettings,
 } from "@/shared/types/settings";
 import {
     DEFAULT_THEME,
     DEFAULT_EDITOR,
     DEFAULT_APPEARANCE,
-    DEFAULT_WINDOW,
     DEFAULT_PROJECT,
 } from "@/app/appConfig/default";
 import { logger } from '@/utils/appLogger';
@@ -30,7 +28,6 @@ function clientSettingsFingerprint(s: AppSettings): string {
         editor: s.editor,
         appearance: s.appearance,
         project: s.project,
-        window: s.window,
     });
 }
 
@@ -40,7 +37,6 @@ function mergeSettings(settings: Partial<AppSettings>): AppSettings {
         editor: { ...DEFAULT_EDITOR, ...settings.editor },
         appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance },
         project: { ...DEFAULT_PROJECT, ...settings.project },
-        window: { ...DEFAULT_WINDOW, ...settings.window },
     };
 }
 
@@ -100,7 +96,6 @@ export async function subscribeClientSettingsCrossWindow(): Promise<() => void> 
             editor: cur.editor,
             appearance: cur.appearance,
             project: cur.project,
-            window: cur.window,
         };
         if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
             return;
@@ -114,7 +109,6 @@ export async function subscribeClientSettingsCrossWindow(): Promise<() => void> 
                 editor: merged.editor,
                 appearance: merged.appearance,
                 project: merged.project,
-                window: merged.window,
                 isLoading: false,
             });
         } finally {
@@ -129,7 +123,6 @@ interface SettingsStore {
     editor: EditorSettings;
     appearance: AppearanceSettings;
     project: ProjectSettings;
-    window: WindowSettings;
     isLoading: boolean;
 
     load: () => Promise<void>;
@@ -139,7 +132,6 @@ interface SettingsStore {
     updateEditor: (updates: Partial<EditorSettings>) => void;
     updateAppearance: (updates: Partial<AppearanceSettings>) => void;
     updateProject: (updates: Partial<ProjectSettings>) => void;
-    updateWindow: (updates: Partial<WindowSettings>) => void;
 
     // 保存方法
     save: () => Promise<void>;
@@ -150,7 +142,6 @@ interface SettingsStore {
     resetEditorToDefaults: () => Promise<void>;
     resetAppearanceToDefaults: () => Promise<void>;
     resetProjectToDefaults: () => Promise<void>;
-    resetWindowToDefaults: () => Promise<void>;
 
     // 重新加载设置
     resetAllToDefaults: () => Promise<void>;
@@ -171,7 +162,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
             editor: state.editor,
             appearance: state.appearance,
             project: state.project,
-            window: state.window,
         };
         persistClientSettings(settings);
     };
@@ -188,7 +178,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         editor: DEFAULT_EDITOR,
         appearance: DEFAULT_APPEARANCE,
         project: DEFAULT_PROJECT,
-        window: DEFAULT_WINDOW,
         isLoading: true,
 
         load: async () => {
@@ -227,13 +216,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
                 return next;
             }),
 
-        updateWindow: (updates) =>
-            set((state) => {
-                const next = { window: { ...state.window, ...updates } };
-                queueMicrotask(scheduleSave);
-                return next;
-            }),
-
         // 立即保存当前状态
         save: saveImmediately,
 
@@ -257,11 +239,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
         resetProjectToDefaults: async () => {
             set({ project: DEFAULT_PROJECT });
-            await saveImmediately();
-        },
-
-        resetWindowToDefaults: async () => {
-            set({ window: DEFAULT_WINDOW });
             await saveImmediately();
         },
 

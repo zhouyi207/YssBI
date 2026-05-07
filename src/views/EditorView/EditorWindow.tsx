@@ -10,6 +10,7 @@ import { useProjectSyncWithEditor } from "@/features/application/initialization"
 import { useEditorGroup } from "@/features/application/editor";
 import { useEditorKeyboard } from "@/features/application/editor";
 import { useMenubar } from "@/features/application/menubar";
+import { usePersistedWindow } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 
@@ -20,6 +21,9 @@ export const EditorWindow = () => {
     const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
     const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
     const { status, error } = useAppInitialization();
+
+    // 主窗口几何状态：恢复尺寸/位置/最大化，并在关闭时持久化
+    usePersistedWindow("main");
 
     // 启用项目同步（带编辑器回调，用于打开新 Tab 等 UI 扩展）
     useProjectSyncWithEditor();

@@ -155,6 +155,8 @@ fn database_name_and_row_count(state: &ProjectState, id: &str) -> Result<(String
             drop(store);
             return Ok((name, count_lazy_rows(&lazy_frame)?));
         }
+        // 后台异步物化中；调用方理解为「行数未知」即可。
+        DatabaseState::Pending => 0,
         DatabaseState::Failed { .. } => 0,
     };
 

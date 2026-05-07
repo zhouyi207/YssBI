@@ -8,6 +8,8 @@ import {
     ExcelSheetSelectDialogOptions,
     SqlConnectionDialogOptions,
     SqlRemoteTableSelectDialogOptions,
+    ConfirmTriResult,
+    ProgressState,
 } from "@/shared/types/ui";
 
 type UIModal =
@@ -22,6 +24,8 @@ type UIModal =
 type UIState = {
   messages: Message[];
   modals: UIModal[];
+  /** 全局进度蒙层；为 null 时不显示。 */
+  progress: ProgressState | null;
 };
 
 type Listener = () => void;
@@ -30,6 +34,7 @@ class UIStore {
   private state: UIState = {
     messages: [],
     modals: [],
+    progress: null,
   };
 
   private listeners = new Set<Listener>();
@@ -95,6 +100,23 @@ class UIStore {
         ...options,
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
+      });
+    });
+  }
+
+  /**
+   * Tri-state confirm with three actions: confirm / discard / cancel.
+   * Use for destructive flows where the user can either commit, abandon, or back out.
+   */
+  confirm3(
+    options: Omit<DialogOptions, "onConfirm" | "onCancel" | "onDiscard"> & { discardText: string }
+  ): Promise<ConfirmTriResult> {
+    return new Promise((resolve) => {
+      this.showDialog({
+        ...options,
+        onConfirm: () => resolve("confirm"),
+        onDiscard: () => resolve("discard"),
+        onCancel: () => resolve("cancel"),
       });
     });
   }
@@ -209,6 +231,33 @@ class UIStore {
       ...this.state,
       modals: newModals,
     };
+    this.emit();
+  }
+
+  // --- Progress Overlay ---
+  /** 启动全局进度蒙层；同一时刻只有一个进度任务。 */
+  startProgress(progress: ProgressState) {
+    this.state = { ...this.state, progress };
+    this.emit();
+  }
+
+  /**
+   * 更新当前进度。若当前没有进度任务则忽略，避免在已 finishProgress 之后
+   * 因异步竞态而误恢复出蒙层。
+   */
+  updateProgress(patch: Partial<ProgressState>) {
+    if (!this.state.progress) return;
+    this.state = {
+      ...this.state,
+      progress: { ...this.state.progress, ...patch },
+    };
+    this.emit();
+  }
+
+  /** 关闭全局进度蒙层。多次调用是幂等的。 */
+  finishProgress() {
+    if (!this.state.progress) return;
+    this.state = { ...this.state, progress: null };
     this.emit();
   }
 }

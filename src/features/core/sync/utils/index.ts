@@ -2,3 +2,4 @@
 
 export * from './eventParser';
 export * from './singletonManager';
+export * from './echoSuppressor';

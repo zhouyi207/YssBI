@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
+import { usePersistedWindow } from '@/features/application/window';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard, getGridSelectionPrimaryCellText } from '@/features/application/dataView';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
@@ -26,6 +27,8 @@ export const DataViewWindow: React.FC = () => {
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const hasInitializedDfRef = useRef(false);
+
+  usePersistedWindow('dataView');
 
   useProjectSync();
 

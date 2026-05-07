@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
 import { listen } from '@tauri-apps/api/event';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { createPersistedWindow } from '@/features/application/window';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useLogActions } from '@/features/application/log';
@@ -189,19 +189,15 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const openInNewWindow = useCallback(async (x?: number, y?: number) => {
     try {
       const label = `logs-${Math.random().toString(36).substring(7)}`;
-      const opts: Record<string, unknown> = {
+      await createPersistedWindow({
+        kind: 'logs',
+        label,
         url: 'index.html#/logs',
         title: t('log.title'),
-        width: 1000,
-        height: 600,
-        decorations: false,
-        visible: false,
-      };
-      if (typeof x === 'number' && typeof y === 'number') {
-        opts.x = x;
-        opts.y = y;
-      }
-      new WebviewWindow(label, opts);
+        // 拖拽落点：仅在后端中没有保存过位置时作为兜底
+        fallbackX: typeof x === 'number' ? x : undefined,
+        fallbackY: typeof y === 'number' ? y : undefined,
+      });
     } catch (error) {
       logger.app.error('Failed to open logs window: ' + String(error), 'LogPanel');
       uiStore.showToast(t('log.failedOpenWindow'), 'error');

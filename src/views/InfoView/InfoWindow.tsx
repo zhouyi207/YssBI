@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
+import { usePersistedWindow } from '@/features/application/window';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';
@@ -116,6 +117,8 @@ export const InfoWindow: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | PanelDidResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  usePersistedWindow('info');
 
   useEffect(() => {
     let cleanup: (() => void)[] = [];

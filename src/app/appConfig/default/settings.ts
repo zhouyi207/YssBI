@@ -1,4 +1,4 @@
-import { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, WindowSettings, AppSettings } from "@/shared/types/settings";
+import { ThemeSettings, EditorSettings, AppearanceSettings, ProjectSettings, AppSettings } from "@/shared/types/settings";
 
 export const DEFAULT_DARK_THEME: ThemeSettings = {
     mode: "dark",
@@ -78,20 +78,11 @@ export const DEFAULT_PROJECT: ProjectSettings = {
     exportPath: "",
 };
 
-export const DEFAULT_WINDOW: WindowSettings = {
-    width: 1600,
-    height: 900,
-    x: null,
-    y: null,
-    isMaximized: false,
-};
-
 export const DEFAULT_SETTINGS: AppSettings = {
     theme: DEFAULT_THEME,
     editor: DEFAULT_EDITOR,
     appearance: DEFAULT_APPEARANCE,
     project: DEFAULT_PROJECT,
-    window: DEFAULT_WINDOW,
 };
 
 export const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };

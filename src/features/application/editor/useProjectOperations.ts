@@ -5,7 +5,7 @@ import { ProjectService } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { createPersistedWindow } from '@/features/application/window';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import { logger } from '@/utils/appLogger';
 
@@ -81,7 +81,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     }
   }, [openGraph]);
 
-  const handleOpenWindow = useCallback((windowType: string, dataKey: string) => {
+  const handleOpenWindow = useCallback(async (windowType: string, dataKey: string) => {
     try {
       const label = `${windowType}-${Math.random().toString(36).substring(2, 10)}`;
       const isPlot = windowType === 'scatter' || windowType === 'line' || windowType === 'plot' || windowType === 'ecdf' || windowType === 'kde' || windowType === 'histogram' || windowType === 'correlation' || windowType === 'correlogram';
@@ -98,13 +98,11 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       const title = isPlot
         ? plotTitles[windowType] ?? 'Plot'
         : 'Regression Results';
-      new WebviewWindow(label, {
+      await createPersistedWindow({
+        kind: isPlot ? 'plot' : 'info',
+        label,
         url,
         title,
-        width: 960,
-        height: 800,
-        decorations: false,
-        visible: false,
       });
     } catch (e) {
       logger.exec.error(`Failed to open window: ${e instanceof Error ? e.message : String(e)}`);

@@ -5,5 +5,6 @@ export * from "./SqlConnectionModal";
 export * from "./SqlRemoteTableSelectModal";
 export * from "./Modal";
 export * from "./InputModal";
+export * from "./LoadingOverlay";
 export * from "./Select";
 export * from "./Toast";

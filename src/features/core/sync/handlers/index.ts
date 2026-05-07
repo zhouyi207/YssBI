@@ -32,6 +32,7 @@ import {
 import {
     DataFrameCreatedHandler,
     DataFrameDeletedHandler,
+    DataFrameSchemaUpdatedHandler,
 } from './DataFrameEventHandler';
 import {
     NodeCreatedHandler,
@@ -78,6 +79,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         // DataFrame
         new DataFrameCreatedHandler() as EventHandler<unknown>,
         new DataFrameDeletedHandler() as EventHandler<unknown>,
+        new DataFrameSchemaUpdatedHandler() as EventHandler<unknown>,
         
         // Node
         new NodeCreatedHandler() as EventHandler<unknown>,

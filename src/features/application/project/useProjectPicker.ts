@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useProjectIOStore } from "@/features/core/dataStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { ProjectService, type ProjectRecordRow } from "@/services/project/projectService";
 
 const RECENT_PROJECTS_STORAGE_KEY = "yssbi-recent-projects";
@@ -58,6 +60,7 @@ function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
 
 export function useProjectPicker() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const loadProject = useProjectIOStore((state) => state.loadProject);
   const currentPath = useProjectIOStore((state) => state.currentPath);
   const [projects, setProjects] = useState<ManagedProject[]>([]);
@@ -115,58 +118,76 @@ export function useProjectPicker() {
 
   const createProject = useCallback(async (name: string, path: string) => {
     setBusy("new");
+    uiStore.startProgress({
+      stage: t("projectPicker.loading.creating"),
+      detail: t("projectPicker.loading.readingFile"),
+      percent: 0.1,
+    });
     try {
       const row = await ProjectService.createProject(name, path);
+      uiStore.updateProgress({
+        detail: t("projectPicker.loading.loadingData"),
+        percent: 0.5,
+      });
       await loadProject();
+      uiStore.updateProgress({
+        detail: t("projectPicker.loading.preparingEditor"),
+        percent: 0.9,
+      });
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
       ]);
+      uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
       navigate("/editor");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
+      uiStore.finishProgress();
       setBusy("idle");
     }
-  }, [navigate, loadProject]);
+  }, [navigate, loadProject, t]);
 
-  const openProjectFromDisk = useCallback(async () => {
+  const openProjectAtPath = useCallback(async (path?: string) => {
     setBusy("open");
-    try {
-      const result = await ProjectService.loadProjectToState();
-      if (!result) return;
-      const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-      await loadProject();
-      setProjects((previous) => [
-        rowToManagedProject(row),
-        ...previous.filter((project) => project.id !== row.id),
-      ]);
-      navigate("/editor");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy("idle");
-    }
-  }, [navigate, loadProject]);
-
-  const openRecentProject = useCallback(async (path: string) => {
-    setBusy("open");
+    uiStore.startProgress({
+      stage: t("projectPicker.loading.opening"),
+      detail: t("projectPicker.loading.readingFile"),
+      percent: 0.1,
+    });
     try {
       const result = await ProjectService.loadProjectToState(path);
       if (!result) return;
+      uiStore.updateProgress({
+        detail: t("projectPicker.loading.loadingData"),
+        percent: 0.5,
+      });
       const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
       await loadProject();
+      uiStore.updateProgress({
+        detail: t("projectPicker.loading.preparingEditor"),
+        percent: 0.9,
+      });
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
       ]);
+      uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
       navigate("/editor");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
+      uiStore.finishProgress();
       setBusy("idle");
     }
-  }, [navigate, loadProject]);
+  }, [navigate, loadProject, t]);
+
+  const openProjectFromDisk = useCallback(() => openProjectAtPath(), [openProjectAtPath]);
+
+  const openRecentProject = useCallback(
+    (path: string) => openProjectAtPath(path),
+    [openProjectAtPath],
+  );
 
   const removeProject = useCallback((id: string) => {
     void (async () => {

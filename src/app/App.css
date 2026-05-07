@@ -124,6 +124,22 @@ body.layout-sash-dragging canvas {
   pointer-events: none;
 }
 
+/* Indeterminate progress bar — sliding stripe used by LoadingOverlay */
+@keyframes loading-indeterminate {
+  0%   { left: -40%; right: 100%; }
+  60%  { left: 100%; right: -40%; }
+  100% { left: 100%; right: -40%; }
+}
+.loading-indeterminate-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: auto;
+  background-color: var(--primary, currentColor);
+  border-radius: inherit;
+  animation: loading-indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 [data-node-id][data-selection-preview="true"] {
   border-color: var(--accent-color) !important;
   outline: 2px solid color-mix(in oklab, var(--accent-color) 50%, transparent);

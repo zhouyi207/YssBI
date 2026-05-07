@@ -28,6 +28,12 @@ export interface LayoutState {
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
     setTabDirty: (tabId: string, isDirty: boolean) => void;
+    /**
+     * Drop every graph (event/function) tab from every editor group, regardless
+     * of dirty state. Use during destructive project transitions (load / clear /
+     * switch) where the previous project's graphs are no longer valid.
+     */
+    closeAllGraphTabs: () => void;
 
     // UI State
     isDragging: boolean;
@@ -623,6 +629,21 @@ export const useLayoutStore = create<LayoutState>()(
                 if (node.type !== 'component' || !node.data?.tabs) continue;
                 const tab = node.data.tabs.find(t => t.id === tabId);
                 if (tab) tab.isDirty = isDirty;
+            }
+        }),
+
+        closeAllGraphTabs: () => set((state) => {
+            for (const node of Object.values(state.nodes)) {
+                if (node.type !== 'component' || !node.data?.tabs) continue;
+                const remaining = node.data.tabs.filter(
+                    (tab) => tab.type && tab.type !== 'event' && tab.type !== 'function'
+                );
+                if (remaining.length === node.data.tabs.length) continue;
+                const activeStillPresent = remaining.some((tab) => tab.id === node.data?.activeTabId);
+                node.data.tabs = remaining;
+                node.data.activeTabId = activeStillPresent
+                    ? node.data?.activeTabId
+                    : remaining[remaining.length - 1]?.id;
             }
         }),
 

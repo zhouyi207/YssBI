@@ -16,7 +16,29 @@ pub struct DatabaseInstance {
 }
 
 impl DatabaseInstance {
+    /// 把 `Pending` 状态实际化为 `Lazy`（或 `Failed`）。Pending 的引擎可能是
+    /// SQL / Excel 这类同步读取器；此调用会真的去拉数据。其他状态保持不变。
+    fn realize_pending(&mut self) -> PolarsResult<()> {
+        if matches!(self.state, DatabaseState::Pending) {
+            match self.decl.engine.build_lazy() {
+                Ok(lazy_frame) => {
+                    self.state = DatabaseState::Lazy { lazy_frame };
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    self.state = DatabaseState::Failed {
+                        error: msg.clone(),
+                    };
+                    return Err(e);
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn ensure_loaded(&mut self) -> PolarsResult<&DataFrame> {
+        self.realize_pending()?;
+
         let need_load = matches!(self.state, DatabaseState::Lazy { .. });
 
         if need_load {
@@ -37,7 +59,8 @@ impl DatabaseInstance {
 
         match &self.state {
             DatabaseState::Loaded { dataframe, .. } => Ok(dataframe),
-            _ => unreachable!(),
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
+            _ => unreachable!("realize_pending+lazy collect should reach Loaded"),
         }
     }
 
@@ -51,7 +74,10 @@ impl DatabaseInstance {
     fn preview_view(&mut self) -> PolarsResult<DatabaseView> {
         let n = 100;
 
+        self.realize_pending()?;
+
         let df = match &self.state {
+            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
             DatabaseState::Lazy { lazy_frame } => lazy_frame.clone().limit(n).collect()?,
             DatabaseState::Loaded { dataframe, .. } => dataframe.head(Some(n as usize)),
             DatabaseState::Failed { error } => {

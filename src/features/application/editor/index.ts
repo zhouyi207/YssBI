@@ -7,3 +7,4 @@ export { useEditorGroup, GroupContext } from './useEditorGroup';
 export { useCanvasViewport } from './useCanvasViewport';
 export { useCanvasDrop } from './useCanvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
+export { saveAllDirtyGraphs } from './saveAllDirtyGraphs';

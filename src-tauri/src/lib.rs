@@ -15,6 +15,7 @@ pub mod log;
 pub mod project;
 pub mod schema;
 pub mod variable;
+pub mod window_state;
 
 use commands::*;
 use tauri::Manager;
@@ -66,6 +67,28 @@ pub fn run() {
             let project_registry =
                 tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir))?;
             app.manage(project_registry);
+
+            // 加载并应用主窗口几何状态：先 set_size/set_position/maximize，
+            // 再 show()。tauri.conf.json 中主窗口需配置为 `visible: false`，
+            // 否则会先以默认尺寸闪现一帧再被这里调整。
+            let window_state_path = app
+                .path()
+                .app_config_dir()
+                .map(|p| p.join("window_state.json"))
+                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            let window_state_store =
+                window_state::WindowStateStore::load(window_state_path);
+            if let Err(e) =
+                window_state::apply_main_window_state(app.handle(), &window_state_store)
+            {
+                tauri_plugin_log::log::warn!("Failed to apply main window state: {}", e);
+                // 兜底：即便恢复失败也确保主窗口显示出来
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.show();
+                }
+            }
+            app.manage(window_state_store);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +119,10 @@ pub fn run() {
             // ==================== 设置 ====================
             load_settings,
             save_settings,
+            // ==================== 窗口几何状态 ====================
+            get_window_states,
+            get_window_state,
+            save_window_state,
             // ==================== Graph CRUD ====================
             get_graph,
             unload_project_graph,

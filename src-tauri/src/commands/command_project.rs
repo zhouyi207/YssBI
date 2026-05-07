@@ -1,7 +1,6 @@
 use crate::application::database::name_from_path;
-use crate::database::{DatabaseInstance, DatabaseState};
-use crate::event::EventProject;
-use crate::event::{emit_project_event, Event};
+use crate::database::{DatabaseDecl, DatabaseInstance, DatabaseState};
+use crate::event::{emit_project_event, Event, EventDataframe, EventProject};
 use crate::execution::ExecutionEvent;
 use crate::frontend::FrontendError;
 use crate::graph::GraphId;
@@ -12,14 +11,16 @@ use crate::project::{
     execute_project_data, load_project_from_file, normalize_project_name, save_project_to_file,
     validate_new_project_path as validate_new_project_path_impl, LegacyProjectRecord, ProjectData,
     ProjectIndex, ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
-    PROJECT_METADATA_FILE,
+    ProjectStore, PROJECT_METADATA_FILE,
 };
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
     GraphsWithValidationDTO, InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
 use polars::prelude::*;
+use std::sync::{Arc, RwLock};
 use tauri::{ipc::Channel, AppHandle, State};
+use yss_sci::api::database::EditHistory;
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -35,12 +36,27 @@ fn dtype_to_string(dt: &DataType) -> String {
     format!("{:?}", dt)
 }
 
-/// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
-/// 优先使用 decl.name（后端 unique name），否则从 path 推导
-fn extract_database_schema(
-    instance: &DatabaseInstance,
-) -> Option<(String, Vec<ColumnInfoDTO>, usize, usize)> {
-    let name = instance
+/// 从 `DatabaseInstance` 抽取出来给前端的 schema 视图。
+enum SchemaInfo {
+    Ready {
+        name: String,
+        columns: Vec<ColumnInfoDTO>,
+        row_count: usize,
+        column_count: usize,
+    },
+    /// 后端尚未触发 IO（如 SQL / Excel 异步物化中），仅有显示名。
+    Pending {
+        name: String,
+    },
+    /// 上一次 IO 失败。
+    Failed {
+        name: String,
+        error: String,
+    },
+}
+
+fn database_display_name(instance: &DatabaseInstance) -> String {
+    instance
         .decl
         .name
         .clone()
@@ -50,7 +66,13 @@ fn extract_database_schema(
             crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
             crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
             crate::database::DatabaseEngine::InMemory { name } => name.clone(),
-        });
+        })
+}
+
+/// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
+/// 优先使用 decl.name（后端 unique name），否则从 path 推导
+fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
+    let name = database_display_name(instance);
 
     match &instance.state {
         DatabaseState::Loaded { dataframe, .. } => {
@@ -66,10 +88,23 @@ fn extract_database_schema(
                 .collect();
             let row_count = dataframe.height();
             let column_count = columns.len();
-            Some((name, columns, row_count, column_count))
+            SchemaInfo::Ready {
+                name,
+                columns,
+                row_count,
+                column_count,
+            }
         }
         DatabaseState::Lazy { lazy_frame } => {
-            let schema = lazy_frame.clone().collect_schema().ok()?;
+            let schema = match lazy_frame.clone().collect_schema() {
+                Ok(s) => s,
+                Err(e) => {
+                    return SchemaInfo::Failed {
+                        name,
+                        error: e.to_string(),
+                    }
+                }
+            };
             let columns: Vec<ColumnInfoDTO> = schema
                 .iter_names()
                 .filter_map(|n| {
@@ -93,9 +128,43 @@ fn extract_database_schema(
                         .map(|v| v as usize)
                 })
                 .unwrap_or(0);
-            Some((name, columns, row_count, column_count))
+            SchemaInfo::Ready {
+                name,
+                columns,
+                row_count,
+                column_count,
+            }
         }
-        DatabaseState::Failed { .. } => None,
+        DatabaseState::Pending => SchemaInfo::Pending { name },
+        DatabaseState::Failed { error } => SchemaInfo::Failed {
+            name,
+            error: error.clone(),
+        },
+    }
+}
+
+/// 把 `SchemaInfo` 写入 `DatabaseDeclDTO`，以便 `get_project_*` 命令复用。
+fn apply_schema_info(dto: &mut DatabaseDeclDTO, info: SchemaInfo) {
+    match info {
+        SchemaInfo::Ready {
+            name,
+            columns,
+            row_count,
+            column_count,
+        } => {
+            dto.name = Some(name);
+            dto.columns = Some(columns);
+            dto.row_count = Some(row_count);
+            dto.column_count = Some(column_count);
+        }
+        SchemaInfo::Pending { name } => {
+            dto.name = Some(name);
+            dto.loading = Some(true);
+        }
+        SchemaInfo::Failed { name, error } => {
+            dto.name = Some(name);
+            dto.load_error = Some(error);
+        }
     }
 }
 
@@ -118,14 +187,7 @@ pub fn get_project_data(state: State<ProjectState>) -> ProjectDataDTO {
     for (id, decl) in data.databases.iter() {
         let mut db_dto = DatabaseDeclDTO::from(decl);
         if let Some(instance) = store.databases.get(id) {
-            if let Some((name, columns, row_count, column_count)) =
-                extract_database_schema(instance)
-            {
-                db_dto.name = Some(name);
-                db_dto.columns = Some(columns);
-                db_dto.row_count = Some(row_count);
-                db_dto.column_count = Some(column_count);
-            }
+            apply_schema_info(&mut db_dto, extract_database_schema(instance));
         }
         enriched.insert(id.clone(), db_dto);
     }
@@ -149,14 +211,7 @@ pub fn get_project_databases_variables(state: State<ProjectState>) -> DatabasesV
     for (id, decl) in data.databases.iter() {
         let mut db_dto = DatabaseDeclDTO::from(decl);
         if let Some(instance) = store.databases.get(id) {
-            if let Some((name, columns, row_count, column_count)) =
-                extract_database_schema(instance)
-            {
-                db_dto.name = Some(name);
-                db_dto.columns = Some(columns);
-                db_dto.row_count = Some(row_count);
-                db_dto.column_count = Some(column_count);
-            }
+            apply_schema_info(&mut db_dto, extract_database_schema(instance));
         }
         databases.insert(id.clone(), db_dto);
     }
@@ -322,6 +377,140 @@ pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
     registry.path().to_string_lossy().into_owned()
 }
 
+/// 收集 store 中所有 `Pending` 的数据库声明快照。返回 `(id, decl)` 列表，
+/// 不持有 store 锁；后续的物化在锁外进行，避免阻塞前端读路径。
+fn snapshot_pending_databases(
+    store: &Arc<RwLock<ProjectStore>>,
+) -> Vec<(String, DatabaseDecl)> {
+    let guard = match store.read() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    guard
+        .databases
+        .iter()
+        .filter_map(|(id, instance)| {
+            if matches!(instance.state, DatabaseState::Pending) {
+                Some((id.clone(), instance.decl.clone()))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// 把已物化好的 `DataFrame` 写回 `project_store`，并发送 `DataFrameSchemaUpdated` 事件。
+///
+/// **取消语义**：写回前会校验 store 中相应 id 仍然存在、状态仍是 `Pending`、
+/// 且 `engine` 与启动后台任务时的 decl 一致——若用户在物化期间切换了项目
+/// （旧项目状态被 clear / 新项目用同 id 但不同 decl 注册了数据源），则丢弃此次结果。
+fn install_materialized_database(
+    app: &AppHandle,
+    store: &Arc<RwLock<ProjectStore>>,
+    id: &str,
+    expected_decl: &DatabaseDecl,
+    result: PolarsResult<DataFrame>,
+) {
+    let mut guard = match store.write() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let Some(instance) = guard.databases.get_mut(id) else {
+        return;
+    };
+    if !matches!(instance.state, DatabaseState::Pending) {
+        return;
+    }
+    if instance.decl.engine != expected_decl.engine {
+        return;
+    }
+
+    match result {
+        Ok(df) => {
+            let schema = df.schema();
+            let columns: Vec<ColumnInfoDTO> = schema
+                .iter_names()
+                .filter_map(|n| {
+                    schema.get(n).map(|dt| ColumnInfoDTO {
+                        name: n.to_string(),
+                        dtype: dtype_to_string(dt),
+                    })
+                })
+                .collect();
+            let row_count = df.height();
+            let column_count = columns.len();
+            let arc_df = Arc::new(df);
+            instance.state = DatabaseState::Loaded {
+                dataframe: arc_df.clone(),
+                original: arc_df,
+                history: EditHistory::new(),
+            };
+            drop(guard);
+            emit_project_event(
+                app,
+                Event::DataFrame(EventDataframe::DataFrameSchemaUpdated {
+                    id: id.to_string(),
+                    columns,
+                    row_count,
+                    column_count,
+                    error: None,
+                }),
+            );
+        }
+        Err(e) => {
+            let error = e.to_string();
+            instance.state = DatabaseState::Failed {
+                error: error.clone(),
+            };
+            drop(guard);
+            emit_project_event(
+                app,
+                Event::DataFrame(EventDataframe::DataFrameSchemaUpdated {
+                    id: id.to_string(),
+                    columns: Vec::new(),
+                    row_count: 0,
+                    column_count: 0,
+                    error: Some(error),
+                }),
+            );
+        }
+    }
+}
+
+/// 后台物化所有 `Pending` 数据库。每个完成后通过 `DataFrameSchemaUpdated` 通知前端。
+///
+/// 整个流程在 `spawn_blocking` 中顺序执行：
+/// 1. 锁外 `decl.engine.build_lazy()` + `.collect()`（耗时 IO）；
+/// 2. 锁内安装结果（毫秒级）；
+/// 3. 释放锁后发事件，避免事件 handler 与持锁路径相互等待。
+fn spawn_pending_database_materialization(
+    app: AppHandle,
+    project_store: Arc<RwLock<ProjectStore>>,
+) {
+    let pending = snapshot_pending_databases(&project_store);
+    if pending.is_empty() {
+        return;
+    }
+
+    log_app!(
+        LogLevel::Info,
+        "[command.load_project] Materializing {} pending database(s) in background",
+        pending.len()
+    );
+
+    tauri::async_runtime::spawn_blocking(move || {
+        for (id, decl) in pending {
+            log_app!(
+                LogLevel::Debug,
+                "[materialize] start id={}",
+                id
+            );
+            let result = decl.engine.build_lazy().and_then(|lazy| lazy.collect());
+            install_materialized_database(&app, &project_store, &id, &decl, result);
+        }
+    });
+}
+
 /// 加载项目（从状态管理层）
 #[tauri::command]
 pub fn load_project(
@@ -343,6 +532,12 @@ pub fn load_project(
         project_data.info()
     );
 
+    // Defensively reset the previous project's in-memory runtime (loaded
+    // graphs, schema providers, project_store) before applying the new
+    // manifest. `set_data` would overwrite the maps anyway, but doing an
+    // explicit `clear()` keeps the contract simple: every project switch
+    // starts from a clean state.
+    state.clear();
     state.set_data(project_data.clone());
     state.set_path(Some(path.clone()));
     emit_project_event(
@@ -352,6 +547,11 @@ pub fn load_project(
             path: Some(path),
         }),
     );
+
+    // Kick off background materialization of SQL / Excel sources so the
+    // frontend can land on the editor immediately while their schemas
+    // arrive via DataFrameSchemaUpdated events.
+    spawn_pending_database_materialization(app.clone(), state.project_store.clone());
     Ok(())
 }
 

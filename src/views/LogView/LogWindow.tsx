@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogPanelContent } from './LogPanelContent';
+import { usePersistedWindow } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { Button } from '@/components/ui/button';
 
 export const LogWindow = () => {
   const { t } = useTranslation();
   const [isMaximized, setIsMaximized] = useState(false);
+
+  usePersistedWindow('logs');
 
   useEffect(() => {
     let cleanup: (() => void) | null = null;
