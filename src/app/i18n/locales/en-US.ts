@@ -28,6 +28,49 @@ export const enUS = {
   editor: {
     initializationFailed: "Initialization failed: {{error}}",
   },
+  /** Editor context menus and input dialogs triggered from them */
+  contextMenu: {
+    sidebar: {
+      open: "Open",
+      rename: "Rename",
+      duplicate: "Duplicate",
+      delete: "Delete",
+      newFolder: "New Folder",
+      renameFolder: "Rename Folder",
+      deleteFolder: "Delete Folder",
+      newVariable: "New Variable",
+    },
+    dialog: {
+      newFolderTitle: "New Folder",
+      createSubmit: "Create",
+      renameGraphTitle: "Rename",
+      renameFolderTitle: "Rename Folder",
+      renameVariableTitle: "Rename Variable",
+      renameSubmit: "Rename",
+    },
+    defaults: {
+      newEvent: "New Event",
+      newFunction: "New Function",
+      newVariable: "New Variable",
+    },
+    node: {
+      copy: "Copy",
+      cut: "Cut",
+      duplicate: "Duplicate",
+      disableNode: "Disable Node",
+      rename: "Rename",
+      collapse: "Collapse",
+      breakAllLinks: "Break All Links",
+      selectLinkedNodes: "Select Linked Nodes",
+      delete: "Delete",
+    },
+    pin: {
+      breakLinks: "Break Links",
+      resetValue: "Reset to Default",
+      promoteToVar: "Promote to Variable",
+      removePin: "Remove Pin",
+    },
+  },
   projectPicker: {
     title: "Project Management",
     heading: "Choose a YssBI Project",

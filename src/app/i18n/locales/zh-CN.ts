@@ -28,6 +28,49 @@ export const zhCN = {
   editor: {
     initializationFailed: "初始化失败: {{error}}",
   },
+  /** 编辑器内右键上下文菜单及由菜单触发的输入框 */
+  contextMenu: {
+    sidebar: {
+      open: "打开",
+      rename: "重命名",
+      duplicate: "复制",
+      delete: "删除",
+      newFolder: "新建文件夹",
+      renameFolder: "重命名文件夹",
+      deleteFolder: "删除文件夹",
+      newVariable: "新建变量",
+    },
+    dialog: {
+      newFolderTitle: "新建文件夹",
+      createSubmit: "创建",
+      renameGraphTitle: "重命名",
+      renameFolderTitle: "重命名文件夹",
+      renameVariableTitle: "重命名变量",
+      renameSubmit: "重命名",
+    },
+    defaults: {
+      newEvent: "新建事件",
+      newFunction: "新建函数",
+      newVariable: "新建变量",
+    },
+    node: {
+      copy: "复制",
+      cut: "剪切",
+      duplicate: "创建副本",
+      disableNode: "禁用节点",
+      rename: "重命名",
+      collapse: "折叠",
+      breakAllLinks: "断开全部连接",
+      selectLinkedNodes: "选择已连接节点",
+      delete: "删除",
+    },
+    pin: {
+      breakLinks: "断开连接",
+      resetValue: "恢复默认值",
+      promoteToVar: "提升为变量",
+      removePin: "移除 Pin",
+    },
+  },
   projectPicker: {
     title: "项目管理",
     heading: "选择一个 YssBI 项目",

@@ -84,7 +84,6 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
       {contextMenu && (
         <NodeContextMenu
           position={contextMenu}
-          nodeTitle={node.title}
           onClose={() => setContextMenu(null)}
         />
       )}

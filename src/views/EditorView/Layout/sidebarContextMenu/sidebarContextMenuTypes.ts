@@ -1,4 +1,5 @@
 import type { ContextMenuSection, PositionedContextMenuState } from "@/shared/ui/contextMenu";
+import type { TFunction } from "i18next";
 
 export type GraphResourceType = "event" | "function";
 
@@ -33,5 +34,6 @@ export interface SidebarContextMenuActions {
 
 export type SidebarContextMenuSectionsBuilder = (
   contextMenu: SidebarContextMenuState | null,
-  actions: SidebarContextMenuActions
+  actions: SidebarContextMenuActions,
+  t: TFunction
 ) => ContextMenuSection[];

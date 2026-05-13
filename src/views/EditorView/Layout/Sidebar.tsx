@@ -473,30 +473,31 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
     if (type === "event") {
-      await GraphService.createEvent("New Event", folderPath);
+      await GraphService.createEvent(t("contextMenu.defaults.newEvent"), folderPath);
     } else {
-      await GraphService.createFunction("New Function", folderPath);
+      await GraphService.createFunction(t("contextMenu.defaults.newFunction"), folderPath);
     }
     await refreshProjectIndex();
-  }, [refreshProjectIndex]);
+  }, [refreshProjectIndex, t]);
 
   const createFolderInFolder = useCallback((type: GraphResourceType, parentFolderPath = "") => {
-    openInputDialog("New Folder", "New Folder", async (name) => {
+    const title = t("contextMenu.dialog.newFolderTitle");
+    openInputDialog(title, title, async (name) => {
       await GraphService.createGraphFolder(type, joinFolderPath(parentFolderPath, name));
       await refreshProjectIndex();
-    }, "Create");
-  }, [openInputDialog, refreshProjectIndex]);
+    }, t("contextMenu.dialog.createSubmit"));
+  }, [openInputDialog, refreshProjectIndex, t]);
 
   const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
-    openInputDialog("Rename", name, async (nextName) => {
+    openInputDialog(t("contextMenu.dialog.renameGraphTitle"), name, async (nextName) => {
       if (type === "event") {
         await GraphService.updateEvent(id, { name: nextName } as any);
       } else {
         await GraphService.updateFunction(id, { name: nextName } as any);
       }
       await refreshProjectIndex();
-    }, "Rename");
-  }, [openInputDialog, refreshProjectIndex]);
+    }, t("contextMenu.dialog.renameSubmit"));
+  }, [openInputDialog, refreshProjectIndex, t]);
 
   const deleteGraphItem = useCallback(async (id: string, type: GraphResourceType) => {
     if (type === "event") {
@@ -513,11 +514,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   }, [refreshProjectIndex]);
 
   const renameFolderItem = useCallback((type: GraphResourceType, folderPath: string, name: string) => {
-    openInputDialog("Rename Folder", name, async (nextName) => {
+    openInputDialog(t("contextMenu.dialog.renameFolderTitle"), name, async (nextName) => {
       await GraphService.renameGraphFolder(type, folderPath, nextName);
       await refreshProjectIndex();
-    }, "Rename");
-  }, [openInputDialog, refreshProjectIndex]);
+    }, t("contextMenu.dialog.renameSubmit"));
+  }, [openInputDialog, refreshProjectIndex, t]);
 
   const deleteFolderItem = useCallback(async (type: GraphResourceType, folderPath: string) => {
     await GraphService.deleteGraphFolder(type, folderPath);
@@ -525,10 +526,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   }, [refreshProjectIndex]);
 
   const renameVariableItem = useCallback((id: string, name: string) => {
-    openInputDialog("Rename Variable", name, async (nextName) => {
+    openInputDialog(t("contextMenu.dialog.renameVariableTitle"), name, async (nextName) => {
       await updateVariable(id, { name: nextName } as any);
-    }, "Rename");
-  }, [openInputDialog, updateVariable]);
+    }, t("contextMenu.dialog.renameSubmit"));
+  }, [openInputDialog, updateVariable, t]);
 
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
@@ -542,7 +543,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addVariable,
     renameVariableItem,
     deleteVariable,
-  });
+  }, t);
 
   const renderItem = (
     id: string,
@@ -795,7 +796,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label="Variable"
                 expanded={isSectionExpanded("graphsVariable")}
                 onToggle={() => toggleSection("graphsVariable")}
-                onAdd={() => addVariable("New Variable", "Int32", false)}
+                onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", false)}
               >
                   {Object.keys(globalVariables).length > 0 &&
                     Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) =>
@@ -822,7 +823,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label="Global"
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
-                onAdd={() => addVariable("New Variable", "Int32", true)}
+                onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", true)}
               >
                   {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
                     renderItem(id, data.name, "variable", { ...data, isGlobal: true }, true)
