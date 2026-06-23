@@ -15,6 +15,7 @@ export interface NodeProps {
   activePinId?: string | null;
   activePin?: PinModel | null;
   subgraphId?: string;
+  groupId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -53,6 +54,7 @@ export const Node = React.memo<NodeProps>((props) => {
     <NodeContainer
       node={node}
       graphId={props.subgraphId}
+      groupId={props.groupId}
       selected={selected}
       dragDelta={dragDelta}
       onPointerDown={onPointerDown}

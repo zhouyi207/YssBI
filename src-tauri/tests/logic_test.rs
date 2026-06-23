@@ -612,3 +612,59 @@ fn test_nested_sequence_tree() {
     println!("Total nodes executed: 1 root + 3 level1 + 9 level2 + 27 prints = 40 nodes");
     println!("Expected 27 print outputs showing position information");
 }
+
+fn operand_pin_names(graph: &GraphInstance, node_id: yssbi_lib::graph::NodeId) -> Vec<String> {
+    graph
+        .get_pin_instances_by_pin_role_family(node_id, &PinRole::Data(DataRole::Operands(0)))
+        .into_iter()
+        .map(|p| p.definition.name.clone())
+        .collect()
+}
+
+#[test]
+fn test_repeatable_pin_reindex_after_remove() {
+    let registry = create_test_registry();
+    let graph = GraphInstance::new(
+        "Repeatable Pin Naming",
+        yssbi_lib::graph::GraphKind::Event,
+        registry,
+    );
+
+    let add_node_id = graph
+        .create_node("Math:Operators:Add (+)")
+        .expect("create add node");
+    assert_eq!(operand_pin_names(&graph, add_node_id), vec!["A", "B"]);
+
+    graph
+        .add_repeatable_pin(add_node_id, 0)
+        .expect("add third operand");
+    assert_eq!(
+        operand_pin_names(&graph, add_node_id),
+        vec!["A", "B", "C"]
+    );
+
+    let pin_b = graph
+        .get_pin_instances_by_node_id(add_node_id)
+        .into_iter()
+        .find(|p| p.definition.name == "B")
+        .expect("pin B exists")
+        .id;
+
+    graph
+        .remove_repeatable_pin(add_node_id, pin_b)
+        .expect("remove pin B");
+    assert_eq!(
+        operand_pin_names(&graph, add_node_id),
+        vec!["A", "B"],
+        "after removing B, former C should be reindexed to B"
+    );
+
+    graph
+        .add_repeatable_pin(add_node_id, 0)
+        .expect("add pin after reindex");
+    assert_eq!(
+        operand_pin_names(&graph, add_node_id),
+        vec!["A", "B", "C"],
+        "new pin should take the next letter, not duplicate C"
+    );
+}

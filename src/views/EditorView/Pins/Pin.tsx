@@ -5,6 +5,8 @@ import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
+import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
+import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 
@@ -30,7 +32,6 @@ export interface PinProps extends PinModel {
   isActive?: boolean;
   pinDragState?: PinDragState;
   onValueChange?: (pinId: string, value: unknown) => void;
-  removable?: boolean;
   onRemovePin?: (pinId: string) => void;
   forceShowInput?: boolean;
 }
@@ -75,7 +76,6 @@ export const Pin: React.FC<PinProps> = (props) => {
     defaultValue,
     userValue,
     onValueChange,
-    removable,
     onRemovePin,
     forceShowInput,
   } = props;
@@ -90,6 +90,26 @@ export const Pin: React.FC<PinProps> = (props) => {
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuActions = useCanvasContextMenuActionsOptional();
+  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id);
+  const canRemovePin =
+    canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
+
+  const handleRemovePin = useCallback(() => {
+    if (onRemovePin) {
+      onRemovePin(id);
+      return;
+    }
+    void menuActions?.removeRepeatablePin(nodeId, id);
+  }, [onRemovePin, menuActions, nodeId, id]);
+
+  const hasLinks = links.length > 0;
+  const canReset =
+    direction === "input" &&
+    PRIMITIVE_PIN_TYPES.has(type) &&
+    !containerType &&
+    userValue != null &&
+    userValue !== undefined;
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -335,8 +355,12 @@ export const Pin: React.FC<PinProps> = (props) => {
       {contextMenu && (
         <PinContextMenu
           position={contextMenu}
-          removable={removable && !!onRemovePin}
-          onRemove={() => onRemovePin?.(id)}
+          removable={canRemovePin}
+          hasLinks={hasLinks}
+          canReset={canReset}
+          onBreakLinks={menuActions ? () => void menuActions.disconnectPin(id) : undefined}
+          onResetValue={menuActions ? () => void menuActions.resetPinValue(nodeId, id) : undefined}
+          onRemove={handleRemovePin}
           onClose={() => setContextMenu(null)}
         />
       )}

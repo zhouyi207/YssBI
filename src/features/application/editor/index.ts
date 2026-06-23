@@ -4,6 +4,8 @@ export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';
 export { useProjectOperations } from './useProjectOperations';
 export { useEditorGroup, GroupContext } from './useEditorGroup';
+export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
+export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';
 export { useCanvasDrop } from './useCanvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';

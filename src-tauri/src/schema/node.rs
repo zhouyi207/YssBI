@@ -1,6 +1,7 @@
-use crate::graph::pin::{PinSlot, PinTypeCapability};
+use crate::graph::pin::PinTypeCapability;
 use crate::graph::{NodeDefinition, NodeInstanceParams, NodeMetaData, NodePosition};
 use crate::graph::{NodeId, NodeInstance};
+use crate::schema::pin::PinSlotDTO;
 use serde::{Deserialize, Serialize};
 
 /// Node instance DTO - 对应前端 Node 类型
@@ -64,7 +65,7 @@ pub struct NodeDefinitionDTO {
     pub node_type: String,
     pub node_metadata: NodeMetaData,
     /// 声明式 pin 槽位（前端可用于渲染和兼容性过滤）
-    pub pin_slots: Vec<PinSlot>,
+    pub pin_slots: Vec<PinSlotDTO>,
     /// 预计算的类型能力（前端拖 pin 过滤用）
     pub type_capabilities: Vec<PinTypeCapability>,
 }
@@ -76,7 +77,7 @@ impl From<&NodeDefinition> for NodeDefinitionDTO {
             category: value.category.clone(),
             node_type: value.node_type.clone(),
             node_metadata: value.metadata.clone(),
-            pin_slots: value.pin_slots.clone(),
+            pin_slots: value.pin_slots.iter().map(PinSlotDTO::from).collect(),
             type_capabilities: value.type_capabilities(),
         }
     }

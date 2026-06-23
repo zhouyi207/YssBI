@@ -40,6 +40,9 @@ pub enum EventNode {
         removed_pin_ids: Vec<PinId>,
         /// 新增的 pins（完整 DTO）
         added_pins: Vec<PinInstanceDTO>,
+        /// 重命名/重索引后的 pins（完整 DTO）
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        updated_pins: Vec<PinInstanceDTO>,
         /// 被断开的连接 (from_pin, to_pin)
         removed_connections: Vec<(PinId, PinId)>,
         /// 变更后节点的完整 pin 顺序（用于前端重排）

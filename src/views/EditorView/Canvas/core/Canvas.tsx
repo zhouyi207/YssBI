@@ -1,6 +1,8 @@
 import { useRef, useMemo, useCallback } from "react";
 import { Node } from "../../Nodes/Node";
 import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
+import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
+import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/dataManagement";
@@ -44,6 +46,15 @@ export default function Canvas() {
     functions,
     groupId,
     selectedNodeIds,
+    copyNodes,
+    cutNodes,
+    duplicateNodes,
+    deleteNodesById,
+    breakAllNodeLinks,
+    selectLinkedNodes,
+    disconnectPinById,
+    resetPinValue,
+    setSelectedNodeIds,
   } = useEditorGroup();
 
   const dragDelta = useGestureStore(selectDragDelta, dragDeltaEq);
@@ -107,7 +118,33 @@ export default function Canvas() {
   const handlePinClick = useCallback(() => {}, []);
   const handlePinValueChange = useCallback(() => {}, []);
 
+  const contextMenuActions = useMemo((): CanvasContextMenuActions => ({
+    selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
+    copyNode: (nodeId) => copyNodes([nodeId]),
+    cutNode: (nodeId) => cutNodes([nodeId]),
+    duplicateNode: (nodeId) => duplicateNodes([nodeId]),
+    deleteNode: (nodeId) => deleteNodesById([nodeId]),
+    breakAllNodeLinks,
+    selectLinkedNodes,
+    disconnectPin: disconnectPinById,
+    resetPinValue,
+    removeRepeatablePin: handleNodeRemovePin,
+  }), [
+    groupId,
+    setSelectedNodeIds,
+    copyNodes,
+    cutNodes,
+    duplicateNodes,
+    deleteNodesById,
+    breakAllNodeLinks,
+    selectLinkedNodes,
+    disconnectPinById,
+    resetPinValue,
+    handleNodeRemovePin,
+  ]);
+
   return (
+    <CanvasContextMenuProvider value={contextMenuActions}>
     <div
       ref={ref}
       data-editor-group-id={groupId}
@@ -151,6 +188,7 @@ export default function Canvas() {
                   activePinId={activePin?.id}
                   activePin={activePin}
                   subgraphId={activeTabId || undefined}
+                  groupId={groupId}
                   onPointerDown={onNodePointerDown}
                   onAddInput={handleNodeAddInput}
                   onRemovePin={handleNodeRemovePin}
@@ -169,5 +207,6 @@ export default function Canvas() {
         setVariableDropMenu={setVariableDropMenu}
       />
     </div>
+    </CanvasContextMenuProvider>
   );
 }

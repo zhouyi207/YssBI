@@ -139,12 +139,25 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
     eventType = 'NodePinsUpdated';
 
     handle(payload: NodePinsUpdatedPayload, _callbacks?: EventCallbacks): void {
-        this.log('Node pins updated:', payload.nodeId, 'removed:', payload.removedPinIds.length, 'added:', payload.addedPins.length);
+        this.log(
+            'Node pins updated:',
+            payload.nodeId,
+            'removed:',
+            payload.removedPinIds.length,
+            'added:',
+            payload.addedPins.length,
+            'updated:',
+            payload.updatedPins?.length ?? 0,
+        );
 
         const store = useGraphDataStore.getState();
         store.batchUpdatePins({
             disconnectIds: payload.removedConnections.map(([from, to]) => `${from}->${to}`),
             removePinIds: payload.removedPinIds,
+            updatePins: (payload.updatedPins ?? []).map((pin) => ({
+                pinId: pin.id,
+                patch: { name: pin.name },
+            })),
             addPins: payload.addedPins.map((pin) => ({
                 nodeId: payload.nodeId,
                 pin: pin as PinData,

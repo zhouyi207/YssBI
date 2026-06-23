@@ -46,10 +46,11 @@ interface GraphDataStore {
   addPin(nodeId: NodeId, pin: PinData): void;
   updatePin(pinId: PinId, patch: Partial<PinData>): void;
   deletePin(pinId: PinId): void;
-  /** 批量更新 pin（断连 + 删 pin + 加 pin，单次 set） */
+  /** 批量更新 pin（断连 + 删 pin + 更新 pin + 加 pin，单次 set） */
   batchUpdatePins(params: {
     disconnectIds: ConnectionId[];
     removePinIds: PinId[];
+    updatePins?: Array<{ pinId: PinId; patch: Partial<PinData> }>;
     addPins: Array<{ nodeId: NodeId; pin: PinData }>;
   }): void;
   /** 按后端提供的顺序重排节点的 pin 列表 */
@@ -375,7 +376,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       };
     }),
 
-  batchUpdatePins: ({ disconnectIds, removePinIds, addPins }) =>
+  batchUpdatePins: ({ disconnectIds, removePinIds, updatePins, addPins }) =>
     set((state) => {
       const nextPins = { ...state.pins };
       const nextConnections = { ...state.connections };
@@ -412,7 +413,14 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
           (nextNodePins[pin.nodeId] ?? []).filter((id) => id !== pinId);
       }
 
-      // 3. 添加新 pin
+      // 3. 更新已有 pin（如 repeatable 重索引后的名称）
+      for (const { pinId, patch } of updatePins ?? []) {
+        const existing = nextPins[pinId];
+        if (!existing) continue;
+        nextPins[pinId] = { ...existing, ...patch };
+      }
+
+      // 4. 添加新 pin
       for (const { nodeId, pin } of addPins) {
         if (!nextPins[pin.id]) {
           nextPins[pin.id] = pin;

@@ -4,6 +4,9 @@ import { Pin as PinModel, Node } from "@/shared/types/domain";
 import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
+import {
+  getRepeatableSlot,
+} from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { Button } from "@/components/ui/button";
 
@@ -85,33 +88,13 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
   const outputsData = node.outputs.filter(p => p.type !== 'exec');
 
-  const nodeDef = useMemo(
-    () => useNodeRegistryStore.getState().getDefinition(node.nodeType),
-    [node.nodeType]
-  );
+  const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
 
-  const repeatableInfo = useMemo(() => {
-    if (!nodeDef) return null;
-    const slot = nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
-    if (!slot || slot.slotKind !== 'repeatable') return null;
-    return { namePrefix: slot.namePrefix, minCount: slot.minCount };
-  }, [nodeDef]);
+  const repeatableSlot = useMemo(() => getRepeatableSlot(nodeDef), [nodeDef]);
 
-  const isRepeatablePin = useMemo(() => {
-    if (!repeatableInfo) return (_pin: PinModel) => false;
-    const prefix = repeatableInfo.namePrefix;
-    return (pin: PinModel) => {
-      if (!prefix) return false;
-      return pin.name.startsWith(prefix);
-    };
-  }, [repeatableInfo]);
-
-  const repeatablePinCount = useMemo(() => {
-    if (!repeatableInfo) return 0;
-    return inputsData.filter(p => isRepeatablePin(p)).length;
-  }, [repeatableInfo, inputsData, isRepeatablePin]);
-
-  const hasRepeatable = repeatableInfo != null;
+  const removePinHandler = onRemovePin
+    ? (pinId: string) => onRemovePin(node.id, pinId)
+    : undefined;
 
   const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
     if (!activePin) return "normal";
@@ -152,6 +135,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     onPinClick={onPinClick}
                     onPinPointerDown={onPinPointerDown}
                     onValueChange={onPinValueChange}
+                    onRemovePin={removePinHandler}
                   />
                 );
               })}
@@ -172,6 +156,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     onPinClick={onPinClick}
                     onPinPointerDown={onPinPointerDown}
                     onValueChange={onPinValueChange}
+                    onRemovePin={removePinHandler}
                   />
                 );
               })}
@@ -183,7 +168,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
         <div className="flex-1 flex gap-2 px-2 py-2 whitespace-nowrap items-center">
           <div className="flex flex-col gap-1 flex-1">
             {inputsData.map((pin) => {
-              const isRepeatable = isRepeatablePin(pin);
               const ds = getPinDragState(pin);
               const metaData = getPinMetaData(nodeDef, pin.name);
               return (
@@ -197,8 +181,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
-                  removable={isRepeatable && onRemovePin != null && repeatablePinCount > (repeatableInfo?.minCount ?? 1)}
-                  onRemovePin={isRepeatable && onRemovePin ? (pinId) => onRemovePin(node.id, pinId) : undefined}
+                  onRemovePin={removePinHandler}
                 />
               );
             })}
@@ -219,6 +202,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   onPinClick={onPinClick}
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
+                  onRemovePin={removePinHandler}
                   forceShowInput={isConstantNode}
                 />
               );
@@ -226,7 +210,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           </div>
         </div>
 
-        {hasRepeatable && onAddInput && (
+        {repeatableSlot && onAddInput && (
           <div className="flex justify-end px-2 pb-2">
             <Button
               type="button"

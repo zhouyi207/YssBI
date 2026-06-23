@@ -5,6 +5,9 @@ import type { Node } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
+import {
+  getRepeatableSlot,
+} from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { Button } from "@/components/ui/button";
 
@@ -52,17 +55,13 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
     return "dimmed";
   }, [activePin]);
 
-  const nodeDef = useMemo(
-    () => useNodeRegistryStore.getState().getDefinition(node.nodeType),
-    [node.nodeType]
-  );
+  const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
 
-  const repeatableSlot = useMemo(() => {
-    if (!nodeDef) return undefined;
-    return nodeDef.pinSlots.find(s => s.slotKind === 'repeatable');
-  }, [nodeDef]);
+  const repeatableSlot = useMemo(() => getRepeatableSlot(nodeDef), [nodeDef]);
 
-  const repeatableMinCount = repeatableSlot?.minCount ?? 2;
+  const removePinHandler = onRemovePin
+    ? (pinId: string) => onRemovePin(node.id, pinId)
+    : undefined;
 
   return (
     <div className="relative flex flex-col min-h-full">
@@ -136,8 +135,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               onPinClick={onPinClick}
               onPinPointerDown={onPinPointerDown}
               onValueChange={onPinValueChange}
-              removable={onRemovePin != null && repeatableSlot != null && inputsData.length > repeatableMinCount}
-              onRemovePin={onRemovePin ? (pinId) => onRemovePin(node.id, pinId) : undefined}
+              onRemovePin={removePinHandler}
             />
           ))}
           {onAddInput && repeatableSlot && (

@@ -30,6 +30,8 @@ pub struct PinChangeSet {
     pub node_id: NodeId,
     pub removed_pin_ids: Vec<PinId>,
     pub added_pins: Vec<PinInstance>,
+    /// 同族 repeatable pin 重排索引后需同步到前端的 pin（如 C→B）
+    pub updated_pins: Vec<PinInstance>,
     pub removed_connections: Vec<(PinId, PinId)>,
 }
 
@@ -912,6 +914,7 @@ impl GraphInstance {
                 node_id,
                 removed_pin_ids: removed_ids,
                 added_pins: new_pin_instances,
+                updated_pins: vec![],
                 removed_connections: removed_conns,
             };
         }
@@ -1338,6 +1341,7 @@ impl GraphInstance {
             node_id,
             removed_pin_ids: vec![],
             added_pins: vec![new_pin],
+            updated_pins: vec![],
             removed_connections: vec![],
         };
         Ok((main_set, resolve_sets))
@@ -1427,7 +1431,7 @@ impl GraphInstance {
         }
 
         // Re-index remaining pins in the same family
-        self.reindex_repeatable_pins(node_id, slot_index)?;
+        let updated_pins = self.reindex_repeatable_pins(node_id, slot_index)?;
 
         self.propagate_schemas();
         let resolve_sets = self.resolve_all_dynamic_pins();
@@ -1437,6 +1441,7 @@ impl GraphInstance {
             node_id,
             removed_pin_ids: vec![pin_id],
             added_pins: vec![],
+            updated_pins,
             removed_connections,
         };
         Ok((main_set, pin_index_in_family, resolve_sets))
@@ -1444,7 +1449,12 @@ impl GraphInstance {
 
     /// Re-index all pins belonging to a Repeatable slot so their roles and names
     /// are contiguous (Operands(0), Operands(1), ...; A, B, C, ...).
-    fn reindex_repeatable_pins(&self, node_id: NodeId, slot_index: usize) -> Result<(), String> {
+    /// Returns updated pin instances for frontend sync.
+    fn reindex_repeatable_pins(
+        &self,
+        node_id: NodeId,
+        slot_index: usize,
+    ) -> Result<Vec<PinInstance>, String> {
         let definition;
         {
             let data_state = self.data_state.read().unwrap();
@@ -1462,7 +1472,7 @@ impl GraphInstance {
 
         let template_role = match slot.repeatable_template_role() {
             Some(r) => r.clone(),
-            None => return Ok(()),
+            None => return Ok(Vec::new()),
         };
 
         let family_pins = self.get_pin_instances_by_pin_role_family(node_id, &template_role);
@@ -1477,6 +1487,9 @@ impl GraphInstance {
             }
         }
 
-        Ok(())
+        Ok(family_pins
+            .iter()
+            .filter_map(|fpin| data_state.pins.get(&fpin.id).cloned())
+            .collect())
     }
 }

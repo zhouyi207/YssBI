@@ -125,6 +125,7 @@ export interface NodePinsUpdatedPayload {
     nodeId: string;
     removedPinIds: string[];
     addedPins: PinInstanceDTO[];
+    updatedPins?: PinInstanceDTO[];
     removedConnections: Array<[string, string]>;
     pinOrder?: string[];
 }

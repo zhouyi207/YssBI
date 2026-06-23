@@ -1,4 +1,4 @@
-use crate::graph::pin::PinDataTypeDefinition;
+use crate::graph::pin::{PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::value::DataType;
 use crate::graph::PinInstance;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
@@ -136,5 +136,92 @@ impl PinInstanceDTO {
 impl From<&PinInstance> for PinInstanceDTO {
     fn from(value: &PinInstance) -> Self {
         Self::from_pin_with_context(value, None, Vec::new())
+    }
+}
+
+/// Pin 槽位的前端 DTO（camelCase 字段，仅用于发往前端）
+///
+/// 与持久化用的 [`PinSlot`] 分离：`PinSlot` 在项目文件中以 snake_case 序列化，
+/// 不能直接改名（会破坏旧项目读取）。前端渲染需要 camelCase，因此用独立 DTO。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "slotKind", rename_all = "camelCase")]
+pub enum PinSlotDTO {
+    Fixed {
+        pin: PinDefinition,
+    },
+    Repeatable {
+        template: PinDefinition,
+        #[serde(rename = "namePrefix")]
+        name_prefix: String,
+        #[serde(rename = "minCount")]
+        min_count: usize,
+        #[serde(rename = "maxCount")]
+        max_count: Option<usize>,
+    },
+    DerivedFromInput {
+        #[serde(rename = "sourceRole")]
+        source_role: PinRole,
+        direction: PinDirection,
+        #[serde(rename = "baseType")]
+        base_type: PinDataTypeDefinition,
+    },
+}
+
+impl From<&PinSlot> for PinSlotDTO {
+    fn from(slot: &PinSlot) -> Self {
+        match slot {
+            PinSlot::Fixed { pin } => PinSlotDTO::Fixed { pin: pin.clone() },
+            PinSlot::Repeatable {
+                template,
+                name_prefix,
+                min_count,
+                max_count,
+            } => PinSlotDTO::Repeatable {
+                template: template.clone(),
+                name_prefix: name_prefix.clone(),
+                min_count: *min_count,
+                max_count: *max_count,
+            },
+            PinSlot::DerivedFromInput {
+                source_role,
+                direction,
+                base_type,
+            } => PinSlotDTO::DerivedFromInput {
+                source_role: source_role.clone(),
+                direction: *direction,
+                base_type: base_type.clone(),
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::pin::DataRole;
+
+    /// 前端依赖 camelCase 字段名（namePrefix/minCount/maxCount）判断 repeatable pin 是否可移除。
+    /// 锁定 DTO 的序列化契约，同时确认持久化 PinSlot 仍保持 snake_case。
+    #[test]
+    fn pin_slot_dto_serializes_camel_case() {
+        let slot = PinSlot::repeatable(
+            PinDefinition::data_input("", DataRole::Inputs(0), PinDataTypeDefinition::Unknown),
+            "X",
+            1,
+            None,
+        );
+
+        let dto_json = serde_json::to_value(PinSlotDTO::from(&slot)).unwrap();
+        assert_eq!(dto_json["slotKind"], "repeatable");
+        assert_eq!(dto_json["namePrefix"], "X");
+        assert_eq!(dto_json["minCount"], 1);
+        assert!(dto_json.get("maxCount").is_some());
+        assert!(dto_json.get("name_prefix").is_none());
+
+        // 持久化类型保持 snake_case，避免破坏旧项目读取
+        let persist_json = serde_json::to_value(&slot).unwrap();
+        assert_eq!(persist_json["name_prefix"], "X");
+        assert_eq!(persist_json["min_count"], 1);
+        assert!(persist_json.get("namePrefix").is_none());
     }
 }

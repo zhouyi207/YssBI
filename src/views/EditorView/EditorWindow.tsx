@@ -40,6 +40,7 @@ export const EditorWindow = () => {
         copy: editor.copy,
         cut: editor.cut,
         paste: editor.paste,
+        duplicateSelected: editor.duplicateSelected,
         saveGraph: editor.saveGraph,
         saveGraphAs: editor.saveGraphAs,
         importGraph: editor.importGraph,

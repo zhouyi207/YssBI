@@ -27,6 +27,15 @@ pub fn emit_pin_change_events(
             })
             .collect();
 
+        let updated_dtos: Vec<PinInstanceDTO> = cs
+            .updated_pins
+            .iter()
+            .map(|pin| {
+                let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
+                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref(), Vec::new())
+            })
+            .collect();
+
         let removed_pin_ids: Vec<PinId> = cs.removed_pin_ids;
 
         let pin_order = graph
@@ -40,6 +49,7 @@ pub fn emit_pin_change_events(
                 node_id: cs.node_id,
                 removed_pin_ids,
                 added_pins: added_dtos,
+                updated_pins: updated_dtos,
                 removed_connections: cs.removed_connections,
                 pin_order,
             }),
