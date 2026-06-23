@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useProjectIOStore } from "@/features/core/dataStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { ProjectService, type ProjectRecordRow } from "@/services/project/projectService";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 
 const RECENT_PROJECTS_STORAGE_KEY = "yssbi-recent-projects";
 
@@ -71,7 +72,7 @@ export function useProjectPicker() {
       const rows = await ProjectService.listRegisteredProjects();
       setProjects(rows.map(rowToManagedProject));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(formatErrorMessage(error));
     }
   }, []);
 
@@ -84,7 +85,7 @@ export function useProjectPicker() {
           await ProjectService.migrateLegacyRegisteredProjects(legacyProjects);
           clearLegacyRecentProjects();
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : String(error));
+          toast.error(formatErrorMessage(error));
         }
       }
       if (!cancelled) {
@@ -129,7 +130,12 @@ export function useProjectPicker() {
         detail: t("projectPicker.loading.loadingData"),
         percent: 0.5,
       });
-      await loadProject();
+      const projectData = await loadProject();
+      if (!projectData) {
+        const loadError = useProjectIOStore.getState().error;
+        toast.error(formatErrorMessage(loadError, "加载项目数据失败"));
+        return;
+      }
       uiStore.updateProgress({
         detail: t("projectPicker.loading.preparingEditor"),
         percent: 0.9,
@@ -141,7 +147,7 @@ export function useProjectPicker() {
       uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
       navigate("/editor");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(formatErrorMessage(error));
     } finally {
       uiStore.finishProgress();
       setBusy("idle");
@@ -163,7 +169,12 @@ export function useProjectPicker() {
         percent: 0.5,
       });
       const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-      await loadProject();
+      const projectData = await loadProject();
+      if (!projectData) {
+        const loadError = useProjectIOStore.getState().error;
+        toast.error(formatErrorMessage(loadError, "加载项目数据失败"));
+        return;
+      }
       uiStore.updateProgress({
         detail: t("projectPicker.loading.preparingEditor"),
         percent: 0.9,
@@ -175,7 +186,7 @@ export function useProjectPicker() {
       uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
       navigate("/editor");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(formatErrorMessage(error));
     } finally {
       uiStore.finishProgress();
       setBusy("idle");
@@ -195,7 +206,7 @@ export function useProjectPicker() {
         await ProjectService.removeRegisteredProject(id);
         setProjects((previous) => previous.filter((project) => project.id !== id));
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error));
+        toast.error(formatErrorMessage(error));
       }
     })();
   }, []);
@@ -210,7 +221,7 @@ export function useProjectPicker() {
           ),
         );
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error));
+        toast.error(formatErrorMessage(error));
       }
     })();
   }, []);

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Datelike, NaiveDate};
-use polars::prelude::{AnyValue, TimeUnit};
+use polars::prelude::{AnyValue, DataFrame, TimeUnit};
 
 pub(super) fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
     match v {
@@ -53,4 +53,18 @@ pub(super) fn polars_value_to_json(v: AnyValue<'_>) -> serde_json::Value {
         | AnyValue::EnumOwned(_, _) => serde_json::Value::String(format!("{}", v)),
         _ => serde_json::Value::String(format!("{}", v)),
     }
+}
+
+pub(super) fn dataframe_to_row_matrix(df: &DataFrame) -> Vec<Vec<serde_json::Value>> {
+    (0..df.height())
+        .map(|row_idx| {
+            df.columns()
+                .iter()
+                .map(|s| match s.get(row_idx) {
+                    Ok(v) => polars_value_to_json(v),
+                    Err(_) => serde_json::Value::Null,
+                })
+                .collect()
+        })
+        .collect()
 }

@@ -80,7 +80,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
     try {
       const es = await DatabaseService.saveDatabaseChanges(selectedDfId);
       await handleEditResult(es);
-      uiStore.showToast('数据修改已保存', 'success', 3000);
+      uiStore.showToast('数据已保存到项目', 'success', 3000);
     } catch (e) {
       const msg = String(e);
       logger.data.error('save changes failed: ' + msg, 'DataViewWindow');

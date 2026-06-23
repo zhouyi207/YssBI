@@ -3,7 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
 import { usePersistedWindow } from '@/features/application/window';
-import { useDatabaseStore } from '@/features/core/dataStore';
+import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard, getGridSelectionPrimaryCellText } from '@/features/application/dataView';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
@@ -126,10 +126,19 @@ export const DataViewWindow: React.FC = () => {
     return () => { cancelled = true; };
   }, [selectedDfId, dataframes]);
 
-  // Show window on mount
+  // 子窗口独立 WebView：先从后端同步项目，再展示窗口
   useEffect(() => {
-    getCurrentWindow().show().catch((e) => logger.app.error(String(e), 'DataViewWindow'));
-    dataLoader.refreshData();
+    let cancelled = false;
+    (async () => {
+      try {
+        await initProjectSync();
+        if (cancelled) return;
+        await getCurrentWindow().show();
+      } catch (e) {
+        logger.app.error(String(e), 'DataViewWindow');
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Dismiss context menu on any click
@@ -144,7 +153,7 @@ export const DataViewWindow: React.FC = () => {
   }, []);
 
   const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
-    const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string } } };
+    const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string }; duckDb?: { table?: string } } };
     let label = d.name;
     if (!label && d.engine?.csv?.path) { const p = d.engine.csv.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }
     if (!label && d.engine?.parquet?.path) { const p = d.engine.parquet.path; label = p.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') || p; }

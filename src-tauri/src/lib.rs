@@ -114,6 +114,7 @@ pub fn run() {
             new_project,
             load_project,
             flush_project,
+            save_project_as,
             execute_project,
             get_window_data,
             // ==================== 设置 ====================

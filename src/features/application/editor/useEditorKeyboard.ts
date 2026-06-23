@@ -13,6 +13,7 @@ interface UseEditorKeyboardProps {
   cut: () => void;
   paste: (pos?: { x: number; y: number }) => void;
   saveGraph: () => void;
+  saveGraphAs: () => void;
   importGraph: () => void;
   addEvent: (name?: string, options?: { openAfterCreate?: boolean }) => void;
   closeTab: (id: string) => void;
@@ -33,6 +34,7 @@ export function useEditorKeyboard({
   cut,
   paste,
   saveGraph,
+  saveGraphAs,
   importGraph,
   addEvent,
   closeTab,
@@ -109,7 +111,8 @@ export function useEditorKeyboard({
         paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
       } else if (isControlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (!e.shiftKey) saveGraph();
+        if (e.shiftKey) saveGraphAs();
+        else saveGraph();
       } else if (isControlKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
         importGraph();
@@ -181,6 +184,7 @@ export function useEditorKeyboard({
     cut,
     paste,
     saveGraph,
+    saveGraphAs,
     importGraph,
     addEvent,
     closeTab,

@@ -32,9 +32,16 @@ export interface ExcelEngineSpec {
     sheet: string;
 }
 
+/** DuckDB 引擎配置（项目内列存） */
+export interface DuckDbEngineSpec {
+    path: string;
+    table: string;
+}
+
 /** 加载数据库的引擎配置（与后端 DatabaseEngineDTO 对应） */
 export type LoadDatabaseEngineSpec =
     | { csv: CsvEngineSpec }
+    | { duckDb: DuckDbEngineSpec }
     | { parquet: ParquetEngineSpec }
     | { sql: SqlEngineSpec }
     | { excel: ExcelEngineSpec };

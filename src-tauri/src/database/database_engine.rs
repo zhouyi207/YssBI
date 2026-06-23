@@ -32,6 +32,13 @@ pub enum DatabaseEngine {
     /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
     Excel { path: String, sheet: String },
 
+    /// 项目内 DuckDB 列存（文件导入后的唯一持久化形态）
+    DuckDb {
+        /// 相对项目根目录的路径，例如 `database/db-xxx.duckdb`
+        path: String,
+        table: String,
+    },
+
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
     InMemory { name: String },
@@ -43,14 +50,22 @@ impl DatabaseEngine {
     ///
     /// 当前 polars 对 SQL / Excel 不提供 lazy adapter，我们的 `build_lazy()`
     /// 实际是同步 `read_*_to_dataframe` 后再 `df.lazy()`，所以它们返回 false。
-    /// 不属于真·lazy 的引擎在 `ProjectState::set_data` 中会被置为
-    /// `DatabaseState::Pending`，由后台任务延后物化。
+    /// 不属于真·lazy 的引擎在 `ProjectState::set_data` 中会同步物化为
+    /// `DatabaseState::Loaded` 或 `Failed`（不再使用后台 Pending 物化）。
     pub fn is_lazy_friendly(&self) -> bool {
         match self {
+            DatabaseEngine::Parquet { .. } | DatabaseEngine::InMemory { .. } => true,
             DatabaseEngine::Csv { .. }
-            | DatabaseEngine::Parquet { .. }
-            | DatabaseEngine::InMemory { .. } => true,
-            DatabaseEngine::Sql { .. } | DatabaseEngine::Excel { .. } => false,
+            | DatabaseEngine::DuckDb { .. }
+            | DatabaseEngine::Sql { .. }
+            | DatabaseEngine::Excel { .. } => false,
+        }
+    }
+
+    pub fn duckdb_table(&self) -> Option<(&str, &str)> {
+        match self {
+            DatabaseEngine::DuckDb { path, table, .. } => Some((path.as_str(), table.as_str())),
+            _ => None,
         }
     }
 
@@ -98,6 +113,10 @@ impl DatabaseEngine {
                     .map_err(|e| PolarsError::ComputeError(e.into()))?;
                 Ok(df.lazy())
             }
+
+            DatabaseEngine::DuckDb { .. } => Err(PolarsError::ComputeError(
+                "DuckDb engine has no lazy source; use duckdb_reader".into(),
+            )),
 
             DatabaseEngine::InMemory { .. } => Err(PolarsError::ComputeError(
                 "InMemory engine has no lazy source".into(),

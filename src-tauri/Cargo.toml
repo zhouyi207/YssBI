@@ -13,6 +13,7 @@ members = [".", "sci"]
 [workspace.dependencies]
 ndarray = { version = "0.17.2", features = ["serde"] }
 polars = { version = "0.53.0", features = ["lazy", "parquet", "csv", "json", "dtype-full", "timezones"] }
+polars-arrow = { version = "0.53.0", default-features = false }
 ndarray-stats = "0.7.0"
 
 
@@ -42,6 +43,7 @@ tauri-plugin-log = "2"
 ndarray.workspace = true
 ndarray-stats.workspace = true
 polars.workspace = true
+polars-arrow.workspace = true
 
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 chrono = "0.4.41"
@@ -56,6 +58,7 @@ calamine = "0.26"
 statrs = "0.17"
 rand = "0.8"
 faer = "0.24.0"
+duckdb = { version = "1.10504.0", features = ["bundled"] }
 
 # [profile.release]
 # opt-level = "z"      # 优化体积而非速度

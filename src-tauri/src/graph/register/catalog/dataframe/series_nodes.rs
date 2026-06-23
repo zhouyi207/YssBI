@@ -63,12 +63,8 @@ fn register_get_dataseries(registry: &NodeRegistry) {
                 DataValue::DataFrame(id) => id.clone(),
                 _ => return Err("Get DataSeries: input is not a DataFrame reference".to_string()),
             };
-            let df = ctx.get_dataframe(&df_id)?;
-            let col = df
-                .column(&column_name)
-                .map_err(|e| format!("Get DataSeries: {}", e))?;
-            let element_type = polars_dtype_to_data_type(col.dtype());
-            let series = col.clone().take_materialized_series();
+            let series = ctx.load_database_series(&df_id, &column_name)?;
+            let element_type = polars_dtype_to_data_type(series.dtype());
             let series_id = ctx.put_series(series)?;
             let mut ds_value = DataSeriesValue::with_element_type(series_id, element_type.clone());
             if matches!(element_type, DataType::Int64 | DataType::Date) {

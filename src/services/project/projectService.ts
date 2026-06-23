@@ -336,6 +336,44 @@ export class ProjectService {
         }
     }
 
+    /** 项目根目录的父路径（用于另存为默认目录） */
+    static projectParentDirectory(metadataOrRootPath: string): string {
+        const normalized = metadataOrRootPath.replace(/\\/g, "/");
+        const root = normalized.replace(/\/metadata\.yssbi$/i, "");
+        const idx = root.lastIndexOf("/");
+        return idx > 0 ? root.slice(0, idx) : root;
+    }
+
+    /**
+     * 另存为：选择空目录，复制当前项目并切换工作路径。
+     */
+    static async saveProjectAs(): Promise<ProjectRecordRow | null> {
+        try {
+            const currentPath = await this.getProjectPath();
+            if (!currentPath) {
+                throw new Error("项目尚未加载");
+            }
+
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: "项目另存为",
+                defaultPath: this.projectParentDirectory(currentPath) || undefined,
+            });
+            if (!selected || Array.isArray(selected)) return null;
+
+            const validation = await this.validateNewProjectPath(selected);
+            if (!validation.ok) {
+                throw new Error(validation.message ?? "项目路径无效");
+            }
+
+            return await invoke<ProjectRecordRow>("save_project_as", { path: selected });
+        } catch (e) {
+            logger.app.error(`Failed to save project as: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
+            throw e;
+        }
+    }
+
     static async updateCanvas(subgraphId: string, canvas: CanvasState): Promise<void> {
         await invoke("update_canvas", { subgraphId, canvas });
     }

@@ -1,6 +1,7 @@
 //! 状态管理模块
 
-use crate::database::{dataframe_to_schema, DatabaseInstance, DatabaseState};
+use crate::application::database::bind_duckdb_instance;
+use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
 use crate::graph::{GraphId, GraphInstance};
 use crate::log::log_sys;
@@ -11,6 +12,7 @@ use crate::project::{
 use crate::variable::VariableInstance;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use yss_sci::api::database::EditHistory;
 
 /// 项目状态
 ///
@@ -77,16 +79,21 @@ impl ProjectState {
 
         // Rebuild project_store.databases from the new declarations.
         //
-        // Engines that polars supports as truly lazy (CSV / Parquet) are
-        // built eagerly: `build_lazy` only inspects file headers/footers and
-        // is essentially free. Engines that polars does NOT support lazily
-        // (SQL / Excel) are deferred via `DatabaseState::Pending` so we don't
-        // block the project-open path with a synchronous full-table read.
-        // The deferred engines are materialized later by
-        // `materialize_pending_databases` on a background task.
+        // DuckDb binds project-local column store metadata from `project.duckdb`.
+        // Other engines materialize synchronously (legacy edge cases only).
+        let project_root = self
+            .get_path()
+            .as_ref()
+            .map(|path| crate::project::project_root_from_path(path));
         let mut store = ProjectStore::default();
         for (id, decl) in databases.iter() {
-            let instance = if decl.engine.is_lazy_friendly() {
+            let instance = if matches!(decl.engine, DatabaseEngine::DuckDb { .. }) {
+                log_sys::info!(
+                    "[ProjectState.set_data] Database '{}' bound (DuckDb)",
+                    id
+                );
+                bind_duckdb_instance(decl, project_root.as_deref())
+            } else if decl.engine.is_lazy_friendly() {
                 match decl.engine.build_lazy() {
                     Ok(lazy_frame) => {
                         log_sys::info!(
@@ -114,12 +121,34 @@ impl ProjectState {
                 }
             } else {
                 log_sys::info!(
-                    "[ProjectState.set_data] Database '{}' deferred (Pending, engine not lazy)",
+                    "[ProjectState.set_data] Database '{}' materializing (non-DuckDb engine)",
                     id
                 );
-                DatabaseInstance {
-                    decl: decl.clone(),
-                    state: DatabaseState::Pending,
+                match decl.engine.build_lazy().and_then(|lazy| lazy.collect()) {
+                    Ok(df) => {
+                        let arc_df = Arc::new(df);
+                        DatabaseInstance {
+                            decl: decl.clone(),
+                            state: DatabaseState::Loaded {
+                                dataframe: arc_df.clone(),
+                                original: arc_df,
+                                history: EditHistory::new(),
+                            },
+                        }
+                    }
+                    Err(e) => {
+                        log_sys::warn!(
+                            "[ProjectState.set_data] Database '{}' materialize failed: {}",
+                            id,
+                            e
+                        );
+                        DatabaseInstance {
+                            decl: decl.clone(),
+                            state: DatabaseState::Failed {
+                                error: e.to_string(),
+                            },
+                        }
+                    }
                 }
             };
             store.databases.insert(id.clone(), instance);
@@ -139,8 +168,7 @@ impl ProjectState {
         Arc::new(move |dataframe_id: &str| {
             let mut store = store.write().ok()?;
             let db = store.databases.get_mut(dataframe_id)?;
-            let df = db.ensure_loaded().ok()?;
-            Some(dataframe_to_schema(df))
+            db.data_schema().ok()
         })
     }
 

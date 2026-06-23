@@ -63,6 +63,12 @@ pub trait NodeExecutionContextTrait {
     /// 按 ID 获取 DataFrame（先查执行缓存，再查原始数据库）
     fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String>;
 
+    /// 列出数据库/中间 DataFrame 的列名
+    fn list_database_columns(&mut self, db_id: &str) -> Result<Vec<String>, String>;
+
+    /// 按列加载 Series（DuckDB 列裁剪；结果缓存在执行 store）
+    fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String>;
+
     /// 存入中间 DataFrame，返回引用 ID
     fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String>;
 

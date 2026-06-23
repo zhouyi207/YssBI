@@ -1,3 +1,4 @@
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import {
     Message,
     MessageType,
@@ -55,13 +56,15 @@ class UIStore {
 
   // --- Toast ---
   showToast(content: string, type: MessageType = "info", duration = 3000) {
+    const message =
+      typeof content === "string" ? content : formatErrorMessage(content);
     this.state = {
       ...this.state,
       messages: [
         ...this.state.messages,
         {
           id: crypto.randomUUID(),
-          content,
+          content: message,
           type,
           duration,
         },

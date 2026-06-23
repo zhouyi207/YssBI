@@ -1,5 +1,6 @@
 # 在正式打包分发前，可以等渲染完毕再显示窗口
 # 在目前的开发环境中，不要这样做，可以取消 debug
+# 项目未发布 不做任何迁移处理
 
 # DOLIST
 
@@ -208,6 +209,66 @@
 - [ ] 我认为需要仔细考虑一下数据存储的问题，初步想法是使用 duckdb 按列存储在文件目录内，具体方式是在导入数据的时候，将数据尽可能的存储在当前文件夹下的 database (如果有) 中，在这里可能需要分为两种情况，一、文件类型数据：对于这种数据可以按照上述方式处理，转存为一种新的格式到本地来读取；二、数据库数据：对于这种数据直接按照数据库的方式处理就好了
 - [ ] 对于图像等处理，我更希望使用一个 sidebar 的方式，在这里我们可以选取我们需要的数据列以及图标类型来操作图像显示，这样就类似于 tableau 了
 - [ ] 架构，架构，架构
+
+## 2026.06.23
+
+**背景**：项目是列式分析（Decompose → Series → OLS 等），不需要整表全列进内存。当前 CSV 路径在 `Execution` 时会 `lazy.collect()` 整表物化，与列分析模型不匹配。目标：**DuckDB 作项目内列存 + 按列/按页 I/O，Polars 仍作 yss-sci / 图节点计算层**（承接 2026.05.20 的 DuckDB 设想）。
+
+**目标架构**：**DuckDB = SQL / 存储引擎**，**Polars = 数据处理 / 建模引擎**，中间以 **Arrow 零拷贝** 互转；所有文件型数据源（CSV、Excel、Parquet 等）统一 ingest 为项目内 `.duckdb` 列存，运行时不再直接依赖原始文件路径读取。
+
+### Phase 1 — 导入 ingest（基础设施）
+
+- [x] 添加 `duckdb` Rust 依赖（桌面嵌入，`bundled` 特性）
+- [x] 定义 `DatabaseEngine::DuckDb { path, table }` 及前后端 DTO / `LoadDatabaseEngineSpec` 同步
+- [x] 导入 CSV 时 ingest 到 `{project}/database/project.duckdb` 内新表（`db-{uuid}`），不再以 Polars `LazyCsvReader` 作为主路径
+- [x] 导入 Parquet 时同样 ingest 到 `project.duckdb` 新表，不再以 Polars `scan_parquet` Lazy 作为主路径
+- [x] `load_database` 返回元数据（id / name / rowCount / columns），不整表进内存
+- [x] 项目 save/load 包含 `database/` 目录；reopen 扫描 `database/*.duckdb` 绑定实例（Phase 4.5 起不再在 manifest 写 catalog）
+- [x] 新建项目时自动创建 `{project}/database/` 目录
+
+### Phase 2 — 读路径替换（元数据 / DataView）
+
+- [x] 新增 `DatabaseState::DuckDb { duckdb_path, table, row_count, columns }`（Phase 1 已落地；Execution 仍会物化到 `Loaded`）
+- [x] `get_database_meta` 对 DuckDB 数据源读缓存元数据，不再 Preview collect
+- [x] `build_schema_provider` 改为 `DatabaseInstance::data_schema()`，DuckDB 读缓存列元数据，不再 `ensure_loaded()`
+- [x] `get_database_rows` 改为 `DatabaseInstance::query_page()`（DuckDB `LIMIT/OFFSET`），分页不触发整表物化
+- [x] `count_lazy_rows` 保留给 Parquet 等非 DuckDB Lazy 导入；CSV 主路径已不再使用
+- [x] 项目 reopen 时枚举 `project.duckdb` 内用户表并绑定（`discover_databases_from_root` + `bind_duckdb_instance`；集成测试已覆盖）
+
+### Phase 3 — 图执行列裁剪（核心收益）
+
+- [x] `DatabaseInstance::load_columns(&[&str])`：DuckDB `SELECT col1, col2, ...` → Polars DataFrame（当前仍经临时 Parquet 中转，Arrow 零拷贝待 Phase 5）
+- [x] `Decompose DataFrame` 改为按列 `load_database_series`，不再 `get_dataframe` 整表后遍历全部列
+- [x] `Get DataSeries` 改为按列 `load_database_series`，不再整表加载
+- [x] `graph_runtime.get_dataframe` 保留整表路径并注明仅用于 Filter 等确需整表的节点；按列分析走 `load_database_series`
+- [x] 图执行缓存（`data_store`）按 `{db_id}::{column}` 缓存 Series，避免重复 I/O
+
+### Phase 4 — 统计与大表
+
+- [x] `get_column_stats` / `get_column_distribution` / `get_dataset_overview` 优先 DuckDB 按列聚合，按需拉单列进 Polars（`duckdb_analytics.rs`；DuckDB 路径不 `ensure_loaded`）
+- [x] 评估超内存场景：DuckDB 列存 + SQL 聚合/spill 承担大表 I/O；`duplicated_rows` 在 DuckDB 路径暂跳过全表 DISTINCT（返回 0）；内存编辑仍走 `Loaded` 小表路径
+- [x] **Parquet 导入 ingest 到 DuckDB**：`load_database(Parquet)` → `read_parquet` 写入项目 `.duckdb`；`DatabaseDecl.engine` 持久化为 `DuckDb` + 原始 Parquet 路径溯源；移除 `DatabaseState::Lazy` Parquet 主路径
+- [x] Excel 等其余文件型数据源 ingest 到 DuckDB（`DuckDbSource::Excel` + calamine → 临时 Parquet → DuckDB；与 CSV / Parquet 统一）
+
+### Phase 4.5 — 数据集目录即持久化（无 JSON catalog）
+
+- [x] **`metadata.yssbi` 不再持久化 `databases`**：manifest 仅保留 `projectName` / `appVersion` / `exportTime`
+- [x] **移除 `DuckDbSource` / `engine.source`**：显示名写入 DuckDB `_yssbi_meta`（按 `table_id`），reopen 从 meta 读取
+- [x] **导入 / 删除 / save**：save 不写 catalog JSON；delete 删表不写 manifest
+- [x] **单文件 DuckDB**：每个项目仅 `{project}/database/project.duckdb`；每个导入数据集 = 库内一张表（`table` = `db-{uuid}`）；reopen 枚举库内用户表（排除 `_yssbi_meta`）
+
+### Phase 5 — 编辑与导出语义
+
+- [x] **`save_database_changes`**：DuckDB 数据集将内存编辑写回 `project.duckdb`（`ingest_dataframe_to_duckdb` 替换表），保存后回到 `DatabaseState::DuckDb`；`export_database` 仍导出到用户指定的外部 CSV/Parquet（含未保存的内存编辑，不写回项目库）
+- [x] **远程 SQL 源（SQLite/PG/MySQL）**：导入时 snapshot ingest 到 `project.duckdb`（与 CSV/Excel 一致），reopen 通过表枚举恢复；不再依赖 session-only `Lazy` + `Pending` 物化路径
+
+### 架构约束（实施时遵守）
+
+- [x] **DuckDB（SQL / 存储）→ Arrow C Data Interface → Polars（数据处理）**：`query_to_dataframe` 走 `query_arrow` + FFI 导入 Polars，无临时 Parquet 读路径；写入 ingest 仍经临时 Parquet（`ingest_dataframe_to_duckdb`）
+- [x] **文件型数据统一 DuckDB 存储**：CSV、Parquet、**Excel** ingest 到项目内 **`database/project.duckdb`**（每数据集一张表；manifest 不写 catalog）
+- [x] **不**把 OLS/面板/时序等迁到 DuckDB SQL 内计算；DuckDB 只负责 I/O 与列裁剪（yss-sci 回归仍在 Polars/Rust 侧）
+- [x] **不**引入 ClickHouse 作为默认桌面导入链路
+- [x] 前端 `DatabaseService` API 尽量保持稳定；变更集中在 Rust `database/` 模块
 
 # TODOLIST
 

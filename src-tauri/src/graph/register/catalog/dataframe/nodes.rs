@@ -90,12 +90,11 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
                 }
             };
 
-            let df = ctx.get_dataframe(&df_id)?;
-            for col in df.columns() {
-                let col_name = col.name().to_string();
-                let series = col.clone().take_materialized_series();
+            let column_names = ctx.list_database_columns(&df_id)?;
+            for col_name in column_names {
+                let series = ctx.load_database_series(&df_id, &col_name)?;
+                let element_type = polars_dtype_to_data_type(series.dtype());
                 let series_id = ctx.put_series(series)?;
-                let element_type = polars_dtype_to_data_type(col.dtype());
                 let role = PinRole::Data(DataRole::Custom(col_name));
                 let value = DataValue::DataSeries(DataSeriesValue::with_element_type(series_id, element_type));
                 if let Err(_) = ctx.emit_output_by_role(&role, value) {}

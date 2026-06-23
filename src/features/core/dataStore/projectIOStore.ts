@@ -17,6 +17,7 @@ import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useHistoryStore } from '@/features/core/history';
 import { getViewport, useViewportStore } from '@/features/core/viewport';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -203,7 +204,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           metadata: { exportTime: index.exportTime, appVersion: index.appVersion },
         } as ProjectData;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const errorMessage = formatErrorMessage(err, 'Failed to load project');
         set({ status: LoadStatus.Error, error: errorMessage });
         logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
         return null;
@@ -246,7 +247,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
         return true;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const errorMessage = formatErrorMessage(err, 'Failed to load graph');
         logger.sys.error('Failed to load graph: ' + errorMessage, 'ProjectIOStore');
         set({ error: errorMessage });
         return false;

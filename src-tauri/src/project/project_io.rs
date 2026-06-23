@@ -4,13 +4,15 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{ProjectData, ProjectError, PROJECT_METADATA_FILE};
-use crate::database::DatabaseDecl;
+use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::{GraphId, GraphInstance, GraphKind};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const EVENTS_DIR: &str = "events";
 pub const FUNCTIONS_DIR: &str = "functions";
+pub const DATABASE_DIR: &str = "database";
+pub const PROJECT_DUCKDB_FILE: &str = "project.duckdb";
 pub const GLOBAL_VARIABLES_FILE: &str = "variables.yssbi-vars";
 pub const EVENT_EXTENSION: &str = "yssbi-event";
 pub const FUNCTION_EXTENSION: &str = "yssbi-function";
@@ -22,7 +24,6 @@ pub struct ProjectManifest {
     pub project_name: String,
     pub app_version: String,
     pub export_time: String,
-    pub databases: HashMap<String, DatabaseDecl>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +151,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     std::fs::create_dir_all(root)?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
+    ensure_project_database_dir(root)?;
 
     let global_variables = project_data
         .variables
@@ -200,7 +202,6 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         project_name: project_data.metadata.project_name.clone(),
         app_version: project_data.metadata.app_version.clone(),
         export_time: project_data.metadata.export_time.clone(),
-        databases: project_data.databases.clone(),
     };
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
@@ -214,7 +215,7 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.metadata.project_name = manifest.project_name;
     project_data.metadata.app_version = manifest.app_version;
     project_data.metadata.export_time = manifest.export_time;
-    project_data.databases = manifest.databases;
+    project_data.databases = discover_databases_from_root(root.as_path())?;
 
     let variables_path = root.join(GLOBAL_VARIABLES_FILE);
     if variables_path.exists() {
@@ -447,7 +448,7 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
     read_json(manifest_path.as_path())
 }
 
-fn project_root_from_path(path: &str) -> PathBuf {
+pub fn project_root_from_path(path: &str) -> PathBuf {
     let path = PathBuf::from(path.trim());
     let is_metadata_file = path
         .file_name()
@@ -462,6 +463,67 @@ fn project_root_from_path(path: &str) -> PathBuf {
     } else {
         path
     }
+}
+
+fn copy_project_directory(src: &Path, dst: &Path) -> Result<(), ProjectError> {
+    if !src.is_dir() {
+        return Err(ProjectError::InvalidProjectFormat(format!(
+            "source project directory not found: {}",
+            src.display()
+        )));
+    }
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_project_directory(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+/// 将当前项目复制到新目录，返回新 `metadata.yssbi` 绝对路径。
+/// 调用方负责在复制后 reload 内存状态并切换 `ProjectState` 路径。
+pub fn save_project_as_to_directory(
+    state: &crate::project::ProjectState,
+    new_root_path: &str,
+) -> Result<String, ProjectError> {
+    use crate::project::validate_new_project_path;
+
+    let validation = validate_new_project_path(new_root_path);
+    if !validation.ok {
+        return Err(ProjectError::InvalidProjectFormat(
+            validation
+                .message
+                .unwrap_or_else(|| "项目路径无效".into()),
+        ));
+    }
+
+    let old_path = state.get_path().ok_or_else(|| {
+        ProjectError::InvalidProjectFormat("项目尚未加载".into())
+    })?;
+    state
+        .persist_current_project()
+        .map_err(ProjectError::InvalidProjectFormat)?;
+
+    let old_root = project_root_from_path(&old_path);
+    let new_root = PathBuf::from(new_root_path.trim());
+    if old_root == new_root {
+        return Err(ProjectError::InvalidProjectFormat(
+            "不能另存为当前项目目录".into(),
+        ));
+    }
+
+    std::fs::create_dir_all(&new_root)?;
+    copy_project_directory(old_root.as_path(), new_root.as_path())?;
+
+    Ok(new_root
+        .join(PROJECT_METADATA_FILE)
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn local_variables_for_graph(
@@ -777,6 +839,47 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> 
     let json = serde_json::to_string_pretty(value).map_err(ProjectError::Serialize)?;
     std::fs::write(path, json)?;
     Ok(())
+}
+
+pub fn ensure_project_database_dir(root: &Path) -> Result<(), ProjectError> {
+    std::fs::create_dir_all(root.join(DATABASE_DIR))?;
+    Ok(())
+}
+
+pub fn relative_project_duckdb_path() -> String {
+    format!("{}/{}", DATABASE_DIR, PROJECT_DUCKDB_FILE)
+}
+
+pub fn project_duckdb_abs(root: &Path) -> PathBuf {
+    root.join(relative_project_duckdb_path())
+}
+
+/// 打开项目时枚举 `database/project.duckdb` 内的用户表，重建运行时 `DatabaseDecl` 索引。
+pub fn discover_databases_from_root(root: &Path) -> Result<HashMap<String, DatabaseDecl>, ProjectError> {
+    let mut map = HashMap::new();
+    let duckdb_path = project_duckdb_abs(root);
+    let tables = crate::database::list_data_tables(&duckdb_path).map_err(|e| {
+        ProjectError::InvalidProjectFormat(format!("Failed to list DuckDB tables: {e}"))
+    })?;
+
+    let relative_path = relative_project_duckdb_path();
+    for table in tables {
+        let display_name =
+            crate::database::read_display_name(&duckdb_path, &table).unwrap_or_else(|| table.clone());
+        let decl = DatabaseDecl {
+            id: table.clone(),
+            engine: DatabaseEngine::DuckDb {
+                path: relative_path.clone(),
+                table: table.clone(),
+            },
+            schema_version: SCHEMA_VERSION,
+            required: false,
+            name: Some(display_name),
+        };
+        map.insert(table, decl);
+    }
+
+    Ok(map)
 }
 
 #[cfg(test)]

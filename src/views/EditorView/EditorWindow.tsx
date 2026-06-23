@@ -8,6 +8,7 @@ import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSyncWithEditor } from "@/features/application/initialization";
 import { useEditorGroup } from "@/features/application/editor";
+import { useAutoOpenFirstGraph } from "@/features/application/editor/useAutoOpenFirstGraph";
 import { useEditorKeyboard } from "@/features/application/editor";
 import { useMenubar } from "@/features/application/menubar";
 import { usePersistedWindow } from "@/features/application/window";
@@ -27,6 +28,7 @@ export const EditorWindow = () => {
 
     // 启用项目同步（带编辑器回调，用于打开新 Tab 等 UI 扩展）
     useProjectSyncWithEditor();
+    useAutoOpenFirstGraph();
 
     // 全局键盘快捷键（Ctrl+C/V/Z/Y 等），粘贴时使用鼠标位置
     const editor = useEditorGroup({ withCanvasInteraction: false });
@@ -39,6 +41,7 @@ export const EditorWindow = () => {
         cut: editor.cut,
         paste: editor.paste,
         saveGraph: editor.saveGraph,
+        saveGraphAs: editor.saveGraphAs,
         importGraph: editor.importGraph,
         addEvent: editor.addEvent,
         closeTab: editor.closeTab,

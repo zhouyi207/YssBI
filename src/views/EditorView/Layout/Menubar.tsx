@@ -4,6 +4,8 @@ import { useNavigate } from "react-router";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
+import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
+import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,6 +92,7 @@ export function Menubar() {
   const {
     importGraph,
     saveGraph,
+    saveGraphAs,
     undo,
     redo,
     copy,
@@ -117,6 +120,18 @@ export function Menubar() {
     openNewWindow,
   } = useMenubar();
 
+  const currentPath = useProjectIOStore((s) => s.currentPath);
+  const saveableGraphTabId = useLayoutStore((s) => {
+    const editorGroupId = s.activeEditorGroupId || "default_editor";
+    const tabId = s.nodes[editorGroupId]?.data?.activeTabId;
+    if (!tabId || tabId === "settings") return null;
+    const tab = s.nodes[editorGroupId]?.data?.tabs?.find((t) => t.id === tabId);
+    if (tab && tab.type !== "event" && tab.type !== "function") return null;
+    return tabId;
+  });
+  const canSaveProject = Boolean(currentPath && saveableGraphTabId);
+  const canSaveProjectAs = Boolean(currentPath);
+
   const themeMode = useSettingsStore((s) => s.theme.mode ?? "dark");
   const updateTheme = useSettingsStore((s) => s.updateTheme);
   const saveDebounced = useSettingsStore((s) => s.saveDebounced);
@@ -133,8 +148,8 @@ export function Menubar() {
     { label: t("menubar.openProject"), shortcut: "Ctrl+O", onClick: () => importGraph() },
     { label: t("menubar.closeProject"), onClick: () => navigate("/projects") },
     { label: "-" },
-    { label: t("menubar.saveProject"), shortcut: "Ctrl+S", onClick: activeTabId ? () => saveGraph() : undefined },
-    { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: undefined },
+    { label: t("menubar.saveProject"), shortcut: "Ctrl+S", onClick: canSaveProject ? () => saveGraph() : undefined },
+    { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: canSaveProjectAs ? () => saveGraphAs() : undefined },
   ];
 
   const editItems: MenuItem[] = [

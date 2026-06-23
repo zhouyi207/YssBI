@@ -7,13 +7,15 @@ import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore'
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
   const activeGroupIdFromStore = useLayoutStore((s: LayoutState) => s.activeGroupId);
+  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
   const groupId = overrideGroupId ?? activeGroupIdFromStore ?? 'default_editor';
+  const editorGroupId = activeEditorGroupId || 'default_editor';
 
   const node = useLayoutStore((s: LayoutState) => s.nodes[groupId]);
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  const editorNode = useLayoutStore((s: LayoutState) => s.nodes[editorGroupId]);
 
   const isEditor = node?.type === 'component' && !!node.data?.tabs;
-  const functionalNode = isEditor ? node : useLayoutStore.getState().nodes[activeEditorGroupId || ''] || node;
+  const functionalNode = isEditor ? node : editorNode ?? node;
 
   const tabs = functionalNode?.data?.tabs || [];
   const activeTabId = functionalNode?.data?.activeTabId || null;
@@ -22,7 +24,7 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
   return {
     groupId,
     activeGroupId: activeGroupIdFromStore ?? 'default_editor',
-    activeEditorGroupId: activeEditorGroupId ?? 'default_editor',
+    activeEditorGroupId: editorGroupId,
     activeTabId,
     tabs,
     selectedNodeIds,

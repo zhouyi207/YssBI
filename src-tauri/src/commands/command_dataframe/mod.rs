@@ -4,7 +4,7 @@ use tauri::State;
 
 mod types;
 
-use types::polars_value_to_json;
+use types::dataframe_to_row_matrix;
 
 #[tauri::command]
 pub fn load_database(
@@ -64,30 +64,13 @@ pub fn get_database_rows(
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, String> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Execution)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
+    let df = state
+        .with_database_mut(&id, |db| {
+            db.query_page(offset, limit)
+                .map_err(|e| format!("Failed to query database page: {}", e))
+        })?;
 
-    let df = &view.dataframe;
-    let total = df.height();
-    let start = offset.min(total);
-    let count = limit.min(total.saturating_sub(start));
-
-    let sliced = df.slice(start as i64, count);
-
-    let result: Vec<Vec<serde_json::Value>> = (0..sliced.height())
-        .map(|row_idx| {
-            sliced
-                .columns()
-                .iter()
-                .map(|s| match s.get(row_idx) {
-                    Ok(v) => polars_value_to_json(v),
-                    Err(_) => serde_json::Value::Null,
-                })
-                .collect()
-        })
-        .collect();
-
+    let result = dataframe_to_row_matrix(&df);
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
@@ -96,11 +79,10 @@ pub fn get_column_stats(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Execution)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
-
-    let stats = yss_sci::api::database::compute_all_column_stats(&view.dataframe);
+    let stats = state.with_database_mut(&id, |db| {
+        db.compute_column_stats()
+            .map_err(|e| format!("Failed to compute column stats: {}", e))
+    })?;
 
     serde_json::to_value(stats).map_err(|e| e.to_string())
 }
@@ -110,11 +92,10 @@ pub fn get_column_distribution(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Execution)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
-
-    let dists = yss_sci::api::database::compute_all_column_distributions(&view.dataframe);
+    let dists = state.with_database_mut(&id, |db| {
+        db.compute_column_distributions()
+            .map_err(|e| format!("Failed to compute column distribution: {}", e))
+    })?;
 
     serde_json::to_value(dists).map_err(|e| e.to_string())
 }
@@ -124,11 +105,10 @@ pub fn get_dataset_overview(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Execution)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
-
-    let overview = yss_sci::api::database::compute_dataset_overview(&view.dataframe);
+    let overview = state.with_database_mut(&id, |db| {
+        db.compute_dataset_overview()
+            .map_err(|e| format!("Failed to compute dataset overview: {}", e))
+    })?;
 
     serde_json::to_value(overview).map_err(|e| e.to_string())
 }
@@ -230,10 +210,13 @@ pub fn save_database_changes(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| db.save_changes())?;
+    let edit_state =
+        crate::application::database::save_database_changes(state.inner(), &id)?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
+/// Export the current dataset view (including unsaved in-memory edits) to an external file.
+/// Use `save_database_changes` to persist edits into `project.duckdb`.
 #[tauri::command]
 pub fn export_database(
     state: State<ProjectState>,

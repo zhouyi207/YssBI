@@ -3,10 +3,12 @@ import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/c
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ProjectService } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
+import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { createPersistedWindow } from '@/features/application/window';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -23,8 +25,24 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
   }, []);
 
   const saveGraphAs = useCallback(async () => {
-    uiStore.showToast("项目目录模式暂不支持另存为", "warning", 3000);
-  }, []);
+    if (!currentPath) {
+      uiStore.showToast("项目尚未加载", "warning", 2000);
+      return;
+    }
+    try {
+      const dirtySaved = await saveAllDirtyGraphs();
+      if (!dirtySaved) return;
+
+      const record = await ProjectService.saveProjectAs();
+      if (!record) return;
+
+      await useProjectIOStore.getState().loadProject();
+      uiStore.showToast(`项目已另存为：${record.name}`, "success", 3000);
+    } catch (e) {
+      logger.app.error(String(e), 'ProjectOperations');
+      uiStore.showToast(`另存为失败：${formatErrorMessage(e)}`, "error", 3000);
+    }
+  }, [currentPath]);
 
   const saveGraph = useCallback(async () => {
     if (!currentPath) {
@@ -159,7 +177,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
     } catch (e) {
       logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
-      uiStore.showToast(`执行失败: ${e}`, "error", 5000);
+      uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
       const graphId = targetGraphId ?? (() => {
         const layoutStore = useLayoutStore.getState();
         const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;

@@ -1,59 +1,280 @@
+use std::path::PathBuf;
+
+use yssbi_lib::application::database::bind_duckdb_instance;
 use yssbi_lib::database::{
-    DatabaseAccess, DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState, DatabaseView,
+    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, write_display_name,
+    DatabaseAccess, DatabaseState,
+};
+use yssbi_lib::project::{
+    discover_databases_from_root, ensure_project_database_dir, project_duckdb_abs, ProjectData,
+    ProjectState,
 };
 
-/// 测试使用 DatabaseEngine::Csv 读取 iris.csv 文件
+fn setup_iris_duckdb_project() -> (PathBuf, String) {
+    let project_root =
+        PathBuf::from(format!("target/test_project_duckdb_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::remove_dir_all(&project_root);
+    ensure_project_database_dir(&project_root).expect("database dir");
+
+    let db_id = "db-test-iris";
+    let duckdb_path = project_duckdb_abs(&project_root);
+
+    ingest_csv_to_duckdb(
+        PathBuf::from("tests/data/iris.csv").as_path(),
+        &duckdb_path,
+        db_id,
+        ',',
+        true,
+        Some(100),
+    )
+    .expect("ingest csv");
+    write_display_name(&duckdb_path, db_id, "iris").expect("write display name");
+
+    (project_root, db_id.to_string())
+}
+
+/// CSV 导入后写入 DuckDB，并可预览/执行读取。
 #[test]
-fn test_read_iris_csv() {
-    println!("\n=== 测试读取 iris.csv 文件 ===");
+fn test_csv_ingest_to_duckdb_and_preview() {
+    println!("\n=== 测试 CSV ingest → DuckDB ===");
 
-    // 1. 创建 CSV 数据库引擎配置
-    let engine = DatabaseEngine::Csv {
-        path: "tests/data/iris.csv".to_string(),
-        delimiter: ',',
-        has_header: true,
-        infer_schema_length: Some(100),
-    };
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
 
-    println!("创建 CSV 引擎配置:");
-    println!("  路径: tests/data/iris.csv");
-    println!("  分隔符: ','");
-    println!("  包含表头: true");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
 
-    // 2. 创建数据库声明
-    let decl = DatabaseDecl {
-        id: "iris_dataset".to_string(),
-        engine: engine.clone(),
-        schema_version: 1,
-        required: true,
-        name: Some("iris".to_string()),
-    };
+    let preview = db_instance
+        .access(DatabaseAccess::Preview)
+        .expect("preview");
+    assert_eq!(preview.dataframe.height(), 100);
+    assert!(preview.dataframe.width() >= 5);
 
-    println!("\n创建数据库声明:");
-    println!("  ID: {}", decl.id);
-    println!("  Schema 版本: {}", decl.schema_version);
-
-    // 3. 构建 LazyFrame
-    let lazy_frame = engine
-        .build_lazy()
-        .expect("Failed to build lazy frame from CSV");
-
-    println!("\n成功构建 LazyFrame");
-
-    // 4. 创建数据库实例
-    let mut db_instance = DatabaseInstance {
-        decl,
-        state: DatabaseState::Lazy { lazy_frame },
-    };
-
-    println!("\n创建数据库实例 (Lazy 状态)");
-
-    // 5. 获取预览数据（前 100 行）
-    println!("\n=== 获取预览数据 ===");
-    let preview_df = db_instance
+    let full = db_instance
         .access(DatabaseAccess::Execution)
-        .expect("Failed to get preview");
+        .expect("execution");
+    assert_eq!(full.dataframe.height(), 150);
 
-    println!("预览数据 (前 10 行):");
-    println!("{:?}", preview_df.dataframe);
+    assert!(project_duckdb_abs(&project_root).is_file());
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 2：分页与 schema 不触发整表 Loaded。
+#[test]
+fn test_duckdb_query_page_and_schema_without_full_load() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+
+    let schema = db_instance.data_schema().expect("schema");
+    assert!(schema.columns.len() >= 5);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let page = db_instance.query_page(10, 5).expect("page");
+    assert_eq!(page.height(), 5);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let direct = query_page_to_dataframe(
+        &project_duckdb_abs(&project_root),
+        &db_id,
+        20,
+        3,
+    )
+    .expect("direct page");
+    assert_eq!(direct.height(), 3);
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 4.5：打开项目时从 project.duckdb 枚举表并绑定。
+#[test]
+fn test_project_reload_discovers_duckdb_from_directory() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let state = ProjectState::new();
+    state.set_path(Some(project_root.to_string_lossy().to_string()));
+
+    let mut project_data = ProjectData::new();
+    project_data.databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    assert_eq!(project_data.databases.len(), 1);
+    assert_eq!(
+        project_data.databases.get(&db_id).and_then(|d| d.name.as_deref()),
+        Some("iris")
+    );
+    state.set_data(project_data);
+
+    let mut store = state.project_store.write().unwrap();
+    let db = store
+        .databases
+        .get_mut(&db_id)
+        .expect("database in store");
+    assert!(matches!(db.state, DatabaseState::DuckDb { .. }));
+
+    let page = db.query_page(0, 20).expect("page after reload");
+    assert_eq!(page.height(), 20);
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// 同一 project.duckdb 可承载多张表。
+#[test]
+fn test_single_project_duckdb_multiple_tables() {
+    let project_root =
+        PathBuf::from(format!("target/test_project_multi_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::remove_dir_all(&project_root);
+    ensure_project_database_dir(&project_root).expect("database dir");
+    let duckdb_path = project_duckdb_abs(&project_root);
+    let csv = PathBuf::from("tests/data/iris.csv");
+
+    ingest_csv_to_duckdb(&csv, &duckdb_path, "db-a", ',', true, Some(100)).expect("ingest a");
+    ingest_csv_to_duckdb(&csv, &duckdb_path, "db-b", ',', true, Some(100)).expect("ingest b");
+    write_display_name(&duckdb_path, "db-a", "iris-a").expect("name a");
+    write_display_name(&duckdb_path, "db-b", "iris-b").expect("name b");
+
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    assert_eq!(databases.len(), 2);
+    assert_eq!(
+        databases.get("db-a").and_then(|d| d.name.as_deref()),
+        Some("iris-a")
+    );
+    assert_eq!(
+        databases.get("db-b").and_then(|d| d.name.as_deref()),
+        Some("iris-b")
+    );
+    assert_eq!(databases.get("db-a").unwrap().engine.duckdb_table(), Some(("database/project.duckdb", "db-a")));
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 1：Parquet ingest → DuckDB 表。
+#[test]
+fn test_parquet_ingest_to_duckdb() {
+    use polars::prelude::*;
+
+    let parquet_path = PathBuf::from(format!(
+        "target/test_iris_{}.parquet",
+        uuid::Uuid::new_v4()
+    ));
+    let csv_path = PathBuf::from("tests/data/iris.csv");
+    let mut df = LazyCsvReader::new(PlRefPath::new(csv_path.to_string_lossy().as_ref()))
+        .with_has_header(true)
+        .finish()
+        .expect("scan csv")
+        .collect()
+        .expect("collect csv");
+    let file = std::fs::File::create(&parquet_path).expect("create parquet");
+    ParquetWriter::new(file)
+        .finish(&mut df)
+        .expect("write parquet");
+
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_parquet_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let _ = std::fs::remove_file(&duckdb_path);
+
+    let meta = ingest_parquet_to_duckdb(
+        &parquet_path,
+        &duckdb_path,
+        "db-parquet-test",
+        None,
+    )
+    .expect("ingest parquet");
+
+    assert_eq!(meta.row_count, 150);
+    assert!(meta.columns.len() >= 5);
+
+    let _ = std::fs::remove_file(&parquet_path);
+    let _ = std::fs::remove_file(&duckdb_path);
+}
+
+/// Phase 3：按列加载不触发整表 Loaded。
+#[test]
+fn test_duckdb_load_columns_without_full_load() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+
+    let series = db_instance
+        .load_column_series("sepal_length")
+        .expect("load column");
+    assert_eq!(series.len(), 150);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let narrow = db_instance
+        .load_columns(&["sepal_length", "sepal_width"])
+        .expect("load columns");
+    assert_eq!(narrow.height(), 150);
+    assert_eq!(narrow.width(), 2);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 4：DuckDB 列统计/分布/概览不触发整表 Loaded。
+#[test]
+fn test_duckdb_analytics_without_full_load() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+
+    let stats = db_instance.compute_column_stats().expect("stats");
+    assert!(stats.len() >= 5);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let dists = db_instance
+        .compute_column_distributions()
+        .expect("distributions");
+    assert_eq!(dists.len(), stats.len());
+
+    let overview = db_instance.compute_dataset_overview().expect("overview");
+    assert_eq!(overview.size_shape.n_rows, 150);
+    assert!(overview.size_shape.n_columns >= 5);
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 5：`save_database_changes` 将编辑写回 `project.duckdb`，重开可恢复。
+#[test]
+fn test_edit_save_persists_to_duckdb() {
+    use yssbi_lib::application::database::save_database_changes;
+
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let state = ProjectState::new();
+    state.set_path(Some(project_root.to_string_lossy().to_string()));
+
+    let mut project_data = ProjectData::new();
+    project_data.databases =
+        discover_databases_from_root(project_root.as_path()).expect("discover");
+    state.set_data(project_data);
+
+    state
+        .with_database_mut(&db_id, |db| {
+            db.edit_cell(0, "sepal_length", serde_json::json!(999.0))
+        })
+        .expect("edit");
+
+    save_database_changes(&state, &db_id).expect("save");
+
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let page = db_instance.query_page(0, 1).expect("page");
+    let val = page
+        .column("sepal_length")
+        .expect("column")
+        .f64()
+        .expect("f64")
+        .get(0)
+        .unwrap();
+    assert!((val - 999.0).abs() < 1e-6);
+
+    let _ = std::fs::remove_dir_all(&project_root);
 }

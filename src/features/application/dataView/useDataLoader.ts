@@ -22,7 +22,11 @@ export function useDataLoader(selectedDfId: string | null) {
 
   const loadPageRows = useCallback(async (id: string, nextPageIndex: number) => {
     const requestId = ++initialRowsRequestRef.current;
-    const safePageIndex = Math.max(0, Math.min(nextPageIndex, Math.max(0, Math.ceil(selectedRowCount / CHUNK_SIZE) - 1)));
+    const rowCount = (useDatabaseStore.getState().databases[id]?.rowCount as number | undefined) ?? 0;
+    const maxPageIndex = rowCount > 0
+      ? Math.max(0, Math.ceil(rowCount / CHUNK_SIZE) - 1)
+      : nextPageIndex;
+    const safePageIndex = Math.max(0, Math.min(nextPageIndex, maxPageIndex));
     setLoading(true);
     const startedAt = performance.now();
     try {
@@ -36,11 +40,31 @@ export function useDataLoader(selectedDfId: string | null) {
     } finally {
       if (requestId === initialRowsRequestRef.current) setLoading(false);
     }
-  }, [CHUNK_SIZE, selectedRowCount]);
+  }, [CHUNK_SIZE]);
+
+  const ensureDatabaseMeta = useCallback(async (id: string) => {
+    const db = useDatabaseStore.getState().databases[id] as Record<string, unknown> | undefined;
+    const hasColumns = Array.isArray(db?.columns) && (db.columns as unknown[]).length > 0;
+    const hasRowCount = typeof db?.rowCount === 'number' && (db.rowCount as number) > 0;
+    if (hasColumns && hasRowCount) return;
+
+    const meta = await DatabaseService.getDatabaseMeta(id);
+    useDatabaseStore.getState().updateDatabase(id, {
+      name: meta.name,
+      columns: meta.columns,
+      rowCount: meta.rowCount,
+      columnCount: meta.columnCount,
+    });
+  }, []);
 
   const loadInitialRows = useCallback(async (id: string) => {
+    try {
+      await ensureDatabaseMeta(id);
+    } catch (e) {
+      logger.data.warn('getDatabaseMeta failed before row load: ' + String(e), 'DataViewWindow');
+    }
     await loadPageRows(id, 0);
-  }, [loadPageRows]);
+  }, [ensureDatabaseMeta, loadPageRows]);
 
   const reloadAllData = useCallback(async () => {
     if (!selectedDfId) return;

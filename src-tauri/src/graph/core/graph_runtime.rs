@@ -245,7 +245,8 @@ impl GraphRuntime {
     // 执行期数据缓存操作
     // ========================================================================
 
-    /// 获取 DataFrame：先查执行缓存，再查 ProjectStore 原始数据
+    /// 获取 DataFrame：先查执行缓存，再查 ProjectStore 原始数据。
+    /// 需要整表的节点（Filter 等）仍走此路径；按列分析应优先 `load_database_series`。
     pub fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String> {
         // 1. 先从执行缓存查找
         if let Some(df) = self.data_store.get_dataframe(id) {
@@ -266,6 +267,75 @@ impl GraphRuntime {
         }
 
         Err(format!("DataFrame '{}' not found", id))
+    }
+
+    fn series_cache_key(db_id: &str, column: &str) -> String {
+        format!("{db_id}::{column}")
+    }
+
+    /// 列出数据库列名；执行期中间 DataFrame 走 schema，不整表加载。
+    pub fn list_database_columns(&mut self, db_id: &str) -> Result<Vec<String>, String> {
+        if let Some(df) = self.data_store.get_dataframe(db_id) {
+            return Ok(df
+                .schema()
+                .iter_names()
+                .map(|name| name.to_string())
+                .collect());
+        }
+
+        let mut store = self.project_store.write().map_err(|e| e.to_string())?;
+        if let Some(db) = store.databases.get_mut(db_id) {
+            return db.list_column_names().map_err(|e| e.to_string());
+        }
+        drop(store);
+
+        let df = self.get_dataframe(db_id)?;
+        Ok(df
+            .schema()
+            .iter_names()
+            .map(|name| name.to_string())
+            .collect())
+    }
+
+    /// 按列加载 Series：DuckDB 列裁剪 → Polars；结果缓存在 `data_store`。
+    pub fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+        let cache_key = Self::series_cache_key(db_id, column);
+        if let Some(series) = self.data_store.get_series(&cache_key) {
+            return Ok(series.clone());
+        }
+
+        if let Some(df) = self.data_store.get_dataframe(db_id) {
+            let series = df
+                .column(column)
+                .map_err(|e| format!("Column '{column}' not found in cached DataFrame: {e}"))?
+                .clone()
+                .take_materialized_series();
+            self.data_store
+                .put_series_with_id(cache_key, series.clone());
+            return Ok(series);
+        }
+
+        let mut store = self.project_store.write().map_err(|e| e.to_string())?;
+        if let Some(db) = store.databases.get_mut(db_id) {
+            let series = db
+                .load_column_series(column)
+                .map_err(|e| format!("Failed to load column '{column}' from '{db_id}': {e}"))?;
+            drop(store);
+            self.data_store
+                .put_series_with_id(cache_key, series.clone());
+            return Ok(series);
+        }
+        drop(store);
+
+        let df = self.get_dataframe(db_id)?;
+        let series = df
+            .column(column)
+            .map_err(|e| format!("Column '{column}' not found: {e}"))?
+            .clone()
+            .take_materialized_series();
+        self.data_store
+            .put_series_with_id(cache_key, series.clone());
+        Ok(series)
     }
 
     /// 存入中间 DataFrame，返回引用 ID

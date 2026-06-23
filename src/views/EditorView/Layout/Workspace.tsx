@@ -1,5 +1,6 @@
 import { forwardRef, useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
@@ -188,7 +189,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       if (targetType === sidebarResource.type && targetFolderPath !== currentFolderPath) {
         void GraphService.moveGraphToFolder(sidebarResource.id, targetFolderPath)
           .then(() => useProjectIOStore.getState().loadProject())
-          .catch((error) => toast.error(error instanceof Error ? error.message : String(error)));
+          .catch((error) => toast.error(formatErrorMessage(error)));
       }
       return;
     }

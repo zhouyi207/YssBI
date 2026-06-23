@@ -89,6 +89,9 @@ pub enum DatabaseEngineDTO {
     /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
     Excel { path: String, sheet: String },
 
+    /// 项目内 DuckDB 列存
+    DuckDb { path: String, table: String },
+
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
     InMemory { name: String },
@@ -126,6 +129,10 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
             crate::database::DatabaseEngine::Excel { path, sheet } => DatabaseEngineDTO::Excel {
                 path: path.clone(),
                 sheet: sheet.clone(),
+            },
+            crate::database::DatabaseEngine::DuckDb { path, table } => DatabaseEngineDTO::DuckDb {
+                path: path.clone(),
+                table: table.clone(),
             },
             crate::database::DatabaseEngine::InMemory { name } => {
                 DatabaseEngineDTO::InMemory { name: name.clone() }
@@ -206,6 +213,9 @@ impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
             }
             DatabaseEngineDTO::Excel { path, sheet } => {
                 Ok(crate::database::DatabaseEngine::Excel { path, sheet })
+            }
+            DatabaseEngineDTO::DuckDb { path, table } => {
+                Ok(crate::database::DatabaseEngine::DuckDb { path, table })
             }
             DatabaseEngineDTO::Sql {
                 engine,

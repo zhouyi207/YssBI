@@ -181,6 +181,16 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         graph.get_dataframe(id)
     }
 
+    fn list_database_columns(&mut self, db_id: &str) -> Result<Vec<String>, String> {
+        let mut graph = self.graph.lock().unwrap();
+        graph.list_database_columns(db_id)
+    }
+
+    fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+        let mut graph = self.graph.lock().unwrap();
+        graph.load_database_series(db_id, column)
+    }
+
     fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String> {
         let mut graph = self.graph.lock().unwrap();
         Ok(graph.put_dataframe(df))

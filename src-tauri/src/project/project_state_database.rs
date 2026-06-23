@@ -43,6 +43,20 @@ impl ProjectState {
 
     /// 从 project_store 和 project_data 中移除数据库
     pub fn delete_database(&self, id: &str) {
+        let engine = {
+            let data = self.project_data.read().unwrap();
+            data.databases.get(id).map(|decl| decl.engine.clone())
+        };
+        if let Some(engine) = engine {
+            let project_root = self
+                .get_path()
+                .as_ref()
+                .map(|path| crate::project::project_root_from_path(path));
+            crate::application::database::remove_duckdb_table_if_needed(
+                &engine,
+                project_root.as_deref(),
+            );
+        }
         {
             let mut store = self.project_store.write().unwrap();
             store.databases.remove(id);

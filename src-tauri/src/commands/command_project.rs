@@ -1,6 +1,6 @@
 use crate::application::database::name_from_path;
-use crate::database::{DatabaseDecl, DatabaseInstance, DatabaseState};
-use crate::event::{emit_project_event, Event, EventDataframe, EventProject};
+use crate::database::{DatabaseInstance, DatabaseState};
+use crate::event::{emit_project_event, Event, EventProject};
 use crate::execution::ExecutionEvent;
 use crate::frontend::FrontendError;
 use crate::graph::GraphId;
@@ -8,19 +8,19 @@ use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
     default_project_parent_directory as default_project_parent_directory_impl,
-    execute_project_data, load_project_from_file, normalize_project_name, save_project_to_file,
+    execute_project_data, load_project_from_file, normalize_project_name, save_project_as_to_directory,
+    save_project_to_file,
     validate_new_project_path as validate_new_project_path_impl, LegacyProjectRecord, ProjectData,
     ProjectIndex, ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
-    ProjectStore, PROJECT_METADATA_FILE,
+    PROJECT_METADATA_FILE,
 };
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
     GraphsWithValidationDTO, InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
-use polars::prelude::*;
-use std::sync::{Arc, RwLock};
+use polars::prelude::DataType;
+use polars::prelude::len;
 use tauri::{ipc::Channel, AppHandle, State};
-use yss_sci::api::database::EditHistory;
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ enum SchemaInfo {
         row_count: usize,
         column_count: usize,
     },
-    /// 后端尚未触发 IO（如 SQL / Excel 异步物化中），仅有显示名。
+    /// 后端尚未物化（遗留 Pending 状态，正常路径不应出现）。
     Pending {
         name: String,
     },
@@ -65,6 +65,7 @@ fn database_display_name(instance: &DatabaseInstance) -> String {
             crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
             crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
             crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
+            crate::database::DatabaseEngine::DuckDb { .. } => instance.decl.id.clone(),
             crate::database::DatabaseEngine::InMemory { name } => name.clone(),
         })
 }
@@ -132,6 +133,26 @@ fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
                 name,
                 columns,
                 row_count,
+                column_count,
+            }
+        }
+        DatabaseState::DuckDb {
+            row_count,
+            columns,
+            ..
+        } => {
+            let columns: Vec<ColumnInfoDTO> = columns
+                .iter()
+                .map(|col| ColumnInfoDTO {
+                    name: col.name.clone(),
+                    dtype: col.dtype.clone(),
+                })
+                .collect();
+            let column_count = columns.len();
+            SchemaInfo::Ready {
+                name,
+                columns,
+                row_count: *row_count,
                 column_count,
             }
         }
@@ -377,140 +398,6 @@ pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
     registry.path().to_string_lossy().into_owned()
 }
 
-/// 收集 store 中所有 `Pending` 的数据库声明快照。返回 `(id, decl)` 列表，
-/// 不持有 store 锁；后续的物化在锁外进行，避免阻塞前端读路径。
-fn snapshot_pending_databases(
-    store: &Arc<RwLock<ProjectStore>>,
-) -> Vec<(String, DatabaseDecl)> {
-    let guard = match store.read() {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-    guard
-        .databases
-        .iter()
-        .filter_map(|(id, instance)| {
-            if matches!(instance.state, DatabaseState::Pending) {
-                Some((id.clone(), instance.decl.clone()))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-/// 把已物化好的 `DataFrame` 写回 `project_store`，并发送 `DataFrameSchemaUpdated` 事件。
-///
-/// **取消语义**：写回前会校验 store 中相应 id 仍然存在、状态仍是 `Pending`、
-/// 且 `engine` 与启动后台任务时的 decl 一致——若用户在物化期间切换了项目
-/// （旧项目状态被 clear / 新项目用同 id 但不同 decl 注册了数据源），则丢弃此次结果。
-fn install_materialized_database(
-    app: &AppHandle,
-    store: &Arc<RwLock<ProjectStore>>,
-    id: &str,
-    expected_decl: &DatabaseDecl,
-    result: PolarsResult<DataFrame>,
-) {
-    let mut guard = match store.write() {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let Some(instance) = guard.databases.get_mut(id) else {
-        return;
-    };
-    if !matches!(instance.state, DatabaseState::Pending) {
-        return;
-    }
-    if instance.decl.engine != expected_decl.engine {
-        return;
-    }
-
-    match result {
-        Ok(df) => {
-            let schema = df.schema();
-            let columns: Vec<ColumnInfoDTO> = schema
-                .iter_names()
-                .filter_map(|n| {
-                    schema.get(n).map(|dt| ColumnInfoDTO {
-                        name: n.to_string(),
-                        dtype: dtype_to_string(dt),
-                    })
-                })
-                .collect();
-            let row_count = df.height();
-            let column_count = columns.len();
-            let arc_df = Arc::new(df);
-            instance.state = DatabaseState::Loaded {
-                dataframe: arc_df.clone(),
-                original: arc_df,
-                history: EditHistory::new(),
-            };
-            drop(guard);
-            emit_project_event(
-                app,
-                Event::DataFrame(EventDataframe::DataFrameSchemaUpdated {
-                    id: id.to_string(),
-                    columns,
-                    row_count,
-                    column_count,
-                    error: None,
-                }),
-            );
-        }
-        Err(e) => {
-            let error = e.to_string();
-            instance.state = DatabaseState::Failed {
-                error: error.clone(),
-            };
-            drop(guard);
-            emit_project_event(
-                app,
-                Event::DataFrame(EventDataframe::DataFrameSchemaUpdated {
-                    id: id.to_string(),
-                    columns: Vec::new(),
-                    row_count: 0,
-                    column_count: 0,
-                    error: Some(error),
-                }),
-            );
-        }
-    }
-}
-
-/// 后台物化所有 `Pending` 数据库。每个完成后通过 `DataFrameSchemaUpdated` 通知前端。
-///
-/// 整个流程在 `spawn_blocking` 中顺序执行：
-/// 1. 锁外 `decl.engine.build_lazy()` + `.collect()`（耗时 IO）；
-/// 2. 锁内安装结果（毫秒级）；
-/// 3. 释放锁后发事件，避免事件 handler 与持锁路径相互等待。
-fn spawn_pending_database_materialization(
-    app: AppHandle,
-    project_store: Arc<RwLock<ProjectStore>>,
-) {
-    let pending = snapshot_pending_databases(&project_store);
-    if pending.is_empty() {
-        return;
-    }
-
-    log_app!(
-        LogLevel::Info,
-        "[command.load_project] Materializing {} pending database(s) in background",
-        pending.len()
-    );
-
-    tauri::async_runtime::spawn_blocking(move || {
-        for (id, decl) in pending {
-            log_app!(
-                LogLevel::Debug,
-                "[materialize] start id={}",
-                id
-            );
-            let result = decl.engine.build_lazy().and_then(|lazy| lazy.collect());
-            install_materialized_database(&app, &project_store, &id, &decl, result);
-        }
-    });
-}
-
 /// 加载项目（从状态管理层）
 #[tauri::command]
 pub fn load_project(
@@ -538,8 +425,8 @@ pub fn load_project(
     // explicit `clear()` keeps the contract simple: every project switch
     // starts from a clean state.
     state.clear();
-    state.set_data(project_data.clone());
     state.set_path(Some(path.clone()));
+    state.set_data(project_data.clone());
     emit_project_event(
         &app,
         Event::Project(EventProject::ProjectLoaded {
@@ -547,12 +434,48 @@ pub fn load_project(
             path: Some(path),
         }),
     );
-
-    // Kick off background materialization of SQL / Excel sources so the
-    // frontend can land on the editor immediately while their schemas
-    // arrive via DataFrameSchemaUpdated events.
-    spawn_pending_database_materialization(app.clone(), state.project_store.clone());
     Ok(())
+}
+
+/// 将当前项目另存为新目录（完整复制 events/functions/database 等）。
+#[tauri::command]
+pub async fn save_project_as(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    registry: State<'_, ProjectRegistry>,
+    path: String,
+) -> Result<ProjectRecord, String> {
+    log_app!(
+        LogLevel::Info,
+        "[command.save_project_as] Saving project copy to: {}",
+        path
+    );
+
+    let new_metadata_path =
+        save_project_as_to_directory(&state, &path).map_err(|e| e.to_string())?;
+
+    let project_data = load_project_from_file(&new_metadata_path).map_err(|e| e.to_string())?;
+
+    state.clear();
+    state.set_path(Some(new_metadata_path.clone()));
+    state.set_data(project_data.clone());
+
+    let record = registry
+        .register_project(
+            &project_data.metadata.project_name,
+            &new_metadata_path,
+        )
+        .await?;
+
+    emit_project_event(
+        &app,
+        Event::Project(EventProject::ProjectLoaded {
+            data: project_data,
+            path: Some(new_metadata_path),
+        }),
+    );
+
+    Ok(record)
 }
 
 #[tauri::command]
@@ -570,6 +493,8 @@ pub async fn create_project(
 
     let project_root = std::path::PathBuf::from(path.trim());
     std::fs::create_dir_all(&project_root).map_err(|e| format!("无法创建项目文件夹: {e}"))?;
+    crate::project::ensure_project_database_dir(&project_root)
+        .map_err(|e| format!("无法创建 database 目录: {e}"))?;
     let project_file_path = project_root.join(PROJECT_METADATA_FILE);
 
     let mut project_data = ProjectData::new();
@@ -586,8 +511,8 @@ pub async fn create_project(
         )
         .await?;
 
-    state.set_data(project_data.clone());
     state.set_path(Some(record.path.clone()));
+    state.set_data(project_data.clone());
     emit_project_event(
         &app,
         Event::Project(EventProject::ProjectLoaded {

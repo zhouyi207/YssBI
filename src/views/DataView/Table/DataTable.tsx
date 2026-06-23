@@ -82,9 +82,9 @@ export const DataTable: React.FC<DataTableProps> = ({
   const rowMarkerTheme = useMemo(() => buildRowMarkerThemeOverlay(appTheme), [appTheme]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
-  /** 分页模式下只渲染当前页数据，避免一次性绘制大数据集 */
+  /** 分页模式下：有列定义或已加载行数据即渲染表格 */
   const virtualRowCount = loadedRows.length;
-  const hasData = columns.length > 0;
+  const hasData = columns.length > 0 || loadedRows.length > 0;
   const gridColumns = useMemo<GridColumn[]>(() => {
     const realColumns = columns.map((col) => ({
       id: col.name,
