@@ -279,6 +279,10 @@
 - [x] repeatable pin 删除后重命名同步：`remove_repeatable_pin` 重索引后通过 `NodePinsUpdated.updatedPins` 下发，前端更新 pin 名称（修复 Add/OLS 等删除中间 pin 后再添加出现 A C C / X 1 X 3 X 3 等问题）
 - [x] 配置 GitHub Actions 发布流水线（`.github/workflows/publish.yml`，推 `release` 分支或手动触发）
 
+## 2026.06.25
+
+- [ ] 点击更新会自动更新
+
 # TODOLIST
 
 绘图组件库需要重构
