@@ -232,7 +232,7 @@
 - [x] `get_database_meta` 对 DuckDB 数据源读缓存元数据，不再 Preview collect
 - [x] `build_schema_provider` 改为 `DatabaseInstance::data_schema()`，DuckDB 读缓存列元数据，不再 `ensure_loaded()`
 - [x] `get_database_rows` 改为 `DatabaseInstance::query_page()`（DuckDB `LIMIT/OFFSET`），分页不触发整表物化
-- [x] `count_lazy_rows` 保留给 Parquet 等非 DuckDB Lazy 导入；CSV 主路径已不再使用
+- [x] `count_lazy_rows` / `load_database_direct` / `DatabaseState::Lazy`·`Pending` 已移除；`load_database` 仅 DuckDB ingest，`set_data` 仅绑定 DuckDb
 - [x] 项目 reopen 时枚举 `project.duckdb` 内用户表并绑定（`discover_databases_from_root` + `bind_duckdb_instance`；集成测试已覆盖）
 
 ### Phase 3 — 图执行列裁剪（核心收益）
@@ -269,6 +269,11 @@
 - [x] **不**把 OLS/面板/时序等迁到 DuckDB SQL 内计算；DuckDB 只负责 I/O 与列裁剪（yss-sci 回归仍在 Polars/Rust 侧）
 - [x] **不**引入 ClickHouse 作为默认桌面导入链路
 - [x] 前端 `DatabaseService` API 尽量保持稳定；变更集中在 Rust `database/` 模块
+
+## 2026.06.24
+
+- [x] 给 sidebar 为数据的情况下，左侧数据表添加右键菜单；右键菜单格式与图的右键菜单保持一致
+- [x] 移除 Lazy / Pending 遗留路径（`count_lazy_rows`、`load_database_direct`、`build_lazy`、`is_lazy_friendly`、`DatabaseState::Lazy` / `Pending`；`set_data` 仅绑定 DuckDb）
 
 # TODOLIST
 

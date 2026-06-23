@@ -15,7 +15,7 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
           : coeff.variable;
 
         return (
-          <div key={`${coeff.variable}-${coeff.category ?? idx}`} className="flex items-center gap-3">
+          <div key={`${coeff.variable}-${coeff.category ?? ''}-${idx}`} className="flex items-center gap-3">
             <span className="text-xs font-mono text-gray-400 w-28 text-right shrink-0 truncate" title={label}>
               {label}
             </span>

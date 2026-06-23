@@ -12,7 +12,6 @@ use crate::project::{
 use crate::variable::VariableInstance;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use yss_sci::api::database::EditHistory;
 
 /// 项目状态
 ///
@@ -77,10 +76,7 @@ impl ProjectState {
             };
         }
 
-        // Rebuild project_store.databases from the new declarations.
-        //
-        // DuckDb binds project-local column store metadata from `project.duckdb`.
-        // Other engines materialize synchronously (legacy edge cases only).
+        // Rebuild project_store.databases from DuckDB table declarations only.
         let project_root = self
             .get_path()
             .as_ref()
@@ -93,62 +89,16 @@ impl ProjectState {
                     id
                 );
                 bind_duckdb_instance(decl, project_root.as_deref())
-            } else if decl.engine.is_lazy_friendly() {
-                match decl.engine.build_lazy() {
-                    Ok(lazy_frame) => {
-                        log_sys::info!(
-                            "[ProjectState.set_data] Database '{}' bound (Lazy)",
-                            id
-                        );
-                        DatabaseInstance {
-                            decl: decl.clone(),
-                            state: DatabaseState::Lazy { lazy_frame },
-                        }
-                    }
-                    Err(e) => {
-                        log_sys::warn!(
-                            "[ProjectState.set_data] Database '{}' build_lazy failed: {}",
-                            id,
-                            e
-                        );
-                        DatabaseInstance {
-                            decl: decl.clone(),
-                            state: DatabaseState::Failed {
-                                error: e.to_string(),
-                            },
-                        }
-                    }
-                }
             } else {
-                log_sys::info!(
-                    "[ProjectState.set_data] Database '{}' materializing (non-DuckDb engine)",
+                log_sys::warn!(
+                    "[ProjectState.set_data] Database '{}' has unsupported engine; expected DuckDb",
                     id
                 );
-                match decl.engine.build_lazy().and_then(|lazy| lazy.collect()) {
-                    Ok(df) => {
-                        let arc_df = Arc::new(df);
-                        DatabaseInstance {
-                            decl: decl.clone(),
-                            state: DatabaseState::Loaded {
-                                dataframe: arc_df.clone(),
-                                original: arc_df,
-                                history: EditHistory::new(),
-                            },
-                        }
-                    }
-                    Err(e) => {
-                        log_sys::warn!(
-                            "[ProjectState.set_data] Database '{}' materialize failed: {}",
-                            id,
-                            e
-                        );
-                        DatabaseInstance {
-                            decl: decl.clone(),
-                            state: DatabaseState::Failed {
-                                error: e.to_string(),
-                            },
-                        }
-                    }
+                DatabaseInstance {
+                    decl: decl.clone(),
+                    state: DatabaseState::Failed {
+                        error: "Only DuckDb datasets are supported; re-import the data".into(),
+                    },
                 }
             };
             store.databases.insert(id.clone(), instance);

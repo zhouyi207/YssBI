@@ -53,7 +53,7 @@ export function CoefficientTable({
           <tbody>
             {coefficients.map((coeff, idx) => (
               <tr
-                key={`${coeff.variable}-${coeff.category ?? idx}`}
+                key={`${coeff.variable}-${coeff.category ?? ''}-${idx}`}
                 className={`
                   border-t border-gray-800/30 transition-colors hover:bg-[#1e2128]
                   ${idx % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'}

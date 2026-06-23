@@ -57,17 +57,56 @@ export function buildSidebarContextMenuSections(
     ];
   }
 
-  return [
-    {
-      items: [
-        { id: "new-variable", label: t("contextMenu.sidebar.newVariable"), icon: <VscAdd size={12} />, onClick: () => void actions.addVariable(defaultVarName, "Int32", false) },
-        { id: "rename-variable", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameVariableItem(target.id, target.name) },
-      ],
-    },
-    {
-      items: [
-        { id: "delete-variable", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteVariable(target.id) },
-      ],
-    },
-  ];
+  if (target.type === "variable") {
+    return [
+      {
+        items: [
+          { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameVariableItem(target.id, target.name) },
+        ],
+      },
+      {
+        items: [
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteVariable(target.id) },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "variableSection") {
+    return [
+      {
+        items: [
+          { id: "new-variable", label: t("contextMenu.sidebar.newVariable"), icon: <VscAdd size={12} />, onClick: () => void actions.addVariable(defaultVarName, "Int32", target.isGlobal) },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "database") {
+    return [
+      {
+        items: [
+          { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openDatabase(target.id) },
+          { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameDatabaseItem(target.id, target.name) },
+        ],
+      },
+      {
+        items: [
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteDatabaseItem(target.id) },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "dataSection") {
+    return [
+      {
+        items: [
+          { id: "import-data", label: t("contextMenu.sidebar.importData"), icon: <VscAdd size={12} />, onClick: () => actions.importData() },
+        ],
+      },
+    ];
+  }
+
+  return [];
 }

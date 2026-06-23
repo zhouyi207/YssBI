@@ -206,9 +206,23 @@ export function useDatabaseManagement() {
     }
   }, [selectedItemId, setSelectedInfo]);
 
+  const renameDataFrame = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    try {
+      await DatabaseService.renameDatabase(id, trimmed);
+      useDatabaseStore.getState().updateDatabase(id, { name: trimmed });
+    } catch (e) {
+      logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
+      uiStore.showToast(`重命名失败: ${e}`, 'error');
+    }
+  }, []);
+
   return {
     triggerImportData,
     updateDataFrame,
     deleteDataFrame,
+    renameDataFrame,
   };
 }

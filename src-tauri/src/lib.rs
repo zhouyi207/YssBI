@@ -176,6 +176,7 @@ pub fn run() {
             list_sql_tables,
             list_excel_sheets,
             delete_database,
+            rename_database,
             get_database_meta,
             get_database_rows,
             get_column_stats,

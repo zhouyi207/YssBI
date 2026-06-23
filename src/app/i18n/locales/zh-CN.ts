@@ -39,6 +39,7 @@ export const zhCN = {
       renameFolder: "重命名文件夹",
       deleteFolder: "删除文件夹",
       newVariable: "新建变量",
+      importData: "导入数据",
     },
     dialog: {
       newFolderTitle: "新建文件夹",
@@ -46,6 +47,7 @@ export const zhCN = {
       renameGraphTitle: "重命名",
       renameFolderTitle: "重命名文件夹",
       renameVariableTitle: "重命名变量",
+      renameDataTitle: "重命名数据集",
       renameSubmit: "重命名",
     },
     defaults: {

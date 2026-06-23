@@ -58,6 +58,15 @@ pub fn delete_database(state: State<ProjectState>, id: String) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn rename_database(
+    state: State<ProjectState>,
+    id: String,
+    name: String,
+) -> Result<(), String> {
+    crate::application::database::rename_database(state.inner(), &id, &name)
+}
+
+#[tauri::command]
 pub fn get_database_rows(
     state: State<ProjectState>,
     id: String,

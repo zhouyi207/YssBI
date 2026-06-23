@@ -15,6 +15,8 @@ import {
   HypothesisTestBlock,
   ACFPACFBlock,
   SerialTestsBlock,
+  VifTable,
+  meanFiniteVif,
   computeKDE,
 } from './shared';
 import type { OLSResultData } from './shared/types';
@@ -399,8 +401,7 @@ export const LIMLComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
             sub={diag.cond_no > 1000 ? 'Possible multicollinearity' : 'Acceptable'}
           />
           {diag.vif && diag.vif.length > 0 && (() => {
-            const finite = diag.vif.filter((e) => Number.isFinite(e.vif));
-            const meanVif = finite.length > 0 ? finite.reduce((s, e) => s + e.vif, 0) / finite.length : null;
+            const meanVif = meanFiniteVif(diag.vif);
             const fmt = (v: number) => (!Number.isFinite(v) ? 'Inf' : v >= 1e6 ? v.toExponential(2) : v.toFixed(4));
             return meanVif != null ? (
               <StatCard
@@ -411,31 +412,7 @@ export const LIMLComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
             ) : null;
           })()}
         </div>
-        {diag.vif && diag.vif.length > 0 && (
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Variable</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">VIF</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">1/VIF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {diag.vif.map((row) => {
-                  const fmt = (v: number) => (!Number.isFinite(v) ? 'Inf' : v >= 1e6 ? v.toExponential(2) : v.toFixed(4));
-                  return (
-                    <tr key={row.variable} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                      <td className="px-4 py-2.5 font-mono text-white">{row.variable}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-300">{fmt(row.vif)}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-300">{fmt(row.tolerance)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {diag.vif && diag.vif.length > 0 && <VifTable rows={diag.vif} />}
       </div>
 
       {diag.bp_tests && (

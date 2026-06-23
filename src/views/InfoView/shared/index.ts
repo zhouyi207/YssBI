@@ -18,5 +18,6 @@ export * from './AnovaTable';
 export * from './HypothesisTestBlock';
 export * from './ACFPACFBlock';
 export * from './SerialTestsBlock';
+export * from './VifTable';
 export { default as VARStableChart } from './VARStableChart';
 export { default as IRFChartSingle } from './IRFChartSingle';

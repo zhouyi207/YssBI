@@ -74,7 +74,13 @@ pub fn load_database(
                 .map_err(|e| format!("Invalid SQL engine config: {}", e))?;
             load_sql_via_duckdb(state, engine_sql, connection_string, table)
         }
-        other => load_database_direct(state, other),
+        DatabaseEngineDTO::DuckDb { .. } => Err(
+            "DuckDb datasets are discovered from the project store; reopen the project to refresh"
+                .into(),
+        ),
+        DatabaseEngineDTO::InMemory { .. } => {
+            Err("InMemory datasets cannot be loaded via load_database".into())
+        }
     }
 }
 
@@ -236,51 +242,6 @@ fn load_sql_via_duckdb(
     )
 }
 
-fn load_database_direct(
-    state: &ProjectState,
-    engine: DatabaseEngineDTO,
-) -> Result<LoadDatabaseResult, String> {
-    let engine_domain = DatabaseEngine::try_from(engine.clone())
-        .map_err(|e| format!("Invalid engine config: {}", e))?;
-
-    let mut lazy_frame = engine_domain
-        .build_lazy()
-        .map_err(|e| format!("Failed to build lazy frame: {}", e))?;
-
-    let schema = lazy_frame
-        .collect_schema()
-        .map_err(|e| format!("Failed to collect schema: {}", e))?;
-
-    let columns = column_info_from_schema(schema.as_ref());
-    let column_count = columns.len();
-    let row_count = count_lazy_rows(&lazy_frame)?;
-    let id = format!("db-{}", Uuid::new_v4());
-    let base_name = base_name_from_engine_dto(&engine).unwrap_or_else(|| id.clone());
-    let name = unique_database_name(state, &base_name);
-
-    let decl = DatabaseDecl {
-        id: id.clone(),
-        engine: engine_domain,
-        schema_version: 1,
-        required: false,
-        name: Some(name.clone()),
-    };
-
-    let instance = DatabaseInstance {
-        decl,
-        state: DatabaseState::Lazy { lazy_frame },
-    };
-    state.add_database(instance);
-
-    Ok(LoadDatabaseResult {
-        id,
-        name,
-        row_count,
-        column_count,
-        columns,
-    })
-}
-
 pub fn bind_duckdb_instance(
     decl: &DatabaseDecl,
     project_root: Option<&Path>,
@@ -363,17 +324,6 @@ fn database_display_name(instance: &DatabaseInstance) -> String {
         .unwrap_or_else(|| instance.decl.id.clone())
 }
 
-fn base_name_from_engine_dto(engine: &DatabaseEngineDTO) -> Option<String> {
-    match engine {
-        DatabaseEngineDTO::Csv { path, .. } => Some(name_from_path(path)),
-        DatabaseEngineDTO::Parquet { path, .. } => Some(name_from_path(path)),
-        DatabaseEngineDTO::Sql { table, .. } => Some(table.clone()),
-        DatabaseEngineDTO::Excel { sheet, .. } => Some(sheet.clone()),
-        DatabaseEngineDTO::DuckDb { .. } => None,
-        _ => None,
-    }
-}
-
 fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
     let store = state.project_store.read().unwrap();
     let existing: Vec<String> = store
@@ -392,12 +342,6 @@ fn database_name_and_row_count(state: &ProjectState, id: &str) -> Result<(String
     let row_count = match &db.state {
         DatabaseState::Loaded { dataframe, .. } => dataframe.height(),
         DatabaseState::DuckDb { row_count, .. } => *row_count,
-        DatabaseState::Lazy { lazy_frame } => {
-            let lazy_frame = lazy_frame.clone();
-            drop(store);
-            return Ok((name, count_lazy_rows(&lazy_frame)?));
-        }
-        DatabaseState::Pending => 0,
         DatabaseState::Failed { .. } => 0,
     };
 
@@ -426,21 +370,51 @@ fn column_info_from_duckdb(columns: &[DuckDbColumnMeta]) -> Vec<ColumnInfo> {
         .collect()
 }
 
-/// Parquet 等非 DuckDB 导入路径仍使用 Lazy 计数。
-fn count_lazy_rows(lazy_frame: &LazyFrame) -> Result<usize, String> {
-    let count_df = lazy_frame
-        .clone()
-        .select([len()])
-        .collect()
-        .map_err(|e| format!("Failed to get row count: {}", e))?;
+pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Dataset name cannot be empty".into());
+    }
 
-    Ok(count_df
-        .columns()
-        .first()
-        .and_then(|s| s.u32().ok())
-        .and_then(|ca| ca.get(0))
-        .map(|v| v as usize)
-        .unwrap_or(0))
+    {
+        let store = state.project_store.read().unwrap();
+        if !store.databases.contains_key(id) {
+            return Err("Database not found".into());
+        }
+        let duplicate = store.databases.iter().any(|(other_id, db)| {
+            other_id != id && database_display_name(db) == name
+        });
+        if duplicate {
+            return Err(format!("Dataset name '{name}' already exists"));
+        }
+    }
+
+    let engine = {
+        let mut store = state.project_store.write().unwrap();
+        let db = store
+            .databases
+            .get_mut(id)
+            .ok_or("Database not found")?;
+        db.decl.name = Some(name.to_string());
+        db.decl.engine.clone()
+    };
+
+    {
+        let mut data = state.project_data.write().unwrap();
+        if let Some(decl) = data.databases.get_mut(id) {
+            decl.name = Some(name.to_string());
+        }
+    }
+
+    if let Some((relative_path, table)) = engine.duckdb_table() {
+        if let Some(project_path) = state.get_path() {
+            let root = project_root_from_path(&project_path);
+            let abs = root.join(relative_path);
+            write_display_name(&abs, table, name)?;
+        }
+    }
+
+    Ok(())
 }
 
 pub fn remove_duckdb_table_if_needed(engine: &DatabaseEngine, project_root: Option<&Path>) {

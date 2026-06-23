@@ -634,12 +634,13 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 .enumerate()
                 .filter(|(j, e)| !(has_constant && *j == 0) && !e.vif.is_nan())
                 .map(|(j, e)| {
-                    let (var_name, _) = all_labels_use
+                    let (var_name, cat) = all_labels_use
                         .get(j)
                         .cloned()
                         .unwrap_or_else(|| (format!("x{}", j), None));
                     VifEntry {
                         variable: var_name,
+                        category: cat,
                         vif: e.vif,
                         tolerance: e.tolerance,
                     }

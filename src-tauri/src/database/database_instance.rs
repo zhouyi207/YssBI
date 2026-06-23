@@ -9,7 +9,7 @@ use super::{
     compute_dataset_overview_duckdb,
 };
 use crate::database::database_schema::{
-    dataframe_to_schema, duckdb_columns_to_schema, polars_schema_to_data_schema,
+    dataframe_to_schema, duckdb_columns_to_schema,
 };
 use crate::graph::node::DataSchema;
 use polars::prelude::*;
@@ -27,47 +27,18 @@ pub struct DatabaseInstance {
 }
 
 impl DatabaseInstance {
-    /// 把 `Pending` 状态实际化为 `Lazy`（或 `Failed`）。Pending 的引擎可能是
-    /// SQL / Excel 这类同步读取器；此调用会真的去拉数据。其他状态保持不变。
-    fn realize_pending(&mut self) -> PolarsResult<()> {
-        if matches!(self.state, DatabaseState::Pending) {
-            match self.decl.engine.build_lazy() {
-                Ok(lazy_frame) => {
-                    self.state = DatabaseState::Lazy { lazy_frame };
-                }
-                Err(e) => {
-                    let msg = e.to_string();
-                    self.state = DatabaseState::Failed {
-                        error: msg.clone(),
-                    };
-                    return Err(e);
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub fn data_schema(&mut self) -> PolarsResult<DataSchema> {
-        self.realize_pending()?;
-
         match &self.state {
             DatabaseState::DuckDb { columns, .. } => Ok(duckdb_columns_to_schema(columns)),
             DatabaseState::Loaded { dataframe, .. } => Ok(dataframe_to_schema(dataframe)),
-            DatabaseState::Lazy { lazy_frame } => {
-                let schema = lazy_frame.clone().collect_schema()?;
-                Ok(polars_schema_to_data_schema(schema.as_ref()))
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
     /// 分页读取行数据。DuckDB 走 `LIMIT/OFFSET`，不触发整表物化。
     pub fn query_page(&mut self, offset: usize, limit: usize) -> PolarsResult<DataFrame> {
-        self.realize_pending()?;
-
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -81,23 +52,14 @@ impl DatabaseInstance {
                 let count = limit.min(total.saturating_sub(start));
                 Ok(dataframe.slice(start as i64, count))
             }
-            DatabaseState::Lazy { lazy_frame } => {
-                Ok(lazy_frame
-                    .clone()
-                    .slice(offset as i64, limit as u32)
-                    .collect()?)
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
     /// 按列名列表加载窄 DataFrame。DuckDB 走 `SELECT col1, col2, ...`，不整表物化。
     pub fn load_columns(&mut self, columns: &[&str]) -> PolarsResult<DataFrame> {
-        self.realize_pending()?;
-
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -108,14 +70,9 @@ impl DatabaseInstance {
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(dataframe.clone().select(columns.to_vec())?)
             }
-            DatabaseState::Lazy { lazy_frame } => {
-                let exprs: Vec<_> = columns.iter().map(|c| col(*c)).collect();
-                Ok(lazy_frame.clone().select(exprs).collect()?)
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
@@ -140,7 +97,6 @@ impl DatabaseInstance {
 
     /// 列统计：DuckDB 走 SQL 聚合，其它状态 fallback 到 Polars 整表。
     pub fn compute_column_stats(&mut self) -> PolarsResult<Vec<yss_sci::database::ColumnStats>> {
-        self.realize_pending()?;
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -157,14 +113,9 @@ impl DatabaseInstance {
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(yss_sci::database::compute_all_column_stats(dataframe))
             }
-            DatabaseState::Lazy { lazy_frame } => {
-                let df = lazy_frame.clone().collect()?;
-                Ok(yss_sci::database::compute_all_column_stats(&df))
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
@@ -172,7 +123,6 @@ impl DatabaseInstance {
     pub fn compute_column_distributions(
         &mut self,
     ) -> PolarsResult<Vec<yss_sci::database::ColumnDistribution>> {
-        self.realize_pending()?;
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -188,14 +138,9 @@ impl DatabaseInstance {
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(yss_sci::database::compute_all_column_distributions(dataframe))
             }
-            DatabaseState::Lazy { lazy_frame } => {
-                let df = lazy_frame.clone().collect()?;
-                Ok(yss_sci::database::compute_all_column_distributions(&df))
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
@@ -203,7 +148,6 @@ impl DatabaseInstance {
     pub fn compute_dataset_overview(
         &mut self,
     ) -> PolarsResult<yss_sci::database::DatasetOverview> {
-        self.realize_pending()?;
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -220,28 +164,15 @@ impl DatabaseInstance {
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(yss_sci::database::compute_dataset_overview(dataframe))
             }
-            DatabaseState::Lazy { lazy_frame } => {
-                let df = lazy_frame.clone().collect()?;
-                Ok(yss_sci::database::compute_dataset_overview(&df))
-            }
             DatabaseState::Failed { error } => {
                 Err(PolarsError::ComputeError(error.clone().into()))
             }
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
         }
     }
 
     pub fn ensure_loaded(&mut self) -> PolarsResult<&DataFrame> {
-        self.realize_pending()?;
-
-        let need_load = matches!(
-            self.state,
-            DatabaseState::Lazy { .. } | DatabaseState::DuckDb { .. }
-        );
-
-        if need_load {
+        if matches!(self.state, DatabaseState::DuckDb { .. }) {
             let df = match &self.state {
-                DatabaseState::Lazy { lazy_frame } => lazy_frame.clone().collect()?,
                 DatabaseState::DuckDb {
                     duckdb_path,
                     table,
@@ -265,7 +196,9 @@ impl DatabaseInstance {
         match &self.state {
             DatabaseState::Loaded { dataframe, .. } => Ok(dataframe),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-            _ => unreachable!("realize_pending+load should reach Loaded"),
+            _ => Err(PolarsError::ComputeError(
+                "Database must be DuckDb or Loaded before materialization".into(),
+            )),
         }
     }
 
@@ -279,11 +212,7 @@ impl DatabaseInstance {
     fn preview_view(&mut self) -> PolarsResult<DatabaseView> {
         let n = 100;
 
-        self.realize_pending()?;
-
         let df = match &self.state {
-            DatabaseState::Pending => unreachable!("realize_pending leaves Pending"),
-            DatabaseState::Lazy { lazy_frame } => lazy_frame.clone().limit(n).collect()?,
             DatabaseState::DuckDb {
                 duckdb_path,
                 table,

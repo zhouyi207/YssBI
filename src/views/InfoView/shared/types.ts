@@ -279,6 +279,7 @@ export interface PraisInfo {
 
 export interface VifEntry {
   variable: string;
+  category?: string | null;
   vif: number;
   tolerance: number;
 }

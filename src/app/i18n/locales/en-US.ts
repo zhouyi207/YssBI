@@ -39,6 +39,7 @@ export const enUS = {
       renameFolder: "Rename Folder",
       deleteFolder: "Delete Folder",
       newVariable: "New Variable",
+      importData: "Import Data",
     },
     dialog: {
       newFolderTitle: "New Folder",
@@ -46,6 +47,7 @@ export const enUS = {
       renameGraphTitle: "Rename",
       renameFolderTitle: "Rename Folder",
       renameVariableTitle: "Rename Variable",
+      renameDataTitle: "Rename Dataset",
       renameSubmit: "Rename",
     },
     defaults: {

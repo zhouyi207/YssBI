@@ -189,6 +189,8 @@ pub struct DiagnosticTiming {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VifEntry {
     pub variable: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     pub vif: f64,
     pub tolerance: f64, // 1/VIF
 }

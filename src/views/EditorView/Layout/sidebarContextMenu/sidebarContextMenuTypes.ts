@@ -7,7 +7,10 @@ export type SidebarContextMenuTarget =
   | { type: "graph"; id: string; name: string; graphType: GraphResourceType; folderPath?: string }
   | { type: "folder"; graphType: GraphResourceType; folderPath: string; name: string }
   | { type: "section"; graphType: GraphResourceType; folderPath?: string }
-  | { type: "variable"; id: string; name: string };
+  | { type: "variable"; id: string; name: string }
+  | { type: "variableSection"; isGlobal: boolean }
+  | { type: "database"; id: string; name: string }
+  | { type: "dataSection" };
 
 export type SidebarContextMenuState = PositionedContextMenuState<SidebarContextMenuTarget>;
 
@@ -30,6 +33,10 @@ export interface SidebarContextMenuActions {
   addVariable: (name: string, dataType: string, isGlobal: boolean) => unknown | Promise<unknown>;
   renameVariableItem: (id: string, name: string) => void;
   deleteVariable: (id: string) => unknown | Promise<unknown>;
+  openDatabase: (id: string) => void;
+  renameDatabaseItem: (id: string, name: string) => void;
+  deleteDatabaseItem: (id: string) => unknown | Promise<unknown>;
+  importData: () => void;
 }
 
 export type SidebarContextMenuSectionsBuilder = (

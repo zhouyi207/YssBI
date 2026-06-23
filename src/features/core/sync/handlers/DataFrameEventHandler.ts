@@ -34,8 +34,7 @@ export class DataFrameDeletedHandler extends BaseEventHandler<DataFrameDeletedPa
 }
 
 /**
- * SQL / Excel 等非真·lazy 数据源在项目打开后由后端后台物化。
- * 收到事件即把 schema 字段补到对应 db record 上，并清掉 loading 标记。
+ * DuckDB 数据集 schema 更新（遗留事件；正常路径在 get_project_data 中同步返回 schema）。
  */
 export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSchemaUpdatedPayload> {
     eventType = 'DataFrameSchemaUpdated';
@@ -43,9 +42,7 @@ export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSch
     handle(payload: DataFrameSchemaUpdatedPayload): void {
         this.log('DataFrame schema updated:', payload.id, payload.error ? `error=${payload.error}` : `rows=${payload.rowCount}`);
 
-        const patch: Record<string, unknown> = {
-            loading: false,
-        };
+        const patch: Record<string, unknown> = {};
 
         if (payload.error) {
             patch.loadError = payload.error;

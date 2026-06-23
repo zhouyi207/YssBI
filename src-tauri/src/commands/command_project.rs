@@ -19,7 +19,6 @@ use crate::schema::{
     GraphsWithValidationDTO, InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
 use polars::prelude::DataType;
-use polars::prelude::len;
 use tauri::{ipc::Channel, AppHandle, State};
 
 use serde_json::Value;
@@ -43,10 +42,6 @@ enum SchemaInfo {
         columns: Vec<ColumnInfoDTO>,
         row_count: usize,
         column_count: usize,
-    },
-    /// 后端尚未物化（遗留 Pending 状态，正常路径不应出现）。
-    Pending {
-        name: String,
     },
     /// 上一次 IO 失败。
     Failed {
@@ -96,46 +91,6 @@ fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
                 column_count,
             }
         }
-        DatabaseState::Lazy { lazy_frame } => {
-            let schema = match lazy_frame.clone().collect_schema() {
-                Ok(s) => s,
-                Err(e) => {
-                    return SchemaInfo::Failed {
-                        name,
-                        error: e.to_string(),
-                    }
-                }
-            };
-            let columns: Vec<ColumnInfoDTO> = schema
-                .iter_names()
-                .filter_map(|n| {
-                    schema.get(n).map(|dt| ColumnInfoDTO {
-                        name: n.to_string(),
-                        dtype: dtype_to_string(dt),
-                    })
-                })
-                .collect();
-            let column_count = columns.len();
-            let row_count = lazy_frame
-                .clone()
-                .select([len()])
-                .collect()
-                .ok()
-                .and_then(|df| {
-                    df.columns()
-                        .first()
-                        .and_then(|s| s.u32().ok())
-                        .and_then(|ca| ca.get(0))
-                        .map(|v| v as usize)
-                })
-                .unwrap_or(0);
-            SchemaInfo::Ready {
-                name,
-                columns,
-                row_count,
-                column_count,
-            }
-        }
         DatabaseState::DuckDb {
             row_count,
             columns,
@@ -156,7 +111,6 @@ fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
                 column_count,
             }
         }
-        DatabaseState::Pending => SchemaInfo::Pending { name },
         DatabaseState::Failed { error } => SchemaInfo::Failed {
             name,
             error: error.clone(),
@@ -177,10 +131,6 @@ fn apply_schema_info(dto: &mut DatabaseDeclDTO, info: SchemaInfo) {
             dto.columns = Some(columns);
             dto.row_count = Some(row_count);
             dto.column_count = Some(column_count);
-        }
-        SchemaInfo::Pending { name } => {
-            dto.name = Some(name);
-            dto.loading = Some(true);
         }
         SchemaInfo::Failed { name, error } => {
             dto.name = Some(name);

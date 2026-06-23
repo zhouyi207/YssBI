@@ -358,6 +358,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     deleteEvent,
     dataframes,
     triggerImportData,
+    deleteDataFrame,
+    renameDataFrame,
     openGraph,
   } = useEditorGroup();
 
@@ -531,6 +533,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     }, t("contextMenu.dialog.renameSubmit"));
   }, [openInputDialog, updateVariable, t]);
 
+  const renameDatabaseItem = useCallback((id: string, name: string) => {
+    openInputDialog(t("contextMenu.dialog.renameDataTitle"), name, async (nextName) => {
+      await renameDataFrame(id, nextName);
+    }, t("contextMenu.dialog.renameSubmit"));
+  }, [openInputDialog, renameDataFrame, t]);
+
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
     createGraphInFolder,
@@ -543,7 +551,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addVariable,
     renameVariableItem,
     deleteVariable,
+    openDatabase: openDataViewWindow,
+    renameDatabaseItem,
+    deleteDatabaseItem: deleteDataFrame,
+    importData: triggerImportData,
   }, t);
+
+  const openVariableContextMenu = useCallback(
+    (e: React.MouseEvent, id: string, name: string) => {
+      openContextMenu(e, { type: "variable", id, name });
+    },
+    [openContextMenu]
+  );
 
   const renderItem = (
     id: string,
@@ -797,17 +816,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("graphsVariable")}
                 onToggle={() => toggleSection("graphsVariable")}
                 onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", false)}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
                   {Object.keys(globalVariables).length > 0 &&
                     Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) =>
                       renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, false, (e) =>
-                        openContextMenu(e, { type: "variable", id, name: data.name })
+                        openVariableContextMenu(e, id, data.name)
                       )
                     )}
                   {Object.entries(graphScopeVariables).map(([id, data]: [string, { name: string }]) => {
                     if (id in globalVariables) return null;
                     return renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, false, (e) =>
-                      openContextMenu(e, { type: "variable", id, name: data.name })
+                      openVariableContextMenu(e, id, data.name)
                     );
                   })}
                   {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
@@ -824,9 +845,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
                 onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", true)}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
                   {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, true)
+                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, true, false, (e) =>
+                      openVariableContextMenu(e, id, data.name)
+                    )
                   )}
                 {Object.keys(variablesGlobal).length === 0 && (
                   <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
@@ -846,7 +871,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                       onToggle={() => toggleSection(`variablesLocal_${graphId}`)}
                     >
                       {Object.entries(variables).map(([id, data]: [string, { name: string }]) =>
-                        renderItem(id, data.name, "variable", { ...data, isGlobal: false }, true, true)
+                        renderItem(id, data.name, "variable", { ...data, isGlobal: false }, true, true, (e) =>
+                          openVariableContextMenu(e, id, data.name)
+                        )
                       )}
                     </CollapsibleSection>
                   ))}
@@ -864,6 +891,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("dataData")}
                 onToggle={() => toggleSection("dataData")}
                 onAdd={triggerImportData}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
               >
                   {Object.entries(dataframes || {}).map(([id, data]) => {
                     const name = String((data as { name?: unknown }).name ?? "");
@@ -893,6 +922,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                               onDoubleClick={(e) => {
                                 e.stopPropagation();
                                 openDataViewWindow(id);
+                              }}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openContextMenu(e, { type: "database", id, name });
                               }}
                               className={`group flex items-center gap-2 flex-1 min-w-0 py-0 pr-0 transition-colors duration-150 ease-out ${isSelected ? "text-gray-200" : "text-gray-400"}`}
                             >

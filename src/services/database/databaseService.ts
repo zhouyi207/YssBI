@@ -105,6 +105,13 @@ export class DatabaseService {
     }
 
     /**
+     * 重命名数据库（显示名，写入 DuckDB meta）
+     */
+    static async renameDatabase(id: string, name: string): Promise<void> {
+        await invoke("rename_database", { id, name });
+    }
+
+    /**
      * 获取数据库行数据（分页）
      */
     static async getDatabaseRows(id: string, offset: number, limit: number): Promise<any[][]> {
