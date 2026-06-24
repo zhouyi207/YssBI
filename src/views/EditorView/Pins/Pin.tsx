@@ -312,9 +312,9 @@ export const Pin: React.FC<PinProps> = (props) => {
               </filter>
             </defs>
           )}
-          {isConnected && (
+          {isConnected && !theme.isExec && (
             <circle
-              cx={theme.isExec ? "5" : "6"}
+              cx="6"
               cy="6"
               r="1.2"
               fill="white"

@@ -1,11 +1,7 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
-  VscChromeClose,
-  VscChromeMaximize,
-  VscChromeMinimize,
   VscClose,
   VscDebugStart,
   VscFolder,
@@ -43,9 +39,11 @@ import {
 import { cn } from "@/lib/utils";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
 import { useProjectIOStore } from "@/features/core/dataStore";
-import { usePersistedWindow } from "@/features/application/window";
+import { usePersistedWindow, useWindowMaximized } from "@/features/application/window";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
+import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
 import type { ThemeSettings } from "@/shared/types/settings";
 import { NewProjectModal } from "./NewProjectModal";
 
@@ -157,6 +155,7 @@ function TitleBar({
   const updateTheme = useSettingsStore((state) => state.updateTheme);
   const saveDebounced = useSettingsStore((state) => state.saveDebounced);
   const isLightTheme = themeMode === "light";
+  const isMaximized = useWindowMaximized("ProjectPicker");
   const toggleThemeMode = () => {
     updateTheme(pickThemeBase(isLightTheme ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME));
     saveDebounced();
@@ -164,10 +163,7 @@ function TitleBar({
   const isBusy = busy !== "idle";
 
   return (
-    <div
-      className="relative flex h-10 shrink-0 items-center border-b border-border bg-[var(--workbench-bg)] shadow-xl select-none"
-      data-tauri-drag-region
-    >
+    <WindowTitleBar>
       <div className="flex items-center gap-2 px-4 pointer-events-none">
         <div className="flex h-5 w-5 items-center justify-center rounded bg-[var(--accent-color)]">
           <span className="text-xs font-black text-white">Y</span>
@@ -262,6 +258,7 @@ function TitleBar({
         </div>
       </div>
       <div className="min-w-[48px] flex-1 self-stretch" data-tauri-drag-region />
+      <WindowTitleBarActions>
       {currentPath ? (
         <Button
           type="button"
@@ -278,7 +275,7 @@ function TitleBar({
         variant="ghost"
         size="icon-lg"
         onClick={toggleThemeMode}
-        className="text-muted-foreground"
+        className="self-center text-muted-foreground"
         title={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
         aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
       >
@@ -298,43 +295,15 @@ function TitleBar({
         variant="ghost"
         size="icon-lg"
         onClick={onOpenSettings}
-        className="text-muted-foreground"
+        className="self-center text-muted-foreground"
         title={t("menubar.settings")}
         aria-label={t("menubar.settings")}
       >
         <VscSettingsGear size={14} />
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        onClick={() => getCurrentWindow().minimize()}
-        className="text-muted-foreground"
-        aria-label={t("common.minimize")}
-      >
-        <VscChromeMinimize size={14} />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        onClick={() => getCurrentWindow().toggleMaximize()}
-        className="text-muted-foreground"
-        aria-label={t("common.maximize")}
-      >
-        <VscChromeMaximize size={14} />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        onClick={() => getCurrentWindow().close()}
-        className="w-12 text-muted-foreground hover:bg-red-600 hover:text-white"
-        aria-label={t("common.close")}
-      >
-        <VscChromeClose size={16} />
-      </Button>
-    </div>
+      <WindowChromeControls isMaximized={isMaximized} />
+      </WindowTitleBarActions>
+    </WindowTitleBar>
   );
 }
 

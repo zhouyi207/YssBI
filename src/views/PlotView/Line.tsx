@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, timeFormat } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface LinePoint {
   x: number;
@@ -74,6 +75,7 @@ const Line: React.FC<LineProps> = ({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [toolbarOpen, setToolbarOpen] = useState(false);
   const [pointsVisible, setPointsVisible] = useState(showPointsInit);
+  const chartTheme = useChartThemeColors();
 
   const toggleToolbar = useCallback(() => setToolbarOpen((v) => !v), []);
 
@@ -121,7 +123,7 @@ const Line: React.FC<LineProps> = ({
       .join('line')
       .attr('x1', 0).attr('x2', w)
       .attr('y1', (d) => yScale(d)).attr('y2', (d) => yScale(d))
-      .attr('stroke', '#2a2d35').attr('stroke-dasharray', '2,3');
+      .attr('stroke', chartTheme.grid).attr('stroke-dasharray', '2,3');
 
     // x axis
     const xAxis = axisBottom(xScale).ticks(6).tickSize(-4);
@@ -134,9 +136,9 @@ const Line: React.FC<LineProps> = ({
       .attr('transform', `translate(0,${h})`)
       .call(xAxis)
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     // y axis
@@ -149,16 +151,16 @@ const Line: React.FC<LineProps> = ({
     g.append('g')
       .call(yAxis)
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     if (xLabel) {
       g.append('text')
         .attr('x', w / 2).attr('y', h + 32)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#6b7080').attr('font-size', '11px')
+        .attr('fill', chartTheme.label).attr('font-size', '11px')
         .text(xLabel);
     }
 
@@ -167,7 +169,7 @@ const Line: React.FC<LineProps> = ({
         .attr('transform', 'rotate(-90)')
         .attr('x', -h / 2).attr('y', -42)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#6b7080').attr('font-size', '11px')
+        .attr('fill', chartTheme.label).attr('font-size', '11px')
         .text(yLabel);
     }
 
@@ -199,7 +201,7 @@ const Line: React.FC<LineProps> = ({
         .attr('stroke-opacity', 0.3)
         .attr('stroke-width', 1);
     }
-  }, [data, xLabel, yLabel, xFormat, yFormat, color, strokeWidth, pointsVisible, heightProp, margin, size]);
+  }, [data, xLabel, yLabel, xFormat, yFormat, color, strokeWidth, pointsVisible, heightProp, margin, size, chartTheme]);
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

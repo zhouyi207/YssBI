@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, curveStepAfter } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface ECDFPoint {
   x: number;
@@ -35,6 +36,7 @@ const ECDF: React.FC<ECDFProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -82,7 +84,7 @@ const ECDF: React.FC<ECDFProps> = ({
       .attr('x2', w)
       .attr('y1', (d) => yScale(d))
       .attr('y2', (d) => yScale(d))
-      .attr('stroke', '#2a2d35')
+      .attr('stroke', chartTheme.grid)
       .attr('stroke-dasharray', '2,3');
 
     // x axis
@@ -90,18 +92,18 @@ const ECDF: React.FC<ECDFProps> = ({
       .attr('transform', `translate(0,${h})`)
       .call(axisBottom(xScale).ticks(6).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     // y axis
     g.append('g')
       .call(axisLeft(yScale).ticks(5).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     if (xLabel) {
@@ -109,7 +111,7 @@ const ECDF: React.FC<ECDFProps> = ({
         .attr('x', w / 2)
         .attr('y', h + 32)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#6b7080')
+        .attr('fill', chartTheme.label)
         .attr('font-size', '11px')
         .text(xLabel);
     }
@@ -120,7 +122,7 @@ const ECDF: React.FC<ECDFProps> = ({
         .attr('x', -h / 2)
         .attr('y', -42)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#6b7080')
+        .attr('fill', chartTheme.label)
         .attr('font-size', '11px')
         .text(yLabel);
     }
@@ -151,7 +153,7 @@ const ECDF: React.FC<ECDFProps> = ({
         .attr('stroke-linecap', 'round')
         .attr('stroke-linejoin', 'round');
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, size]);
+  }, [data, xLabel, yLabel, color, heightProp, margin, size, chartTheme]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

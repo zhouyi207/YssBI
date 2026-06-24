@@ -1,4 +1,3 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useEditorGroup } from "@/features/application/editor";
@@ -18,6 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import type { ThemeSettings } from "@/shared/types/settings";
+import { cn } from "@/lib/utils";
+import { useWindowMaximized } from "@/features/application/window";
+import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
+import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
 
 interface MenuItem {
   label: string;
@@ -136,6 +139,7 @@ export function Menubar() {
   const updateTheme = useSettingsStore((s) => s.updateTheme);
   const saveDebounced = useSettingsStore((s) => s.saveDebounced);
   const isLightTheme = themeMode === "light";
+  const isMaximized = useWindowMaximized("Menubar");
   const toggleThemeMode = () => {
     updateTheme(pickThemeBase(isLightTheme ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME));
     saveDebounced();
@@ -199,13 +203,13 @@ export function Menubar() {
   ];
 
   return (
-    <div
-      className="menubar-container h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center relative z-[100] shadow-xl select-none"
+    <WindowTitleBar
+      elevated
+      className="menubar-container"
       onWheel={(e) => e.stopPropagation()}
-      data-tauri-drag-region
     >
       {/* Left: Icon & Brand */}
-      <div className="flex items-center gap-2 px-4 pointer-events-none">
+      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
         <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
           <span className="text-white font-black text-xs">Y</span>
         </div>
@@ -215,7 +219,7 @@ export function Menubar() {
       </div>
 
       {/* Center Left: Menus */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 self-center">
         <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
         <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
         <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
@@ -227,13 +231,13 @@ export function Menubar() {
       <div className="flex-1 min-w-[20px]" data-tauri-drag-region />
 
       {/* Right side: Window Buttons */}
-      <div className="flex items-center h-full">
+      <WindowTitleBarActions>
         {/* Theme Toggle Button */}
         <Button
           variant="ghost"
           size="icon-lg"
           onClick={toggleThemeMode}
-          className="text-muted-foreground"
+          className="self-center text-muted-foreground"
           title={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
           aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
         >
@@ -253,7 +257,10 @@ export function Menubar() {
           variant="ghost"
           size="icon-lg"
           onClick={toggleDetail}
-          className={isDetailVisible ? 'text-foreground' : 'text-muted-foreground'}
+          className={cn(
+            'self-center',
+            isDetailVisible ? 'text-foreground' : 'text-muted-foreground',
+          )}
           title={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
@@ -264,45 +271,13 @@ export function Menubar() {
           variant="ghost"
           size="icon-lg"
           onClick={() => openSettings()}
-          className="text-muted-foreground"
+          className="self-center text-muted-foreground"
           title={t("menubar.settings")}
         >
           <VscSettingsGear size={14} />
         </Button>
-        {/* Window Controls */}
-        <div className="flex items-center h-full">
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => getCurrentWindow().minimize()}
-            className="text-muted-foreground"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-            </svg>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => getCurrentWindow().toggleMaximize()}
-            className="text-muted-foreground"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
-            </svg>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            onClick={() => getCurrentWindow().close()}
-            className="w-12 text-muted-foreground hover:bg-red-600 hover:text-white"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-      </div>
-    </div>
+        <WindowChromeControls isMaximized={isMaximized} />
+      </WindowTitleBarActions>
+    </WindowTitleBar>
   );
 }

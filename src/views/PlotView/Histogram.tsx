@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface HistogramBin {
   label: string;
@@ -35,6 +36,7 @@ const Histogram: React.FC<HistogramProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
 
@@ -83,7 +85,7 @@ const Histogram: React.FC<HistogramProps> = ({
         .join('line')
         .attr('x1', 0).attr('x2', w)
         .attr('y1', (d) => yScale(d)).attr('y2', (d) => yScale(d))
-        .attr('stroke', '#2a2d35').attr('stroke-dasharray', '2,3');
+        .attr('stroke', chartTheme.grid).attr('stroke-dasharray', '2,3');
     }
 
     const tooltip = select(tooltipRef.current);
@@ -109,7 +111,7 @@ const Histogram: React.FC<HistogramProps> = ({
           select(this).attr('fill-opacity', 1);
           tooltip
             .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:#e0e0e0">${d.label}</div><div style="font-size:11px;font-weight:600;color:#569cd6">${d.count}</div>`);
+            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${color}">${d.count}</div>`);
         })
         .on('mousemove', function (event) {
           const rect = container!.getBoundingClientRect();
@@ -128,10 +130,10 @@ const Histogram: React.FC<HistogramProps> = ({
         .attr('transform', `translate(0,${h})`)
         .call(axisBottom(xBand).tickSize(-4))
         .call((sel) => {
-          sel.select('.domain').attr('stroke', '#3a3d45');
-          sel.selectAll('.tick line').attr('stroke', '#3a3d45');
+          sel.select('.domain').attr('stroke', chartTheme.axis);
+          sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
           sel.selectAll('.tick text')
-            .attr('fill', '#8b8f9a').attr('font-size', '10px')
+            .attr('fill', chartTheme.tick).attr('font-size', '10px')
             .attr('text-anchor', 'end')
             .attr('transform', data.length > 6 ? 'rotate(-40)' : '');
         });
@@ -139,16 +141,16 @@ const Histogram: React.FC<HistogramProps> = ({
       g.append('g')
         .call(axisLeft(yScale).ticks(5).tickSize(-4))
         .call((sel) => {
-          sel.select('.domain').attr('stroke', '#3a3d45');
-          sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-          sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+          sel.select('.domain').attr('stroke', chartTheme.axis);
+          sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+          sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
         });
 
       if (xLabel) {
         g.append('text')
           .attr('x', w / 2).attr('y', h + 32)
           .attr('text-anchor', 'middle')
-          .attr('fill', '#6b7080').attr('font-size', '11px')
+          .attr('fill', chartTheme.label).attr('font-size', '11px')
           .text(xLabel);
       }
       if (yLabel) {
@@ -156,11 +158,11 @@ const Histogram: React.FC<HistogramProps> = ({
           .attr('transform', 'rotate(-90)')
           .attr('x', -h / 2).attr('y', -42)
           .attr('text-anchor', 'middle')
-          .attr('fill', '#6b7080').attr('font-size', '11px')
+          .attr('fill', chartTheme.label).attr('font-size', '11px')
           .text(yLabel);
       }
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, compact, size]);
+  }, [data, xLabel, yLabel, color, heightProp, margin, compact, size, chartTheme]);
 
   return (
     <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`}>

@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 import type { DidEventStudyPoint } from './types';
 
 const MARGIN = { top: 20, right: 16, bottom: 36, left: 52 };
@@ -14,6 +15,7 @@ export const DidEventStudyChart: React.FC<{
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const el = containerRef.current;
@@ -66,14 +68,14 @@ export const DidEventStudyChart: React.FC<{
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
 
-    g.append('rect').attr('width', w).attr('height', h).attr('fill', '#13151a').attr('rx', 2);
+    g.append('rect').attr('width', w).attr('height', h).attr('fill', chartTheme.canvas).attr('rx', 2);
 
     g.append('line')
       .attr('x1', 0)
       .attr('x2', w)
       .attr('y1', yScale(0))
       .attr('y2', yScale(0))
-      .attr('stroke', '#4a4d55')
+      .attr('stroke', chartTheme.zeroLine)
       .attr('stroke-dasharray', '4,3');
 
     if (0 >= xDomain[0] && 0 <= xDomain[1]) {
@@ -83,7 +85,7 @@ export const DidEventStudyChart: React.FC<{
         .attr('x2', x0)
         .attr('y1', 0)
         .attr('y2', h)
-        .attr('stroke', '#6b7280')
+        .attr('stroke', chartTheme.label)
         .attr('stroke-dasharray', '3,3')
         .attr('opacity', 0.6);
     }
@@ -94,21 +96,21 @@ export const DidEventStudyChart: React.FC<{
     g.append('g')
       .attr('transform', `translate(0,${h})`)
       .call(xAxis)
-      .attr('color', '#9ca3af')
+      .attr('color', chartTheme.tick)
       .selectAll('path,line')
-      .attr('stroke', '#4b5563');
+      .attr('stroke', chartTheme.axis);
 
     g.append('g')
       .call(yAxis)
-      .attr('color', '#9ca3af')
+      .attr('color', chartTheme.tick)
       .selectAll('path,line')
-      .attr('stroke', '#4b5563');
+      .attr('stroke', chartTheme.axis);
 
     g.append('text')
       .attr('x', w / 2)
       .attr('y', h + 28)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#9ca3af')
+      .attr('fill', chartTheme.label)
       .attr('font-size', 11)
       .text('Relative time (rel_time)');
 
@@ -117,7 +119,7 @@ export const DidEventStudyChart: React.FC<{
       .attr('x', -h / 2)
       .attr('y', -40)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#9ca3af')
+      .attr('fill', chartTheme.label)
       .attr('font-size', 11)
       .text(`Coefficient (× ${treatLabel})`);
 
@@ -156,7 +158,7 @@ export const DidEventStudyChart: React.FC<{
         .attr('cx', x)
         .attr('cy', y)
         .attr('r', d.is_reference ? dotR - 0.5 : dotR)
-        .attr('fill', d.is_reference ? '#9ca3af' : '#22d3ee')
+        .attr('fill', d.is_reference ? chartTheme.tick : '#22d3ee')
         .attr('stroke', d.is_reference ? '#d1d5db' : '#a5f3fc')
         .attr('stroke-width', 1.2);
     }
@@ -174,7 +176,7 @@ export const DidEventStudyChart: React.FC<{
         .attr('opacity', 0.35)
         .attr('stroke-linejoin', 'round');
     }
-  }, [points, size, treatLabel]);
+  }, [points, size, treatLabel, chartTheme]);
 
   if (!points.length) return null;
 

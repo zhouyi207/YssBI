@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 import type { VARStableRow } from './types';
 
 export interface VARStableChartProps {
@@ -20,6 +21,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -72,7 +74,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         .attr('cy', h / 2)
         .attr('r', rPx)
         .attr('fill', 'none')
-        .attr('stroke', radius === 1 ? '#5a5d65' : '#2a2d35')
+        .attr('stroke', radius === 1 ? chartTheme.zeroLine : chartTheme.grid)
         .attr('stroke-width', radius === 1 ? 1.5 : 0.8)
         .attr('stroke-dasharray', radius === 1 ? 'none' : '3,3');
     });
@@ -81,11 +83,11 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
     g.append('line')
       .attr('x1', 0).attr('x2', w)
       .attr('y1', h / 2).attr('y2', h / 2)
-      .attr('stroke', '#3a3d45').attr('stroke-width', 1);
+      .attr('stroke', chartTheme.axis).attr('stroke-width', 1);
     g.append('line')
       .attr('x1', w / 2).attr('x2', w / 2)
       .attr('y1', 0).attr('y2', h)
-      .attr('stroke', '#3a3d45').attr('stroke-width', 1);
+      .attr('stroke', chartTheme.axis).attr('stroke-width', 1);
 
     const tipEl = tooltipRef.current;
 
@@ -138,24 +140,24 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('transform', `translate(0,${h})`)
       .call(axisBottom(xScale).ticks(6).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     g.append('g')
       .call(axisLeft(yScale).ticks(6).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     g.append('text')
       .attr('x', w / 2)
       .attr('y', -10)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#8b8f9a')
+      .attr('fill', chartTheme.label)
       .attr('font-size', '11px')
       .text('Real');
     g.append('text')
@@ -163,17 +165,17 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('x', -h / 2)
       .attr('y', -36)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#8b8f9a')
+      .attr('fill', chartTheme.label)
       .attr('font-size', '11px')
       .text('Imaginary');
-  }, [data, size, hideTooltip]);
+  }, [data, size, hideTooltip, chartTheme]);
 
   return (
-    <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
       <div
         ref={tooltipRef}
-        className="pointer-events-none absolute z-10 rounded-md bg-[#1e2028] border border-gray-700/60 px-3 py-2 shadow-lg transition-opacity duration-100"
+        className="pointer-events-none absolute z-10 rounded-md bg-popover border border-border px-3 py-2 shadow-lg transition-opacity duration-100"
         style={{ opacity: 0 }}
       />
     </div>

@@ -15,22 +15,22 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
   const hasCategory = rows.some((r) => r.category != null);
 
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
+    <div className="rounded-lg border border-border bg-muted overflow-hidden">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-gray-800/50">
-            <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Variable</th>
+          <tr className="border-b border-border">
+            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Variable</th>
             {hasCategory && (
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Category</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Category</th>
             )}
-            <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">VIF</th>
-            <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">1/VIF</th>
+            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">VIF</th>
+            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">1/VIF</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={vifRowKey(row, idx)} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-              <td className="px-4 py-2.5 font-mono text-white">{row.variable}</td>
+            <tr key={vifRowKey(row, idx)} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+              <td className="px-4 py-2.5 font-mono text-foreground">{row.variable}</td>
               {hasCategory && (
                 <td className="px-4 py-2.5">
                   {row.category != null ? (
@@ -38,12 +38,12 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
                       {row.category}
                     </span>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </td>
               )}
-              <td className="px-4 py-2.5 font-mono text-gray-300">{formatVifValue(row.vif)}</td>
-              <td className="px-4 py-2.5 font-mono text-gray-300">{formatVifValue(row.tolerance)}</td>
+              <td className="px-4 py-2.5 font-mono text-foreground">{formatVifValue(row.vif)}</td>
+              <td className="px-4 py-2.5 font-mono text-foreground">{formatVifValue(row.tolerance)}</td>
             </tr>
           ))}
         </tbody>

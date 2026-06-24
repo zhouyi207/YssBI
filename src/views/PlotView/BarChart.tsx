@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface BarDatum {
   label: string;
@@ -37,6 +38,7 @@ const BarChart: React.FC<BarChartProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
 
@@ -80,7 +82,7 @@ const BarChart: React.FC<BarChartProps> = ({
           select(this).attr('fill-opacity', 1);
           tooltip
             .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:#e0e0e0">${d.label}</div><div style="font-size:11px;font-weight:600;color:#569cd6">${d.value}</div>`);
+            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${color}">${d.value}</div>`);
         })
         .on('mousemove', function (event: any) {
           const rect = container!.getBoundingClientRect();
@@ -109,7 +111,7 @@ const BarChart: React.FC<BarChartProps> = ({
           .join('line')
           .attr('x1', (d) => xLinear(d)).attr('x2', (d) => xLinear(d))
           .attr('y1', 0).attr('y2', h)
-          .attr('stroke', '#2a2d35').attr('stroke-dasharray', '2,3');
+          .attr('stroke', chartTheme.grid).attr('stroke-dasharray', '2,3');
       }
 
       const bars = g.selectAll('rect.bar')
@@ -131,16 +133,16 @@ const BarChart: React.FC<BarChartProps> = ({
           .attr('transform', `translate(0,${h})`)
           .call(axisBottom(xLinear).ticks(6).tickSize(-4))
           .call((sel) => {
-            sel.select('.domain').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+            sel.select('.domain').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
           });
 
         g.append('g')
           .call(axisLeft(yBand).tickSize(0))
           .call((sel) => {
-            sel.select('.domain').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+            sel.select('.domain').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
           });
       }
     } else {
@@ -158,7 +160,7 @@ const BarChart: React.FC<BarChartProps> = ({
           .join('line')
           .attr('x1', 0).attr('x2', w)
           .attr('y1', (d) => yLinear(d)).attr('y2', (d) => yLinear(d))
-          .attr('stroke', '#2a2d35').attr('stroke-dasharray', '2,3');
+          .attr('stroke', chartTheme.grid).attr('stroke-dasharray', '2,3');
       }
 
       const bars = g.selectAll('rect.bar')
@@ -180,10 +182,10 @@ const BarChart: React.FC<BarChartProps> = ({
           .attr('transform', `translate(0,${h})`)
           .call(axisBottom(xBand).tickSize(-4))
           .call((sel) => {
-            sel.select('.domain').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick line').attr('stroke', '#3a3d45');
+            sel.select('.domain').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
             sel.selectAll('.tick text')
-              .attr('fill', '#8b8f9a').attr('font-size', '10px')
+              .attr('fill', chartTheme.tick).attr('font-size', '10px')
               .attr('text-anchor', 'end')
               .attr('transform', data.length > 8 ? 'rotate(-35)' : '');
           });
@@ -191,9 +193,9 @@ const BarChart: React.FC<BarChartProps> = ({
         g.append('g')
           .call(axisLeft(yLinear).ticks(5).tickSize(-4))
           .call((sel) => {
-            sel.select('.domain').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-            sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+            sel.select('.domain').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+            sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
           });
       }
     }
@@ -203,7 +205,7 @@ const BarChart: React.FC<BarChartProps> = ({
         g.append('text')
           .attr('x', w / 2).attr('y', h + 32)
           .attr('text-anchor', 'middle')
-          .attr('fill', '#6b7080').attr('font-size', '11px')
+          .attr('fill', chartTheme.label).attr('font-size', '11px')
           .text(xLabel);
       }
       if (yLabel) {
@@ -211,11 +213,11 @@ const BarChart: React.FC<BarChartProps> = ({
           .attr('transform', 'rotate(-90)')
           .attr('x', -h / 2).attr('y', -42)
           .attr('text-anchor', 'middle')
-          .attr('fill', '#6b7080').attr('font-size', '11px')
+          .attr('fill', chartTheme.label).attr('font-size', '11px')
           .text(yLabel);
       }
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, horizontal, compact, size]);
+  }, [data, xLabel, yLabel, color, heightProp, margin, horizontal, compact, size, chartTheme]);
 
   return (
     <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`}>

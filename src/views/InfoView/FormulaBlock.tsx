@@ -131,16 +131,16 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
   const hasCat = useMemo(() => mappings.some((m) => m.category != null), [mappings]);
 
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-0">
-        <div className="inline-flex rounded-md bg-[#1a1d23] border border-gray-800/50 text-[11px]">
+        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
           <button
             onClick={() => setMode('symbolic')}
             className={`px-3 py-1 rounded-l-md transition-colors ${
               mode === 'symbolic'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-gray-800/50'
-                : 'text-gray-500 hover:text-gray-300 border-r border-gray-800/50'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border'
+                : 'text-muted-foreground hover:text-foreground border-r border-border'
             }`}
           >
             Symbolic
@@ -150,7 +150,7 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
             className={`px-3 py-1 rounded-r-md transition-colors ${
               mode === 'expanded'
                 ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                : 'text-gray-500 hover:text-gray-300'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Expanded
@@ -161,18 +161,18 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
       {/* Formula */}
       <OverlayScrollbar direction="horizontal">
         <div
-          className="px-6 py-4 w-max min-w-full [&_.katex]:text-gray-200"
+          className="px-6 py-4 w-max min-w-full [&_.katex]:text-foreground"
           dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
         />
       </OverlayScrollbar>
 
       {/* Mapping table (symbolic mode only) */}
       {mode === 'symbolic' && (
-        <div className="border-t border-gray-800/40 px-4 pb-4 pt-3">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
+        <div className="border-t border-border px-4 pb-4 pt-3">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-gray-500">
+              <tr className="text-muted-foreground">
                 <th className="text-left px-3 py-1.5 font-medium w-20">Symbol</th>
                 <th className="text-left px-3 py-1.5 font-medium">Variable</th>
                 {hasCat && <th className="text-left px-3 py-1.5 font-medium">Category</th>}
@@ -183,7 +183,7 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
               {mappings.map((m, idx) => {
                 const symHtml = renderInlineKatex(m.symbol);
                 return (
-                  <tr key={idx} className={`border-t border-gray-800/20 ${idx % 2 === 0 ? 'bg-[#15171d]/50' : ''}`}>
+                  <tr key={idx} className={`border-t border-border ${idx % 2 === 0 ? 'bg-muted/50' : ''}`}>
                     <td className="px-3 py-1.5">
                       {symHtml ? (
                         <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
@@ -191,7 +191,7 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
                         <span className="font-mono text-[var(--accent-color)]">{m.symbol}</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 font-mono text-gray-300">{m.variable}</td>
+                    <td className="px-3 py-1.5 font-mono text-foreground">{m.variable}</td>
                     {hasCat && (
                       <td className="px-3 py-1.5">
                         {m.category != null ? (
@@ -199,11 +199,11 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
                             {m.category}
                           </span>
                         ) : (
-                          <span className="text-gray-600">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                     )}
-                    <td className="text-right px-3 py-1.5 font-mono text-gray-400">
+                    <td className="text-right px-3 py-1.5 font-mono text-muted-foreground">
                       {isNaN(m.coef) ? '—' : formatNum(m.coef)}
                     </td>
                   </tr>

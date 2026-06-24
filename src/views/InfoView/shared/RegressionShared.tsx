@@ -8,7 +8,7 @@ export function SignificanceStars({ pValue }: { pValue: number }) {
   if (pValue < 0.001) return <span className="text-yellow-400 font-bold ml-1">***</span>;
   if (pValue < 0.01) return <span className="text-yellow-400 font-bold ml-1">**</span>;
   if (pValue < 0.05) return <span className="text-yellow-400 font-bold ml-1">*</span>;
-  if (pValue < 0.1) return <span className="text-gray-500 ml-1">.</span>;
+  if (pValue < 0.1) return <span className="text-muted-foreground ml-1">.</span>;
   return null;
 }
 
@@ -26,10 +26,10 @@ export function RSquaredBadge({ value }: { value: number }) {
 
 export function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-[#1a1d23] rounded-lg px-4 py-3 border border-gray-800/50">
-      <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-white font-mono text-sm font-medium">{value}</div>
-      {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
+    <div className="bg-muted rounded-lg px-4 py-3 border border-border">
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-foreground font-mono text-sm font-medium">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -38,17 +38,17 @@ export function SectionHeader({ title, icon }: { title: string; icon: React.Reac
   return (
     <div className="flex items-center gap-2 mb-3 mt-6 first:mt-0">
       <div className="text-[var(--accent-color)]">{icon}</div>
-      <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">{title}</h3>
-      <div className="flex-1 h-px bg-gray-800 ml-2"></div>
+      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">{title}</h3>
+      <div className="flex-1 h-px bg-border ml-2"></div>
     </div>
   );
 }
 
 export function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-      <span className="text-gray-500 text-xs">{label}</span>
-      <span className="text-white text-xs font-mono font-medium">{children}</span>
+    <div className="bg-card px-4 py-2.5 flex justify-between">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-foreground text-xs font-mono font-medium">{children}</span>
     </div>
   );
 }
@@ -77,25 +77,25 @@ export function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
         return (
           <div
             key={c.label}
-            className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors"
+            className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors"
           >
-            <div className="text-[11px] text-gray-500 font-mono mb-2">{c.label}</div>
+            <div className="text-[11px] text-muted-foreground font-mono mb-2">{c.label}</div>
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-              <span className="text-gray-400">
-                chi2 = <span className="font-mono text-white">{formatNum(c.chi2)}</span>
+              <span className="text-muted-foreground">
+                chi2 = <span className="font-mono text-foreground">{formatNum(c.chi2)}</span>
               </span>
-              <span className="text-gray-400">
-                df = <span className="font-mono text-gray-300">{c.df}</span>
+              <span className="text-muted-foreground">
+                df = <span className="font-mono text-foreground">{c.df}</span>
               </span>
-              <span className="text-gray-400">
-                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(c.p_value)}</span>
+              <span className="text-muted-foreground">
+                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
               </span>
             </div>
             <div className="mt-1.5 text-[10px]">
               {reject ? (
                 <span className="text-amber-400">拒绝 H0</span>
               ) : (
-                <span className="text-gray-500">不拒绝 H0</span>
+                <span className="text-muted-foreground">不拒绝 H0</span>
               )}
             </div>
           </div>
@@ -128,22 +128,22 @@ export function FTestCards({ cards }: { cards: FTestCard[] }) {
         return (
           <div
             key={c.label}
-            className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors"
+            className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors"
           >
-            <div className="text-[11px] text-gray-500 font-mono mb-2">{c.label}</div>
+            <div className="text-[11px] text-muted-foreground font-mono mb-2">{c.label}</div>
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-              <span className="text-gray-400">
-                F({c.df1},{c.df2}) = <span className="font-mono text-white">{formatNum(c.f_stat)}</span>
+              <span className="text-muted-foreground">
+                F({c.df1},{c.df2}) = <span className="font-mono text-foreground">{formatNum(c.f_stat)}</span>
               </span>
-              <span className="text-gray-400">
-                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(c.p_value)}</span>
+              <span className="text-muted-foreground">
+                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
               </span>
             </div>
             <div className="mt-1.5 text-[10px]">
               {reject ? (
                 <span className="text-amber-400">拒绝 H0（模型可能有遗漏变量或函数形式误设）</span>
               ) : (
-                <span className="text-gray-500">不拒绝 H0</span>
+                <span className="text-muted-foreground">不拒绝 H0</span>
               )}
             </div>
           </div>

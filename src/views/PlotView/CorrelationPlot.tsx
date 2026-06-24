@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleBand, scaleSequential, interpolateRdBu } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface CorrelationPlotProps {
   /** 变量名列表，与 matrix 行列顺序一致 */
@@ -27,6 +28,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -118,7 +120,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('width', xScale.bandwidth())
       .attr('height', yScale.bandwidth())
       .attr('fill', (d) => colorScale(d.value))
-      .attr('stroke', '#2a2d35')
+      .attr('stroke', chartTheme.grid)
       .attr('stroke-width', 0.5)
       .attr('rx', 2)
       .on('mouseenter', function (event, d) {
@@ -127,9 +129,9 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
         tooltip
           .style('opacity', '1')
           .html(
-            `<div style="font-size:10px;color:#888">${labels[d.i]} × ${labels[d.j]}</div>` +
-            `<div style="font-size:12px;font-weight:600;color:#e0e0e0">r = ${d.value.toFixed(3)}</div>` +
-            `<div style="font-size:10px;color:#8b8f9a">${pStr}</div>`
+            `<div style="font-size:10px;color:${chartTheme.tooltipMuted}">${labels[d.i]} × ${labels[d.j]}</div>` +
+            `<div style="font-size:12px;font-weight:600;color:${chartTheme.tooltipFg}">r = ${d.value.toFixed(3)}</div>` +
+            `<div style="font-size:10px;color:${chartTheme.tick}">${pStr}</div>`
           );
       })
       .on('mousemove', function (event) {
@@ -139,7 +141,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
           .style('top', `${event.clientY - rect.top - 10}px`);
       })
       .on('mouseleave', function () {
-        select(this).attr('stroke', '#2a2d35').attr('stroke-width', 0.5);
+        select(this).attr('stroke', chartTheme.grid).attr('stroke-width', 0.5);
         tooltip.style('opacity', '0');
       });
 
@@ -156,7 +158,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
         const x = (xScale(name) ?? 0) + xScale.bandwidth() / 2;
         return `rotate(-45 ${x} 16)`;
       })
-      .attr('fill', '#8b8f9a')
+      .attr('fill', chartTheme.tick)
       .attr('font-size', '10px')
       .text((name) => (name.length > 12 ? name.slice(0, 10) + '…' : name));
 
@@ -169,7 +171,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('y', (name) => (yScale(name) ?? 0) + yScale.bandwidth() / 2)
       .attr('text-anchor', 'end')
       .attr('dominant-baseline', 'middle')
-      .attr('fill', '#8b8f9a')
+      .attr('fill', chartTheme.tick)
       .attr('font-size', '10px')
       .text((name) => (name.length > 12 ? name.slice(0, 10) + '…' : name));
 
@@ -210,7 +212,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('y', legendY + legendH)
       .attr('text-anchor', 'start')
       .attr('dominant-baseline', 'middle')
-      .attr('fill', '#6b7080')
+      .attr('fill', chartTheme.label)
       .attr('font-size', '9px')
       .text('-1');
     svg
@@ -219,10 +221,10 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('y', legendY)
       .attr('text-anchor', 'start')
       .attr('dominant-baseline', 'middle')
-      .attr('fill', '#6b7080')
+      .attr('fill', chartTheme.label)
       .attr('font-size', '9px')
       .text('1');
-  }, [labels, matrix, pMatrix, heightProp, margin, size]);
+  }, [labels, matrix, pMatrix, heightProp, margin, size, chartTheme]);
 
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden relative">

@@ -45,25 +45,25 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
           </svg>
         }
       />
-      <div className="rounded-lg border border-gray-800/50 bg-[#13151a] p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-[11px] text-gray-500 uppercase tracking-wider">Lags (BG/Q)</label>
+          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags (BG/Q)</label>
           <input
             type="number"
             min={1}
             max={40}
             value={lag}
             onChange={(e) => setLag(Math.max(1, Math.min(40, parseInt(e.target.value, 10) || 1)))}
-            className="w-20 px-3 py-2 rounded-md bg-[#1a1d23] border border-gray-700/50 text-sm font-mono text-white focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="w-20 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
           />
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={bgDropMissing}
               onChange={(e) => setBgDropMissing(e.target.checked)}
-              className="rounded border-gray-600 bg-[#1a1d23] text-[var(--accent-color)] focus:ring-[var(--accent-color)]/50"
+              className="rounded border-border bg-muted text-[var(--accent-color)] focus:ring-[var(--accent-color)]/50"
             />
-            <span className="text-[11px] text-gray-400">BG: 去掉缺失值 (n-p)</span>
+            <span className="text-[11px] text-muted-foreground">BG: 去掉缺失值 (n-p)</span>
           </label>
           <button
             onClick={handleRun}
@@ -73,19 +73,19 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
             {loading ? '...' : '生成'}
           </button>
         </div>
-        <div className="text-[10px] text-gray-500">
+        <div className="text-[10px] text-muted-foreground">
           BG: estat bgodfrey（勾选「去掉缺失值」= 不用 nomiss0）· Q: wntestq · DW: estat dwatson
         </div>
         {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
         {result && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
             {result.bg && (
-              <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                <div className="text-[11px] text-gray-500 font-mono mb-2">Breusch-Godfrey LM</div>
-                <div className="text-white font-mono text-sm font-medium">
+              <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                <div className="text-[11px] text-muted-foreground font-mono mb-2">Breusch-Godfrey LM</div>
+                <div className="text-foreground font-mono text-sm font-medium">
                   χ²({result.bg.lags}) = {formatNum(result.bg.stat)}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   p = {formatNum(result.bg.p_value)}
                   {result.bg.p_value < 0.05 ? (
                     <span className="text-amber-400 ml-1">*</span>
@@ -94,12 +94,12 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
               </div>
             )}
             {result.q && (
-              <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                <div className="text-[11px] text-gray-500 font-mono mb-2">Ljung-Box Q</div>
-                <div className="text-white font-mono text-sm font-medium">
+              <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                <div className="text-[11px] text-muted-foreground font-mono mb-2">Ljung-Box Q</div>
+                <div className="text-foreground font-mono text-sm font-medium">
                   Q({result.q.lags}) = {formatNum(result.q.stat)}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   p = {formatNum(result.q.p_value)}
                   {result.q.p_value < 0.05 ? (
                     <span className="text-amber-400 ml-1">*</span>
@@ -107,12 +107,12 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
                 </div>
               </div>
             )}
-            <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-              <div className="text-[11px] text-gray-500 font-mono mb-2">Durbin-Watson</div>
-              <div className="text-white font-mono text-sm font-medium">
+            <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+              <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
+              <div className="text-foreground font-mono text-sm font-medium">
                 d = {formatNum(result.dw.d)}
               </div>
-              <div className="text-xs text-gray-400 mt-1">estat dwatson</div>
+              <div className="text-xs text-muted-foreground mt-1">estat dwatson</div>
             </div>
           </div>
         )}

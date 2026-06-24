@@ -172,7 +172,7 @@ export const DataViewWindow: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-muted/30 text-[var(--workbench-fg)] font-sans">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-[var(--workbench-fg)] font-sans">
       <TitleBar
         dataframes={dfOptions}
         selectedDataframeId={selectedDfId}
@@ -180,7 +180,7 @@ export const DataViewWindow: React.FC = () => {
         selectedCellText={selectedCellPreview}
       />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden bg-muted/30">
         <DataTable
           columns={columns}
           loadedRows={dataLoader.loadedRows}

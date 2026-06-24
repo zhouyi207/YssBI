@@ -163,37 +163,37 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
   if (!coreHtml || !methodHtml) return null;
 
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden w-full">
+    <div className="rounded-lg border border-border bg-card overflow-hidden w-full">
       <div className="w-full overflow-x-auto">
         <div className="min-w-full w-max px-6 py-4 space-y-5">
           {/* Part 1: Core formula */}
           <div className="w-full flex flex-col items-center">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 font-medium">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">
               Core Model
             </div>
             <div
-              className="w-full flex justify-center [&_.katex]:text-gray-200 [&_.katex]:text-base"
+              className="w-full flex justify-center [&_.katex]:text-foreground [&_.katex]:text-base"
               dangerouslySetInnerHTML={{ __html: coreHtml }}
             />
           </div>
 
           {/* Part 2: Estimation method formula */}
           <div className="w-full flex flex-col items-center">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 font-medium">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">
               Estimation
             </div>
             <div
-              className="w-full flex justify-center [&_.katex]:text-gray-200 [&_.katex]:text-base"
+              className="w-full flex justify-center [&_.katex]:text-foreground [&_.katex]:text-base"
               dangerouslySetInnerHTML={{ __html: methodHtml }}
             />
           </div>
         </div>
       </div>
-      <div className="border-t border-gray-800/40 px-4 pb-4 pt-3">
-        <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
+      <div className="border-t border-border px-4 pb-4 pt-3">
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-gray-500">
+            <tr className="text-muted-foreground">
               <th className="text-left px-3 py-1.5 font-medium w-20">Symbol</th>
               <th className="text-left px-3 py-1.5 font-medium">Variable</th>
             </tr>
@@ -202,7 +202,7 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
             {mappings.map((m, idx) => {
               const symHtml = renderInlineKatex(m.symbol);
               return (
-                <tr key={`${m.symbol}-${idx}`} className={`border-t border-gray-800/20 ${idx % 2 === 0 ? 'bg-[#15171d]/50' : ''}`}>
+                <tr key={`${m.symbol}-${idx}`} className={`border-t border-border ${idx % 2 === 0 ? 'bg-muted/50' : ''}`}>
                   <td className="px-3 py-1.5">
                     {symHtml ? (
                       <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
@@ -210,7 +210,7 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
                       <span className="font-mono text-[var(--accent-color)]">{m.symbol}</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-gray-300">{m.variable}</td>
+                  <td className="px-3 py-1.5 font-mono text-foreground">{m.variable}</td>
                 </tr>
               );
             })}

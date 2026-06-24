@@ -43,16 +43,16 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
           </svg>
         }
       />
-      <div className="rounded-lg border border-gray-800/50 bg-[#13151a] p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <label className="text-[11px] text-gray-500 uppercase tracking-wider">Lags</label>
+          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags</label>
           <input
             type="number"
             min={1}
             max={40}
             value={lag}
             onChange={(e) => setLag(Math.max(1, Math.min(40, parseInt(e.target.value, 10) || 1)))}
-            className="w-20 px-3 py-2 rounded-md bg-[#1a1d23] border border-gray-700/50 text-sm font-mono text-white focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="w-20 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
           />
           <button
             onClick={handleRun}
@@ -62,14 +62,14 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
             {loading ? '...' : '生成'}
           </button>
         </div>
-        <div className="text-[10px] text-gray-500">
+        <div className="text-[10px] text-muted-foreground">
           Stata ac / pac 风格，95% 置信区间 ±1.96/√n
         </div>
         {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
         {result && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
             <div>
-              <Suspense fallback={<div className="h-[240px] animate-pulse bg-[#1a1d23] rounded" />}>
+              <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
                 <CorrelogramChart
                   data={result.acf.map((v, i) => ({ lag: i, value: v }))}
                   ciHalfWidth={ciHalfWidth}
@@ -79,7 +79,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
               </Suspense>
             </div>
             <div>
-              <Suspense fallback={<div className="h-[240px] animate-pulse bg-[#1a1d23] rounded" />}>
+              <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
                 <CorrelogramChart
                   data={result.pacf.map((v, i) => ({ lag: i + 1, value: v }))}
                   ciHalfWidth={ciHalfWidth}

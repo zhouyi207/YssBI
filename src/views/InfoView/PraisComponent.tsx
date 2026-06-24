@@ -47,10 +47,10 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <RSquaredBadge value={info.r_squared} />
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {info.method} &middot; n={info.num_observation} &middot; ρ={formatNum(praisInfo.rho)}
           </span>
         </div>
@@ -65,7 +65,7 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         <FormulaBlock endogName={data.endog_name || 'y'} coefficients={coefficients} ar1Rho={praisInfo.rho} />
       </Suspense>
 
@@ -117,20 +117,20 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
             </svg>
             <div>
               <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
-              <div className="text-sm text-gray-300">
+              <div className="text-sm text-foreground">
                 The following variables were dropped due to strict multicollinearity
                 (non-dummy variables removed first):
               </div>
               <ul className="mt-2 space-y-1 text-sm font-mono">
                 {diag.omit_info.omitted.map((o, i) => (
-                  <li key={i} className="text-gray-400">
+                  <li key={i} className="text-muted-foreground">
                     {o.variable}
                     {o.category != null ? (
                       <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
                         {o.category}
                       </span>
                     ) : null}
-                    <span className="text-gray-500 text-xs ml-1">({o.reason})</span>
+                    <span className="text-muted-foreground text-xs ml-1">({o.reason})</span>
                   </li>
                 ))}
               </ul>
@@ -166,7 +166,7 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
         </div>
         <StatCard label="Iterations" value={praisInfo.iterations} sub="Convergence" />
         <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
             Multicollinearity — Condition Number & VIF (Stata estat vif)
           </span>
         </div>
@@ -192,12 +192,12 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
       </div>
 
       {praisInfo.iteration_log && praisInfo.iteration_log.length > 0 && (
-        <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden mb-4">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider px-4 py-2 bg-[#1a1d23] border-b border-gray-800/40">
+        <div className="rounded-lg border border-border bg-card overflow-hidden mb-4">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider px-4 py-2 bg-muted border-b border-border">
             Iteration Log
           </div>
           <OverlayScrollbar direction="both" className="max-h-40">
-            <pre className="min-w-max whitespace-pre px-4 py-3 text-xs font-mono text-gray-300">
+            <pre className="min-w-max whitespace-pre px-4 py-3 text-xs font-mono text-foreground">
               {praisInfo.iteration_log.join('\n')}
             </pre>
           </OverlayScrollbar>
@@ -210,18 +210,18 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
           {diag.leverage && diag.leverage.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <KDE data={leverageKdeData} xLabel="Leverage" yLabel="Density" height={280} xMin={0} />
               </Suspense>
             </div>
           )}
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
-            <span className="text-[10px] text-gray-500">检验对象: u_t (Prais 收敛后)</span>
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals vs Fitted</span>
+            <span className="text-[10px] text-muted-foreground">检验对象: u_t (Prais 收敛后)</span>
           </div>
-          <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+          <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
             <ResidualPlot
               fitted={diag.fitted_values}
               residuals={diag.residuals}
@@ -232,9 +232,9 @@ export const PraisComponent: React.FC<{ data: PraisResultData }> = ({ data }) =>
           {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals: u_t vs u_{'{t-1}'}</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals: u_t vs u_{'{t-1}'}</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <Scatter
                   data={diag.residual_scatter.e_lag1.map((x, i) => ({ x, y: diag.residual_scatter!.e[i] }))}
                   xLabel="u_{t-1}"

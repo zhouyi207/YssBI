@@ -1,10 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { VscDatabase } from 'react-icons/vsc';
-import { logger } from '@/utils/appLogger';
 import { useEditStateStore } from '@/features/core/dataStore';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -13,6 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useWindowMaximized } from '@/features/application/window';
+import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
+import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 
 export interface DataframeOption {
   label: string;
@@ -37,41 +37,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 }) => {
   const { t } = useTranslation();
   const editStateByDatabase = useEditStateStore((s) => s.editStateByDatabase);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const isMaximized = useWindowMaximized('DataViewTitleBar');
 
   const labelWithDirtyMark = (id: string, label: string) =>
     editStateByDatabase[id]?.isModified ? `${label} *` : label;
-
-  useEffect(() => {
-    let disposed = false;
-    let cleanup: (() => void) | null = null;
-    const setup = async () => {
-      const win = getCurrentWindow();
-      const maximized = await win.isMaximized();
-      if (!disposed) setIsMaximized(maximized);
-      const unlisten = await win.onResized(async () => {
-        if (!disposed) setIsMaximized(await win.isMaximized());
-      });
-      if (disposed) unlisten();
-      else cleanup = unlisten;
-    };
-    setup().catch((e) => logger.app.error(String(e), 'DataViewTitleBar'));
-    return () => {
-      disposed = true;
-      cleanup?.();
-    };
-  }, []);
-
-  const handleMinimize = () => getCurrentWindow().minimize();
-  const handleMaximize = () => getCurrentWindow().toggleMaximize();
-  const handleClose = () => getCurrentWindow().close();
 
   const selectValue = selectedDataframeId && dataframes.some((o) => o.value === selectedDataframeId)
     ? selectedDataframeId
     : undefined;
 
   return (
-    <div data-tauri-drag-region className="flex h-9 shrink-0 select-none items-center border-b border-border bg-background/95 z-50">
+    <WindowTitleBar className="z-50">
       <div className="flex min-w-0 flex-1 items-center gap-2 px-3" data-tauri-drag-region>
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
           <VscDatabase size={14} />
@@ -116,17 +92,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           aria-label={t('dataView.cellPreviewPlaceholder')}
         />
       </div>
-      <div className="flex h-full shrink-0 items-center">
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMinimize} className="h-9 rounded-none text-muted-foreground" title={t('common.minimize')}>
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-        </Button>
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleMaximize} className="h-9 rounded-none text-muted-foreground" title={isMaximized ? t('common.restore') : t('common.maximize')}>
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" strokeWidth={2} /></svg>
-        </Button>
-        <Button type="button" variant="ghost" size="icon-lg" onClick={handleClose} className="h-9 w-11 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white" title={t('common.close')}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </Button>
-      </div>
-    </div>
+      <WindowTitleBarActions>
+        <WindowChromeControls isMaximized={isMaximized} />
+      </WindowTitleBarActions>
+    </WindowTitleBar>
   );
 };

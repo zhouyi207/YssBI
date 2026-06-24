@@ -26,21 +26,21 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
       {/* 主列表 */}
       <div className="p-6 max-w-[1100px] mx-auto">
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
-          <div className="text-xs text-gray-500">
+          <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+          <div className="text-xs text-muted-foreground">
             Variable: {data.var_name} · {data.items.length} combinations
           </div>
         </div>
-        <div className="rounded-lg border border-gray-800/50 overflow-hidden">
+        <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-[#1a1d23]">
-                <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
-                <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Lags</th>
-                <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Z(t)</th>
-                <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">P&gt;|t|</th>
-                <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">const (p)</th>
-                <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">trend (p)</th>
+              <tr className="bg-muted">
+                <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
+                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Lags</th>
+                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Z(t)</th>
+                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">P&gt;|t|</th>
+                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">const (p)</th>
+                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">trend (p)</th>
               </tr>
             </thead>
             <tbody>
@@ -54,23 +54,23 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
                     key={idx}
                     onClick={() => setSelected(item)}
                     className={`
-                      border-t border-gray-800/30 transition-colors cursor-pointer hover:bg-[#1e2128]
-                      ${idx % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'}
+                      border-t border-border transition-colors cursor-pointer hover:bg-muted
+                      ${idx % 2 === 0 ? 'bg-card' : 'bg-muted/40'}
                       ${isActive ? 'ring-2 ring-inset ring-[var(--accent-color)]' : ''}
                     `}
                   >
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full ${reject ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-                        <span className={`font-mono font-medium ${reject ? 'text-white' : 'text-gray-400'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${reject ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} />
+                        <span className={`font-mono font-medium ${reject ? 'text-foreground' : 'text-muted-foreground'}`}>
                           {item.regression}
                         </span>
                       </div>
                     </td>
-                    <td className="text-right px-3 py-2.5 font-mono text-gray-300">{item.lags}</td>
-                    <td className="text-right px-3 py-2.5 font-mono text-white">{formatNum(item.test_statistic)}</td>
+                    <td className="text-right px-3 py-2.5 font-mono text-foreground">{item.lags}</td>
+                    <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(item.test_statistic)}</td>
                     <td className="text-right px-3 py-2.5 font-mono">
-                      <span className={reject ? 'text-emerald-400' : 'text-gray-500'}>
+                      <span className={reject ? 'text-emerald-400' : 'text-muted-foreground'}>
                         {formatNum(item.p_value, 3)}
                       </span>
                       <SignificanceStars pValue={item.p_value} />
@@ -78,25 +78,25 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
                     <td className="text-right px-3 py-2.5 font-mono">
                       {cons ? (
                         <>
-                          <span className={cons.p_value < 0.05 ? 'text-emerald-400' : 'text-gray-500'}>
+                          <span className={cons.p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
                             {formatNum(cons.p_value, 3)}
                           </span>
                           <SignificanceStars pValue={cons.p_value} />
                         </>
                       ) : (
-                        <span className="text-gray-600">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="text-right px-3 py-2.5 font-mono">
                       {trend ? (
                         <>
-                          <span className={trend.p_value < 0.05 ? 'text-emerald-400' : 'text-gray-500'}>
+                          <span className={trend.p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
                             {formatNum(trend.p_value, 3)}
                           </span>
                           <SignificanceStars pValue={trend.p_value} />
                         </>
                       ) : (
-                        <span className="text-gray-600">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>
@@ -105,8 +105,8 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
             </tbody>
           </table>
         </div>
-        <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-600 px-1">
-          <span>Significance: <span className="text-yellow-400">***</span> p&lt;0.001, <span className="text-yellow-400">**</span> p&lt;0.01, <span className="text-yellow-400">*</span> p&lt;0.05, <span className="text-gray-500">.</span> p&lt;0.1</span>
+        <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground px-1">
+          <span>Significance: <span className="text-yellow-400">***</span> p&lt;0.001, <span className="text-yellow-400">**</span> p&lt;0.01, <span className="text-yellow-400">*</span> p&lt;0.05, <span className="text-muted-foreground">.</span> p&lt;0.1</span>
         </div>
       </div>
 
@@ -120,15 +120,15 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
             aria-hidden="true"
           />
           <div
-            className="fixed right-0 bottom-0 w-[min(90vw,900px)] bg-[var(--workbench-bg)] border-l border-gray-800/50 z-50 shadow-2xl animate-slide-in flex flex-col min-h-0"
+            className="fixed right-0 bottom-0 w-[min(90vw,900px)] bg-[var(--workbench-bg)] border-l border-border z-50 shadow-2xl animate-slide-in flex flex-col min-h-0"
             style={{ top: '2.5rem' }}
           >
-            <div className="bg-[var(--workbench-bg)] border-b border-gray-800/50 px-4 py-3 flex items-center justify-between z-10 shrink-0">
-              <span className="text-sm font-medium text-gray-400">{itemLabel(selected)}</span>
+            <div className="bg-[var(--workbench-bg)] border-b border-border px-4 py-3 flex items-center justify-between z-10 shrink-0">
+              <span className="text-sm font-medium text-muted-foreground">{itemLabel(selected)}</span>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                className="p-1.5 rounded text-gray-500 hover:text-white hover:bg-gray-800/50 transition-colors"
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-border transition-colors"
                 title={t('common.close')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

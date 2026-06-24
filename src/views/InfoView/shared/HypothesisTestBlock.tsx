@@ -24,7 +24,7 @@ function HypothesisFormulas({
         return (
           <div
             key={i}
-            className="[&_.katex]:text-gray-200 [&_.katex]:text-xs [&_.katex]:block"
+            className="[&_.katex]:text-foreground [&_.katex]:text-xs [&_.katex]:block"
             dangerouslySetInnerHTML={{ __html: html ?? part }}
           />
         );
@@ -77,14 +77,14 @@ export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
           </svg>
         }
       />
-      <div className="rounded-lg border border-gray-800/50 bg-[#13151a] p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex gap-2">
           <input
             type="text"
             value={hypothesis}
             onChange={(e) => setHypothesis(e.target.value)}
             placeholder="e.g. x1 = 0 或 petal_width = -0.5626, petal_length = 0.7（逗号分隔多约束）"
-            className="flex-1 px-3 py-2 rounded-md bg-[#1a1d23] border border-gray-700/50 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="flex-1 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
             onKeyDown={(e) => e.key === 'Enter' && handleRun()}
           />
           <button
@@ -95,38 +95,38 @@ export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
             {loading ? '...' : 'Run'}
           </button>
         </div>
-        <div className="text-[10px] text-gray-500">
+        <div className="text-[10px] text-muted-foreground">
           Param names: {paramNames.join(', ')}
         </div>
         {error && (
           <div className="text-xs text-red-400 font-mono">{error}</div>
         )}
         {result && (
-          <div className="rounded-md bg-[#1a1d23] border border-gray-800/50 overflow-hidden">
-            <div className="grid grid-cols-2 divide-x divide-gray-800/50">
+          <div className="rounded-md bg-muted border border-border overflow-hidden">
+            <div className="grid grid-cols-2 divide-x divide-border">
               <div className="p-4 min-w-0">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">H₀ 原假设</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">H₀ 原假设</div>
                 <HypothesisFormulas form={result.h0_form} paramNames={paramNames} />
               </div>
               <div className="p-4 min-w-0">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">H₁ 备择假设</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">H₁ 备择假设</div>
                 <HypothesisFormulas form={result.h1_form} paramNames={paramNames} />
               </div>
             </div>
-            <div className="border-t border-gray-800/50 px-4 py-3 space-y-1.5 text-xs">
+            <div className="border-t border-border px-4 py-3 space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-gray-500">
+                <span className="text-muted-foreground">
                   {result.test_type === "t" ? "t-statistic" : "F-statistic"}
                 </span>
-                <span className="font-mono text-white">{formatNum(result.stat, 4)}</span>
+                <span className="font-mono text-foreground">{formatNum(result.stat, 4)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">df</span>
-                <span className="font-mono text-gray-400">{result.df1}, {result.df2}</span>
+                <span className="text-muted-foreground">df</span>
+                <span className="font-mono text-muted-foreground">{result.df1}, {result.df2}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">p-value</span>
-                <span className={`font-mono font-medium ${result.p_value < 0.05 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                <span className="text-muted-foreground">p-value</span>
+                <span className={`font-mono font-medium ${result.p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
                   {formatNum(result.p_value, 4)}
                 </span>
               </div>

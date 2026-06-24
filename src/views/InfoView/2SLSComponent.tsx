@@ -46,13 +46,13 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <RSquaredBadge value={info.r_squared} />
           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
             IV:2SLS
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {info.method} &middot; n={info.num_observation}
           </span>
         </div>
@@ -67,7 +67,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         {diag.iv2sls_first_stage && diag.iv2sls_first_stage.length > 0 ? (
           <FormulaBlock2SLS
             endogName={data.endog_name || 'y'}
@@ -94,13 +94,13 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
             {diag.iv2sls_first_stage.map((fs) => (
               <div
                 key={fs.endog_name}
-                className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden"
+                className="rounded-lg border border-border bg-muted overflow-hidden"
               >
-                <div className="px-4 py-2.5 border-b border-gray-800/50 flex items-center justify-between">
-                  <span className="text-sm font-medium text-white">
+                <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">
                     {fs.endog_name} on exog + instruments
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-muted-foreground">
                     R² = {fs.r_squared.toFixed(4)} &middot; Adj R² = {fs.adj_r_squared.toFixed(4)}
                   </span>
                 </div>
@@ -127,39 +127,39 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           />
           <div className="space-y-3 mb-4">
             {/* Instrument counts */}
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-400">
-              <span>Included instruments: <span className="font-mono text-gray-300">{diag.iv2sls_first_stage_summary.k_included_instruments}</span></span>
-              <span>Excluded instruments: <span className="font-mono text-gray-300">{diag.iv2sls_first_stage_summary.k_excluded_instruments}</span></span>
-              <span>Endogenous regressors: <span className="font-mono text-gray-300">{diag.iv2sls_first_stage_summary.k_endogenous_regressors}</span></span>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <span>Included instruments: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_included_instruments}</span></span>
+              <span>Excluded instruments: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_excluded_instruments}</span></span>
+              <span>Endogenous regressors: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_endogenous_regressors}</span></span>
             </div>
             {/* Single endog: R², Adj R², Partial R², F table */}
             {diag.iv2sls_first_stage_summary.r2 != null ? (
-              <div className="rounded-lg border border-gray-800/50 overflow-hidden">
+              <div className="rounded-lg border border-border overflow-hidden">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-[#1a1d23]">
-                      <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Adj R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Partial R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">
+                    <tr className="bg-muted">
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">R-sq.</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Adj R-sq.</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Partial R-sq.</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">
                         F({diag.iv2sls_first_stage_summary.f_df1 ?? 0},{diag.iv2sls_first_stage_summary.f_df2 ?? 0})
                       </th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Prob &gt; F</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Prob &gt; F</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="bg-[#13151a] border-t border-gray-800/30 hover:bg-[#1e2128]">
-                      <td className="px-4 py-2.5 font-mono text-white">
+                    <tr className="bg-card border-t border-border hover:bg-muted">
+                      <td className="px-4 py-2.5 font-mono text-foreground">
                         {diag.iv2sls_first_stage?.[0]?.endog_name ?? '—'}
                       </td>
-                      <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(diag.iv2sls_first_stage_summary.r2, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(diag.iv2sls_first_stage_summary.r2_adjusted, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-gray-300">{formatNum(diag.iv2sls_first_stage_summary.partial_r2, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-gray-300">
+                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.r2, 4)}</td>
+                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.r2_adjusted, 4)}</td>
+                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.partial_r2, 4)}</td>
+                      <td className="text-right px-3 py-2.5 font-mono text-foreground">
                         {diag.iv2sls_first_stage_summary.f_stat != null ? formatNum(diag.iv2sls_first_stage_summary.f_stat, 4) : '—'}
                       </td>
-                      <td className="text-right px-3 py-2.5 font-mono text-gray-300">
+                      <td className="text-right px-3 py-2.5 font-mono text-foreground">
                         {diag.iv2sls_first_stage_summary.f_p_value != null ? formatNum(diag.iv2sls_first_stage_summary.f_p_value, 4) : '—'}
                       </td>
                     </tr>
@@ -168,26 +168,26 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
               </div>
             ) : (
               /* Multi endog: Shea's partial R² table */
-              <div className="rounded-lg border border-gray-800/50 overflow-hidden">
+              <div className="rounded-lg border border-border overflow-hidden">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-[#1a1d23]">
-                      <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Shea&apos;s partial R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Shea&apos;s adj. partial R-sq.</th>
+                    <tr className="bg-muted">
+                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Shea&apos;s partial R-sq.</th>
+                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Shea&apos;s adj. partial R-sq.</th>
                     </tr>
                   </thead>
                   <tbody>
                     {diag.iv2sls_first_stage.map((fs, i) => (
                       <tr
                         key={fs.endog_name}
-                        className={`border-t border-gray-800/30 hover:bg-[#1e2128] ${i % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'}`}
+                        className={`border-t border-border hover:bg-muted ${i % 2 === 0 ? 'bg-card' : 'bg-muted/40'}`}
                       >
-                        <td className="px-4 py-2.5 font-mono text-white">{fs.endog_name}</td>
-                        <td className="text-right px-3 py-2.5 font-mono text-gray-300">
+                        <td className="px-4 py-2.5 font-mono text-foreground">{fs.endog_name}</td>
+                        <td className="text-right px-3 py-2.5 font-mono text-foreground">
                           {formatNum(diag.iv2sls_first_stage_summary.shea_partial_r2[i] ?? 0, 4)}
                         </td>
-                        <td className="text-right px-3 py-2.5 font-mono text-gray-300">
+                        <td className="text-right px-3 py-2.5 font-mono text-foreground">
                           {formatNum(diag.iv2sls_first_stage_summary.shea_adj_partial_r2[i] ?? 0, 4)}
                         </td>
                       </tr>
@@ -199,21 +199,21 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
 
             {/* Minimum eigenvalue + Stock-Yogo critical values（robust 时整块隐藏） */}
             {diag.iv2sls_first_stage_summary.min_eigenvalue_cv_note !== 'robust' && (
-            <div className="rounded-lg border border-gray-800/50 overflow-hidden">
-              <div className="px-4 py-2.5 bg-[#1a1d23] border-b border-gray-800/50 flex items-center justify-between">
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="px-4 py-2.5 bg-muted border-b border-border flex items-center justify-between">
                 <div>
-                  <span className="text-[11px] text-gray-500 uppercase tracking-wider">Minimum eigenvalue statistic</span>
-                  <span className="ml-2 font-mono text-white font-medium">{formatNum(diag.iv2sls_first_stage_summary.min_eigenvalue, 4)}</span>
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Minimum eigenvalue statistic</span>
+                  <span className="ml-2 font-mono text-foreground font-medium">{formatNum(diag.iv2sls_first_stage_summary.min_eigenvalue, 4)}</span>
                 </div>
                 {diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (
-                  <span className="text-[10px] text-gray-500">Stock-Yogo (2005)</span>
+                  <span className="text-[10px] text-muted-foreground">Stock-Yogo (2005)</span>
                 )}
               </div>
               {diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (() => {
                 const cv = diag.iv2sls_first_stage_summary.min_eigenvalue_cv;
-                const cellClass = "text-right px-4 py-2 font-mono text-gray-300 tabular-nums";
-                const labelClass = "text-left px-4 py-2 text-[11px] text-gray-400";
-                const thClass = "text-right px-4 py-2 text-gray-500 font-medium tabular-nums";
+                const cellClass = "text-right px-4 py-2 font-mono text-foreground tabular-nums";
+                const labelClass = "text-left px-4 py-2 text-[11px] text-muted-foreground";
+                const thClass = "text-right px-4 py-2 text-muted-foreground font-medium tabular-nums";
                 return (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs table-fixed">
@@ -225,8 +225,8 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                         <col className="w-[4.5rem]" />
                       </colgroup>
                       <thead>
-                        <tr className="bg-[#15171d]">
-                          <th className="text-left px-4 py-2 text-gray-500 font-medium uppercase tracking-wider text-[10px]">Test</th>
+                        <tr className="bg-muted/40">
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">Test</th>
                           <th className={thClass}>5%</th>
                           <th className={thClass}>10%</th>
                           <th className={thClass}>20%</th>
@@ -234,7 +234,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="bg-[#13151a] border-t border-gray-800/30">
+                        <tr className="bg-card border-t border-border">
                           <td className={labelClass}>2SLS relative bias</td>
                           {cv.bias ? (
                             <>
@@ -244,13 +244,13 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                               <td className={cellClass}>{cv.bias.pct_30.toFixed(2)}</td>
                             </>
                           ) : (
-                            <td colSpan={4} className="text-right px-4 py-2 text-gray-500 italic">(not available)</td>
+                            <td colSpan={4} className="text-right px-4 py-2 text-muted-foreground italic">(not available)</td>
                           )}
                         </tr>
                       </tbody>
                       <thead>
-                        <tr className="bg-[#15171d] border-t border-gray-800/50">
-                          <th className="text-left px-4 py-2 text-gray-500 font-medium uppercase tracking-wider text-[10px]">Test</th>
+                        <tr className="bg-muted/40 border-t border-border">
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">Test</th>
                           <th className={thClass}>10%</th>
                           <th className={thClass}>15%</th>
                           <th className={thClass}>20%</th>
@@ -258,7 +258,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="bg-[#13151a] border-t border-gray-800/30">
+                        <tr className="bg-card border-t border-border">
                           <td className={labelClass}>2SLS size of nominal 5% Wald test</td>
                           <td className={cellClass}>{cv.size.pct_10.toFixed(2)}</td>
                           <td className={cellClass}>{cv.size.pct_15.toFixed(2)}</td>
@@ -271,7 +271,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                 );
               })()}
               {!diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (
-                <div className="px-4 py-2.5 bg-[#13151a] text-[11px] text-gray-500">
+                <div className="px-4 py-2.5 bg-card text-[11px] text-muted-foreground">
                   {diag.iv2sls_first_stage_summary.min_eigenvalue_cv_note === 'k_endog_gt_2'
                     ? 'Stock-Yogo critical values not available for 3+ endogenous regressors'
                     : 'Stock-Yogo critical values not shown'}
@@ -298,7 +298,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
             {diag.iv2sls_overid ? (
               <>
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
                     Tests of overidentifying restrictions (df = {diag.iv2sls_overid.df})
                     {diag.iv2sls_overid.test_type === 'wooldridge' && ' — Wooldridge score (robust)'}
                   </span>
@@ -330,7 +330,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                         ]
                   }
                 />
-                <p className="text-xs text-gray-500 mt-2 px-1">
+                <p className="text-xs text-muted-foreground mt-2 px-1">
                   H0: overidentifying restrictions are valid. Significant p-value suggests instruments may not be valid.
                   {diag.iv2sls_overid.test_type === 'wooldridge' &&
                     ' Wooldridge (1995) score test is used with robust VCE (Sargan/Basmann assume homoskedasticity).'}
@@ -341,7 +341,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
                 <p className="text-sm text-amber-200">
                   Model is exactly identified (k_iv = {diag.iv2sls_overid_dims.k_iv}, k_endog = {diag.iv2sls_overid_dims.k_endog}).
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   The overidentification test requires k_iv &gt; k_endog (excluded instruments &gt; endogenous variables). Exogenous variables are not counted as instruments.
                 </p>
               </div>
@@ -363,73 +363,73 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           />
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
                 H0: variables are exogenous
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {diag.iv2sls_endogenous && (
                 <>
-                  <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                    <div className="text-[11px] text-gray-500 font-mono mb-2">Durbin (score)</div>
+                  <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                    <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin (score)</div>
                     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-                      <span className="text-gray-400">
-                        chi2({diag.iv2sls_endogenous.df}) = <span className="font-mono text-white">{formatNum(diag.iv2sls_endogenous.durbin_stat)}</span>
+                      <span className="text-muted-foreground">
+                        chi2({diag.iv2sls_endogenous.df}) = <span className="font-mono text-foreground">{formatNum(diag.iv2sls_endogenous.durbin_stat)}</span>
                       </span>
-                      <span className="text-gray-400">
-                        p = <span className={`font-mono ${diag.iv2sls_endogenous.durbin_p_value < 0.05 ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(diag.iv2sls_endogenous.durbin_p_value)}</span>
+                      <span className="text-muted-foreground">
+                        p = <span className={`font-mono ${diag.iv2sls_endogenous.durbin_p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(diag.iv2sls_endogenous.durbin_p_value)}</span>
                       </span>
                     </div>
                     <div className="mt-1.5 text-[10px]">
                       {diag.iv2sls_endogenous.durbin_p_value < 0.05 ? (
                         <span className="text-amber-400">拒绝 H0</span>
                       ) : (
-                        <span className="text-gray-500">不拒绝 H0</span>
+                        <span className="text-muted-foreground">不拒绝 H0</span>
                       )}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                    <div className="text-[11px] text-gray-500 font-mono mb-2">Wu-Hausman</div>
+                  <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                    <div className="text-[11px] text-muted-foreground font-mono mb-2">Wu-Hausman</div>
                     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-                      <span className="text-gray-400">
-                        F({diag.iv2sls_endogenous.df},{diag.iv2sls_endogenous.wu_df_denom}) = <span className="font-mono text-white">{formatNum(diag.iv2sls_endogenous.wu_stat)}</span>
+                      <span className="text-muted-foreground">
+                        F({diag.iv2sls_endogenous.df},{diag.iv2sls_endogenous.wu_df_denom}) = <span className="font-mono text-foreground">{formatNum(diag.iv2sls_endogenous.wu_stat)}</span>
                       </span>
-                      <span className="text-gray-400">
-                        p = <span className={`font-mono ${diag.iv2sls_endogenous.wu_p_value < 0.05 ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(diag.iv2sls_endogenous.wu_p_value)}</span>
+                      <span className="text-muted-foreground">
+                        p = <span className={`font-mono ${diag.iv2sls_endogenous.wu_p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(diag.iv2sls_endogenous.wu_p_value)}</span>
                       </span>
                     </div>
                     <div className="mt-1.5 text-[10px]">
                       {diag.iv2sls_endogenous.wu_p_value < 0.05 ? (
                         <span className="text-amber-400">拒绝 H0</span>
                       ) : (
-                        <span className="text-gray-500">不拒绝 H0</span>
+                        <span className="text-muted-foreground">不拒绝 H0</span>
                       )}
                     </div>
                   </div>
                 </>
               )}
               {diag.iv2sls_hausman && (
-                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                  <div className="text-[11px] text-gray-500 font-mono mb-2">Hausman (sigmamore)</div>
+                <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                  <div className="text-[11px] text-muted-foreground font-mono mb-2">Hausman (sigmamore)</div>
                   <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-                    <span className="text-gray-400">
-                      chi2({diag.iv2sls_hausman.df}) = <span className="font-mono text-white">{formatNum(diag.iv2sls_hausman.stat)}</span>
+                    <span className="text-muted-foreground">
+                      chi2({diag.iv2sls_hausman.df}) = <span className="font-mono text-foreground">{formatNum(diag.iv2sls_hausman.stat)}</span>
                     </span>
-                    <span className="text-gray-400">
-                      p = <span className={`font-mono ${diag.iv2sls_hausman.p_value < 0.05 ? 'text-emerald-400' : 'text-gray-400'}`}>{formatNum(diag.iv2sls_hausman.p_value)}</span>
+                    <span className="text-muted-foreground">
+                      p = <span className={`font-mono ${diag.iv2sls_hausman.p_value < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(diag.iv2sls_hausman.p_value)}</span>
                     </span>
                   </div>
                   <div className="mt-1.5 text-[10px]">
                     {diag.iv2sls_hausman.p_value < 0.05 ? (
                       <span className="text-amber-400">拒绝 H0</span>
                     ) : (
-                      <span className="text-gray-500">不拒绝 H0</span>
+                      <span className="text-muted-foreground">不拒绝 H0</span>
                     )}
                   </div>
                 </div>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-2 px-1">
+            <p className="text-xs text-muted-foreground mt-2 px-1">
               estat endogenous: Durbin &amp; Wu-Hausman. hausman iv ols, constant sigmamore: traditional Hausman. Significant p-value favors IV.
             </p>
           </div>
@@ -480,7 +480,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
 
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
             Multicollinearity — Condition Number & VIF (Stata estat vif)
           </span>
         </div>
@@ -508,7 +508,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
       {diag.bp_tests && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Breusch-Pagan (Heteroscedasticity) — Stata estat hettest 四种变体
             </span>
             {diag.timing?.bp_tests_ms != null && (
@@ -529,7 +529,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
       {diag.ov_tests && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Ramsey RESET (Omitted Variables) — Stata estat ovtest 两种变体
             </span>
             {diag.timing?.ov_tests_ms != null && (
@@ -551,7 +551,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
       {diag.im_test ? (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Cameron & Trivedi&apos;s decomposition of IM-test — Stata estat imtest
             </span>
             {diag.timing?.im_test_ms != null && (
@@ -572,7 +572,7 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
       {diag.normality_tests ? (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Residual Normality (Omnibus / Jarque-Bera)
             </span>
           </div>
@@ -600,9 +600,9 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           {diag.leverage && diag.leverage.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <KDE
                   data={leverageKdeData}
                   xLabel="Leverage"
@@ -614,12 +614,12 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
             </div>
           )}
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals vs Fitted</span>
             {diag.timing?.fitted_residuals_ms != null && (
               <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.fitted_residuals_ms} ms</span>
             )}
           </div>
-          <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+          <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
             <ResidualPlot
               fitted={diag.fitted_values}
               residuals={diag.residuals}
@@ -630,9 +630,9 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals: e vs e_lag1</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals: e vs e_lag1</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <Scatter
                   data={diag.residual_scatter.e_lag1.map((x, i) => ({ x, y: diag.residual_scatter!.e[i] }))}
                   xLabel="e_{t-1}"
@@ -651,16 +651,16 @@ export const TwoSLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           {diag.normality_tests ? (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Skew & Kurtosis</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Skew & Kurtosis</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                  <div className="text-[11px] text-gray-500 font-mono mb-2">Skew</div>
-                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.skewness)}</div>
+                <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                  <div className="text-[11px] text-muted-foreground font-mono mb-2">Skew</div>
+                  <div className="text-foreground font-mono text-sm font-medium">{formatNum(diag.normality_tests.skewness)}</div>
                 </div>
-                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                  <div className="text-[11px] text-gray-500 font-mono mb-2">Kurtosis</div>
-                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.kurtosis)}</div>
+                <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                  <div className="text-[11px] text-muted-foreground font-mono mb-2">Kurtosis</div>
+                  <div className="text-foreground font-mono text-sm font-medium">{formatNum(diag.normality_tests.kurtosis)}</div>
                 </div>
               </div>
             </div>

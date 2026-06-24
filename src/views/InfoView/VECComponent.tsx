@@ -129,8 +129,8 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
-        <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span>Variables: {var_names.join(', ')}</span>
           <span>n = {num_observation}</span>
           <span>rank = {rank}</span>
@@ -148,26 +148,26 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
           </svg>
         }
       />
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50 mb-6">
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Log likelihood</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border mb-6">
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">Log likelihood</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">AIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(aic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">AIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(aic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">HQIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(hqic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">HQIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(hqic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">SBIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(sbic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">SBIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(sbic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-gray-500 text-xs">Det(Sigma_ml)</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(det_sigma_ml)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+          <span className="text-muted-foreground text-xs">Det(Sigma_ml)</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(det_sigma_ml)}</span>
         </div>
       </div>
 
@@ -182,27 +182,27 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Parms</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">RMSE</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">R-sq</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">P&gt;chi2</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">RMSE</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">R-sq</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
                 </tr>
               </thead>
               <tbody>
                 {equations.map((eq, i) => (
-                  <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                    <td className="px-4 py-2.5 font-mono text-white">{eq.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{eq.parms}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.rmse)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.r_sq)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.p_chi2)}</td>
+                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                    <td className="px-4 py-2.5 font-mono text-foreground">{eq.eq_name}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{eq.parms}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.rmse)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.r_sq)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.chi2)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.p_chi2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -232,36 +232,36 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Parms</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">P&gt;chi2</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
                 </tr>
               </thead>
               <tbody>
                 {cointegrating_equations.map((ce, i) => (
-                  <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                    <td className="px-4 py-2.5 font-mono text-white">{ce.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{ce.parms}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(ce.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(ce.p_chi2)}</td>
+                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                    <td className="px-4 py-2.5 font-mono text-foreground">{ce.eq_name}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{ce.parms}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(ce.chi2)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(ce.p_chi2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="text-xs text-gray-500 mt-2 mb-4">Identification: beta is exactly identified</div>
+          <div className="text-xs text-muted-foreground mt-2 mb-4">Identification: beta is exactly identified</div>
         </>
       )}
 
       {/* Cointegration vectors (beta) - 使用 CoefficientTable 展示 */}
       {betaCoeffs.length > 0 && (
         <>
-          <div className="text-xs text-gray-500 mb-2">Johansen normalization restriction imposed</div>
+          <div className="text-xs text-muted-foreground mb-2">Johansen normalization restriction imposed</div>
           <SectionHeader
             title="beta"
             icon={
@@ -293,31 +293,31 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
             }
           />
           <div className="grid grid-cols-[auto_1fr] gap-4 mb-6 items-stretch min-h-[360px]">
-            <div className="flex flex-col h-full rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
+            <div className="flex flex-col h-full rounded-lg border border-border bg-muted overflow-hidden">
               <div className="flex-1 min-h-0 flex flex-col">
                 <table className="text-left text-sm min-w-[200px]">
                   <thead>
-                    <tr className="border-b border-gray-800/50">
-                      <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Eigenvalue</th>
-                      <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Modulus</th>
+                    <tr className="border-b border-border">
+                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Eigenvalue</th>
+                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Modulus</th>
                     </tr>
                   </thead>
                   <tbody>
                     {vecstableSorted.map((row, i) => (
-                      <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                        <td className="px-4 py-2.5 font-mono text-gray-300">
+                      <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                        <td className="px-4 py-2.5 font-mono text-foreground">
                           {row.im >= 0
                             ? `${formatNum(row.re)} + ${formatNum(row.im)}i`
                             : `${formatNum(row.re)} - ${formatNum(Math.abs(row.im))}i`}
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-white">{formatNum(row.modulus)}</td>
+                        <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.modulus)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div className="flex-1 min-h-0 bg-[#1a1d23]" />
+                <div className="flex-1 min-h-0 bg-muted" />
               </div>
-              <div className="px-4 py-2 text-[11px] text-gray-500 border-t border-gray-800/30 shrink-0">
+              <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border shrink-0">
                 {vecstableSorted.some((r) => r.modulus >= 1)
                   ? 'At least one eigenvalue is at least 1.0. VEC does not satisfy stability condition.'
                   : 'All the eigenvalues lie inside the unit circle.'}
@@ -341,28 +341,28 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">lag</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Prob &gt; chi2</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
                 </tr>
               </thead>
               <tbody>
                 {veclmar.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                    <td className="px-4 py-2.5 font-mono text-white">{row.lag}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.p_value)}</td>
+                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2 text-[11px] text-gray-500 border-t border-gray-800/30">
+            <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
               H0: no autocorrelation at lag order
             </div>
           </div>

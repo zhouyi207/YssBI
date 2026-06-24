@@ -307,3 +307,76 @@ body.layout-sash-dragging canvas {
 :root:not(.dark) .hover\:bg-white\/10:hover {
   background-color: var(--muted) !important;
 }
+
+/* Hover text/bg variants (Tailwind hover: classes are not covered by static .text-gray-* rules) */
+:root:not(.dark) .hover\:text-gray-300:hover {
+  color: var(--foreground) !important;
+}
+
+:root:not(.dark) [class*="hover:bg-[#1e2128]"]:hover {
+  background-color: var(--muted) !important;
+}
+
+:root:not(.dark) [class*="bg-[#1e2128]"] {
+  background-color: var(--muted) !important;
+}
+
+/* KaTeX via arbitrary descendant selector (e.g. [&_.katex]:text-gray-200) */
+:root:not(.dark) [class*="[&_.katex]"] .katex {
+  color: var(--foreground) !important;
+}
+
+/* Plot / summary tooltips */
+:root:not(.dark) [class*="bg-[#1e2028]"] {
+  background-color: var(--card) !important;
+  color: var(--foreground);
+  border-color: var(--border) !important;
+}
+
+/* Semantic accent text — pastels → readable on light surfaces */
+:root:not(.dark) .text-indigo-300 {
+  color: #4338ca !important;
+}
+
+:root:not(.dark) .text-amber-200,
+:root:not(.dark) [class*="text-amber-200/"] {
+  color: #b45309 !important;
+}
+
+:root:not(.dark) .text-amber-300 {
+  color: #b45309 !important;
+}
+
+:root:not(.dark) .text-cyan-300 {
+  color: #0e7490 !important;
+}
+
+:root:not(.dark) .text-violet-300 {
+  color: #6d28d9 !important;
+}
+
+:root:not(.dark) .text-fuchsia-300 {
+  color: #a21caf !important;
+}
+
+:root:not(.dark) .text-red-200,
+:root:not(.dark) [class*="text-red-200/"],
+:root:not(.dark) [class*="text-red-300/"] {
+  color: #b91c1c !important;
+}
+
+:root:not(.dark) [class*="bg-gray-800/70"],
+:root:not(.dark) [class*="bg-gray-700/50"] {
+  background-color: var(--muted) !important;
+}
+
+:root:not(.dark) [class*="border-gray-600"],
+:root:not(.dark) [class*="border-gray-700/50"],
+:root:not(.dark) [class*="border-gray-700/60"] {
+  border-color: var(--border) !important;
+}
+
+:root:not(.dark) .bg-gray-700,
+:root:not(.dark) .bg-gray-800 {
+  background-color: var(--border) !important;
+}

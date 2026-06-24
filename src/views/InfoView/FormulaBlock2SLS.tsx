@@ -140,10 +140,10 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
   ];
 
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-0">
-        <div className="inline-flex rounded-md bg-[#1a1d23] border border-gray-800/50 text-[11px]">
+        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
           {modeLabels.map(({ key, label }) => (
             <button
               key={key}
@@ -152,8 +152,8 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
                 key === 'stage1' ? 'rounded-l-md' : ''
               } ${key === 'final' ? 'rounded-r-md' : ''} ${
                 mode === key
-                  ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-gray-800/50 last:border-r-0'
-                  : 'text-gray-500 hover:text-gray-300 border-r border-gray-800/50 last:border-r-0'
+                  ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border last:border-r-0'
+                  : 'text-muted-foreground hover:text-foreground border-r border-border last:border-r-0'
               }`}
             >
               {label}
@@ -165,14 +165,14 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
       {/* Formula */}
       <OverlayScrollbar direction="horizontal">
         <div
-          className="px-6 py-4 w-max min-w-full [&_.katex]:text-gray-200"
+          className="px-6 py-4 w-max min-w-full [&_.katex]:text-foreground"
           dangerouslySetInnerHTML={{ __html: currentHtml || '' }}
         />
       </OverlayScrollbar>
 
       {/* Mode description */}
-      <div className="border-t border-gray-800/40 px-4 pb-4 pt-3">
-        <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-1 px-1">
+      <div className="border-t border-border px-4 pb-4 pt-3">
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1 px-1">
           {mode === 'stage1' && 'Stage 1: Each endogenous regressed on exog + instruments'}
           {mode === 'stage2' && 'Stage 2: Y regressed on exog + fitted endog (ŷ = Zγ̂)'}
           {mode === 'final' && 'Final (structural): Y = f(exog, endog) with 2SLS coefficients'}

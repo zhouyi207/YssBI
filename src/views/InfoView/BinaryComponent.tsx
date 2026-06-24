@@ -27,12 +27,12 @@ export const BinaryComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
             Pseudo R² = {info.r_squared.toFixed(3)}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {info.method} &middot; n={info.num_observation}
           </span>
         </div>
@@ -47,7 +47,7 @@ export const BinaryComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         <BinaryFormulaBlock
           modelType={info.model_type === 'Probit' ? 'Probit' : 'Logit'}
           endogName={data.endog_name || 'y'}
@@ -106,7 +106,7 @@ export const BinaryComponent: React.FC<{ data: OLSResultData }> = ({ data }) => 
               </svg>
             }
           />
-          <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+          <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
             <Scatter
               data={diag.fitted_values.map((x, i) => ({ x, y: (diag.residuals ?? [])[i] ?? 0 }))}
               xLabel="Fitted (P)"

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scalePoint, line, extent } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface ParallelAxis {
   name: string;
@@ -31,6 +32,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -90,12 +92,12 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
       g.append('line')
         .attr('x1', x).attr('x2', x)
         .attr('y1', 0).attr('y2', h)
-        .attr('stroke', '#3a3d45').attr('stroke-width', 1);
+        .attr('stroke', chartTheme.axis).attr('stroke-width', 1);
 
       g.append('text')
         .attr('x', x).attr('y', -10)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#8b8f9a')
+        .attr('fill', chartTheme.tick)
         .attr('font-size', `${AXIS_LABEL_SIZE}px`)
         .attr('font-weight', '600')
         .text(axis.name.length > 10 ? axis.name.slice(0, 9) + '…' : axis.name);
@@ -109,7 +111,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
           g.append('text')
             .attr('x', x - 4).attr('y', y + 3)
             .attr('text-anchor', 'end')
-            .attr('fill', '#555')
+            .attr('fill', chartTheme.tick)
             .attr('font-size', '8px')
             .text(Number.isInteger(t) ? String(t) : t.toFixed(1));
         });
@@ -148,7 +150,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
             .raise();
           const html = axes.map((a, ci) => {
             const v = d.row[ci];
-            return `<span style="color:#888">${a.name}:</span> <span style="color:#e0e0e0">${v ?? 'null'}</span>`;
+            return `<span style="color:${chartTheme.tooltipMuted}">${a.name}:</span> <span style="color:${chartTheme.tooltipFg}">${v ?? 'null'}</span>`;
           }).join('<br/>');
           tooltip.style('opacity', '1').html(html);
         })
@@ -165,7 +167,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
           tooltip.style('opacity', '0');
         });
     });
-  }, [axes, rows, color, maxLines, size]);
+  }, [axes, rows, color, maxLines, size, chartTheme]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

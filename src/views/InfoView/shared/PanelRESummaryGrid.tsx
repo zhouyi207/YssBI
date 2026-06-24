@@ -19,19 +19,19 @@ export function PanelRESummaryGrid({
   return (
     <div className="space-y-2 mb-2">
       {/* Header: Random-effects GLS or ML regression */}
-      <div className="text-xs text-gray-400 mb-2">
+      <div className="text-xs text-muted-foreground mb-2">
         {isMle ? 'Random-effects ML regression' : 'Random-effects GLS regression'}
       </div>
 
       {/* Number of obs, Number of groups */}
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         <InfoRow label="Number of obs">{info.num_observation}</InfoRow>
         <InfoRow label="Number of groups">{panelFe.num_groups}</InfoRow>
       </div>
 
       {/* R-squared: Within, Between, Overall (FGLS only; MLE does not report these) */}
       {panelFe.r2_within != null && panelFe.r2_between != null && panelFe.r2_overall != null && (
-        <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+        <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
           <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
           <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
           <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
@@ -40,14 +40,14 @@ export function PanelRESummaryGrid({
       )}
 
       {/* Obs per group */}
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         <InfoRow label="Obs per group (min)">{panelFe.obs_per_group.min}</InfoRow>
         <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group.avg.toFixed(1)}</InfoRow>
         <InfoRow label="Obs per group (max)">{panelFe.obs_per_group.max}</InfoRow>
       </div>
 
       {/* Wald/LR chi2, Prob > chi2, Log likelihood (MLE), corr(u_i, X) = 0 (assumed) */}
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         {isMle && info.log_likelihood != null && (
           <InfoRow label="Log likelihood">{formatNum(info.log_likelihood)}</InfoRow>
         )}
@@ -55,23 +55,23 @@ export function PanelRESummaryGrid({
           {formatNum(waldChi2)}
         </InfoRow>
         <InfoRow label="Prob &gt; chi2">
-          <span className={probWald < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
+          <span className={probWald < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
             {formatNum(probWald)}
           </span>
         </InfoRow>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-gray-500 text-xs">corr(u_i, X) = 0 (assumed)</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+          <span className="text-muted-foreground text-xs">corr(u_i, X) = 0 (assumed)</span>
         </div>
         {isMle && (
-          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-            <span className="text-gray-500 text-xs">
+          <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+            <span className="text-muted-foreground text-xs">
               u_i ~ N(0, σ²_u), ε_it ~ N(0, σ²_e)
             </span>
           </div>
         )}
         {isCluster && (
-          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-            <span className="text-gray-500 text-xs">
+          <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+            <span className="text-muted-foreground text-xs">
               (Std. err. adjusted for {panelFe.num_groups} clusters)
             </span>
           </div>
@@ -80,12 +80,12 @@ export function PanelRESummaryGrid({
       </div>
 
       {/* sigma_u, sigma_e, rho */}
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         <InfoRow label="sigma_u">{formatNum(panelFe.sigma.sigma_u)}</InfoRow>
         <InfoRow label="sigma_e">{formatNum(panelFe.sigma.sigma_e)}</InfoRow>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-gray-500 text-xs">rho</span>
-          <span className="text-white text-xs font-mono font-medium">
+        <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+          <span className="text-muted-foreground text-xs">rho</span>
+          <span className="text-foreground text-xs font-mono font-medium">
             {formatNum(panelFe.sigma.rho)} (fraction of variance due to u_i)
           </span>
         </div>
@@ -93,7 +93,7 @@ export function PanelRESummaryGrid({
 
       {/* theta (RE quasi-demeaning parameter) */}
       {panelFe.theta != null && (
-        <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+        <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
           {Math.abs(panelFe.theta.min - panelFe.theta.max) > 1e-10 ? (
             <>
               <InfoRow label="theta (min)">{formatNum(panelFe.theta.min)}</InfoRow>
@@ -101,9 +101,9 @@ export function PanelRESummaryGrid({
               <InfoRow label="theta (max)">{formatNum(panelFe.theta.max)}</InfoRow>
             </>
           ) : (
-            <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2">
-              <span className="text-gray-500 text-xs">theta</span>
-              <span className="text-white text-xs font-mono font-medium">
+            <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
+              <span className="text-muted-foreground text-xs">theta</span>
+              <span className="text-foreground text-xs font-mono font-medium">
                 {formatNum(panelFe.theta.avg)}
               </span>
             </div>
@@ -113,10 +113,10 @@ export function PanelRESummaryGrid({
 
       {/* MLE: LR test of sigma_u=0 */}
       {isMle && panelFe.chibar2 != null && panelFe.prob_chibar2 != null && (
-        <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50">
+        <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
           <InfoRow label="LR test of sigma_u=0: chibar2(01)">{formatNum(panelFe.chibar2)}</InfoRow>
           <InfoRow label="Prob &gt;= chibar2">
-            <span className={panelFe.prob_chibar2 < 0.05 ? 'text-emerald-400' : 'text-gray-400'}>
+            <span className={panelFe.prob_chibar2 < 0.05 ? 'text-emerald-400' : 'text-muted-foreground'}>
               {formatNum(panelFe.prob_chibar2)}
             </span>
           </InfoRow>

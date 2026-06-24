@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
-import { usePersistedWindow } from '@/features/application/window';
+import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
+import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
+import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 import Scatter, { type ScatterPoint } from '@/views/PlotView/Scatter';
 import Line, { type LinePoint } from '@/views/PlotView/Line';
 import ECDF, { type ECDFPoint } from '@/views/PlotView/ECDF';
@@ -11,7 +13,6 @@ import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
 import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
 import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
 import CorrelogramChart, { type CorrelogramDatum } from '@/views/PlotView/CorrelogramChart';
-import { Button } from '@/components/ui/button';
 
 interface ScatterEcdfData {
   data: { x: number; y: number }[];
@@ -62,7 +63,7 @@ function getPlotTypeFromHash(): string {
 export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const isMaximized = useWindowMaximized('PlotWindow');
   const [scatterEcdfData, setScatterEcdfData] = useState<ScatterEcdfData | null>(null);
   const [histogramData, setHistogramData] = useState<HistogramData | null>(null);
   const [correlationData, setCorrelationData] = useState<CorrelationData | null>(null);
@@ -73,7 +74,6 @@ export const PlotWindow: React.FC = () => {
   usePersistedWindow('plot');
 
   useEffect(() => {
-    let cleanup: (() => void) | null = null;
     let mounted = true;
 
     const initializeWindow = async () => {
@@ -141,21 +141,6 @@ export const PlotWindow: React.FC = () => {
         if (mounted) setIsReady(true);
         await currentWindow.show().catch(() => {});
 
-        const maximized = await currentWindow.isMaximized().catch(() => false);
-        if (mounted) setIsMaximized(maximized);
-
-        const unlisten = await currentWindow.onResized(async () => {
-          if (!mounted) return;
-          try {
-            const max = await currentWindow.isMaximized();
-            if (mounted) setIsMaximized(max);
-          } catch (e) {
-            logger.sys.warn('Failed to check maximized state on resize: ' + String(e), 'PlotWindow');
-          }
-        });
-        if (mounted) cleanup = () => unlisten();
-        else unlisten();
-
         logger.sys.debug('Plot window initialized successfully', 'PlotWindow');
       } catch (e) {
         logger.sys.error('Failed to initialize plot window: ' + String(e), 'PlotWindow');
@@ -170,9 +155,6 @@ export const PlotWindow: React.FC = () => {
 
     return () => {
       mounted = false;
-      if (cleanup) {
-        cleanup();
-      }
     };
   }, []);
 
@@ -214,10 +196,7 @@ export const PlotWindow: React.FC = () => {
   return (
     <div className="flex flex-col w-full h-screen overflow-hidden bg-[var(--workbench-bg)]">
       {/* 自定义标题栏 - 与主窗口一致 */}
-      <div
-        data-tauri-drag-region
-        className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none rounded-tr-lg overflow-hidden"
-      >
+      <WindowTitleBar childWindow>
         <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -225,46 +204,15 @@ export const PlotWindow: React.FC = () => {
           <span className="text-foreground font-bold text-sm tracking-tight">{t('plot.title')}</span>
         </div>
 
-        {/* 窗口控制按钮 */}
-        <div className="flex items-center h-full">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-lg"
-            onClick={handleMinimize}
-            className="h-10 rounded-none text-muted-foreground"
-            title={t('common.minimize')}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-            </svg>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-lg"
-            onClick={handleMaximize}
-            className="h-10 rounded-none text-muted-foreground"
-            title={isMaximized ? t('common.restore') : t('common.maximize')}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
-            </svg>
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-lg"
-            onClick={handleClose}
-            className="h-10 w-12 rounded-none text-muted-foreground hover:bg-red-600 hover:text-white"
-            title={t('common.close')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-      </div>
+        <WindowTitleBarActions>
+        <WindowChromeControls
+          isMaximized={isMaximized}
+          onMinimize={handleMinimize}
+          onMaximize={handleMaximize}
+          onClose={handleClose}
+        />
+        </WindowTitleBarActions>
+      </WindowTitleBar>
 
       {/* 主内容区：图表填充可用空间 */}
       <div className="flex-1 flex flex-col min-h-0 p-4">

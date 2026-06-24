@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, line } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface IRFChartSingleProps {
   /** 序列：step -> value */
@@ -23,6 +24,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -77,7 +79,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
     g.append('rect')
       .attr('width', w)
       .attr('height', h)
-      .attr('fill', '#13151a')
+      .attr('fill', chartTheme.canvas)
       .attr('rx', 2);
 
     g.append('line')
@@ -85,7 +87,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
       .attr('x2', w)
       .attr('y1', yScale(0))
       .attr('y2', yScale(0))
-      .attr('stroke', '#4a4d55')
+      .attr('stroke', chartTheme.zeroLine)
       .attr('stroke-dasharray', '2,2');
 
     if (lower && upper && lower.length === nSteps && upper.length === nSteps) {
@@ -120,7 +122,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
       .attr('x', w / 2)
       .attr('y', -6)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#8b8f9a')
+      .attr('fill', chartTheme.tick)
       .attr('font-size', '10px')
       .text(title);
 
@@ -128,16 +130,16 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
       .attr('transform', `translate(0,${h})`)
       .call(axisBottom(xScale).ticks(Math.min(5, nSteps)).tickSize(0))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#6b7080').attr('font-size', '9px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.label).attr('font-size', '9px');
       });
 
     g.append('g')
       .call(axisLeft(yScale).ticks(3).tickSize(-w))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#2a2d35');
-        sel.selectAll('.tick text').attr('fill', '#6b7080').attr('font-size', '9px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.grid);
+        sel.selectAll('.tick text').attr('fill', chartTheme.label).attr('font-size', '9px');
       });
 
     const tipEl = tooltipRef.current;
@@ -172,14 +174,14 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
         tipEl.style.top = above > 0 ? `${above}px` : `${below}px`;
       })
       .on('mouseleave', hideTooltip);
-  }, [series, lower, upper, title, size, hideTooltip]);
+  }, [series, lower, upper, title, size, hideTooltip, chartTheme]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
       <div
         ref={tooltipRef}
-        className="pointer-events-none absolute z-10 rounded-md bg-[#1e2028] border border-gray-700/60 px-3 py-2 shadow-lg transition-opacity duration-100"
+        className="pointer-events-none absolute z-10 rounded-md bg-popover border border-border px-3 py-2 shadow-lg transition-opacity duration-100"
         style={{ opacity: 0 }}
       />
     </div>

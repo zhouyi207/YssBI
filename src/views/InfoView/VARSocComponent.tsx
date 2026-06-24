@@ -21,7 +21,7 @@ function EmphasisNumber({
   return (
     <div className={flex}>
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden />
-      <span className="font-medium text-white">{valueText}</span>
+      <span className="font-medium text-foreground">{valueText}</span>
     </div>
   );
 }
@@ -67,10 +67,10 @@ export const VARSocComponent: React.FC<{ data: VARSocResultData }> = ({ data }) 
   return (
     <div className="p-6 max-w-[980px] mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
-        <p className="text-xs text-gray-500">
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+        <p className="text-xs text-muted-foreground">
           Endogenous: {var_names.join(', ')} · table lag 0…{maxlag} · n={num_observation} (common sample T−maxlag, Stata{' '}
-          <code className="text-gray-400">varsoc</code>)
+          <code className="text-muted-foreground">varsoc</code>)
         </p>
       </div>
 
@@ -83,10 +83,10 @@ export const VARSocComponent: React.FC<{ data: VARSocResultData }> = ({ data }) 
         }
       />
 
-      <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-x-auto">
-        <table className="w-full text-xs font-mono text-gray-300">
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
+        <table className="w-full text-xs font-mono text-foreground">
           <thead>
-            <tr className="border-b border-gray-800 text-gray-500">
+            <tr className="border-b border-border text-muted-foreground">
               <th className="px-3 py-2 text-left">Lag</th>
               <th className="px-3 py-2 text-right">LL</th>
               <th className="px-3 py-2 text-right">LR</th>
@@ -102,65 +102,65 @@ export const VARSocComponent: React.FC<{ data: VARSocResultData }> = ({ data }) 
             {rows.map((r, idx) => (
               <tr
                 key={r.lag}
-                className={`border-b border-gray-800/40 transition-colors hover:bg-[#1e2128] ${
-                  idx % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'
+                className={`border-b border-border transition-colors hover:bg-muted ${
+                  idx % 2 === 0 ? 'bg-card' : 'bg-muted/40'
                 }`}
               >
-                <td className="px-3 py-2 text-gray-400">{r.lag}</td>
+                <td className="px-3 py-2 text-muted-foreground">{r.lag}</td>
                 <td className="px-3 py-2 text-right">
                   {highlight.ll.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.log_likelihood)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.log_likelihood)}</span>
+                    <span className="text-foreground">{fmtCell(r.log_likelihood)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.lr.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.lr ?? undefined)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.lr ?? undefined)}</span>
+                    <span className="text-foreground">{fmtCell(r.lr ?? undefined)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {r.lr_df != null && highlight.lr_df.has(idx) ? (
                     <EmphasisNumber valueText={String(r.lr_df)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{r.lr_df ?? '—'}</span>
+                    <span className="text-foreground">{r.lr_df ?? '—'}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.lr_p.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.lr_p ?? undefined, 4)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.lr_p ?? undefined, 4)}</span>
+                    <span className="text-foreground">{fmtCell(r.lr_p ?? undefined, 4)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.fpe.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.fpe)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.fpe)}</span>
+                    <span className="text-foreground">{fmtCell(r.fpe)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.aic.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.aic)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.aic)}</span>
+                    <span className="text-foreground">{fmtCell(r.aic)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.hqic.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.hqic)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.hqic)}</span>
+                    <span className="text-foreground">{fmtCell(r.hqic)}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {highlight.sbic.has(idx) ? (
                     <EmphasisNumber valueText={fmtCell(r.sbic)} align="right" />
                   ) : (
-                    <span className="text-gray-300">{fmtCell(r.sbic)}</span>
+                    <span className="text-foreground">{fmtCell(r.sbic)}</span>
                   )}
                 </td>
               </tr>
@@ -169,7 +169,7 @@ export const VARSocComponent: React.FC<{ data: VARSocResultData }> = ({ data }) 
         </table>
       </div>
 
-      <p className="mt-2 text-[10px] text-gray-600 px-1">
+      <p className="mt-2 text-[10px] text-muted-foreground px-1">
         <span className="inline-flex items-center gap-1 align-middle">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
         </span>

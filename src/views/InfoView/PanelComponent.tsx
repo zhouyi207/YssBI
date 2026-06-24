@@ -172,14 +172,14 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
   };
 
   const pillActive = 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-[var(--accent-color)]/50';
-  const pillInactive = 'text-gray-400 border-gray-700/60 hover:border-gray-600 hover:text-gray-300';
+  const pillInactive = 'text-muted-foreground border-border hover:border-border hover:text-foreground';
 
   return (
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
-        <span className="text-xs text-gray-500">
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+        <span className="text-xs text-muted-foreground">
           {data.endog_name} &middot; Entity ID + Time ID (cluster by entity)
         </span>
       </div>
@@ -188,11 +188,11 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
       {data.selection_tests && data.selection_tests.length > 0 && (
         <PanelSelectionTestsBlock tests={data.selection_tests} />
       )}
-      <div className="mb-6 rounded-xl border border-gray-800/60 bg-gray-900/40 overflow-hidden">
+      <div className="mb-6 rounded-xl border border-border bg-muted/30 overflow-hidden">
         {/* Row 1: Model Type (left) | Effect Type (right) */}
-        <div className="flex flex-col sm:flex-row sm:divide-x sm:divide-gray-800/60">
+        <div className="flex flex-col sm:flex-row sm:divide-x sm:divide-border">
           <div className="flex-1 p-4 flex flex-col items-start">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2.5 font-medium">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
               Model Type
             </div>
             <div className="flex flex-wrap gap-2 justify-start">
@@ -210,11 +210,11 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             </div>
           </div>
           <div className="flex-1 p-4 flex flex-col items-end">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2.5 font-medium">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
               Effect Type
             </div>
             {modelType === 'mixed' ? (
-              <div className="text-sm text-gray-400 border border-gray-700/60 rounded-lg px-3.5 py-1.5">
+              <div className="text-sm text-muted-foreground border border-border rounded-lg px-3.5 py-1.5">
                 Not Applicable
               </div>
             ) : (
@@ -240,8 +240,8 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
         </div>
 
         {/* Row 2: Estimation Method */}
-        <div className="border-t border-gray-800/60 p-4 bg-[#13151a]/50">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2.5 font-medium">
+        <div className="border-t border-border p-4 bg-card/50">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
             Estimation Method
           </div>
           <div className="flex flex-wrap gap-2">
@@ -278,7 +278,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         <PanelFormulaBlock
           modelType={modelType}
           effectType={effectType}
@@ -305,7 +305,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             </svg>
             <div>
               <div className="font-medium text-red-400">Model failed</div>
-              <div className="text-sm text-gray-300 mt-1">{currentError}</div>
+              <div className="text-sm text-foreground mt-1">{currentError}</div>
             </div>
           </div>
         </div>
@@ -380,20 +380,20 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
                   </svg>
                   <div>
                     <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
-                    <div className="text-sm text-gray-300">
+                    <div className="text-sm text-foreground">
                       The following variables were dropped due to strict multicollinearity
                       (non-dummy variables removed first):
                     </div>
                     <ul className="mt-2 space-y-1 text-sm font-mono">
                       {currentData.diagnostic_info.omit_info.omitted.map((o, i) => (
-                        <li key={i} className="text-gray-400">
+                        <li key={i} className="text-muted-foreground">
                           {o.variable}
                           {o.category != null ? (
                             <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
                               {o.category}
                             </span>
                           ) : null}
-                          <span className="text-gray-500 text-xs ml-1">({o.reason})</span>
+                          <span className="text-muted-foreground text-xs ml-1">({o.reason})</span>
                         </li>
                       ))}
                     </ul>

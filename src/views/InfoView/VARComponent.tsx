@@ -66,9 +66,9 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-gray-500 leading-relaxed">
+          <span className="text-xs text-muted-foreground leading-relaxed">
             Variables: {var_names.join(', ')}
             {complete_sample_rows != null && var_max_lag != null ? (
               <>
@@ -93,7 +93,7 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         <VARFormulaBlock varNames={var_names} coefficients={coefficients} />
       </Suspense>
 
@@ -106,41 +106,41 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
           </svg>
         }
       />
-      <div className="grid grid-cols-2 gap-px bg-gray-800/50 rounded-lg overflow-hidden border border-gray-800/50 mb-6">
+      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border mb-6">
         {complete_sample_rows != null && var_max_lag != null && (
-          <div className="bg-[#13151a] px-4 py-2.5 flex justify-between col-span-2 border-b border-gray-800/40">
-            <span className="text-gray-500 text-xs shrink-0">Observations</span>
-            <span className="text-white text-xs font-mono text-right">
+          <div className="bg-card px-4 py-2.5 flex justify-between col-span-2 border-b border-border">
+            <span className="text-muted-foreground text-xs shrink-0">Observations</span>
+            <span className="text-foreground text-xs font-mono text-right">
               T = {complete_sample_rows}, p = {var_max_lag}, n = {num_observation}{' '}
-              <span className="text-gray-500 font-sans">
+              <span className="text-muted-foreground font-sans">
                 （无缺失外生时 n = T − p；首期外生缺失不减少 n）
               </span>
             </span>
           </div>
         )}
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Log likelihood</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">Log likelihood</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">AIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(aic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">AIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(aic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">FPE</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(fpe)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">FPE</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(fpe)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">HQIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(hqic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">HQIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(hqic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">SBIC</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(sbic)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">SBIC</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(sbic)}</span>
         </div>
-        <div className="bg-[#13151a] px-4 py-2.5 flex justify-between">
-          <span className="text-gray-500 text-xs">Det(Sigma_ml)</span>
-          <span className="text-white text-xs font-mono font-medium">{formatNum(data.det_sigma_ml)}</span>
+        <div className="bg-card px-4 py-2.5 flex justify-between">
+          <span className="text-muted-foreground text-xs">Det(Sigma_ml)</span>
+          <span className="text-foreground text-xs font-mono font-medium">{formatNum(data.det_sigma_ml)}</span>
         </div>
       </div>
 
@@ -153,27 +153,27 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
           </svg>
         }
       />
-      <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+      <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-gray-800/50">
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Equation</th>
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Parms</th>
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">RMSE</th>
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">R-sq</th>
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-              <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">P&gt;chi2</th>
+            <tr className="border-b border-border">
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">RMSE</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">R-sq</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
             </tr>
           </thead>
           <tbody>
             {equations.map((eq, i) => (
-              <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                <td className="px-4 py-2.5 font-mono text-white">{eq.eq_name}</td>
-                <td className="px-4 py-2.5 font-mono text-gray-300">{eq.parms}</td>
-                <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.rmse)}</td>
-                <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.r_sq)}</td>
-                <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.chi2)}</td>
-                <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(eq.p_chi2)}</td>
+              <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                <td className="px-4 py-2.5 font-mono text-foreground">{eq.eq_name}</td>
+                <td className="px-4 py-2.5 font-mono text-foreground">{eq.parms}</td>
+                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.rmse)}</td>
+                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.r_sq)}</td>
+                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.chi2)}</td>
+                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.p_chi2)}</td>
               </tr>
             ))}
           </tbody>
@@ -209,26 +209,26 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               {eqOrder.map((eqName) => {
                 const rows = byEq[eqName] ?? [];
                 return (
-                  <div key={eqName} className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
-                    <div className="px-4 py-2.5 text-sm font-medium text-gray-300 border-b border-gray-800/50">
+                  <div key={eqName} className="rounded-lg border border-border bg-muted overflow-hidden">
+                    <div className="px-4 py-2.5 text-sm font-medium text-foreground border-b border-border">
                       Equation: {eqName}
                     </div>
                     <table className="w-full text-left text-sm">
                       <thead>
-                        <tr className="border-b border-gray-800/50">
-                          <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">lag</th>
-                          <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                          <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">df</th>
-                          <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Prob &gt; chi2</th>
+                        <tr className="border-b border-border">
+                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
+                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
+                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((row, i) => (
-                          <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                            <td className="px-4 py-2.5 font-mono text-white">{row.lag}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.chi2)}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-300">{row.df}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.p_value)}</td>
+                          <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                            <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
+                            <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
+                            <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
+                            <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -253,31 +253,31 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
             }
           />
           <div className="grid grid-cols-[auto_1fr] gap-4 mb-6 items-stretch min-h-[360px]">
-            <div className="flex flex-col h-full rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden">
+            <div className="flex flex-col h-full rounded-lg border border-border bg-muted overflow-hidden">
               <div className="flex-1 min-h-0 flex flex-col">
                 <table className="text-left text-sm min-w-[200px]">
                   <thead>
-                    <tr className="border-b border-gray-800/50">
-                      <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Eigenvalue</th>
-                      <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Modulus</th>
+                    <tr className="border-b border-border">
+                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Eigenvalue</th>
+                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Modulus</th>
                     </tr>
                   </thead>
                   <tbody>
                     {varstableSorted.map((row, i) => (
-                      <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                        <td className="px-4 py-2.5 font-mono text-gray-300">
+                      <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                        <td className="px-4 py-2.5 font-mono text-foreground">
                           {row.im >= 0
                             ? `${formatNum(row.re)} + ${formatNum(row.im)}i`
                             : `${formatNum(row.re)} - ${formatNum(Math.abs(row.im))}i`}
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-white">{formatNum(row.modulus)}</td>
+                        <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.modulus)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div className="flex-1 min-h-0 bg-[#1a1d23]" />
+                <div className="flex-1 min-h-0 bg-muted" />
               </div>
-              <div className="px-4 py-2 text-[11px] text-gray-500 border-t border-gray-800/30 shrink-0">
+              <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border shrink-0">
                 {varstableSorted.some((r) => r.modulus >= 1)
                   ? 'At least one eigenvalue is at least 1.0. VAR does not satisfy stability condition.'
                   : 'All the eigenvalues lie inside the unit circle.'}
@@ -301,28 +301,28 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Excluded</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Prob &gt; chi2</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Excluded</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
                 </tr>
               </thead>
               <tbody>
                 {vargranger.map((row, i) => (
                   <tr
                     key={i}
-                    className={`border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20 ${row.excluded === 'ALL' ? 'border-b-2 border-gray-700/50' : ''}`}
+                    className={`border-b border-border last:border-b-0 hover:bg-muted/40 ${row.excluded === 'ALL' ? 'border-b-2 border-border' : ''}`}
                   >
-                    <td className="px-4 py-2.5 font-mono text-white">{row.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{row.excluded}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.p_value)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.eq_name}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.excluded}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -342,28 +342,28 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-hidden mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">lag</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Prob &gt; chi2</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
                 </tr>
               </thead>
               <tbody>
                 {varlmar.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                    <td className="px-4 py-2.5 font-mono text-white">{row.lag}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{formatNum(row.p_value)}</td>
+                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
+                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="px-4 py-2 text-[11px] text-gray-500 border-t border-gray-800/30">
+            <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
               H0: no autocorrelation at lag order
             </div>
           </div>
@@ -381,14 +381,14 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-x-auto mb-6">
+          <div className="rounded-lg border border-border bg-muted overflow-x-auto mb-6">
             <table className="w-full text-left text-sm min-w-[400px]">
               <thead>
-                <tr className="border-b border-gray-800/50">
-                  <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">Step</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Step</th>
                   {var_names.flatMap((imp) =>
                     var_names.map((resp) => (
-                      <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                      <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
                         {imp}→{resp}
                       </th>
                     ))
@@ -397,11 +397,11 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </thead>
               <tbody>
                 {oirf.map((stepData, s) => (
-                  <tr key={s} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                    <td className="px-4 py-2.5 font-mono text-white">{s}</td>
+                  <tr key={s} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                    <td className="px-4 py-2.5 font-mono text-foreground">{s}</td>
                     {var_names.flatMap((_, impIdx) =>
                       var_names.map((_, respIdx) => (
-                        <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-gray-300">
+                        <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-foreground">
                           {formatNum(stepData[respIdx]?.[impIdx] ?? 0)}
                         </td>
                       ))
@@ -425,14 +425,14 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
             </svg>
           }
         />
-        <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] overflow-x-auto mb-6">
+        <div className="rounded-lg border border-border bg-muted overflow-x-auto mb-6">
           <table className="w-full text-left text-sm min-w-[400px]">
             <thead>
-              <tr className="border-b border-gray-800/50">
-                <th className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">step</th>
+              <tr className="border-b border-border">
+                <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">step</th>
                 {var_names.flatMap((imp) =>
                   var_names.map((resp) => (
-                    <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-gray-500 uppercase tracking-wider font-medium">
+                    <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
                       {imp}→{resp}
                     </th>
                   ))
@@ -441,11 +441,11 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
             </thead>
             <tbody>
               {fevd.map((stepData, s) => (
-                <tr key={s} className="border-b border-gray-800/30 last:border-b-0 hover:bg-gray-800/20">
-                  <td className="px-4 py-2.5 font-mono text-white">{s}</td>
+                <tr key={s} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+                  <td className="px-4 py-2.5 font-mono text-foreground">{s}</td>
                   {var_names.flatMap((_, impIdx) =>
                     var_names.map((_, respIdx) => (
-                      <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-gray-300">
+                      <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-foreground">
                         {formatNum(stepData[respIdx]?.[impIdx] ?? 0)}
                       </td>
                     ))

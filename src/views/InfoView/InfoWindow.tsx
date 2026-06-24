@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
-import { usePersistedWindow } from '@/features/application/window';
+import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { OLSComponent, type OLSResultData } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';
@@ -19,6 +19,8 @@ import { LIMLComponent } from './LIMLComponent';
 import { DataViewComponent } from './DataViewComponent';
 import type { PanelDidResultData, PanelSummaryResult, VecRankResultData } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
+import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 import { logger } from '@/utils/appLogger';
 
 function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]: unknown } {
@@ -114,14 +116,13 @@ function getDataKeyFromHash(): string | null {
 export const InfoWindow: React.FC = () => {
   const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const isMaximized = useWindowMaximized('InfoWindow');
   const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | PanelDidResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   usePersistedWindow('info');
 
   useEffect(() => {
-    let cleanup: (() => void)[] = [];
     let mounted = true;
 
     const initializeWindow = async () => {
@@ -158,21 +159,6 @@ export const InfoWindow: React.FC = () => {
         );
 
         if (mounted) setIsReady(true);
-
-        const maximized = await currentWindow.isMaximized().catch(() => false);
-        if (mounted) setIsMaximized(maximized);
-
-        const unlistenResize = await currentWindow.onResized(async () => {
-          if (!mounted) return;
-          try {
-            const max = await currentWindow.isMaximized();
-            if (mounted) setIsMaximized(max);
-          } catch (e) {
-            logger.sys.warn('Failed to check maximized state: ' + String(e), 'InfoWindow');
-          }
-        });
-        if (mounted) cleanup.push(unlistenResize);
-        else unlistenResize();
       } catch (e) {
         logger.sys.error('Failed to initialize window: ' + String(e), 'InfoWindow');
         if (mounted) {
@@ -185,7 +171,6 @@ export const InfoWindow: React.FC = () => {
     initializeWindow();
     return () => {
       mounted = false;
-      cleanup.forEach((fn) => fn());
     };
   }, []);
 
@@ -226,10 +211,7 @@ export const InfoWindow: React.FC = () => {
   return (
     <div className="flex flex-col w-full h-screen overflow-hidden bg-[var(--workbench-bg)] text-foreground">
       {/* Title bar */}
-      <div
-        data-tauri-drag-region
-        className="h-10 bg-[var(--workbench-bg)] border-b border-border flex items-center z-50 select-none rounded-tr-lg overflow-hidden shrink-0"
-      >
+      <WindowTitleBar childWindow>
         <div className="flex items-center gap-2 px-4 flex-1" data-tauri-drag-region>
           <svg className="w-4 h-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -239,36 +221,15 @@ export const InfoWindow: React.FC = () => {
           </span>
         </div>
 
-        <div className="flex items-center h-full">
-          <button
-            onClick={handleMinimize}
-            className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            title={t('common.minimize')}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-            </svg>
-          </button>
-          <button
-            onClick={handleMaximize}
-            className="w-10 h-10 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            title={isMaximized ? t('common.restore') : t('common.maximize')}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <rect x="4" y="4" width="16" height="16" strokeWidth={2} />
-            </svg>
-          </button>
-          <button
-            onClick={handleClose}
-            className="w-12 h-10 flex items-center justify-center text-gray-400 hover:bg-red-600 hover:text-white transition-colors"
-            title={t('common.close')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
+        <WindowTitleBarActions>
+        <WindowChromeControls
+          isMaximized={isMaximized}
+          onMinimize={handleMinimize}
+          onMaximize={handleMaximize}
+          onClose={handleClose}
+        />
+        </WindowTitleBarActions>
+      </WindowTitleBar>
 
       {/* Content */}
       <OverlayScrollbar className="flex-1 min-h-0" direction="vertical">

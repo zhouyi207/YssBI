@@ -119,16 +119,16 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
   }, [varNames, coefficients]);
 
   return (
-    <div className="rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-1">
-        <div className="inline-flex rounded-md bg-[#1a1d23] border border-gray-800/50 text-[11px]">
+        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
           <button
             onClick={() => setMode('symbolic')}
             className={`px-3 py-1 rounded-l-md transition-colors ${
               mode === 'symbolic'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-gray-800/50'
-                : 'text-gray-500 hover:text-gray-300 border-r border-gray-800/50'
+                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border'
+                : 'text-muted-foreground hover:text-foreground border-r border-border'
             }`}
           >
             Symbolic
@@ -138,7 +138,7 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
             className={`px-3 py-1 rounded-r-md transition-colors ${
               mode === 'expanded'
                 ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                : 'text-gray-500 hover:text-gray-300'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Expanded
@@ -149,38 +149,38 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
       {/* Formula */}
       <OverlayScrollbar direction="both">
         <div
-          className="px-6 py-5 min-w-full [&_.katex]:text-gray-200 [&_.katex]:text-[1.05em] [&_.katex-display]:py-3 [&_.katex-display]:leading-relaxed"
+          className="px-6 py-5 min-w-full [&_.katex]:text-foreground [&_.katex]:text-[1.05em] [&_.katex-display]:py-3 [&_.katex-display]:leading-relaxed"
           dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
         />
       </OverlayScrollbar>
 
       {/* Symbolic mode: variable mapping */}
       {mode === 'symbolic' && (
-        <div className="border-t border-gray-800/40 px-4 pb-4 pt-3">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
+        <div className="border-t border-border px-4 pb-4 pt-3">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-gray-500">
+              <tr className="text-muted-foreground">
                 <th className="text-left px-3 py-1.5 font-medium w-24">Symbol</th>
                 <th className="text-left px-3 py-1.5 font-medium">Meaning</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-t border-gray-800/20 bg-[#15171d]/50">
+              <tr className="border-t border-border bg-muted/50">
                 <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">y_t</td>
-                <td className="px-3 py-1.5 text-gray-400">K×1 vector of endogenous variables</td>
+                <td className="px-3 py-1.5 text-muted-foreground">K×1 vector of endogenous variables</td>
               </tr>
-              <tr className="border-t border-gray-800/20">
+              <tr className="border-t border-border">
                 <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">A_l</td>
-                <td className="px-3 py-1.5 text-gray-400">K×K coefficient matrix at lag l</td>
+                <td className="px-3 py-1.5 text-muted-foreground">K×K coefficient matrix at lag l</td>
               </tr>
-              <tr className="border-t border-gray-800/20 bg-[#15171d]/50">
+              <tr className="border-t border-border bg-muted/50">
                 <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">v</td>
-                <td className="px-3 py-1.5 text-gray-400">Constant vector</td>
+                <td className="px-3 py-1.5 text-muted-foreground">Constant vector</td>
               </tr>
-              <tr className="border-t border-gray-800/20">
+              <tr className="border-t border-border">
                 <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">u_t</td>
-                <td className="px-3 py-1.5 text-gray-400">Innovation vector, white noise</td>
+                <td className="px-3 py-1.5 text-muted-foreground">Innovation vector, white noise</td>
               </tr>
             </tbody>
           </table>

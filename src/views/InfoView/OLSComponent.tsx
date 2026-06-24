@@ -44,10 +44,10 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-2">{data.title}</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <RSquaredBadge value={info.r_squared} />
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {info.method} &middot; n={info.num_observation}
           </span>
         </div>
@@ -62,7 +62,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           </svg>
         }
       />
-      <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-24 animate-pulse" />}>
+      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
         <FormulaBlock endogName={data.endog_name || 'y'} coefficients={coefficients} />
       </Suspense>
 
@@ -110,20 +110,20 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
             </svg>
             <div>
               <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
-              <div className="text-sm text-gray-300">
+              <div className="text-sm text-foreground">
                 The following variables were dropped due to strict multicollinearity
                 (non-dummy variables removed first):
               </div>
               <ul className="mt-2 space-y-1 text-sm font-mono">
                 {diag.omit_info.omitted.map((o, i) => (
-                  <li key={i} className="text-gray-400">
+                  <li key={i} className="text-muted-foreground">
                     {o.variable}
                     {o.category != null ? (
                       <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
                         {o.category}
                       </span>
                     ) : null}
-                    <span className="text-gray-500 text-xs ml-1">({o.reason})</span>
+                    <span className="text-muted-foreground text-xs ml-1">({o.reason})</span>
                   </li>
                 ))}
               </ul>
@@ -147,7 +147,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
 
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
             Multicollinearity — Condition Number & VIF (Stata estat vif)
           </span>
         </div>
@@ -175,7 +175,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       {diag.bp_tests && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Breusch-Pagan (Heteroscedasticity) — Stata estat hettest 四种变体
             </span>
             {diag.timing?.bp_tests_ms != null && (
@@ -196,7 +196,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       {diag.ov_tests && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Ramsey RESET (Omitted Variables) — Stata estat ovtest 两种变体
             </span>
             {diag.timing?.ov_tests_ms != null && (
@@ -218,7 +218,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       {diag.im_test ? (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Cameron & Trivedi&apos;s decomposition of IM-test — Stata estat imtest
             </span>
             {diag.timing?.im_test_ms != null && (
@@ -239,7 +239,7 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
       {diag.normality_tests ? (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
               Residual Normality (Omnibus / Jarque-Bera)
             </span>
           </div>
@@ -267,9 +267,9 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           {diag.leverage && diag.leverage.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Leverage KDE (Stata predict lev, leverage)</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <KDE
                   data={leverageKdeData}
                   xLabel="Leverage"
@@ -281,12 +281,12 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
             </div>
           )}
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals vs Fitted</span>
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals vs Fitted</span>
             {diag.timing?.fitted_residuals_ms != null && (
               <span className="text-[10px] text-[var(--accent-color)] font-mono">{diag.timing.fitted_residuals_ms} ms</span>
             )}
           </div>
-          <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+          <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
             <ResidualPlot
               fitted={diag.fitted_values}
               residuals={diag.residuals}
@@ -297,9 +297,9 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           {diag.residual_scatter && diag.residual_scatter.e.length > 0 && diag.residual_scatter.e_lag1.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Residuals: e vs e_lag1</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Residuals: e vs e_lag1</span>
               </div>
-              <Suspense fallback={<div className="rounded-lg border border-gray-800/50 bg-[#13151a] h-[280px] animate-pulse" />}>
+              <Suspense fallback={<div className="rounded-lg border border-border bg-card h-[280px] animate-pulse" />}>
                 <Scatter
                   data={diag.residual_scatter.e_lag1.map((x, i) => ({ x, y: diag.residual_scatter!.e[i] }))}
                   xLabel="e_{t-1}"
@@ -318,16 +318,16 @@ export const OLSComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
           {diag.normality_tests ? (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Skew & Kurtosis</span>
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Skew & Kurtosis</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                  <div className="text-[11px] text-gray-500 font-mono mb-2">Skew</div>
-                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.skewness)}</div>
+                <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                  <div className="text-[11px] text-muted-foreground font-mono mb-2">Skew</div>
+                  <div className="text-foreground font-mono text-sm font-medium">{formatNum(diag.normality_tests.skewness)}</div>
                 </div>
-                <div className="rounded-lg border border-gray-800/50 bg-[#1a1d23] px-4 py-3 hover:border-gray-700/50 transition-colors">
-                  <div className="text-[11px] text-gray-500 font-mono mb-2">Kurtosis</div>
-                  <div className="text-white font-mono text-sm font-medium">{formatNum(diag.normality_tests.kurtosis)}</div>
+                <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                  <div className="text-[11px] text-muted-foreground font-mono mb-2">Kurtosis</div>
+                  <div className="text-foreground font-mono text-sm font-medium">{formatNum(diag.normality_tests.kurtosis)}</div>
                 </div>
               </div>
             </div>

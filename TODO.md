@@ -297,7 +297,24 @@
 
 ## 2026.06.25
 
+- [x] light 模式下 exec pin 连接状态去除中心白点，与 dark 模式一致（`Pin.tsx`）
+- [x] light 模式下 Summary Equation KaTeX 文字过浅：FormulaBlock 等改为 `[&_.katex]:text-foreground`
+- [x] light 模式主题兼容补全：`App.css` 覆盖 hover 变体、语义 accent 色、tooltip、`[&_.katex]` 兜底、分隔线 `bg-gray-700/800`
+- [x] 图表主题：`shared/theme/chartTheme.ts` + PlotView / InfoView D3 轴网格画布随 light/dark 重绘（12 个图表）
+- [x] InfoView legacy 深色类名迁移为 shadcn token（`bg-card` / `bg-muted` / `text-foreground` / `border-border` 等；新增 `shared/infoViewTheme.ts`）
+- [x] 窗口控制按钮统一：`WindowChromeControls` + `WindowTitleBar` / `WindowTitleBarActions`；hover 背景铺满标题栏高度（去掉 `buttonVariants` 默认 `h-7`，改用 `self-stretch`）
+- [x] 各页面标题栏与 Edit 对齐：`h-10`、`bg-[var(--workbench-bg)]`、`shadow-xl`（Editor Menubar、ProjectPicker、DataView、Info / Plot / Log）
+- [x] 关闭钮右上角与系统窗口圆角贴合：子窗口移除 CSS `rounded-tr-lg`，直角贴边由 OS 裁剪（与 Edit 主窗口一致）
+- [x] Edit 菜单栏「显示详细」按钮垂直居中：补 `self-center`（与主题 / 设置按钮一致）
+- [x] 修复 npm audit esbuild 漏洞（`package.json` overrides `"esbuild": "^0.28.1"`）
+
+## v1.0 待办
+
 - [ ] 点击更新会自动更新
+- [ ] 变量切换类型 dataview 无法获取
+- [ ] 连接 pin 的线在执行的时候只有一部分会亮
+- [ ] 断开连接后 pin 的状态有时还是连接状态
+- [ ] sequence 只有前三个才执行，后面加上的都不会执行
 
 # TODOLIST
 

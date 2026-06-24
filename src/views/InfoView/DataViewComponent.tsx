@@ -26,8 +26,8 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
   if (dataType === 'null' || dataType === 'struct') {
     return (
       <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-white mb-4">{title}</h1>
-        <p className="text-gray-400">{data.message ?? 'No data'}</p>
+        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+        <p className="text-muted-foreground">{data.message ?? 'No data'}</p>
       </div>
     );
   }
@@ -35,9 +35,9 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
   if (dataType === 'scalar') {
     return (
       <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-white mb-4">{title}</h1>
-        <div className="rounded-lg border border-gray-700 bg-[#13151a] p-4 font-mono text-sm">
-          <div className="text-gray-500 text-xs mb-1">{data.valueType ?? 'Value'}</div>
+        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+        <div className="rounded-lg border border-border bg-card p-4 font-mono text-sm">
+          <div className="text-muted-foreground text-xs mb-1">{data.valueType ?? 'Value'}</div>
           <pre className="text-[var(--accent-color)] break-all">
             {JSON.stringify(data.value, null, 2)}
           </pre>
@@ -53,8 +53,8 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
 
     return (
       <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-white mb-4">{title}</h1>
-        <div className="text-gray-500 text-sm mb-2">
+        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+        <div className="text-muted-foreground text-sm mb-2">
           {data.name && <span className="mr-3">Name: {data.name}</span>}
           {data.dtype && <span className="mr-3">Type: {data.dtype}</span>}
           <span>Length: {length}</span>
@@ -62,19 +62,19 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
             <span className="ml-2 text-amber-500">(showing first {previewCount})</span>
           )}
         </div>
-        <div className="rounded-lg border border-gray-700 bg-[#13151a] overflow-x-auto">
+        <div className="rounded-lg border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-700">
-                <th className="px-4 py-2 text-left text-gray-500 font-medium">#</th>
-                <th className="px-4 py-2 text-left text-gray-500 font-medium">Value</th>
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 text-left text-muted-foreground font-medium">#</th>
+                <th className="px-4 py-2 text-left text-muted-foreground font-medium">Value</th>
               </tr>
             </thead>
             <tbody>
               {values.map((v, i) => (
-                <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/30">
-                  <td className="px-4 py-2 text-gray-500">{i}</td>
-                  <td className="px-4 py-2 text-white font-mono">
+                <tr key={i} className="border-b border-border hover:bg-muted/50">
+                  <td className="px-4 py-2 text-muted-foreground">{i}</td>
+                  <td className="px-4 py-2 text-foreground font-mono">
                     {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                   </td>
                 </tr>
@@ -94,20 +94,20 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
 
     return (
       <div className="p-6 max-w-[1200px] mx-auto">
-        <h1 className="text-xl font-bold text-white mb-4">{title}</h1>
-        <div className="text-gray-500 text-sm mb-2">
+        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+        <div className="text-muted-foreground text-sm mb-2">
           <span>{totalRows} rows × {columns.length} columns</span>
           {totalRows > previewRows && (
             <span className="ml-2 text-amber-500">(showing first {previewRows} rows)</span>
           )}
         </div>
-        <div className="rounded-lg border border-gray-700 bg-[#13151a] overflow-x-auto">
+        <div className="rounded-lg border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm min-w-[400px]">
             <thead>
-              <tr className="border-b border-gray-700">
-                <th className="px-4 py-2 text-left text-gray-500 font-medium sticky left-0 bg-[#13151a]">#</th>
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 text-left text-muted-foreground font-medium sticky left-0 bg-card">#</th>
                 {columns.map((col, i) => (
-                  <th key={i} className="px-4 py-2 text-left text-gray-500 font-medium whitespace-nowrap">
+                  <th key={i} className="px-4 py-2 text-left text-muted-foreground font-medium whitespace-nowrap">
                     {col}
                   </th>
                 ))}
@@ -115,10 +115,10 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
             </thead>
             <tbody>
               {rows.map((row, rowIdx) => (
-                <tr key={rowIdx} className="border-b border-gray-800 hover:bg-gray-800/30">
-                  <td className="px-4 py-2 text-gray-500 sticky left-0 bg-[#13151a]">{rowIdx}</td>
+                <tr key={rowIdx} className="border-b border-border hover:bg-muted/50">
+                  <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">{rowIdx}</td>
                   {(row as unknown[]).map((cell, colIdx) => (
-                    <td key={colIdx} className="px-4 py-2 text-white font-mono whitespace-nowrap">
+                    <td key={colIdx} className="px-4 py-2 text-foreground font-mono whitespace-nowrap">
                       {cell === null || cell === undefined
                         ? '—'
                         : typeof cell === 'object'
@@ -137,8 +137,8 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
 
   return (
     <div className="p-6 max-w-[900px] mx-auto">
-      <h1 className="text-xl font-bold text-white mb-4">{title}</h1>
-      <p className="text-gray-400">Unknown data type: {dataType}</p>
+      <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+      <p className="text-muted-foreground">Unknown data type: {dataType}</p>
     </div>
   );
 };

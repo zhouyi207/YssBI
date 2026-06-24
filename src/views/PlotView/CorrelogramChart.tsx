@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft } from 'd3';
+import { useChartThemeColors } from '@/shared/theme/chartTheme';
 
 export interface CorrelogramDatum {
   lag: number;
@@ -37,6 +38,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const chartTheme = useChartThemeColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -87,21 +89,21 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
       .attr('y', yScale(ciHalfWidth))
       .attr('width', w)
       .attr('height', yScale(-ciHalfWidth) - yScale(ciHalfWidth))
-      .attr('fill', '#2a2d35')
+      .attr('fill', chartTheme.grid)
       .attr('opacity', 0.5);
 
     [ciHalfWidth, -ciHalfWidth].forEach((ci) => {
       g.append('line')
         .attr('x1', 0).attr('x2', w)
         .attr('y1', yScale(ci)).attr('y2', yScale(ci))
-        .attr('stroke', '#4a4d55')
+        .attr('stroke', chartTheme.zeroLine)
         .attr('stroke-dasharray', '4,4');
     });
 
     g.append('line')
       .attr('x1', 0).attr('x2', w)
       .attr('y1', zeroY).attr('y2', zeroY)
-      .attr('stroke', '#5a5d65');
+      .attr('stroke', chartTheme.zeroLine);
 
     const tipEl = tooltipRef.current;
 
@@ -128,7 +130,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
           if (!tipEl) return;
           tipEl.style.opacity = '1';
           tipEl.innerHTML =
-            `<div style="font-size:11px;line-height:1.6">` +
+            `<div style="font-size:11px;line-height:1.6;color:${chartTheme.tooltipFg}">` +
             `<b>Lag ${d.lag}</b><br/>` +
             `${valueLabel}: <b>${d.value.toFixed(4)}</b><br/>` +
             `Q(${d.lag}): <b>${d.q_stat.toFixed(4)}</b><br/>` +
@@ -154,17 +156,17 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
       .attr('transform', `translate(0,${h})`)
       .call(axisBottom(xBand).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     g.append('g')
       .call(axisLeft(yScale).ticks(5).tickSize(-4))
       .call((sel) => {
-        sel.select('.domain').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick line').attr('stroke', '#3a3d45');
-        sel.selectAll('.tick text').attr('fill', '#8b8f9a').attr('font-size', '10px');
+        sel.select('.domain').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick line').attr('stroke', chartTheme.axis);
+        sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
     if (title) {
@@ -172,12 +174,12 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('x', w / 2)
         .attr('y', -10)
         .attr('text-anchor', 'middle')
-        .attr('fill', '#8b8f9a')
+        .attr('fill', chartTheme.tick)
         .attr('font-size', '12px')
         .attr('font-weight', '500')
         .text(title);
     }
-  }, [data, ciHalfWidth, title, color, valueLabel, size, hideTooltip]);
+  }, [data, ciHalfWidth, title, color, valueLabel, size, hideTooltip, chartTheme]);
 
   return (
     <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

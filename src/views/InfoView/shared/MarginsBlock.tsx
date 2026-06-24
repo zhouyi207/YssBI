@@ -183,14 +183,14 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
           </svg>
         }
       />
-      <div className="rounded-lg border border-gray-800/50 bg-[#13151a] p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider">Command</label>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Command</label>
             <select
               value={marginType}
               onChange={(e) => setMarginType(e.target.value as MarginType)}
-              className="px-3 py-2 rounded-md bg-[#1a1d23] border border-gray-700/50 text-sm font-mono text-white focus:outline-none focus:border-[var(--accent-color)]/50 min-w-[220px]"
+              className="px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50 min-w-[220px]"
             >
               {MARGIN_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -201,7 +201,7 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
           </div>
           {showAtInput && (
             <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-              <label className="text-[10px] text-gray-500 uppercase tracking-wider">
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                 at (e.g. x1 = 0, x2 = 1.5)
               </label>
               <input
@@ -209,33 +209,33 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
                 value={atSpec}
                 onChange={(e) => setAtSpec(e.target.value)}
                 placeholder="x1 = 0, x2 = 1.5（与假设检验格式一致）"
-                className="px-3 py-2 rounded-md bg-[#1a1d23] border border-gray-700/50 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-[var(--accent-color)]/50 w-full"
+                className="px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[var(--accent-color)]/50 w-full"
               />
             </div>
           )}
         </div>
-        <div className="text-[10px] text-gray-500">
+        <div className="text-[10px] text-muted-foreground">
           Param names: {paramNames.join(', ')}
         </div>
         {atParseError && (
           <div className="text-xs text-red-400 font-mono">{atParseError}</div>
         )}
         {results.length > 0 && (
-          <div className="rounded-md bg-[#1a1d23] border border-gray-800/50 overflow-hidden mt-2">
+          <div className="rounded-md bg-muted border border-border overflow-hidden mt-2">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-[#0d0e12]">
-                  <th className="text-left px-4 py-2 text-gray-500 font-medium">Variable</th>
-                  <th className="text-right px-4 py-2 text-gray-500 font-medium">
+                <tr className="bg-muted/60">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Variable</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground font-medium">
                     {marginType.startsWith('dydx') ? 'dY/dX' : marginType === 'eyex' ? 'ey/ex' : marginType === 'eydx' ? 'ey/dx' : 'dy/ex'}
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {results.map((r) => (
-                  <tr key={r.variable} className="border-t border-gray-800/30">
-                    <td className="px-4 py-2 font-mono text-gray-300">{r.variable}</td>
-                    <td className="px-4 py-2 text-right font-mono text-white">{formatNum(r.margin)}</td>
+                  <tr key={r.variable} className="border-t border-border">
+                    <td className="px-4 py-2 font-mono text-foreground">{r.variable}</td>
+                    <td className="px-4 py-2 text-right font-mono text-foreground">{formatNum(r.margin)}</td>
                   </tr>
                 ))}
               </tbody>

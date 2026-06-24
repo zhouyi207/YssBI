@@ -26,28 +26,28 @@ export function CoefficientTable({
   const catHeader = categoryLabel ?? 'Category';
   return (
     <>
-      <div className="rounded-lg border border-gray-800/50 overflow-hidden">
+      <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-[#1a1d23]">
-              <th className="text-left px-4 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Variable</th>
+            <tr className="bg-muted">
+              <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
               {hasCategorical && (
-                <th className="text-left px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{catHeader}</th>
+                <th className="text-left px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">{catHeader}</th>
               )}
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Coef</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Coef</th>
               {showOddsRatio && (
                 <th
-                  className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider cursor-help"
+                  className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider cursor-help"
                   title="exp(β)。变量系数：x 每增加 1 单位，几率变为原来的 exp(β) 倍；常数项：当所有 x 为 0 时 y=1 的基准几率"
                 >
                   Odds Ratio
                 </th>
               )}
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">Std Err</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{statLabel}</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">{pLabel}</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">[0.025</th>
-              <th className="text-right px-3 py-2.5 text-gray-500 font-medium uppercase tracking-wider">0.975]</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Std Err</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">{statLabel}</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">{pLabel}</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">[0.025</th>
+              <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">0.975]</th>
             </tr>
           </thead>
           <tbody>
@@ -55,14 +55,14 @@ export function CoefficientTable({
               <tr
                 key={`${coeff.variable}-${coeff.category ?? ''}-${idx}`}
                 className={`
-                  border-t border-gray-800/30 transition-colors hover:bg-[#1e2128]
-                  ${idx % 2 === 0 ? 'bg-[#13151a]' : 'bg-[#15171d]'}
+                  border-t border-border transition-colors hover:bg-muted
+                  ${idx % 2 === 0 ? 'bg-card' : 'bg-muted/40'}
                 `}
               >
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full ${coeff.is_significant ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-                    <span className={`font-mono font-medium ${coeff.is_significant ? 'text-white' : 'text-gray-400'}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${coeff.is_significant ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} />
+                    <span className={`font-mono font-medium ${coeff.is_significant ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {coeff.variable}
                     </span>
                   </div>
@@ -74,11 +74,11 @@ export function CoefficientTable({
                         {coeff.category}
                       </span>
                     ) : (
-                      <span className="text-gray-600">—</span>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
                 )}
-                <td className="text-right px-3 py-2.5 font-mono text-white">
+                <td className="text-right px-3 py-2.5 font-mono text-foreground">
                   {formatNum(coeff.coef)}
                 </td>
                 {showOddsRatio && (
@@ -95,56 +95,56 @@ export function CoefficientTable({
                     {formatNum(Math.exp(coeff.coef))}
                   </td>
                 )}
-                <td className="text-right px-3 py-2.5 font-mono text-gray-400">
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">
                   {coeff.std_err != null ? formatNum(coeff.std_err) : '.'}
                 </td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-300">
+                <td className="text-right px-3 py-2.5 font-mono text-foreground">
                   {coeff.t_value != null ? formatNum(coeff.t_value, 3) : '.'}
                 </td>
                 <td className="text-right px-3 py-2.5 font-mono">
                   {coeff.p_value != null ? (
                     <>
-                      <span className={coeff.is_significant ? 'text-emerald-400' : 'text-gray-500'}>
+                      <span className={coeff.is_significant ? 'text-emerald-400' : 'text-muted-foreground'}>
                         {formatNum(coeff.p_value, 3)}
                       </span>
                       <SignificanceStars pValue={coeff.p_value} />
                     </>
                   ) : (
-                    <span className="text-gray-500">.</span>
+                    <span className="text-muted-foreground">.</span>
                   )}
                 </td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-500">
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">
                   {coeff['confidence_interval_0.025'] != null ? formatNum(coeff['confidence_interval_0.025']) : '.'}
                 </td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-500">
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">
                   {coeff['confidence_interval_0.975'] != null ? formatNum(coeff['confidence_interval_0.975']) : '.'}
                 </td>
               </tr>
             ))}
             {ar1Rho != null && (
-              <tr className="border-t border-gray-800/30 bg-[#15171d] hover:bg-[#1e2128]">
+              <tr className="border-t border-border bg-muted/40 hover:bg-muted">
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
-                    <span className="font-mono font-medium text-white">rho</span>
+                    <span className="font-mono font-medium text-foreground">rho</span>
                   </div>
                 </td>
-                {hasCategorical && <td className="px-3 py-2.5 text-gray-600">—</td>}
-                <td className="text-right px-3 py-2.5 font-mono text-white">{formatNum(ar1Rho)}</td>
-                {showOddsRatio && <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>}
-                <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
-                <td className="text-right px-3 py-2.5 font-mono text-gray-600">—</td>
+                {hasCategorical && <td className="px-3 py-2.5 text-muted-foreground">—</td>}
+                <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(ar1Rho)}</td>
+                {showOddsRatio && <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>}
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>
+                <td className="text-right px-3 py-2.5 font-mono text-muted-foreground">—</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-600 px-1">
-        <span>Significance: <span className="text-yellow-400">***</span> p&lt;0.001, <span className="text-yellow-400">**</span> p&lt;0.01, <span className="text-yellow-400">*</span> p&lt;0.05, <span className="text-gray-500">.</span> p&lt;0.1</span>
+      <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground px-1">
+        <span>Significance: <span className="text-yellow-400">***</span> p&lt;0.001, <span className="text-yellow-400">**</span> p&lt;0.01, <span className="text-yellow-400">*</span> p&lt;0.05, <span className="text-muted-foreground">.</span> p&lt;0.1</span>
       </div>
     </>
   );

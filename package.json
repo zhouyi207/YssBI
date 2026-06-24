@@ -59,6 +59,7 @@
         "vite": "^7.0.4"
     },
     "overrides": {
+        "esbuild": "^0.28.1",
         "@glideapps/glide-data-grid": {
             "react": "$react",
             "react-dom": "$react-dom",
