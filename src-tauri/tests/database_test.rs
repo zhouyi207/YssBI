@@ -255,7 +255,7 @@ fn test_edit_save_persists_to_duckdb() {
 
     state
         .with_database_mut(&db_id, |db| {
-            db.edit_cell(0, "sepal_length", serde_json::json!(999.0))
+            db.edit_cell(0, "sepal_length", serde_json::json!(999.0), None)
         })
         .expect("edit");
 
@@ -275,6 +275,37 @@ fn test_edit_save_persists_to_duckdb() {
         .get(0)
         .unwrap();
     assert!((val - 999.0).abs() < 1e-6);
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// Phase 6：SQL 编辑不触发 Loaded 整表物化。
+#[test]
+fn test_duckdb_sql_edit_without_full_load() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+
+    let page = db_instance.query_page_with_rowids(0, 1).expect("page");
+    let row_id = page.row_ids[0];
+
+    db_instance
+        .edit_cell(0, "sepal_length", serde_json::json!(123.0), Some(row_id))
+        .expect("sql edit");
+
+    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
+
+    let page2 = db_instance.query_page_with_rowids(0, 1).expect("page after edit");
+    let val = page2
+        .dataframe
+        .column("sepal_length")
+        .expect("column")
+        .f64()
+        .expect("f64")
+        .get(0)
+        .unwrap();
+    assert!((val - 123.0).abs() < 1e-6);
 
     let _ = std::fs::remove_dir_all(&project_root);
 }

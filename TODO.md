@@ -284,6 +284,17 @@
 - [x] DataView String→Categorical 保存时写入 DuckDB ENUM（`_yssbi_enum_*`），重开 schema 与数据均恢复为 Categorical，不再降级为 String
 - [x] DuckDB ENUM 读写类型映射文档：`src-tauri/src/database/README.md`；写侧 Appender 仅接受 Utf8（Categorical 经 String 桥接），读侧 `query_arrow` 为 `Dictionary(UInt8, Utf8)`；spike 测试 `duckdb_enum_*`
 
+### Phase 6 — 大表内存边界（DuckDB SQL 编辑，避免整表 Loaded）
+
+- [x] ingest / reopen 写入稳定行键 `_yssbi_rowid`；`read_table_meta` / schema 对用户隐藏内部列
+- [x] DataView 分页返回 `rowIds`；`edit_cell` / `delete_rows` 走 DuckDB SQL，不再 `ensure_loaded`
+- [x] `DatabaseState::DuckDb` 挂 `EditHistory`；`save_changes` 大表仅刷新元数据 + 清历史，不全量 `ingest`
+- [x] 小表（≤ `MAX_IN_MEMORY_EDIT_ROWS` = 50_000）保留 `Loaded` 路径（cast / 复杂 schema 编辑）
+- [x] `ingest_dataframe_to_duckdb` 分 batch append（`INGEST_CHUNK_ROWS` = 50_000），降低保存峰值
+- [x] `get_dataframe` 超 `MAX_GET_DATAFRAME_ROWS`（500_000）拒绝整表；图节点继续优先 `load_database_series`
+- [x] Excel 导入改道：calamine → 临时 CSV → DuckDB `read_csv`（不经 Polars 全量）
+- [x] `database/README.md` 补充内存边界说明；集成测试 `test_duckdb_sql_edit_without_full_load`
+
 ## 2026.06.25
 
 - [ ] 点击更新会自动更新

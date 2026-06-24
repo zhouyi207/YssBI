@@ -59,3 +59,41 @@ cargo test ingest_categorical_enum_roundtrip              # 端到端 roundtrip
 `duckdb_type_to_raw_string` 将多种 DuckDB 整型统一映射为 Polars `"Int64"`；DECIMAL/NUMERIC → `"Float64"`。非 Categorical 列写入时由 Arrow dtype 推断 `CREATE TABLE` SQL（见 `arrow_dtype_to_create_table_sql`）。LIST / STRUCT / MAP 等嵌套类型在 ingest 时暂不支持。
 
 完整严格 DuckDB ↔ Arrow ↔ Polars 对照表尚未全部落地；Categorical/ENUM 路径以本文与代码注释为准。
+
+## 大表内存边界（Phase 6）
+
+DuckDB 负责磁盘列存；**只有 Polars 整表路径会随行数线性占内存**。常量见 `duckdb_editing.rs`：
+
+| 常量 | 值 | 含义 |
+|------|-----|------|
+| `MAX_IN_MEMORY_EDIT_ROWS` | 50_000 | 超过则 `ensure_loaded` 拒绝整表（小表仍可用 Loaded 编辑） |
+| `INGEST_CHUNK_ROWS` | 50_000 | `ingest_dataframe_to_duckdb` 分 batch append |
+| `MAX_GET_DATAFRAME_ROWS` | 500_000 | 图执行 `get_dataframe` 超限报错 |
+
+### 安全路径（O(分页) / O(列)）
+
+- DataView **`get_database_rows`**：`LIMIT/OFFSET` + 返回 `rowIds`（`_yssbi_rowid`）
+- 列统计 / 分布 / 概览：DuckDB SQL 聚合（`duckdb_analytics.rs`）
+- 图节点按列：`load_database_series` / `load_columns`
+- CSV / Parquet 导入：DuckDB 直读；Excel：calamine → 临时 CSV → `read_csv`
+
+### DataView 编辑（DuckDB SQL，不 Loaded）
+
+1. 每行有内部列 **`_yssbi_rowid`**（对用户 schema 隐藏）；旧表 reopen 时自动回填
+2. `edit_cell` / `delete_rows` / schema 变更 → `duckdb_editing.rs` 打 SQL
+3. `DatabaseState::DuckDb` 挂 **`EditHistory`**；undo/redo 同样走 SQL
+4. **`save_database_changes`**：编辑已落盘，仅 `refresh_duckdb_meta` + 清历史（不全量 rebuild）
+
+### 仍需谨慎
+
+- 图节点 **`get_dataframe`**（Filter / Align 等）：仍会整表进 Polars，且有 50 万行上限
+- 小表 **`Loaded`** + `save_changes`：仍走全量 `ingest_dataframe_to_duckdb`（已分 chunk）
+- 远程 SQL 导入：仍先 sqlx 全表进 Polars 再 ingest（待 Phase 6+ 改 ATTACH/直写）
+
+### 测试
+
+```bash
+cd src-tauri
+cargo test --test database_test test_duckdb_sql_edit_without_full_load -- --nocapture
+cargo test --test database_test -- --test-threads=1
+```

@@ -46,6 +46,7 @@ export const DataViewWindow: React.FC = () => {
     selectedDfId,
     columns,
     loadedRows: dataLoader.loadedRows,
+    loadedRowIds: dataLoader.loadedRowIds,
     rowOffset: dataLoader.pageStartIndex,
     reloadAllData: dataLoader.reloadAllData,
   });

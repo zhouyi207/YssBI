@@ -13,11 +13,19 @@ interface UseEditActionsParams {
   selectedDfId: string | null;
   columns: ColumnMeta[];
   loadedRows: any[][];
+  loadedRowIds: number[];
   rowOffset: number;
   reloadAllData: () => Promise<void>;
 }
 
-export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, reloadAllData }: UseEditActionsParams) {
+export function useEditActions({
+  selectedDfId,
+  columns,
+  loadedRows,
+  loadedRowIds,
+  rowOffset,
+  reloadAllData,
+}: UseEditActionsParams) {
   const editStateByDatabase = useEditStateStore(s => s.editStateByDatabase);
   const commitInFlightRef = useRef(false);
 
@@ -48,7 +56,14 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
       let parsed: unknown = value;
       if (nextStr === '') parsed = null;
       else if (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '') parsed = Number(value);
-      const es = await DatabaseService.editCell(selectedDfId, globalRow, colName, parsed);
+      const rowId = loadedRowIds[row];
+      const es = await DatabaseService.editCell(
+        selectedDfId,
+        globalRow,
+        colName,
+        parsed,
+        rowId,
+      );
       await handleEditResult(es);
     } catch (e) {
       const msg = String(e);
@@ -57,7 +72,7 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
     } finally {
       commitInFlightRef.current = false;
     }
-  }, [selectedDfId, columns, loadedRows, rowOffset, handleEditResult]);
+  }, [selectedDfId, columns, loadedRows, loadedRowIds, rowOffset, handleEditResult]);
 
   const handleUndo = useCallback(async () => {
     if (!selectedDfId || !currentEditState.canUndo) return;
@@ -116,10 +131,18 @@ export function useEditActions({ selectedDfId, columns, loadedRows, rowOffset, r
   const handleDeleteRow = useCallback(async (indices: number[]) => {
     if (!selectedDfId || indices.length === 0) return;
     try {
-      const es = await DatabaseService.deleteRows(selectedDfId, indices.map((index) => rowOffset + index));
+      const globalIndices = indices.map((index) => rowOffset + index);
+      const rowIds = indices
+        .map((index) => loadedRowIds[index])
+        .filter((id): id is number => typeof id === 'number');
+      const es = await DatabaseService.deleteRows(
+        selectedDfId,
+        globalIndices,
+        rowIds.length === indices.length ? rowIds : undefined,
+      );
       await handleEditResult(es);
     } catch (e) { logger.data.error('deleteRows failed: ' + String(e), 'DataViewWindow'); }
-  }, [selectedDfId, rowOffset, handleEditResult]);
+  }, [selectedDfId, rowOffset, loadedRowIds, handleEditResult]);
 
   const handleAddColumn = useCallback(async () => {
     if (!selectedDfId) return;

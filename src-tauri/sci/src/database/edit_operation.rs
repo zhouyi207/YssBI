@@ -8,15 +8,21 @@ use serde::{Deserialize, Serialize};
 pub enum EditOperation {
     EditCell {
         row: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row_id: Option<i64>,
         col: String,
         old_value: serde_json::Value,
         new_value: serde_json::Value,
     },
     AddRow {
         index: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row_id: Option<i64>,
     },
     DeleteRow {
         index: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row_id: Option<i64>,
         data: Vec<serde_json::Value>,
     },
     AddColumn {
@@ -385,7 +391,7 @@ pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), Str
             new_value,
             ..
         } => set_cell(df, *row, col, new_value),
-        EditOperation::AddRow { index } => {
+        EditOperation::AddRow { index, .. } => {
             let height = df.height();
             let idx = (*index).min(height);
 
@@ -458,15 +464,19 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             old_value,
             ..
         } => set_cell(df, *row, col, old_value),
-        EditOperation::AddRow { index } => {
+        EditOperation::AddRow { index, row_id } => {
             let del_op = EditOperation::DeleteRow {
                 index: *index,
+                row_id: *row_id,
                 data: vec![],
             };
             apply_operation(df, &del_op)
         }
-        EditOperation::DeleteRow { index, data } => {
-            let add_op = EditOperation::AddRow { index: *index };
+        EditOperation::DeleteRow { index, data, .. } => {
+            let add_op = EditOperation::AddRow {
+                index: *index,
+                row_id: None,
+            };
             apply_operation(df, &add_op)?;
             for (col_idx, val) in data.iter().enumerate() {
                 if col_idx < df.width() {

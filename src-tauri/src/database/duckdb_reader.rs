@@ -18,6 +18,7 @@ use polars_arrow::ffi::{export_array_to_c, export_field_to_c, import_array_from_
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
 pub const YSSBI_ENUM_PREFIX: &str = "_yssbi_enum_";
+pub const YSSBI_ROWID_COLUMN: &str = "_yssbi_rowid";
 
 fn open_project_duckdb(duckdb_path: &Path) -> Result<Connection, String> {
     if let Some(parent) = duckdb_path.parent() {
@@ -103,6 +104,64 @@ pub struct DuckDbTableMeta {
 
 pub fn sql_escape_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('\'', "''")
+}
+
+pub fn is_internal_column(name: &str) -> bool {
+    name == YSSBI_ROWID_COLUMN
+}
+
+/// 确保表含单调 `_yssbi_rowid`；对旧表（CSV 直 ingest 等）做一次性回填。
+pub fn ensure_rowid_column(conn: &Connection, table: &str) -> Result<(), String> {
+    let table_sql = duckdb_table_sql(table);
+    let rowid = format!(r#""{}""#, sql_escape_literal(YSSBI_ROWID_COLUMN));
+
+    let has_rowid: bool = conn
+        .query_row(
+            &format!(
+                "SELECT COUNT(*) FROM information_schema.columns \
+                 WHERE table_schema = 'main' AND table_name = '{}' AND column_name = '{}'",
+                sql_escape_literal(table),
+                sql_escape_literal(YSSBI_ROWID_COLUMN),
+            ),
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .map_err(|e| format!("Failed to inspect rowid column on '{table}': {e}"))?;
+
+    if !has_rowid {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {table_sql} ADD COLUMN {rowid} BIGINT;"
+        ))
+        .map_err(|e| format!("Failed to add rowid column on '{table}': {e}"))?;
+    }
+
+    let null_count: i64 = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {table_sql} WHERE {rowid} IS NULL"),
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to count null rowids on '{table}': {e}"))?;
+
+    if null_count > 0 {
+        conn.execute_batch(&format!(
+            "UPDATE {table_sql} SET {rowid} = s.rn \
+             FROM ( \
+               SELECT rowid AS duck_rowid, row_number() OVER (ORDER BY rowid) - 1 AS rn \
+               FROM {table_sql} \
+             ) AS s \
+             WHERE {table_sql}.rowid = s.duck_rowid AND {table_sql}.{rowid} IS NULL;"
+        ))
+        .map_err(|e| format!("Failed to backfill rowids on '{table}': {e}"))?;
+    }
+
+    Ok(())
+}
+
+pub fn ensure_rowid_on_table(duckdb_path: &Path, table: &str) -> Result<(), String> {
+    let conn = open_project_duckdb(duckdb_path)?;
+    ensure_rowid_column(&conn, table)
 }
 
 pub fn duckdb_path_literal(path: &Path) -> String {
@@ -458,6 +517,7 @@ pub fn ingest_csv_to_duckdb(
 
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to ingest CSV into DuckDB: {e}"))?;
+    ensure_rowid_column(&conn, table)?;
     drop(conn);
 
     read_table_meta(duckdb_path, table)
@@ -500,6 +560,7 @@ pub fn ingest_parquet_to_duckdb(
 
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to ingest Parquet into DuckDB: {e}"))?;
+    ensure_rowid_column(&conn, table)?;
     drop(conn);
 
     read_table_meta(duckdb_path, table)
@@ -539,15 +600,21 @@ pub fn ingest_dataframe_to_duckdb(
     }
 
     create_table_for_ingest(&conn, table, df, &enum_by_column)?;
-    let batch = dataframe_to_record_batch(df, &enum_by_column)?;
 
-    if batch.num_rows() > 0 {
+    let height = df.height();
+    if height > 0 {
+        use super::duckdb_editing::INGEST_CHUNK_ROWS;
         let mut appender = conn
             .appender(table)
             .map_err(|e| format!("Failed to open DuckDB appender for '{table}': {e}"))?;
-        appender
-            .append_record_batch(batch)
-            .map_err(|e| format!("Failed to append Arrow batch to '{table}': {e}"))?;
+        for start in (0..height).step_by(INGEST_CHUNK_ROWS) {
+            let chunk_len = INGEST_CHUNK_ROWS.min(height - start);
+            let chunk = df.slice(start as i64, chunk_len);
+            let batch = dataframe_to_record_batch(&chunk, &enum_by_column, start as i64)?;
+            appender
+                .append_record_batch(batch)
+                .map_err(|e| format!("Failed to append Arrow batch to '{table}': {e}"))?;
+        }
     }
 
     drop(conn);
@@ -581,8 +648,13 @@ fn create_table_for_ingest(
         })
         .collect::<Result<Vec<_>, String>>()?;
 
+    let rowid_def = format!(
+        r#""{}" BIGINT"#,
+        sql_escape_literal(YSSBI_ROWID_COLUMN)
+    );
     let sql = format!(
-        r#"CREATE TABLE "{table_literal}" ({})"#,
+        r#"CREATE TABLE "{table_literal}" ({}, {})"#,
+        rowid_def,
         column_defs.join(", ")
     );
     conn.execute_batch(&sql)
@@ -592,9 +664,20 @@ fn create_table_for_ingest(
 fn dataframe_to_record_batch(
     df: &DataFrame,
     enum_by_column: &std::collections::HashMap<String, EnumColumnSpec>,
+    rowid_start: i64,
 ) -> Result<RecordBatch, String> {
-    let mut arrays = Vec::with_capacity(df.width());
-    let mut fields = Vec::with_capacity(df.width());
+    let mut arrays = Vec::with_capacity(df.width() + 1);
+    let mut fields = Vec::with_capacity(df.width() + 1);
+
+    let rowid_values: Vec<i64> = (rowid_start..rowid_start + df.height() as i64).collect();
+    let rowid_series = Series::new(YSSBI_ROWID_COLUMN.into(), rowid_values);
+    let rowid_array = polars_series_to_arrow_array(&rowid_series, false)?;
+    fields.push(Field::new(
+        YSSBI_ROWID_COLUMN,
+        rowid_array.data_type().clone(),
+        false,
+    ));
+    arrays.push(rowid_array);
 
     for col in df.columns() {
         let series = col.as_materialized_series();
@@ -718,11 +801,19 @@ pub fn ingest_excel_to_duckdb(
         return Err(format!("Excel file not found: {}", excel_path.display()));
     }
 
-    let mut df = super::excel_reader::read_sheet_to_dataframe(
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_csv = std::env::temp_dir().join(format!("yssbi_excel_{table}_{stamp}.csv"));
+    super::excel_reader::export_sheet_to_csv(
         excel_path.to_string_lossy().as_ref(),
         sheet,
+        &temp_csv,
     )?;
-    ingest_dataframe_to_duckdb(&mut df, duckdb_path, table)
+    let meta = ingest_csv_to_duckdb(&temp_csv, duckdb_path, table, ',', true, None);
+    let _ = std::fs::remove_file(&temp_csv);
+    meta
 }
 
 pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMeta, String> {
@@ -751,6 +842,9 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
     for row in rows {
         columns.push(row.map_err(|e| e.to_string())?);
     }
+
+    ensure_rowid_column(&conn, table)?;
+    columns.retain(|c| !is_internal_column(&c.name));
 
     let count_sql = format!(r#"SELECT COUNT(*) FROM "{}""#, table_literal);
     let row_count: i64 = conn
@@ -905,20 +999,64 @@ pub fn query_page_to_dataframe(
     offset: usize,
     limit: usize,
 ) -> Result<DataFrame, String> {
+    Ok(query_page_with_rowids(duckdb_path, table, offset, limit)?.dataframe)
+}
+
+#[derive(Debug, Clone)]
+pub struct PageQueryResult {
+    pub dataframe: DataFrame,
+    pub row_ids: Vec<i64>,
+}
+
+pub fn query_page_with_rowids(
+    duckdb_path: &Path,
+    table: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<PageQueryResult, String> {
+    ensure_rowid_on_table(duckdb_path, table)?;
+    let meta = read_table_meta(duckdb_path, table)?;
+    let user_cols = meta
+        .columns
+        .iter()
+        .map(|c| format!(r#""{}""#, sql_escape_literal(&c.name)))
+        .collect::<Vec<_>>();
+    let rowid = format!(r#""{}""#, sql_escape_literal(YSSBI_ROWID_COLUMN));
+    let table_sql = duckdb_table_sql(table);
+
     if limit == 0 {
-        return query_to_dataframe_for_table(
-            duckdb_path,
-            &format!("SELECT * FROM {} LIMIT 0", duckdb_table_sql(table)),
-            Some(table),
-        );
+        return Ok(PageQueryResult {
+            dataframe: query_to_dataframe_for_table(
+                duckdb_path,
+                &format!("SELECT {} FROM {} LIMIT 0", user_cols.join(", "), table_sql),
+                Some(table),
+            )?,
+            row_ids: Vec::new(),
+        });
     }
+
+    let select_list = if user_cols.is_empty() {
+        rowid.clone()
+    } else {
+        format!("{}, {}", rowid, user_cols.join(", "))
+    };
     let sql = format!(
-        "SELECT * FROM {} LIMIT {} OFFSET {}",
-        duckdb_table_sql(table),
-        limit,
-        offset
+        "SELECT {select_list} FROM {table_sql} ORDER BY {rowid} LIMIT {limit} OFFSET {offset}"
     );
-    query_to_dataframe_for_table(duckdb_path, &sql, Some(table))
+    let df = query_to_dataframe_for_table(duckdb_path, &sql, Some(table))?;
+    let row_ids = df
+        .column(YSSBI_ROWID_COLUMN)
+        .map_err(|e| e.to_string())?
+        .i64()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|v| v.unwrap_or(0))
+        .collect::<Vec<_>>();
+    let user_df = df.drop(YSSBI_ROWID_COLUMN).map_err(|e| e.to_string())?;
+    Ok(PageQueryResult {
+        dataframe: user_df,
+        row_ids,
+    })
 }
 
 pub fn resolve_duckdb_file(project_root: &Path, relative_path: &str) -> PathBuf {

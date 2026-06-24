@@ -6,6 +6,13 @@ mod types;
 
 use types::dataframe_to_row_matrix;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DatabaseRowsPayload {
+    rows: Vec<Vec<serde_json::Value>>,
+    row_ids: Vec<i64>,
+}
+
 #[tauri::command]
 pub fn load_database(
     state: State<ProjectState>,
@@ -73,14 +80,17 @@ pub fn get_database_rows(
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, String> {
-    let df = state
+    let page = state
         .with_database_mut(&id, |db| {
-            db.query_page(offset, limit)
+            db.query_page_with_rowids(offset, limit)
                 .map_err(|e| format!("Failed to query database page: {}", e))
         })?;
 
-    let result = dataframe_to_row_matrix(&df);
-    serde_json::to_value(result).map_err(|e| e.to_string())
+    let payload = DatabaseRowsPayload {
+        rows: dataframe_to_row_matrix(&page.dataframe),
+        row_ids: page.row_ids,
+    };
+    serde_json::to_value(payload).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -131,8 +141,10 @@ pub fn edit_cell(
     row: usize,
     col_name: String,
     value: serde_json::Value,
+    row_id: Option<i64>,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| db.edit_cell(row, &col_name, value))?;
+    let edit_state =
+        state.with_database_mut(&id, |db| db.edit_cell(row, &col_name, value, row_id))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -151,8 +163,11 @@ pub fn delete_rows(
     state: State<ProjectState>,
     id: String,
     indices: Vec<usize>,
+    row_ids: Option<Vec<i64>>,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| db.delete_rows(&indices))?;
+    let edit_state = state.with_database_mut(&id, |db| {
+        db.delete_rows(&indices, row_ids.as_deref())
+    })?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -243,9 +258,6 @@ pub fn export_database(
 
 #[tauri::command]
 pub fn get_edit_state(state: State<ProjectState>, id: String) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.ensure_loaded().map_err(|e| e.to_string())?;
-        Ok(db.edit_state())
-    })?;
+    let edit_state = state.with_database_mut(&id, |db| Ok(db.edit_state()))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }

@@ -12,7 +12,7 @@ use crate::database::{
 };
 use crate::project::{project_root_from_path, relative_project_duckdb_path, unique_name, ProjectState};
 use crate::schema::DatabaseEngineDTO;
-use yss_sci::api::database::EditState;
+use yss_sci::api::database::{EditHistory, EditState};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -207,6 +207,7 @@ fn register_duckdb_instance(
             table,
             row_count,
             columns: meta.columns,
+            history: EditHistory::new(),
         },
     };
     state.add_database(instance);
@@ -259,6 +260,7 @@ pub fn bind_duckdb_instance(
                     table: table.clone(),
                     row_count: meta.row_count,
                     columns: meta.columns,
+                    history: EditHistory::new(),
                 },
                 Err(error) => DatabaseState::Failed { error },
             }

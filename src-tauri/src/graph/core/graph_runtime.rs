@@ -256,6 +256,15 @@ impl GraphRuntime {
         // 2. 再从 ProjectStore 原始数据库加载
         let mut store = self.project_store.write().map_err(|e| e.to_string())?;
         if let Some(db_instance) = store.databases.get_mut(id) {
+            if let crate::database::DatabaseState::DuckDb { row_count, .. } = &db_instance.state {
+                if *row_count > crate::database::MAX_GET_DATAFRAME_ROWS {
+                    return Err(format!(
+                        "Dataset '{id}' has {row_count} rows; exceeds in-memory graph limit ({}). \
+                         Use column-scoped nodes or filter in DuckDB first.",
+                        crate::database::MAX_GET_DATAFRAME_ROWS
+                    ));
+                }
+            }
             let df = db_instance
                 .ensure_loaded()
                 .map_err(|e| format!("Failed to load database '{}': {}", id, e))?;

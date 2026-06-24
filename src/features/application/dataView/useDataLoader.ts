@@ -7,6 +7,7 @@ import { logger } from '@/utils/appLogger';
 export function useDataLoader(selectedDfId: string | null) {
   const selectedRowCount = useDatabaseStore(s => selectedDfId ? ((s.databases[selectedDfId]?.rowCount as number) ?? 0) : 0);
   const [loadedRows, setLoadedRows] = useState<any[][]>([]);
+  const [loadedRowIds, setLoadedRowIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null);
@@ -30,10 +31,11 @@ export function useDataLoader(selectedDfId: string | null) {
     setLoading(true);
     const startedAt = performance.now();
     try {
-      const rows = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
+      const page = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
       if (requestId !== initialRowsRequestRef.current || id !== selectedDfIdRef.current) return;
       setPageIndex(safePageIndex);
-      setLoadedRows(rows);
+      setLoadedRows(page.rows);
+      setLoadedRowIds(page.rowIds);
       setLastFetchMs(Math.round(performance.now() - startedAt));
     } catch (e) {
       logger.data.error('Failed to load page rows: ' + String(e), 'DataViewWindow');
@@ -73,10 +75,11 @@ export function useDataLoader(selectedDfId: string | null) {
     const safePageIndex = Math.max(0, Math.min(pageIndex, Math.max(0, totalPages - 1)));
     const startedAt = performance.now();
     try {
-      const rows = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
+      const page = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
       if (requestId !== reloadRequestRef.current || id !== selectedDfIdRef.current) return;
       setPageIndex(safePageIndex);
-      setLoadedRows(rows);
+      setLoadedRows(page.rows);
+      setLoadedRowIds(page.rowIds);
       const meta = await DatabaseService.getDatabaseMeta(id);
       if (requestId !== reloadRequestRef.current || id !== selectedDfIdRef.current) return;
       useDatabaseStore.getState().updateDatabase(id, {
@@ -113,10 +116,11 @@ export function useDataLoader(selectedDfId: string | null) {
       if (selectedDfId) {
         const id = selectedDfId;
         const safePageIndex = Math.max(0, Math.min(pageIndex, Math.max(0, totalPages - 1)));
-        const rows = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
+        const page = await DatabaseService.getDatabaseRows(id, safePageIndex * CHUNK_SIZE, CHUNK_SIZE);
         if (requestId !== refreshRequestRef.current || id !== selectedDfIdRef.current) return;
         setPageIndex(safePageIndex);
-        setLoadedRows(rows);
+        setLoadedRows(page.rows);
+        setLoadedRowIds(page.rowIds);
         setLastFetchMs(Math.round(performance.now() - startedAt));
       }
     } catch (e) {
@@ -129,6 +133,8 @@ export function useDataLoader(selectedDfId: string | null) {
   return {
     loadedRows,
     setLoadedRows,
+    loadedRowIds,
+    setLoadedRowIds,
     loading,
     CHUNK_SIZE,
     pageIndex,

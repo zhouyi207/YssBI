@@ -8,6 +8,7 @@ pub mod database_schema;
 pub mod database_state;
 pub mod database_view;
 pub mod duckdb_analytics;
+pub mod duckdb_editing;
 pub mod duckdb_reader; // 类型映射见 duckdb_reader 与 database/README.md
 pub mod excel_reader;
 pub mod sql_reader;
@@ -23,4 +24,5 @@ pub use database_schema::*;
 pub use database_state::*;
 pub use database_view::*;
 pub use duckdb_analytics::*;
+pub use duckdb_editing::*;
 pub use duckdb_reader::*;

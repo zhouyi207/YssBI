@@ -55,6 +55,12 @@ export interface LoadDatabaseResult {
     columns: Array<{ name: string; type: string }>;
 }
 
+/** 分页行数据（含稳定 rowIds） */
+export interface DatabaseRowsResult {
+    rows: unknown[][];
+    rowIds: number[];
+}
+
 /**
  * Database Service
  * 数据库服务 - 封装 load_database、delete_database、get_database_rows
@@ -112,10 +118,20 @@ export class DatabaseService {
     }
 
     /**
-     * 获取数据库行数据（分页）
+     * 获取数据库行数据（分页，含稳定 rowIds）
      */
-    static async getDatabaseRows(id: string, offset: number, limit: number): Promise<any[][]> {
-        return await invoke("get_database_rows", { id, offset, limit });
+    static async getDatabaseRows(id: string, offset: number, limit: number): Promise<DatabaseRowsResult> {
+        const payload = await invoke<{ rows?: unknown[][]; rowIds?: number[] } | unknown[][]>(
+            "get_database_rows",
+            { id, offset, limit },
+        );
+        if (Array.isArray(payload)) {
+            return { rows: payload, rowIds: [] };
+        }
+        return {
+            rows: payload.rows ?? [],
+            rowIds: payload.rowIds ?? [],
+        };
     }
 
     /**
@@ -136,16 +152,26 @@ export class DatabaseService {
         return await invoke("get_dataset_overview", { id });
     }
 
-    static async editCell(id: string, row: number, colName: string, value: unknown): Promise<EditState> {
-        return await invoke("edit_cell", { id, row, colName, value });
+    static async editCell(
+        id: string,
+        row: number,
+        colName: string,
+        value: unknown,
+        rowId?: number | null,
+    ): Promise<EditState> {
+        return await invoke("edit_cell", { id, row, colName, value, rowId: rowId ?? null });
     }
 
     static async addRow(id: string, index?: number): Promise<EditState> {
         return await invoke("add_row", { id, index: index ?? null });
     }
 
-    static async deleteRows(id: string, indices: number[]): Promise<EditState> {
-        return await invoke("delete_rows", { id, indices });
+    static async deleteRows(id: string, indices: number[], rowIds?: number[]): Promise<EditState> {
+        return await invoke("delete_rows", {
+            id,
+            indices,
+            rowIds: rowIds && rowIds.length > 0 ? rowIds : null,
+        });
     }
 
     static async addColumn(id: string, name: string, dtype: string): Promise<EditState> {
