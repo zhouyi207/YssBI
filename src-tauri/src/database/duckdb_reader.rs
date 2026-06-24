@@ -1,15 +1,19 @@
 use std::path::{Path, PathBuf};
 
-use duckdb::arrow::array::Array;
-use duckdb::arrow::ffi::{to_ffi, FFI_ArrowArray, FFI_ArrowSchema};
+use duckdb::arrow::array::{make_array, Array};
+use duckdb::arrow::compute::cast;
+use duckdb::arrow::datatypes::{DataType as ArrowDataType, Field, Schema};
+use duckdb::arrow::ffi::{from_ffi, to_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use duckdb::arrow::record_batch::RecordBatch;
 use duckdb::Connection;
 use polars::prelude::*;
-use polars_arrow::ffi::{import_array_from_c, import_field_from_c, ArrowArray, ArrowSchema};
-use uuid::Uuid;
+use polars_dtype::categorical::{CatSize, FrozenCategories};
+use polars_arrow::datatypes::Field as PlField;
+use polars_arrow::ffi::{export_array_to_c, export_field_to_c, import_array_from_c, import_field_from_c, ArrowArray, ArrowSchema};
 
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
+pub const YSSBI_ENUM_PREFIX: &str = "_yssbi_enum_";
 
 fn open_project_duckdb(duckdb_path: &Path) -> Result<Connection, String> {
     if let Some(parent) = duckdb_path.parent() {
@@ -102,6 +106,10 @@ pub fn duckdb_path_literal(path: &Path) -> String {
 }
 
 pub fn duckdb_type_to_raw_string(duckdb_type: &str) -> String {
+    if is_duckdb_enum_storage_type(duckdb_type) {
+        return "Categorical".to_string();
+    }
+
     let upper = duckdb_type.to_uppercase();
     if upper.contains("DECIMAL") || upper.contains("NUMERIC") {
         return "Float64".to_string();
@@ -120,6 +128,285 @@ pub fn duckdb_type_to_raw_string(duckdb_type: &str) -> String {
         }
         other => other.to_string(),
     }
+}
+
+pub fn is_yssbi_enum_type(type_name: &str) -> bool {
+    type_name.starts_with(YSSBI_ENUM_PREFIX)
+}
+
+fn is_duckdb_enum_storage_type(storage_type: &str) -> bool {
+    is_yssbi_enum_type(storage_type)
+        || storage_type.trim().to_uppercase().starts_with("ENUM(")
+}
+
+fn parse_inline_enum_categories(storage_type: &str) -> Option<Vec<String>> {
+    let trimmed = storage_type.trim();
+    let upper = trimmed.to_uppercase();
+    if !upper.starts_with("ENUM(") || !trimmed.ends_with(')') {
+        return None;
+    }
+
+    let inner = trimmed[5..trimmed.len() - 1].trim();
+    if inner.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let mut categories = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while chars.peek().is_some() {
+        while matches!(chars.peek(), Some(' ' | ',')) {
+            chars.next();
+        }
+        if chars.peek().is_none() {
+            break;
+        }
+        if chars.next() != Some('\'') {
+            return None;
+        }
+
+        let mut value = String::new();
+        while let Some(ch) = chars.next() {
+            if ch == '\'' {
+                if chars.peek() == Some(&'\'') {
+                    chars.next();
+                    value.push('\'');
+                } else {
+                    break;
+                }
+            } else {
+                value.push(ch);
+            }
+        }
+        categories.push(value);
+    }
+
+    Some(categories)
+}
+
+fn resolve_enum_categories(
+    conn: &Connection,
+    storage_type: &str,
+) -> Result<Vec<String>, String> {
+    if let Some(categories) = parse_inline_enum_categories(storage_type) {
+        return Ok(categories);
+    }
+    if is_yssbi_enum_type(storage_type) {
+        return fetch_enum_categories(conn, storage_type);
+    }
+    Err(format!("Unsupported enum storage type: {storage_type}"))
+}
+
+fn yssbi_enum_type_name(table: &str, column: &str) -> String {
+    fn sanitize(value: &str) -> String {
+        value
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    }
+
+    format!(
+        "{YSSBI_ENUM_PREFIX}{}_{}",
+        sanitize(table),
+        sanitize(column)
+    )
+}
+
+#[derive(Debug, Clone)]
+struct EnumColumnSpec {
+    type_name: String,
+    categories: Vec<String>,
+}
+
+fn extract_categorical_categories(series: &Series) -> Result<Vec<String>, String> {
+    if let Ok(ca) = series.cat8() {
+        return collect_categories_from_categorical_chunked(ca);
+    }
+    if let Ok(ca) = series.cat16() {
+        return collect_categories_from_categorical_chunked(ca);
+    }
+    if let Ok(ca) = series.cat32() {
+        return collect_categories_from_categorical_chunked(ca);
+    }
+
+    Err(format!(
+        "Column '{}' is not categorical",
+        series.name()
+    ))
+}
+
+fn collect_categories_from_categorical_chunked<T: PolarsCategoricalType>(
+    ca: &CategoricalChunked<T>,
+) -> Result<Vec<String>, String> {
+    match ca.dtype() {
+        DataType::Enum(fcats, _) => Ok(fcats
+            .categories()
+            .values_iter()
+            .map(|s| s.to_string())
+            .collect()),
+        DataType::Categorical(_, mapping) => {
+            let n = mapping.num_cats_upper_bound();
+            Ok((0..n)
+                .filter_map(|i| mapping.cat_to_str(i as CatSize).map(str::to_string))
+                .collect())
+        }
+        other => Err(format!("Unexpected categorical dtype: {other:?}")),
+    }
+}
+
+fn plan_enum_columns(df: &DataFrame, table: &str) -> Result<Vec<(String, EnumColumnSpec)>, String> {
+    let mut specs = Vec::new();
+    for col in df.columns() {
+        let series = col.as_materialized_series();
+        if !matches!(
+            series.dtype(),
+            DataType::Categorical(_, _) | DataType::Enum(_, _)
+        ) {
+            continue;
+        }
+
+        let categories = extract_categorical_categories(series)?;
+        if categories.is_empty() {
+            continue;
+        }
+
+        let col_name = series.name().to_string();
+        specs.push((
+            col_name.clone(),
+            EnumColumnSpec {
+                type_name: yssbi_enum_type_name(table, &col_name),
+                categories,
+            },
+        ));
+    }
+    Ok(specs)
+}
+
+fn describe_table_storage_types(
+    conn: &Connection,
+    table: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let table_literal = sql_escape_literal(table);
+    let describe_sql = format!(r#"DESCRIBE "{}""#, table_literal);
+    let mut stmt = conn
+        .prepare(&describe_sql)
+        .map_err(|e| format!("Failed to describe table '{table}': {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let name: String = row.get(0)?;
+            let dtype: String = row.get(1)?;
+            Ok((name, dtype))
+        })
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+fn drop_table_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
+    let columns = describe_table_storage_types(conn, table).unwrap_or_default();
+    for (_, storage_type) in columns {
+        if is_yssbi_enum_type(&storage_type) {
+            let type_literal = sql_escape_literal(&storage_type);
+            conn.execute_batch(&format!(r#"DROP TYPE IF EXISTS "{type_literal}" CASCADE;"#))
+                .map_err(|e| format!("Failed to drop enum type '{storage_type}': {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn drop_user_table_and_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
+    drop_table_enum_types(conn, table)?;
+    drop_user_table(conn, table)
+}
+
+fn create_enum_type(conn: &Connection, spec: &EnumColumnSpec) -> Result<(), String> {
+    let type_literal = sql_escape_literal(&spec.type_name);
+    let values = spec
+        .categories
+        .iter()
+        .map(|value| format!("'{}'", sql_escape_literal(value)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"DROP TYPE IF EXISTS "{type_literal}" CASCADE;
+           CREATE TYPE "{type_literal}" AS ENUM ({values});"#
+    );
+    conn.execute_batch(&sql)
+        .map_err(|e| format!("Failed to create enum type '{}': {e}", spec.type_name))
+}
+
+fn fetch_enum_categories(conn: &Connection, enum_type: &str) -> Result<Vec<String>, String> {
+    let type_literal = sql_escape_literal(enum_type);
+    let sql = format!(r#"SELECT unnest(enum_range(NULL::"{type_literal}"))"#);
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("Failed to read enum categories for '{enum_type}': {e}"))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+fn string_series_to_categorical(series: &Series, categories: &[String]) -> Result<Series, String> {
+    let fcats = FrozenCategories::new(categories.iter().map(|s| s.as_str()))
+        .map_err(|e| format!("Failed to rebuild categorical categories: {e}"))?;
+    let dtype = DataType::Enum(fcats.clone(), fcats.mapping().clone());
+    series
+        .cast(&dtype)
+        .map_err(|e| format!("Failed to cast column '{}' to categorical: {e}", series.name()))
+}
+
+pub fn restore_categorical_columns(
+    duckdb_path: &Path,
+    table: &str,
+    df: &mut DataFrame,
+) -> Result<(), String> {
+    if !duckdb_path.is_file() {
+        return Ok(());
+    }
+
+    let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
+    restore_categorical_columns_with_conn(&conn, table, df)
+}
+
+fn restore_categorical_columns_with_conn(
+    conn: &Connection,
+    table: &str,
+    df: &mut DataFrame,
+) -> Result<(), String> {
+    let columns = describe_table_storage_types(conn, table)?;
+
+    for (col_name, storage_type) in columns {
+        if !is_duckdb_enum_storage_type(&storage_type) {
+            continue;
+        }
+
+        let categories = resolve_enum_categories(conn, &storage_type)?;
+        if categories.is_empty() {
+            continue;
+        }
+
+        let col_idx = df
+            .get_column_index(&col_name)
+            .ok_or_else(|| format!("Column '{col_name}' missing while restoring categorical"))?;
+        let series = df
+            .column(&col_name)
+            .map_err(|e| e.to_string())?
+            .as_materialized_series()
+            .clone();
+        let restored = string_series_to_categorical(&series, &categories)?;
+        df.replace_column(col_idx, Column::from(restored))
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 pub fn ingest_csv_to_duckdb(
@@ -219,15 +506,182 @@ pub fn ingest_dataframe_to_duckdb(
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    let tmp = std::env::temp_dir().join(format!("yssbi-ingest-{}.parquet", Uuid::new_v4()));
-    let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-    ParquetWriter::new(file)
-        .finish(df)
-        .map_err(|e| format!("Failed to write ingest Parquet: {e}"))?;
+    df.rechunk_mut();
+    let enum_columns = plan_enum_columns(df, table)?;
+    let enum_by_column: std::collections::HashMap<String, EnumColumnSpec> = enum_columns
+        .into_iter()
+        .map(|(name, spec)| (name, spec))
+        .collect();
 
-    let result = ingest_parquet_to_duckdb(&tmp, duckdb_path, table, None);
-    let _ = std::fs::remove_file(&tmp);
-    result
+    let conn = open_project_duckdb(duckdb_path)?;
+    ensure_meta_table(&conn)?;
+    drop_user_table_and_enum_types(&conn, table)?;
+
+    for spec in enum_by_column.values() {
+        create_enum_type(&conn, spec)?;
+    }
+
+    create_table_for_ingest(&conn, table, df, &enum_by_column)?;
+    let batch = dataframe_to_record_batch(df, &enum_by_column)?;
+
+    if batch.num_rows() > 0 {
+        let mut appender = conn
+            .appender(table)
+            .map_err(|e| format!("Failed to open DuckDB appender for '{table}': {e}"))?;
+        appender
+            .append_record_batch(batch)
+            .map_err(|e| format!("Failed to append Arrow batch to '{table}': {e}"))?;
+    }
+
+    drop(conn);
+    read_table_meta(duckdb_path, table)
+}
+
+fn create_table_for_ingest(
+    conn: &Connection,
+    table: &str,
+    df: &DataFrame,
+    enum_by_column: &std::collections::HashMap<String, EnumColumnSpec>,
+) -> Result<(), String> {
+    let table_literal = sql_escape_literal(table);
+    let column_defs = df
+        .columns()
+        .iter()
+        .map(|col| {
+            let series = col.as_materialized_series();
+            let col_name = series.name().to_string();
+            let sql_type = if let Some(spec) = enum_by_column.get(&col_name) {
+                format!(r#""{}""#, sql_escape_literal(&spec.type_name))
+            } else {
+                let arrow_array = polars_series_to_arrow_array(series, false)?;
+                arrow_dtype_to_create_table_sql(arrow_array.data_type())?
+            };
+            Ok(format!(
+                r#""{}" {}"#,
+                sql_escape_literal(series.name().as_str()),
+                sql_type
+            ))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let sql = format!(
+        r#"CREATE TABLE "{table_literal}" ({})"#,
+        column_defs.join(", ")
+    );
+    conn.execute_batch(&sql)
+        .map_err(|e| format!("Failed to create table '{table}': {e}"))
+}
+
+fn dataframe_to_record_batch(
+    df: &DataFrame,
+    enum_by_column: &std::collections::HashMap<String, EnumColumnSpec>,
+) -> Result<RecordBatch, String> {
+    let mut arrays = Vec::with_capacity(df.width());
+    let mut fields = Vec::with_capacity(df.width());
+
+    for col in df.columns() {
+        let series = col.as_materialized_series();
+        let use_enum = enum_by_column.contains_key(series.name().as_str());
+        let arrow_array = polars_series_to_arrow_array(series, use_enum)?;
+        fields.push(Field::new(
+            series.name().as_str(),
+            arrow_array.data_type().clone(),
+            true,
+        ));
+        arrays.push(arrow_array);
+    }
+
+    let schema = std::sync::Arc::new(Schema::new(fields));
+    RecordBatch::try_new(schema, arrays)
+        .map_err(|e| format!("Failed to build Arrow RecordBatch: {e}"))
+}
+
+fn polars_series_to_arrow_array(
+    series: &Series,
+    for_enum_ingest: bool,
+) -> Result<std::sync::Arc<dyn Array>, String> {
+    let series = if for_enum_ingest {
+        series
+            .cast(&DataType::String)
+            .map_err(|e| format!("Failed to cast categorical column '{}' for enum ingest: {e}", series.name()))?
+    } else if series.n_chunks() > 1 {
+        series.rechunk()
+    } else {
+        series.clone()
+    };
+
+    let pl_field = PlField::new(
+        series.name().clone(),
+        series.dtype().to_arrow(CompatLevel::newest()),
+        true,
+    );
+    let pl_array = series.to_arrow(0, CompatLevel::newest());
+    let c_array = export_array_to_c(pl_array);
+    let c_schema = export_field_to_c(&pl_field);
+
+    let ffi_array: FFI_ArrowArray = unsafe { std::mem::transmute(c_array) };
+    let ffi_schema: FFI_ArrowSchema = unsafe { std::mem::transmute(c_schema) };
+
+    let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }
+        .map_err(|e| format!("Failed to import Polars column '{}' to Arrow: {e}", series.name()))?;
+    let arrow_array = make_array(array_data);
+
+    if !for_enum_ingest
+        && matches!(
+            arrow_array.data_type(),
+            ArrowDataType::Dictionary(_, _)
+        )
+    {
+        cast(
+            arrow_array.as_ref(),
+            &ArrowDataType::LargeUtf8,
+        )
+        .map_err(|e| {
+            format!(
+                "Failed to cast dictionary column '{}' to string: {e}",
+                series.name()
+            )
+        })
+    } else {
+        Ok(arrow_array)
+    }
+}
+
+fn arrow_dtype_to_create_table_sql(dtype: &ArrowDataType) -> Result<String, String> {
+    Ok(match dtype {
+        ArrowDataType::Null => "VARCHAR".to_string(),
+        ArrowDataType::Boolean => "BOOLEAN".to_string(),
+        ArrowDataType::Int8 => "TINYINT".to_string(),
+        ArrowDataType::Int16 => "SMALLINT".to_string(),
+        ArrowDataType::Int32 => "INTEGER".to_string(),
+        ArrowDataType::Int64 => "BIGINT".to_string(),
+        ArrowDataType::UInt8 => "UTINYINT".to_string(),
+        ArrowDataType::UInt16 => "USMALLINT".to_string(),
+        ArrowDataType::UInt32 => "UINTEGER".to_string(),
+        ArrowDataType::UInt64 => "UBIGINT".to_string(),
+        ArrowDataType::Float16 | ArrowDataType::Float32 => "FLOAT".to_string(),
+        ArrowDataType::Float64 => "DOUBLE".to_string(),
+        ArrowDataType::Utf8 | ArrowDataType::LargeUtf8 | ArrowDataType::Utf8View => {
+            "VARCHAR".to_string()
+        }
+        ArrowDataType::Binary | ArrowDataType::LargeBinary | ArrowDataType::BinaryView => {
+            "BLOB".to_string()
+        }
+        ArrowDataType::Date32 | ArrowDataType::Date64 => "DATE".to_string(),
+        ArrowDataType::Time32(_) | ArrowDataType::Time64(_) => "TIME".to_string(),
+        ArrowDataType::Timestamp(_, _) => "TIMESTAMP".to_string(),
+        ArrowDataType::Decimal128(precision, scale) | ArrowDataType::Decimal256(precision, scale) => {
+            format!("DECIMAL({precision},{scale})")
+        }
+        ArrowDataType::Dictionary(_, value_type) => {
+            arrow_dtype_to_create_table_sql(value_type)?
+        }
+        other => {
+            return Err(format!(
+                "Unsupported Arrow type for DuckDB ingest: {other:?}"
+            ));
+        }
+    })
 }
 
 pub fn ingest_excel_to_duckdb(
@@ -313,6 +767,14 @@ pub fn read_display_name(duckdb_path: &Path, table_id: &str) -> Option<String> {
 }
 
 pub fn query_to_dataframe(duckdb_path: &Path, sql: &str) -> Result<DataFrame, String> {
+    query_to_dataframe_for_table(duckdb_path, sql, None)
+}
+
+pub fn query_to_dataframe_for_table(
+    duckdb_path: &Path,
+    sql: &str,
+    table: Option<&str>,
+) -> Result<DataFrame, String> {
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(sql)
@@ -321,7 +783,11 @@ pub fn query_to_dataframe(duckdb_path: &Path, sql: &str) -> Result<DataFrame, St
         .query_arrow([])
         .map_err(|e| format!("Failed to execute DuckDB query: {e}"))?
         .collect();
-    record_batches_to_dataframe(batches)
+    let mut df = record_batches_to_dataframe(batches)?;
+    if let Some(table) = table {
+        restore_categorical_columns_with_conn(&conn, table, &mut df)?;
+    }
+    Ok(df)
 }
 
 /// DuckDB `query_arrow` batches → Polars via Arrow C Data Interface (no temp files).
@@ -393,9 +859,10 @@ pub fn query_columns_to_dataframe(
     columns: &[&str],
 ) -> Result<DataFrame, String> {
     if columns.is_empty() {
-        return query_to_dataframe(
+        return query_to_dataframe_for_table(
             duckdb_path,
             &format!("SELECT * FROM {} LIMIT 0", duckdb_table_sql(table)),
+            Some(table),
         );
     }
 
@@ -405,7 +872,7 @@ pub fn query_columns_to_dataframe(
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!("SELECT {} FROM {}", select_list, duckdb_table_sql(table));
-    query_to_dataframe(duckdb_path, &sql)
+    query_to_dataframe_for_table(duckdb_path, &sql, Some(table))
 }
 
 pub fn query_page_to_dataframe(
@@ -415,9 +882,10 @@ pub fn query_page_to_dataframe(
     limit: usize,
 ) -> Result<DataFrame, String> {
     if limit == 0 {
-        return query_to_dataframe(
+        return query_to_dataframe_for_table(
             duckdb_path,
             &format!("SELECT * FROM {} LIMIT 0", duckdb_table_sql(table)),
+            Some(table),
         );
     }
     let sql = format!(
@@ -426,7 +894,7 @@ pub fn query_page_to_dataframe(
         limit,
         offset
     );
-    query_to_dataframe(duckdb_path, &sql)
+    query_to_dataframe_for_table(duckdb_path, &sql, Some(table))
 }
 
 pub fn resolve_duckdb_file(project_root: &Path, relative_path: &str) -> PathBuf {
@@ -438,10 +906,83 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ingest_categorical_enum_roundtrip() {
+        use yss_sci::database::cast_column;
+
+        let mut df = df!(
+            "city" => &["北京", "上海", "北京"],
+            "value" => &[1i64, 2, 3],
+        )
+        .expect("df");
+        cast_column(&mut df, "city", "Categorical", true).expect("cast");
+
+        let duckdb_path = PathBuf::from(format!(
+            "target/test_duckdb_categorical_enum_{}.duckdb",
+            uuid::Uuid::new_v4()
+        ));
+
+        ingest_dataframe_to_duckdb(&mut df, &duckdb_path, "test_table").expect("ingest");
+
+        let meta = read_table_meta(&duckdb_path, "test_table").expect("meta");
+        let city_meta = meta
+            .columns
+            .iter()
+            .find(|col| col.name == "city")
+            .expect("city meta");
+        assert_eq!(city_meta.dtype, "Categorical");
+
+        let loaded = query_page_to_dataframe(&duckdb_path, "test_table", 0, 10).expect("query");
+        let city = loaded.column("city").expect("city");
+        assert!(matches!(
+            city.dtype(),
+            DataType::Categorical(_, _) | DataType::Enum(_, _)
+        ));
+
+        let _ = std::fs::remove_file(&duckdb_path);
+    }
+
+    #[test]
+    fn ingest_dataframe_via_arrow_roundtrip() {
+        let mut df = df!(
+            "name" => &["a", "b"],
+            "value" => &[1i64, 2],
+        )
+        .expect("df");
+        let duckdb_path = PathBuf::from(format!(
+            "target/test_duckdb_arrow_ingest_{}.duckdb",
+            uuid::Uuid::new_v4()
+        ));
+
+        ingest_dataframe_to_duckdb(&mut df, &duckdb_path, "test_table").expect("ingest");
+
+        let meta = read_table_meta(&duckdb_path, "test_table").expect("meta");
+        assert_eq!(meta.row_count, 2);
+        assert_eq!(meta.columns.len(), 2);
+
+        let loaded =
+            query_to_dataframe(&duckdb_path, r#"SELECT * FROM "test_table" ORDER BY "value""#)
+                .expect("query");
+        assert_eq!(loaded.height(), 2);
+        assert_eq!(
+            loaded
+                .column("name")
+                .expect("name")
+                .str()
+                .expect("str")
+                .get(0),
+            Some("a")
+        );
+
+        let _ = std::fs::remove_file(&duckdb_path);
+    }
+
+    #[test]
     fn ingest_csv_and_read_meta() {
         let csv_path = PathBuf::from("tests/data/iris.csv");
-        let duckdb_path = PathBuf::from("target/test_duckdb_ingest.duckdb");
-        let _ = std::fs::remove_file(&duckdb_path);
+        let duckdb_path = PathBuf::from(format!(
+            "target/test_duckdb_ingest_{}.duckdb",
+            uuid::Uuid::new_v4()
+        ));
 
         let meta = ingest_csv_to_duckdb(
             &csv_path,

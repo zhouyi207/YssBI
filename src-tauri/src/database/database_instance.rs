@@ -3,7 +3,7 @@ use super::DatabaseDecl;
 use super::DatabaseEngine;
 use super::DatabaseState;
 use super::DatabaseView;
-use super::{duckdb_table_sql, ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_to_dataframe, query_to_dataframe};
+use super::{duckdb_table_sql, ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_to_dataframe, query_to_dataframe_for_table};
 use super::{
     compute_all_column_distributions_duckdb, compute_all_column_stats_duckdb,
     compute_dataset_overview_duckdb,
@@ -179,7 +179,7 @@ impl DatabaseInstance {
                     ..
                 } => {
                     let sql = format!("SELECT * FROM {}", duckdb_table_sql(table));
-                    query_to_dataframe(Path::new(duckdb_path), &sql)
+                    query_to_dataframe_for_table(Path::new(duckdb_path), &sql, Some(table))
                         .map_err(|e| PolarsError::ComputeError(e.into()))?
                 }
                 _ => unreachable!(),
@@ -223,7 +223,7 @@ impl DatabaseInstance {
                     duckdb_table_sql(table),
                     n
                 );
-                query_to_dataframe(Path::new(duckdb_path), &sql)
+                query_to_dataframe_for_table(Path::new(duckdb_path), &sql, Some(table))
                     .map_err(|e| PolarsError::ComputeError(e.into()))?
             }
             DatabaseState::Loaded { dataframe, .. } => dataframe.head(Some(n as usize)),

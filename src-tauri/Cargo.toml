@@ -44,6 +44,7 @@ ndarray.workspace = true
 ndarray-stats.workspace = true
 polars.workspace = true
 polars-arrow.workspace = true
+polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 chrono = "0.4.41"
@@ -58,7 +59,7 @@ calamine = "0.26"
 statrs = "0.17"
 rand = "0.8"
 faer = "0.24.0"
-duckdb = { version = "1.10504.0", features = ["bundled"] }
+duckdb = { version = "1.10504.0", features = ["bundled", "appender-arrow"] }
 
 # [profile.release]
 # opt-level = "z"      # 优化体积而非速度
