@@ -421,6 +421,99 @@ Command 返回 `Result`，Event 通过 EventEmitter 推送至前端。
 
 遵循 Rust 惯例，使用 `cargo fmt` 统一格式。
 
+### 3.7 Schema 与 Pin 解析
+
+数据处理节点的输出形状在**编辑期**即可由上游 schema 推导，不应依赖执行结果。Pin 结构与此信息层分离维护，执行引擎只消费已解析结果。
+
+#### 3.7.1 三层模型
+
+| 层 | 何时确定 | 存储位置 | 示例 |
+| --- | --- | --- | --- |
+| **结构（Structure）** | 节点定义时固定 | `NodeDefinition.pin_slots` | Exec In/Out、Add 的 A/B/C、OLS 的可重复输入 |
+| **信息（Schema）** | 连线 / 断线 / 改参时链式传播 | `PinInstance.resolved_schema` | DataFrame 列名与类型、Model 特征列 |
+| **数据（Value）** | 执行或预览时计算 | `PinRuntimeState.current_value` | 回归系数、残差序列、预览前几行 |
+
+- **结构层**决定节点「有哪些槽位、能否增删 pin」。
+- **信息层**决定「每个 DataFrame / Model pin 携带什么列结构」，沿连接图拓扑序传播。
+- **数据层**仅在 run / preview 时填充，**不得**在 exec 过程中增删 pin 或改写 schema。
+
+#### 3.7.2 Pin 槽位类型
+
+`PinSlot` 表达结构层；schema 派生 pin 不是「运行时动态」，而是「编辑期由信息层物化」：
+
+| 槽位 | 含义 | 初始 pin | 后续变更 |
+| --- | --- | --- | --- |
+| `Fixed` | 固定 pin | 创建节点时生成 | 仅用户改值 |
+| `Repeatable` | 可重复 pin（如 Add、OLS） | 按 `min_count` 生成 | 用户 `+` / 移除，后端 reindex |
+| `DerivedFromInput` | 由上游 schema 派生 | 空（无初始 pin） | `pin_resolver` 在 schema 变化时物化 |
+
+- **可预测 ≠ 全部写死在 Definition 里**。Decompose 列数随上游 schema 变化，仍属可预测，应使用 `DerivedFromInput` + `pin_resolver`，而非 exec 时计算。
+- 命名上避免「动态节点」；统一称为 **schema 派生 pin** 或 **信息层物化**。
+
+#### 3.7.3 Schema 传播（信息层）
+
+- 入口：`GraphInstance::propagate_schemas()`，按拓扑序填充各 DataFrame output pin 的 `resolved_schema`。
+- 节点自算 output schema：在 `NodeDefinition` 上注册 `output_schema_resolver`（如 TS Align、Combine）。
+- 默认 fallback：无 resolver 时透传上游 Input 的 `resolved_schema`。
+- 按 `dataframe_id` 查列结构：通过 `OutputSchemaContext.schema_provider`（如 Get DataFrame、自配 Model）。
+
+**触发时机**（必须做 schema 传播）：
+
+- `connect_pins` / `disconnect_pin`
+- 影响上游 schema 的节点参数变更
+- 项目/图加载恢复连接后（恢复信息层）
+
+**禁止**：在执行引擎、`flow_processor` / `data_evaluator` 内修改 pin 列表或 `resolved_schema`。
+
+#### 3.7.4 Pin 物化（结构层增量更新）
+
+- 有 `pin_resolver` 的节点：在 `PinResolverContext`（`instance_params` + 上游 `input_schemas`）下生成 **DerivedFromInput** 部分的 pin。
+- **连线路径**（推荐模式）：`propagate_schemas` → 仅对受影响节点调用 `resolve_dynamic_pins`（含下游），见 `get_downstream_resolve_nodes`。
+- **打开项目**：至少 `propagate_schemas`；全图 `resolve_all_dynamic_pins` 仅作兼容兜底，大项目应改为 **延迟物化**（打开 tab / 节点进入视口 / 后台分帧 + 事件推送），避免阻塞首屏。
+- Pin 变更通过 `PinChangeSet` + `NodePinsUpdated` 事件同步前端；renames 须包含在 `updated_pins` 中。
+
+#### 3.7.5 Predict 等双模式节点
+
+| 模式 | Schema 来源 | Pin 更新时机 |
+| --- | --- | --- |
+| 连线 Model | 上游 output 的 `resolved_schema` | connect / 上游 schema 变化 |
+| 自配 Model | `instance_params` + `schema_provider` | 改参 / 选择 model 时 |
+
+两种模式共用同一机制：信息层在编辑期解析，不在 exec 时生成 pin。
+
+#### 3.7.6 编译 / 预览（补充层）
+
+借鉴 UE compile、ipynb 的「编译后可见结果」用于：
+
+- 中间结果预览（前几行、摘要统计）
+- 用户主动触发的「展开列 pin / 编译后才显示 preview 口」
+- 缓存执行结果以加速重复预览
+
+**不用于**：类型检查、schema 传播、默认 pin 列表。编辑期连线与校验必须不依赖是否已执行。
+
+#### 3.7.7 宽表 UX（可选）
+
+列数很大时，可不物化 N 个 output pin，而保留单一 DataFrame output + schema 驱动的列选择 UI。属产品选择，不改变信息层在 connect 时传播的原则。
+
+#### 3.7.8 反模式
+
+| 反模式 | 原因 |
+| --- | --- |
+| Exec 等待样式 + 执行时才生成 data pin | 未执行无法连线/校验；编辑与运行耦合 |
+| 打开项目对整图同步 `resolve_all_dynamic_pins` | 大图首屏卡顿 |
+| 为未发布格式保留旧 pin 解析兼容层 | 见 §Early Stage：直接改当前架构与测试 |
+| 前端自行推断 schema 并改 pin 结构 | 违反 §1.1 后端为唯一真实来源 |
+
+#### 3.7.9 相关实现位置
+
+| 职责 | 模块 |
+| --- | --- |
+| Schema 传播 | `graph/core/graph_instance.rs` — `propagate_schemas`, `compute_output_schema_for_node` |
+| Pin 物化 | `graph/core/graph_instance.rs` — `resolve_dynamic_pins`, `resolve_all_dynamic_pins` |
+| 节点注册 | `graph/register/catalog/` — `with_output_schema_resolver`, `with_pin_resolver` |
+| 槽位定义 | `graph/pin/pin_slot.rs` — `PinSlot` |
+| 前端同步 | `features/core/sync/` — `NodePinsUpdated`, `batchUpdatePins` |
+
 ---
 
 ## 4. 参考文档

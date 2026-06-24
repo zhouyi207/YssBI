@@ -4,7 +4,7 @@ use crate::graph::value::{DataType, DataValue};
 use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
 use crate::project::ProjectState;
-use crate::schema::PinInstanceDTO;
+use crate::schema::{GraphInstanceDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
@@ -247,4 +247,27 @@ pub fn remove_repeatable_pin(
         pin_index,
         removed_connections: removed_conns,
     })
+}
+
+/// 打开图 Tab 时物化 schema 派生 pin（DESIGN_RULE §3.7）
+///
+/// 返回完整 Graph DTO；前端以 DTO 为准灌入 store，不在此 emit pin 事件（避免与 addGraphFromData 竞态）。
+#[tauri::command]
+pub fn resolve_graph_dynamic_pins(
+    _app: AppHandle,
+    state: State<ProjectState>,
+    graph_id: GraphId,
+) -> Result<GraphInstanceDTO, String> {
+    if state.get_graph(&graph_id).is_none() {
+        state.load_graph_from_current_project(&graph_id)?;
+    }
+
+    log_app::info!(
+        "[command.resolve_graph_dynamic_pins] graph={}",
+        graph_id
+    );
+
+    let (graph, _change_sets, _inferred) = state.resolve_graph_dynamic_pins(&graph_id)?;
+
+    Ok((&graph).into())
 }

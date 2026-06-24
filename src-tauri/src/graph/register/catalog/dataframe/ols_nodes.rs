@@ -1,7 +1,7 @@
 //! OLS 回归节点
 
 use crate::execution::ExecutionEffect;
-use crate::graph::node::NodeDefinition;
+use crate::graph::node::{ColumnSchema, DataSchema, NodeDefinition, OutputSchemaContext};
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
@@ -212,6 +212,45 @@ fn ols_input_slots() -> Vec<PinSlot> {
             .with_optional(true),
         ),
     ]
+}
+
+/// 从回归节点 X 输入（Repeatable `Inputs(0)`）推导 Model output 的 schema，供 Predict 连线物化 input pin。
+pub fn regression_exog_output_schema(ctx: &OutputSchemaContext) -> Option<DataSchema> {
+    let mut indexed: Vec<(usize, &DataSchema)> = ctx
+        .input_schemas
+        .iter()
+        .filter_map(|(role, schema)| {
+            let idx = role.index()?;
+            if !role.matches_family(&PinRole::Data(DataRole::Inputs(0))) {
+                return None;
+            }
+            Some((idx, schema))
+        })
+        .collect();
+    indexed.sort_by_key(|(i, _)| *i);
+
+    let columns: Vec<ColumnSchema> = indexed
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, (_, schema))| {
+            let col = schema.columns.first()?;
+            let name = if col.name.is_empty() || col.name == "literal" {
+                format!("x{}", i + 1)
+            } else {
+                col.name.clone()
+            };
+            Some(ColumnSchema {
+                name,
+                data_type: col.data_type.clone(),
+            })
+        })
+        .collect();
+
+    if columns.is_empty() {
+        None
+    } else {
+        Some(DataSchema { columns })
+    }
 }
 
 use crate::execution::context::NodeExecutionContextTrait;
@@ -1352,6 +1391,7 @@ fn register_ols(registry: &NodeRegistry) {
             "Ordinary Least Squares regression — outputs the fitted model for prediction",
         )
         .with_pin_slots(slots)
+        .with_output_schema_resolver(Arc::new(regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_ols_regression(ctx)?;
 

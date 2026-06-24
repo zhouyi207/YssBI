@@ -24,6 +24,15 @@ use crate::graph::GraphId;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
+/// 动态 pin 解析模式
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PinResolveMode {
+    /// 连线 / 断线 / 改参：允许移除过时的 schema 派生 pin
+    Interactive,
+    /// 打开 Tab 物化：resolver 无结果时保留已持久化的 pin
+    Materialize,
+}
+
 /// 动态 pin 重建的变更集
 #[derive(Debug, Clone, Default)]
 pub struct PinChangeSet {
@@ -226,7 +235,6 @@ impl GraphInstance {
         drop(data_state);
 
         self.propagate_schemas();
-        let _ = self.resolve_all_dynamic_pins();
         let _ = self.infer_types();
 
         Ok(())
@@ -822,6 +830,14 @@ impl GraphInstance {
     ///
     /// 返回 `Some(PinChangeSet)` 表示 pins 有变化，`None` 表示无需变更
     pub fn resolve_dynamic_pins(&self, node_id: NodeId) -> Result<Option<PinChangeSet>, String> {
+        self.resolve_dynamic_pins_with_mode(node_id, PinResolveMode::Interactive)
+    }
+
+    pub fn resolve_dynamic_pins_with_mode(
+        &self,
+        node_id: NodeId,
+        mode: PinResolveMode,
+    ) -> Result<Option<PinChangeSet>, String> {
         let (definition, instance_params, current_pin_ids);
         {
             let data_state = self.data_state.read().unwrap();
@@ -901,6 +917,11 @@ impl GraphInstance {
             return Ok(None);
         }
 
+        // Tab 打开物化：resolver 无输出时保留项目文件中已保存的 pin（常见于 DB schema 尚未 lazy load）
+        if mode == PinResolveMode::Materialize && new_names.is_empty() && !old_names.is_empty() {
+            return Ok(None);
+        }
+
         // 应用变更
         let change_set;
         {
@@ -960,6 +981,10 @@ impl GraphInstance {
     }
 
     /// 传播 schema：按拓扑序计算并填充各 output pin 的 resolved_schema
+    fn is_model_struct_type_key(type_key: &str) -> bool {
+        matches!(type_key, "OLSModel" | "LogitModel" | "ProbitModel")
+    }
+
     pub fn propagate_schemas(&self) {
         let node_order = self.topological_node_order();
         let mut data_state = self.data_state.write().unwrap();
@@ -976,19 +1001,28 @@ impl GraphInstance {
                     .get(&node_id)
                     .map(|n| n.pin_ids.clone())
                     .unwrap_or_default();
+                let has_output_resolver = data_state
+                    .nodes
+                    .get(&node_id)
+                    .map(|n| n.definition.output_schema_resolver.is_some())
+                    .unwrap_or(false);
                 for pin_id in pin_ids {
                     if let Some(pin) = data_state.pins.get_mut(&pin_id) {
-                        if pin.is_output()
-                            && pin.definition.data_type.as_ref().map_or(false, |dt| {
-                                matches!(
-                                    dt,
-                                    crate::graph::pin::PinDataTypeDefinition::Concrete(
-                                        crate::graph::DataType::DataFrame
-                                    )
-                                )
-                            })
-                        {
-                            pin.resolved_schema = Some(schema);
+                        if !pin.is_output() || !pin.is_data() {
+                            continue;
+                        }
+                        let assign = match pin.definition.data_type.as_ref() {
+                            Some(PinDataTypeDefinition::Concrete(DataType::DataFrame)) => true,
+                            Some(PinDataTypeDefinition::Concrete(DataType::Struct(type_key)))
+                                if has_output_resolver
+                                    && Self::is_model_struct_type_key(type_key) =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        };
+                        if assign {
+                            pin.resolved_schema = Some(schema.clone());
                             break;
                         }
                     }
@@ -1001,17 +1035,29 @@ impl GraphInstance {
     ///
     /// 确保 Combine 的 input 部分连接时，下游 Decompose 能正确更新 output pins
     pub fn resolve_all_dynamic_pins(&self) -> Vec<PinChangeSet> {
+        self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Interactive)
+    }
+
+    pub fn resolve_all_dynamic_pins_with_mode(&self, mode: PinResolveMode) -> Vec<PinChangeSet> {
         let node_ids: Vec<NodeId> = {
             let data_state = self.data_state.read().unwrap();
             data_state.nodes.keys().copied().collect()
         };
         let mut change_sets = Vec::new();
         for node_id in node_ids {
-            if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
+            if let Ok(Some(cs)) = self.resolve_dynamic_pins_with_mode(node_id, mode) {
                 change_sets.push(cs);
             }
         }
         change_sets
+    }
+
+    /// 打开图 Tab 时：传播 schema、物化 schema 派生 pin、运行类型推断
+    pub fn materialize_dynamic_pins(&self) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
+        self.propagate_schemas();
+        let change_sets = self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Materialize);
+        let inferred = self.infer_types().unwrap_or_default();
+        (change_sets, inferred)
     }
 
     /// 拓扑序：保证上游节点先于下游

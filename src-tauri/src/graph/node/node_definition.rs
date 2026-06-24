@@ -48,6 +48,11 @@ pub struct OutputSchemaContext {
 pub type OutputSchemaResolver =
     Arc<dyn Fn(&OutputSchemaContext) -> Option<DataSchema> + Send + Sync>;
 
+/// 透传指定 input pin 的 schema 作为 DataFrame output schema（列结构不变类节点）
+pub fn passthrough_input_schema_resolver(input_role: PinRole) -> OutputSchemaResolver {
+    Arc::new(move |ctx| ctx.input_schemas.get(&input_role).cloned())
+}
+
 /// 数据源 schema（如 DataFrame 的列结构）
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DataSchema {

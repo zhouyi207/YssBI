@@ -668,3 +668,269 @@ fn test_repeatable_pin_reindex_after_remove() {
         "new pin should take the next letter, not duplicate C"
     );
 }
+
+#[test]
+fn test_ts_align_schema_propagates_to_decompose() {
+    use yssbi_lib::graph::node::{ColumnSchema, DataSchema, NodeInstanceParams};
+    use yssbi_lib::graph::value::DataType;
+    use yssbi_lib::graph::GraphKind;
+
+    let registry = create_test_registry();
+    let mut graph = GraphInstance::new("Schema Chain Test", GraphKind::Event, registry.clone());
+    graph.set_schema_provider(Arc::new(|dataframe_id: &str| {
+        if dataframe_id == "test_df" {
+            Some(DataSchema {
+                columns: vec![
+                    ColumnSchema {
+                        name: "time".to_string(),
+                        data_type: DataType::Int64,
+                    },
+                    ColumnSchema {
+                        name: "value".to_string(),
+                        data_type: DataType::Float64,
+                    },
+                ],
+            })
+        } else {
+            None
+        }
+    }));
+    let graph = Arc::new(graph);
+
+    let get_node = graph
+        .create_node_with_position(
+            "Data:Get DataFrame",
+            0.0,
+            0.0,
+            Some(NodeInstanceParams::DataFrame {
+                dataframe_id: "test_df".to_string(),
+                dataframe_name: None,
+            }),
+        )
+        .expect("create get dataframe");
+    let align_node = graph
+        .create_node("Data:Time Series:TS Align")
+        .expect("create ts align");
+    let decompose_node = graph
+        .create_node("Data:Decompose DataFrame")
+        .expect("create decompose");
+
+    let get_out = graph
+        .get_pin_instances_by_node_id(get_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
+        .expect("get output")
+        .id;
+    let align_in = graph
+        .get_pin_instances_by_node_id(align_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("align input")
+        .id;
+    let align_out = graph
+        .get_pin_instances_by_node_id(align_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
+        .expect("align output")
+        .id;
+    let decompose_in = graph
+        .get_pin_instances_by_node_id(decompose_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("decompose input")
+        .id;
+
+    graph.connect(get_out, align_in).expect("connect get->align");
+    graph
+        .connect(align_out, decompose_in)
+        .expect("connect align->decompose");
+
+    let align_output = graph
+        .get_pin_instances_by_node_id(align_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
+        .expect("align output pin");
+    assert_eq!(
+        align_output
+            .resolved_schema
+            .as_ref()
+            .map(|schema| schema.columns.len()),
+        Some(2),
+        "TS Align output should inherit input schema"
+    );
+
+    let (_, _) = graph.materialize_dynamic_pins();
+
+    let decompose_pins_before_reopen = graph
+        .get_pin_instances_by_node_id(decompose_node)
+        .into_iter()
+        .filter(|p| p.is_output())
+        .map(|p| p.definition.name.clone())
+        .collect::<Vec<_>>();
+
+    assert_eq!(decompose_pins_before_reopen, vec!["time", "value"]);
+
+    // 模拟 DB schema 未就绪：清空 resolved_schema 后再 materialize，应保留磁盘 pin
+    {
+        let mut data_state = graph.data_state.write().unwrap();
+        for pin in data_state.pins.values_mut() {
+            pin.resolved_schema = None;
+        }
+    }
+    let (change_sets, _) = graph.materialize_dynamic_pins();
+    assert!(
+        change_sets.is_empty(),
+        "materialize should not strip persisted pins when schema is unavailable"
+    );
+
+    let mut output_names: Vec<String> = graph
+        .get_pin_instances_by_node_id(decompose_node)
+        .into_iter()
+        .filter(|p| p.is_output())
+        .map(|p| p.definition.name.clone())
+        .collect();
+    output_names.sort();
+    assert_eq!(output_names, vec!["time", "value"]);
+}
+
+#[test]
+fn test_ols_model_schema_propagates_to_predict_inputs() {
+    use yssbi_lib::graph::node::{ColumnSchema, DataSchema, NodeInstanceParams};
+    use yssbi_lib::graph::value::DataType;
+    use yssbi_lib::graph::GraphKind;
+
+    let registry = create_test_registry();
+    let mut graph = GraphInstance::new("OLS Predict Schema", GraphKind::Event, registry.clone());
+    graph.set_schema_provider(Arc::new(|dataframe_id: &str| {
+        if dataframe_id == "reg_df" {
+            Some(DataSchema {
+                columns: vec![
+                    ColumnSchema {
+                        name: "y".to_string(),
+                        data_type: DataType::Float64,
+                    },
+                    ColumnSchema {
+                        name: "x1".to_string(),
+                        data_type: DataType::Float64,
+                    },
+                ],
+            })
+        } else {
+            None
+        }
+    }));
+    let graph = Arc::new(graph);
+
+    let get_node = graph
+        .create_node_with_position(
+            "Data:Get DataFrame",
+            0.0,
+            0.0,
+            Some(NodeInstanceParams::DataFrame {
+                dataframe_id: "reg_df".to_string(),
+                dataframe_name: None,
+            }),
+        )
+        .expect("get dataframe");
+    let decompose_node = graph
+        .create_node("Data:Decompose DataFrame")
+        .expect("decompose");
+    let ols_node = graph
+        .create_node("Data:Statistics:OLS")
+        .expect("ols");
+    let predict_node = graph
+        .create_node("Data:Statistics:Predict")
+        .expect("predict");
+
+    let get_out = graph
+        .get_pin_instances_by_node_id(get_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
+        .expect("get out")
+        .id;
+    let decompose_in = graph
+        .get_pin_instances_by_node_id(decompose_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("decompose in")
+        .id;
+
+    graph.connect(get_out, decompose_in).expect("get->decompose");
+
+    let decompose_pins: std::collections::HashMap<String, yssbi_lib::graph::PinId> = graph
+        .get_pin_instances_by_node_id(decompose_node)
+        .into_iter()
+        .filter(|p| p.is_output())
+        .map(|p| (p.definition.name.clone(), p.id))
+        .collect();
+
+    let ols_y = graph
+        .get_pin_instances_by_node_id(ols_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Custom("y".to_string())))
+        .expect("ols y")
+        .id;
+    let ols_x = graph
+        .get_pin_instances_by_node_id(ols_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+        .expect("ols x")
+        .id;
+    let ols_model_out = graph
+        .get_pin_instances_by_node_id(ols_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Custom("ols_model".to_string())))
+        .expect("ols model out")
+        .id;
+    let predict_model_in = graph
+        .get_pin_instances_by_node_id(predict_node)
+        .into_iter()
+        .find(|p| {
+            p.definition.role
+                == PinRole::Data(DataRole::Custom("prediction_model".to_string()))
+        })
+        .expect("predict model in")
+        .id;
+
+    graph
+        .connect(decompose_pins["y"], ols_y)
+        .expect("y -> ols");
+    graph
+        .connect(decompose_pins["x1"], ols_x)
+        .expect("x1 -> ols");
+
+    graph.propagate_schemas();
+
+    let ols_model_pin = graph
+        .get_pin_instances_by_node_id(ols_node)
+        .into_iter()
+        .find(|p| p.id == ols_model_out)
+        .expect("ols model pin");
+    assert_eq!(
+        ols_model_pin
+            .resolved_schema
+            .as_ref()
+            .map(|s| s.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>()),
+        Some(vec!["x1".to_string()]),
+        "OLS Model output should expose exog schema"
+    );
+
+    graph
+        .connect(ols_model_out, predict_model_in)
+        .expect("ols model -> predict");
+
+    let predict_exog_names: Vec<String> = graph
+        .get_pin_instances_by_node_id(predict_node)
+        .into_iter()
+        .filter(|p| {
+            p.is_input()
+                && matches!(
+                    &p.definition.role,
+                    PinRole::Data(DataRole::Custom(name)) if name.starts_with("pred_exog:")
+                )
+        })
+        .map(|p| p.definition.name.clone())
+        .collect();
+
+    assert_eq!(predict_exog_names, vec!["x1"]);
+}

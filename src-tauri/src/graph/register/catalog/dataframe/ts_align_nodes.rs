@@ -7,7 +7,7 @@
 //! - TS Lag: 严格时间对齐的滞后
 
 use crate::database::polars_dtype_to_data_type;
-use crate::graph::node::NodeDefinition;
+use crate::graph::node::{passthrough_input_schema_resolver, NodeDefinition};
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
@@ -53,6 +53,9 @@ fn register_ts_align(registry: &NodeRegistry) {
             PinDataTypeDefinition::concrete(DataType::DataFrame),
         )),
     ])
+    .with_output_schema_resolver(passthrough_input_schema_resolver(PinRole::Data(
+        DataRole::Input,
+    )))
     .with_data_evaluator(Arc::new(|ctx| {
         let df_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
         let df_id = match &df_value {

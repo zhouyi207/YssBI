@@ -164,6 +164,7 @@ pub fn run() {
             clear_pin_user_value,
             add_repeatable_pin,
             remove_repeatable_pin,
+            resolve_graph_dynamic_pins,
             // ==================== History ====================
             sync_graph_state,
             // ==================== 子图管理 ====================

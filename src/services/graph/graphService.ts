@@ -104,6 +104,17 @@ export class GraphService {
         }
     }
 
+    static async resolveGraphDynamicPins(graphId: string): Promise<Graph> {
+        try {
+            const graph = await invoke<GraphInstanceDTO>("resolve_graph_dynamic_pins", { graphId });
+            logger.graph.info(`Graph '${graphId}' dynamic pins materialized`, 'GraphService');
+            return toFrontendGraph(graph);
+        } catch (error) {
+            logger.graph.error(`Error resolving graph dynamic pins: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
+            throw error;
+        }
+    }
+
     static async unloadProjectGraph(graphId: string): Promise<void> {
         await invoke("unload_project_graph", { graphId });
     }

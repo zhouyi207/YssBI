@@ -3,7 +3,7 @@
 use crate::application::database::bind_duckdb_instance;
 use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
-use crate::graph::{GraphId, GraphInstance};
+use crate::graph::{DataType, GraphId, GraphInstance, PinChangeSet, PinId};
 use crate::log::log_sys;
 use crate::project::{
     load_project_graph_from_file, save_project_graph_to_file, save_project_to_file, GraphDocument,
@@ -123,7 +123,10 @@ impl ProjectState {
     }
 
     /// Bind the project's runtime context onto a graph: registry, schema
-    /// provider, schema propagation and dynamic pin resolution. Idempotent.
+    /// provider and schema propagation. Idempotent.
+    ///
+    /// Schema-derived pin materialization is deferred until the graph tab is
+    /// opened (`resolve_graph_dynamic_pins` command). See DESIGN_RULE §3.7.
     /// Always called by `insert_graph` — do not call from elsewhere.
     fn prepare_graph_runtime(&self, graph: &mut GraphInstance) {
         let registry = {
@@ -133,7 +136,18 @@ impl ProjectState {
         graph.set_registry(registry);
         graph.set_schema_provider(self.build_schema_provider());
         graph.propagate_schemas();
-        let _ = graph.resolve_all_dynamic_pins();
+    }
+
+    /// Materialize schema-derived pins for a loaded graph (tab open path).
+    pub fn resolve_graph_dynamic_pins(
+        &self,
+        graph_id: &GraphId,
+    ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+        let graph = self
+            .get_graph(graph_id)
+            .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+        let (change_sets, inferred) = graph.materialize_dynamic_pins();
+        Ok((graph, change_sets, inferred))
     }
 
     /// Single entry point for placing a graph into `project_data.graphs`.
@@ -141,8 +155,9 @@ impl ProjectState {
     /// Every code path that wants the project's authoritative copy of a graph
     /// (newly created, loaded from disk, duplicated, restored from a snapshot,
     /// imported, etc.) MUST go through this method. It enforces the runtime
-    /// invariants (registry, schema provider, schema propagation, dynamic pin
-    /// resolution) before the graph becomes visible to readers.
+    /// invariants (registry, schema provider, schema propagation) before the
+    /// graph becomes visible to readers. Schema-derived pin materialization is
+    /// deferred to `resolve_graph_dynamic_pins` when the graph tab is opened.
     pub fn insert_graph(&self, mut graph: GraphInstance) -> GraphInstance {
         self.prepare_graph_runtime(&mut graph);
         let graph_id = graph.id;

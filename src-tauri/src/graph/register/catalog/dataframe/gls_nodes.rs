@@ -937,6 +937,7 @@ fn register_gls(registry: &NodeRegistry) {
             "Generalized Least Squares regression — outputs the fitted model for prediction",
         )
         .with_pin_slots(slots)
+        .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_gls_regression(ctx)?;
 

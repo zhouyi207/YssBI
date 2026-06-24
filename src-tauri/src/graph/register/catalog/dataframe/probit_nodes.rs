@@ -579,6 +579,7 @@ fn register_probit(registry: &NodeRegistry) {
                 "Binary probit regression (IRLS) — outputs fitted model for prediction",
             )
             .with_pin_slots(slots)
+            .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
             .with_flow_processor(Arc::new(|ctx| {
                 let fit = run_probit_regression(ctx)?;
 

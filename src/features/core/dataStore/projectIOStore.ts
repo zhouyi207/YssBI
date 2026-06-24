@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
 import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
+import { GraphService } from '@/services/graph/graphService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { logger } from '@/utils/appLogger';
 
@@ -235,7 +236,17 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     const pending = (async (): Promise<boolean> => {
       try {
         const { graph, variables } = await ProjectService.loadProjectGraph(graphId);
-        const frontendGraph = toFrontendGraph(graph);
+        let frontendGraph;
+        try {
+          frontendGraph = await GraphService.resolveGraphDynamicPins(graphId);
+        } catch (resolveErr) {
+          logger.sys.warn(
+            'Dynamic pin materialize failed, using loaded graph: ' +
+              formatErrorMessage(resolveErr, 'resolve failed'),
+            'ProjectIOStore',
+          );
+          frontendGraph = toFrontendGraph(graph);
+        }
         useVariableStore.getState().setVariables({
           ...useVariableStore.getState().variables,
           ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
