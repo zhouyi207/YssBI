@@ -8,7 +8,7 @@ pub mod database_schema;
 pub mod database_state;
 pub mod database_view;
 pub mod duckdb_analytics;
-pub mod duckdb_reader;
+pub mod duckdb_reader; // 类型映射见 duckdb_reader 与 database/README.md
 pub mod excel_reader;
 pub mod sql_reader;
 pub mod sqlite_reader;

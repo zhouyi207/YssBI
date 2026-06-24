@@ -1,3 +1,7 @@
+//! DuckDB 项目库读写：Polars ↔ Arrow ↔ DuckDB。
+//!
+//! Categorical 列通过 DuckDB `ENUM`（类型名 `_yssbi_enum_*`）持久化；读写 Arrow 物理类型不对称，
+//! 详见 [`README.md`](./README.md) 中「Categorical / ENUM 类型映射」一节。
 use std::path::{Path, PathBuf};
 
 use duckdb::arrow::array::{make_array, Array};
@@ -105,6 +109,10 @@ pub fn duckdb_path_literal(path: &Path) -> String {
     sql_escape_literal(&path.to_string_lossy().replace('\\', "/"))
 }
 
+/// 将 DuckDB `DESCRIBE` / `information_schema` 中的列类型映射为 Polars 逻辑类型名（schema 展示用）。
+///
+/// - 存储为 `ENUM` 或 `_yssbi_enum_*` → `"Categorical"`
+/// - 多数整型统一为 `"Int64"`（读侧尚未做细粒度 Arrow 整数对齐）
 pub fn duckdb_type_to_raw_string(duckdb_type: &str) -> String {
     if is_duckdb_enum_storage_type(duckdb_type) {
         return "Categorical".to_string();
@@ -363,6 +371,10 @@ fn string_series_to_categorical(series: &Series, categories: &[String]) -> Resul
         .map_err(|e| format!("Failed to cast column '{}' to categorical: {e}", series.name()))
 }
 
+/// 加载后根据 DuckDB 存储类型，将 ENUM / `_yssbi_enum_*` 列从 String 恢复为 Polars Categorical。
+///
+/// 读路径：`query_arrow` 可能已是 Dictionary，经 Polars 导入后常为 String；此处用 `DESCRIBE` 识别
+/// ENUM 并用 `FrozenCategories` 重建 `DataType::Enum`。
 pub fn restore_categorical_columns(
     duckdb_path: &Path,
     table: &str,
@@ -493,6 +505,11 @@ pub fn ingest_parquet_to_duckdb(
     read_table_meta(duckdb_path, table)
 }
 
+/// 将 Polars `DataFrame` 写入项目 DuckDB（Arrow RecordBatch + Appender，无临时 Parquet）。
+///
+/// Categorical / Enum 列：先 `CREATE TYPE _yssbi_enum_{table}_{col}`，建 ENUM 列，再经
+/// [`polars_series_to_arrow_array`]（`for_enum_ingest = true`）cast 为 **Utf8** 后 append。
+/// Appender 不接受 Arrow Dictionary 直写 ENUM，见 `database/README.md`。
 pub fn ingest_dataframe_to_duckdb(
     df: &mut DataFrame,
     duckdb_path: &Path,
@@ -596,11 +613,18 @@ fn dataframe_to_record_batch(
         .map_err(|e| format!("Failed to build Arrow RecordBatch: {e}"))
 }
 
+/// Polars 列 → Arrow 数组（FFI），供建表推断或 Appender 写入。
+///
+/// `for_enum_ingest == true`（写入 DuckDB ENUM 列）时，**必须先 cast 为 String → Arrow Utf8**。
+/// DuckDB `appender-arrow` 对 ENUM 目标列只接受 Utf8 字面量，不接受
+/// `Dictionary(UInt8, Utf8)` 或 Polars 导出的 `Dictionary(UInt32, Utf8View)`（见 spike 测试
+/// `duckdb_enum_appender_write_paths`）。读侧 `query_arrow` 则返回 `Dictionary(UInt8, Utf8)`。
 fn polars_series_to_arrow_array(
     series: &Series,
     for_enum_ingest: bool,
 ) -> Result<std::sync::Arc<dyn Array>, String> {
     let series = if for_enum_ingest {
+        // ENUM Appender 仅接受 Utf8；Polars Categorical 的 Arrow 形态是 Dictionary，直接 append 会失败。
         series
             .cast(&DataType::String)
             .map_err(|e| format!("Failed to cast categorical column '{}' for enum ingest: {e}", series.name()))?
@@ -1012,5 +1036,245 @@ mod tests {
         assert_eq!(page.height(), 7);
         assert!(df.width() >= 5);
         let _ = std::fs::remove_file(&duckdb_path);
+    }
+
+    /// Spike（读侧）：DuckDB ENUM 经 `query_arrow` 返回的 Arrow 物理类型。
+    ///
+    /// 当前 bundled DuckDB：**`Dictionary(UInt8, Utf8)`**，不是裸 `Utf8`。
+    /// 运行: `cargo test duckdb_enum_query_arrow_schema -- --nocapture`
+    #[test]
+    fn duckdb_enum_query_arrow_schema() {
+        let conn = Connection::open_in_memory().expect("open in-memory duckdb");
+
+        conn.execute_batch(
+            r#"
+            CREATE TYPE gender AS ENUM ('M', 'F');
+            CREATE TABLE t (gender gender);
+            INSERT INTO t VALUES ('M'), ('F');
+            "#,
+        )
+        .expect("setup enum table");
+
+        let mut stmt = conn
+            .prepare("SELECT * FROM t")
+            .expect("prepare select");
+        let mut arrow = stmt.query_arrow([]).expect("query_arrow");
+        let batch = arrow.next().expect("missing record batch");
+
+        println!("Arrow schema:\n{:#?}", batch.schema());
+        for (idx, field) in batch.schema().fields().iter().enumerate() {
+            println!(
+                "column[{idx}] name={} arrow_type={:?}",
+                field.name(),
+                field.data_type()
+            );
+        }
+
+        let gender_field = batch.schema().field(0).clone();
+        let dtype = gender_field.data_type();
+        println!("gender arrow dtype (Debug): {dtype:?}");
+
+        // 记录 bundled DuckDB 读侧行为；若升级 DuckDB 后类型变化，此处 assertion 会提示复查 README。
+        assert!(
+            matches!(
+                dtype,
+                ArrowDataType::Utf8
+                    | ArrowDataType::LargeUtf8
+                    | ArrowDataType::Utf8View
+                    | ArrowDataType::Dictionary(_, _)
+            ),
+            "unexpected arrow type for DuckDB ENUM: {dtype:?}"
+        );
+    }
+
+    /// 测试专用：Polars → Arrow，**不**做 ENUM 写入所需的 String cast（用于验证 Dictionary 直写会失败）。
+    fn polars_series_to_arrow_array_raw(series: &Series) -> Result<std::sync::Arc<dyn Array>, String> {
+        let series = if series.n_chunks() > 1 {
+            series.rechunk()
+        } else {
+            series.clone()
+        };
+
+        let pl_field = PlField::new(
+            series.name().clone(),
+            series.dtype().to_arrow(CompatLevel::newest()),
+            true,
+        );
+        let pl_array = series.to_arrow(0, CompatLevel::newest());
+        let c_array = export_array_to_c(pl_array);
+        let c_schema = export_field_to_c(&pl_field);
+
+        let ffi_array: FFI_ArrowArray = unsafe { std::mem::transmute(c_array) };
+        let ffi_schema: FFI_ArrowSchema = unsafe { std::mem::transmute(c_schema) };
+
+        let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }
+            .map_err(|e| format!("Failed to import Polars column '{}' to Arrow: {e}", series.name()))?;
+        Ok(make_array(array_data))
+    }
+
+    fn append_record_batch_to_enum_table(
+        conn: &Connection,
+        table: &str,
+        batch: RecordBatch,
+    ) -> Result<(), String> {
+        let mut appender = conn
+            .appender(table)
+            .map_err(|e| format!("open appender for '{table}': {e}"))?;
+        appender
+            .append_record_batch(batch)
+            .map_err(|e| format!("append_record_batch to '{table}': {e}"))
+    }
+
+    fn query_arrow_batch(conn: &Connection, sql: &str) -> Result<RecordBatch, String> {
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| format!("prepare '{sql}': {e}"))?;
+        let mut arrow = stmt
+            .query_arrow([])
+            .map_err(|e| format!("query_arrow '{sql}': {e}"))?;
+        arrow
+            .next()
+            .ok_or_else(|| format!("query_arrow '{sql}' returned no batches"))
+    }
+
+    /// Spike（写侧）：DuckDB ENUM Appender 可接受的 Arrow 输入类型。
+    ///
+    /// | 路径 | 输入 | 结果 |
+    /// |------|------|------|
+    /// | A | `Utf8` | ✅ 成功；读回 `Dictionary(UInt8, Utf8)` |
+    /// | B | `Dictionary(UInt8, Utf8)` | ❌ `Append error` |
+    /// | C | Polars Categorical → `Dictionary(UInt32, Utf8View)` | ❌ `Append error` |
+    ///
+    /// 生产写入必须使用路径 A（见 [`polars_series_to_arrow_array`] 的 `for_enum_ingest`）。
+    /// 详见 `database/README.md`。
+    ///
+    /// 运行: `cargo test duckdb_enum_appender_write_paths -- --nocapture`
+    #[test]
+    fn duckdb_enum_appender_write_paths() {
+        use duckdb::arrow::array::{DictionaryArray, StringArray, UInt8Array};
+
+        // --- A) Utf8 → ENUM（当前生产路径；唯一可靠的 Appender 写入方式） ---
+        {
+            let conn = Connection::open_in_memory().expect("open memory");
+            conn.execute_batch(
+                r#"
+                CREATE TYPE gender AS ENUM ('M', 'F');
+                CREATE TABLE t_utf8 (gender gender);
+                "#,
+            )
+            .expect("setup utf8 table");
+
+            let values = StringArray::from(vec![Some("M"), Some("F"), Some("M")]);
+            let field = Field::new("gender", ArrowDataType::Utf8, true);
+            let schema = std::sync::Arc::new(Schema::new(vec![field]));
+            let batch =
+                RecordBatch::try_new(schema, vec![std::sync::Arc::new(values)]).expect("utf8 batch");
+
+            println!("[write A utf8] input schema: {:#?}", batch.schema());
+            match append_record_batch_to_enum_table(&conn, "t_utf8", batch) {
+                Ok(()) => {
+                    let read_back = query_arrow_batch(&conn, "SELECT * FROM t_utf8").expect("read utf8 write");
+                    println!("[write A utf8] read schema: {:#?}", read_back.schema());
+                    assert_eq!(read_back.num_rows(), 3);
+                }
+                Err(err) => println!("[write A utf8] FAILED: {err}"),
+            }
+        }
+
+        // --- B) Dictionary(UInt8, Utf8) → ENUM（已知失败：Appender 不接受 Dictionary） ---
+        {
+            let conn = Connection::open_in_memory().expect("open memory");
+            conn.execute_batch(
+                r#"
+                CREATE TYPE gender AS ENUM ('M', 'F');
+                CREATE TABLE t_dict (gender gender);
+                "#,
+            )
+            .expect("setup dict table");
+
+            let dictionary_values = std::sync::Arc::new(StringArray::from(vec!["M", "F"]));
+            let dictionary_keys = UInt8Array::from(vec![0u8, 1u8, 0u8]);
+            let dict_array =
+                DictionaryArray::try_new(dictionary_keys, dictionary_values).expect("build dictionary array");
+            let field = Field::new(
+                "gender",
+                ArrowDataType::Dictionary(Box::new(ArrowDataType::UInt8), Box::new(ArrowDataType::Utf8)),
+                true,
+            );
+            let schema = std::sync::Arc::new(Schema::new(vec![field]));
+            let batch = RecordBatch::try_new(schema, vec![std::sync::Arc::new(dict_array)])
+                .expect("dict batch");
+
+            println!("[write B dictionary] input schema: {:#?}", batch.schema());
+            match append_record_batch_to_enum_table(&conn, "t_dict", batch) {
+                Ok(()) => {
+                    let read_back = query_arrow_batch(&conn, "SELECT * FROM t_dict").expect("read dict write");
+                    println!("[write B dictionary] read schema: {:#?}", read_back.schema());
+                    assert_eq!(read_back.num_rows(), 3);
+                    let read_field = read_back.schema().field(0).clone();
+                    let read_type = read_field.data_type();
+                    println!("[write B dictionary] read arrow type: {read_type:?}");
+                }
+                Err(err) => {
+                    println!("[write B dictionary] FAILED (expected): {err}");
+                    assert!(
+                        err.contains("Append error"),
+                        "unexpected error for dictionary→ENUM: {err}"
+                    );
+                }
+            }
+        }
+
+        // --- C) Polars Categorical → Arrow Dictionary → ENUM（已知失败：须先 cast 为 Utf8，见路径 A） ---
+        {
+            use yss_sci::database::cast_column;
+
+            let mut df = df!(
+                "gender" => &["M", "F", "M"],
+            )
+            .expect("df");
+            cast_column(&mut df, "gender", "Categorical", true).expect("cast categorical");
+
+            let series = df.column("gender").expect("gender").as_materialized_series();
+            let arrow_array = polars_series_to_arrow_array_raw(series).expect("polars to arrow");
+            println!(
+                "[write C polars categorical] polars dtype={:?}, arrow type={:?}",
+                series.dtype(),
+                arrow_array.data_type()
+            );
+
+            let field = Field::new("gender", arrow_array.data_type().clone(), true);
+            let schema = std::sync::Arc::new(Schema::new(vec![field]));
+            let batch =
+                RecordBatch::try_new(schema, vec![arrow_array]).expect("polars categorical batch");
+
+            let conn = Connection::open_in_memory().expect("open memory");
+            conn.execute_batch(
+                r#"
+                CREATE TYPE gender AS ENUM ('M', 'F');
+                CREATE TABLE t_polars (gender gender);
+                "#,
+            )
+            .expect("setup polars table");
+
+            match append_record_batch_to_enum_table(&conn, "t_polars", batch) {
+                Ok(()) => {
+                    let read_back =
+                        query_arrow_batch(&conn, "SELECT * FROM t_polars").expect("read polars write");
+                    println!("[write C polars categorical] read schema: {:#?}", read_back.schema());
+                    assert_eq!(read_back.num_rows(), 3);
+                    let read_field = read_back.schema().field(0).clone();
+                    let read_type = read_field.data_type();
+                    println!("[write C polars categorical] read arrow type: {read_type:?}");
+                }
+                Err(err) => {
+                    println!("[write C polars categorical] FAILED (expected): {err}");
+                    assert!(
+                        err.contains("Append error"),
+                        "unexpected error for polars categorical→ENUM: {err}"
+                    );
+                }
+            }
+        }
     }
 }
