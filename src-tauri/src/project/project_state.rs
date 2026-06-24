@@ -136,6 +136,7 @@ impl ProjectState {
         graph.set_registry(registry);
         graph.set_schema_provider(self.build_schema_provider());
         graph.propagate_schemas();
+        let _ = graph.infer_types();
     }
 
     /// Materialize schema-derived pins for a loaded graph (tab open path).

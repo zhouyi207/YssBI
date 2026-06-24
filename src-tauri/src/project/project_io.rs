@@ -128,7 +128,7 @@ pub fn save_project_graph_to_file(
         .data_state
         .write()
         .unwrap()
-        .prune_orphan_pin_types();
+        .prepare_for_persistence();
     let relative_path = graph_relative_path_for_save(
         root.as_path(),
         dir,
@@ -185,7 +185,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
             .data_state
             .write()
             .unwrap()
-            .prune_orphan_pin_types();
+            .prepare_for_persistence();
         write_json(
             root.join(&relative_path).as_path(),
             &GraphDocument {
@@ -836,7 +836,7 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json = serde_json::to_string_pretty(value).map_err(ProjectError::Serialize)?;
+    let json = serde_json::to_string(value).map_err(ProjectError::Serialize)?;
     std::fs::write(path, json)?;
     Ok(())
 }

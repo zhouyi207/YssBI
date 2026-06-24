@@ -228,6 +228,22 @@ impl NodeDefinition {
         Ok(pins)
     }
 
+    /// 反序列化占位：仅保留 node_type，加载后由 set_registry 补全
+    pub fn placeholder(node_type: impl Into<String>) -> Self {
+        Self {
+            name: String::new(),
+            category: vec![],
+            node_type: node_type.into(),
+            type_vars: vec![],
+            pin_slots: vec![],
+            flow_processor: None,
+            data_evaluator: None,
+            pin_resolver: None,
+            output_schema_resolver: None,
+            metadata: NodeMetaData::default(),
+        }
+    }
+
     // ======================== 类型能力查询 ========================
 
     /// 获取该节点所有槽位的类型能力（含 Fixed、Repeatable、DerivedFromInput）

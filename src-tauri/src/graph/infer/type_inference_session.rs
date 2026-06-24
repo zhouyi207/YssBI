@@ -137,18 +137,30 @@ impl<'g> TypeInferenceSession<'g> {
             }
         }
 
-        // 写回 TypeVar 绑定，清理不再绑定的旧条目
-        for (&var_id, var_def) in self.ctx.type_vars.iter() {
-            if let Some(bound_type) = &var_def.bound {
-                data_state
-                    .type_var_bindings
-                    .insert(var_id, bound_type.clone());
-            } else if self.ctx.bindings.get(&var_id).is_none() {
-                data_state.type_var_bindings.remove(&var_id);
-            }
-        }
+        // 写回 TypeVar 绑定：仅保留各节点 type_var_map 中的 TypeVarId
+        let live_type_var_ids: std::collections::HashSet<TypeVarId> = data_state
+            .nodes
+            .values()
+            .flat_map(|node| node.type_var_map.keys().copied())
+            .collect();
 
         self.ctx.commit()?;
+
+        data_state
+            .type_var_bindings
+            .retain(|var_id, _| live_type_var_ids.contains(var_id));
+
+        for &var_id in &live_type_var_ids {
+            if let Some(var_def) = self.ctx.type_vars.get(&var_id) {
+                if let Some(bound_type) = &var_def.bound {
+                    data_state
+                        .type_var_bindings
+                        .insert(var_id, bound_type.clone());
+                } else {
+                    data_state.type_var_bindings.remove(&var_id);
+                }
+            }
+        }
 
         Ok(resolved)
     }

@@ -7,7 +7,8 @@ pub mod connection_validator;
 
 use crate::graph::NodeId;
 use crate::graph::PinId;
-use serde::{Deserialize, Serialize};
+use crate::graph::PinInstance;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
@@ -26,8 +27,7 @@ impl Connection {
 }
 
 /// 连接管理器
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct ConnectionManager {
     /// 所有连接（from_pin -> [to_pins]）
     connections: Mutex<HashMap<PinId, Vec<PinId>>>,
@@ -40,6 +40,62 @@ pub struct ConnectionManager {
 
     /// 节点到 Pin 的映射
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionManagerPersist {
+    links: Vec<Connection>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionManagerLegacy {
+    connections: HashMap<PinId, Vec<PinId>>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ConnectionManagerLoad {
+    Slim(ConnectionManagerPersist),
+    Legacy(ConnectionManagerLegacy),
+}
+
+impl Serialize for ConnectionManager {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        ConnectionManagerPersist {
+            links: self.all_connections(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ConnectionManager {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let loaded = ConnectionManagerLoad::deserialize(deserializer)?;
+        let manager = ConnectionManager::new();
+        match loaded {
+            ConnectionManagerLoad::Slim(persist) => {
+                for link in persist.links {
+                    manager.connect(link.from_pin, link.to_pin);
+                }
+            }
+            ConnectionManagerLoad::Legacy(legacy) => {
+                for (from_pin, to_pins) in legacy.connections {
+                    for to_pin in to_pins {
+                        manager.connect(from_pin, to_pin);
+                    }
+                }
+            }
+        }
+        Ok(manager)
+    }
 }
 
 // 手动实现 Clone，因为 Mutex 不支持 Clone
@@ -245,6 +301,47 @@ impl ConnectionManager {
     pub fn clear(&self) {
         self.connections.lock().unwrap().clear();
         self.reverse_connections.lock().unwrap().clear();
+    }
+
+    /// 移除引用已不存在 pin 的连接，并重建反向索引
+    pub fn prune_orphan_links(&self, live_pins: &HashSet<PinId>) {
+        {
+            let mut connections = self.connections.lock().unwrap();
+            connections.retain(|from_pin, to_pins| {
+                if !live_pins.contains(from_pin) {
+                    return false;
+                }
+                to_pins.retain(|to_pin| live_pins.contains(to_pin));
+                !to_pins.is_empty()
+            });
+        }
+        self.rebuild_reverse_from_forward();
+    }
+
+    /// 从 pin 表重建 pin↔node 索引（加载/保存前调用）
+    pub fn rebuild_indices_from_pins(&self, pins: &HashMap<PinId, PinInstance>) {
+        let mut pin_to_node = self.pin_to_node.lock().unwrap();
+        let mut node_to_pins = self.node_to_pins.lock().unwrap();
+        pin_to_node.clear();
+        node_to_pins.clear();
+        for (pin_id, pin) in pins {
+            pin_to_node.insert(*pin_id, pin.node_id);
+            node_to_pins
+                .entry(pin.node_id)
+                .or_insert_with(Vec::new)
+                .push(*pin_id);
+        }
+    }
+
+    fn rebuild_reverse_from_forward(&self) {
+        let connections = self.connections.lock().unwrap().clone();
+        let mut reverse = self.reverse_connections.lock().unwrap();
+        reverse.clear();
+        for (from_pin, to_pins) in connections {
+            for to_pin in to_pins {
+                reverse.insert(to_pin, from_pin);
+            }
+        }
     }
 
     /// 移除节点的所有连接

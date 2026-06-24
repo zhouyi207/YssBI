@@ -96,16 +96,8 @@ impl TypeInferenceContext {
                 // 这种情况下，pin 的类型已经确定，不需要推断
                 match data_type {
                     crate::graph::pin::PinDataTypeDefinition::Concrete(concrete_type) => {
-                        // 为具体类型创建一个临时的 TypeVarId 和 TypeVarInference
-                        let temp_type_var_id = TypeVarId::new();
-                        let type_var_inference = TypeVarInference {
-                            id: temp_type_var_id,
-                            constraints: vec![],
-                            bound: Some(concrete_type.clone()),
-                        };
-                        self.type_vars.insert(temp_type_var_id, type_var_inference);
-
-                        let data_type_inference = PinDataTypeInference::Concrete(concrete_type);
+                        let data_type_inference =
+                            PinDataTypeInference::Concrete(concrete_type);
                         self.pin_types.insert(pin_instance.id, data_type_inference);
                     }
                     crate::graph::pin::PinDataTypeDefinition::TypeVar(_) => {

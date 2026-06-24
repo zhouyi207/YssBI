@@ -120,8 +120,38 @@ impl GraphInstance {
                     node.definition = full_def;
                 }
             }
+            Self::sync_static_pin_definitions(&mut data_state, &registry);
+            data_state.reconcile_connections();
         }
         self.registry = registry;
+    }
+
+    fn sync_static_pin_definitions(
+        data_state: &mut crate::graph::GraphDataState,
+        registry: &NodeRegistry,
+    ) {
+        for node in data_state.nodes.values() {
+            let Some(full_def) = registry.get(&node.definition.node_type) else {
+                continue;
+            };
+            let Ok(expected_pins) = full_def.generate_initial_pins() else {
+                continue;
+            };
+
+            for pin_id in &node.pin_ids {
+                let Some(pin) = data_state.pins.get_mut(pin_id) else {
+                    continue;
+                };
+                if pin.definition.should_persist_full_definition() {
+                    continue;
+                }
+                if let Some(template) = expected_pins.iter().find(|template| {
+                    template.role == pin.definition.role && template.name == pin.definition.name
+                }) {
+                    pin.definition = template.clone();
+                }
+            }
+        }
     }
 
     /// 设置模式提供器（用于 pin_resolver 查询 DataFrame 列结构）

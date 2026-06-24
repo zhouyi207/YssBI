@@ -24,3 +24,73 @@ pub fn infer_graph(graph_instance: &GraphInstance) -> Result<Vec<(PinId, DataTyp
     let resolved = session.commit_to_graph()?;
     Ok(resolved)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::register::NodeRegistry;
+    use crate::graph::{GraphInstance, GraphKind};
+    use std::sync::Arc;
+
+    fn math_registry() -> Arc<NodeRegistry> {
+        let registry = Arc::new(NodeRegistry::new());
+        crate::graph::register::catalog::math::register(&registry);
+        registry
+    }
+
+    #[test]
+    fn type_var_bindings_do_not_accumulate_on_repeated_infer() {
+        let graph = GraphInstance::new("Test", GraphKind::Event, math_registry());
+        graph
+            .create_node("Math:Operators:Add (+)")
+            .expect("create add node");
+
+        let live_type_var_count = graph
+            .data_state
+            .read()
+            .unwrap()
+            .nodes
+            .values()
+            .map(|node| node.type_var_map.len())
+            .sum::<usize>();
+
+        for _ in 0..20 {
+            infer_graph(&graph).expect("infer");
+        }
+
+        let binding_count = graph.data_state.read().unwrap().type_var_bindings.len();
+        assert!(
+            binding_count <= live_type_var_count,
+            "expected at most {live_type_var_count} bindings, got {binding_count}"
+        );
+    }
+
+    #[test]
+    fn type_var_bindings_are_not_serialized() {
+        let graph = GraphInstance::new("Test", GraphKind::Event, math_registry());
+        graph
+            .create_node("Math:Operators:Add (+)")
+            .expect("create add node");
+        infer_graph(&graph).expect("infer");
+
+        let data_state = graph.data_state.read().unwrap();
+        let value = serde_json::to_value(&*data_state).expect("serialize data state");
+        assert!(
+            value.get("typeVarBindings").is_none(),
+            "typeVarBindings must not be written to project files"
+        );
+        assert!(
+            value.get("pinTypes").is_none(),
+            "pinTypes must not be written to project files"
+        );
+        let connections = value.get("connections").expect("connections");
+        assert!(
+            connections.get("links").is_some(),
+            "connections should serialize as {{ links: [...] }}"
+        );
+        assert!(
+            connections.get("reverseConnections").is_none(),
+            "reverseConnections must not be written to project files"
+        );
+    }
+}

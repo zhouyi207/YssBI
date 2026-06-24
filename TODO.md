@@ -311,6 +311,12 @@
 - [x] Tauri 前后端版本对齐：Rust `tauri` 2.11.3 ↔ `@tauri-apps/api` 2.11.x；同步 `plugin-dialog` / `plugin-fs` / `plugin-opener`
 - [x] 修复 `useCanvasDrop` 视口迁移遗留 `_graphId` 引用导致 Canvas 崩溃
 - [x] Rust 1.92 闭包引用模式：`ast/parser.rs`、`graph_instance.rs` 拓扑排序 `|&(_, &v)|` 修复编译错误
+- [x] 修复 `typeVarBindings` 推断泄漏：concrete pin 不再创建临时 TypeVarId；`commit_to_graph` 仅保留 `node.type_var_map` 中的绑定
+- [x] `.yssbi-event` 不再持久化 `typeVarBindings`（`#[serde(skip)]`）；图加载后 `prepare_graph_runtime` 重跑 `infer_types` 重建缓存
+- [x] `.yssbi-event` 体积优化（Phase A）：连接仅存 `links`；跳过 `pinTypes` / `resolvedSchema`；节点存 `nodeType` 替代完整 `definition`；静态 pin 存 `pinContract`；保存前 `reconcile_connections` 清理孤立连接；紧凑 JSON（`to_string`）
+- [ ] `.yssbi-event` 体积优化 Phase B：持久化格式对齐 `GraphRebuildSnapshot`（nodeType + pin id/userValue/动态 override + flat connections；加载时 registry 重建）
+- [ ] Dev/HMR 下 `[TAURI] Couldn't find callback id`：排查 WebView 热重载时 Rust 异步 `invoke` 回调失效；确认 release 构建是否仍出现
+- [ ] 旧 `.yssbi-event` / `.yssbi-function` 重新保存或批量迁移，以丢弃磁盘上的 legacy 冗余字段（完整 `definition`、四表 `connections`、`pinTypes` 等）
 
 ## v1.0 待办
 

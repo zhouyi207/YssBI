@@ -121,8 +121,7 @@ impl NodeInstanceParams {
 }
 
 /// Node 实例（运行时）
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct NodeInstance {
     /// 节点 ID
     pub id: NodeId,
@@ -137,7 +136,6 @@ pub struct NodeInstance {
     pub position: NodePosition,
 
     /// 实例参数（variable_id, sub_graph_id 等）
-    #[serde(default)]
     pub instance_params: NodeInstanceParams,
 
     // pins
@@ -330,5 +328,73 @@ impl NodeInstance {
     pub fn with_instance_params(mut self, params: NodeInstanceParams) -> Self {
         self.instance_params = params;
         self
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeInstanceSer<'a> {
+    id: NodeId,
+    #[serde(rename = "nodeType")]
+    node_type: &'a str,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    type_var_map: &'a HashMap<TypeVarId, TypeVarDefinition>,
+    position: NodePosition,
+    instance_params: NodeInstanceParams,
+    pin_ids: &'a [PinId],
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeInstanceDe {
+    id: NodeId,
+    #[serde(default)]
+    definition: Option<Arc<NodeDefinition>>,
+    #[serde(rename = "nodeType")]
+    node_type: Option<String>,
+    #[serde(default)]
+    type_var_map: HashMap<TypeVarId, TypeVarDefinition>,
+    position: NodePosition,
+    #[serde(default)]
+    instance_params: NodeInstanceParams,
+    pin_ids: Vec<PinId>,
+}
+
+impl Serialize for NodeInstance {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        NodeInstanceSer {
+            id: self.id,
+            node_type: &self.definition.node_type,
+            type_var_map: &self.type_var_map,
+            position: self.position.clone(),
+            instance_params: self.instance_params.clone(),
+            pin_ids: &self.pin_ids,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for NodeInstance {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = NodeInstanceDe::deserialize(deserializer)?;
+        let definition = raw.definition.unwrap_or_else(|| {
+            Arc::new(NodeDefinition::placeholder(
+                raw.node_type.unwrap_or_default(),
+            ))
+        });
+        Ok(Self {
+            id: raw.id,
+            definition,
+            type_var_map: raw.type_var_map,
+            position: raw.position,
+            instance_params: raw.instance_params,
+            pin_ids: raw.pin_ids,
+        })
     }
 }

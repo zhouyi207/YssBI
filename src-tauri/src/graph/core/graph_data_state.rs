@@ -15,10 +15,12 @@ pub struct GraphDataState {
     pub pins: HashMap<PinId, PinInstance>,
     pub connections: ConnectionManager,
 
-    // 新增：Pin 类型缓存
+    /// 类型推断缓存（不持久化；加载后 infer_types 重建）
+    #[serde(skip, default)]
     pub pin_types: HashMap<PinId, DataType>,
 
-    // 新增：TypeVar 类型缓存
+    // 运行时 TypeVar 绑定缓存（不持久化；加载后 infer_types 重建）
+    #[serde(skip, default)]
     pub type_var_bindings: HashMap<TypeVarId, DataType>,
 }
 
@@ -60,6 +62,31 @@ impl GraphDataState {
         let live_pin_ids: HashSet<PinId> = self.pins.keys().copied().collect();
         self.pin_types
             .retain(|pin_id, _| live_pin_ids.contains(pin_id));
+    }
+
+    /// 移除已不存在节点的 TypeVar 绑定（推断缓存）
+    pub fn prune_orphan_type_var_bindings(&mut self) {
+        let live_type_var_ids: HashSet<TypeVarId> = self
+            .nodes
+            .values()
+            .flat_map(|node| node.type_var_map.keys().copied())
+            .collect();
+        self.type_var_bindings
+            .retain(|var_id, _| live_type_var_ids.contains(var_id));
+    }
+
+    /// 清理孤立连接并重建连接索引
+    pub fn reconcile_connections(&mut self) {
+        let live_pins: HashSet<PinId> = self.pins.keys().copied().collect();
+        self.connections.prune_orphan_links(&live_pins);
+        self.connections.rebuild_indices_from_pins(&self.pins);
+    }
+
+    /// 保存前清理推断缓存与连接索引
+    pub fn prepare_for_persistence(&mut self) {
+        self.reconcile_connections();
+        self.prune_orphan_pin_types();
+        self.prune_orphan_type_var_bindings();
     }
 
     /// 替换节点的 pins（用于动态 pin 重建）

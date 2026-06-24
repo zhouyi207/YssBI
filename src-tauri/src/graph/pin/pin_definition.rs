@@ -208,4 +208,16 @@ impl PinDefinition {
     pub fn is_output(&self) -> bool {
         matches!(self.direction, PinDirection::Output)
     }
+
+    /// 项目文件是否保留完整 pin 定义（动态/可重复 pin 需要保留）
+    pub fn should_persist_full_definition(&self) -> bool {
+        if self.meta_data.is_dynamic {
+            return true;
+        }
+        matches!(
+            self.role,
+            PinRole::Data(DataRole::Inputs(_) | DataRole::Outputs(_) | DataRole::Operands(_))
+                | PinRole::Exec(ExecRole::Steps(_))
+        )
+    }
 }
