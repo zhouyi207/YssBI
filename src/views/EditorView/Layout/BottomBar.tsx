@@ -61,24 +61,26 @@ const StatusItem = ({
   </div>
 );
 
-function formatViewportStatus(groupId: string) {
-  const viewport = getViewport(groupId);
+function formatViewportStatus(graphId: string | null) {
+  if (!graphId) return `X 0 Y 0 100%`;
+  const viewport = getViewport(graphId);
   return `X ${Math.round(viewport.x)} Y ${Math.round(viewport.y)} ${Math.round(viewport.scale * 100)}%`;
 }
 
-function ViewportStatus({ groupId }: { groupId: string }) {
+function ViewportStatus({ graphId }: { graphId: string | null }) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    if (!graphId) return;
     const update = () => {
-      if (ref.current) ref.current.textContent = formatViewportStatus(groupId);
+      if (ref.current) ref.current.textContent = formatViewportStatus(graphId);
     };
 
     update();
-    return subscribeToViewport(groupId, update);
-  }, [groupId]);
+    return subscribeToViewport(graphId, update);
+  }, [graphId]);
 
-  return <span ref={ref}>{formatViewportStatus(groupId)}</span>;
+  return <span ref={ref}>{formatViewportStatus(graphId)}</span>;
 }
 
 export function BottomBar() {
@@ -186,7 +188,7 @@ export function BottomBar() {
         </StatusItem>
         <StatusItem title={t("bottomBar.canvasViewport")}>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
-          <ViewportStatus groupId={editor.groupId} />
+          <ViewportStatus graphId={editor.activeTabId} />
         </StatusItem>
         <StatusItem title={t("bottomBar.themeMode")} className="capitalize text-foreground">
           {themeMode}

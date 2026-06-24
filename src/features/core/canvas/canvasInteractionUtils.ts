@@ -10,14 +10,21 @@ export interface SelectionHitTarget {
   bottom: number;
 }
 
-export function getCanvasWorldPoint(groupId: string, clientX: number, clientY: number) {
+export function getCanvasWorldPoint(
+  groupId: string,
+  graphId: string | null,
+  clientX: number,
+  clientY: number,
+) {
   const canvasEl = document.querySelector(`[data-editor-group-id="${groupId}"]`);
   if (!canvasEl) {
     return { x: clientX, y: clientY };
   }
 
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+  const viewport = graphId
+    ? useViewportStore.getState().viewports[graphId] || { x: 0, y: 0, scale: 1 }
+    : { x: 0, y: 0, scale: 1 };
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,

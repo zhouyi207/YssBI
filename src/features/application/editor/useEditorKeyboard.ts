@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { useViewportStore } from '@/features/core/viewport';
+import { getViewport } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
@@ -52,7 +52,8 @@ export function useEditorKeyboard({
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const currentCanvas = useViewportStore.getState().viewports[gid] || DEFAULT_VIEWPORT;
+    const graphId = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
+    const currentCanvas = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
     return {
       x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
       y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,

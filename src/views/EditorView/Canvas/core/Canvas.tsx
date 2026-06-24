@@ -65,7 +65,9 @@ export default function Canvas() {
   const { createNode } = useNodeManagement();
 
   const ref = useRef<HTMLDivElement>(null);
-  const scale = useViewportStore((state) => state.viewports[groupId]?.scale || 1);
+  const scale = useViewportStore((state) =>
+    activeTabId ? (state.viewports[activeTabId]?.scale ?? 1) : 1,
+  );
 
   const selectedNodeIdsSet = useMemo(
     () => new Set(selectedNodeIds),
@@ -79,7 +81,6 @@ export default function Canvas() {
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     ref,
-    groupId,
     activeTabId,
     nodes,
     scale,
@@ -150,7 +151,7 @@ export default function Canvas() {
       data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
-      <ViewportGrid groupId={groupId} />
+      <ViewportGrid graphId={activeTabId ?? ""} />
 
       <div
         className="absolute inset-0"
@@ -158,14 +159,14 @@ export default function Canvas() {
         onContextMenu={handleContextMenu}
       >
         <ConnectionLine
-          groupId={groupId}
+          graphId={activeTabId ?? ""}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
           pendingConnection={pendingConnection}
           menuPos={contextMenu}
         />
 
-        <TransformContainer groupId={groupId}>
+        <TransformContainer graphId={activeTabId ?? ""}>
           <EdgesOverlay
             graphId={activeTabId ?? ""}
             nodes={nodes}

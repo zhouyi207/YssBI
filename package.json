@@ -18,8 +18,8 @@
         "@hugeicons/react": "^1.1.6",
         "@tailwindcss/vite": "^4.2.4",
         "@tanstack/react-virtual": "^3.13.18",
-        "@tauri-apps/api": "^2",
-        "@tauri-apps/plugin-dialog": "^2.6.0",
+        "@tauri-apps/api": "^2.11.0",
+        "@tauri-apps/plugin-dialog": "^2.7.1",
         "@tauri-apps/plugin-log": "^2.8.0",
         "@tauri-apps/plugin-opener": "^2",
         "@types/d3": "^7.4.3",
@@ -49,7 +49,7 @@
         "zustand": "^5.0.10"
     },
     "devDependencies": {
-        "@tauri-apps/cli": "^2",
+        "@tauri-apps/cli": "^2.11.0",
         "@types/katex": "^0.16.8",
         "@types/node": "^25.6.0",
         "@types/react": "^19.1.8",

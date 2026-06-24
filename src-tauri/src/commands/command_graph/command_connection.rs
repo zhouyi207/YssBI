@@ -452,7 +452,7 @@ pub fn update_canvas(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
 
-    log_app::info!("[command.update_canvas] graph={}", subgraph_id);
+    log_app::debug!("[command.update_canvas] graph={}", subgraph_id);
 
     let mut data = state.project_data.write().unwrap();
     let graph = data

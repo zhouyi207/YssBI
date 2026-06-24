@@ -307,6 +307,10 @@
 - [x] 关闭钮右上角与系统窗口圆角贴合：子窗口移除 CSS `rounded-tr-lg`，直角贴边由 OS 裁剪（与 Edit 主窗口一致）
 - [x] Edit 菜单栏「显示详细」按钮垂直居中：补 `self-center`（与主题 / 设置按钮一致）
 - [x] 修复 npm audit esbuild 漏洞（`package.json` overrides `"esbuild": "^0.28.1"`）
+- [x] 画布视口按 graphId 存取/恢复：前后端与 `graph.canvas` 对齐；移除按 editor groupId 的错误 key；切换 tab / 加载项目时 `ensureGraphViewport` / `syncGraphViewportsFromRecords`
+- [x] Tauri 前后端版本对齐：Rust `tauri` 2.11.3 ↔ `@tauri-apps/api` 2.11.x；同步 `plugin-dialog` / `plugin-fs` / `plugin-opener`
+- [x] 修复 `useCanvasDrop` 视口迁移遗留 `_graphId` 引用导致 Canvas 崩溃
+- [x] Rust 1.92 闭包引用模式：`ast/parser.rs`、`graph_instance.rs` 拓扑排序 `|&(_, &v)|` 修复编译错误
 
 ## v1.0 待办
 

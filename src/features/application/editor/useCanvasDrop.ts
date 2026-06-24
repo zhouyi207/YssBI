@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { useViewportStore } from "@/features/core/viewport";
+import { getViewport } from "@/features/core/viewport";
 import { useGestureStore } from "@/features/core/gesture";
 import { useVariableStore, useGraphDataStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
@@ -40,7 +40,7 @@ interface UseCanvasDropParams {
 export function useCanvasDrop({
   canvasRef,
   groupId,
-  graphId: _graphId,
+  graphId,
   variables,
   functions,
   setNodes,
@@ -77,7 +77,7 @@ export function useCanvasDrop({
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
-      if (!_graphId) return;
+      if (!graphId) return;
       const nodeData = useGraphDataStore.getState().nodes[nodeId];
       const nodeType = nodeData?.nodeType;
       let slotIndex = 0;
@@ -86,20 +86,20 @@ export function useCanvasDrop({
         const idx = def?.pinSlots.findIndex(s => s.slotKind === 'repeatable') ?? -1;
         if (idx >= 0) slotIndex = idx;
       }
-      executeCommand(_graphId, 'AddRepeatablePin', { nodeId, slotIndex });
+      executeCommand(graphId, 'AddRepeatablePin', { nodeId, slotIndex });
     },
-    [_graphId]
+    [graphId]
   );
 
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
-      if (!_graphId) return Promise.resolve();
-      return executeCommand(_graphId, 'RemoveRepeatablePin', { nodeId, pinId }).catch((err) => {
+      if (!graphId) return Promise.resolve();
+      return executeCommand(graphId, 'RemoveRepeatablePin', { nodeId, pinId }).catch((err) => {
         toast.error(err instanceof Error ? err.message : String(err));
         throw err;
       });
     },
-    [_graphId]
+    [graphId]
   );
 
   const handleContextMenu = useCallback(
@@ -136,7 +136,7 @@ export function useCanvasDrop({
 
       const screenX = dragState.x - rect.left;
       const screenY = dragState.y - rect.top;
-      const currentCanvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+      const currentCanvas = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
       const x = (screenX - currentCanvas.x) / currentCanvas.scale;
       const y = (screenY - currentCanvas.y) / currentCanvas.scale;
 
@@ -215,7 +215,7 @@ export function useCanvasDrop({
     },
     [
       canvasRef,
-      groupId,
+      graphId,
       variables,
       functions,
       createNode,

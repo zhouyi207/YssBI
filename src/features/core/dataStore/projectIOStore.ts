@@ -16,7 +16,7 @@ import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
 import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useHistoryStore } from '@/features/core/history';
-import { getViewport, useViewportStore } from '@/features/core/viewport';
+import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
@@ -223,6 +223,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     useDatabaseStore.getState().setDatabases(normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>));
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
+    syncGraphViewportsFromRecords(project.graphs);
     set({ status: LoadStatus.Ready, currentPath: path });
   },
 
@@ -256,6 +257,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           type: frontendGraph.type,
         });
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
+        ensureGraphViewport(graphId, frontendGraph.canvas);
         return true;
       } catch (err) {
         const errorMessage = formatErrorMessage(err, 'Failed to load graph');

@@ -68,16 +68,14 @@ export function useCanvasInteraction({
 
     const selectionPreviewIdsRef = useRef<string[]>([]);
 
-    const persistViewport = useCallback((groupId?: string) => {
-        const gid = groupId || activeGroupIdRef.current;
-        const lNode = useLayoutStore.getState().nodes[gid];
-        const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
+    const persistViewport = useCallback((graphId?: string | null) => {
+        const tid = graphId ?? activeTabIdRef.current;
         if (!tid) return;
-        const viewport = useViewportStore.getState().viewports[gid];
+        const viewport = useViewportStore.getState().viewports[tid];
         if (viewport) {
             ProjectService.updateCanvas(tid, viewport).catch(() => {});
         }
-    }, [activeGroupIdRef, activeTabIdRef]);
+    }, [activeTabIdRef]);
 
     const connectPins = useCallback(async (a: string, b: string) => {
         const tid = activeTabIdRef.current;
@@ -168,7 +166,7 @@ export function useCanvasInteraction({
 
         // 计算初始世界坐标，避免第一帧在多 editor 中终点不一致
         const gid = groupId || activeGroupIdRef.current;
-        const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, e.clientX, e.clientY);
+        const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
     }, [activeTabIdRef, setNodes]);
 
@@ -191,11 +189,16 @@ export function useCanvasInteraction({
 
             if (g.type === "pan") {
                 const dx = e.clientX - g.lastX, dy = e.clientY - g.lastY;
-                useViewportStore.getState().setViewport(g.groupId || activeGroupIdRef.current, (prev: GraphPosition) => ({
-                    ...prev,
-                    x: prev.x + dx,
-                    y: prev.y + dy
-                }));
+                const layoutGroupId = g.groupId || activeGroupIdRef.current;
+                const layoutNode = useLayoutStore.getState().nodes[layoutGroupId];
+                const graphId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current;
+                if (graphId) {
+                    useViewportStore.getState().setViewport(graphId, (prev: GraphPosition) => ({
+                        ...prev,
+                        x: prev.x + dx,
+                        y: prev.y + dy
+                    }));
+                }
                 nextGesture = { ...g, lastX: e.clientX, lastY: e.clientY, moved: true };
             } else if (g.type === "select") {
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY };
@@ -212,7 +215,8 @@ export function useCanvasInteraction({
             else if (g.type === "connect") {
                 // 计算世界坐标，使多 editor 渲染同一连接线时终点一致
                 const gid = g.groupId || activeGroupIdRef.current;
-                const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, e.clientX, e.clientY);
+                const tid = activeTabIdRef.current;
+                const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
                 nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY, worldX, worldY };
                 useGestureStore.getState().setGesture(nextGesture);
                 nextGesture = null; // already set above
@@ -260,7 +264,10 @@ export function useCanvasInteraction({
                 if (!g.moved && e.button === 2) {
                     setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
                 } else if (g.moved) {
-                    persistViewport(g.groupId);
+                    const layoutGroupId = g.groupId || activeGroupIdRef.current;
+                    const layoutNode = useLayoutStore.getState().nodes[layoutGroupId];
+                    const graphId = layoutNode?.data?.activeTabId ?? activeTabIdRef.current;
+                    persistViewport(graphId);
                 }
             }
             else if (g.type === "select") {

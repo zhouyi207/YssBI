@@ -28,16 +28,14 @@ function segmentIntersectsRect(
 
 /**
  * Viewport culling, wheel zoom, pin offsets, and coordinate helpers for Canvas.
- * Extracted from Canvas.tsx - view should only consume this hook.
  */
 export function useCanvasViewport(
   canvasRef: React.RefObject<HTMLDivElement | null>,
-  groupId: string,
-  activeTabId: string | null,
+  graphId: string | null,
   nodes: { id: string; position: { x: number; y: number }; inputs: Pin[]; outputs: Pin[] }[],
   scale: number,
   gestureType: string | null,
-  setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGroupId?: string) => void,
+  setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGraphId?: string) => void,
   dragDelta?: { x: number; y: number } | null,
   dragNodeIds?: Set<string>
 ) {
@@ -47,11 +45,11 @@ export function useCanvasViewport(
   const cullingTimerRef = useRef<number | null>(null);
 
   const persistViewport = useCallback(() => {
-    if (!activeTabId) return;
-    const viewport = useViewportStore.getState().viewports[groupId];
+    if (!graphId) return;
+    const viewport = useViewportStore.getState().viewports[graphId];
     if (!viewport) return;
-    ProjectService.updateCanvas(activeTabId, viewport).catch(() => {});
-  }, [activeTabId, groupId]);
+    ProjectService.updateCanvas(graphId, viewport).catch(() => {});
+  }, [graphId]);
 
   const scheduleViewportPersist = useCallback(() => {
     if (wheelPersistTimerRef.current !== null) {
@@ -65,10 +63,10 @@ export function useCanvasViewport(
 
   const updateVisibleNodes = useCallback(() => {
     const el = canvasRef.current;
-    if (!el) return;
+    if (!el || !graphId) return;
 
     const rect = el.getBoundingClientRect();
-    const viewport = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+    const viewport = useViewportStore.getState().viewports[graphId] || DEFAULT_VIEWPORT;
 
     const padding = CULLING_PADDING_FACTOR / viewport.scale;
     const worldViewLeft = -viewport.x / viewport.scale - padding;
@@ -76,9 +74,8 @@ export function useCanvasViewport(
     const worldViewRight = (rect.width - viewport.x) / viewport.scale + padding;
     const worldViewBottom = (rect.height - viewport.y) / viewport.scale + padding;
 
-    // 直接从 store 读取节点位置，避免 deserializeGraph
     const store = useGraphDataStore.getState();
-    const nodeIds = activeTabId ? store.graphNodes[activeTabId] ?? [] : [];
+    const nodeIds = store.graphNodes[graphId] ?? [];
 
     const visible = new Set<string>();
     for (const nid of nodeIds) {
@@ -92,9 +89,6 @@ export function useCanvasViewport(
       if (isVisible) visible.add(nid);
     }
 
-    // 扩展可见集：确保边线能正确绘制
-    // 1) 与可见节点有连边的节点
-    // 2) 边线段穿过视口的节点（长边在中间时两端都不可见，但边应显示）
     const pinToNode = new Map<string, string>();
     for (const nid of nodeIds) {
       for (const pid of store.nodePins[nid] ?? []) {
@@ -129,7 +123,7 @@ export function useCanvasViewport(
     }
 
     setVisibleNodes(visible);
-  }, [canvasRef, groupId, activeTabId]);
+  }, [canvasRef, graphId]);
 
   useEffect(() => {
     updateVisibleNodes();
@@ -140,20 +134,22 @@ export function useCanvasViewport(
   }, [gestureType, updateVisibleNodes]);
 
   useEffect(() => {
-    if (gestureType !== "pan") return;
+    if (gestureType !== "pan" || !graphId) return;
 
     return useViewportStore.subscribe((state, prevState) => {
-      if (state.viewports[groupId] === prevState.viewports[groupId]) return;
+      if (state.viewports[graphId] === prevState.viewports[graphId]) return;
       if (cullingTimerRef.current !== null) return;
       cullingTimerRef.current = window.setTimeout(() => {
         cullingTimerRef.current = null;
         updateVisibleNodes();
       }, 120);
     });
-  }, [gestureType, groupId, updateVisibleNodes]);
+  }, [gestureType, graphId, updateVisibleNodes]);
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
+      if (!graphId) return;
+
       const target = e.target as HTMLElement;
       if (
         target.closest(".menubar-container") ||
@@ -177,7 +173,7 @@ export function useCanvasViewport(
 
       e.preventDefault();
 
-      const currentCanvas = useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+      const currentCanvas = useViewportStore.getState().viewports[graphId] || DEFAULT_VIEWPORT;
       if (e.ctrlKey || e.metaKey) {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -190,7 +186,7 @@ export function useCanvasViewport(
           scale: nextScale,
           x: mouseX - worldX * nextScale,
           y: mouseY - worldY * nextScale,
-        }, groupId);
+        });
       } else {
         const panX = e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX;
         const panY = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY;
@@ -198,12 +194,12 @@ export function useCanvasViewport(
           ...prev,
           x: prev.x - panX,
           y: prev.y - panY,
-        }), groupId);
+        }));
       }
 
       scheduleViewportPersist();
     },
-    [canvasRef, setCanvas, groupId, scheduleViewportPersist]
+    [canvasRef, graphId, setCanvas, scheduleViewportPersist]
   );
 
   useEffect(() => {
@@ -219,7 +215,6 @@ export function useCanvasViewport(
     };
   }, []);
 
-  // pin→nodeId 映射，只在 nodes 变化时重建
   const pinNodeIdMap = useMemo(() => {
     const map = new Map<string, string>();
     nodes.forEach((node) => {
@@ -229,7 +224,6 @@ export function useCanvasViewport(
     return map;
   }, [nodes]);
 
-  // node 位置映射，只在 nodes 变化时重建
   const nodePositionMap = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>();
     nodes.forEach((node) => map.set(node.id, node.position));
@@ -302,7 +296,6 @@ export function useCanvasViewport(
     });
   }, [canvasRef, scale, visibleNodeIds, nodes, nodeResizeVersion]);
 
-  // getPinWorldPos: 使用 DOM 测量的 pin 偏移，可见集已包含连边节点，故所有需绘边的 pin 均有测量值
   const getPinWorldPos = useCallback(
     (pinId: string) => {
       const nodeId = pinNodeIdMap.get(pinId);
@@ -323,15 +316,15 @@ export function useCanvasViewport(
   const getCanvasLocalPoint = useCallback(
     (clientX: number, clientY: number) => {
       const root = canvasRef.current;
-      if (!root) return { x: 0, y: 0 };
+      if (!root || !graphId) return { x: 0, y: 0 };
       const rect = root.getBoundingClientRect();
-      const currentCanvas = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+      const currentCanvas = useViewportStore.getState().viewports[graphId] || DEFAULT_VIEWPORT;
       return {
         x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
         y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,
       };
     },
-    [canvasRef, groupId]
+    [canvasRef, graphId]
   );
 
   return {

@@ -11,6 +11,7 @@ import {
   RuntimeNodeInput,
 } from '@/shared/types';
 import { logger } from '@/utils/appLogger';
+import { getViewport } from '@/features/core/viewport';
 
 interface GraphDataStore {
   // ======================
@@ -720,7 +721,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       id: graphId,
       name: '',
       type: 'event',
-      canvas: { x: 0, y: 0, scale: 1 },
+      canvas: getViewport(graphId),
       nodes: nodeData,
       pins,
       connections: { connections: connectionItems },

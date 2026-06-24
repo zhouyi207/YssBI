@@ -8,13 +8,13 @@ import { drawEdge } from "./Edge";
 import { Pin } from "@/shared/types/domain";
 
 export const ConnectionLine = ({
-    groupId,
+    graphId,
     getPinWorldPos,
     getCanvasLocalPoint,
     pendingConnection,
     menuPos,
 }: {
-    groupId: string;
+    graphId: string;
     getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
     getCanvasLocalPoint: (x: number, y: number) => { x: number; y: number };
     pendingConnection?: Pin | null;
@@ -75,7 +75,7 @@ export const ConnectionLine = ({
 
             if (!activeStart || !endWorld) return;
 
-            const viewport = useViewportStore.getState().viewports[groupId] || { x: 0, y: 0, scale: 1 };
+            const viewport = useViewportStore.getState().viewports[graphId] || { x: 0, y: 0, scale: 1 };
             const currentTheme = themeRef.current;
 
             ctx.save();
@@ -104,11 +104,11 @@ export const ConnectionLine = ({
             previousGesture = state.gesture;
             render();
         });
-        const unsubViewport = subscribeToViewport(groupId, render);
+        const unsubViewport = graphId ? subscribeToViewport(graphId, render) : () => {};
         render();
 
         return () => { unsubGesture(); unsubViewport(); };
-    }, [groupId]);
+    }, [graphId]);
 
     // Handle canvas resizing
     useEffect(() => {

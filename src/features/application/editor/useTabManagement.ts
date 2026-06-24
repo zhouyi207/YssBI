@@ -5,6 +5,7 @@ import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore'
 import { useEditorStore } from '@/features/core/editor';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
 import { closeGraphTab } from './closeGraphTab';
+import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -41,6 +42,8 @@ export function useTabManagement() {
 
     const tabSource = initialData || getGraphById(newId);
     const type = forceType || (tabSource as any)?.type;
+
+    ensureGraphViewport(newId, tabSource?.canvas);
     
     logger.graph.trace(`handleSetActiveTabId final type: ${type}`, 'TabManagement');
     

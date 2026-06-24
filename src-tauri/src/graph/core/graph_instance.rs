@@ -1082,7 +1082,7 @@ impl GraphInstance {
         }
         let mut queue: Vec<NodeId> = in_degree
             .iter()
-            .filter(|(_, &d)| d == 0)
+            .filter(|&(_, &d)| d == 0)
             .map(|(id, _)| *id)
             .collect();
         let mut order = Vec::new();

@@ -4,9 +4,7 @@
  * 并提供 refs 供 canvas interaction 使用
  */
 import { useRef, useEffect } from 'react';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getViewport, subscribeToViewport } from '@/features/core/viewport';
-import { useActiveEditorGroup } from './useActiveEditorGroup';
+import { getViewport, subscribeToViewport } from '@/features/core/viewport';import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorNodeActions } from './useEditorNodeActions';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
@@ -20,19 +18,20 @@ export function useEditorActions(overrideGroupId?: string | null) {
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
   const nodeActions = useEditorNodeActions(activeTabIdRef, editorGroupId);
-  const canvasActions = useEditorCanvasActions(editorGroupId);
+  const canvasActions = useEditorCanvasActions(activeTabIdRef);
   const uiActions = useEditorUIActions();
   const layoutActions = useEditorLayoutActions();
 
-  const canvasRef = useRef(getViewport(editorGroupId));
+  const canvasRef = useRef(getViewport(active.activeTabId ?? ''));
 
   useEffect(() => {
-    const editorGid = useLayoutStore.getState().activeEditorGroupId || editorGroupId;
-    canvasRef.current = getViewport(editorGid);
-    return subscribeToViewport(editorGid, (viewport) => {
+    const graphId = activeTabIdRef.current;
+    if (!graphId) return;
+    canvasRef.current = getViewport(graphId);
+    return subscribeToViewport(graphId, (viewport) => {
       canvasRef.current = viewport;
     });
-  }, [editorGroupId]);
+  }, [active.activeTabId]);
 
   return {
     activeGroupIdRef,

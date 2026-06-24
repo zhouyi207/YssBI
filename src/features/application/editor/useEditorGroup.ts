@@ -46,11 +46,11 @@ export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
     editor.onPinPointerDown(pinId, e, groupId);
   }, [groupId, editor.onPinPointerDown, setActiveGroup]);
 
-  const wrappedSetCanvas = useCallback((updater: any, targetGroupId?: string) => {
+  const wrappedSetCanvas = useCallback((updater: Parameters<typeof editor.setCanvas>[0]) => {
     if (useLayoutStore.getState().activeGroupId !== groupId) {
       setActiveGroup(groupId);
     }
-    editor.setCanvas(updater, targetGroupId || groupId);
+    editor.setCanvas(updater);
   }, [groupId, editor.setCanvas, setActiveGroup]);
 
   // Return combined object - memoize to prevent unnecessary re-renders

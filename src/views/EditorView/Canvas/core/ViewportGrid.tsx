@@ -2,21 +2,21 @@
 import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 import { GRID } from "@/app/appConfig/default";
 
-export const ViewportGrid = ({ groupId }: { groupId: string }) => {
+export const ViewportGrid = ({ graphId }: { graphId: string }) => {
     const gridRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // 零 React 重绘：直接订阅 Store 并同步 DOM 样式
-        return subscribeToViewport(groupId, (canvas) => {
+        if (!graphId) return;
+        return subscribeToViewport(graphId, (canvas) => {
             const el = gridRef.current;
             if (el) {
                 el.style.backgroundSize = `${GRID * canvas.scale}px ${GRID * canvas.scale}px`;
                 el.style.backgroundPosition = `${canvas.x}px ${canvas.y}px`;
             }
         });
-    }, [groupId]);
+    }, [graphId]);
 
-    const initial = getViewport(groupId);
+    const initial = graphId ? getViewport(graphId) : { x: 0, y: 0, scale: 1 };
     return (
         <div
             ref={gridRef}

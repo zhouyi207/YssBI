@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { getGraphById } from "@/features/core/dataStore";
-import { useViewportStore } from "@/features/core/viewport";
+import { getViewport } from "@/features/core/viewport";
 import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
@@ -54,7 +54,7 @@ export function useCanvasOverlayHandlers({
   setPendingConnection: (pin: any) => void;
   setVariableDropMenu: (menu: VariableDropMenu | null) => void;
   createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
-  setCanvas: (updater: any, targetGroupId?: string) => void;
+  setCanvas: (updater: any, targetGraphId?: string) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
     async (item: PaletteItem, contextMenu: { x: number; y: number }) => {
@@ -76,8 +76,7 @@ export function useCanvasOverlayHandlers({
           const rect = canvasRef.current.getBoundingClientRect();
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
-          const currentCanvas =
-            useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+          const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
           setCanvas({
             ...currentCanvas,
             x: centerX - existingNode.position.x * currentCanvas.scale,
@@ -90,8 +89,7 @@ export function useCanvasOverlayHandlers({
       }
 
       const rect = canvasRef.current.getBoundingClientRect();
-      const currentCanvas =
-        useViewportStore.getState().viewports[groupId] || DEFAULT_VIEWPORT;
+      const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 

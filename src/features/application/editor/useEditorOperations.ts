@@ -9,8 +9,7 @@ import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboa
 import { useHistoryStore, executeCommand } from '@/features/core/history';
 import type { GraphHistory } from '@/features/core/history';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useViewportStore } from '@/features/core/viewport';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { getViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 
 
@@ -188,8 +187,7 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
-    const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId || activeGroupId || '';
-    const vp = useViewportStore.getState().viewports[gid] || DEFAULT_VIEWPORT;
+    const vp = getViewport(tid);
     const tX = pos ? pos.x : -vp.x / vp.scale + 100;
     const tY = pos ? pos.y : -vp.y / vp.scale + 100;
     const minX = Math.min(...clipboard.entries.map(e => e.position.x));

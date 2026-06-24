@@ -39,7 +39,7 @@ impl ParamRegistry {
     pub fn get_name(&self, id: ParamId) -> Option<&str> {
         self.name_to_id
             .iter()
-            .find(|(_, &v)| v == id)
+            .find(|&(_, &v)| v == id)
             .map(|(k, _)| k.as_str())
     }
 }
