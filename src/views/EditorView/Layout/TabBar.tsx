@@ -6,7 +6,9 @@ import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
@@ -197,37 +199,45 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
       {/* Group Action Buttons */}
       <div className="flex items-center gap-0.5 px-1 border-l border-[var(--strong-border)] h-full bg-[var(--workbench-bg)]">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onPointerDown={(e) => {
-            // 使用 PointerDown 代替 Click，消除点击抬起的延迟感
-            if (e.button !== 0) return;
-            handleSplit(e as any);
-          }}
-          onMouseEnter={(e) => {
-            // 鼠标移入时同步 Alt 状态，确保图标及时更新
-            if (e.altKey !== isAltPressed) {
-                useLayoutStore.getState().setAltPressed(e.altKey);
-            }
-          }}
-          className="text-muted-foreground"
-          title={isAltPressed ? t("tabBar.splitDownAlt") : t("tabBar.splitRight")}
-        >
-          {isAltPressed ? <VscSplitVertical size={15} /> : <VscSplitHorizontal size={15} />}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                handleSplit(e as any);
+              }}
+              onMouseEnter={(e) => {
+                if (e.altKey !== isAltPressed) {
+                  useLayoutStore.getState().setAltPressed(e.altKey);
+                }
+              }}
+              className="text-muted-foreground"
+            >
+              {isAltPressed ? <VscSplitVertical size={15} /> : <VscSplitHorizontal size={15} />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isAltPressed ? t("tabBar.splitDownAlt") : t("tabBar.splitRight")}
+          </TooltipContent>
+        </Tooltip>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleCloseGroup}
-          className="text-muted-foreground hover:text-red-400"
-          title={t("tabBar.closeGroup")}
-        >
-          <VscChromeClose size={15} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleCloseGroup}
+              className="text-muted-foreground hover:text-red-400"
+            >
+              <VscChromeClose size={15} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("tabBar.closeGroup")}</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );
@@ -301,11 +311,12 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             {...listeners}
             data-tab-id={tab.id}
             onClick={onClick}
-            className={`
-                relative flex items-center gap-2 px-3 border-r border-[var(--strong-border)] cursor-pointer shrink-0
-                ${isActive ? "bg-[var(--sidebar-bg)] text-foreground" : "text-muted-foreground hover:bg-muted"}
-                ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'}
-            `}
+            className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "relative h-[var(--titlebar-height)] shrink-0 cursor-pointer gap-2 rounded-none border-r border-[var(--strong-border)] px-3",
+                isActive ? "bg-[var(--sidebar-bg)] text-foreground" : "text-muted-foreground hover:bg-muted",
+                isDragging ? "cursor-grabbing" : "cursor-pointer",
+            )}
         >
             {/* Active Top Border */}
             {isActive && (

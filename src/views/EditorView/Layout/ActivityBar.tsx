@@ -5,18 +5,23 @@ import { HiVariable } from "react-icons/hi2";
 import { VscDatabase, VscGraphLine, VscTerminal } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean; onClick: () => void; children: React.ReactNode; title: string; id: string }) => (
-  <Button
-    type="button"
-    variant="ghost"
-    onClick={onClick}
-    title={title}
-    data-tab-id={id}
-    className={`relative h-12 w-full rounded-none ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-  >
-    {children}
-  </Button>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onClick}
+        data-tab-id={id}
+        className={`relative h-12 w-full rounded-none ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+      >
+        {children}
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent side="right">{title}</TooltipContent>
+  </Tooltip>
 );
 
 export function ActivityBar() {

@@ -1,5 +1,7 @@
 import React from 'react';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SectionHeader, formatNum } from './shared';
+import { InfoStatsTable } from './shared/InfoStatsTable';
 import type { VecRankResultData } from './shared/types';
 
 export type { VecRankResultData } from './shared/types';
@@ -55,70 +57,68 @@ export const VecRankComponent: React.FC<{ data: VecRankResultData }> = ({ data }
         }
       />
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto mb-6">
-        <table className="w-full text-xs font-mono text-foreground">
-          <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="px-2 py-2 text-left">rank</th>
-              <th className="px-2 py-2 text-right">LL</th>
-              <th className="px-2 py-2 text-right">Eigen</th>
-              <th className="px-2 py-2 text-right">Trace</th>
-              <th className="px-2 py-2 text-right">cv 10%</th>
-              <th className="px-2 py-2 text-right">cv 5%</th>
-              <th className="px-2 py-2 text-right">cv 1%</th>
-              {show_max_eigen && (
-                <>
-                  <th className="px-2 py-2 text-right border-l border-border">λ_max</th>
-                  <th className="px-2 py-2 text-right">cv 10%</th>
-                  <th className="px-2 py-2 text-right">cv 5%</th>
-                  <th className="px-2 py-2 text-right">cv 1%</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const starTrace = r.rank === selected_rank_trace_95 && r.trace_statistic != null;
-              const starMax = show_max_eigen && r.rank === selected_rank_max_95 && r.max_eigenvalue_statistic != null;
-              return (
-                <tr key={r.rank} className="border-b border-border hover:bg-white/[0.02]">
-                  <td className="px-2 py-1.5 text-left text-muted-foreground">{r.rank}</td>
-                  <td className="px-2 py-1.5 text-right">{fmt(r.log_likelihood)}</td>
-                  <td className="px-2 py-1.5 text-right">{fmt(r.eigenvalue)}</td>
-                  <td className="px-2 py-1.5 text-right">
-                    {starTrace ? (
-                      <span className="text-emerald-400 font-medium">
-                        {fmt(r.trace_statistic)} <span className="text-muted-foreground">*</span>
-                      </span>
-                    ) : (
-                      fmt(r.trace_statistic)
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_10pct)}</td>
-                  <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_5pct)}</td>
-                  <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_1pct)}</td>
-                  {show_max_eigen && (
-                    <>
-                      <td className="px-2 py-1.5 text-right border-l border-border">
-                        {starMax ? (
-                          <span className="text-emerald-400 font-medium">
-                            {fmt(r.max_eigenvalue_statistic)} <span className="text-muted-foreground">*</span>
-                          </span>
-                        ) : (
-                          fmt(r.max_eigenvalue_statistic)
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_10pct)}</td>
-                      <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_5pct)}</td>
-                      <td className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_1pct)}</td>
-                    </>
+      <InfoStatsTable className="mb-6 overflow-x-auto" tableClassName="text-xs font-mono text-foreground">
+        <TableHeader>
+          <TableRow className="border-b border-border text-muted-foreground hover:bg-transparent">
+            <TableHead className="h-auto px-2 py-2 text-left">rank</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">LL</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">Eigen</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">Trace</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">cv 10%</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">cv 5%</TableHead>
+            <TableHead className="h-auto px-2 py-2 text-right">cv 1%</TableHead>
+            {show_max_eigen && (
+              <>
+                <TableHead className="h-auto border-l border-border px-2 py-2 text-right">λ_max</TableHead>
+                <TableHead className="h-auto px-2 py-2 text-right">cv 10%</TableHead>
+                <TableHead className="h-auto px-2 py-2 text-right">cv 5%</TableHead>
+                <TableHead className="h-auto px-2 py-2 text-right">cv 1%</TableHead>
+              </>
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const starTrace = r.rank === selected_rank_trace_95 && r.trace_statistic != null;
+            const starMax = show_max_eigen && r.rank === selected_rank_max_95 && r.max_eigenvalue_statistic != null;
+            return (
+              <TableRow key={r.rank} className="border-b border-border hover:bg-muted/40">
+                <TableCell className="px-2 py-1.5 text-left text-muted-foreground">{r.rank}</TableCell>
+                <TableCell className="px-2 py-1.5 text-right">{fmt(r.log_likelihood)}</TableCell>
+                <TableCell className="px-2 py-1.5 text-right">{fmt(r.eigenvalue)}</TableCell>
+                <TableCell className="px-2 py-1.5 text-right">
+                  {starTrace ? (
+                    <span className="font-medium text-emerald-400">
+                      {fmt(r.trace_statistic)} <span className="text-muted-foreground">*</span>
+                    </span>
+                  ) : (
+                    fmt(r.trace_statistic)
                   )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                </TableCell>
+                <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_10pct)}</TableCell>
+                <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_5pct)}</TableCell>
+                <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.trace_crit_1pct)}</TableCell>
+                {show_max_eigen && (
+                  <>
+                    <TableCell className="border-l border-border px-2 py-1.5 text-right">
+                      {starMax ? (
+                        <span className="font-medium text-emerald-400">
+                          {fmt(r.max_eigenvalue_statistic)} <span className="text-muted-foreground">*</span>
+                        </span>
+                      ) : (
+                        fmt(r.max_eigenvalue_statistic)
+                      )}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_10pct)}</TableCell>
+                    <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_5pct)}</TableCell>
+                    <TableCell className="px-2 py-1.5 text-right text-muted-foreground">{fmt(r.max_eigen_crit_1pct)}</TableCell>
+                  </>
+                )}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </InfoStatsTable>
 
       <p className="text-[11px] text-muted-foreground leading-relaxed">{note}</p>
       <p className="text-[11px] text-muted-foreground mt-2">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatNum } from './utils';
 import type { Coefficient } from './types';
 
@@ -16,9 +17,14 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
 
         return (
           <div key={`${coeff.variable}-${coeff.category ?? ''}-${idx}`} className="flex items-center gap-3">
-            <span className="text-xs font-mono text-muted-foreground w-28 text-right shrink-0 truncate" title={label}>
-              {label}
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs font-mono text-muted-foreground w-28 text-right shrink-0 truncate cursor-default">
+                  {label}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">{label}</TooltipContent>
+            </Tooltip>
             <div className="flex-1 flex items-center h-5">
               <div className="w-1/2 flex justify-end">
                 {!isPositive && (

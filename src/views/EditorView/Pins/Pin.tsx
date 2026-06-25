@@ -7,6 +7,7 @@ import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
 import { useRepeatablePinRemovable } from "@/features/core/pin";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 
@@ -139,27 +140,30 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
+  const pinTooltip = `${name} (${typeDisplay ?? type})`;
+
   return (
-    <div
-      className={`
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={`
        group relative flex items-center h-7 shrink-0 pin-container transition-opacity
         ${direction === "input"
           ? "flex-row justify-start"
           : "flex-row-reverse justify-end"
         }
       `}
-      style={dragStyle}
-      data-pin-id={id}
-      title={`${name} (${typeDisplay ?? type})`}
-      onContextMenu={handleContextMenu}
-      onPointerDown={(e) => {
-        if (onPinPointerDown) {
-          e.stopPropagation();
-          e.preventDefault();
-          onPinPointerDown(e, props);
-        }
-      }}
-    >
+          style={dragStyle}
+          data-pin-id={id}
+          onContextMenu={handleContextMenu}
+          onPointerDown={(e) => {
+            if (onPinPointerDown) {
+              e.stopPropagation();
+              e.preventDefault();
+              onPinPointerDown(e, props);
+            }
+          }}
+        >
       {/* Pin Icon Container - 扩大交互区域 */}
       <div
         className={`
@@ -332,9 +336,9 @@ export const Pin: React.FC<PinProps> = (props) => {
           ${contextMenu
             ? "text-[var(--accent-color)]"
             : isConnected
-              ? "text-gray-900"
-              : "text-gray-500"}
-          ${!contextMenu ? "group-hover:text-black" : ""}
+              ? "text-foreground"
+              : "text-muted-foreground"}
+          ${!contextMenu ? "group-hover:text-foreground" : ""}
         `}
       >
         {name}
@@ -364,6 +368,9 @@ export const Pin: React.FC<PinProps> = (props) => {
           onClose={() => setContextMenu(null)}
         />
       )}
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side={direction === 'input' ? 'left' : 'right'}>{pinTooltip}</TooltipContent>
+    </Tooltip>
   );
 };

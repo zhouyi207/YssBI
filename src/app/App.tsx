@@ -4,6 +4,7 @@ import "./i18n";
 
 import React, { Suspense } from "react";
 import { HashRouter, Route, Routes } from "react-router";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
 import { UIHost } from "./ui/UIHost";
 
@@ -33,11 +34,13 @@ function AppRouter() {
 
 export default function App() {
   return (
-    <SettingsEffectsProvider>
-      <HashRouter>
-        <AppRouter />
-      </HashRouter>
-      <UIHost />
-    </SettingsEffectsProvider>
+    <TooltipProvider>
+      <SettingsEffectsProvider>
+        <HashRouter>
+          <AppRouter />
+        </HashRouter>
+        <UIHost />
+      </SettingsEffectsProvider>
+    </TooltipProvider>
   );
 }

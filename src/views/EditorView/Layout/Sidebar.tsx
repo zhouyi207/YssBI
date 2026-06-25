@@ -28,7 +28,8 @@ import { ensureDetailVisible } from "@/features/application/editor/ensureDetailV
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -37,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { GraphService } from "@/services/graph/graphService";
 import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
@@ -149,10 +151,13 @@ const StackedCollapsibleSection = ({
           onToggle();
         }}
         onContextMenu={onHeaderContextMenu}
-        className={`group flex items-center gap-2 px-2 py-1.5 cursor-pointer shrink-0 h-7 min-h-7 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-gray-500 hover:bg-[var(--sidebar-hover)]`}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "group h-7 min-h-7 w-full shrink-0 cursor-pointer justify-start gap-2 rounded-none px-2 py-1.5 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-muted-foreground hover:bg-[var(--sidebar-hover)]",
+        )}
       >
         <span
-          className="shrink-0 text-gray-500 transition-transform duration-150 ease-out"
+          className="shrink-0 text-muted-foreground transition-transform duration-150 ease-out"
           style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
         >
           <VscChevronDown size={12} />
@@ -168,7 +173,7 @@ const StackedCollapsibleSection = ({
               e.stopPropagation();
               onAdd();
             }}
-            className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
+            className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
           >
             <VscAdd size={11} />
           </Button>
@@ -250,7 +255,7 @@ const CollapsibleSection = ({
         }}
         onContextMenu={onContextMenu}
       >
-        <span className="text-gray-500 shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
+        <span className="text-muted-foreground shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
           <VscChevronDown size={11} />
         </span>
         {headerContent ? (
@@ -258,7 +263,7 @@ const CollapsibleSection = ({
             {headerContent}
           </div>
         ) : (
-          <span className="flex-1 text-[12px] text-gray-500 tracking-tight">{label}</span>
+          <span className="flex-1 text-[12px] text-muted-foreground tracking-tight">{label}</span>
         )}
         {onAdd && (
           <Button
@@ -270,7 +275,7 @@ const CollapsibleSection = ({
               e.stopPropagation();
               onAdd();
             }}
-            className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
+            className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
           >
             <VscAdd size={11} />
           </Button>
@@ -600,12 +605,14 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           }
         }}
         onContextMenu={onContextMenu}
-        className={`
-          group flex items-center gap-2 pr-2 py-1.5 transition-colors duration-150 ease-out
-          ${isSelected
-            ? "bg-[var(--sidebar-item-active)] text-gray-200"
-            : "hover:bg-[var(--sidebar-hover)] text-gray-400"}
-        `}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          `group h-auto w-full justify-start gap-2 rounded-none py-1.5 pr-2 transition-colors duration-150 ease-out ${
+            isSelected
+              ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
+              : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70"
+          }`,
+        )}
         style={{ paddingLeft: 16 + indentDepth * 16 }}
       >
         <span
@@ -631,53 +638,65 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         </span>
         <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
         {(type === "event" || type === "function") && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              openGraph(id, name, type);
-            }}
-            className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-            title={t("sidebar.open")}
-          >
-            <VscChevronRight size={11} />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openGraph(id, name, type);
+                }}
+                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
+              >
+                <VscChevronRight size={11} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
+          </Tooltip>
         )}
         {type === "variable" && !readOnly && (
           <>
             {!extra?.isGlobal ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  promoteVariable(id);
-                }}
-                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-                title={t("sidebar.promoteToGlobal")}
-              >
-                <VscEye size={11} />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      promoteVariable(id);
+                    }}
+                    className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
+                  >
+                    <VscEye size={11} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t("sidebar.promoteToGlobal")}</TooltipContent>
+              </Tooltip>
             ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  demoteVariable(id);
-                }}
-                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-                title={t("sidebar.demoteToLocal")}
-              >
-                <VscEyeClosed size={11} />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      demoteVariable(id);
+                    }}
+                    className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
+                  >
+                    <VscEyeClosed size={11} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t("sidebar.demoteToLocal")}</TooltipContent>
+              </Tooltip>
             )}
             <span
-              className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-white/[0.04]"}`}
+              className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50"}`}
               style={{ color: safeDataTypeColor(extra?.dataType) }}
             >
               {safeDataTypeDisplay(extra?.dataType)}
@@ -692,7 +711,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         )}
         {type === "variable" && readOnly && (
           <span
-            className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-white/[0.04]"}`}
+            className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50"}`}
             style={{ color: safeDataTypeColor(extra?.dataType) }}
           >
             {safeDataTypeDisplay(extra?.dataType)}
@@ -731,7 +750,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               name: folder.name,
             })}
             headerContent={
-              <div className="flex items-center gap-2 min-w-0 text-gray-500">
+              <div className="flex items-center gap-2 min-w-0 text-muted-foreground">
                 <VscFolder size={12} className="shrink-0" />
                 <span className="flex-1 text-[12px] tracking-tight truncate">{folder.name}</span>
               </div>
@@ -779,8 +798,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         }}
         className={`group flex items-center gap-2 pr-2 py-1.5 transition-colors duration-150 ease-out ${
           isSelected
-            ? "bg-[var(--sidebar-item-active)] text-gray-200"
-            : "hover:bg-[var(--sidebar-hover)] text-gray-400"
+            ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
+            : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70"
         }`}
         style={{ paddingLeft: 16 }}
       >
@@ -791,19 +810,23 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           <VscGraphLine size={12} />
         </span>
         <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            void openWorksheet(id, name);
-          }}
-          className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
-          title={t("sidebar.open")}
-        >
-          <VscChevronRight size={11} />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                void openWorksheet(id, name);
+              }}
+              className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
+            >
+              <VscChevronRight size={11} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
+        </Tooltip>
       </SidebarDraggableItem>
     );
   };
@@ -817,7 +840,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
         <div className="px-3 border-b border-border bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
-          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
             {currentTab === "graphs"
               ? "Graphs"
               : currentTab === "variables"
@@ -850,7 +873,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 >
                   {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
                   {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No events</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No events</div>
                   )}
                 </div>
               </StackedCollapsibleSection>
@@ -870,7 +893,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 >
                   {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
                   {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No functions</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No functions</div>
                   )}
                 </div>
               </StackedCollapsibleSection>
@@ -896,7 +919,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     );
                   })}
                   {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">No variables</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No variables</div>
                   )}
               </StackedCollapsibleSection>
             </div>
@@ -918,7 +941,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     )
                   )}
                 {Object.keys(variablesGlobal).length === 0 && (
-                  <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
                 )}
               </StackedCollapsibleSection>
 
@@ -942,7 +965,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     </CollapsibleSection>
                   ))}
                 {localVariablesByGraph.length === 0 && (
-                  <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
                 )}
               </StackedCollapsibleSection>
             </div>
@@ -992,7 +1015,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                                 e.stopPropagation();
                                 openContextMenu(e, { type: "database", id, name });
                               }}
-                              className={`group flex items-center gap-2 flex-1 min-w-0 py-0 pr-0 transition-colors duration-150 ease-out ${isSelected ? "text-gray-200" : "text-gray-400"}`}
+                              className={`group flex items-center gap-2 flex-1 min-w-0 py-0 pr-0 transition-colors duration-150 ease-out ${isSelected ? "text-sidebar-foreground" : "text-sidebar-foreground/70"}`}
                             >
                               <span
                                 className="shrink-0 flex items-center justify-center"
@@ -1002,30 +1025,44 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                               </span>
                               <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
                               {isLoading && (
-                                <span className="shrink-0 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" title={t("sidebar.dataLoading")} />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{t("sidebar.dataLoading")}</TooltipContent>
+                                </Tooltip>
                               )}
                               {!isLoading && typeof loadError === "string" && loadError.length > 0 && (
-                                <span className="shrink-0 inline-block h-1.5 w-1.5 rounded-full bg-red-500" title={String(loadError)} />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{String(loadError)}</TooltipContent>
+                                </Tooltip>
                               )}
                             </SidebarDraggableItem>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDataViewWindow(id);
-                              }}
-                              className="shrink-0 text-gray-500 opacity-0 transition-opacity group-hover:opacity-100"
-                              title={t("sidebar.viewInDataViewer")}
-                            >
-                              <VscEye size={12} />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDataViewWindow(id);
+                                  }}
+                                  className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                                >
+                                  <VscEye size={12} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t("sidebar.viewInDataViewer")}</TooltipContent>
+                            </Tooltip>
                           </div>
                         }
                       >
                         {isLoading ? (
-                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-gray-500/80">
+                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-muted-foreground/80">
                             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                             {t("sidebar.dataLoading")}
                           </div>
@@ -1037,11 +1074,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                           columns.map((col, idx) => (
                             <div
                               key={`${id}-col-${idx}`}
-                              className="flex items-center gap-2 py-1 pl-8 pr-2 hover:bg-[var(--sidebar-hover)] text-[12px] text-gray-500 group/col transition-colors"
+                              className="flex items-center gap-2 py-1 pl-8 pr-2 hover:bg-[var(--sidebar-hover)] text-[12px] text-muted-foreground group/col transition-colors"
                             >
                               <VscListUnordered size={10} className="opacity-40 shrink-0" />
                               <span className="flex-1 truncate">{col.name}</span>
-                              <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-gray-500 bg-white/[0.04] px-1 py-0.5">
+                              <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-muted-foreground bg-sidebar-accent/50 px-1 py-0.5">
                                 {col.type.replace("Owned", "")}
                               </span>
                             </div>
@@ -1051,7 +1088,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     );
                   })}
                   {Object.keys(dataframes || {}).length === 0 && (
-                    <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">{t("sidebar.noData")}</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noData")}</div>
                   )}
               </StackedCollapsibleSection>
             </div>
@@ -1069,7 +1106,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               >
                 {worksheets.map((ws) => renderWorksheetItem(ws.id, ws.name))}
                 {worksheets.length === 0 && (
-                  <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">{t("chartsSidebar.noWorksheets")}</div>
+                  <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("chartsSidebar.noWorksheets")}</div>
                 )}
               </StackedCollapsibleSection>
             </div>
@@ -1151,7 +1188,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   if (!activeTabId) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="text-[12px] text-gray-500/60 pl-4 py-3">{t("sidebar.noActiveGraph")}</div>
+        <div className="text-[12px] text-muted-foreground/60 pl-4 py-3">{t("sidebar.noActiveGraph")}</div>
       </div>
     );
   }
@@ -1168,16 +1205,16 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         {reversedUndo.length > 0 ? reversedUndo.map((entry, i) => (
           <div
             key={entry.id}
-            className={`flex items-center gap-2 px-4 py-1.5 text-gray-400 ${i === 0 ? "bg-white/[0.04]" : ""}`}
+            className={`flex items-center gap-2 px-4 py-1.5 text-sidebar-foreground/70 ${i === 0 ? "bg-sidebar-accent/50" : ""}`}
           >
-            <VscDiscard size={11} className="shrink-0 text-gray-500" />
+            <VscDiscard size={11} className="shrink-0 text-muted-foreground" />
             <span className="flex-1 text-[12px] tracking-tight truncate">
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
-          <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+          <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
         )}
       </StackedCollapsibleSection>
 
@@ -1189,16 +1226,16 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         {redoStack.length > 0 ? redoStack.map((entry) => (
           <div
             key={entry.id}
-            className="flex items-center gap-2 px-4 py-1.5 text-gray-500"
+            className="flex items-center gap-2 px-4 py-1.5 text-muted-foreground"
           >
-            <VscRedo size={11} className="shrink-0 text-gray-600" />
+            <VscRedo size={11} className="shrink-0 text-muted-foreground/60" />
             <span className="flex-1 text-[12px] tracking-tight truncate">
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="text-[10px] text-gray-600 shrink-0">{formatTime(entry.timestamp)}</span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
-          <div className="text-[12px] text-gray-500/60 pl-4 py-1.5">—</div>
+          <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
         )}
       </StackedCollapsibleSection>
     </div>

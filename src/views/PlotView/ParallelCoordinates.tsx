@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scalePoint, line, extent } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass, plotTooltipRichClass } from './plotShellStyles';
 
 export interface ParallelAxis {
   name: string;
@@ -20,12 +22,11 @@ export interface ParallelCoordinatesProps {
 
 const MARGIN = { top: 28, right: 16, bottom: 12, left: 16 };
 const AXIS_LABEL_SIZE = 10;
-const DEFAULT_COLOR = '#569cd6';
 
 const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   axes,
   rows,
-  color = DEFAULT_COLOR,
+  color,
   maxLines = 200,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,6 +34,8 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -140,7 +143,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
         .datum({ points, row, rowIdx })
         .attr('d', (d: any) => pathGen(d.points))
         .attr('fill', 'none')
-        .attr('stroke', color)
+        .attr('stroke', plotColor)
         .attr('stroke-opacity', Math.min(0.35, 60 / sampled.length))
         .attr('stroke-width', 1.2)
         .on('mouseenter', function (_, d: any) {
@@ -167,15 +170,12 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
           tooltip.style('opacity', '0');
         });
     });
-  }, [axes, rows, color, maxLines, size, chartTheme]);
+  }, [axes, rows, plotColor, maxLines, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className={cn(plotContainerClass())}>
       <svg ref={svgRef} className="w-full h-full" />
-      <div
-        ref={tooltipRef}
-        className="absolute pointer-events-none rounded px-2 py-1.5 bg-[#1e2028] border border-gray-700 shadow-lg opacity-0 transition-opacity duration-100 z-10 text-[10px] leading-relaxed whitespace-nowrap"
-      />
+      <div ref={tooltipRef} className={plotTooltipRichClass} />
     </div>
   );
 };

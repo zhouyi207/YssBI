@@ -2,8 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscChevronLeft, VscChevronRight, VscRefresh } from 'react-icons/vsc';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 
 interface ToolbarProps {
   loading: boolean;
@@ -37,46 +37,74 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
   <div className="flex min-h-12 shrink-0 items-center gap-2 border-t border-border bg-card/90 px-3 py-2">
     <div className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background p-0.5 shadow-sm">
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onRefresh} title={t("common.refresh")}>
+      <ToolbarIconButton type="button" variant="ghost" size="icon-sm" onClick={onRefresh} tooltip={t("common.refresh")}>
         <VscRefresh className={loading ? 'animate-spin' : ''} size={15} />
-      </Button>
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onSave} disabled={!currentEditState.isModified} title={t("common.save")}>
+      </ToolbarIconButton>
+      <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={onSave}
+        disabled={!currentEditState.isModified}
+        tooltip={t("common.save")}
+      >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
         </svg>
-      </Button>
+      </ToolbarIconButton>
       <Separator orientation="vertical" className="h-4" />
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onUndo} disabled={!currentEditState.canUndo} title={`${t("common.undo")} (Ctrl+Z)`}>
+      <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={onUndo}
+        disabled={!currentEditState.canUndo}
+        tooltip={`${t("common.undo")} (Ctrl+Z)`}
+      >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 010 8H9" /><path d="M3 10l4-4M3 10l4 4" /></svg>
-      </Button>
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onRedo} disabled={!currentEditState.canRedo} title={`${t("common.redo")} (Ctrl+Shift+Z)`}>
+      </ToolbarIconButton>
+      <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={onRedo}
+        disabled={!currentEditState.canRedo}
+        tooltip={`${t("common.redo")} (Ctrl+Shift+Z)`}
+      >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 000 8h6" /><path d="M21 10l-4-4M21 10l-4 4" /></svg>
-      </Button>
+      </ToolbarIconButton>
       <Separator orientation="vertical" className="h-4" />
-      <Button type="button" variant="ghost" size="icon-sm" onClick={onExport} disabled={!exportEnabled} title={t("common.export")}>
+      <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={onExport}
+        disabled={!exportEnabled}
+        tooltip={t("common.export")}
+      >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
           <polyline points="7 10 12 15 17 10" />
           <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
-      </Button>
+      </ToolbarIconButton>
     </div>
 
     <div className="flex min-w-0 flex-1 items-center justify-center">
     <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border bg-background text-card-foreground shadow-sm">
-      <Button
+      <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-sm"
         className="rounded-none border-r border-border"
         onClick={onPreviousPage}
         disabled={loading || pageIndex <= 0}
-        title="上一页"
+        tooltip="上一页"
       >
         <VscChevronLeft size={15} />
-      </Button>
+      </ToolbarIconButton>
 
       <div className="flex h-6 min-w-[184px] items-center justify-center gap-1 px-2 text-[11px]">
         <span className="font-medium text-foreground">{pageStart}-{pageEnd}</span>
@@ -87,17 +115,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </span>
       </div>
 
-      <Button
+      <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-sm"
         className="rounded-none border-l border-border"
         onClick={onNextPage}
         disabled={loading || pageIndex >= totalPages - 1}
-        title="下一页"
+        tooltip="下一页"
       >
         <VscChevronRight size={15} />
-      </Button>
+      </ToolbarIconButton>
     </div>
     </div>
 

@@ -2,6 +2,13 @@ import { useTranslation } from 'react-i18next';
 import { Select } from '@/shared/ui';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  detailEmptyHintClass,
+  detailInlineInputSmallClass,
+  detailPinRowClass,
+  detailSubsectionTitleClass,
+} from './detailStyles';
 
 interface PinEditorProps {
   title: string;
@@ -21,7 +28,7 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
   return (
     <div className="mt-4 px-2">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase text-gray-400">{title}</span>
+        <span className={detailSubsectionTitleClass}>{title}</span>
         <Button
           type="button"
           variant="ghost"
@@ -41,9 +48,9 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
       </div>
       <div className="space-y-1">
         {pins.map((pin, idx) => (
-          <div key={pin.id} className="group flex items-center gap-1 rounded bg-white/5 p-1">
+          <div key={pin.id} className={detailPinRowClass}>
             <Input
-              className="h-6 flex-1 border-0 bg-transparent px-1 py-0 text-[10px] shadow-none"
+              className={detailInlineInputSmallClass}
               value={pin.name}
               onChange={(e) => {
                 const newPins = [...pins];
@@ -61,26 +68,32 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
                 onChange(newPins);
               }}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => {
-                const newPins = [...pins];
-                const current = newPins[idx].containerType;
-                const next = current === 'array' ? 'dataseries' : current === 'dataseries' ? undefined : 'array';
-                newPins[idx] = { ...newPins[idx], containerType: next };
-                onChange(newPins);
-              }}
-              className={pin.containerType ? 'bg-blue-500/10 text-blue-400' : 'text-muted-foreground'}
-              title={t('detail.pinEditor.containerTooltip', {
-                container: containerLabel(pin.containerType),
-              })}
-            >
-              <span className="text-[9px] font-black">
-                {pin.containerType === 'dataseries' ? '◇' : pin.containerType === 'array' ? '[]' : '·'}
-              </span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => {
+                    const newPins = [...pins];
+                    const current = newPins[idx].containerType;
+                    const next = current === 'array' ? 'dataseries' : current === 'dataseries' ? undefined : 'array';
+                    newPins[idx] = { ...newPins[idx], containerType: next };
+                    onChange(newPins);
+                  }}
+                  className={pin.containerType ? 'bg-blue-500/10 text-blue-400' : 'text-muted-foreground'}
+                >
+                  <span className="text-[9px] font-black">
+                    {pin.containerType === 'dataseries' ? '◇' : pin.containerType === 'array' ? '[]' : '·'}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {t('detail.pinEditor.containerTooltip', {
+                  container: containerLabel(pin.containerType),
+                })}
+              </TooltipContent>
+            </Tooltip>
             <Button
               type="button"
               variant="ghost"
@@ -96,9 +109,7 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
             </Button>
           </div>
         ))}
-        {pins.length === 0 && (
-          <div className="py-1 text-center text-[9px] italic text-gray-300">{emptyMessage}</div>
-        )}
+        {pins.length === 0 && <div className={detailEmptyHintClass}>{emptyMessage}</div>}
       </div>
     </div>
   );

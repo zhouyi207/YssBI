@@ -194,7 +194,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
                     {ActiveComponent ? (
                         <ActiveComponent />
                     ) : (
-                        <div className="p-4 text-gray-500 italic">No content</div>
+                        <div className="p-4 italic text-muted-foreground">No content</div>
                     )}
 
                     {/* 拖拽停靠区域覆盖层 - 固定节点不允许作为停靠目标 */}

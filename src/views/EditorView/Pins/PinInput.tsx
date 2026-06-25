@@ -3,6 +3,7 @@ import { usePinInput } from "@/features/core/pin";
 import { Select } from "@/shared/ui";
 import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 export interface PinInputProps {
   pinId: string;
@@ -211,29 +212,16 @@ export const PinInput: React.FC<PinInputProps> = ({
 
     case "bool":
       return (
-        <label
-          className="relative inline-flex items-center cursor-pointer ml-0.5"
-          onClick={stop}
-          onPointerDown={stop}
-        >
-          <Input
-            type="checkbox"
+        <div className="ml-0.5" onClick={stop} onPointerDown={stop}>
+          <Switch
+            size="sm"
             checked={Boolean(value)}
-            onChange={async (e) => {
-              const newValue = e.target.checked;
-              handleChange(newValue);
-              savePinValue(newValue);
+            onCheckedChange={(checked) => {
+              handleChange(checked);
+              savePinValue(checked);
             }}
-            className="sr-only peer"
           />
-          <div className="
-            w-[26px] h-[14px] rounded-full transition-colors
-            bg-[#3c3c3c] peer-checked:bg-[#007fd4]
-            after:content-[''] after:absolute after:top-[2px] after:left-[2px]
-            after:w-[10px] after:h-[10px] after:rounded-full after:transition-transform
-            after:bg-[#ccc] peer-checked:after:translate-x-[12px]
-          " />
-        </label>
+        </div>
       );
 
     case "string":

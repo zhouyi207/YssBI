@@ -13,6 +13,7 @@ import { DataDetailPanel } from './panels/DataDetailPanel';
 import { LogDetailPanel } from './panels/LogDetailPanel';
 import { NodeDetailPanel } from './panels/NodeDetailPanel';
 import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
+import { detailSectionTitleClass } from './shared/detailStyles';
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
   const { t } = useTranslation();
@@ -106,7 +107,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
             className="flex shrink-0 items-center justify-between border-b border-border bg-[var(--workbench-bg)]/50 px-3"
             style={{ height: 'var(--titlebar-height)' }}
           >
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+            <span className={detailSectionTitleClass}>
               {t('detail.title')}
             </span>
           </div>

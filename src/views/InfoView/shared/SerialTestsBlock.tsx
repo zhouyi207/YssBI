@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { computeSerialTests } from '@/services/stats';
 import type { SerialTestsResponse } from '@/services/stats';
 import { SectionHeader } from './RegressionShared';
+import { InfoAccentButton } from './InfoViewControls';
 import { formatNum } from './utils';
 
 export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals?: number[]; exog?: number[][]; residualLabel?: string }) {
@@ -21,9 +25,9 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
     try {
       const res = await computeSerialTests({
         residuals,
+        exog,
         lags: lag,
-        exog: exog ?? undefined,
-        bg_nomiss0: !bgDropMissing,
+        bg_drop_missing: bgDropMissing,
       });
       setResult(res);
     } catch (e) {
@@ -38,40 +42,37 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
   return (
     <div className="mt-6">
       <SectionHeader
-        title={residualLabel ? `序列相关检验 (检验对象: ${residualLabel})` : '序列相关检验'}
+        title={residualLabel ? `Serial Correlation (检验对象: ${residualLabel})` : 'Serial Correlation (BG / Q / DW)'}
         icon={
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
           </svg>
         }
       />
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags (BG/Q)</label>
-          <input
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags (BG/Q)</Label>
+          <Input
             type="number"
             min={1}
             max={40}
             value={lag}
             onChange={(e) => setLag(Math.max(1, Math.min(40, parseInt(e.target.value, 10) || 1)))}
-            className="w-20 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="w-20 font-mono text-sm"
           />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="serial-bg-drop-missing"
               checked={bgDropMissing}
-              onChange={(e) => setBgDropMissing(e.target.checked)}
-              className="rounded border-border bg-muted text-[var(--accent-color)] focus:ring-[var(--accent-color)]/50"
+              onCheckedChange={(checked) => setBgDropMissing(checked === true)}
             />
-            <span className="text-[11px] text-muted-foreground">BG: 去掉缺失值 (n-p)</span>
-          </label>
-          <button
-            onClick={handleRun}
-            disabled={!canRun || loading}
-            className="px-4 py-2 rounded-md bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-color)]/40 hover:bg-[var(--accent-color)]/30 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-          >
-            {loading ? '...' : '生成'}
-          </button>
+            <Label htmlFor="serial-bg-drop-missing" className="cursor-pointer text-[11px] text-muted-foreground">
+              BG: 去掉缺失值 (n-p)
+            </Label>
+          </div>
+          <InfoAccentButton onClick={handleRun} disabled={!canRun} loading={loading}>
+            生成
+          </InfoAccentButton>
         </div>
         <div className="text-[10px] text-muted-foreground">
           BG: estat bgodfrey（勾选「去掉缺失值」= 不用 nomiss0）· Q: wntestq · DW: estat dwatson
@@ -107,13 +108,12 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
                 </div>
               </div>
             )}
-            <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
-              <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
-              <div className="text-foreground font-mono text-sm font-medium">
-                d = {formatNum(result.dw.d)}
+            {result.dw != null && (
+              <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+                <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
+                <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw)}</div>
               </div>
-              <div className="text-xs text-muted-foreground mt-1">estat dwatson</div>
-            </div>
+            )}
           </div>
         )}
       </div>

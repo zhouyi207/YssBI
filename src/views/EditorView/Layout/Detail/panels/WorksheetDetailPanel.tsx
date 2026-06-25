@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody } from '@/components/ui/table';
 import { useEditorGroup } from '@/features/application/editor';
 import { performWorksheetDelete } from '@/features/application/editor/closeEditorTab';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -11,6 +11,14 @@ import { Select } from '@/shared/ui';
 import type { WorksheetChartType, WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailDeleteButton } from '../shared/DetailDeleteButton';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
+import {
+  detailInlineInputClass,
+  detailListItemClass,
+  detailSubsectionTitleClass,
+  detailTableClass,
+  detailValueMutedClass,
+} from '../shared/detailStyles';
 
 const CHART_TYPES: WorksheetChartType[] = ['histogram', 'scatter', 'line'];
 
@@ -77,109 +85,98 @@ export function WorksheetDetailPanel({ document, onDeleted }: WorksheetDetailPan
     updateDocument(document.id, changes);
   };
 
+  const encodingLabelClass = 'align-top pt-2';
+
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: document.name })}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-24 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.name')}
-            </TableCell>
-            <TableCell>
-              <Input
-                className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
-                value={document.name}
-                onChange={(e) => patch({ name: e.target.value })}
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400 align-top pt-2">
-              {t('chartsSidebar.dataset')}
-            </TableCell>
-            <TableCell>
-              <Select
-                value={document.databaseId}
-                options={databaseOptions}
-                onChange={(val) => patch({ databaseId: val, encodings: {} })}
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400 align-top pt-2">
-              {t('chartsSidebar.chartType')}
-            </TableCell>
-            <TableCell>
-              <Select
-                value={document.chartType}
-                options={CHART_TYPES.map((type) => ({
-                  value: type,
-                  label: t(`chartsSidebar.chartTypes.${type}`),
-                }))}
-                onChange={(val) => patch({ chartType: val as WorksheetChartType, encodings: {} })}
-              />
-            </TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.name')} labelWidth="wide">
+            <Input
+              className={detailInlineInputClass}
+              value={document.name}
+              onChange={(e) => patch({ name: e.target.value })}
+            />
+          </DetailFieldRow>
+          <DetailFieldRow
+            label={t('chartsSidebar.dataset')}
+            labelWidth="wide"
+            labelClassName={encodingLabelClass}
+          >
+            <Select
+              value={document.databaseId}
+              options={databaseOptions}
+              onChange={(val) => patch({ databaseId: val, encodings: {} })}
+            />
+          </DetailFieldRow>
+          <DetailFieldRow
+            label={t('chartsSidebar.chartType')}
+            labelWidth="wide"
+            labelClassName={encodingLabelClass}
+          >
+            <Select
+              value={document.chartType}
+              options={CHART_TYPES.map((type) => ({
+                value: type,
+                label: t(`chartsSidebar.chartTypes.${type}`),
+              }))}
+              onChange={(val) => patch({ chartType: val as WorksheetChartType, encodings: {} })}
+            />
+          </DetailFieldRow>
           {document.chartType === 'histogram' ? (
-            <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400 align-top pt-2">
-                {t('chartsSidebar.encodingY')}
-              </TableCell>
-              <TableCell>
-                <Select
-                  value={document.encodings.y ?? ''}
-                  options={allColumnOptions}
-                  onChange={(val) => patch({ encodings: { ...document.encodings, y: val } })}
-                />
-              </TableCell>
-            </TableRow>
+            <DetailFieldRow
+              label={t('chartsSidebar.encodingY')}
+              labelWidth="wide"
+              labelClassName={encodingLabelClass}
+            >
+              <Select
+                value={document.encodings.y ?? ''}
+                options={allColumnOptions}
+                onChange={(val) => patch({ encodings: { ...document.encodings, y: val } })}
+              />
+            </DetailFieldRow>
           ) : (
             <>
-              <TableRow>
-                <TableCell className="bg-white/5 font-bold text-gray-400 align-top pt-2">
-                  {t('chartsSidebar.encodingX')}
-                </TableCell>
-                <TableCell>
-                  <Select
-                    value={document.encodings.x ?? ''}
-                    options={numericColumnOptions}
-                    onChange={(val) => patch({ encodings: { ...document.encodings, x: val } })}
-                  />
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="bg-white/5 font-bold text-gray-400 align-top pt-2">
-                  {t('chartsSidebar.encodingY')}
-                </TableCell>
-                <TableCell>
-                  <Select
-                    value={document.encodings.y ?? ''}
-                    options={numericColumnOptions}
-                    onChange={(val) => patch({ encodings: { ...document.encodings, y: val } })}
-                  />
-                </TableCell>
-              </TableRow>
+              <DetailFieldRow
+                label={t('chartsSidebar.encodingX')}
+                labelWidth="wide"
+                labelClassName={encodingLabelClass}
+              >
+                <Select
+                  value={document.encodings.x ?? ''}
+                  options={numericColumnOptions}
+                  onChange={(val) => patch({ encodings: { ...document.encodings, x: val } })}
+                />
+              </DetailFieldRow>
+              <DetailFieldRow
+                label={t('chartsSidebar.encodingY')}
+                labelWidth="wide"
+                labelClassName={encodingLabelClass}
+              >
+                <Select
+                  value={document.encodings.y ?? ''}
+                  options={numericColumnOptions}
+                  onChange={(val) => patch({ encodings: { ...document.encodings, y: val } })}
+                />
+              </DetailFieldRow>
             </>
           )}
         </TableBody>
       </Table>
 
       <div className="px-2 pt-3">
-        <div className="mb-1 text-[10px] font-semibold uppercase text-gray-500">
-          {t('chartsSidebar.columns')}
-        </div>
+        <div className={`mb-1 ${detailSubsectionTitleClass}`}>{t('chartsSidebar.columns')}</div>
         <div className="space-y-0.5">
           {columns.map((col) => (
-            <div
-              key={col.name}
-              className="flex items-center justify-between rounded px-2 py-1 text-[11px] text-gray-400 hover:bg-white/5"
-            >
+            <div key={col.name} className={detailListItemClass}>
               <span className="truncate">{col.name}</span>
               <span className="ml-2 shrink-0 text-[10px] text-[var(--accent-color)]/70">{col.type}</span>
             </div>
           ))}
           {columns.length === 0 && (
-            <div className="px-2 text-[11px] text-gray-500/70">{t('chartsSidebar.noColumns')}</div>
+            <div className={`px-2 text-[11px] ${detailValueMutedClass}`}>
+              {t('chartsSidebar.noColumns')}
+            </div>
           )}
         </div>
       </div>

@@ -16,6 +16,7 @@ import {
   ACFPACFBlock,
   SerialTestsBlock,
   VifTable,
+  IvFirstStageSummaryTables,
   meanFiniteVif,
   computeKDE,
 } from './shared';
@@ -128,137 +129,11 @@ export const LIMLComponent: React.FC<{ data: OLSResultData }> = ({ data }) => {
               </svg>
             }
           />
-          <div className="space-y-3 mb-4">
-            {/* Instrument counts */}
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-              <span>Included instruments: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_included_instruments}</span></span>
-              <span>Excluded instruments: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_excluded_instruments}</span></span>
-              <span>Endogenous regressors: <span className="font-mono text-foreground">{diag.iv2sls_first_stage_summary.k_endogenous_regressors}</span></span>
-            </div>
-            {/* Single endog: R², Adj R², Partial R², F table */}
-            {diag.iv2sls_first_stage_summary.r2 != null ? (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Adj R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Partial R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">
-                        F({diag.iv2sls_first_stage_summary.f_df1 ?? 0},{diag.iv2sls_first_stage_summary.f_df2 ?? 0})
-                      </th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Prob &gt; F</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="bg-card border-t border-border hover:bg-muted">
-                      <td className="px-4 py-2.5 font-mono text-foreground">
-                        {diag.iv2sls_first_stage?.[0]?.endog_name ?? '—'}
-                      </td>
-                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.r2, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.r2_adjusted, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-foreground">{formatNum(diag.iv2sls_first_stage_summary.partial_r2, 4)}</td>
-                      <td className="text-right px-3 py-2.5 font-mono text-foreground">
-                        {diag.iv2sls_first_stage_summary.f_stat != null ? formatNum(diag.iv2sls_first_stage_summary.f_stat, 4) : '—'}
-                      </td>
-                      <td className="text-right px-3 py-2.5 font-mono text-foreground">
-                        {diag.iv2sls_first_stage_summary.f_p_value != null ? formatNum(diag.iv2sls_first_stage_summary.f_p_value, 4) : '—'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              /* Multi endog: Shea's partial R² table */
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="text-left px-4 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Variable</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Shea&apos;s partial R-sq.</th>
-                      <th className="text-right px-3 py-2.5 text-muted-foreground font-medium uppercase tracking-wider">Shea&apos;s adj. partial R-sq.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {diag.iv2sls_first_stage?.map((fs, i) => (
-                      <tr
-                        key={fs.endog_name}
-                        className={`border-t border-border hover:bg-muted ${i % 2 === 0 ? 'bg-card' : 'bg-muted/40'}`}
-                      >
-                        <td className="px-4 py-2.5 font-mono text-foreground">{fs.endog_name}</td>
-                        <td className="text-right px-3 py-2.5 font-mono text-foreground">
-                          {formatNum(diag.iv2sls_first_stage_summary.shea_partial_r2[i] ?? 0, 4)}
-                        </td>
-                        <td className="text-right px-3 py-2.5 font-mono text-foreground">
-                          {formatNum(diag.iv2sls_first_stage_summary.shea_adj_partial_r2[i] ?? 0, 4)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Minimum eigenvalue + LIML size of nominal 5% Wald test (Stock-Yogo 2005) */}
-            {diag.iv2sls_first_stage_summary.min_eigenvalue_cv_note !== 'robust' && (
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="px-4 py-2.5 bg-muted border-b border-border flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Minimum eigenvalue statistic</span>
-                  <span className="ml-2 font-mono text-foreground font-medium">{formatNum(diag.iv2sls_first_stage_summary.min_eigenvalue, 4)}</span>
-                </div>
-                {diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (
-                  <span className="text-[10px] text-muted-foreground">Stock-Yogo (2005) LIML</span>
-                )}
-              </div>
-              {diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (() => {
-                const cv = diag.iv2sls_first_stage_summary.min_eigenvalue_cv;
-                const cellClass = "text-right px-4 py-2 font-mono text-foreground tabular-nums";
-                const labelClass = "text-left px-4 py-2 text-[11px] text-muted-foreground";
-                const thClass = "text-right px-4 py-2 text-muted-foreground font-medium tabular-nums";
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs table-fixed">
-                      <colgroup>
-                        <col className="w-[min(16rem,45%)]" />
-                        <col className="w-[4.5rem]" />
-                        <col className="w-[4.5rem]" />
-                        <col className="w-[4.5rem]" />
-                        <col className="w-[4.5rem]" />
-                      </colgroup>
-                      <thead>
-                        <tr className="bg-muted/40">
-                          <th className="text-left px-4 py-2 text-muted-foreground font-medium uppercase tracking-wider text-[10px]">Test</th>
-                          <th className={thClass}>10%</th>
-                          <th className={thClass}>15%</th>
-                          <th className={thClass}>20%</th>
-                          <th className={thClass}>25%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="bg-card border-t border-border">
-                          <td className={labelClass}>LIML size of nominal 5% Wald test</td>
-                          <td className={cellClass}>{cv?.size.pct_10.toFixed(2)}</td>
-                          <td className={cellClass}>{cv?.size.pct_15.toFixed(2)}</td>
-                          <td className={cellClass}>{cv?.size.pct_20.toFixed(2)}</td>
-                          <td className={cellClass}>{cv?.size.pct_25.toFixed(2)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-              {!diag.iv2sls_first_stage_summary.min_eigenvalue_cv && (
-                <div className="px-4 py-2.5 bg-card text-[11px] text-muted-foreground">
-                  {diag.iv2sls_first_stage_summary.min_eigenvalue_cv_note === 'k_endog_gt_2'
-                    ? 'Stock-Yogo critical values not available for 3+ endogenous regressors'
-                    : 'Stock-Yogo critical values not shown'}
-                </div>
-              )}
-            </div>
-            )}
-          </div>
+          <IvFirstStageSummaryTables
+            summary={diag.iv2sls_first_stage_summary}
+            firstStage={diag.iv2sls_first_stage}
+            variant="liml"
+          />
         </>
       )}
 

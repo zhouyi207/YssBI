@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, timeFormat } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass } from './plotShellStyles';
 
 export interface ScatterPoint {
   x: number;
@@ -46,7 +48,6 @@ function numToDate(v: number, format: 'date' | 'datetime'): Date {
 }
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-const DEFAULT_COLOR = '#569cd6';
 
 const Scatter: React.FC<ScatterProps> = ({
   data,
@@ -54,20 +55,23 @@ const Scatter: React.FC<ScatterProps> = ({
   yLabel,
   xFormat = 'number',
   yFormat = 'number',
-  color = DEFAULT_COLOR,
+  color,
   radius = 3,
   height: heightProp,
   margin = DEFAULT_MARGIN,
   symmetricY = false,
   zeroLine = false,
   highlightIndices,
-  highlightColor = '#ef4444',
+  highlightColor,
   embedded = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
+  const plotHighlightColor = highlightColor ?? seriesColors.highlight;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -186,22 +190,15 @@ const Scatter: React.FC<ScatterProps> = ({
       .attr('cx', (d) => xScale(d.x))
       .attr('cy', (d) => yScale(d.y))
       .attr('r', radius)
-      .attr('fill', (_, i) => (highlightIndices?.has(i) ? highlightColor : color))
+      .attr('fill', (_, i) => (highlightIndices?.has(i) ? plotHighlightColor : plotColor))
       .attr('fill-opacity', 0.7)
-      .attr('stroke', (_, i) => (highlightIndices?.has(i) ? highlightColor : color))
+      .attr('stroke', (_, i) => (highlightIndices?.has(i) ? plotHighlightColor : plotColor))
       .attr('stroke-opacity', 0.3)
       .attr('stroke-width', 1);
-  }, [data, xLabel, yLabel, xFormat, yFormat, color, radius, heightProp, margin, symmetricY, zeroLine, highlightIndices, highlightColor, size, chartTheme]);
+  }, [data, xLabel, yLabel, xFormat, yFormat, plotColor, radius, heightProp, margin, symmetricY, zeroLine, highlightIndices, plotHighlightColor, size, chartTheme]);
 
   return (
-    <div
-      ref={containerRef}
-      className={
-        embedded
-          ? 'h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]'
-          : 'w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden'
-      }
-    >
+    <div ref={containerRef} className={cn(plotContainerClass(embedded, heightProp))}>
       <svg ref={svgRef} />
     </div>
   );

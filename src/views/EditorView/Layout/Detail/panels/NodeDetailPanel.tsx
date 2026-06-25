@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody } from '@/components/ui/table';
 import type { PinData } from '@/shared/types/store/graph';
 import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
@@ -11,6 +11,8 @@ import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
 import { resolveNodeDocumentationContent } from '../nodeDocumentation';
 import { resolveNodePinSpecs } from '../resolveNodePinSpecs';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
+import { detailTableClass, detailValueMutedClass } from '../shared/detailStyles';
 
 const EMPTY_PINS: PinData[] = [];
 
@@ -47,41 +49,35 @@ export function NodeDetailPanel({ nodeId, graphId }: NodeDetailPanelProps) {
   if (!node) {
     return (
       <DetailPanelShell title={t('detail.titleNode')}>
-        <div className="p-4 text-[11px] text-gray-400">{t('detail.nodeNotFound')}</div>
+        <div className={`p-4 text-[11px] ${detailValueMutedClass}`}>{t('detail.nodeNotFound')}</div>
       </DetailPanelShell>
     );
   }
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: node.title || node.nodeType })}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.name')}
-            </TableCell>
-            <TableCell className="font-medium text-gray-200">{node.title}</TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.type')}
-            </TableCell>
-            <TableCell className="font-mono text-[10px] text-gray-400">{node.nodeType}</TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.name')} valueClassName="font-medium text-foreground">
+            {node.title}
+          </DetailFieldRow>
+          <DetailFieldRow
+            label={t('detail.fields.type')}
+            valueClassName={`font-mono text-[10px] ${detailValueMutedClass}`}
+          >
+            {node.nodeType}
+          </DetailFieldRow>
           {node.category?.length > 0 && (
-            <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400">
-                {t('detail.fields.category')}
-              </TableCell>
-              <TableCell className="text-gray-400">{node.category.join(' / ')}</TableCell>
-            </TableRow>
+            <DetailFieldRow label={t('detail.fields.category')} valueClassName={detailValueMutedClass}>
+              {node.category.join(' / ')}
+            </DetailFieldRow>
           )}
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.graph')}
-            </TableCell>
-            <TableCell className="font-mono text-[10px] text-gray-500">{graphId}</TableCell>
-          </TableRow>
+          <DetailFieldRow
+            label={t('detail.fields.graph')}
+            valueClassName="font-mono text-[10px] text-muted-foreground/70"
+          >
+            {graphId}
+          </DetailFieldRow>
         </TableBody>
       </Table>
       <NodePinInterfacePanel inputs={pinSpecs.inputs} outputs={pinSpecs.outputs} />

@@ -9,8 +9,8 @@ import { useExecutionPlayback, useExecutionStore } from "@/features/core/executi
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ContextMenu } from "@/shared/ui/contextMenu";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
 import {
   VscDebugStart,
@@ -20,6 +20,21 @@ import {
   VscPlay,
   VscRunAll,
 } from "react-icons/vsc";
+
+function CanvasToolbarButton({
+    tooltip,
+    children,
+    ...props
+}: React.ComponentProps<typeof Button> & { tooltip: string }) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Button {...props}>{children}</Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{tooltip}</TooltipContent>
+        </Tooltip>
+    );
+}
 
 function SelectionRegion({
     groupId,
@@ -115,22 +130,21 @@ export default function CanvasOverlays({
             {isEventTab && (
                 <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
                     {/* Debug placeholder */}
-                    <Button
+                    <CanvasToolbarButton
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled
                         className="text-[var(--text-secondary)] opacity-40"
-                        title={t("canvas.debugComingSoon")}
+                        tooltip={t("canvas.debugComingSoon")}
                     >
                         <VscDebugStart size={14} />
-                    </Button>
+                    </CanvasToolbarButton>
 
                     <div className="w-px h-5 bg-[var(--border-color)]" />
 
-                    {/* Replay */}
                     {!playbackActive ? (
-                        <Button
+                        <CanvasToolbarButton
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -141,47 +155,42 @@ export default function CanvasOverlays({
                                     ? 'text-blue-400 hover:text-blue-300'
                                     : 'text-[var(--text-secondary)] opacity-40 cursor-not-allowed'
                             }
-                            title={
+                            tooltip={
                                 graphDirty ? t("canvas.replayDisabledDirty") :
                                 !hasRecording ? t("canvas.replayNoRecording") :
                                 t("canvas.replayExecution")
                             }
                         >
                             <VscDebugRestart size={14} />
-                        </Button>
+                        </CanvasToolbarButton>
                     ) : (
                         <div className="flex items-center">
-                            <Button
+                            <CanvasToolbarButton
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={togglePlayPause}
-                                className={
-                                    isPlaying
-                                        ? 'text-amber-400'
-                                        : 'text-blue-400'
-                                }
-                                title={isPlaying ? t("canvas.pauseReplay") : t("canvas.resumeReplay")}
+                                className={isPlaying ? 'text-amber-400' : 'text-blue-400'}
+                                tooltip={isPlaying ? t("canvas.pauseReplay") : t("canvas.resumeReplay")}
                             >
                                 {isPlaying ? <VscDebugPause size={14} /> : <VscPlay size={14} />}
-                            </Button>
-                            <Button
+                            </CanvasToolbarButton>
+                            <CanvasToolbarButton
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={stop}
                                 className="text-red-400"
-                                title={t("canvas.stopReplay")}
+                                tooltip={t("canvas.stopReplay")}
                             >
                                 <VscDebugStop size={14} />
-                            </Button>
+                            </CanvasToolbarButton>
                         </div>
                     )}
 
                     <div className="w-px h-5 bg-[var(--border-color)]" />
 
-                    {/* Execute */}
-                    <Button
+                    <CanvasToolbarButton
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -192,10 +201,10 @@ export default function CanvasOverlays({
                                 ? 'text-green-400 opacity-60 cursor-not-allowed'
                                 : 'text-green-400 hover:text-green-300'
                         }
-                        title={isThisGraphRunning ? t("canvas.executing") : t("canvas.executeCurrentEvent")}
+                        tooltip={isThisGraphRunning ? t("canvas.executing") : t("canvas.executeCurrentEvent")}
                     >
                         <VscRunAll size={14} />
-                    </Button>
+                    </CanvasToolbarButton>
                 </div>
             )}
 
@@ -219,33 +228,31 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Variable Drop Menu ================= */}
-            {activeGroupId === groupId && variableDropMenu && createPortal(
-                <Card
-                    className="menu-container fixed z-50 overflow-hidden py-1 shadow-xl"
-                    style={{ left: variableDropMenu.x, top: variableDropMenu.y }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                >
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-auto w-full justify-start rounded-none px-4 py-2 text-sm font-bold"
-                        onClick={() => handleVariableDropGet(variableDropMenu)}
-                    >
-                        <div className="w-2 h-2 rounded-full bg-blue-400" />
-                        {t("canvas.getVariable", { name: variableDropMenu.variableName })}
-                    </Button>
-                    <Separator />
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-auto w-full justify-start rounded-none px-4 py-2 text-sm font-bold"
-                        onClick={() => handleVariableDropSet(variableDropMenu)}
-                    >
-                        <div className="w-2 h-2 rounded-full bg-orange-400" />
-                        {t("canvas.setVariable", { name: variableDropMenu.variableName })}
-                    </Button>
-                </Card>,
-                document.body
+            {activeGroupId === groupId && variableDropMenu && (
+                <ContextMenu
+                    position={{ x: variableDropMenu.x, y: variableDropMenu.y }}
+                    sections={[
+                        {
+                            items: [
+                                {
+                                    id: "get-variable",
+                                    label: t("canvas.getVariable", { name: variableDropMenu.variableName }),
+                                    onClick: () => handleVariableDropGet(variableDropMenu),
+                                },
+                            ],
+                        },
+                        {
+                            items: [
+                                {
+                                    id: "set-variable",
+                                    label: t("canvas.setVariable", { name: variableDropMenu.variableName }),
+                                    onClick: () => handleVariableDropSet(variableDropMenu),
+                                },
+                            ],
+                        },
+                    ]}
+                    onClose={() => setVariableDropMenu(null)}
+                />
             )}
         </>
     );

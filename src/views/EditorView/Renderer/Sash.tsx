@@ -181,12 +181,12 @@ export const Sash: React.FC<SashProps> = ({
                 ${orientation === 'row' 
                     ? 'w-2 h-full cursor-col-resize -mx-1' 
                     : 'h-2 w-full cursor-row-resize -my-1'}
-                hover:bg-blue-500/10 [&.active]:bg-blue-500/20
+                hover:bg-primary/10 [&.active]:bg-primary/20
             `}
         >
             <div 
                 className={`
-                    absolute bg-slate-400/25 group-hover:bg-blue-500 group-[.active]:bg-blue-500 transition-colors
+                    absolute bg-border/60 group-hover:bg-primary group-[.active]:bg-primary transition-colors
                     ${orientation === 'row' 
                         ? 'left-1/2 -translate-x-1/2 w-[1px] h-full' 
                         : 'top-1/2 -translate-y-1/2 h-[1px] w-full'}

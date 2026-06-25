@@ -1,8 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody } from '@/components/ui/table';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailDeleteButton } from '../shared/DetailDeleteButton';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
+import { detailInlineInputClass, detailTableClass } from '../shared/detailStyles';
 
 interface EventDetailPanelProps {
   event: { id: string; name: string };
@@ -16,20 +18,15 @@ export function EventDetailPanel({ event, onUpdate, onDelete, onDeleted }: Event
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: event.name })}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.name')}
-            </TableCell>
-            <TableCell>
-              <Input
-                className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
-                value={event.name}
-                onChange={(e) => onUpdate({ name: e.target.value })}
-              />
-            </TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.name')}>
+            <Input
+              className={detailInlineInputClass}
+              value={event.name}
+              onChange={(e) => onUpdate({ name: e.target.value })}
+            />
+          </DetailFieldRow>
         </TableBody>
       </Table>
       <DetailDeleteButton

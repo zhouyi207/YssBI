@@ -8,9 +8,9 @@ export function SidebarDragOverlay() {
   const activeDrag = useSidebarDragStore((s) => s.activeDrag);
   if (!activeDrag) return null;
   return (
-    <div className="bg-white/80 border border-blue-500 rounded px-3 py-1.5 shadow-xl flex items-center gap-2 cursor-grabbing">
-      <div className="w-2 h-2 rounded-full bg-blue-500" />
-      <span className="text-xs font-bold text-gray-700">
+    <div className="flex cursor-grabbing items-center gap-2 rounded-md border border-primary/60 bg-card/95 px-3 py-1.5 shadow-xl backdrop-blur-sm">
+      <div className="h-2 w-2 rounded-full bg-primary" />
+      <span className="text-xs font-bold text-foreground">
         {activeDrag.template?.title || activeDrag.template?.nodeType}
       </span>
     </div>

@@ -20,6 +20,7 @@ import type { ThemeSettings } from "@/shared/types/settings";
 import { cn } from "@/lib/utils";
 import { useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
+import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
 
 interface MenuItem {
@@ -242,12 +243,12 @@ export function Menubar() {
       {/* Right side: Window Buttons */}
       <WindowTitleBarActions>
         {/* Theme Toggle Button */}
-        <Button
+        <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
           onClick={toggleThemeMode}
           className="self-center text-muted-foreground"
-          title={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
+          tooltip={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
           aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
         >
           {isLightTheme ? (
@@ -260,9 +261,8 @@ export function Menubar() {
               <circle cx="12" cy="12" r="4" strokeWidth={2} />
             </svg>
           )}
-        </Button>
-        {/* Toggle Detail Button */}
-        <Button
+        </ToolbarIconButton>
+        <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
           onClick={toggleDetail}
@@ -270,21 +270,20 @@ export function Menubar() {
             'self-center',
             isDetailVisible ? 'text-foreground' : 'text-muted-foreground',
           )}
-          title={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
+          tooltip={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
-        </Button>
+        </ToolbarIconButton>
 
-        {/* Settings Button */}
-        <Button
+        <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
           onClick={() => openSettings()}
           className="self-center text-muted-foreground"
-          title={t("menubar.settings")}
+          tooltip={t("menubar.settings")}
         >
           <VscSettingsGear size={14} />
-        </Button>
+        </ToolbarIconButton>
         <WindowChromeControls isMaximized={isMaximized} />
       </WindowTitleBarActions>
     </WindowTitleBar>

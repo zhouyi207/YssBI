@@ -1,6 +1,7 @@
 import React from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { FormulaMappingTable } from './shared/FormulaMappingTable';
 
 export type PanelMethod = 'mixed_ols' | 'fe' | 'fe_time' | 'fe_twoway' | 'lsdv' | 'lsdv_time' | 'lsdv_twoway' | 'fd' | 're_fgls' | 're_mle' | 're_be' | 're_fgls_time' | 're_mle_time' | 're_be_time' | 're_fgls_twoway' | 're_mle_twoway';
 export type PanelModelType = 'mixed' | 'fe' | 're';
@@ -190,32 +191,21 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
         </div>
       </div>
       <div className="border-t border-border px-4 pb-4 pt-3">
-        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-muted-foreground">
-              <th className="text-left px-3 py-1.5 font-medium w-20">Symbol</th>
-              <th className="text-left px-3 py-1.5 font-medium">Variable</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mappings.map((m, idx) => {
-              const symHtml = renderInlineKatex(m.symbol);
-              return (
-                <tr key={`${m.symbol}-${idx}`} className={`border-t border-border ${idx % 2 === 0 ? 'bg-muted/50' : ''}`}>
-                  <td className="px-3 py-1.5">
-                    {symHtml ? (
-                      <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
-                    ) : (
-                      <span className="font-mono text-[var(--accent-color)]">{m.symbol}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 font-mono text-foreground">{m.variable}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+        <FormulaMappingTable
+          mappings={mappings}
+          hasCat={false}
+          showCoef={false}
+          formatNum={() => ''}
+          renderSymbol={(symbol) => {
+            const symHtml = renderInlineKatex(symbol);
+            return symHtml ? (
+              <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+            ) : (
+              <span className="font-mono text-[var(--accent-color)]">{symbol}</span>
+            );
+          }}
+        />
       </div>
     </div>
   );

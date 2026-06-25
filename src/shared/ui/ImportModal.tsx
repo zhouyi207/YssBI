@@ -5,6 +5,9 @@ import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -58,26 +61,21 @@ function TypeOptionButton({
 }) {
   const { t } = useTranslation();
 
-  return (
-    <button
+  const button = (
+    <Button
       type="button"
+      variant="ghost"
       disabled={type.comingSoon}
       onClick={() => {
         onSelect(type.id);
         if (!type.comingSoon) onClose();
       }}
-      className={`group flex h-12 w-full items-center gap-3 rounded-md px-2.5 text-left transition-colors ${
-        type.comingSoon
-          ? "cursor-default opacity-50"
-          : "hover:bg-[var(--interactive-hover)]"
-      }`}
-      title={type.comingSoon ? t("importModal.comingSoon") : undefined}
+      className={cn(
+        "group h-12 w-full justify-start gap-3 rounded-md px-2.5",
+        type.comingSoon && "cursor-default opacity-50",
+      )}
     >
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${type.tone}`}
-      >
-        {type.icon}
-      </div>
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${type.tone}`}>{type.icon}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-medium text-foreground">{type.label}</span>
@@ -85,15 +83,27 @@ function TypeOptionButton({
         </div>
         <p className="truncate text-[11px] text-muted-foreground">{type.description}</p>
       </div>
-      {!type.comingSoon && <VscChevronRight className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent-color)]" size={16} />}
-    </button>
+      {!type.comingSoon && (
+        <VscChevronRight className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent-color)]" size={16} />
+      )}
+    </Button>
   );
+
+  if (type.comingSoon) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{t("importModal.comingSoon")}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return button;
 }
 
 export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions; onClose: () => void }) => {
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
-  const types = CATEGORY_TYPES[selectedCategory];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -114,39 +124,39 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
           </div>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 gap-1 border-b border-border px-3 py-2">
+        <Tabs
+          value={selectedCategory}
+          onValueChange={(value) => setSelectedCategory(value as CategoryId)}
+          className="flex min-h-0 flex-1 flex-col gap-0"
+        >
+          <TabsList
+            variant="line"
+            className="h-auto w-full shrink-0 justify-start gap-1 rounded-none border-b border-border bg-transparent px-3 py-2"
+          >
             {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`flex h-8 items-center gap-2 rounded-md px-2.5 text-left transition-colors ${
-                  selectedCategory === cat.id
-                    ? "bg-[var(--interactive-active)] text-foreground"
-                    : "text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground"
-                }`}
-              >
-                <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded ${cat.tone}`}>
+              <TabsTrigger key={cat.id} value={cat.id} className="h-8 gap-2 px-2.5 text-[12px]">
+                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${cat.tone}`}>
                   {cat.icon}
                 </div>
-                <span className="truncate text-[12px] font-medium">{t(`importModal.categories.${cat.id}`)}</span>
-              </button>
+                <span className="truncate font-medium">{t(`importModal.categories.${cat.id}`)}</span>
+              </TabsTrigger>
             ))}
-          </div>
+          </TabsList>
 
-          <div className="flex h-[232px] min-w-0 flex-col overflow-hidden">
-            <OverlayScrollbar className="h-full">
-              <div className="p-2">
-                <div className="space-y-1">
-                  {types.map((type) => (
-                    <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
-                  ))}
+          {(Object.keys(CATEGORY_TYPES) as CategoryId[]).map((categoryId) => (
+            <TabsContent key={categoryId} value={categoryId} className="mt-0 flex h-[232px] min-w-0 flex-col overflow-hidden">
+              <OverlayScrollbar className="h-full">
+                <div className="p-2">
+                  <div className="space-y-1">
+                    {CATEGORY_TYPES[categoryId].map((type) => (
+                      <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </OverlayScrollbar>
-          </div>
-        </div>
+              </OverlayScrollbar>
+            </TabsContent>
+          ))}
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

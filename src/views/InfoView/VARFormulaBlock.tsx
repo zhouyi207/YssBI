@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { InfoSegmentedToggle } from './shared/InfoViewControls';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { VARCoefDisplay } from './shared/types';
 
 function formatNum(value: number, decimals = 4): string {
@@ -122,28 +124,14 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-1">
-        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
-          <button
-            onClick={() => setMode('symbolic')}
-            className={`px-3 py-1 rounded-l-md transition-colors ${
-              mode === 'symbolic'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border'
-                : 'text-muted-foreground hover:text-foreground border-r border-border'
-            }`}
-          >
-            Symbolic
-          </button>
-          <button
-            onClick={() => setMode('expanded')}
-            className={`px-3 py-1 rounded-r-md transition-colors ${
-              mode === 'expanded'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Expanded
-          </button>
-        </div>
+        <InfoSegmentedToggle
+          value={mode}
+          onValueChange={setMode}
+          options={[
+            { value: 'symbolic', label: 'Symbolic' },
+            { value: 'expanded', label: 'Expanded' },
+          ]}
+        />
       </div>
 
       {/* Formula */}
@@ -157,33 +145,28 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
       {/* Symbolic mode: variable mapping */}
       {mode === 'symbolic' && (
         <div className="border-t border-border px-4 pb-4 pt-3">
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="text-left px-3 py-1.5 font-medium w-24">Symbol</th>
-                <th className="text-left px-3 py-1.5 font-medium">Meaning</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-border bg-muted/50">
-                <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">y_t</td>
-                <td className="px-3 py-1.5 text-muted-foreground">K×1 vector of endogenous variables</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">A_l</td>
-                <td className="px-3 py-1.5 text-muted-foreground">K×K coefficient matrix at lag l</td>
-              </tr>
-              <tr className="border-t border-border bg-muted/50">
-                <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">v</td>
-                <td className="px-3 py-1.5 text-muted-foreground">Constant vector</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="px-3 py-1.5 font-mono text-[var(--accent-color)]">u_t</td>
-                <td className="px-3 py-1.5 text-muted-foreground">Innovation vector, white noise</td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+          <Table className="w-full text-xs">
+            <TableHeader>
+              <TableRow className="border-0 hover:bg-transparent">
+                <TableHead className="h-auto w-24 px-3 py-1.5 text-left font-medium text-muted-foreground">Symbol</TableHead>
+                <TableHead className="h-auto px-3 py-1.5 text-left font-medium text-muted-foreground">Meaning</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[
+                ['y_t', 'K×1 vector of endogenous variables'],
+                ['A_l', 'K×K coefficient matrix at lag l'],
+                ['v', 'Constant vector'],
+                ['u_t', 'Innovation vector, white noise'],
+              ].map(([symbol, meaning], idx) => (
+                <TableRow key={symbol} className={`border-t border-border ${idx % 2 === 0 ? 'bg-muted/50' : ''}`}>
+                  <TableCell className="px-3 py-1.5 font-mono text-[var(--accent-color)]">{symbol}</TableCell>
+                  <TableCell className="px-3 py-1.5 text-muted-foreground">{meaning}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

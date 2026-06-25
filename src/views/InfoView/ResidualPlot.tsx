@@ -1,4 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useChartSeriesColors } from '@/shared/theme/chartTheme';
 import Scatter from '@/views/PlotView/Scatter';
 
 interface ResidualPlotProps {
@@ -18,6 +21,7 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
   yLabel = 'Residuals',
 }) => {
   const [outlierPct, setOutlierPct] = useState(5);
+  const seriesColors = useChartSeriesColors();
 
   const data = useMemo(
     () => fitted.map((f, i) => ({ x: f, y: residuals[i] })),
@@ -42,15 +46,18 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
   return (
     <div className="w-full min-h-[280px]">
       {leverage && leverage.length === data.length && (
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <span className="text-[11px] text-muted-foreground">异常值高亮:</span>
-          <input
+        <div className="mb-2 flex items-center gap-2 px-1">
+          <Label htmlFor="residual-outlier-pct" className="text-[11px] text-muted-foreground">
+            异常值高亮:
+          </Label>
+          <Input
+            id="residual-outlier-pct"
             type="number"
             min={0}
             max={100}
             value={outlierPct}
             onChange={handlePctChange}
-            className="w-14 px-2 py-0.5 text-xs font-mono text-foreground bg-muted border border-border rounded focus:outline-none focus:border-[var(--accent-color)]"
+            className="h-7 w-14 px-2 font-mono text-xs"
           />
           <span className="text-[11px] text-muted-foreground">% (按 leverage 最高)</span>
         </div>
@@ -63,7 +70,7 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
         symmetricY
         zeroLine
         highlightIndices={highlightIndices}
-        highlightColor="#ef4444"
+        highlightColor={seriesColors.highlight}
       />
     </div>
   );

@@ -4,7 +4,8 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
 
@@ -288,7 +289,7 @@ export const SettingsView: React.FC = () => {
                             </div>
 
                             <div className="mb-8">
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.editorUi")}</h3>
+                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.editorUi")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
                                         label={t("settings.labels.workbenchBackground")}
@@ -315,7 +316,7 @@ export const SettingsView: React.FC = () => {
                             </div>
 
                             <div>
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.canvasElements")}</h3>
+                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.canvasElements")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
                                         label={t("settings.labels.gridLines")}
@@ -349,7 +350,7 @@ export const SettingsView: React.FC = () => {
                             </div>
 
                             <div>
-                                <h3 className="text-[11px] font-bold text-[#858585] uppercase tracking-widest mb-4 opacity-70">{t("settings.groups.pinColors")}</h3>
+                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.pinColors")}</h3>
                                 <div className="space-y-6">
                                     <SettingItem
                                         label={t("settings.labels.executionColor")}
@@ -576,12 +577,10 @@ const SettingItem: React.FC<SettingItemProps> = ({
 
             <div className="flex items-center">
                 {type === "checkbox" && (
-                    <Input
+                    <Checkbox
                         id={controlId}
-                        type="checkbox"
                         checked={checked ?? false}
-                        onChange={(e) => onChange?.(e.target.checked)}
-                        className="h-4 w-4 accent-[var(--accent-color)]"
+                        onCheckedChange={(value) => onChange?.(value === true)}
                     />
                 )}
                 {type === "text" && (

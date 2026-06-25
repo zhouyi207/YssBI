@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { VscDatabase } from 'react-icons/vsc';
 import { useEditStateStore } from '@/features/core/dataStore';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -83,14 +84,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         style={noDragStyle}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <Input
-          readOnly
-          value={selectedCellText}
-          placeholder={t('dataView.cellPreviewPlaceholder')}
-          className="h-7 w-full text-xs shadow-none"
-          title={selectedCellText || undefined}
-          aria-label={t('dataView.cellPreviewPlaceholder')}
-        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Input
+              readOnly
+              value={selectedCellText}
+              placeholder={t('dataView.cellPreviewPlaceholder')}
+              className="h-7 w-full text-xs shadow-none"
+              aria-label={t('dataView.cellPreviewPlaceholder')}
+            />
+          </TooltipTrigger>
+          {selectedCellText ? <TooltipContent side="bottom">{selectedCellText}</TooltipContent> : null}
+        </Tooltip>
       </div>
       <WindowTitleBarActions>
         <WindowChromeControls isMaximized={isMaximized} />

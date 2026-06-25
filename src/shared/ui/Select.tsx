@@ -18,11 +18,12 @@ interface SelectProps {
     onChange: (value: string) => void;
     className?: string;
     disabled?: boolean;
+    id?: string;
 }
 
 const EMPTY_OPTION_VALUE = "__yssbi_empty_select_value__";
 
-export const Select: React.FC<SelectProps> = ({ options, value, onChange, className = "", disabled = false }) => {
+export const Select: React.FC<SelectProps> = ({ options, value, onChange, className = "", disabled = false, id }) => {
     const formattedOptions: Option[] = options.map(opt =>
         typeof opt === "string" ? { label: opt, value: opt } : opt
     );
@@ -35,7 +36,7 @@ export const Select: React.FC<SelectProps> = ({ options, value, onChange, classN
             onValueChange={(nextValue) => onChange(nextValue === EMPTY_OPTION_VALUE ? "" : nextValue)}
             disabled={disabled}
         >
-            <SelectTrigger size="sm" className={className}>
+            <SelectTrigger id={id} size="sm" className={className}>
                 <SelectValue />
             </SelectTrigger>
             <SelectContent>

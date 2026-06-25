@@ -285,7 +285,7 @@ export function NodePalette({
       </div>
 
       {noResults ? (
-        <div className="px-4 py-8 text-center text-xs text-gray-600 italic">No matches found</div>
+        <div className="px-4 py-8 text-center text-xs italic text-muted-foreground">No matches found</div>
       ) : (
         <OverlayScrollbar ref={scrollRef} direction="vertical" className="max-h-96 py-1">
           <div
@@ -374,16 +374,16 @@ const CategoryRow = React.memo(function CategoryRow({
     <Button
       type="button"
       variant="ghost"
-      className="flex h-full w-full cursor-pointer items-center justify-start gap-1 rounded-none px-2 py-1.5 font-bold text-gray-300"
+      className="flex h-full w-full cursor-pointer items-center justify-start gap-1 rounded-none px-2 py-1.5 font-bold text-foreground/80"
       style={{ paddingLeft: level * 12 + 8 }}
       onClick={() => onToggle(path)}
     >
       {expanded ? (
-        <VscChevronDown size={14} className="text-gray-500" />
+        <VscChevronDown size={14} className="text-muted-foreground" />
       ) : (
-        <VscChevronRight size={14} className="text-gray-500" />
+        <VscChevronRight size={14} className="text-muted-foreground" />
       )}
-      <VscCircuitBoard className="text-gray-500 shrink-0" size={14} />
+      <VscCircuitBoard className="shrink-0 text-muted-foreground" size={14} />
       <span className="text-[11px] uppercase tracking-wider truncate">{node.name}</span>
     </Button>
   );

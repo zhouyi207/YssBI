@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
 
 export interface BarDatum {
   label: string;
@@ -22,13 +24,12 @@ export interface BarChartProps {
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
 const COMPACT_MARGIN = { top: 4, right: 4, bottom: 4, left: 4 };
-const DEFAULT_COLOR = '#569cd6';
 
 const BarChart: React.FC<BarChartProps> = ({
   data,
   xLabel,
   yLabel,
-  color = DEFAULT_COLOR,
+  color,
   height: heightProp,
   margin: marginProp,
   horizontal = false,
@@ -39,6 +40,8 @@ const BarChart: React.FC<BarChartProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
 
   const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
 
@@ -82,7 +85,7 @@ const BarChart: React.FC<BarChartProps> = ({
           select(this).attr('fill-opacity', 1);
           tooltip
             .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${color}">${d.value}</div>`);
+            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${plotColor}">${d.value}</div>`);
         })
         .on('mousemove', function (event: any) {
           const rect = container!.getBoundingClientRect();
@@ -122,7 +125,7 @@ const BarChart: React.FC<BarChartProps> = ({
         .attr('y', (d) => yBand(d.label)!)
         .attr('width', (d) => xLinear(d.value))
         .attr('height', yBand.bandwidth())
-        .attr('fill', color)
+        .attr('fill', plotColor)
         .attr('fill-opacity', 0.75)
         .attr('rx', 2);
 
@@ -171,7 +174,7 @@ const BarChart: React.FC<BarChartProps> = ({
         .attr('y', (d) => yLinear(d.value))
         .attr('width', xBand.bandwidth())
         .attr('height', (d) => h - yLinear(d.value))
-        .attr('fill', color)
+        .attr('fill', plotColor)
         .attr('fill-opacity', 0.75)
         .attr('rx', 2);
 
@@ -217,15 +220,15 @@ const BarChart: React.FC<BarChartProps> = ({
           .text(yLabel);
       }
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, horizontal, compact, size, chartTheme]);
+  }, [data, xLabel, yLabel, plotColor, heightProp, margin, horizontal, compact, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`}>
+    <div ref={containerRef} className={cn(plotContainerClass(undefined, heightProp))}>
       <svg ref={svgRef} />
       {compact && (
         <div
           ref={tooltipRef}
-          className="absolute pointer-events-none rounded px-2 py-1 bg-[#1e2028] border border-gray-700 shadow-lg opacity-0 transition-opacity duration-100 z-10 whitespace-nowrap"
+          className={plotTooltipClass}
         />
       )}
     </div>

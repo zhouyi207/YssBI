@@ -1,5 +1,11 @@
 import React, { useMemo } from 'react';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SectionHeader, formatNum } from './shared';
+import {
+  InfoStatsTable,
+  infoStatsRowEvenClass,
+  infoStatsRowOddClass,
+} from './shared/InfoStatsTable';
 import type { VARSocResultData } from './shared/types';
 
 export type { VARSocResultData } from './shared/types';
@@ -83,91 +89,87 @@ export const VARSocComponent: React.FC<{ data: VARSocResultData }> = ({ data }) 
         }
       />
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        <table className="w-full text-xs font-mono text-foreground">
-          <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="px-3 py-2 text-left">Lag</th>
-              <th className="px-3 py-2 text-right">LL</th>
-              <th className="px-3 py-2 text-right">LR</th>
-              <th className="px-3 py-2 text-right">df</th>
-              <th className="px-3 py-2 text-right">P</th>
-              <th className="px-3 py-2 text-right">FPE</th>
-              <th className="px-3 py-2 text-right">AIC</th>
-              <th className="px-3 py-2 text-right">HQIC</th>
-              <th className="px-3 py-2 text-right">SBIC</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, idx) => (
-              <tr
-                key={r.lag}
-                className={`border-b border-border transition-colors hover:bg-muted ${
-                  idx % 2 === 0 ? 'bg-card' : 'bg-muted/40'
-                }`}
-              >
-                <td className="px-3 py-2 text-muted-foreground">{r.lag}</td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.ll.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.log_likelihood)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.log_likelihood)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.lr.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.lr ?? undefined)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.lr ?? undefined)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {r.lr_df != null && highlight.lr_df.has(idx) ? (
-                    <EmphasisNumber valueText={String(r.lr_df)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{r.lr_df ?? '—'}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.lr_p.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.lr_p ?? undefined, 4)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.lr_p ?? undefined, 4)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.fpe.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.fpe)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.fpe)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.aic.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.aic)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.aic)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.hqic.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.hqic)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.hqic)}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {highlight.sbic.has(idx) ? (
-                    <EmphasisNumber valueText={fmtCell(r.sbic)} align="right" />
-                  ) : (
-                    <span className="text-foreground">{fmtCell(r.sbic)}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <InfoStatsTable className="overflow-x-auto" tableClassName="text-xs font-mono text-foreground">
+        <TableHeader>
+          <TableRow className="border-b border-border text-muted-foreground hover:bg-transparent">
+            <TableHead className="h-auto px-3 py-2 text-left">Lag</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">LL</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">LR</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">df</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">P</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">FPE</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">AIC</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">HQIC</TableHead>
+            <TableHead className="h-auto px-3 py-2 text-right">SBIC</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, idx) => (
+            <TableRow
+              key={r.lag}
+              className={`border-b border-border transition-colors hover:bg-muted ${idx % 2 === 0 ? infoStatsRowEvenClass : infoStatsRowOddClass}`}
+            >
+              <TableCell className="px-3 py-2 text-muted-foreground">{r.lag}</TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.ll.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.log_likelihood)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.log_likelihood)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.lr.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.lr ?? undefined)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.lr ?? undefined)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {r.lr_df != null && highlight.lr_df.has(idx) ? (
+                  <EmphasisNumber valueText={String(r.lr_df)} align="right" />
+                ) : (
+                  <span className="text-foreground">{r.lr_df ?? '—'}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.lr_p.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.lr_p ?? undefined, 4)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.lr_p ?? undefined, 4)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.fpe.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.fpe)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.fpe)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.aic.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.aic)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.aic)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.hqic.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.hqic)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.hqic)}</span>
+                )}
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
+                {highlight.sbic.has(idx) ? (
+                  <EmphasisNumber valueText={fmtCell(r.sbic)} align="right" />
+                ) : (
+                  <span className="text-foreground">{fmtCell(r.sbic)}</span>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </InfoStatsTable>
 
       <p className="mt-2 text-[10px] text-muted-foreground px-1">
         <span className="inline-flex items-center gap-1 align-middle">

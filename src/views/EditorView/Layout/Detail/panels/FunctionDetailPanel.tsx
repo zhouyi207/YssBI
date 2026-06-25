@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody } from '@/components/ui/table';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailDeleteButton } from '../shared/DetailDeleteButton';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { PinEditor } from '../shared/PinEditor';
+import { detailInlineInputClass, detailTableClass, detailValueMutedClass } from '../shared/detailStyles';
 
 interface FunctionDetailPanelProps {
   fn: {
@@ -22,24 +24,18 @@ export function FunctionDetailPanel({ fn, onUpdate, onDelete, onDeleted }: Funct
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: fn.name })}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.name')}
-            </TableCell>
-            <TableCell>
-              <Input
-                className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
-                value={fn.name}
-                onChange={(e) => onUpdate({ name: e.target.value })}
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.type')}</TableCell>
-            <TableCell className="italic text-gray-400">{t('detail.typeLabels.function')}</TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.name')}>
+            <Input
+              className={detailInlineInputClass}
+              value={fn.name}
+              onChange={(e) => onUpdate({ name: e.target.value })}
+            />
+          </DetailFieldRow>
+          <DetailFieldRow label={t('detail.fields.type')} valueClassName={`italic ${detailValueMutedClass}`}>
+            {t('detail.typeLabels.function')}
+          </DetailFieldRow>
         </TableBody>
       </Table>
       <PinEditor

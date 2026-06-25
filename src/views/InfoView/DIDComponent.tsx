@@ -1,4 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { PanelDidService } from '@/services/stats';
 import {
   SectionHeader,
@@ -233,34 +236,42 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
           <div className="font-medium text-fuchsia-300 mb-2">安慰剂 ② 虚构处理组（实体级随机置换）</div>
           {fake_group_engine ? (
             <div className="mb-4 flex flex-wrap items-end gap-3 text-xs">
-              <label className="flex flex-col gap-1 text-muted-foreground">
-                模拟次数（1–2000）
-                <input
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="did-perm-reps" className="text-muted-foreground">
+                  模拟次数（1–2000）
+                </Label>
+                <Input
+                  id="did-perm-reps"
                   type="number"
                   min={1}
                   max={2000}
                   value={permReps}
                   onChange={(ev) => setPermReps(Number(ev.target.value))}
-                  className="w-28 rounded border border-fuchsia-500/30 bg-black/30 px-2 py-1 text-foreground font-mono tabular-nums"
+                  className="h-8 w-28 border-fuchsia-500/30 bg-muted/50 font-mono tabular-nums"
                 />
-              </label>
-              <label className="flex flex-col gap-1 text-muted-foreground">
-                随机种子
-                <input
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="did-rng-seed" className="text-muted-foreground">
+                  随机种子
+                </Label>
+                <Input
+                  id="did-rng-seed"
                   type="number"
                   value={rngSeed}
                   onChange={(ev) => setRngSeed(Number(ev.target.value))}
-                  className="w-28 rounded border border-fuchsia-500/30 bg-black/30 px-2 py-1 text-foreground font-mono tabular-nums"
+                  className="h-8 w-28 border-fuchsia-500/30 bg-muted/50 font-mono tabular-nums"
                 />
-              </label>
-              <button
+              </div>
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 disabled={fgLoading}
                 onClick={() => void runFakeGroupRi()}
-                className="rounded border border-fuchsia-400/50 bg-fuchsia-500/20 px-3 py-1.5 text-fuchsia-100 hover:bg-fuchsia-500/30 disabled:opacity-50"
+                className="border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-100 hover:bg-fuchsia-500/30"
               >
                 {fgLoading ? '计算中…' : '计算置换检验'}
-              </button>
+              </Button>
             </div>
           ) : null}
           {fgErr ? (

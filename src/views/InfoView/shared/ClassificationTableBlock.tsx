@@ -1,4 +1,5 @@
 import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { ClassificationTable } from './types';
 
 /** Stata estat classification — classification table and statistics */
@@ -20,36 +21,36 @@ export function ClassificationTableBlock({ data }: { data: ClassificationTable }
 
       {/* 2×2 Table */}
       <div className="p-4">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium"></th>
-              <th className="text-center py-2 px-3 text-muted-foreground font-medium">True D</th>
-              <th className="text-center py-2 px-3 text-muted-foreground font-medium">True ~D</th>
-              <th className="text-center py-2 px-3 text-muted-foreground font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-border">
-              <td className="py-2 px-3 text-muted-foreground font-medium">Classified +</td>
-              <td className="py-2 px-3 text-center font-mono text-emerald-400">{data.tp}</td>
-              <td className="py-2 px-3 text-center font-mono text-amber-400">{data.fp}</td>
-              <td className="py-2 px-3 text-center font-mono text-foreground">{totalPos}</td>
-            </tr>
-            <tr>
-              <td className="py-2 px-3 text-muted-foreground font-medium">Classified −</td>
-              <td className="py-2 px-3 text-center font-mono text-amber-400">{data.fn_}</td>
-              <td className="py-2 px-3 text-center font-mono text-emerald-400">{data.tn}</td>
-              <td className="py-2 px-3 text-center font-mono text-foreground">{totalNeg}</td>
-            </tr>
-            <tr className="border-t border-border">
-              <td className="py-2 px-3 text-muted-foreground font-medium">Total</td>
-              <td className="py-2 px-3 text-center font-mono text-foreground">{totalD}</td>
-              <td className="py-2 px-3 text-center font-mono text-foreground">{totalND}</td>
-              <td className="py-2 px-3 text-center font-mono text-foreground">{total}</td>
-            </tr>
-          </tbody>
-        </table>
+        <Table className="w-full border-collapse text-sm">
+          <TableHeader>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="h-auto px-3 py-2 text-left font-medium text-muted-foreground"></TableHead>
+              <TableHead className="h-auto px-3 py-2 text-center font-medium text-muted-foreground">True D</TableHead>
+              <TableHead className="h-auto px-3 py-2 text-center font-medium text-muted-foreground">True ~D</TableHead>
+              <TableHead className="h-auto px-3 py-2 text-center font-medium text-muted-foreground">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow className="border-b border-border">
+              <TableCell className="px-3 py-2 font-medium text-muted-foreground">Classified +</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-emerald-400">{data.tp}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-amber-400">{data.fp}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-foreground">{totalPos}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="px-3 py-2 font-medium text-muted-foreground">Classified −</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-amber-400">{data.fn_}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-emerald-400">{data.tn}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-foreground">{totalNeg}</TableCell>
+            </TableRow>
+            <TableRow className="border-t border-border">
+              <TableCell className="px-3 py-2 font-medium text-muted-foreground">Total</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-foreground">{totalD}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-foreground">{totalND}</TableCell>
+              <TableCell className="px-3 py-2 text-center font-mono text-foreground">{total}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
 
         {/* Statistics */}
         <div className="mt-4 space-y-1.5 text-xs">

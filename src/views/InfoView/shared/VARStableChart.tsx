@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
 import type { VARStableRow } from './types';
 
 export interface VARStableChartProps {
@@ -22,6 +22,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -101,8 +102,8 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         .attr('cx', x)
         .attr('cy', y)
         .attr('r', 5)
-        .attr('fill', isUnstable ? '#e06c75' : '#569cd6')
-        .attr('stroke', isUnstable ? '#e06c75' : '#569cd6')
+        .attr('fill', isUnstable ? seriesColors.negative : seriesColors.primary)
+        .attr('stroke', isUnstable ? seriesColors.negative : seriesColors.primary)
         .attr('stroke-width', 1.5)
         .attr('fill-opacity', 0.9)
         .style('cursor', 'pointer')
@@ -118,7 +119,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
             `<b>Eigenvalue ${i + 1}</b><br/>` +
             `${evStr}<br/>` +
             `Modulus: <b>${d.modulus.toFixed(6)}</b>` +
-            (isUnstable ? '<br/><span style="color:#e06c75">≥ 1 (unstable)</span>' : '') +
+            (isUnstable ? `<br/><span style="color:${seriesColors.negative}">≥ 1 (unstable)</span>` : '') +
             `</div>`;
           const rect = (event.currentTarget as SVGCircleElement).getBoundingClientRect();
           const containerRect = containerRef.current!.getBoundingClientRect();
@@ -168,7 +169,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('fill', chartTheme.label)
       .attr('font-size', '11px')
       .text('Imaginary');
-  }, [data, size, hideTooltip, chartTheme]);
+  }, [data, size, hideTooltip, chartTheme, seriesColors]);
 
   return (
     <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>

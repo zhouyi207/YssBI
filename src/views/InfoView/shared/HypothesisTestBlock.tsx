@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { Input } from '@/components/ui/input';
 import { hypothesisTest } from '@/services/stats';
 import type { HypothesisTestResponse } from '@/services/stats';
 import { SectionHeader, formatNum } from './RegressionShared';
+import { InfoAccentButton } from './InfoViewControls';
 import { buildParamNames, linearFormToLatex, renderHypothesisLatex } from './utils';
 import type { RegressionResultData } from './types';
 
@@ -79,21 +81,17 @@ export function HypothesisTestBlock({ data }: { data: RegressionResultData }) {
       />
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex gap-2">
-          <input
+          <Input
             type="text"
             value={hypothesis}
             onChange={(e) => setHypothesis(e.target.value)}
             placeholder="e.g. x1 = 0 或 petal_width = -0.5626, petal_length = 0.7（逗号分隔多约束）"
-            className="flex-1 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="flex-1 font-mono text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleRun()}
           />
-          <button
-            onClick={handleRun}
-            disabled={!canRun || loading}
-            className="px-4 py-2 rounded-md bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-color)]/40 hover:bg-[var(--accent-color)]/30 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-          >
-            {loading ? '...' : 'Run'}
-          </button>
+          <InfoAccentButton onClick={handleRun} disabled={!canRun} loading={loading}>
+            Run
+          </InfoAccentButton>
         </div>
         <div className="text-[10px] text-muted-foreground">
           Param names: {paramNames.join(', ')}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
 
 export interface HistogramBin {
   label: string;
@@ -23,13 +25,12 @@ export interface HistogramProps {
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
 const COMPACT_MARGIN = { top: 4, right: 4, bottom: 4, left: 4 };
-const DEFAULT_COLOR = '#569cd6';
 
 const Histogram: React.FC<HistogramProps> = ({
   data,
   xLabel,
   yLabel = 'Frequency',
-  color = DEFAULT_COLOR,
+  color,
   height: heightProp,
   margin: marginProp,
   compact = false,
@@ -40,6 +41,8 @@ const Histogram: React.FC<HistogramProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
 
   const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
 
@@ -101,9 +104,9 @@ const Histogram: React.FC<HistogramProps> = ({
       .attr('y', (d) => yScale(d.count))
       .attr('width', xBand.bandwidth())
       .attr('height', (d) => h - yScale(d.count))
-      .attr('fill', color)
+      .attr('fill', plotColor)
       .attr('fill-opacity', 0.75)
-      .attr('stroke', color)
+      .attr('stroke', plotColor)
       .attr('stroke-opacity', 0.4)
       .attr('stroke-width', 0.5)
       .attr('rx', compact ? 1 : 0);
@@ -114,7 +117,7 @@ const Histogram: React.FC<HistogramProps> = ({
           select(this).attr('fill-opacity', 1);
           tooltip
             .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${color}">${d.count}</div>`);
+            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${plotColor}">${d.count}</div>`);
         })
         .on('mousemove', function (event) {
           const rect = container!.getBoundingClientRect();
@@ -165,24 +168,12 @@ const Histogram: React.FC<HistogramProps> = ({
           .text(yLabel);
       }
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, compact, size, chartTheme]);
+  }, [data, xLabel, yLabel, plotColor, heightProp, margin, compact, size, chartTheme]);
 
   return (
-    <div
-      ref={containerRef}
-      className={
-        embedded
-          ? 'relative h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]'
-          : `relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`
-      }
-    >
+    <div ref={containerRef} className={cn('relative', plotContainerClass(embedded, heightProp))}>
       <svg ref={svgRef} />
-      {compact && (
-        <div
-          ref={tooltipRef}
-          className="absolute pointer-events-none rounded px-2 py-1 bg-[#1e2028] border border-gray-700 shadow-lg opacity-0 transition-opacity duration-100 z-10 whitespace-nowrap"
-        />
-      )}
+      {compact && <div ref={tooltipRef} className={plotTooltipClass} />}
     </div>
   );
 };

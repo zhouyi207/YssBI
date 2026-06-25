@@ -1,4 +1,6 @@
 import React from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { formatNum } from './utils';
 import type { BreuschPaganTests } from './types';
 
@@ -13,24 +15,24 @@ export function SignificanceStars({ pValue }: { pValue: number }) {
 }
 
 export function RSquaredBadge({ value }: { value: number }) {
-  let color = 'bg-red-500/20 text-red-400 border-red-500/30';
-  if (value >= 0.7) color = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-  else if (value >= 0.4) color = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+  const variant = value >= 0.7 ? 'success' : value >= 0.4 ? 'warning' : 'destructive';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${color}`}>
+    <Badge variant={variant} className="rounded-full px-2.5 py-0.5 text-xs font-semibold normal-case tracking-normal">
       R² = {value.toFixed(3)}
-    </span>
+    </Badge>
   );
 }
 
 export function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-muted rounded-lg px-4 py-3 border border-border">
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-foreground font-mono text-sm font-medium">{value}</div>
-      {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
-    </div>
+    <Card className="rounded-lg py-0 shadow-none">
+      <CardContent className="px-4 py-3">
+        <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="font-mono text-sm font-medium text-foreground">{value}</div>
+        {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -75,30 +77,29 @@ export function Chi2TestCards({ cards }: { cards: Chi2TestCard[] }) {
       {cards.map((c) => {
         const reject = c.p_value < 0.05;
         return (
-          <div
-            key={c.label}
-            className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors"
-          >
-            <div className="text-[11px] text-muted-foreground font-mono mb-2">{c.label}</div>
-            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-              <span className="text-muted-foreground">
-                chi2 = <span className="font-mono text-foreground">{formatNum(c.chi2)}</span>
-              </span>
-              <span className="text-muted-foreground">
-                df = <span className="font-mono text-foreground">{c.df}</span>
-              </span>
-              <span className="text-muted-foreground">
-                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
-              </span>
-            </div>
-            <div className="mt-1.5 text-[10px]">
-              {reject ? (
-                <span className="text-amber-400">拒绝 H0</span>
-              ) : (
-                <span className="text-muted-foreground">不拒绝 H0</span>
-              )}
-            </div>
-          </div>
+          <Card key={c.label} className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border">
+            <CardContent className="px-4 py-3">
+              <div className="mb-2 font-mono text-[11px] text-muted-foreground">{c.label}</div>
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+                <span className="text-muted-foreground">
+                  chi2 = <span className="font-mono text-foreground">{formatNum(c.chi2)}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  df = <span className="font-mono text-foreground">{c.df}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
+                </span>
+              </div>
+              <div className="mt-1.5 text-[10px]">
+                {reject ? (
+                  <span className="text-amber-400">拒绝 H0</span>
+                ) : (
+                  <span className="text-muted-foreground">不拒绝 H0</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         );
       })}
     </div>
@@ -126,27 +127,26 @@ export function FTestCards({ cards }: { cards: FTestCard[] }) {
       {cards.map((c) => {
         const reject = c.p_value < 0.05;
         return (
-          <div
-            key={c.label}
-            className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors"
-          >
-            <div className="text-[11px] text-muted-foreground font-mono mb-2">{c.label}</div>
-            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-              <span className="text-muted-foreground">
-                F({c.df1},{c.df2}) = <span className="font-mono text-foreground">{formatNum(c.f_stat)}</span>
-              </span>
-              <span className="text-muted-foreground">
-                p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
-              </span>
-            </div>
-            <div className="mt-1.5 text-[10px]">
-              {reject ? (
-                <span className="text-amber-400">拒绝 H0（模型可能有遗漏变量或函数形式误设）</span>
-              ) : (
-                <span className="text-muted-foreground">不拒绝 H0</span>
-              )}
-            </div>
-          </div>
+          <Card key={c.label} className="rounded-lg bg-muted py-0 shadow-none transition-colors hover:border-border">
+            <CardContent className="px-4 py-3">
+              <div className="mb-2 font-mono text-[11px] text-muted-foreground">{c.label}</div>
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+                <span className="text-muted-foreground">
+                  F({c.df1},{c.df2}) = <span className="font-mono text-foreground">{formatNum(c.f_stat)}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  p = <span className={`font-mono ${reject ? 'text-emerald-400' : 'text-muted-foreground'}`}>{formatNum(c.p_value)}</span>
+                </span>
+              </div>
+              <div className="mt-1.5 text-[10px]">
+                {reject ? (
+                  <span className="text-amber-400">拒绝 H0（模型可能有遗漏变量或函数形式误设）</span>
+                ) : (
+                  <span className="text-muted-foreground">不拒绝 H0</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         );
       })}
     </div>

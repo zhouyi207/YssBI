@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select } from '@/shared/ui';
 import { SectionHeader, formatNum } from './RegressionShared';
+import {
+  InfoStatsTable,
+  infoStatsCellClass,
+  infoStatsHeadClass,
+} from './InfoStatsTable';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildParamNames } from './utils';
 import { parseAtValues } from '@/services/stats/parseAtService';
 import type { OLSResultData } from './types';
@@ -186,30 +195,25 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Command</label>
-            <select
+            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Command</Label>
+            <Select
               value={marginType}
-              onChange={(e) => setMarginType(e.target.value as MarginType)}
-              className="px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50 min-w-[220px]"
-            >
-              {MARGIN_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              options={MARGIN_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
+              onChange={(val) => setMarginType(val as MarginType)}
+              className="min-w-[220px] font-mono text-sm"
+            />
           </div>
           {showAtInput && (
             <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                 at (e.g. x1 = 0, x2 = 1.5)
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
                 value={atSpec}
                 onChange={(e) => setAtSpec(e.target.value)}
                 placeholder="x1 = 0, x2 = 1.5（与假设检验格式一致）"
-                className="px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[var(--accent-color)]/50 w-full"
+                className="w-full font-mono text-sm"
               />
             </div>
           )}
@@ -221,26 +225,24 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
           <div className="text-xs text-red-400 font-mono">{atParseError}</div>
         )}
         {results.length > 0 && (
-          <div className="rounded-md bg-muted border border-border overflow-hidden mt-2">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-muted/60">
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Variable</th>
-                  <th className="text-right px-4 py-2 text-muted-foreground font-medium">
-                    {marginType.startsWith('dydx') ? 'dY/dX' : marginType === 'eyex' ? 'ey/ex' : marginType === 'eydx' ? 'ey/dx' : 'dy/ex'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r) => (
-                  <tr key={r.variable} className="border-t border-border">
-                    <td className="px-4 py-2 font-mono text-foreground">{r.variable}</td>
-                    <td className="px-4 py-2 text-right font-mono text-foreground">{formatNum(r.margin)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <InfoStatsTable className="mt-2 bg-muted" tableClassName="text-xs">
+            <TableHeader>
+              <TableRow className="border-0 hover:bg-transparent">
+                <TableHead className={infoStatsHeadClass}>Variable</TableHead>
+                <TableHead className={`${infoStatsHeadClass} text-right`}>
+                  {marginType.startsWith('dydx') ? 'dY/dX' : marginType === 'eyex' ? 'ey/ex' : marginType === 'eydx' ? 'ey/dx' : 'dy/ex'}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {results.map((r) => (
+                <TableRow key={r.variable} className="border-t border-border">
+                  <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{r.variable}</TableCell>
+                  <TableCell className={`${infoStatsCellClass} text-right font-mono text-foreground`}>{formatNum(r.margin)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </InfoStatsTable>
         )}
       </div>
     </div>

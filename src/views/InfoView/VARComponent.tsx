@@ -4,7 +4,14 @@ import {
   formatNum,
   CoefficientsBlock,
   VARStableChart,
+  VarModelTable,
+  VarModelRow,
+  VarModelCell,
+  VarEigenvalueTable,
+  InfoStatsTable,
+  infoVarHeadClass,
 } from './shared';
+import { TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { Coefficient, VARSummaryResultData } from './shared/types';
 
 const VARFormulaBlock = React.lazy(() => import('./VARFormulaBlock'));
@@ -153,32 +160,18 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
           </svg>
         }
       />
-      <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">RMSE</th>
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">R-sq</th>
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
-            </tr>
-          </thead>
-          <tbody>
-            {equations.map((eq, i) => (
-              <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                <td className="px-4 py-2.5 font-mono text-foreground">{eq.eq_name}</td>
-                <td className="px-4 py-2.5 font-mono text-foreground">{eq.parms}</td>
-                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.rmse)}</td>
-                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.r_sq)}</td>
-                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.chi2)}</td>
-                <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.p_chi2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'RMSE', 'R-sq', 'chi2', 'P>chi2']}>
+        {equations.map((eq, i) => (
+          <VarModelRow key={i}>
+            <VarModelCell>{eq.eq_name}</VarModelCell>
+            <VarModelCell>{eq.parms}</VarModelCell>
+            <VarModelCell>{formatNum(eq.rmse)}</VarModelCell>
+            <VarModelCell>{formatNum(eq.r_sq)}</VarModelCell>
+            <VarModelCell>{formatNum(eq.chi2)}</VarModelCell>
+            <VarModelCell>{formatNum(eq.p_chi2)}</VarModelCell>
+          </VarModelRow>
+        ))}
+      </VarModelTable>
 
       {/* Coefficients */}
       <CoefficientsBlock
@@ -213,26 +206,16 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
                     <div className="px-4 py-2.5 text-sm font-medium text-foreground border-b border-border">
                       Equation: {eqName}
                     </div>
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
-                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
-                          <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((row, i) => (
-                          <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                            <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
-                            <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
-                            <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
-                            <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <VarModelTable columns={['lag', 'chi2', 'df', 'Prob > chi2']}>
+                      {rows.map((row, i) => (
+                        <VarModelRow key={i}>
+                          <VarModelCell>{row.lag}</VarModelCell>
+                          <VarModelCell>{formatNum(row.chi2)}</VarModelCell>
+                          <VarModelCell>{row.df}</VarModelCell>
+                          <VarModelCell>{formatNum(row.p_value)}</VarModelCell>
+                        </VarModelRow>
+                      ))}
+                    </VarModelTable>
                   </div>
                 );
               })}
@@ -255,26 +238,7 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
           <div className="grid grid-cols-[auto_1fr] gap-4 mb-6 items-stretch min-h-[360px]">
             <div className="flex flex-col h-full rounded-lg border border-border bg-muted overflow-hidden">
               <div className="flex-1 min-h-0 flex flex-col">
-                <table className="text-left text-sm min-w-[200px]">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Eigenvalue</th>
-                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Modulus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {varstableSorted.map((row, i) => (
-                      <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                        <td className="px-4 py-2.5 font-mono text-foreground">
-                          {row.im >= 0
-                            ? `${formatNum(row.re)} + ${formatNum(row.im)}i`
-                            : `${formatNum(row.re)} - ${formatNum(Math.abs(row.im))}i`}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.modulus)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <VarEigenvalueTable rows={varstableSorted} />
                 <div className="flex-1 min-h-0 bg-muted" />
               </div>
               <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border shrink-0">
@@ -301,33 +265,17 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Excluded</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vargranger.map((row, i) => (
-                  <tr
-                    key={i}
-                    className={`border-b border-border last:border-b-0 hover:bg-muted/40 ${row.excluded === 'ALL' ? 'border-b-2 border-border' : ''}`}
-                  >
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.excluded}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <VarModelTable className="mb-6" columns={['Equation', 'Excluded', 'chi2', 'df', 'Prob > chi2']}>
+            {vargranger.map((row, i) => (
+              <VarModelRow key={i} className={row.excluded === 'ALL' ? 'border-b-2 border-border' : undefined}>
+                <VarModelCell>{row.eq_name}</VarModelCell>
+                <VarModelCell>{row.excluded}</VarModelCell>
+                <VarModelCell>{formatNum(row.chi2)}</VarModelCell>
+                <VarModelCell>{row.df}</VarModelCell>
+                <VarModelCell>{formatNum(row.p_value)}</VarModelCell>
+              </VarModelRow>
+            ))}
+          </VarModelTable>
         </>
       )}
 
@@ -342,31 +290,24 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
-                </tr>
-              </thead>
-              <tbody>
-                {varlmar.map((row, i) => (
-                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
-              H0: no autocorrelation at lag order
-            </div>
-          </div>
+          <VarModelTable
+            className="mb-6"
+            columns={['lag', 'chi2', 'df', 'Prob > chi2']}
+            footer={
+              <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                H0: no autocorrelation at lag order
+              </div>
+            }
+          >
+            {varlmar.map((row, i) => (
+              <VarModelRow key={i}>
+                <VarModelCell>{row.lag}</VarModelCell>
+                <VarModelCell>{formatNum(row.chi2)}</VarModelCell>
+                <VarModelCell>{row.df}</VarModelCell>
+                <VarModelCell>{formatNum(row.p_value)}</VarModelCell>
+              </VarModelRow>
+            ))}
+          </VarModelTable>
         </>
       )}
 
@@ -381,36 +322,32 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-x-auto mb-6">
-            <table className="w-full text-left text-sm min-w-[400px]">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Step</th>
-                  {var_names.flatMap((imp) =>
-                    var_names.map((resp) => (
-                      <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-                        {imp}→{resp}
-                      </th>
-                    ))
+          <InfoStatsTable className="mb-6 overflow-x-auto bg-muted" tableClassName="min-w-[400px] text-left text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-border hover:bg-transparent">
+                <TableHead className={infoVarHeadClass}>Step</TableHead>
+                {var_names.flatMap((imp) =>
+                  var_names.map((resp) => (
+                    <TableHead key={`${imp}-${resp}`} className={infoVarHeadClass}>
+                      {imp}→{resp}
+                    </TableHead>
+                  )),
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {oirf.map((stepData, s) => (
+                <VarModelRow key={s}>
+                  <VarModelCell>{s}</VarModelCell>
+                  {var_names.flatMap((_, impIdx) =>
+                    var_names.map((_, respIdx) => (
+                      <VarModelCell key={`${impIdx}-${respIdx}`}>{formatNum(stepData[respIdx]?.[impIdx] ?? 0)}</VarModelCell>
+                    )),
                   )}
-                </tr>
-              </thead>
-              <tbody>
-                {oirf.map((stepData, s) => (
-                  <tr key={s} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                    <td className="px-4 py-2.5 font-mono text-foreground">{s}</td>
-                    {var_names.flatMap((_, impIdx) =>
-                      var_names.map((_, respIdx) => (
-                        <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-foreground">
-                          {formatNum(stepData[respIdx]?.[impIdx] ?? 0)}
-                        </td>
-                      ))
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </VarModelRow>
+              ))}
+            </TableBody>
+          </InfoStatsTable>
         </>
       )}
 
@@ -425,36 +362,32 @@ export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data })
             </svg>
           }
         />
-        <div className="rounded-lg border border-border bg-muted overflow-x-auto mb-6">
-          <table className="w-full text-left text-sm min-w-[400px]">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">step</th>
-                {var_names.flatMap((imp) =>
-                  var_names.map((resp) => (
-                    <th key={`${imp}-${resp}`} className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-                      {imp}→{resp}
-                    </th>
-                  ))
+        <InfoStatsTable className="mb-6 overflow-x-auto bg-muted" tableClassName="min-w-[400px] text-left text-sm">
+          <TableHeader>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className={infoVarHeadClass}>step</TableHead>
+              {var_names.flatMap((imp) =>
+                var_names.map((resp) => (
+                  <TableHead key={`${imp}-${resp}`} className={infoVarHeadClass}>
+                    {imp}→{resp}
+                  </TableHead>
+                )),
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {fevd.map((stepData, s) => (
+              <VarModelRow key={s}>
+                <VarModelCell>{s}</VarModelCell>
+                {var_names.flatMap((_, impIdx) =>
+                  var_names.map((_, respIdx) => (
+                    <VarModelCell key={`${impIdx}-${respIdx}`}>{formatNum(stepData[respIdx]?.[impIdx] ?? 0)}</VarModelCell>
+                  )),
                 )}
-              </tr>
-            </thead>
-            <tbody>
-              {fevd.map((stepData, s) => (
-                <tr key={s} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                  <td className="px-4 py-2.5 font-mono text-foreground">{s}</td>
-                  {var_names.flatMap((_, impIdx) =>
-                    var_names.map((_, respIdx) => (
-                      <td key={`${impIdx}-${respIdx}`} className="px-4 py-2.5 font-mono text-foreground">
-                        {formatNum(stepData[respIdx]?.[impIdx] ?? 0)}
-                      </td>
-                    ))
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </VarModelRow>
+            ))}
+          </TableBody>
+        </InfoStatsTable>
         </>
       )}
     </div>

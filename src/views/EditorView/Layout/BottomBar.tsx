@@ -19,6 +19,7 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 import { LoadStatus } from "@/shared/types/ui";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function fileNameFromPath(path: string | null) {
   if (!path) return null;
@@ -48,18 +49,30 @@ function projectStatusLabel(status: LoadStatus, error: string | null, t: (key: s
 const StatusItem = ({
   children,
   className,
+  tooltip,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-  <div
-    className={cn(
-      "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors hover:bg-[var(--hover-bg)] hover:text-foreground",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </div>
-);
+}: React.HTMLAttributes<HTMLDivElement> & { tooltip?: string }) => {
+  const item = (
+    <div
+      className={cn(
+        "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors hover:bg-[var(--hover-bg)] hover:text-foreground",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+
+  if (!tooltip) return item;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{item}</TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+};
 
 function formatViewportStatus(graphId: string | null) {
   if (!graphId) return `X 0 Y 0 100%`;
@@ -159,19 +172,19 @@ export function BottomBar() {
       </div>
 
       <div className="flex h-full shrink-0 items-center">
-        <StatusItem title={t("bottomBar.nodeCount")}>
+        <StatusItem tooltip={t("bottomBar.nodeCount")}>
           <VscGraph size={13} className="text-[var(--accent-color)]" />
           <span>{t("bottomBar.nodes", { count: graphStats.nodeCount })}</span>
         </StatusItem>
-        <StatusItem title={t("bottomBar.connectionCount")}>
+        <StatusItem tooltip={t("bottomBar.connectionCount")}>
           <VscRadioTower size={13} className="text-[var(--accent-color)]" />
           <span>{t("bottomBar.links", { count: graphStats.connectionCount })}</span>
         </StatusItem>
-        <StatusItem title={t("bottomBar.selectedNodes")}>
+        <StatusItem tooltip={t("bottomBar.selectedNodes")}>
           <VscCircleFilled size={9} className={editor.selectedCount > 0 ? "text-[var(--accent-color)]" : "text-muted-foreground"} />
           <span>{t("bottomBar.selected", { count: editor.selectedCount })}</span>
         </StatusItem>
-        <StatusItem title={t("bottomBar.executionStatus")}>
+        <StatusItem tooltip={t("bottomBar.executionStatus")}>
           <span
             className={cn(
               "size-2 rounded-full",
@@ -186,11 +199,11 @@ export function BottomBar() {
           />
           <span>{executionLabel(executionStatus, t)}</span>
         </StatusItem>
-        <StatusItem title={t("bottomBar.canvasViewport")}>
+        <StatusItem tooltip={t("bottomBar.canvasViewport")}>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
           <ViewportStatus graphId={editor.activeTabId} />
         </StatusItem>
-        <StatusItem title={t("bottomBar.themeMode")} className="capitalize text-foreground">
+        <StatusItem tooltip={t("bottomBar.themeMode")} className="capitalize text-foreground">
           {themeMode}
         </StatusItem>
       </div>

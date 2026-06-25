@@ -6,7 +6,8 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
 
 export interface CorrelogramDatum {
   lag: number;
@@ -25,13 +26,12 @@ export interface CorrelogramChartProps {
 }
 
 const MARGIN = { top: 28, right: 24, bottom: 36, left: 52 };
-const DEFAULT_COLOR = '#569cd6';
 
 const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
   data,
   ciHalfWidth,
   title,
-  color = DEFAULT_COLOR,
+  color,
   valueLabel = 'Value',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +39,9 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
+  const negativeColor = seriesColors.negative;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -121,12 +124,12 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('y', yMin)
         .attr('width', bw)
         .attr('height', barH)
-        .attr('fill', d.value >= 0 ? color : '#e06c75')
+        .attr('fill', d.value >= 0 ? plotColor : negativeColor)
         .attr('fill-opacity', 0.85)
         .attr('rx', 2)
         .style('cursor', 'pointer')
         .on('mouseenter', function (event) {
-          select(this).attr('fill-opacity', 1).attr('stroke', '#fff').attr('stroke-width', 1);
+          select(this).attr('fill-opacity', 1).attr('stroke', chartTheme.tooltipFg).attr('stroke-width', 1);
           if (!tipEl) return;
           tipEl.style.opacity = '1';
           tipEl.innerHTML =
@@ -179,14 +182,14 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('font-weight', '500')
         .text(title);
     }
-  }, [data, ciHalfWidth, title, color, valueLabel, size, hideTooltip, chartTheme]);
+  }, [data, ciHalfWidth, title, plotColor, negativeColor, valueLabel, size, hideTooltip, chartTheme]);
 
   return (
-    <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className={plotFlexShellClass}>
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
       <div
         ref={tooltipRef}
-        className="pointer-events-none absolute z-10 rounded-md bg-[#1e2028] border border-gray-700/60 px-3 py-2 shadow-lg transition-opacity duration-100"
+        className={plotTooltipRichClass}
         style={{ opacity: 0 }}
       />
     </div>

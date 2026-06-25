@@ -18,6 +18,8 @@ import { logger } from '@/utils/appLogger';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import {
   getLogLevelBackground,
@@ -42,8 +44,8 @@ const LogItem = ({ log, isSelected, onClick, getLevelColor, getLevelBgColor, get
   const borderColor = log.level === 'error' ? 'border-red-500'
     : log.level === 'warn' ? 'border-yellow-500'
     : log.level === 'info' ? 'border-blue-500'
-    : log.level === 'debug' ? 'border-gray-500'
-    : 'border-gray-600';
+    : log.level === 'debug' ? 'border-muted-foreground/50'
+    : 'border-muted-foreground/40';
 
   return (
     <div
@@ -54,7 +56,7 @@ const LogItem = ({ log, isSelected, onClick, getLevelColor, getLevelBgColor, get
     >
       <span className="text-muted-foreground shrink-0 text-[11px] font-mono">{log.timestamp.split(' ')[1]}</span>
       <span className={`${getLevelColor(log.level)} font-bold shrink-0 w-14 text-[10px] uppercase`}>{log.level}</span>
-      <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${LOG_TYPE_BACKGROUND[log.log_type] ?? 'bg-gray-500/10'}`}>
+      <span className={`${getTypeColor(log.log_type)} shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${LOG_TYPE_BACKGROUND[log.log_type] ?? 'bg-muted/50'}`}>
         {LOG_TYPE_LABELS[log.log_type] ?? log.log_type.toUpperCase()}
       </span>
       {log.source && <span className="text-sky-500 shrink-0 text-[11px] font-mono opacity-80">[{log.source}]</span>}
@@ -340,41 +342,41 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             {t("log.showCount", { filtered: filteredLogs.length, total })}
           </span>
         </div>
-        <div className="flex items-center gap-1 shrink-0" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <Button
+        <div className="flex shrink-0 items-center gap-1" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+          <ToolbarIconButton
             type="button"
             variant="ghost"
             size="icon-sm"
             onClick={() => refreshLogs()}
             disabled={loading}
-            title={t("log.refresh")}
+            tooltip={t("log.refresh")}
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-          </Button>
-          <Button
+          </ToolbarIconButton>
+          <ToolbarIconButton
             type="button"
             variant="ghost"
             size="icon-sm"
             onClick={() => setAutoScroll(!autoScroll)}
             className={autoScroll ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-            title={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
+            tooltip={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
           >
             {autoScroll ? <FiChevronDown size={14} /> : <FiChevronUp size={14} />}
-          </Button>
+          </ToolbarIconButton>
           <div className="relative">
-            <Button
+            <ToolbarIconButton
               type="button"
               variant="ghost"
               size="icon-sm"
               ref={filterButtonRef}
               onClick={() => setIsFilterOpen(!isFilterOpen)}
               className={isFilterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-              title={t("log.filter")}
+              tooltip={t("log.filter")}
             >
               <FiFilter size={14} />
-            </Button>
+            </ToolbarIconButton>
             {isFilterOpen &&
               createPortal(
                 <Card
@@ -431,24 +433,24 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
                 document.body
               )}
           </div>
-          <Button
+          <ToolbarIconButton
             type="button"
             variant="destructive"
             size="icon-sm"
             onClick={clearLogs}
-            title={t("log.clear")}
+            tooltip={t("log.clear")}
           >
             <FiTrash2 size={14} />
-          </Button>
-          <Button
+          </ToolbarIconButton>
+          <ToolbarIconButton
             type="button"
             variant="ghost"
             size="icon-sm"
             onClick={handleClose}
-            title={variant === 'embedded' ? t('log.closePanel') : t('log.closeWindow')}
+            tooltip={variant === 'embedded' ? t('log.closePanel') : t('log.closeWindow')}
           >
             <FiX size={14} />
-          </Button>
+          </ToolbarIconButton>
         </div>
       </div>
 

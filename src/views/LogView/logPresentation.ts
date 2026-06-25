@@ -21,9 +21,9 @@ export function getLogLevelColor(level: LogLevel) {
     case "error": return "text-red-400";
     case "warn": return "text-yellow-400";
     case "info": return "text-blue-400";
-    case "debug": return "text-gray-400";
-    case "trace": return "text-gray-500";
-    default: return "text-gray-400";
+    case "debug": return "text-muted-foreground";
+    case "trace": return "text-muted-foreground/80";
+    default: return "text-muted-foreground";
   }
 }
 
@@ -32,9 +32,9 @@ export function getLogLevelBackground(level: LogLevel) {
     case "error": return "bg-red-500/10";
     case "warn": return "bg-yellow-500/10";
     case "info": return "bg-blue-500/10";
-    case "debug": return "bg-gray-500/10";
-    case "trace": return "bg-gray-600/10";
-    default: return "bg-gray-500/10";
+    case "debug": return "bg-muted/60";
+    case "trace": return "bg-muted/40";
+    default: return "bg-muted/50";
   }
 }
 
@@ -45,6 +45,6 @@ export function getLogTypeColor(type: LogType) {
     case "system": return "text-cyan-400";
     case "graph": return "text-orange-400";
     case "data": return "text-pink-400";
-    default: return "text-gray-400";
+    default: return "text-muted-foreground";
   }
 }

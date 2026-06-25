@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, area } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass } from './plotShellStyles';
 
 export interface KDEPoint {
   x: number;
@@ -25,13 +27,12 @@ export interface KDEProps {
 }
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-const DEFAULT_COLOR = '#569cd6';
 
 const KDE: React.FC<KDEProps> = ({
   data,
   xLabel,
   yLabel = 'Density',
-  color = DEFAULT_COLOR,
+  color,
   height: heightProp,
   margin = DEFAULT_MARGIN,
   xMin: xMinProp,
@@ -40,6 +41,8 @@ const KDE: React.FC<KDEProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -147,21 +150,21 @@ const KDE: React.FC<KDEProps> = ({
     g.append('path')
       .datum(data)
       .attr('d', pathArea)
-      .attr('fill', color)
+      .attr('fill', plotColor)
       .attr('fill-opacity', 0.2);
 
     g.append('path')
       .datum(data)
       .attr('d', pathLine)
       .attr('fill', 'none')
-      .attr('stroke', color)
+      .attr('stroke', plotColor)
       .attr('stroke-width', 2)
       .attr('stroke-linecap', 'round')
       .attr('stroke-linejoin', 'round');
-  }, [data, xLabel, yLabel, color, heightProp, margin, xMinProp, size, chartTheme]);
+  }, [data, xLabel, yLabel, plotColor, heightProp, margin, xMinProp, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className={cn(plotContainerClass(undefined, heightProp))}>
       <svg ref={svgRef} />
     </div>
   );

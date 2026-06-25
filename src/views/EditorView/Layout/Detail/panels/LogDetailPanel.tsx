@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody } from '@/components/ui/table';
 import { LogLevel, LogType } from '@/shared/types/ui';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
+import { detailTableClass, detailValueMutedClass } from '../shared/detailStyles';
 
 const getLevelColor = (level: LogLevel) => {
   switch (level) {
@@ -12,11 +14,11 @@ const getLevelColor = (level: LogLevel) => {
     case 'info':
       return 'text-blue-400';
     case 'debug':
-      return 'text-gray-400';
+      return 'text-muted-foreground';
     case 'trace':
-      return 'text-gray-500';
+      return 'text-muted-foreground/70';
     default:
-      return 'text-gray-400';
+      return 'text-muted-foreground';
   }
 };
 
@@ -33,7 +35,7 @@ const getTypeColor = (type: LogType) => {
     case 'data':
       return 'text-pink-400';
     default:
-      return 'text-gray-400';
+      return 'text-muted-foreground';
   }
 };
 
@@ -54,42 +56,31 @@ export function LogDetailPanel({ log }: LogDetailPanelProps) {
 
   return (
     <DetailPanelShell title={t('detail.titleLog')}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.time')}
-            </TableCell>
-            <TableCell className="font-mono text-gray-300">{log.timestamp}</TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.level')}</TableCell>
-            <TableCell>
-              <span className={`${getLevelColor(log.level)} font-bold uppercase`}>{log.level}</span>
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.type')}</TableCell>
-            <TableCell>
-              <span className={`${getTypeColor(log.log_type)} font-semibold`}>{logTypeLabel}</span>
-            </TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.time')} valueClassName="font-mono text-foreground">
+            {log.timestamp}
+          </DetailFieldRow>
+          <DetailFieldRow label={t('detail.fields.level')}>
+            <span className={`${getLevelColor(log.level)} font-bold uppercase`}>{log.level}</span>
+          </DetailFieldRow>
+          <DetailFieldRow label={t('detail.fields.type')}>
+            <span className={`${getTypeColor(log.log_type)} font-semibold`}>{logTypeLabel}</span>
+          </DetailFieldRow>
           {log.source && (
-            <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.source')}</TableCell>
-              <TableCell className="font-mono text-cyan-400">{log.source}</TableCell>
-            </TableRow>
+            <DetailFieldRow label={t('detail.fields.source')} valueClassName="font-mono text-cyan-400">
+              {log.source}
+            </DetailFieldRow>
           )}
-          <TableRow>
-            <TableCell className="align-top bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.message')}
-            </TableCell>
-            <TableCell>
-              <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-gray-200">
-                {log.message}
-              </pre>
-            </TableCell>
-          </TableRow>
+          <DetailFieldRow
+            label={t('detail.fields.message')}
+            labelClassName="align-top"
+            valueClassName="align-top"
+          >
+            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-foreground">
+              {log.message}
+            </pre>
+          </DetailFieldRow>
         </TableBody>
       </Table>
     </DetailPanelShell>

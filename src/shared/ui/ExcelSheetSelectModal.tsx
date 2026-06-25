@@ -3,6 +3,7 @@ import { VscTable, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExcelSheetSelectDialogOptions } from "@/shared/types/ui";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -32,9 +33,12 @@ export const ExcelSheetSelectModal = ({
         </DialogHeader>
 
         <div className="p-6">
-          <p className="mb-3 truncate text-xs text-muted-foreground" title={filePath}>
-            {fileName}
-          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="mb-3 truncate text-xs text-muted-foreground">{fileName}</p>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-sm break-all">{filePath}</TooltipContent>
+          </Tooltip>
           <OverlayScrollbar className="max-h-60">
             <div className="flex flex-col gap-2">
               {sheets.map((sheet) => (
@@ -50,7 +54,7 @@ export const ExcelSheetSelectModal = ({
                   className="h-auto justify-start gap-3 px-4 py-3 text-left"
                 >
                   <Badge variant="success">Sheet</Badge>
-                  <span className="text-sm font-medium text-gray-200">{sheet}</span>
+                  <span className="text-sm font-medium text-foreground">{sheet}</span>
                 </Button>
               ))}
             </div>

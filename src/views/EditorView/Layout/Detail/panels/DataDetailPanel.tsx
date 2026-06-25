@@ -4,6 +4,13 @@ import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailDeleteButton } from '../shared/DetailDeleteButton';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
+import {
+  detailInlineInputClass,
+  detailNestedScrollClass,
+  detailTableClass,
+  detailValueMutedClass,
+} from '../shared/detailStyles';
 
 interface DataDetailPanelProps {
   dataframe: {
@@ -26,33 +33,25 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: dataframe.name })}>
-      <Table className="text-[11px] text-[#cccccc]">
+      <Table className={detailTableClass}>
         <TableBody>
-          <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
-              {t('detail.fields.name')}
-            </TableCell>
-            <TableCell>
-              <Input
-                className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
-                value={dataframe.name}
-                onChange={(e) => onUpdate({ name: e.target.value })}
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.columns')}</TableCell>
-            <TableCell className="text-gray-400">
-              {t('detail.counts.columns', { count: columnCount })}
-            </TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.name')}>
+            <Input
+              className={detailInlineInputClass}
+              value={dataframe.name}
+              onChange={(e) => onUpdate({ name: e.target.value })}
+            />
+          </DetailFieldRow>
+          <DetailFieldRow label={t('detail.fields.columns')} valueClassName={detailValueMutedClass}>
+            {t('detail.counts.columns', { count: columnCount })}
+          </DetailFieldRow>
           {dataframe.columns && dataframe.columns.length > 0 && (
             <TableRow>
               <TableCell colSpan={2} className="p-0">
-                <OverlayScrollbar className="max-h-40 bg-black/20" direction="vertical">
+                <OverlayScrollbar className={detailNestedScrollClass} direction="vertical">
                   <Table className="text-[9px]">
                     <TableHeader>
-                      <TableRow className="text-gray-500">
+                      <TableRow className="text-muted-foreground">
                         <TableHead className="h-6 p-1 font-normal uppercase">
                           {t('detail.fields.column')}
                         </TableHead>
@@ -63,8 +62,8 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
                     </TableHeader>
                     <TableBody>
                       {dataframe.columns.map((col) => (
-                        <TableRow key={col.name} className="border-white/5">
-                          <TableCell className="p-1 font-medium text-gray-300">{col.name}</TableCell>
+                        <TableRow key={col.name} className="border-border/50">
+                          <TableCell className="p-1 font-medium text-foreground">{col.name}</TableCell>
                           <TableCell className="p-1 text-[var(--accent-color)]/70">{col.type}</TableCell>
                         </TableRow>
                       ))}
@@ -74,15 +73,16 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
               </TableCell>
             </TableRow>
           )}
-          <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.rows')}</TableCell>
-            <TableCell className="text-gray-400">{t('detail.counts.rows', { count: rowCount })}</TableCell>
-          </TableRow>
+          <DetailFieldRow label={t('detail.fields.rows')} valueClassName={detailValueMutedClass}>
+            {t('detail.counts.rows', { count: rowCount })}
+          </DetailFieldRow>
           {dataframe.sourcePath && (
-            <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.source')}</TableCell>
-              <TableCell className="break-all text-[9px] text-gray-400">{dataframe.sourcePath}</TableCell>
-            </TableRow>
+            <DetailFieldRow
+              label={t('detail.fields.source')}
+              valueClassName={`break-all text-[9px] ${detailValueMutedClass}`}
+            >
+              {dataframe.sourcePath}
+            </DetailFieldRow>
           )}
         </TableBody>
       </Table>

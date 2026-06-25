@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, curveStepAfter } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass } from './plotShellStyles';
 
 export interface ECDFPoint {
   x: number;
@@ -23,13 +25,12 @@ export interface ECDFProps {
 }
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-const DEFAULT_COLOR = '#569cd6';
 
 const ECDF: React.FC<ECDFProps> = ({
   data,
   xLabel,
   yLabel = 'Cumulative Proportion',
-  color = DEFAULT_COLOR,
+  color,
   height: heightProp,
   margin = DEFAULT_MARGIN,
 }) => {
@@ -37,6 +38,8 @@ const ECDF: React.FC<ECDFProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = color ?? seriesColors.primary;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -148,15 +151,15 @@ const ECDF: React.FC<ECDFProps> = ({
         .datum(stepPoints)
         .attr('d', pathLine)
         .attr('fill', 'none')
-        .attr('stroke', color)
+        .attr('stroke', plotColor)
         .attr('stroke-width', 2)
         .attr('stroke-linecap', 'round')
         .attr('stroke-linejoin', 'round');
     }
-  }, [data, xLabel, yLabel, color, heightProp, margin, size, chartTheme]);
+  }, [data, xLabel, yLabel, plotColor, heightProp, margin, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div ref={containerRef} className={cn(plotContainerClass(undefined, heightProp))}>
       <svg ref={svgRef} />
     </div>
   );

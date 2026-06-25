@@ -12,6 +12,7 @@ import ECDF, { type ECDFPoint } from '@/views/PlotView/ECDF';
 import KDE, { type KDEPoint } from '@/views/PlotView/KDE';
 import Histogram, { type HistogramBin } from '@/views/PlotView/Histogram';
 import CorrelationPlot from '@/views/PlotView/CorrelationPlot';
+import { useChartSeriesColors } from '@/shared/theme/chartTheme';
 import CorrelogramChart, { type CorrelogramDatum } from '@/views/PlotView/CorrelogramChart';
 
 interface ScatterEcdfData {
@@ -70,6 +71,7 @@ export const PlotWindow: React.FC = () => {
   const [correlogramData, setCorrelogramData] = useState<CorrelogramData | null>(null);
   const [plotType, setPlotType] = useState<string>(() => getPlotTypeFromHash());
   const [error, setError] = useState<string | null>(null);
+  const seriesColors = useChartSeriesColors();
 
   usePersistedWindow('plot');
 
@@ -187,7 +189,7 @@ export const PlotWindow: React.FC = () => {
 
   if (!isReady) {
     return (
-      <div className="flex items-center justify-center w-full h-screen bg-[var(--workbench-bg)] text-gray-400">
+      <div className="flex h-screen w-full items-center justify-center bg-[var(--workbench-bg)] text-muted-foreground">
         {t('common.initializing')}
       </div>
     );
@@ -217,7 +219,7 @@ export const PlotWindow: React.FC = () => {
       {/* 主内容区：图表填充可用空间 */}
       <div className="flex-1 flex flex-col min-h-0 p-4">
         {error ? (
-          <div className="flex flex-1 flex-col items-center justify-center text-gray-400 gap-3">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
             <svg className="w-12 h-12 text-red-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
@@ -235,7 +237,7 @@ export const PlotWindow: React.FC = () => {
               data={correlogramData.pacf}
               ciHalfWidth={correlogramData.ci_half_width}
               title="PACF"
-              color="#e5c07b"
+              color={seriesColors.secondary}
               valueLabel="PACF"
             />
           </div>

@@ -3,6 +3,7 @@ import { VscDatabase, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SqliteTableSelectDialogOptions } from "@/shared/types/ui";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
@@ -32,9 +33,12 @@ export const SqliteTableSelectModal = ({
         </DialogHeader>
 
         <div className="p-6">
-          <p className="mb-3 truncate text-xs text-muted-foreground" title={dbPath}>
-            {dbName}
-          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="mb-3 truncate text-xs text-muted-foreground">{dbName}</p>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-sm break-all">{dbPath}</TooltipContent>
+          </Tooltip>
           <OverlayScrollbar className="max-h-60">
             <div className="flex flex-col gap-2">
               {tables.map((table) => (
@@ -50,7 +54,7 @@ export const SqliteTableSelectModal = ({
                   className="h-auto justify-start gap-3 px-4 py-3 text-left"
                 >
                   <Badge variant="default">Table</Badge>
-                  <span className="text-sm font-medium text-gray-200">{table}</span>
+                  <span className="text-sm font-medium text-foreground">{table}</span>
                 </Button>
               ))}
             </div>

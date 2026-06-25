@@ -1,4 +1,6 @@
 import React from 'react';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { InfoStatsTable } from './shared/InfoStatsTable';
 
 export interface DataViewData {
   viewType: 'data_view';
@@ -25,8 +27,8 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
 
   if (dataType === 'null' || dataType === 'struct') {
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+      <div className="mx-auto max-w-[900px] p-6">
+        <h1 className="mb-4 text-xl font-bold text-foreground">{title}</h1>
         <p className="text-muted-foreground">{data.message ?? 'No data'}</p>
       </div>
     );
@@ -34,13 +36,11 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
 
   if (dataType === 'scalar') {
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+      <div className="mx-auto max-w-[900px] p-6">
+        <h1 className="mb-4 text-xl font-bold text-foreground">{title}</h1>
         <div className="rounded-lg border border-border bg-card p-4 font-mono text-sm">
-          <div className="text-muted-foreground text-xs mb-1">{data.valueType ?? 'Value'}</div>
-          <pre className="text-[var(--accent-color)] break-all">
-            {JSON.stringify(data.value, null, 2)}
-          </pre>
+          <div className="mb-1 text-xs text-muted-foreground">{data.valueType ?? 'Value'}</div>
+          <pre className="break-all text-[var(--accent-color)]">{JSON.stringify(data.value, null, 2)}</pre>
         </div>
       </div>
     );
@@ -52,36 +52,32 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
     const previewCount = data.previewCount ?? values.length;
 
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
-        <div className="text-muted-foreground text-sm mb-2">
+      <div className="mx-auto max-w-[900px] p-6">
+        <h1 className="mb-4 text-xl font-bold text-foreground">{title}</h1>
+        <div className="mb-2 text-sm text-muted-foreground">
           {data.name && <span className="mr-3">Name: {data.name}</span>}
           {data.dtype && <span className="mr-3">Type: {data.dtype}</span>}
           <span>Length: {length}</span>
-          {length > previewCount && (
-            <span className="ml-2 text-amber-500">(showing first {previewCount})</span>
-          )}
+          {length > previewCount && <span className="ml-2 text-amber-500">(showing first {previewCount})</span>}
         </div>
-        <div className="rounded-lg border border-border bg-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 text-left text-muted-foreground font-medium">#</th>
-                <th className="px-4 py-2 text-left text-muted-foreground font-medium">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {values.map((v, i) => (
-                <tr key={i} className="border-b border-border hover:bg-muted/50">
-                  <td className="px-4 py-2 text-muted-foreground">{i}</td>
-                  <td className="px-4 py-2 text-foreground font-mono">
-                    {typeof v === 'object' ? JSON.stringify(v) : String(v)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <InfoStatsTable className="bg-card" tableClassName="text-sm">
+          <TableHeader>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="h-auto px-4 py-2 text-left font-medium text-muted-foreground">#</TableHead>
+              <TableHead className="h-auto px-4 py-2 text-left font-medium text-muted-foreground">Value</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {values.map((v, i) => (
+              <TableRow key={i} className="border-b border-border hover:bg-muted/50">
+                <TableCell className="px-4 py-2 text-muted-foreground">{i}</TableCell>
+                <TableCell className="px-4 py-2 font-mono text-foreground">
+                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </InfoStatsTable>
       </div>
     );
   }
@@ -93,51 +89,49 @@ export const DataViewComponent: React.FC<{ data: DataViewData }> = ({ data }) =>
     const previewRows = data.previewRows ?? rows.length;
 
     return (
-      <div className="p-6 max-w-[1200px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
-        <div className="text-muted-foreground text-sm mb-2">
-          <span>{totalRows} rows × {columns.length} columns</span>
-          {totalRows > previewRows && (
-            <span className="ml-2 text-amber-500">(showing first {previewRows} rows)</span>
-          )}
+      <div className="mx-auto max-w-[1200px] p-6">
+        <h1 className="mb-4 text-xl font-bold text-foreground">{title}</h1>
+        <div className="mb-2 text-sm text-muted-foreground">
+          <span>
+            {totalRows} rows × {columns.length} columns
+          </span>
+          {totalRows > previewRows && <span className="ml-2 text-amber-500">(showing first {previewRows} rows)</span>}
         </div>
-        <div className="rounded-lg border border-border bg-card overflow-x-auto">
-          <table className="w-full text-sm min-w-[400px]">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 text-left text-muted-foreground font-medium sticky left-0 bg-card">#</th>
-                {columns.map((col, i) => (
-                  <th key={i} className="px-4 py-2 text-left text-muted-foreground font-medium whitespace-nowrap">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIdx) => (
-                <tr key={rowIdx} className="border-b border-border hover:bg-muted/50">
-                  <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">{rowIdx}</td>
-                  {(row as unknown[]).map((cell, colIdx) => (
-                    <td key={colIdx} className="px-4 py-2 text-foreground font-mono whitespace-nowrap">
-                      {cell === null || cell === undefined
-                        ? '—'
-                        : typeof cell === 'object'
-                          ? JSON.stringify(cell)
-                          : String(cell)}
-                    </td>
-                  ))}
-                </tr>
+        <InfoStatsTable className="overflow-x-auto bg-card" tableClassName="min-w-[400px] text-sm">
+          <TableHeader>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="sticky left-0 h-auto bg-card px-4 py-2 text-left font-medium text-muted-foreground">#</TableHead>
+              {columns.map((col, i) => (
+                <TableHead key={i} className="h-auto whitespace-nowrap px-4 py-2 text-left font-medium text-muted-foreground">
+                  {col}
+                </TableHead>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, rowIdx) => (
+              <TableRow key={rowIdx} className="border-b border-border hover:bg-muted/50">
+                <TableCell className="sticky left-0 bg-card px-4 py-2 text-muted-foreground">{rowIdx}</TableCell>
+                {(row as unknown[]).map((cell, colIdx) => (
+                  <TableCell key={colIdx} className="whitespace-nowrap px-4 py-2 font-mono text-foreground">
+                    {cell === null || cell === undefined
+                      ? '—'
+                      : typeof cell === 'object'
+                        ? JSON.stringify(cell)
+                        : String(cell)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </InfoStatsTable>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      <h1 className="text-xl font-bold text-foreground mb-4">{title}</h1>
+    <div className="mx-auto max-w-[900px] p-6">
+      <h1 className="mb-4 text-xl font-bold text-foreground">{title}</h1>
       <p className="text-muted-foreground">Unknown data type: {dataType}</p>
     </div>
   );

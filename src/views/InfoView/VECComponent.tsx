@@ -1,5 +1,15 @@
 import React, { useMemo } from 'react';
-import { SectionHeader, formatNum, CoefficientsBlock, CoefficientTable, VARStableChart } from './shared';
+import {
+  SectionHeader,
+  formatNum,
+  CoefficientsBlock,
+  CoefficientTable,
+  VARStableChart,
+  VarModelTable,
+  VarModelRow,
+  VarModelCell,
+  VarEigenvalueTable,
+} from './shared';
 import type { Coefficient, VECSummaryResultData } from './shared/types';
 
 function vecCoeffsToOLSFormat(coefficients: VECSummaryResultData['coefficients']): Coefficient[] {
@@ -182,32 +192,18 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">RMSE</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">R-sq</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
-                </tr>
-              </thead>
-              <tbody>
-                {equations.map((eq, i) => (
-                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                    <td className="px-4 py-2.5 font-mono text-foreground">{eq.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{eq.parms}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.rmse)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.r_sq)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(eq.p_chi2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'RMSE', 'R-sq', 'chi2', 'P>chi2']}>
+            {equations.map((eq, i) => (
+              <VarModelRow key={i}>
+                <VarModelCell>{eq.eq_name}</VarModelCell>
+                <VarModelCell>{eq.parms}</VarModelCell>
+                <VarModelCell>{formatNum(eq.rmse)}</VarModelCell>
+                <VarModelCell>{formatNum(eq.r_sq)}</VarModelCell>
+                <VarModelCell>{formatNum(eq.chi2)}</VarModelCell>
+                <VarModelCell>{formatNum(eq.p_chi2)}</VarModelCell>
+              </VarModelRow>
+            ))}
+          </VarModelTable>
         </>
       )}
 
@@ -232,28 +228,16 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Equation</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Parms</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">P&gt;chi2</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cointegrating_equations.map((ce, i) => (
-                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                    <td className="px-4 py-2.5 font-mono text-foreground">{ce.eq_name}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{ce.parms}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(ce.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(ce.p_chi2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'chi2', 'P>chi2']}>
+            {cointegrating_equations.map((ce, i) => (
+              <VarModelRow key={i}>
+                <VarModelCell>{ce.eq_name}</VarModelCell>
+                <VarModelCell>{ce.parms}</VarModelCell>
+                <VarModelCell>{formatNum(ce.chi2)}</VarModelCell>
+                <VarModelCell>{formatNum(ce.p_chi2)}</VarModelCell>
+              </VarModelRow>
+            ))}
+          </VarModelTable>
           <div className="text-xs text-muted-foreground mt-2 mb-4">Identification: beta is exactly identified</div>
         </>
       )}
@@ -295,26 +279,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
           <div className="grid grid-cols-[auto_1fr] gap-4 mb-6 items-stretch min-h-[360px]">
             <div className="flex flex-col h-full rounded-lg border border-border bg-muted overflow-hidden">
               <div className="flex-1 min-h-0 flex flex-col">
-                <table className="text-left text-sm min-w-[200px]">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Eigenvalue</th>
-                      <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Modulus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vecstableSorted.map((row, i) => (
-                      <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                        <td className="px-4 py-2.5 font-mono text-foreground">
-                          {row.im >= 0
-                            ? `${formatNum(row.re)} + ${formatNum(row.im)}i`
-                            : `${formatNum(row.re)} - ${formatNum(Math.abs(row.im))}i`}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.modulus)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <VarEigenvalueTable rows={vecstableSorted} />
                 <div className="flex-1 min-h-0 bg-muted" />
               </div>
               <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border shrink-0">
@@ -341,31 +306,24 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </svg>
             }
           />
-          <div className="rounded-lg border border-border bg-muted overflow-hidden mb-6">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">lag</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">chi2</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">df</th>
-                  <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prob &gt; chi2</th>
-                </tr>
-              </thead>
-              <tbody>
-                {veclmar.map((row, i) => (
-                  <tr key={i} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.lag}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.chi2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{row.df}</td>
-                    <td className="px-4 py-2.5 font-mono text-foreground">{formatNum(row.p_value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
-              H0: no autocorrelation at lag order
-            </div>
-          </div>
+          <VarModelTable
+            className="mb-6"
+            columns={['lag', 'chi2', 'df', 'Prob > chi2']}
+            footer={
+              <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                H0: no autocorrelation at lag order
+              </div>
+            }
+          >
+            {veclmar.map((row, i) => (
+              <VarModelRow key={i}>
+                <VarModelCell>{row.lag}</VarModelCell>
+                <VarModelCell>{formatNum(row.chi2)}</VarModelCell>
+                <VarModelCell>{row.df}</VarModelCell>
+                <VarModelCell>{formatNum(row.p_value)}</VarModelCell>
+              </VarModelRow>
+            ))}
+          </VarModelTable>
         </>
       )}
 

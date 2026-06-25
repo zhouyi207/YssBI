@@ -42,6 +42,8 @@ import { useProjectIOStore } from "@/features/core/dataStore";
 import { usePersistedWindow, useWindowMaximized } from "@/features/application/window";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
 import type { ThemeSettings } from "@/shared/types/settings";
@@ -194,16 +196,20 @@ function TitleBar({
         >
           <VscFolderOpened size={14} /> {busy === "open" ? t("projectPicker.opening") : t("projectPicker.importProject")}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRefresh}
-          className="h-7 gap-1 border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={t("common.refresh")}
-        >
-          <VscRefresh size={14} /> {t("projectPicker.scanProjects")}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              className="h-7 gap-1 border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <VscRefresh size={14} /> {t("projectPicker.scanProjects")}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("common.refresh")}</TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="absolute left-1/2 top-1/2 flex w-[min(42vw,34rem)] -translate-x-1/2 -translate-y-1/2 items-center gap-2">
@@ -218,17 +224,17 @@ function TitleBar({
               className="h-7 min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-sm text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
               placeholder={t("projectPicker.searchPlaceholder")}
             />
-            <Button
+            <ToolbarIconButton
               type="button"
               variant="ghost"
               size="icon-xs"
               onClick={() => onSetFilterQuery("")}
               className="mr-1 text-muted-foreground hover:text-foreground/80"
-              title={t("projectPicker.clearSearch")}
+              tooltip={t("projectPicker.clearSearch")}
               aria-label={t("projectPicker.clearSearch")}
             >
               <VscClose size={12} />
-            </Button>
+            </ToolbarIconButton>
           </div>
         </div>
 
@@ -270,13 +276,13 @@ function TitleBar({
           {t("projectPicker.backToEditor")}
         </Button>
       ) : null}
-      <Button
+      <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-lg"
         onClick={toggleThemeMode}
         className="self-center text-muted-foreground"
-        title={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
+        tooltip={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
         aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
       >
         {isLightTheme ? (
@@ -289,18 +295,18 @@ function TitleBar({
             <circle cx="12" cy="12" r="4" strokeWidth={2} />
           </svg>
         )}
-      </Button>
-      <Button
+      </ToolbarIconButton>
+      <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-lg"
         onClick={onOpenSettings}
         className="self-center text-muted-foreground"
-        title={t("menubar.settings")}
+        tooltip={t("menubar.settings")}
         aria-label={t("menubar.settings")}
       >
         <VscSettingsGear size={14} />
-      </Button>
+      </ToolbarIconButton>
       <WindowChromeControls isMaximized={isMaximized} />
       </WindowTitleBarActions>
     </WindowTitleBar>
@@ -466,7 +472,7 @@ export function ProjectPickerScreen() {
                           isSelected ? "bg-primary/15" : "hover:bg-muted/50",
                         )}
                       >
-                        <Button
+                        <ToolbarIconButton
                           type="button"
                           variant="ghost"
                           size="icon-sm"
@@ -475,7 +481,7 @@ export function ProjectPickerScreen() {
                             toggleFavorite(project.id);
                           }}
                           className="shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-amber-600 dark:hover:text-amber-300"
-                          title={isFavorite ? t("projectPicker.unfavorite") : t("projectPicker.favorite")}
+                          tooltip={isFavorite ? t("projectPicker.unfavorite") : t("projectPicker.favorite")}
                           aria-label={isFavorite ? t("projectPicker.unfavorite") : t("projectPicker.favorite")}
                         >
                           {isFavorite ? (
@@ -483,7 +489,7 @@ export function ProjectPickerScreen() {
                           ) : (
                             <VscStarEmpty size={18} />
                           )}
-                        </Button>
+                        </ToolbarIconButton>
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 shadow-inner ring-1 ring-border">
                           <VscProject size={32} className="text-primary" />
                         </div>
@@ -503,7 +509,14 @@ export function ProjectPickerScreen() {
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-muted-foreground">
                               <VscFolder className="shrink-0 opacity-70" size={14} />
-                              <span className="truncate font-mono leading-snug">{project.path}</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="truncate font-mono leading-snug">{project.path}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-md break-all font-mono text-xs">
+                                  {project.path}
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                             <span className="max-w-[min(260px,42%)] shrink-0 pl-1 text-right text-[12px] tabular-nums leading-snug text-muted-foreground/95">
                               {formatStamp(project.lastOpenedAt)}

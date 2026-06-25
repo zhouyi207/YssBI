@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { InfoSegmentedToggle } from './shared/InfoViewControls';
+import { FormulaMappingTable } from './shared/FormulaMappingTable';
 import type { Coefficient } from './shared/types';
 
 function formatNum(value: number, decimals = 4): string {
@@ -134,28 +136,14 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-0">
-        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
-          <button
-            onClick={() => setMode('symbolic')}
-            className={`px-3 py-1 rounded-l-md transition-colors ${
-              mode === 'symbolic'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border'
-                : 'text-muted-foreground hover:text-foreground border-r border-border'
-            }`}
-          >
-            Symbolic
-          </button>
-          <button
-            onClick={() => setMode('expanded')}
-            className={`px-3 py-1 rounded-r-md transition-colors ${
-              mode === 'expanded'
-                ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)]'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Expanded
-          </button>
-        </div>
+        <InfoSegmentedToggle
+          value={mode}
+          onValueChange={setMode}
+          options={[
+            { value: 'symbolic', label: 'Symbolic' },
+            { value: 'expanded', label: 'Expanded' },
+          ]}
+        />
       </div>
 
       {/* Formula */}
@@ -169,48 +157,20 @@ const FormulaBlock: React.FC<FormulaBlockProps> = ({ endogName, coefficients, ar
       {/* Mapping table (symbolic mode only) */}
       {mode === 'symbolic' && (
         <div className="border-t border-border px-4 pb-4 pt-3">
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1">Variable Mapping</div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="text-left px-3 py-1.5 font-medium w-20">Symbol</th>
-                <th className="text-left px-3 py-1.5 font-medium">Variable</th>
-                {hasCat && <th className="text-left px-3 py-1.5 font-medium">Category</th>}
-                <th className="text-right px-3 py-1.5 font-medium w-28">Coefficient</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((m, idx) => {
-                const symHtml = renderInlineKatex(m.symbol);
-                return (
-                  <tr key={idx} className={`border-t border-border ${idx % 2 === 0 ? 'bg-muted/50' : ''}`}>
-                    <td className="px-3 py-1.5">
-                      {symHtml ? (
-                        <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
-                      ) : (
-                        <span className="font-mono text-[var(--accent-color)]">{m.symbol}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 font-mono text-foreground">{m.variable}</td>
-                    {hasCat && (
-                      <td className="px-3 py-1.5">
-                        {m.category != null ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
-                            {m.category}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="text-right px-3 py-1.5 font-mono text-muted-foreground">
-                      {isNaN(m.coef) ? '—' : formatNum(m.coef)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="mb-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">Variable Mapping</div>
+          <FormulaMappingTable
+            mappings={mappings}
+            hasCat={hasCat}
+            formatNum={formatNum}
+            renderSymbol={(symbol) => {
+              const symHtml = renderInlineKatex(symbol);
+              return symHtml ? (
+                <span className="[&_.katex]:text-[var(--accent-color)]" dangerouslySetInnerHTML={{ __html: symHtml }} />
+              ) : (
+                <span className="font-mono text-[var(--accent-color)]">{symbol}</span>
+              );
+            }}
+          />
         </div>
       )}
     </div>

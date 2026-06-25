@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleBand, scaleSequential, interpolateRdBu } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { cn } from '@/lib/utils';
+import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
 
 export interface CorrelationPlotProps {
   /** 变量名列表，与 matrix 行列顺序一致 */
@@ -29,6 +31,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -124,7 +127,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('stroke-width', 0.5)
       .attr('rx', 2)
       .on('mouseenter', function (event, d) {
-        select(this).attr('stroke', '#569cd6').attr('stroke-width', 2);
+        select(this).attr('stroke', seriesColors.primary).attr('stroke-width', 2);
         const pStr = formatP(d.pValue);
         tooltip
           .style('opacity', '1')
@@ -224,15 +227,12 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('fill', chartTheme.label)
       .attr('font-size', '9px')
       .text('1');
-  }, [labels, matrix, pMatrix, heightProp, margin, size, chartTheme]);
+  }, [labels, matrix, pMatrix, heightProp, margin, size, chartTheme, seriesColors.primary]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden relative">
+    <div ref={containerRef} className={cn(plotContainerClass(), 'relative')}>
       <svg ref={svgRef} />
-      <div
-        ref={tooltipRef}
-        className="absolute pointer-events-none rounded px-2 py-1.5 bg-[#1e2028] border border-gray-700 shadow-lg opacity-0 transition-opacity duration-100 z-10"
-      />
+      <div ref={tooltipRef} className={plotTooltipClass} />
     </div>
   );
 };

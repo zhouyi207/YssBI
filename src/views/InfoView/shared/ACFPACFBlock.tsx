@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Suspense } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { computeAcfPacf } from '@/services/stats';
 import type { AcfPacfResponse } from '@/services/stats';
+import { useChartSeriesColors } from '@/shared/theme/chartTheme';
 import { SectionHeader } from './RegressionShared';
+import { InfoAccentButton } from './InfoViewControls';
 
 const CorrelogramChart = React.lazy(() => import('@/views/PlotView/CorrelogramChart'));
 
@@ -11,6 +15,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
   const [result, setResult] = useState<AcfPacfResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const seriesColors = useChartSeriesColors();
 
   const canRun = residuals != null && residuals.length >= 4 && lag >= 1 && lag <= 40;
 
@@ -45,22 +50,18 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
       />
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags</label>
-          <input
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lags</Label>
+          <Input
             type="number"
             min={1}
             max={40}
             value={lag}
             onChange={(e) => setLag(Math.max(1, Math.min(40, parseInt(e.target.value, 10) || 1)))}
-            className="w-20 px-3 py-2 rounded-md bg-muted border border-border text-sm font-mono text-foreground focus:outline-none focus:border-[var(--accent-color)]/50"
+            className="w-20 font-mono text-sm"
           />
-          <button
-            onClick={handleRun}
-            disabled={!canRun || loading}
-            className="px-4 py-2 rounded-md bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-color)]/40 hover:bg-[var(--accent-color)]/30 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-          >
-            {loading ? '...' : '生成'}
-          </button>
+          <InfoAccentButton onClick={handleRun} disabled={!canRun} loading={loading}>
+            生成
+          </InfoAccentButton>
         </div>
         <div className="text-[10px] text-muted-foreground">
           Stata ac / pac 风格，95% 置信区间 ±1.96/√n
@@ -74,7 +75,6 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
                   data={result.acf.map((v, i) => ({ lag: i, value: v }))}
                   ciHalfWidth={ciHalfWidth}
                   title="ACF"
-                  height={240}
                 />
               </Suspense>
             </div>
@@ -84,7 +84,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
                   data={result.pacf.map((v, i) => ({ lag: i + 1, value: v }))}
                   ciHalfWidth={ciHalfWidth}
                   title="PACF"
-                  height={240}
+                  color={seriesColors.secondary}
                 />
               </Suspense>
             </div>

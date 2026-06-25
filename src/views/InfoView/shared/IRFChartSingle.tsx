@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, line } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
 
 export interface IRFChartSingleProps {
   /** 序列：step -> value */
@@ -17,7 +17,6 @@ export interface IRFChartSingleProps {
 }
 
 const MARGIN = { top: 24, right: 12, bottom: 24, left: 36 };
-const DEFAULT_COLOR = '#569cd6';
 
 const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, title }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -25,6 +24,8 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
+  const plotColor = seriesColors.primary;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -101,7 +102,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
       const areaPath = `M ${xScale(areaData[0].step)} ${yScale(areaData[0].low)} ${lowerLine} ${upperLine} Z`;
       g.append('path')
         .attr('d', areaPath)
-        .attr('fill', DEFAULT_COLOR)
+        .attr('fill', plotColor)
         .attr('fill-opacity', 0.2)
         .attr('stroke', 'none');
     }
@@ -113,7 +114,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
     g.append('path')
       .attr('d', pathGen(series)!)
       .attr('fill', 'none')
-      .attr('stroke', DEFAULT_COLOR)
+      .attr('stroke', plotColor)
       .attr('stroke-width', 1.5)
       .attr('stroke-linecap', 'round')
       .attr('stroke-linejoin', 'round');
@@ -174,7 +175,7 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
         tipEl.style.top = above > 0 ? `${above}px` : `${below}px`;
       })
       .on('mouseleave', hideTooltip);
-  }, [series, lower, upper, title, size, hideTooltip, chartTheme]);
+  }, [series, lower, upper, title, size, hideTooltip, chartTheme, plotColor]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>

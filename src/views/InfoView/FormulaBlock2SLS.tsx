@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import type { Coefficient } from './shared/types';
 import type { Iv2slsFirstStageResult } from './shared/types';
 
@@ -143,23 +144,11 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Toggle */}
       <div className="flex items-center justify-end px-4 pt-3 pb-0">
-        <div className="inline-flex rounded-md bg-muted border border-border text-[11px]">
-          {modeLabels.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setMode(key)}
-              className={`px-3 py-1 transition-colors ${
-                key === 'stage1' ? 'rounded-l-md' : ''
-              } ${key === 'final' ? 'rounded-r-md' : ''} ${
-                mode === key
-                  ? 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-r border-border last:border-r-0'
-                  : 'text-muted-foreground hover:text-foreground border-r border-border last:border-r-0'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <InfoSegmentedToggle
+          value={mode}
+          onValueChange={setMode}
+          options={modeLabels.map(({ key, label }) => ({ value: key, label }))}
+        />
       </div>
 
       {/* Formula */}

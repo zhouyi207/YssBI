@@ -1,4 +1,6 @@
 import React, { useState, useMemo, Suspense } from 'react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   SectionHeader,
   ModelSummaryGrid,
@@ -171,9 +173,6 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
     if (first) setActiveMethod(first.key);
   };
 
-  const pillActive = 'bg-[var(--accent-color)]/20 text-[var(--accent-color)] border-[var(--accent-color)]/50';
-  const pillInactive = 'text-muted-foreground border-border hover:border-border hover:text-foreground';
-
   return (
     <div className="p-6 max-w-[900px] mx-auto">
       {/* Title */}
@@ -195,19 +194,20 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
               Model Type
             </div>
-            <div className="flex flex-wrap gap-2 justify-start">
+            <ToggleGroup
+              type="single"
+              value={modelType}
+              onValueChange={(value) => value && handleModelChange(value as ModelType)}
+              variant="outline"
+              size="sm"
+              className="flex-wrap justify-start"
+            >
               {MODEL_TYPE_TABS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => handleModelChange(key)}
-                  className={`px-3.5 py-1.5 text-sm font-medium rounded-lg border transition-all ${
-                    modelType === key ? pillActive : pillInactive
-                  }`}
-                >
+                <ToggleGroupItem key={key} value={key} className="px-3.5 text-sm">
                   {label}
-                </button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </div>
           <div className="flex-1 p-4 flex flex-col items-end">
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
@@ -218,23 +218,20 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
                 Not Applicable
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2 justify-end">
-                {EFFECT_TYPE_TABS.map(({ key, label }) => {
-                  const disabled = false;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => !disabled && handleEffectChange(key)}
-                      disabled={disabled}
-                      className={`px-3.5 py-1.5 text-sm font-medium rounded-lg border transition-all ${
-                        effectType === key && !disabled ? pillActive : pillInactive
-                      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+              <ToggleGroup
+                type="single"
+                value={effectType}
+                onValueChange={(value) => value && handleEffectChange(value as EffectType)}
+                variant="outline"
+                size="sm"
+                className="flex-wrap justify-end"
+              >
+                {EFFECT_TYPE_TABS.map(({ key, label }) => (
+                  <ToggleGroupItem key={key} value={key} className="px-3.5 text-sm">
+                    {label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             )}
           </div>
         </div>
@@ -244,28 +241,31 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
           <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5 font-medium">
             Estimation Method
           </div>
-          <div className="flex flex-wrap gap-2">
+          <ToggleGroup
+            type="single"
+            value={currentMethod}
+            onValueChange={(value) => value && setActiveMethod(value as TabKey)}
+            variant="outline"
+            size="sm"
+            className="flex-wrap"
+          >
             {methods.map(({ key, label }) => {
               const hasErr = data.errors?.[key];
-              const isActive = currentMethod === key;
               return (
-                <button
-                  key={key}
-                  onClick={() => setActiveMethod(key)}
-                  className={`px-3.5 py-1.5 text-sm font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
-                    isActive ? pillActive : pillInactive
-                  }`}
-                >
+                <ToggleGroupItem key={key} value={key} className="gap-1.5 px-3.5 text-sm">
                   {label}
                   {hasErr && (
-                    <span className="text-red-400" title={hasErr}>
-                      ⚠
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-red-400">⚠</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{hasErr}</TooltipContent>
+                    </Tooltip>
                   )}
-                </button>
+                </ToggleGroupItem>
               );
             })}
-          </div>
+          </ToggleGroup>
         </div>
       </div>
 

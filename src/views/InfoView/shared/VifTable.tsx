@@ -1,5 +1,11 @@
 import React from 'react';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { VifEntry } from './types';
+import {
+  InfoStatsTable,
+  infoStatsCellClass,
+  infoStatsHeadClass,
+} from './InfoStatsTable';
 
 function formatVifValue(v: number): string {
   if (!Number.isFinite(v)) return 'Inf';
@@ -15,40 +21,36 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
   const hasCategory = rows.some((r) => r.category != null);
 
   return (
-    <div className="rounded-lg border border-border bg-muted overflow-hidden">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Variable</th>
+    <InfoStatsTable className="bg-muted" tableClassName="text-sm">
+      <TableHeader>
+        <TableRow className="border-b border-border hover:bg-transparent">
+          <TableHead className={infoStatsHeadClass}>Variable</TableHead>
+          {hasCategory && <TableHead className={infoStatsHeadClass}>Category</TableHead>}
+          <TableHead className={infoStatsHeadClass}>VIF</TableHead>
+          <TableHead className={infoStatsHeadClass}>1/VIF</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row, idx) => (
+          <TableRow key={vifRowKey(row, idx)} className="border-b border-border last:border-b-0 hover:bg-muted/40">
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{row.variable}</TableCell>
             {hasCategory && (
-              <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Category</th>
+              <TableCell className={infoStatsCellClass}>
+                {row.category != null ? (
+                  <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-300">
+                    {row.category}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </TableCell>
             )}
-            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">VIF</th>
-            <th className="px-4 py-2.5 text-[11px] text-muted-foreground uppercase tracking-wider font-medium">1/VIF</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, idx) => (
-            <tr key={vifRowKey(row, idx)} className="border-b border-border last:border-b-0 hover:bg-muted/40">
-              <td className="px-4 py-2.5 font-mono text-foreground">{row.variable}</td>
-              {hasCategory && (
-                <td className="px-4 py-2.5">
-                  {row.category != null ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
-                      {row.category}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-              )}
-              <td className="px-4 py-2.5 font-mono text-foreground">{formatVifValue(row.vif)}</td>
-              <td className="px-4 py-2.5 font-mono text-foreground">{formatVifValue(row.tolerance)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatVifValue(row.vif)}</TableCell>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatVifValue(row.tolerance)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </InfoStatsTable>
   );
 }
 

@@ -45,3 +45,30 @@ export function useChartThemeColors(): ChartThemeColors {
   const mode = useSettingsStore((s) => s.theme.mode);
   return useMemo(() => getChartThemeColors(mode !== 'light'), [mode]);
 }
+
+/** D3 序列色：主色跟随主题 accent，其余为固定语义色 */
+export interface ChartSeriesColors {
+  primary: string;
+  negative: string;
+  secondary: string;
+  highlight: string;
+}
+
+const SERIES_NEGATIVE = '#e06c75';
+const SERIES_SECONDARY = '#e5c07b';
+const SERIES_HIGHLIGHT = '#ef4444';
+const SERIES_PRIMARY_FALLBACK = '#569cd6';
+
+export function getChartSeriesColors(accentColor?: string): ChartSeriesColors {
+  return {
+    primary: accentColor?.trim() || SERIES_PRIMARY_FALLBACK,
+    negative: SERIES_NEGATIVE,
+    secondary: SERIES_SECONDARY,
+    highlight: SERIES_HIGHLIGHT,
+  };
+}
+
+export function useChartSeriesColors(): ChartSeriesColors {
+  const accentColor = useSettingsStore((s) => s.theme.accentColor);
+  return useMemo(() => getChartSeriesColors(accentColor), [accentColor]);
+}
