@@ -15,7 +15,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_get_variable(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get Variable", vec!["Variables".to_string()])
         .with_ui_style("variable")
-        .with_description("Read the value of a variable")
+        .with_localized_description("读取变量值", "Read the value of a variable")
         .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
             "Value",
             DataRole::Output,
@@ -36,7 +36,7 @@ fn register_get_variable(registry: &NodeRegistry) {
 fn register_set_variable(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Set Variable", vec!["Variables".to_string()])
         .with_ui_style("variable")
-        .with_description("Write a value to a variable")
+        .with_localized_description("写入变量值", "Write a value to a variable")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),

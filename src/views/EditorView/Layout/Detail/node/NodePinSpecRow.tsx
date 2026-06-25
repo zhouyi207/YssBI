@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 
 interface NodePinSpecRowProps {
@@ -5,12 +6,31 @@ interface NodePinSpecRowProps {
 }
 
 export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
+  const { t } = useTranslation();
+
   const badges: string[] = [];
-  if (pin.optional) badges.push('optional');
-  else badges.push('required');
-  if (pin.slotKind === 'repeatable') badges.push('repeatable');
-  if (pin.slotKind === 'derivedFromInput') badges.push('derived');
-  if (pin.connected) badges.push('connected');
+  if (pin.optional) badges.push(t('detail.nodeDoc.optional'));
+  else badges.push(t('detail.nodeDoc.required'));
+  if (pin.slotKind === 'repeatable') badges.push(t('detail.nodeDoc.repeatable'));
+  if (pin.slotKind === 'derivedFromInput') badges.push(t('detail.nodeDoc.derived'));
+  if (pin.connected) badges.push(t('detail.nodeDoc.connected'));
+
+  const directionLabel =
+    pin.direction === 'input'
+      ? t('detail.nodeDoc.directionInput')
+      : t('detail.nodeDoc.directionOutput');
+
+  const kindLabel = pin.kind === 'Exec' ? t('detail.nodeDoc.kindExec') : t('detail.nodeDoc.kindData');
+
+  const slotNoteText =
+    pin.slotNote?.kind === 'repeatableRange'
+      ? t('detail.nodeDoc.repeatableRange', {
+          min: pin.slotNote.min,
+          max: pin.slotNote.max ?? '∞',
+        })
+      : pin.slotNote?.kind === 'derivedFromInput'
+        ? t('detail.nodeDoc.derivedFromInput')
+        : undefined;
 
   return (
     <div className="flex items-start gap-2 rounded bg-white/5 px-2 py-1.5">
@@ -19,17 +39,19 @@ export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
           pin.direction === 'input' ? 'bg-blue-500/20 text-blue-300' : 'bg-emerald-500/20 text-emerald-300'
         }`}
       >
-        {pin.direction}
+        {directionLabel}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] font-semibold text-gray-200">{pin.name || '(unnamed)'}</span>
-          <span className="text-[9px] text-gray-500">{pin.kind}</span>
+          <span className="text-[10px] font-semibold text-gray-200">
+            {pin.name || t('detail.nodeDoc.unnamed')}
+          </span>
+          <span className="text-[9px] text-gray-500">{kindLabel}</span>
         </div>
         <div className="mt-0.5 font-mono text-[9px] text-[var(--accent-color)]/80">
           {pin.typeDisplay ?? pin.type}
         </div>
-        {(pin.slotNote || badges.length > 0) && (
+        {(slotNoteText || badges.length > 0) && (
           <div className="mt-1 flex flex-wrap gap-1">
             {badges.map((badge) => (
               <span
@@ -39,8 +61,8 @@ export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
                 {badge}
               </span>
             ))}
-            {pin.slotNote && (
-              <span className="text-[8px] italic text-gray-500">{pin.slotNote}</span>
+            {slotNoteText && (
+              <span className="text-[8px] italic text-gray-500">{slotNoteText}</span>
             )}
           </div>
         )}

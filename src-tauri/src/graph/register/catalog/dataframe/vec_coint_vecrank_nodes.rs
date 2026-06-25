@@ -179,7 +179,8 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "Johansen 协整秩检验 — Stata vecrank（trace 与可选 max eigenvalue）",
         "Johansen cointegration rank tests — Stata vecrank (trace & optional max eigenvalue)",
     )
     .with_pin_slots(slots)

@@ -106,7 +106,7 @@ fn series_to_view_json(series: &polars::prelude::Series) -> serde_json::Value {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("View", vec!["Debug".to_string(), "Data".to_string()])
         .with_ui_style("debug")
-        .with_description("View data in a window (DataFrame, DataSeries, or scalar). Data persists after execution.")
+        .with_localized_description("在窗口中查看数据（DataFrame、DataSeries 或标量），执行后数据仍保留", "View data in a window (DataFrame, DataSeries, or scalar). Data persists after execution.")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(

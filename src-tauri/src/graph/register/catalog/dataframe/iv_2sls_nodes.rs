@@ -716,7 +716,10 @@ fn register_iv_2sls_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("IV:2SLS regression configuration — same as OLS (Constant, VCE, Time)")
+    .with_localized_description(
+        "IV:2SLS 回归配置 — 与 OLS 相同（Constant、VCE、Time）",
+        "IV:2SLS regression configuration — same as OLS (Constant, VCE, Time)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -850,7 +853,8 @@ fn register_iv_2sls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "工具变量两阶段最小二乘回归 — 输出结果并打开 Summary 窗口",
         "Instrumental Variables Two-Stage Least Squares regression — outputs results and opens the summary window",
     )
     .with_pin_slots(slots)

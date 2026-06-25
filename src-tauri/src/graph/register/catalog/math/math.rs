@@ -101,7 +101,7 @@ fn register_add(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Add (+)", vec!["Math".to_string(), "Operators".to_string()])
             .with_ui_style("math")
-            .with_description("Add numbers or DataSeries (element-wise / broadcast)")
+            .with_localized_description("加法（标量或 DataSeries，逐元素 / 广播）", "Add numbers or DataSeries (element-wise / broadcast)")
             .with_pin_slots(vec![
                 PinSlot::repeatable(
                     PinDefinition::data_input(
@@ -157,7 +157,7 @@ fn register_subtract(registry: &NodeRegistry) {
         vec!["Math".to_string(), "Operators".to_string()],
     )
     .with_ui_style("math")
-    .with_description("Subtract B from A (scalar or DataSeries)")
+    .with_localized_description("减法 A − B（标量或 DataSeries）", "Subtract B from A (scalar or DataSeries)")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -207,7 +207,7 @@ fn register_multiply(registry: &NodeRegistry) {
         vec!["Math".to_string(), "Operators".to_string()],
     )
     .with_ui_style("math")
-    .with_description("Multiply A and B (scalar or DataSeries)")
+    .with_localized_description("乘法 A × B（标量或 DataSeries）", "Multiply A and B (scalar or DataSeries)")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -257,7 +257,7 @@ fn register_divide(registry: &NodeRegistry) {
         vec!["Math".to_string(), "Operators".to_string()],
     )
     .with_ui_style("math")
-    .with_description("Divide A by B (scalar or DataSeries)")
+    .with_localized_description("除法 A ÷ B（标量或 DataSeries）", "Divide A by B (scalar or DataSeries)")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(

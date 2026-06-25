@@ -529,7 +529,7 @@ fn register_prais_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Prais-Winsten / Cochrane-Orcutt configuration")
+    .with_localized_description("Prais-Winsten / Cochrane-Orcutt 配置", "Prais-Winsten / Cochrane-Orcutt configuration")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -605,7 +605,10 @@ fn register_prais(registry: &NodeRegistry) {
 
     let def = NodeDefinition::new("Prais", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Prais-Winsten / Cochrane-Orcutt AR(1) regression — Stata prais")
+        .with_localized_description(
+            "Prais-Winsten / Cochrane-Orcutt AR(1) 回归 — Stata prais",
+            "Prais-Winsten / Cochrane-Orcutt AR(1) regression — Stata prais",
+        )
         .with_pin_slots(slots)
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_prais_regression(ctx)?;
@@ -658,7 +661,10 @@ fn register_prais_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Prais-Winsten / Cochrane-Orcutt — outputs results and opens summary window")
+    .with_localized_description(
+        "Prais-Winsten / Cochrane-Orcutt — 输出结果并打开 Summary 窗口",
+        "Prais-Winsten / Cochrane-Orcutt — outputs results and opens summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_prais_regression(ctx)?;

@@ -16,7 +16,7 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Annotate a Categorical DataSeries with dummy variable encoding metadata for OLS regression")
+    .with_localized_description("为 Categorical DataSeries 标注哑变量编码元数据，供 OLS 回归使用", "Annotate a Categorical DataSeries with dummy variable encoding metadata for OLS regression")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",

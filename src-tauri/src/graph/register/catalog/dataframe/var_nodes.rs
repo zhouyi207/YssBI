@@ -551,7 +551,8 @@ fn register_varsoc(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "VAR 滞后阶选择 — LL、LR、FPE、AIC、HQIC、SBIC（Stata varsoc varlist, maxlag(#)）",
         "VAR lag-order selection — LL, LR, FPE, AIC, HQIC, SBIC (Stata varsoc varlist, maxlag(#))",
     )
     .with_pin_slots(slots)
@@ -599,7 +600,8 @@ fn register_var_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "向量自回归 VAR(p)，含 OIRF 与 FEVD（Stata varbasic）。外生 DataFrame 行数须与 Variables 一致；缺失/非有限值按 listwise 删除。",
         "Vector Autoregression — VAR(p) with OIRF and FEVD (Stata varbasic). Exog DataFrame must have the same row count as Variables; missing/non-finite cells use listwise deletion.",
     )
     .with_pin_slots(slots)

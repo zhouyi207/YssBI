@@ -28,7 +28,7 @@ fn register_boolean_constant(registry: &NodeRegistry) {
         vec!["Value".to_string(), "Constants".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Boolean constant value")
+    .with_localized_description("布尔常量", "Boolean constant value")
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "Value",
         DataRole::Result,
@@ -42,7 +42,7 @@ fn register_int32_constant(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Int32", vec!["Value".to_string(), "Constants".to_string()])
             .with_ui_style("value")
-            .with_description("32-bit integer constant value")
+            .with_localized_description("32 位整数常量", "32-bit integer constant value")
             .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -56,7 +56,7 @@ fn register_int64_constant(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Int64", vec!["Value".to_string(), "Constants".to_string()])
             .with_ui_style("value")
-            .with_description("64-bit integer constant value")
+            .with_localized_description("64 位整数常量", "64-bit integer constant value")
             .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
                 "Value",
                 DataRole::Result,
@@ -72,7 +72,7 @@ fn register_float32_constant(registry: &NodeRegistry) {
         vec!["Value".to_string(), "Constants".to_string()],
     )
     .with_ui_style("value")
-    .with_description("32-bit floating point constant value")
+    .with_localized_description("32 位浮点常量", "32-bit floating point constant value")
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "Value",
         DataRole::Result,
@@ -88,7 +88,7 @@ fn register_float64_constant(registry: &NodeRegistry) {
         vec!["Value".to_string(), "Constants".to_string()],
     )
     .with_ui_style("value")
-    .with_description("64-bit floating point constant value")
+    .with_localized_description("64 位浮点常量", "64-bit floating point constant value")
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "Value",
         DataRole::Result,
@@ -102,7 +102,7 @@ fn register_string_constant(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("String", vec!["Value".to_string(), "Constants".to_string()])
             .with_ui_style("value")
-            .with_description("String constant value")
+            .with_localized_description("字符串常量", "String constant value")
             .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
                 "Value",
                 DataRole::Result,

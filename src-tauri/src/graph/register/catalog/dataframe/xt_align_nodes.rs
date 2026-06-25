@@ -21,7 +21,10 @@ fn register_xt_align(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Panel".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("按 (entity, time) 对齐面板数据：补齐缺失时间点，缺失为 null。实体列支持 Categorical、Int64、String；时间列支持 Int64 或 Date。")
+    .with_localized_description(
+        "按 (entity, time) 对齐面板数据：补齐缺失时间点，缺失为 null。实体列支持 Categorical、Int64、String；时间列支持 Int64 或 Date。",
+        "Align panel data by (entity, time): fill missing time points with null. Entity column supports Categorical, Int64, String; time column supports Int64 or Date.",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataFrame",
@@ -105,7 +108,10 @@ fn register_xt_diff(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Panel".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("在 XT Align 后的 DataFrame 上按 entity 做一阶差分（Stata D. 语义）。仅保留有有效差分的行。")
+    .with_localized_description(
+        "在 XT Align 后的 DataFrame 上按 entity 做一阶差分（Stata D. 语义）。仅保留有有效差分的行。",
+        "First difference by entity on XT-aligned DataFrame (Stata D. semantics). Keeps only rows with valid differences.",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Aligned DataFrame",

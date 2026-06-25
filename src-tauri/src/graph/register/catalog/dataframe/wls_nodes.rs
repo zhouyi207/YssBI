@@ -879,7 +879,8 @@ fn register_wls(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("WLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_description(
+        .with_localized_description(
+            "加权最小二乘回归 — 输出拟合模型供预测使用",
             "Weighted Least Squares regression — outputs the fitted model for prediction",
         )
         .with_pin_slots(slots)
@@ -942,7 +943,8 @@ fn register_wls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "加权最小二乘回归 — 输出结果并打开 Summary 窗口",
         "Weighted Least Squares regression — outputs results and opens the summary window",
     )
     .with_pin_slots(slots)

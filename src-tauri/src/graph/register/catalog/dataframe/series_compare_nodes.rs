@@ -128,10 +128,15 @@ fn compare_series_series(a: &Series, b: &Series, op: &str) -> Result<Series, Str
         .map(|ca: BooleanChunked| ca.into_series())
 }
 
-fn register_compare_node(registry: &NodeRegistry, name: &str, op: &str, description: &str) {
+fn register_compare_node(
+    registry: &NodeRegistry,
+    name: &str,
+    op: &str,
+    desc_zh: &str,
+    desc_en: &str,
+) {
     let name = name.to_string();
     let op = op.to_string();
-    let description = description.to_string();
     let definition = NodeDefinition::new(
         name.clone(),
         vec![
@@ -141,7 +146,7 @@ fn register_compare_node(registry: &NodeRegistry, name: &str, op: &str, descript
         ],
     )
     .with_ui_style("dataframe")
-    .with_description(description)
+    .with_localized_description(desc_zh, desc_en)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -221,36 +226,42 @@ pub fn register(registry: &NodeRegistry) {
         registry,
         "Series Greater Than (>)",
         "gt",
+        "逐元素大于：Series > Value（标量或 DataSeries）",
         "Element-wise greater than: Series > Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
         "Series Less Than (<)",
         "lt",
+        "逐元素小于：Series < Value（标量或 DataSeries）",
         "Element-wise less than: Series < Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
         "Series Greater Equal (>=)",
         "gte",
+        "逐元素大于等于：Series >= Value（标量或 DataSeries）",
         "Element-wise greater or equal: Series >= Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
         "Series Less Equal (<=)",
         "lte",
+        "逐元素小于等于：Series <= Value（标量或 DataSeries）",
         "Element-wise less or equal: Series <= Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
         "Series Equal (==)",
         "eq",
+        "逐元素相等：Series == Value（标量或 DataSeries）",
         "Element-wise equality: Series == Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
         "Series Not Equal (!=)",
         "neq",
+        "逐元素不等：Series != Value（标量或 DataSeries）",
         "Element-wise not equal: Series != Value (scalar or DataSeries)",
     );
 }

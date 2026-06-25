@@ -76,7 +76,7 @@ fn register_bernoulli(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Bernoulli(p) distribution, outputs 0 or 1")
+    .with_localized_description("从 Bernoulli(p) 分布抽样，输出 0 或 1", "Sample from Bernoulli(p) distribution, outputs 0 or 1")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "P",
@@ -115,7 +115,7 @@ fn register_binomial(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Binomial(n_trials, p) distribution")
+    .with_localized_description("从 Binomial(n_trials, p) 分布抽样", "Sample from Binomial(n_trials, p) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "N Trials",
@@ -165,7 +165,7 @@ fn register_poisson(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Poisson(lambda) distribution")
+    .with_localized_description("从 Poisson(λ) 分布抽样", "Sample from Poisson(lambda) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Lambda",
@@ -204,7 +204,7 @@ fn register_geometric(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Geometric(p) distribution")
+    .with_localized_description("从 Geometric(p) 分布抽样", "Sample from Geometric(p) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "P",
@@ -243,7 +243,7 @@ fn register_negative_binomial(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from NegativeBinomial(r, p) distribution")
+    .with_localized_description("从 NegativeBinomial(r, p) 分布抽样", "Sample from NegativeBinomial(r, p) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "R",
@@ -288,7 +288,7 @@ fn register_discrete_uniform(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from DiscreteUniform(low, high) distribution, inclusive")
+    .with_localized_description("从 DiscreteUniform(low, high) 分布抽样（含端点）", "Sample from DiscreteUniform(low, high) distribution, inclusive")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Low",
@@ -333,7 +333,7 @@ fn register_hypergeometric(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Hypergeometric(N, K, n) distribution")
+    .with_localized_description("从 Hypergeometric(N, K, n) 分布抽样", "Sample from Hypergeometric(N, K, n) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "N",

@@ -455,7 +455,10 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Vector Error-Correction model — Johansen cointegration (Stata vec)")
+    .with_localized_description(
+        "向量误差修正模型 — Johansen 协整（Stata vec）",
+        "Vector Error-Correction model — Johansen cointegration (Stata vec)",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_vec(ctx)?;

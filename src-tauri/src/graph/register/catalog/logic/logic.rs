@@ -20,7 +20,7 @@ fn register_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-    .with_description("Check if two values are equal")
+    .with_localized_description("判断两值是否相等", "Check if two values are equal")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -60,7 +60,7 @@ fn register_not_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-    .with_description("Check if two values are not equal")
+    .with_localized_description("判断两值是否不等", "Check if two values are not equal")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -98,7 +98,7 @@ fn register_and(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("And (&&)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_description("Logical AND operation")
+            .with_localized_description("逻辑与运算", "Logical AND operation")
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(
@@ -144,7 +144,7 @@ fn register_or(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Or (||)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_description("Logical OR operation")
+            .with_localized_description("逻辑或运算", "Logical OR operation")
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(
@@ -190,7 +190,7 @@ fn register_not(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Not (!)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_description("Logical NOT operation")
+            .with_localized_description("逻辑非运算", "Logical NOT operation")
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(

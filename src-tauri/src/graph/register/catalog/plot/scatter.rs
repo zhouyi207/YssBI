@@ -56,7 +56,7 @@ fn series_to_plot_f64(s: &polars::prelude::Series) -> Result<polars::prelude::Se
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Scatter", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_description("Plot scatter chart from two DataSeries (X, Y). X can be numeric or Date, Y must be numeric.")
+        .with_localized_description("用两个 DataSeries 绘制散点图；X 可为数值或 Date，Y 须为数值", "Plot scatter chart from two DataSeries (X, Y). X can be numeric or Date, Y must be numeric.")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(

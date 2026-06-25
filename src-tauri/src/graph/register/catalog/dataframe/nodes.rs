@@ -20,7 +20,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_get_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Get a DataFrame by ID")
+        .with_localized_description("按 ID 获取 DataFrame", "Get a DataFrame by ID")
         .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
             "DataFrame",
             DataRole::Output,
@@ -48,7 +48,7 @@ fn register_get_dataframe(registry: &NodeRegistry) {
 fn register_decompose_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Decompose DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Decompose a DataFrame into individual columns")
+        .with_localized_description("将 DataFrame 分解为各列 DataSeries", "Decompose a DataFrame into individual columns")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "DataFrame", DataRole::Input, PinDataTypeDefinition::concrete(DataType::DataFrame),
@@ -107,7 +107,7 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
 fn register_combine_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)")
+        .with_localized_description("将多个 DataSeries 合并为 DataFrame（Decompose DataFrame 的逆操作）", "Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)")
         .with_output_schema_resolver(Arc::new(|ctx| {
             let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
                 .input_schemas
@@ -215,7 +215,7 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
 fn register_filter_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Filter DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Filter rows by a Boolean DataSeries mask (keep rows where condition is true)")
+        .with_localized_description("按布尔 DataSeries 条件过滤行（保留为 true 的行）", "Filter rows by a Boolean DataSeries mask (keep rows where condition is true)")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "DataFrame",

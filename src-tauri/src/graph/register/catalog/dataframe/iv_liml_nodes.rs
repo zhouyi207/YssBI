@@ -631,7 +631,8 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "工具变量 LIML 回归 — 输出结果并打开 Summary 窗口",
         "Instrumental Variables LIML regression — outputs results and opens the summary window",
     )
     .with_pin_slots(slots)

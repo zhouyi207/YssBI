@@ -517,7 +517,10 @@ fn register_probit_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Probit regression configuration — Constant term")
+    .with_localized_description(
+        "Probit 回归配置 — 常数项",
+        "Probit regression configuration — Constant term",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -575,7 +578,8 @@ fn register_probit(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Probit", vec!["Data".to_string(), "Statistics".to_string()])
             .with_ui_style("dataframe")
-            .with_description(
+            .with_localized_description(
+                "二元 Probit 回归（IRLS）— 输出拟合模型供预测使用",
                 "Binary probit regression (IRLS) — outputs fitted model for prediction",
             )
             .with_pin_slots(slots)
@@ -636,7 +640,10 @@ fn register_probit_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Binary probit regression — outputs results and opens summary window")
+    .with_localized_description(
+        "二元 Probit 回归 — 输出结果并打开 Summary 窗口",
+        "Binary probit regression — outputs results and opens summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_probit_regression(ctx)?;

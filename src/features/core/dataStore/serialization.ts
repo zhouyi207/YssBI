@@ -1,5 +1,5 @@
 import { Node } from '@/shared/types/ui';
-import { GraphPosition, Pin, Variable, getNodeDefinitionMeta } from "@/shared/types/domain";
+import { GraphPosition, Pin, Variable, getNodeDefinitionMeta, getLocalizedDescription } from "@/shared/types/domain";
 import type {
   SerializedGraphData,
   SerializedPin,
@@ -150,7 +150,7 @@ export function deserializeGraph(data: DeserializeGraphInput): {
         inputs: [],
         outputs: [],
         uiStyle: n.uiStyle ?? getNodeDefinitionMeta(def)?.uiStyle ?? getNodeDefinitionMeta(def)?.ui_style ?? 'default',
-        description: n.description ?? getNodeDefinitionMeta(def)?.description,
+        description: n.description ?? getLocalizedDescription(getNodeDefinitionMeta(def), 'en-US'),
         isInternal: !!n.isInternal,
         subGraphId: n.subGraphId,
         variableId: n.variableId,

@@ -43,11 +43,17 @@ fn scalar_to_f64(v: &DataValue) -> Option<f64> {
     }
 }
 
-fn register_unary_fn(registry: &NodeRegistry, name: &str, description: &str, f: fn(f64) -> f64) {
+fn register_unary_fn(
+    registry: &NodeRegistry,
+    name: &str,
+    desc_zh: &str,
+    desc_en: &str,
+    f: fn(f64) -> f64,
+) {
     let name_owned = name.to_string();
     let definition = NodeDefinition::new(name, vec!["Math".to_string(), "Functions".to_string()])
         .with_ui_style("math")
-        .with_description(description)
+        .with_localized_description(desc_zh, desc_en)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "X",
@@ -90,29 +96,43 @@ pub fn register(registry: &NodeRegistry) {
     register_unary_fn(
         registry,
         "Ln",
+        "自然对数（以 e 为底），逐元素计算",
         "Natural logarithm (base e) of each element",
         f64::ln,
     );
     register_unary_fn(
         registry,
         "Log2",
+        "以 2 为底的对数，逐元素计算",
         "Base-2 logarithm of each element",
         f64::log2,
     );
     register_unary_fn(
         registry,
         "Log10",
+        "以 10 为底的对数，逐元素计算",
         "Base-10 logarithm of each element",
         f64::log10,
     );
     register_unary_fn(
         registry,
         "Exp",
+        "指数函数 e^x，逐元素计算",
         "Exponential (e^x) of each element",
         f64::exp,
     );
-    register_unary_fn(registry, "Sqrt", "Square root of each element", f64::sqrt);
-    register_unary_fn(registry, "Square", "Square (x²) of each element", |x| {
-        x * x
-    });
+    register_unary_fn(
+        registry,
+        "Sqrt",
+        "平方根，逐元素计算",
+        "Square root of each element",
+        f64::sqrt,
+    );
+    register_unary_fn(
+        registry,
+        "Square",
+        "平方 x²，逐元素计算",
+        "Square (x²) of each element",
+        |x| x * x,
+    );
 }

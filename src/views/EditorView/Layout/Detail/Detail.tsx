@@ -1,4 +1,5 @@
 import { forwardRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useEditorGroup } from '@/features/application/editor';
 import { useEditorStore } from '@/features/core/editor';
 import { useLogStore } from '@/features/core/log/logStore';
@@ -11,6 +12,7 @@ import { LogDetailPanel } from './panels/LogDetailPanel';
 import { NodeDetailPanel } from './panels/NodeDetailPanel';
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
+  const { t } = useTranslation();
   const {
     Variables,
     events,
@@ -87,7 +89,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
             style={{ height: 'var(--titlebar-height)' }}
           >
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-              Details
+              {t('detail.title')}
             </span>
           </div>
           <DetailEmptyState />

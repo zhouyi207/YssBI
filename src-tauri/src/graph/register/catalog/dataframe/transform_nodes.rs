@@ -19,7 +19,8 @@ fn register_standardize_series(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "对数值 DataSeries 做标准化（z-score），并输出拟合变换",
         "Standardize a numeric DataSeries (z-score normalization) and output the fitted transform",
     )
     .with_pin_slots(vec![
@@ -84,7 +85,7 @@ fn register_inverse_standardize_series(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Reverse a standardization using a previously fitted transform")
+    .with_localized_description("使用已拟合变换逆标准化", "Reverse a standardization using a previously fitted transform")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",

@@ -563,7 +563,8 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "2×2 DID 双向固定效应（entity + time）。对 Y 回归可选 X 与 Treat×Post（主效应被 FE 吸收）；Treat×Post 系数为 DID 估计量。",
         "2×2 DID with two-way FE (entity + time). Regresses Y on optional X and Treat×Post only (main effects absorbed by FE). Coef on Treat×Post is the DID estimate.",
     )
     .with_pin_slots(slots)

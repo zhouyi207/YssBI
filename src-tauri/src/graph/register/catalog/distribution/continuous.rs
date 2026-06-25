@@ -85,7 +85,7 @@ fn register_normal(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Normal(mean, std) distribution")
+    .with_localized_description("从 Normal(μ, σ) 分布抽样", "Sample from Normal(mean, std) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Mean",
@@ -130,7 +130,7 @@ fn register_uniform(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Uniform(low, high) distribution")
+    .with_localized_description("从 Uniform(low, high) 分布抽样", "Sample from Uniform(low, high) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Low",
@@ -175,7 +175,7 @@ fn register_exp(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Exp(rate) distribution")
+    .with_localized_description("从 Exp(rate) 分布抽样", "Sample from Exp(rate) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Rate",
@@ -214,7 +214,7 @@ fn register_gamma(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Gamma(shape, rate) distribution")
+    .with_localized_description("从 Gamma(shape, rate) 分布抽样", "Sample from Gamma(shape, rate) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -259,7 +259,7 @@ fn register_beta(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Beta(alpha, beta) distribution")
+    .with_localized_description("从 Beta(α, β) 分布抽样", "Sample from Beta(alpha, beta) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Alpha",
@@ -304,7 +304,7 @@ fn register_students_t(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Student's t(df) distribution")
+    .with_localized_description("从 Student t(df) 分布抽样", "Sample from Student's t(df) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DF",
@@ -343,7 +343,7 @@ fn register_cauchy(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Cauchy(location, scale) distribution")
+    .with_localized_description("从 Cauchy(location, scale) 分布抽样", "Sample from Cauchy(location, scale) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Location",
@@ -388,7 +388,7 @@ fn register_chi_squared(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from ChiSquared(df) distribution")
+    .with_localized_description("从 ChiSquared(df) 分布抽样", "Sample from ChiSquared(df) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DF",
@@ -427,7 +427,7 @@ fn register_log_normal(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from LogNormal(mu, sigma) distribution")
+    .with_localized_description("从 LogNormal(μ, σ) 分布抽样", "Sample from LogNormal(mu, sigma) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Mu",
@@ -472,7 +472,7 @@ fn register_weibull(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Weibull(shape, scale) distribution")
+    .with_localized_description("从 Weibull(shape, scale) 分布抽样", "Sample from Weibull(shape, scale) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -517,7 +517,7 @@ fn register_laplace(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Laplace(location, scale) distribution")
+    .with_localized_description("从 Laplace(location, scale) 分布抽样", "Sample from Laplace(location, scale) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Location",
@@ -562,7 +562,7 @@ fn register_pareto(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Pareto(shape, scale) distribution")
+    .with_localized_description("从 Pareto(shape, scale) 分布抽样", "Sample from Pareto(shape, scale) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -607,7 +607,7 @@ fn register_inverse_gamma(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from InverseGamma(shape, scale) distribution")
+    .with_localized_description("从 InverseGamma(shape, scale) 分布抽样", "Sample from InverseGamma(shape, scale) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -652,7 +652,7 @@ fn register_triangular(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Triangular(a, b, c) distribution")
+    .with_localized_description("从 Triangular(a, b, c) 分布抽样", "Sample from Triangular(a, b, c) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "A",
@@ -703,7 +703,7 @@ fn register_fisher_snedecor(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from F(d1, d2) distribution")
+    .with_localized_description("从 F(d1, d2) 分布抽样", "Sample from F(d1, d2) distribution")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "D1",
@@ -748,7 +748,7 @@ fn register_erlang(registry: &NodeRegistry) {
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_description("Sample from Erlang(k, rate) distribution, k is shape (integer)")
+    .with_localized_description("从 Erlang(k, rate) 分布抽样，k 为形状（整数）", "Sample from Erlang(k, rate) distribution, k is shape (integer)")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "K",

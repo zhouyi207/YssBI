@@ -83,7 +83,7 @@ fn numeric_dataseries_type() -> PinDataTypeDefinition {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Correlation Plot", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_description("Plot correlation heatmap from numeric DataSeries (use + to add more)")
+        .with_localized_description("由数值 DataSeries 绘制相关热力图（可用 + 添加更多序列）", "Plot correlation heatmap from numeric DataSeries (use + to add more)")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::repeatable(

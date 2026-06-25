@@ -16,7 +16,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_print(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Print", vec!["Debug".to_string()])
         .with_ui_style("debug")
-        .with_description("Print a string to the console")
+        .with_localized_description("将字符串打印到控制台", "Print a string to the console")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(

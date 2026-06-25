@@ -17,7 +17,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_if_else(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Branch", vec!["Control Flow".to_string()])
         .with_ui_style("control")
-        .with_description("Branch execution based on condition")
+        .with_localized_description("按条件分支执行", "Branch execution based on condition")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(
@@ -48,7 +48,7 @@ fn register_if_else(registry: &NodeRegistry) {
 fn register_sequence(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Sequence", vec!["Control Flow".to_string()])
         .with_ui_style("control")
-        .with_description("Execute steps in sequence")
+        .with_localized_description("按顺序逐步执行", "Execute steps in sequence")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::repeatable(

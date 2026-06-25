@@ -512,7 +512,10 @@ fn register_logit_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Logit regression configuration — Constant term")
+    .with_localized_description(
+        "Logit 回归配置 — 常数项",
+        "Logit regression configuration — Constant term",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -570,7 +573,8 @@ fn register_logit(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Logit", vec!["Data".to_string(), "Statistics".to_string()])
             .with_ui_style("dataframe")
-            .with_description(
+            .with_localized_description(
+                "二元 Logit 回归（IRLS）— 输出拟合模型供预测使用",
                 "Binary logistic regression (IRLS) — outputs fitted model for prediction",
             )
             .with_pin_slots(slots)
@@ -631,7 +635,10 @@ fn register_logit_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Binary logistic regression — outputs results and opens summary window")
+    .with_localized_description(
+        "二元 Logit 回归 — 输出结果并打开 Summary 窗口",
+        "Binary logistic regression — outputs results and opens summary window",
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_logit_regression(ctx)?;

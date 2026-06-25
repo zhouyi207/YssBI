@@ -30,7 +30,10 @@ fn register_ts_align(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("对齐时间序列：补齐缺失时间点，拒绝重复时间。时间列需为 Int64 或 Date。")
+    .with_localized_description(
+        "对齐时间序列：补齐缺失时间点，拒绝重复时间。时间列需为 Int64 或 Date。",
+        "Align time series: fill missing timestamps, reject duplicates. Time column must be Int64 or Date.",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataFrame",
@@ -121,7 +124,10 @@ fn register_ts_diff(registry: &NodeRegistry) {
     ])));
     let definition = NodeDefinition::new("TS Diff", vec!["Data".to_string(), "Time Series".to_string()])
         .with_ui_style("dataframe")
-        .with_description("对 DataSeries 做差分：y_t - y_{t-lag}。连接 Time Series 时与 Stata D. 一致，仅对相邻时间点（interval）差分，不跨 gap。")
+        .with_localized_description(
+            "对 DataSeries 做差分：y_t - y_{t-lag}。连接 Time Series 时与 Stata D. 一致，仅对相邻时间点（interval）差分，不跨 gap。",
+            "Difference on DataSeries: y_t - y_{t-lag}. With Time Series, matches Stata D. on adjacent intervals only.",
+        )
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "Value Series",
@@ -199,7 +205,10 @@ fn register_ts_pct_change(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("百分比变化：(y_t - y_{t-lag}) / y_{t-lag}，前 lag 个为 null")
+    .with_localized_description(
+        "百分比变化：(y_t - y_{t-lag}) / y_{t-lag}，前 lag 个为 null",
+        "Percent change: (y_t - y_{t-lag}) / y_{t-lag}; first lag values are null",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -251,7 +260,10 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("滚动均值：前 (window-1) 个为 null")
+    .with_localized_description(
+        "滚动均值：前 (window-1) 个为 null",
+        "Rolling mean; first (window-1) values are null",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -309,7 +321,10 @@ fn register_ts_lag(registry: &NodeRegistry) {
     ])));
     let definition = NodeDefinition::new("TS Lag", vec!["Data".to_string(), "Time Series".to_string()])
         .with_ui_style("dataframe")
-        .with_description("严格时间对齐的滞后（Stata L. 语义）。Time 为 Aligned 时跳过对齐。时间列支持 Int64 或 Date。")
+        .with_localized_description(
+            "严格时间对齐的滞后（Stata L. 语义）。Time 为 Aligned 时跳过对齐。时间列支持 Int64 或 Date。",
+            "Time-aligned lag (Stata L.). Skips realign when Time is already aligned. Int64 or Date time column.",
+        )
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "Time Series",

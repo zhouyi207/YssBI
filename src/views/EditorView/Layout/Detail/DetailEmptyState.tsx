@@ -1,4 +1,8 @@
+import { useTranslation } from 'react-i18next';
+
 export function DetailEmptyState() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center p-4 text-center opacity-30 group">
       <svg
@@ -12,11 +16,9 @@ export function DetailEmptyState() {
         <polyline points="13 2 13 9 20 9" />
       </svg>
       <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-        No selection
+        {t('detail.noSelection')}
       </span>
-      <span className="mt-1 text-[9px] italic text-gray-400">
-        Select an item from the sidebar or canvas
-      </span>
+      <span className="mt-1 text-[9px] italic text-gray-400">{t('detail.noSelectionHint')}</span>
     </div>
   );
 }

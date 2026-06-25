@@ -10,7 +10,7 @@ export interface ResolvedPinSpec {
   typeDisplay?: string;
   optional: boolean;
   slotKind?: 'fixed' | 'repeatable' | 'derivedFromInput';
-  slotNote?: string;
+  slotNote?: { kind: 'repeatableRange'; min: number; max: number | null } | { kind: 'derivedFromInput' };
   connected: boolean;
 }
 
@@ -35,12 +35,13 @@ function formatDefinitionType(def: PinDefinitionDTO): string {
   return 'unknown';
 }
 
-function slotNote(slot: PinSlot): string | undefined {
+function slotNote(slot: PinSlot): ResolvedPinSpec['slotNote'] {
   if (slot.slotKind === 'repeatable') {
-    const max = slot.maxCount == null ? '∞' : String(slot.maxCount);
-    return `repeatable ${slot.minCount}–${max}`;
+    return { kind: 'repeatableRange', min: slot.minCount, max: slot.maxCount };
   }
-  if (slot.slotKind === 'derivedFromInput') return 'derived from input schema';
+  if (slot.slotKind === 'derivedFromInput') {
+    return { kind: 'derivedFromInput' };
+  }
   return undefined;
 }
 

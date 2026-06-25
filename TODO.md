@@ -327,6 +327,9 @@
 - [x] 后端 `NodeMetaData.documentation { zh, en }` + `with_documentation()`；`catalog/docs/` 目录；OLS / OLS Summary 首批完整文档
 - [x] 修复 Detail 点击节点报错：`nodeMetadata`（camelCase）与 `node_metadata` 字段不一致；Zustand pins selector 无限循环（`useShallow`）
 - [x] 修复 Detail 左侧 Sash 拖动卡顿：拖动过程 DOM 直改 + rAF 节流，松手再写 layout store；文档 Panel `memo` + 拖动时 `contain`
+- [x] Detail 面板 UI i18n：`detail.*` 键（`en-US` / `zh-CN`）；NodeDetailPanel、Pin 接口、文档区、空状态等按当前语言展示
+- [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → legacy `description`
+- [x] OLS / OLS Summary Markdown 文档去重：移除与 Pin 接口重复的 Input/Output 表格，保留公式与 Usage
 
 ## v1.0 待办
 
@@ -334,7 +337,7 @@
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 连接 pin 的线在执行的时候只有一部分会亮
 - [ ] 断开连接后 pin 的状态有时还是连接状态
-- [ ] 给每一个节点都设置一个文档，然后点击节点的时候在 detail 侧边栏中显示这个文档，文档还能显示公式（**基础设施已完成**：Detail Node 面板 + 后端 `documentation` + OLS/OLS Summary 示例；其余统计/计量节点 Markdown 待批量补充）
+- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 
 # TODOLIST
 

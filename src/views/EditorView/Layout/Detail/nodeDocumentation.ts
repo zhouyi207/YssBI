@@ -1,20 +1,31 @@
-import type { NodeDocumentation } from '@/shared/types/domain/node';
+import type { NodeMetaData } from '@/shared/types/domain/node';
+import {
+  getLocalizedDescription,
+  pickLocalizedText,
+} from '@/shared/types/domain/node';
 
-export function pickNodeDocumentation(
-  doc: NodeDocumentation | undefined,
+export { pickLocalizedText, getLocalizedDescription };
+
+/** @deprecated 使用 pickLocalizedText */
+export const pickNodeDocumentation = pickLocalizedText;
+
+export function resolveNodeDocumentationContent(
+  meta: NodeMetaData | undefined,
   language: string,
+  instanceDescription?: string,
 ): string | undefined {
-  if (!doc) return undefined;
-  const isZh = language.startsWith('zh');
-  const primary = isZh ? doc.zh : doc.en;
-  const fallback = isZh ? doc.en : doc.zh;
-  return primary ?? fallback;
+  return (
+    pickLocalizedText(meta?.documentation, language) ??
+    getLocalizedDescription(meta, language) ??
+    instanceDescription
+  );
 }
 
+/** @deprecated 使用 resolveNodeDocumentationContent */
 export function resolveNodeDescription(
-  documentation: NodeDocumentation | undefined,
+  documentation: NodeMetaData['documentation'],
   description: string | undefined,
   language: string,
 ): string | undefined {
-  return pickNodeDocumentation(documentation, language) ?? description;
+  return pickLocalizedText(documentation, language) ?? description;
 }

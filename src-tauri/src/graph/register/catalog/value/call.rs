@@ -11,7 +11,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_call_function(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Call Function", vec!["Functions".to_string()])
         .with_ui_style("function")
-        .with_description("Call a function subgraph")
+        .with_localized_description("调用函数子图", "Call a function subgraph")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),

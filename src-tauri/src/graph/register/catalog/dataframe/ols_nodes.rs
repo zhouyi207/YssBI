@@ -979,7 +979,10 @@ fn register_ols_vce_constants(registry: &NodeRegistry) {
             vec!["Data".to_string(), "Statistics".to_string()],
         )
         .with_ui_style("dataframe")
-        .with_description(format!("VCE constant — {}", name))
+        .with_localized_description(
+            format!("VCE 常数 — {}", name),
+            format!("VCE constant — {}", name),
+        )
         .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
             "VCE",
             DataRole::Result,
@@ -1013,7 +1016,8 @@ fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "固定尺度协方差配置 — 用户指定 scale，用于 cov_type 'fixed scale'",
         "Fixed scale covariance config — user-specified scale for cov_type 'fixed scale'",
     )
     .with_pin_slots(vec![
@@ -1111,7 +1115,10 @@ fn register_ols_cluster_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Cluster-robust covariance config — connect Cluster ID (group labels) for cov_type 'cluster'")
+    .with_localized_description(
+        "聚类稳健协方差配置 — 连接 Cluster ID（组标签），用于 cov_type 'cluster'",
+        "Cluster-robust covariance config — connect Cluster ID (group labels) for cov_type 'cluster'",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Cluster ID",
@@ -1150,7 +1157,7 @@ fn register_ols_hac_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("HAC (Heteroscedasticity and Autocorrelation Consistent) covariance config for cov_type 'HAC'")
+    .with_localized_description("HAC 异方差自相关稳健协方差配置，用于 cov_type 'HAC'", "HAC (Heteroscedasticity and Autocorrelation Consistent) covariance config for cov_type 'HAC'")
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1210,7 +1217,10 @@ fn register_ols_newey_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Stata newey 风格 — Bartlett kernel + n/(n-k)，与 HAC (ivreg2) 不同")
+    .with_localized_description(
+        "Stata newey 风格 — Bartlett 核 + n/(n-k)，与 HAC (ivreg2) 不同",
+        "Stata newey style — Bartlett kernel + n/(n-k), differs from HAC (ivreg2)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1250,7 +1260,10 @@ fn register_ols_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("OLS & WLS regression configuration — input pins compose the output Config")
+    .with_localized_description(
+        docs::ols::OLS_CONFIGURE_DESC_ZH,
+        docs::ols::OLS_CONFIGURE_DESC_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1388,9 +1401,7 @@ fn register_ols(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("OLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_description(
-            "Ordinary Least Squares regression — outputs the fitted model for prediction",
-        )
+        .with_localized_description(docs::ols::OLS_DESC_ZH, docs::ols::OLS_DESC_EN)
         .with_documentation(docs::ols::OLS_ZH, docs::ols::OLS_EN)
         .with_pin_slots(slots)
         .with_output_schema_resolver(Arc::new(regression_exog_output_schema))
@@ -1452,8 +1463,9 @@ fn register_ols_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
-        "Ordinary Least Squares regression — outputs results and opens the summary window",
+    .with_localized_description(
+        docs::ols::OLS_SUMMARY_DESC_ZH,
+        docs::ols::OLS_SUMMARY_DESC_EN,
     )
     .with_documentation(docs::ols::OLS_SUMMARY_ZH, docs::ols::OLS_SUMMARY_EN)
     .with_pin_slots(slots)

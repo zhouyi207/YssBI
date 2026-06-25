@@ -852,7 +852,10 @@ fn register_gls_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("GLS regression configuration — constant term (optional)")
+    .with_localized_description(
+        "GLS 回归配置 — 常数项（可选）",
+        "GLS regression configuration — constant term (optional)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -933,7 +936,8 @@ fn register_gls(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("GLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_description(
+        .with_localized_description(
+            "广义最小二乘回归 — 输出拟合模型供预测使用",
             "Generalized Least Squares regression — outputs the fitted model for prediction",
         )
         .with_pin_slots(slots)
@@ -996,7 +1000,8 @@ fn register_gls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description(
+    .with_localized_description(
+        "广义最小二乘回归 — 输出结果并打开 Summary 窗口",
         "Generalized Least Squares regression — outputs results and opens the summary window",
     )
     .with_pin_slots(slots)

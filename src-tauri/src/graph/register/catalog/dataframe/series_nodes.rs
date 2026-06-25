@@ -33,7 +33,7 @@ pub fn register(registry: &NodeRegistry) {
 fn register_get_dataseries(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataSeries", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_description("Get a DataSeries from a DataFrame by column name")
+        .with_localized_description("按列名从 DataFrame 获取 DataSeries", "Get a DataSeries from a DataFrame by column name")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "DataFrame",
@@ -81,7 +81,7 @@ fn register_int_range(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Int Range", vec!["Data".to_string(), "Series".to_string()])
             .with_ui_style("value")
-            .with_description("Generate Int64 DataSeries: start, start+1, ..., start+length-1")
+            .with_localized_description("生成 Int64 序列：start, start+1, …, start+length-1", "Generate Int64 DataSeries: start, start+1, ..., start+length-1")
             .with_pin_slots(vec![
                 PinSlot::fixed(PinDefinition::data_input(
                     "Start",
@@ -134,7 +134,7 @@ fn register_series_length(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Get the number of elements in a DataSeries")
+    .with_localized_description("获取 DataSeries 元素个数", "Get the number of elements in a DataSeries")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",
@@ -165,7 +165,7 @@ fn register_series_sum(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Series Sum", vec!["Data".to_string(), "Series".to_string()])
             .with_ui_style("dataframe")
-            .with_description("Calculate the sum of a numeric DataSeries")
+            .with_localized_description("计算数值 DataSeries 之和", "Calculate the sum of a numeric DataSeries")
             .with_pin_slots(vec![
                 PinSlot::fixed(PinDefinition::data_input(
                     "Series",
@@ -207,7 +207,7 @@ fn register_series_mean(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_description("Calculate the mean of a numeric DataSeries")
+    .with_localized_description("计算数值 DataSeries 的均值", "Calculate the mean of a numeric DataSeries")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Series",

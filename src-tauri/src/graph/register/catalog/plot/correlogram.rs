@@ -52,7 +52,8 @@ fn cumulative_ljung_box(acf_vals: &[f64], n: usize) -> Vec<(f64, f64)> {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Correlogram (ACF & PACF)", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_description(
+        .with_localized_description(
+            "绘制 ACF 与 PACF 相关图，含 Ljung-Box Q 统计量。悬停柱条可查看滞后阶、Q 统计量与 p 值。",
             "Plot ACF & PACF correlogram with Ljung-Box Q statistics. Hover bars to see lag value, Q stat and p-value.",
         )
         .with_pin_slots(vec![
