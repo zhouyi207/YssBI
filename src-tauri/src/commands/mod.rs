@@ -10,6 +10,7 @@ pub mod command_schema;
 pub mod command_serial_tests;
 pub mod command_settings;
 pub mod command_variable;
+pub mod command_worksheet;
 pub mod command_window;
 
 pub use command_acf_pacf::*;
@@ -25,3 +26,4 @@ pub use command_serial_tests::*;
 pub use command_settings::*;
 pub use command_variable::*;
 pub use command_window::*;
+pub use command_worksheet::*;

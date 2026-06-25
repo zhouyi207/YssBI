@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/shared/ui';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
@@ -24,12 +25,16 @@ export function VariableDetailPanel({
   onDelete,
   onDeleted,
 }: VariableDetailPanelProps) {
+  const { t } = useTranslation();
+
   return (
-    <DetailPanelShell title={`Details : ${variable.name}`}>
+    <DetailPanelShell title={t('detail.titleWithName', { name: variable.name })}>
       <Table className="text-[11px] text-[#cccccc]">
         <TableBody>
           <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Name</TableCell>
+            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
+              {t('detail.fields.name')}
+            </TableCell>
             <TableCell>
               <Input
                 className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
@@ -39,7 +44,7 @@ export function VariableDetailPanel({
             </TableCell>
           </TableRow>
           <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">Type</TableCell>
+            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.type')}</TableCell>
             <TableCell>
               <Select
                 value={dataTypeKind(variable.dataType)}
@@ -61,7 +66,7 @@ export function VariableDetailPanel({
           </TableRow>
           {variable.dataType.kind !== 'Array' && isPrimitiveType(variable.dataType) && (
             <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400">Value</TableCell>
+              <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.value')}</TableCell>
               <TableCell>
                 {variable.dataType.kind === 'Boolean' ? (
                   <Input

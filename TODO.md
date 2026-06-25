@@ -330,6 +330,12 @@
 - [x] Detail 面板 UI i18n：`detail.*` 键（`en-US` / `zh-CN`）；NodeDetailPanel、Pin 接口、文档区、空状态等按当前语言展示
 - [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → legacy `description`
 - [x] OLS / OLS Summary Markdown 文档去重：移除与 Pin 接口重复的 Input/Output 表格，保留公式与 Usage
+- [x] Tableau 式 Worksheet 工作区（Phase 1）：ActivityBar **Charts**（位于 Data 与 Commands 之间）；Sidebar 折叠 **Worksheets** 列表（与 Event/Variable 同风格）；Menubar **Data → 新建 Worksheet**
+- [x] Worksheet 配置迁至 **Detail** 面板（数据集 / 图表类型 / X·Y 编码 / 列列表）；打开 Worksheet Tab 自动展开 Detail
+- [x] 中间 **Worksheet Tab** 全屏嵌入预览（Scatter / Line / Histogram，`embedded` 模式无边框圆角）；空状态居中提示
+- [x] 后端 `worksheets/*.yssbi-worksheet` CRUD + `get_plot_column_pair`；项目 reopen 扫描恢复；Tab dirty 关闭提示
+- [x] Ctrl+S / 批量保存：Worksheet Tab 走 `saveWorksheet`，不再误调 `save_project_graph`
+- [x] Tab 切换同步 Detail：`syncDetailFromEditorTab`（worksheet / event / function）；修复切回 graph Tab 时 Detail 仍显示工作表的问题
 
 ## v1.0 待办
 
@@ -338,6 +344,8 @@
 - [ ] 连接 pin 的线在执行的时候只有一部分会亮
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
+- [ ] 类型推荐估计存在较大的问题，同时在批量节点复制的时候，粘贴是一个一个出现并连接的，这样感觉不太好？
+- [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 
 # TODOLIST
 

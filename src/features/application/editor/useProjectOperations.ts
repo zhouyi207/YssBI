@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { ProjectService } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
@@ -16,6 +18,7 @@ import { logger } from '@/utils/appLogger';
  * Handles flush, load, and execute operations
  */
 export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void | Promise<void>) {
+  const { t } = useTranslation();
   const currentPath = useProjectIOStore((s) => s.currentPath);
 
   // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
@@ -53,19 +56,33 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     try {
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
-      const activeTabId = editorGroupId ? layoutStore.nodes[editorGroupId]?.data?.activeTabId : null;
+      const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
+      const activeTabId = editorNode?.data?.activeTabId;
       if (!activeTabId) {
-        uiStore.showToast("请先打开一个图", "warning", 2000);
+        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
         return;
       }
+
+      const activeTab = editorNode?.data?.tabs?.find((tab) => tab.id === activeTabId);
+      if (activeTab?.type === 'worksheet') {
+        await useWorksheetStore.getState().saveDocument(activeTabId);
+        uiStore.showToast(t('worksheet.saved'), 'success', 2000);
+        return;
+      }
+
+      if (activeTab?.type !== 'event' && activeTab?.type !== 'function') {
+        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
+        return;
+      }
+
       await GraphService.saveProjectGraph(activeTabId);
       layoutStore.setTabDirty(activeTabId, false);
       uiStore.showToast("图已保存", "success", 2000);
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
-      uiStore.showToast("保存失败", "error", 2000);
+      uiStore.showToast(`保存失败：${formatErrorMessage(e)}`, "error", 2000);
     }
-  }, [currentPath, syncActiveToCollection]);
+  }, [currentPath, syncActiveToCollection, t]);
 
   const importGraph = useCallback(async () => {
     try {

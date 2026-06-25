@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,12 +20,18 @@ interface DataDetailPanelProps {
 }
 
 export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPanelProps) {
+  const { t } = useTranslation();
+  const columnCount = dataframe.columnCount || dataframe.columns?.length || 0;
+  const rowCount = dataframe.rowCount || dataframe.rows?.length || 0;
+
   return (
-    <DetailPanelShell title={`Details : ${dataframe.name}`}>
+    <DetailPanelShell title={t('detail.titleWithName', { name: dataframe.name })}>
       <Table className="text-[11px] text-[#cccccc]">
         <TableBody>
           <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Name</TableCell>
+            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
+              {t('detail.fields.name')}
+            </TableCell>
             <TableCell>
               <Input
                 className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
@@ -34,9 +41,9 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
             </TableCell>
           </TableRow>
           <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">Columns</TableCell>
+            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.columns')}</TableCell>
             <TableCell className="text-gray-400">
-              {dataframe.columnCount || dataframe.columns?.length || 0} columns
+              {t('detail.counts.columns', { count: columnCount })}
             </TableCell>
           </TableRow>
           {dataframe.columns && dataframe.columns.length > 0 && (
@@ -46,8 +53,12 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
                   <Table className="text-[9px]">
                     <TableHeader>
                       <TableRow className="text-gray-500">
-                        <TableHead className="h-6 p-1 font-normal uppercase">Column</TableHead>
-                        <TableHead className="h-6 p-1 font-normal uppercase">Type</TableHead>
+                        <TableHead className="h-6 p-1 font-normal uppercase">
+                          {t('detail.fields.column')}
+                        </TableHead>
+                        <TableHead className="h-6 p-1 font-normal uppercase">
+                          {t('detail.fields.type')}
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -64,14 +75,12 @@ export function DataDetailPanel({ dataframe, onUpdate, onDelete }: DataDetailPan
             </TableRow>
           )}
           <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">Rows</TableCell>
-            <TableCell className="text-gray-400">
-              {dataframe.rowCount || dataframe.rows?.length || 0} rows
-            </TableCell>
+            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.rows')}</TableCell>
+            <TableCell className="text-gray-400">{t('detail.counts.rows', { count: rowCount })}</TableCell>
           </TableRow>
           {dataframe.sourcePath && (
             <TableRow>
-              <TableCell className="bg-white/5 font-bold text-gray-400">Source</TableCell>
+              <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.source')}</TableCell>
               <TableCell className="break-all text-[9px] text-gray-400">{dataframe.sourcePath}</TableCell>
             </TableRow>
           )}

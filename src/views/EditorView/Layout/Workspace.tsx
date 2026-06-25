@@ -276,7 +276,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
                 children: [],
                 size: 1,
                 data: {
-                  component: 'GraphEditor',
+                  component: tabToMove.component || 'GraphEditor',
                   tabs: [{ ...tabToMove }],
                   activeTabId: tabId
                 }

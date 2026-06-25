@@ -1,8 +1,9 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { uiStore } from '@/features/core/ui/UIStore';
 
 interface DetailDeleteButtonProps {
-  itemType: string;
+  itemType: 'variable' | 'event' | 'function' | 'data' | 'worksheet';
   itemName: string;
   onDelete: () => Promise<void> | void;
   onDeleted?: () => void;
@@ -14,6 +15,9 @@ export function DetailDeleteButton({
   onDelete,
   onDeleted,
 }: DetailDeleteButtonProps) {
+  const { t } = useTranslation();
+  const itemTypeLabel = t(`detail.itemTypes.${itemType}`);
+
   return (
     <div className="p-2">
       <Button
@@ -22,10 +26,10 @@ export function DetailDeleteButton({
         size="sm"
         onClick={() => {
           uiStore.showDialog({
-            title: `Delete ${itemType}`,
-            message: `Are you sure you want to delete ${itemType} '${itemName}'?`,
+            title: t('detail.delete.title', { itemType: itemTypeLabel }),
+            message: t('detail.delete.message', { itemType: itemTypeLabel, name: itemName }),
             type: 'danger',
-            confirmText: 'Delete',
+            confirmText: t('common.delete'),
             onConfirm: async () => {
               await onDelete();
               onDeleted?.();
@@ -34,7 +38,7 @@ export function DetailDeleteButton({
         }}
         className="mt-4 w-full uppercase tracking-wider"
       >
-        Delete {itemType}
+        {t('detail.delete.button', { itemType: itemTypeLabel })}
       </Button>
     </div>
   );

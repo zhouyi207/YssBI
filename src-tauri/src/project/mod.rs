@@ -12,6 +12,7 @@ pub mod project_state_graph;
 pub mod project_state_variable;
 pub mod project_store;
 pub mod unique_name;
+pub mod worksheet_io;
 
 pub use project_data::*;
 pub use project_error::*;
@@ -22,5 +23,6 @@ pub use project_registry::*;
 pub use project_state::*;
 pub use project_state_variable::*;
 pub use project_store::*;
+pub use worksheet_io::*;
 // pub use project_state_database::*;  // 暂时未使用
 // pub use project_state_graph::*;     // 暂时未使用

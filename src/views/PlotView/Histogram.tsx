@@ -17,6 +17,8 @@ export interface HistogramProps {
   margin?: { top: number; right: number; bottom: number; left: number };
   /** 紧凑模式：无轴线，用 tooltip 显示信息 */
   compact?: boolean;
+  /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
+  embedded?: boolean;
 }
 
 const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
@@ -31,6 +33,7 @@ const Histogram: React.FC<HistogramProps> = ({
   height: heightProp,
   margin: marginProp,
   compact = false,
+  embedded = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -165,7 +168,14 @@ const Histogram: React.FC<HistogramProps> = ({
   }, [data, xLabel, yLabel, color, heightProp, margin, compact, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className={`relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`}>
+    <div
+      ref={containerRef}
+      className={
+        embedded
+          ? 'relative h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]'
+          : `relative rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden ${!heightProp ? 'w-full h-full min-h-0' : ''}`
+      }
+    >
       <svg ref={svgRef} />
       {compact && (
         <div

@@ -196,6 +196,12 @@ pub fn run() {
             save_database_changes,
             export_database,
             get_edit_state,
+            // ==================== Worksheet ====================
+            create_worksheet,
+            load_worksheet,
+            save_worksheet,
+            delete_worksheet,
+            get_plot_column_pair,
             // ==================== 假设检验 ====================
             hypothesis_test,
             parse_at_values,

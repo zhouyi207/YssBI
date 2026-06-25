@@ -4,8 +4,9 @@ import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
-import { closeGraphTab } from './closeGraphTab';
+import { closeEditorTab } from './closeEditorTab';
 import { ensureGraphViewport } from '@/features/core/viewport';
+import { syncDetailFromEditorTab } from './syncDetailFromEditorTab';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -26,6 +27,10 @@ export function useTabManagement() {
           activeTabId: id || undefined
         }
       });
+      const tab = id
+        ? useLayoutStore.getState().nodes[groupId]?.data?.tabs?.find((item) => item.id === id)
+        : undefined;
+      syncDetailFromEditorTab(tab);
     }
   }, [activeGroupId]);
 
@@ -90,17 +95,19 @@ export function useTabManagement() {
 
   const closeTab = useCallback((id: string, e?: React.MouseEvent, options?: { skipDirtyPrompt?: boolean }) => {
     if (e) e.stopPropagation();
-    void closeGraphTab(id, undefined, options?.skipDirtyPrompt);
+    void closeEditorTab(id, undefined, options?.skipDirtyPrompt);
   }, []);
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
-    useLayoutStore.getState().splitNode(sourceGroupId, 'row', 'GraphEditor');
+    const node = useLayoutStore.getState().nodes[sourceGroupId];
+    const activeTab = node?.data?.tabs?.find((t) => t.id === node?.data?.activeTabId);
+    useLayoutStore.getState().splitNode(sourceGroupId, 'row', activeTab?.component || 'GraphEditor');
   }, []);
 
   const closeGroup = useCallback(async (id: string) => {
     const tabIds = useLayoutStore.getState().nodes[id]?.data?.tabs?.map((tab) => tab.id) ?? [];
     for (const tabId of tabIds) {
-      const closed = await closeGraphTab(tabId, id);
+      const closed = await closeEditorTab(tabId, id);
       if (!closed) return;
     }
     useLayoutStore.getState().removeNode(id);

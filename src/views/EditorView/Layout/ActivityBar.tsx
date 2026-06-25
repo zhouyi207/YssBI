@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
-import { VscDatabase, VscTerminal } from "react-icons/vsc";
+import { VscDatabase, VscGraphLine, VscTerminal } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { Button } from "@/components/ui/button";
 
@@ -24,7 +24,7 @@ export function ActivityBar() {
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
   const isSidebarVisible = sidebarNode?.data?.visible !== false;
   const activeTab = isSidebarVisible
-    ? (sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null)
+    ? (sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null)
     : null;
 
   const activityBarRef = useRef<HTMLDivElement>(null);
@@ -33,7 +33,7 @@ export function ActivityBar() {
   const updateNode = useLayoutStore((s) => s.updateNode);
   const previousSizeRef = useRef(260);
 
-  const toggleTab = (tab: "graphs" | "variables" | "data" | "commands") => {
+  const toggleTab = (tab: "graphs" | "variables" | "data" | "commands" | "charts") => {
     if (activeTab === tab) {
       if (sidebarNode?.pixelSize) previousSizeRef.current = sidebarNode.pixelSize;
       updateNode("sidebar", {
@@ -85,6 +85,9 @@ export function ActivityBar() {
       </ActivityIcon>
       <ActivityIcon id="data" active={activeTab === "data"} onClick={() => toggleTab("data")} title={t("activityBar.data")}>
         <VscDatabase size={24} />
+      </ActivityIcon>
+      <ActivityIcon id="charts" active={activeTab === "charts"} onClick={() => toggleTab("charts")} title={t("activityBar.charts")}>
+        <VscGraphLine size={24} />
       </ActivityIcon>
       <ActivityIcon id="commands" active={activeTab === "commands"} onClick={() => toggleTab("commands")} title={t("activityBar.commands")}>
         <VscTerminal size={24} />

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
@@ -17,12 +18,16 @@ interface FunctionDetailPanelProps {
 }
 
 export function FunctionDetailPanel({ fn, onUpdate, onDelete, onDeleted }: FunctionDetailPanelProps) {
+  const { t } = useTranslation();
+
   return (
-    <DetailPanelShell title={`Details : ${fn.name}`}>
+    <DetailPanelShell title={t('detail.titleWithName', { name: fn.name })}>
       <Table className="text-[11px] text-[#cccccc]">
         <TableBody>
           <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Name</TableCell>
+            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
+              {t('detail.fields.name')}
+            </TableCell>
             <TableCell>
               <Input
                 className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"
@@ -32,18 +37,20 @@ export function FunctionDetailPanel({ fn, onUpdate, onDelete, onDeleted }: Funct
             </TableCell>
           </TableRow>
           <TableRow>
-            <TableCell className="bg-white/5 font-bold text-gray-400">Type</TableCell>
-            <TableCell className="italic text-gray-400">Function</TableCell>
+            <TableCell className="bg-white/5 font-bold text-gray-400">{t('detail.fields.type')}</TableCell>
+            <TableCell className="italic text-gray-400">{t('detail.typeLabels.function')}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
       <PinEditor
-        title="Inputs"
+        title={t('detail.pinEditor.inputs')}
+        emptyMessage={t('detail.pinEditor.noInputs')}
         pins={fn.inputs ?? []}
         onChange={(inputs) => onUpdate({ inputs })}
       />
       <PinEditor
-        title="Outputs"
+        title={t('detail.pinEditor.outputs')}
+        emptyMessage={t('detail.pinEditor.noOutputs')}
         pins={fn.outputs ?? []}
         onChange={(outputs) => onUpdate({ outputs })}
       />

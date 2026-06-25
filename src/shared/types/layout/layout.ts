@@ -23,7 +23,7 @@ export interface LayoutTab {
     id: string;
     title: string;
     component: string;
-    type?: "event" | "function" | "project" | "setting";
+    type?: "event" | "function" | "project" | "setting" | "worksheet";
     isDirty?: boolean;
     params?: Record<string, any>;
 }

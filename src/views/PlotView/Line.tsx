@@ -27,6 +27,8 @@ export interface LineProps {
   height?: number;
   /** 图表边距 */
   margin?: { top: number; right: number; bottom: number; left: number };
+  /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
+  embedded?: boolean;
 }
 
 function ToolbarToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -69,6 +71,7 @@ const Line: React.FC<LineProps> = ({
   showPoints: showPointsInit = true,
   height: heightProp,
   margin = DEFAULT_MARGIN,
+  embedded = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -202,6 +205,14 @@ const Line: React.FC<LineProps> = ({
         .attr('stroke-width', 1);
     }
   }, [data, xLabel, yLabel, xFormat, yFormat, color, strokeWidth, pointsVisible, heightProp, margin, size, chartTheme]);
+
+  if (embedded) {
+    return (
+      <div ref={containerRef} className="h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]">
+        <svg ref={svgRef} />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">

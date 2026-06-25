@@ -107,6 +107,7 @@ export function Menubar() {
     activeTabId,
     addEvent,
     addFunction,
+    addWorksheet,
   } = useEditorGroup({ withCanvasInteraction: false });
 
   const {
@@ -124,15 +125,22 @@ export function Menubar() {
   } = useMenubar();
 
   const currentPath = useProjectIOStore((s) => s.currentPath);
-  const saveableGraphTabId = useLayoutStore((s) => {
+  const saveableEditorTabId = useLayoutStore((s) => {
     const editorGroupId = s.activeEditorGroupId || "default_editor";
     const tabId = s.nodes[editorGroupId]?.data?.activeTabId;
     if (!tabId || tabId === "settings") return null;
     const tab = s.nodes[editorGroupId]?.data?.tabs?.find((t) => t.id === tabId);
-    if (tab && tab.type !== "event" && tab.type !== "function") return null;
+    if (
+      tab &&
+      tab.type !== "event" &&
+      tab.type !== "function" &&
+      tab.type !== "worksheet"
+    ) {
+      return null;
+    }
     return tabId;
   });
-  const canSaveProject = Boolean(currentPath && saveableGraphTabId);
+  const canSaveProject = Boolean(currentPath && saveableEditorTabId);
   const canSaveProjectAs = Boolean(currentPath);
 
   const themeMode = useSettingsStore((s) => s.theme.mode ?? "dark");
@@ -171,6 +179,7 @@ export function Menubar() {
     { label: t("menubar.manageVariables") },
     { label: t("menubar.importData"), onClick: handleImportData },
     { label: t("menubar.dataViewer"), onClick: handleDataView },
+    { label: t("menubar.newWorksheet"), onClick: () => void addWorksheet() },
     { label: "-" },
     { label: t("menubar.schemaViewer") },
   ];

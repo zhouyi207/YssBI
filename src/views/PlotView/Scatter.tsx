@@ -33,6 +33,8 @@ export interface ScatterProps {
   highlightIndices?: Set<number>;
   /** 高亮点颜色，默认 #ef4444 */
   highlightColor?: string;
+  /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
+  embedded?: boolean;
 }
 
 /** 将数值转为 Date（date=天数, datetime=微秒） */
@@ -60,6 +62,7 @@ const Scatter: React.FC<ScatterProps> = ({
   zeroLine = false,
   highlightIndices,
   highlightColor = '#ef4444',
+  embedded = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -191,7 +194,14 @@ const Scatter: React.FC<ScatterProps> = ({
   }, [data, xLabel, yLabel, xFormat, yFormat, color, radius, heightProp, margin, symmetricY, zeroLine, highlightIndices, highlightColor, size, chartTheme]);
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden">
+    <div
+      ref={containerRef}
+      className={
+        embedded
+          ? 'h-full w-full min-h-0 overflow-hidden bg-[var(--workbench-bg)]'
+          : 'w-full h-full min-h-0 rounded-lg border border-gray-800/50 bg-[#13151a] overflow-hidden'
+      }
+    >
       <svg ref={svgRef} />
     </div>
   );

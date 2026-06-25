@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
@@ -11,12 +12,16 @@ interface EventDetailPanelProps {
 }
 
 export function EventDetailPanel({ event, onUpdate, onDelete, onDeleted }: EventDetailPanelProps) {
+  const { t } = useTranslation();
+
   return (
-    <DetailPanelShell title={`Details : ${event.name}`}>
+    <DetailPanelShell title={t('detail.titleWithName', { name: event.name })}>
       <Table className="text-[11px] text-[#cccccc]">
         <TableBody>
           <TableRow>
-            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">Name</TableCell>
+            <TableCell className="w-20 bg-white/5 font-bold text-gray-400">
+              {t('detail.fields.name')}
+            </TableCell>
             <TableCell>
               <Input
                 className="h-7 border-0 bg-transparent px-0 py-0 font-medium shadow-none"

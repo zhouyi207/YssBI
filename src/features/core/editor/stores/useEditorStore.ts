@@ -14,7 +14,8 @@ export type DetailSelectionType =
   | 'data'
   | 'setting'
   | 'log'
-  | 'node';
+  | 'node'
+  | 'worksheet';
 
 interface EditorStore {
   contextMenu: ContextMenuState | null;

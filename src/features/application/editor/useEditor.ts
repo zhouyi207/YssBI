@@ -3,6 +3,7 @@ import { useCanvasInteraction } from '@/features/core/canvas';
 import { useEditorState, useEditorActions } from '@/features/core/editor';
 import { useEditorOperations } from './useEditorOperations';
 import { useTabManagement } from './useTabManagement';
+import { useOpenWorksheet, useWorksheetManagement } from './useWorksheetManagement';
 import { useProjectOperations } from './useProjectOperations';
 import { useGraphManagement, useVariableManagement, useDatabaseManagement, useNodeManagement } from '@/features/application/dataManagement';
 
@@ -17,6 +18,8 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
   // Get sub-hooks
   const editorOps = useEditorOperations();
   const tabMgmt = useTabManagement();
+  const openWorksheet = useOpenWorksheet();
+  const worksheetMgmt = useWorksheetManagement(openWorksheet);
   const projectOps = useProjectOperations(tabMgmt.openGraph);
   
   const graphMgmt = useGraphManagement(tabMgmt.openGraph, tabMgmt.closeTab);
@@ -59,6 +62,10 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
 
     // Tab management
     ...tabMgmt,
+    openWorksheet,
+
+    // Worksheet management
+    ...worksheetMgmt,
 
     // Project operations
     ...projectOps,
@@ -85,6 +92,8 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     canvasInteraction,
     editorOps,
     tabMgmt,
+    openWorksheet,
+    worksheetMgmt,
     projectOps,
     graphMgmt,
     variableMgmt,

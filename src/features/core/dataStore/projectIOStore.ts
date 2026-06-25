@@ -14,6 +14,7 @@ import { useGraphDataStore } from './graphDataStore';
 import { useEditStateStore } from './editStateStore';
 import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useHistoryStore } from '@/features/core/history';
 import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
@@ -149,6 +150,7 @@ function resetClientProjectState(): void {
   useColumnStatsStore.getState().clear();
   useColumnDistributionStore.getState().clear();
   useDatasetOverviewStore.getState().clear();
+  useWorksheetStore.getState().clear();
 }
 
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
@@ -194,6 +196,15 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         );
         useGraphMetaStore.getState().setGraphs(graphMetaMap);
         useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
+        useWorksheetStore.getState().setIndex(
+          (index.worksheets ?? []).map((ws) => ({
+            id: ws.id,
+            name: ws.name,
+            databaseId: ws.databaseId,
+            chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
+            folderPath: ws.folderPath ?? '',
+          })),
+        );
         useGraphDataStore.getState().hydrateGraphs({});
 
         set({ status: LoadStatus.Ready, currentPath: path });

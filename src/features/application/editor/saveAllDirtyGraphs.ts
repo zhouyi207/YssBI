@@ -1,5 +1,6 @@
 import { GraphService } from "@/services/graph/graphService";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
@@ -17,7 +18,15 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
     const layout = useLayoutStore.getState();
     for (const tab of dirty) {
         try {
-            await GraphService.saveProjectGraph(tab.graphId);
+            const layoutTab = Object.values(layout.nodes)
+                .flatMap((node) => node.data?.tabs ?? [])
+                .find((item) => item.id === tab.graphId);
+
+            if (layoutTab?.type === 'worksheet') {
+                await useWorksheetStore.getState().saveDocument(tab.graphId);
+            } else {
+                await GraphService.saveProjectGraph(tab.graphId);
+            }
             layout.setTabDirty(tab.graphId, false);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);

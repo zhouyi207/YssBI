@@ -636,7 +636,7 @@ export const useLayoutStore = create<LayoutState>()(
             for (const node of Object.values(state.nodes)) {
                 if (node.type !== 'component' || !node.data?.tabs) continue;
                 const remaining = node.data.tabs.filter(
-                    (tab) => tab.type && tab.type !== 'event' && tab.type !== 'function'
+                    (tab) => tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet'
                 );
                 if (remaining.length === node.data.tabs.length) continue;
                 const activeStillPresent = remaining.some((tab) => tab.id === node.data?.activeTabId);

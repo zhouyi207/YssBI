@@ -34,12 +34,21 @@ export interface ProjectFolderIndexRow {
     folderPath: string;
 }
 
+export interface ProjectWorksheetIndexRow {
+  id: string;
+  name: string;
+  databaseId: string;
+  chartType: string;
+  folderPath: string;
+}
+
 export interface ProjectIndexRow {
-    projectName: string;
-    appVersion: string;
-    exportTime: string;
-    graphs: ProjectGraphIndexRow[];
-    folders: ProjectFolderIndexRow[];
+  projectName: string;
+  appVersion: string;
+  exportTime: string;
+  graphs: ProjectGraphIndexRow[];
+  folders: ProjectFolderIndexRow[];
+  worksheets?: ProjectWorksheetIndexRow[];
 }
 
 export interface LoadedProjectGraphRow {

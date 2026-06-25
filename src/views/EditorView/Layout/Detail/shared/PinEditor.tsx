@@ -1,14 +1,23 @@
+import { useTranslation } from 'react-i18next';
 import { Select } from '@/shared/ui';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface PinEditorProps {
   title: string;
+  emptyMessage: string;
   pins: Array<{ id: string; name: string; type: string; containerType?: string }>;
   onChange: (pins: PinEditorProps['pins']) => void;
 }
 
-export function PinEditor({ title, pins, onChange }: PinEditorProps) {
+export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProps) {
+  const { t } = useTranslation();
+
+  const containerLabel = (containerType?: string) => {
+    if (!containerType) return t('detail.pinEditor.containerNone');
+    return containerType;
+  };
+
   return (
     <div className="mt-4 px-2">
       <div className="mb-1 flex items-center justify-between">
@@ -18,7 +27,10 @@ export function PinEditor({ title, pins, onChange }: PinEditorProps) {
           variant="ghost"
           size="icon-xs"
           onClick={() => {
-            onChange([...pins, { id: `pin-${crypto.randomUUID()}`, name: 'NewPin', type: 'int' }]);
+            onChange([
+              ...pins,
+              { id: `pin-${crypto.randomUUID()}`, name: t('detail.pinEditor.newPin'), type: 'int' },
+            ]);
           }}
           className="text-muted-foreground hover:text-[var(--accent-color)]"
         >
@@ -61,7 +73,9 @@ export function PinEditor({ title, pins, onChange }: PinEditorProps) {
                 onChange(newPins);
               }}
               className={pin.containerType ? 'bg-blue-500/10 text-blue-400' : 'text-muted-foreground'}
-              title={`Container: ${pin.containerType ?? 'none'} (click to cycle)`}
+              title={t('detail.pinEditor.containerTooltip', {
+                container: containerLabel(pin.containerType),
+              })}
             >
               <span className="text-[9px] font-black">
                 {pin.containerType === 'dataseries' ? '◇' : pin.containerType === 'array' ? '[]' : '·'}
@@ -83,9 +97,7 @@ export function PinEditor({ title, pins, onChange }: PinEditorProps) {
           </div>
         ))}
         {pins.length === 0 && (
-          <div className="py-1 text-center text-[9px] italic text-gray-300">
-            No {title.toLowerCase()}
-          </div>
+          <div className="py-1 text-center text-[9px] italic text-gray-300">{emptyMessage}</div>
         )}
       </div>
     </div>

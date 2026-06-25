@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
-import { closeGraphTab } from "@/features/application/editor/closeGraphTab";
+import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
+import { syncDetailFromEditorTab } from "@/features/application/editor/syncDetailFromEditorTab";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -61,11 +62,13 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             activeTabId: id
         }
     });
+    const tab = tabs.find((item) => item.id === id);
+    syncDetailFromEditorTab(tab);
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    void closeGraphTab(id, layoutNodeId);
+    void closeEditorTab(id, layoutNodeId);
   };
 
   const handleSplit = (e: React.MouseEvent) => {
@@ -87,7 +90,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     e.stopPropagation();
     const tabIds = useLayoutStore.getState().nodes[layoutNodeId]?.data?.tabs?.map((tab) => tab.id) ?? [];
     for (const tabId of tabIds) {
-      const closed = await closeGraphTab(tabId, layoutNodeId);
+      const closed = await closeEditorTab(tabId, layoutNodeId);
       if (!closed) return;
     }
     removeNode(layoutNodeId);

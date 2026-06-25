@@ -17,12 +17,14 @@ import {
   VscDiscard,
   VscRedo,
   VscFolder,
+  VscGraphLine,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useHistoryStore } from "@/features/core/history";
 import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
+import { ensureDetailVisible } from "@/features/application/editor/ensureDetailVisible";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
@@ -38,6 +40,7 @@ import {
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { GraphService } from "@/services/graph/graphService";
 import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
+import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 import {
   buildSidebarContextMenuSections,
@@ -337,7 +340,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
   useContext(GroupContext);
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | null;
+  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null;
 
   const {
     variables: graphVariables,
@@ -361,7 +364,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     deleteDataFrame,
     renameDataFrame,
     openGraph,
+    addWorksheet,
+    openWorksheet,
   } = useEditorGroup();
+
+  const worksheets = useWorksheetStore((s) => s.index);
 
   const toggleSection = useSidebarStore((s) => s.toggleSection);
   const expandedSections = useSidebarStore((s) => s.expandedSections);
@@ -754,6 +761,53 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     );
   };
 
+  const renderWorksheetItem = (id: string, name: string) => {
+    const isSelected = selectedItemId === id && selectedItemType === "worksheet";
+    return (
+      <SidebarDraggableItem
+        key={id}
+        id={id}
+        dragData={null}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedInfo(id, "worksheet");
+          ensureDetailVisible();
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          void openWorksheet(id, name);
+        }}
+        className={`group flex items-center gap-2 pr-2 py-1.5 transition-colors duration-150 ease-out ${
+          isSelected
+            ? "bg-[var(--sidebar-item-active)] text-gray-200"
+            : "hover:bg-[var(--sidebar-hover)] text-gray-400"
+        }`}
+        style={{ paddingLeft: 16 }}
+      >
+        <span
+          className="shrink-0 flex items-center justify-center"
+          style={{ color: TYPE_ICON_COLORS.worksheet }}
+        >
+          <VscGraphLine size={12} />
+        </span>
+        <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            void openWorksheet(id, name);
+          }}
+          className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-gray-200" : "text-gray-500"}`}
+          title={t("sidebar.open")}
+        >
+          <VscChevronRight size={11} />
+        </Button>
+      </SidebarDraggableItem>
+    );
+  };
+
   return (
     <div
       ref={ref}
@@ -764,7 +818,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
         <div className="px-3 border-b border-border bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
           <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-            {currentTab === "graphs" ? "Graphs" : currentTab === "variables" ? "Variables" : currentTab === "data" ? "Data" : currentTab === "commands" ? "Commands" : ""}
+            {currentTab === "graphs"
+              ? "Graphs"
+              : currentTab === "variables"
+                ? "Variables"
+                : currentTab === "data"
+                  ? "Data"
+                  : currentTab === "commands"
+                    ? "Commands"
+                    : currentTab === "charts"
+                      ? t("activityBar.charts")
+                      : ""}
           </span>
         </div>
 
@@ -994,6 +1058,21 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
           {currentTab === "commands" && (
             <CommandsPanel activeTabId={activeTabId} />
+          )}
+          {currentTab === "charts" && (
+            <div ref={listRef} className="flex flex-col flex-1 min-h-0">
+              <StackedCollapsibleSection
+                label={t("chartsSidebar.worksheets")}
+                expanded={isSectionExpanded("chartsWorksheets")}
+                onToggle={() => toggleSection("chartsWorksheets")}
+                onAdd={() => void addWorksheet()}
+              >
+                {worksheets.map((ws) => renderWorksheetItem(ws.id, ws.name))}
+                {worksheets.length === 0 && (
+                  <div className="text-[12px] text-gray-500/70 pl-4 py-1.5">{t("chartsSidebar.noWorksheets")}</div>
+                )}
+              </StackedCollapsibleSection>
+            </div>
           )}
         </div>
       </div>

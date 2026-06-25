@@ -45,4 +45,5 @@ export const TYPE_ICON_COLORS: Record<string, string> = {
   variable: "rgba(156, 163, 175, 0.85)",
   variableGlobal: "rgba(245, 158, 11, 0.9)",
   data: "rgba(16, 185, 129, 0.9)",
+  worksheet: "rgba(167, 139, 250, 0.9)",
 };

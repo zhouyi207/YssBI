@@ -1,5 +1,6 @@
 import React from 'react';
 import { GraphEditor } from "../Canvas/core/GraphEditor";
+import { WorksheetEditor } from "../Worksheet/WorksheetEditor";
 import { SettingsView } from "../Layout/SettingsView";
 import Sidebar from "../Layout/Sidebar";
 import { Detail } from "../Layout/Detail/Detail";
@@ -39,6 +40,7 @@ export const viewRegistry = ViewRegistry.getInstance();
 
 // 1. 蓝图图形编辑器
 viewRegistry.register('GraphEditor', GraphEditor);
+viewRegistry.register('WorksheetEditor', WorksheetEditor);
 
 // 2. 设置编辑器
 viewRegistry.register('SettingsEditor', SettingsView);

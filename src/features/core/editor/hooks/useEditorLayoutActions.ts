@@ -11,7 +11,7 @@ export function useEditorLayoutActions() {
     useLayoutStore.getState().setActiveGroup(id);
   }, []);
 
-  const switchSidebarTab = useCallback((tab: 'graphs' | 'variables' | 'data') => {
+  const switchSidebarTab = useCallback((tab: 'graphs' | 'variables' | 'data' | 'charts') => {
     const layoutStore = useLayoutStore.getState();
     const sidebarNode = layoutStore.nodes['sidebar'];
     if (sidebarNode) {

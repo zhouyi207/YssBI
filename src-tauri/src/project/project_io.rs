@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::{ProjectData, ProjectError, PROJECT_METADATA_FILE};
+use super::{
+    ensure_worksheets_dir, read_worksheet_index_entries, ProjectData, ProjectError,
+    ProjectWorksheetIndexEntry, PROJECT_METADATA_FILE,
+};
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::{GraphId, GraphInstance, GraphKind};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -76,6 +79,8 @@ pub struct ProjectIndex {
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
     pub folders: Vec<ProjectFolderIndexEntry>,
+    #[serde(default)]
+    pub worksheets: Vec<ProjectWorksheetIndexEntry>,
 }
 
 impl From<&GraphKind> for GraphDocumentKind {
@@ -110,6 +115,7 @@ pub fn save_project_graph_to_file(
     std::fs::create_dir_all(root.as_path())?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
+    ensure_worksheets_dir(root.as_path())?;
 
     let graph = project_data.graphs.get(graph_id).ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_id))
@@ -151,6 +157,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     std::fs::create_dir_all(root)?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
+    ensure_worksheets_dir(root)?;
     ensure_project_database_dir(root)?;
 
     let global_variables = project_data
@@ -253,6 +260,7 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         FUNCTIONS_DIR,
         GraphDocumentKind::Function,
     )?);
+    let worksheets = read_worksheet_index_entries(root.as_path())?;
 
     Ok(ProjectIndex {
         project_name: manifest.project_name,
@@ -260,6 +268,7 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         export_time: manifest.export_time,
         graphs,
         folders,
+        worksheets,
     })
 }
 

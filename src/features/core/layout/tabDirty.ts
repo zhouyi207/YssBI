@@ -15,7 +15,7 @@ export interface DirtyTabSnapshot {
 }
 
 /**
- * Collect every dirty graph tab (Event/Function) across all editor groups,
+ * Collect every dirty editor tab (Event/Function/Worksheet) across all editor groups,
  * deduplicated by graphId. Use before destructive flows (window close, project
  * switch) to ask the user once. Non-graph tabs (project picker, settings) are
  * skipped because they have no on-disk graph file to persist.
@@ -27,7 +27,7 @@ export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
         if (node.type !== "component" || !node.data?.tabs) continue;
         for (const tab of node.data.tabs as LayoutTab[]) {
             if (!tab.isDirty) continue;
-            if (tab.type && tab.type !== "event" && tab.type !== "function") continue;
+            if (tab.type && tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
             if (seen.has(tab.id)) continue;
             seen.add(tab.id);
             out.push({ nodeId: node.id, graphId: tab.id, title: tab.title ?? tab.id });

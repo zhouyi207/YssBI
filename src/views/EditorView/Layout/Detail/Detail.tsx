@@ -1,8 +1,10 @@
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorGroup } from '@/features/application/editor';
 import { useEditorStore } from '@/features/core/editor';
 import { useLogStore } from '@/features/core/log/logStore';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { DetailEmptyState } from './DetailEmptyState';
 import { VariableDetailPanel } from './panels/VariableDetailPanel';
 import { EventDetailPanel } from './panels/EventDetailPanel';
@@ -10,6 +12,7 @@ import { FunctionDetailPanel } from './panels/FunctionDetailPanel';
 import { DataDetailPanel } from './panels/DataDetailPanel';
 import { LogDetailPanel } from './panels/LogDetailPanel';
 import { NodeDetailPanel } from './panels/NodeDetailPanel';
+import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
   const { t } = useTranslation();
@@ -33,6 +36,19 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
 
   const selectedGraphId = useEditorStore((s) => s.selectedGraphId);
   const selectedLog = useLogStore((s) => s.selectedLog);
+  const worksheetDocument = useWorksheetStore((s) =>
+    selectedItemId && selectedItemType === 'worksheet'
+      ? s.documents[selectedItemId] ?? null
+      : null,
+  );
+
+  useEffect(() => {
+    if (selectedItemType !== 'worksheet' || !selectedItemId) return;
+    if (worksheetDocument) return;
+    void WorksheetService.loadWorksheet(selectedItemId)
+      .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
+      .catch(() => undefined);
+  }, [selectedItemId, selectedItemType, worksheetDocument]);
 
   const selectedData = useMemo(() => {
     if (!selectedItemId || !selectedItemType) return null;
@@ -76,6 +92,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
           onDelete={() => deleteFunction(selectedItemId!)}
           onDeleted={clearSelection}
         />
+      ) : selectedItemType === 'worksheet' && worksheetDocument ? (
+        <WorksheetDetailPanel document={worksheetDocument} onDeleted={clearSelection} />
       ) : selectedData && selectedItemType === 'data' ? (
         <DataDetailPanel
           dataframe={selectedData}
