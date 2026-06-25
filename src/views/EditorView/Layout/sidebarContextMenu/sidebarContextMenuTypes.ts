@@ -1,3 +1,4 @@
+import type { RevealProjectResourceRequest } from "@/services/project/projectService";
 import type { ContextMenuSection, PositionedContextMenuState } from "@/shared/ui/contextMenu";
 import type { TFunction } from "i18next";
 
@@ -10,7 +11,8 @@ export type SidebarContextMenuTarget =
   | { type: "variable"; id: string; name: string }
   | { type: "variableSection"; isGlobal: boolean }
   | { type: "database"; id: string; name: string }
-  | { type: "dataSection" };
+  | { type: "dataSection" }
+  | { type: "worksheet"; id: string; name: string };
 
 export type SidebarContextMenuState = PositionedContextMenuState<SidebarContextMenuTarget>;
 
@@ -37,6 +39,8 @@ export interface SidebarContextMenuActions {
   renameDatabaseItem: (id: string, name: string) => void;
   deleteDatabaseItem: (id: string) => unknown | Promise<unknown>;
   importData: () => void;
+  openWorksheet: (id: string, name: string) => unknown | Promise<unknown>;
+  revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }
 
 export type SidebarContextMenuSectionsBuilder = (

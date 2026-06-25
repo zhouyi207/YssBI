@@ -8,11 +8,11 @@ use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
     default_project_parent_directory as default_project_parent_directory_impl,
-    execute_project_data, load_project_from_file, normalize_project_name, save_project_as_to_directory,
-    save_project_to_file,
-    validate_new_project_path as validate_new_project_path_impl, LegacyProjectRecord, ProjectData,
-    ProjectIndex, ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
-    PROJECT_METADATA_FILE,
+    delete_project_directory, execute_project_data, load_project_from_file, normalize_project_name,
+    paths_refer_to_same_project, resolve_reveal_path, save_project_as_to_directory,
+    save_project_to_file, validate_new_project_path as validate_new_project_path_impl,
+    LegacyProjectRecord, ProjectData, ProjectIndex, ProjectPathValidation, ProjectRecord,
+    ProjectRegistry, ProjectState, RevealProjectResourceRequest, PROJECT_METADATA_FILE,
 };
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
@@ -328,6 +328,33 @@ pub async fn remove_registered_project(
 }
 
 #[tauri::command]
+pub async fn delete_registered_project_files(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+    registry: State<'_, ProjectRegistry>,
+    id: String,
+) -> Result<(), String> {
+    let record = registry
+        .fetch_by_id(&id)
+        .await?
+        .ok_or_else(|| "项目不存在".to_string())?;
+
+    let deleting_active = state
+        .get_path()
+        .is_some_and(|loaded| paths_refer_to_same_project(&loaded, &record.path));
+
+    delete_project_directory(&record.path).map_err(|e| e.to_string())?;
+    registry.remove_project(&id).await?;
+
+    if deleting_active {
+        state.clear();
+        emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn toggle_registered_project_favorite(
     registry: State<'_, ProjectRegistry>,
     id: String,
@@ -558,4 +585,19 @@ pub fn load_project_graph(
             .map(|(id, variable)| (id.to_string(), VariableInstanceDTO::from(variable)))
             .collect(),
     })
+}
+
+/// Resolve the on-disk path for a project resource (graph / database / worksheet).
+#[tauri::command]
+pub fn get_project_resource_path(
+    state: State<ProjectState>,
+    kind: String,
+    resource_id: String,
+) -> Result<String, String> {
+    let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)?;
+    let path = resolve_reveal_path(&state, request).map_err(|e| e.to_string())?;
+    if !path.exists() {
+        return Err(format!("File not found: {}", path.display()));
+    }
+    Ok(path.to_string_lossy().into_owned())
 }

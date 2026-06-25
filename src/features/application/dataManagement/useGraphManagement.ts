@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import { Graph } from '@/shared/types/domain';
+import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
@@ -66,7 +67,7 @@ export function useGraphManagement(
 
     logger.graph.debug(`addEvent called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
 
-    const baseName = name || "New Event";
+    const baseName = name || DEFAULT_EVENT_NAME;
     logger.graph.debug(`Creating event: ${baseName}`, 'GraphManagement');
 
     try {
@@ -160,7 +161,7 @@ export function useGraphManagement(
 
     logger.graph.debug(`addFunction called with name: ${name}, openAfterCreate: ${openAfterCreate}`, 'GraphManagement');
 
-    const baseName = name || "New Function";
+    const baseName = name || DEFAULT_FUNCTION_NAME;
     logger.graph.debug(`Creating function: ${baseName}`, 'GraphManagement');
 
     try {

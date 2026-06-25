@@ -103,7 +103,7 @@ pub fn save_worksheet_to_file(root: &Path, document: &WorksheetDocument) -> Resu
 }
 
 pub fn delete_worksheet_from_file(root: &Path, worksheet_id: &str) -> Result<(), ProjectError> {
-    if let Some(path) = find_worksheet_file_path(root, worksheet_id)? {
+    if let Some(path) = worksheet_absolute_path(root, worksheet_id)? {
         std::fs::remove_file(path)?;
     }
     Ok(())
@@ -154,7 +154,7 @@ fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, Projec
     read_json(path)
 }
 
-fn find_worksheet_file_path(root: &Path, worksheet_id: &str) -> Result<Option<PathBuf>, ProjectError> {
+pub fn worksheet_absolute_path(root: &Path, worksheet_id: &str) -> Result<Option<PathBuf>, ProjectError> {
     for path in list_worksheet_files(root)? {
         let document = read_worksheet_document_path(path.as_path())?;
         if document.id == worksheet_id {
@@ -169,7 +169,7 @@ fn worksheet_relative_path_for_save(
     worksheet_name: &str,
     worksheet_id: &str,
 ) -> Result<String, ProjectError> {
-    let existing_path = find_worksheet_file_path(root, worksheet_id)?;
+    let existing_path = worksheet_absolute_path(root, worksheet_id)?;
     let target_dir = existing_path
         .as_ref()
         .and_then(|path| path.parent().map(Path::to_path_buf))

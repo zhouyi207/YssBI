@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
@@ -6,6 +6,7 @@ import {
   VscDebugStart,
   VscFolder,
   VscFolderOpened,
+  VscGithub,
   VscNewFile,
   VscProject,
   VscRefresh,
@@ -16,7 +17,7 @@ import {
   VscTrash,
 } from "react-icons/vsc";
 import { i18n, type AppLanguage } from "@/app/i18n";
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
+import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME, APP_LINKS } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -39,15 +40,22 @@ import {
 import { cn } from "@/lib/utils";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
 import { useProjectIOStore } from "@/features/core/dataStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { usePersistedWindow, useWindowMaximized } from "@/features/application/window";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { ContextMenu, usePositionedContextMenu } from "@/shared/ui/contextMenu";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { ProjectService } from "@/services/project/projectService";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
+import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import type { ThemeSettings } from "@/shared/types/settings";
 import { NewProjectModal } from "./NewProjectModal";
+import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
+import { buildProjectPickerContextMenuSections } from "./projectPickerContextMenu";
 
 type SortMode = "lastOpened" | "name";
 
@@ -265,18 +273,29 @@ function TitleBar({
       </div>
       <div className="min-w-[48px] flex-1 self-stretch" data-tauri-drag-region />
       <WindowTitleBarActions>
-      {currentPath ? (
-        <Button
+        {currentPath ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onGoEditor}
+            className="mr-1 h-7 self-center px-3 text-muted-foreground hover:text-foreground"
+          >
+            {t("projectPicker.backToEditor")}
+          </Button>
+        ) : null}
+        <ToolbarIconButton
           type="button"
           variant="ghost"
-          size="sm"
-          onClick={onGoEditor}
-          className="mr-1 h-7 text-muted-foreground hover:text-foreground"
+          size="icon-lg"
+          onClick={() => void openExternalUrl(APP_LINKS.repository)}
+          className="self-center text-muted-foreground"
+          tooltip={t("menubar.githubRepository")}
+          aria-label={t("menubar.githubRepository")}
         >
-          {t("projectPicker.backToEditor")}
-        </Button>
-      ) : null}
-      <ToolbarIconButton
+          <VscGithub size={16} />
+        </ToolbarIconButton>
+        <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-lg"
@@ -392,6 +411,7 @@ export function ProjectPickerScreen() {
     openRecentProject,
     refresh,
     removeProject,
+    deleteProjectFiles,
     toggleFavorite,
   } = useProjectPicker();
   const [selectedId, setSelectedId] = useState<string | null>(currentProjectId);
@@ -399,6 +419,7 @@ export function ProjectPickerScreen() {
   const [sortMode, setSortMode] = useState<SortMode>("lastOpened");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState<ManagedProject | null>(null);
 
   const filtered = useMemo(
     () => sortAndFilter(projects, filterQuery, sortMode),
@@ -406,6 +427,42 @@ export function ProjectPickerScreen() {
   );
   const selected = selectedId ? projects.find((project) => project.id === selectedId) : undefined;
   const isBusy = busy !== "idle";
+
+  const {
+    contextMenu,
+    openContextMenu,
+    closeContextMenu,
+  } = usePositionedContextMenu<ManagedProject>();
+
+  const revealInExplorer = useCallback(async (projectPath: string) => {
+    try {
+      await ProjectService.revealProjectPath(projectPath);
+    } catch (error) {
+      uiStore.showToast(
+        t("contextMenu.sidebar.revealInExplorerFailed", {
+          error: formatErrorMessage(error, "Unknown error"),
+        }),
+        "error",
+      );
+    }
+  }, [t]);
+
+  const contextMenuSections = useMemo(
+    () => buildProjectPickerContextMenuSections(contextMenu, {
+      openProject: (path) => void openRecentProject(path),
+      toggleFavorite,
+      removeProject,
+      requestDeleteProjectFiles: setDeleteConfirmProject,
+      revealInExplorer,
+      isBusy,
+    }, t),
+    [contextMenu, isBusy, openRecentProject, removeProject, revealInExplorer, t, toggleFavorite],
+  );
+
+  const handleConfirmDeleteProject = useCallback(async (project: ManagedProject) => {
+    await deleteProjectFiles(project.id);
+    setSelectedId((current) => (current === project.id ? null : current));
+  }, [deleteProjectFiles]);
 
   useEffect(() => {
     if (currentProjectId) {
@@ -439,6 +496,13 @@ export function ProjectPickerScreen() {
         onCreate={createProject}
       />
       <ProjectSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <DeleteProjectConfirmDialog
+        project={deleteConfirmProject}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmProject(null);
+        }}
+        onConfirm={handleConfirmDeleteProject}
+      />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -461,6 +525,10 @@ export function ProjectPickerScreen() {
                         tabIndex={0}
                         onClick={() => setSelectedId(project.id)}
                         onDoubleClick={() => void openRecentProject(project.path)}
+                        onContextMenu={(event) => {
+                          setSelectedId(project.id);
+                          openContextMenu(event, project);
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
@@ -569,6 +637,13 @@ export function ProjectPickerScreen() {
           </CardContent>
         </Card>
       </div>
+      {contextMenu && (
+        <ContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          sections={contextMenuSections}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   );
 }

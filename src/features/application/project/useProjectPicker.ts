@@ -211,6 +211,21 @@ export function useProjectPicker() {
     })();
   }, []);
 
+  const deleteProjectFiles = useCallback((id: string) => {
+    return (async () => {
+      try {
+        await ProjectService.deleteRegisteredProjectFiles(id);
+        setProjects((previous) => previous.filter((project) => project.id !== id));
+        toast.success(t("projectPicker.deleteProjectConfirm.success"));
+      } catch (error) {
+        toast.error(
+          `${t("projectPicker.deleteProjectConfirm.failed")}: ${formatErrorMessage(error)}`,
+        );
+        throw error;
+      }
+    })();
+  }, [t]);
+
   const toggleFavorite = useCallback((id: string) => {
     void (async () => {
       try {
@@ -235,6 +250,7 @@ export function useProjectPicker() {
     openRecentProject,
     refresh,
     removeProject,
+    deleteProjectFiles,
     toggleFavorite,
   };
 }

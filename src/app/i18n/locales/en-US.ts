@@ -40,6 +40,8 @@ export const enUS = {
       deleteFolder: "Delete Folder",
       newVariable: "New Variable",
       importData: "Import Data",
+      revealInExplorer: "Reveal in File Explorer",
+      revealInExplorerFailed: "Could not reveal in file explorer: {{error}}",
     },
     dialog: {
       newFolderTitle: "New Folder",
@@ -49,11 +51,6 @@ export const enUS = {
       renameVariableTitle: "Rename Variable",
       renameDataTitle: "Rename Dataset",
       renameSubmit: "Rename",
-    },
-    defaults: {
-      newEvent: "New Event",
-      newFunction: "New Function",
-      newVariable: "New Variable",
     },
     node: {
       copy: "Copy",
@@ -100,6 +97,16 @@ export const enUS = {
     favorite: "Favorite",
     unfavorite: "Unfavorite",
     removeFromList: "Remove from List",
+    deleteProjectFiles: "Move to Recycle Bin…",
+    deleteProjectConfirm: {
+      title: "Move project to Recycle Bin?",
+      description: "All files and folders for \"{{name}}\" will be moved to the Recycle Bin. You can restore them from there later.",
+      pathLabel: "Project path",
+      confirm: "Move to Recycle Bin",
+      deleting: "Moving…",
+      success: "Project moved to Recycle Bin",
+      failed: "Failed to move project to Recycle Bin",
+    },
     localOnlyHint: "This list is stored in the local app data directory and does not delete project files from disk.",
     settingsDescription: "Adjust preferences for the project picker.",
     loading: {
@@ -112,7 +119,6 @@ export const enUS = {
     },
     newProjectModal: {
       title: "New Project",
-      defaultName: "New Project",
       nameLabel: "Project Name",
       pathLabel: "Project Folder Path",
       browse: "Browse",
@@ -164,11 +170,18 @@ export const enUS = {
     settings: "Settings",
     documentation: "Documentation",
     releaseNotes: "Release Notes",
+    githubRepository: "GitHub Repository",
+    reportIssue: "Report Issue",
     about: "About",
     switchToDark: "Switch to dark theme",
     switchToLight: "Switch to light theme",
     hideDetail: "Hide Detail",
     showDetail: "Show Detail",
+  },
+  aboutModal: {
+    title: "About {{appName}}",
+    version: "Version {{version}}",
+    description: "Statistical computing and visualization workbench.",
   },
   bottomBar: {
     untitledProject: "Untitled Project",
@@ -339,7 +352,6 @@ export const enUS = {
     },
   },
   worksheet: {
-    defaultName: "New Worksheet",
     created: "Worksheet created",
     createFailed: "Failed to create worksheet",
     saved: "Worksheet saved",

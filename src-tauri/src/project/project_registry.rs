@@ -223,6 +223,21 @@ impl ProjectRegistry {
         Ok(())
     }
 
+    pub async fn fetch_by_id(&self, id: &str) -> Result<Option<ProjectRecord>, String> {
+        let row = sqlx::query_as::<_, ProjectRecordRow>(
+            r#"
+            SELECT id, name, path, created_at, last_opened_at, is_favorite
+            FROM projects
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        Ok(row.map(ProjectRecordRow::into_record))
+    }
+
     pub async fn toggle_favorite(&self, id: &str) -> Result<bool, String> {
         let current: Option<i64> =
             sqlx::query_scalar("SELECT is_favorite FROM projects WHERE id = ?")
@@ -314,6 +329,14 @@ fn invalid(message: &str) -> ProjectPathValidation {
     ProjectPathValidation {
         ok: false,
         message: Some(message.into()),
+    }
+}
+
+/// Whether two paths refer to the same YssBI project on disk.
+pub fn paths_refer_to_same_project(a: &str, b: &str) -> bool {
+    match (normalize_existing_path(a), normalize_existing_path(b)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
     }
 }
 

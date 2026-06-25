@@ -474,6 +474,24 @@ pub fn project_root_from_path(path: &str) -> PathBuf {
     }
 }
 
+/// Move a project directory to the system recycle bin after validating `metadata.yssbi` exists.
+pub fn delete_project_directory(path: &str) -> Result<(), ProjectError> {
+    let root = project_root_from_path(path);
+    let manifest = root.join(PROJECT_METADATA_FILE);
+    if !manifest.is_file() {
+        return Err(ProjectError::InvalidProjectFormat(format!(
+            "missing {PROJECT_METADATA_FILE} under {}",
+            root.display()
+        )));
+    }
+    if root.exists() {
+        trash::delete(&root).map_err(|e| {
+            ProjectError::InvalidProjectFormat(format!("failed to move project to recycle bin: {e}"))
+        })?;
+    }
+    Ok(())
+}
+
 fn copy_project_directory(src: &Path, dst: &Path) -> Result<(), ProjectError> {
     if !src.is_dir() {
         return Err(ProjectError::InvalidProjectFormat(format!(
@@ -727,7 +745,7 @@ fn find_graph_file_path(
     Ok(None)
 }
 
-fn find_graph_document_path(
+pub(crate) fn find_graph_document_path(
     root: &Path,
     graph_id: &GraphId,
 ) -> Result<Option<(PathBuf, GraphDocumentKind, GraphDocument)>, ProjectError> {

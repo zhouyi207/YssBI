@@ -1,16 +1,11 @@
-import { forwardRef, useCallback, useContext, useEffect, useId, useRef } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import {
   VscEye,
   VscEyeClosed,
-  VscAdd,
   VscChevronRight,
-  VscChevronDown,
   VscDatabase,
-  VscListUnordered,
   VscSymbolEvent,
   VscSymbolMethod,
   VscSymbolVariable,
@@ -25,10 +20,9 @@ import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
 import { ensureDetailVisible } from "@/features/application/editor/ensureDetailVisible";
-import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,9 +33,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_EVENT_NAME,
+  DEFAULT_FOLDER_NAME,
+  DEFAULT_FUNCTION_NAME,
+  DEFAULT_VARIABLE_NAME,
+} from "@/shared/constants/defaultResourceNames";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { GraphService } from "@/services/graph/graphService";
+import { ProjectService } from "@/services/project/projectService";
 import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 import {
@@ -49,252 +52,13 @@ import {
   useSidebarContextMenu,
   type GraphResourceType,
 } from "./sidebarContextMenu";
-
-/**
- * 可拖拽的侧边栏项 — 整行可拖拽。
- * 必须定义在 Sidebar 组件外以保证 useDraggable hook 稳定。
- *
- * PointerSensor activationConstraint (distance: 5) 确保：
- *  - 简单 click / doubleClick 不会触发拖拽
- *  - 按住并移动 >= 5px 后才开始拖拽
- */
-const SidebarDraggableItem: React.FC<{
-  id: string;
-  dragData: { type: string; template?: unknown } | null;
-  children: React.ReactNode;
-  className?: string;
-  style?: React.CSSProperties;
-  onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-}> = ({ id, dragData, children, className, style, onClick, onDoubleClick, onContextMenu }) => {
-  const canDrag = !!dragData;
-  const { attributes, listeners, setNodeRef } = useDraggable({
-    id: `sidebar-item-${id}`,
-    data: dragData ?? { type: DRAG_TYPES.NODE_TEMPLATE, template: {} },
-    disabled: !canDrag,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...(canDrag ? listeners : {})}
-      {...(canDrag ? attributes : {})}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
-      className={`${className ?? ""} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
-      style={{
-        ...style,
-        opacity: 1,
-        touchAction: canDrag ? "none" : undefined,
-      }}
-    >
-      {children}
-    </div>
-  );
-};
-
-/**
- * 堆叠列表中的可折叠 section：标题栏 + 可展开内容
- * 工程化风格：无圆角、轻微背景区分、ease-out 动画
- */
-const StackedCollapsibleSection = ({
-  label,
-  expanded,
-  onToggle,
-  onAdd,
-  dropTarget,
-  onHeaderContextMenu,
-  onContentContextMenu,
-  children,
-}: {
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-  onAdd?: () => void;
-  dropTarget?: GraphFolderDropTarget;
-  onHeaderContextMenu?: (e: React.MouseEvent) => void;
-  onContentContextMenu?: (e: React.MouseEvent) => void;
-  children: React.ReactNode;
-}) => {
-  const fallbackDropId = useId();
-  const { setNodeRef, isOver } = useDroppable({
-    id: dropTarget
-      ? `graph-folder-drop-${dropTarget.graphType}-${dropTarget.folderPath || "root"}`
-      : `graph-folder-drop-disabled-${fallbackDropId}`,
-    data: dropTarget
-      ? { dropType: DROP_TYPES.GRAPH_FOLDER, graphType: dropTarget.graphType, folderPath: dropTarget.folderPath }
-      : undefined,
-    disabled: !dropTarget,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`flex flex-col shrink-0 min-h-0 ${expanded ? "flex-1" : "flex-none"} ${
-        isOver ? "bg-[var(--sidebar-hover)]" : ""
-      }`}
-      style={expanded ? { minHeight: 0 } : undefined}
-    >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
-          e.stopPropagation();
-          onToggle();
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          onToggle();
-        }}
-        onContextMenu={onHeaderContextMenu}
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "group h-7 min-h-7 w-full shrink-0 cursor-pointer justify-start gap-2 rounded-none px-2 py-1.5 transition-colors duration-150 ease-out bg-[var(--sidebar-section-bg)] text-muted-foreground hover:bg-[var(--sidebar-hover)]",
-        )}
-      >
-        <span
-          className="shrink-0 text-muted-foreground transition-transform duration-150 ease-out"
-          style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-        >
-          <VscChevronDown size={12} />
-        </span>
-        <span className="flex-1 text-[12px] tracking-tight truncate">{label}</span>
-        {onAdd && (
-          <Button
-            data-add-btn
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAdd();
-            }}
-            className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <VscAdd size={11} />
-          </Button>
-        )}
-      </div>
-      <div
-        className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
-        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-      >
-        <OverlayScrollbar className="min-h-0 flex-1">
-          <div className="min-h-full" onContextMenu={onContentContextMenu}>
-            {children}
-          </div>
-        </OverlayScrollbar>
-      </div>
-    </div>
-  );
-};
-
-/**
- * 可折叠分类区块（非堆叠模式，用于嵌套结构如 Local 下的 graphName）
- * headerContent 可选，用于自定义标题（如 data 栏目的可拖拽 dataframe 行）
- */
-const CollapsibleSection = ({
-  label,
-  expanded,
-  onToggle,
-  onAdd,
-  headerContent,
-  headerContentToggles = true,
-  headerActive,
-  indentDepth = 0,
-  dropTarget,
-  onContextMenu,
-  children,
-}: {
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-  onAdd?: () => void;
-  headerContent?: React.ReactNode;
-  headerContentToggles?: boolean;
-  headerActive?: boolean;
-  indentDepth?: number;
-  dropTarget?: GraphFolderDropTarget;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  children: React.ReactNode;
-}) => {
-  const fallbackDropId = useId();
-  const { setNodeRef, isOver } = useDroppable({
-    id: dropTarget
-      ? `graph-folder-drop-${dropTarget.graphType}-${dropTarget.folderPath || "root"}`
-      : `graph-folder-drop-disabled-${fallbackDropId}`,
-    data: dropTarget
-      ? { dropType: DROP_TYPES.GRAPH_FOLDER, graphType: dropTarget.graphType, folderPath: dropTarget.folderPath }
-      : undefined,
-    disabled: !dropTarget,
-  });
-
-  return (
-    <div ref={setNodeRef} className={isOver ? "bg-[var(--sidebar-hover)]" : undefined}>
-      <div
-        role="button"
-        tabIndex={0}
-        className={`flex items-center gap-2 py-1 pr-2 cursor-pointer group transition-colors duration-150 ease-out ${
-          headerActive ? "bg-[var(--sidebar-item-active)]" : "hover:bg-[var(--sidebar-hover)]"
-        }`}
-        style={{ paddingLeft: 16 + indentDepth * 16 }}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
-          if (!headerContentToggles && (e.target as HTMLElement).closest("[data-header-content]")) return;
-          e.stopPropagation();
-          onToggle();
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          onToggle();
-        }}
-        onContextMenu={onContextMenu}
-      >
-        <span className="text-muted-foreground shrink-0 transition-transform duration-150 ease-out" style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
-          <VscChevronDown size={11} />
-        </span>
-        {headerContent ? (
-          <div data-header-content className="flex-1 min-w-0">
-            {headerContent}
-          </div>
-        ) : (
-          <span className="flex-1 text-[12px] text-muted-foreground tracking-tight">{label}</span>
-        )}
-        {onAdd && (
-          <Button
-            data-add-btn
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAdd();
-            }}
-            className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <VscAdd size={11} />
-          </Button>
-        )}
-      </div>
-      <div
-        className="grid transition-[grid-template-rows] duration-150 ease-out overflow-hidden"
-        style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-      >
-        <div className="min-h-0">{children}</div>
-      </div>
-    </div>
-  );
-};
-
-interface GraphFolderDropTarget {
-  graphType: GraphResourceType;
-  folderPath: string;
-}
+import {
+  SidebarCollapsibleSection,
+  SidebarListItem,
+  sidebarItemIndent,
+  sidebarItemRowClass,
+  sidebarRowActionClass,
+} from "./sidebarUi";
 
 interface GraphTreeNode {
   name: string;
@@ -487,16 +251,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
     if (type === "event") {
-      await GraphService.createEvent(t("contextMenu.defaults.newEvent"), folderPath);
+      await GraphService.createEvent(DEFAULT_EVENT_NAME, folderPath);
     } else {
-      await GraphService.createFunction(t("contextMenu.defaults.newFunction"), folderPath);
+      await GraphService.createFunction(DEFAULT_FUNCTION_NAME, folderPath);
     }
     await refreshProjectIndex();
-  }, [refreshProjectIndex, t]);
+  }, [refreshProjectIndex]);
 
   const createFolderInFolder = useCallback((type: GraphResourceType, parentFolderPath = "") => {
     const title = t("contextMenu.dialog.newFolderTitle");
-    openInputDialog(title, title, async (name) => {
+    openInputDialog(title, DEFAULT_FOLDER_NAME, async (name) => {
       await GraphService.createGraphFolder(type, joinFolderPath(parentFolderPath, name));
       await refreshProjectIndex();
     }, t("contextMenu.dialog.createSubmit"));
@@ -551,6 +315,19 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     }, t("contextMenu.dialog.renameSubmit"));
   }, [openInputDialog, renameDataFrame, t]);
 
+  const revealInExplorer = useCallback(async (request: Parameters<typeof ProjectService.revealProjectResource>[0]) => {
+    try {
+      await ProjectService.revealProjectResource(request);
+    } catch (error) {
+      uiStore.showToast(
+        t("contextMenu.sidebar.revealInExplorerFailed", {
+          error: formatErrorMessage(error, "Unknown error"),
+        }),
+        "error",
+      );
+    }
+  }, [t]);
+
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
     createGraphInFolder,
@@ -567,6 +344,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     renameDatabaseItem,
     deleteDatabaseItem: deleteDataFrame,
     importData: triggerImportData,
+    openWorksheet,
+    revealInExplorer,
   }, t);
 
   const openVariableContextMenu = useCallback(
@@ -589,11 +368,32 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string; folderPath?: string } | undefined);
     const indentDepth = typeof nested === "number" ? nested : nested ? 1 : 0;
 
+    const iconColor =
+      type === "event"
+        ? TYPE_ICON_COLORS.event
+        : type === "function"
+          ? TYPE_ICON_COLORS.function
+          : type === "variable"
+            ? extra?.isGlobal
+              ? TYPE_ICON_COLORS.variableGlobal
+              : TYPE_ICON_COLORS.variable
+            : TYPE_ICON_COLORS.data;
+
+    const icon =
+      type === "event" ? <VscSymbolEvent size={12} style={{ color: iconColor }} />
+      : type === "function" ? <VscSymbolMethod size={12} style={{ color: iconColor }} />
+      : type === "variable" ? <VscSymbolVariable size={12} style={{ color: iconColor }} />
+      : <VscDatabase size={12} style={{ color: iconColor }} />;
+
     return (
-      <SidebarDraggableItem
+      <SidebarListItem
         key={id}
         id={id}
         dragData={dragData}
+        isSelected={isSelected}
+        indentDepth={indentDepth}
+        icon={icon}
+        label={name}
         onClick={(e) => {
           e.stopPropagation();
           setSelectedInfo(id, type);
@@ -605,60 +405,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           }
         }}
         onContextMenu={onContextMenu}
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          `group h-auto w-full justify-start gap-2 rounded-none py-1.5 pr-2 transition-colors duration-150 ease-out ${
-            isSelected
-              ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
-              : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70"
-          }`,
-        )}
-        style={{ paddingLeft: 16 + indentDepth * 16 }}
-      >
-        <span
-          className="shrink-0 flex items-center justify-center"
-          style={{
-            color: type === "event"
-                ? TYPE_ICON_COLORS.event
-                : type === "function"
-                  ? TYPE_ICON_COLORS.function
-                  : type === "variable"
-                      ? extra?.isGlobal
-                        ? TYPE_ICON_COLORS.variableGlobal
-                        : TYPE_ICON_COLORS.variable
-                      : type === "data"
-                        ? TYPE_ICON_COLORS.data
-                        : "rgba(156,163,175,0.8)",
-          }}
-        >
-          {type === "event" && <VscSymbolEvent size={12} />}
-          {type === "function" && <VscSymbolMethod size={12} />}
-          {type === "variable" && <VscSymbolVariable size={12} />}
-          {type === "data" && <VscDatabase size={12} />}
-        </span>
-        <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
-        {(type === "event" || type === "function") && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openGraph(id, name, type);
-                }}
-                className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
-              >
-                <VscChevronRight size={11} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
-          </Tooltip>
-        )}
-        {type === "variable" && !readOnly && (
+        trailing={
           <>
-            {!extra?.isGlobal ? (
+            {(type === "event" || type === "function") && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -667,57 +416,86 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     size="icon-xs"
                     onClick={(e) => {
                       e.stopPropagation();
-                      promoteVariable(id);
+                      openGraph(id, name, type);
                     }}
-                    className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
+                    className={sidebarRowActionClass(isSelected)}
                   >
-                    <VscEye size={11} />
+                    <VscChevronRight size={11} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top">{t("sidebar.promoteToGlobal")}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      demoteVariable(id);
-                    }}
-                    className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
-                  >
-                    <VscEyeClosed size={11} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t("sidebar.demoteToLocal")}</TooltipContent>
+                <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
               </Tooltip>
             )}
-            <span
-              className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50"}`}
-              style={{ color: safeDataTypeColor(extra?.dataType) }}
-            >
-              {safeDataTypeDisplay(extra?.dataType)}
-              {extra?.dataType &&
-                typeof extra.dataType === "object" &&
-                "kind" in extra.dataType &&
-                (extra.dataType as DataType).kind === "Array"
-                  ? <span className="text-[8px]">[]</span>
-                  : null}
-            </span>
+            {type === "variable" && !readOnly && (
+              <>
+                {!extra?.isGlobal ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          promoteVariable(id);
+                        }}
+                        className={sidebarRowActionClass(isSelected)}
+                      >
+                        <VscEye size={11} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{t("sidebar.promoteToGlobal")}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          demoteVariable(id);
+                        }}
+                        className={sidebarRowActionClass(isSelected)}
+                      >
+                        <VscEyeClosed size={11} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{t("sidebar.demoteToLocal")}</TooltipContent>
+                  </Tooltip>
+                )}
+                <span
+                  className={cn(
+                    "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
+                    isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
+                  )}
+                  style={{ color: safeDataTypeColor(extra?.dataType) }}
+                >
+                  {safeDataTypeDisplay(extra?.dataType)}
+                  {extra?.dataType &&
+                    typeof extra.dataType === "object" &&
+                    "kind" in extra.dataType &&
+                    (extra.dataType as DataType).kind === "Array"
+                    ? <span className="text-[8px]">[]</span>
+                    : null}
+                </span>
+              </>
+            )}
+            {type === "variable" && readOnly && (
+              <span
+                className={cn(
+                  "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
+                  isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
+                )}
+                style={{ color: safeDataTypeColor(extra?.dataType) }}
+              >
+                {safeDataTypeDisplay(extra?.dataType)}
+              </span>
+            )}
           </>
-        )}
-        {type === "variable" && readOnly && (
-          <span
-            className={`text-[10px] font-normal px-1 py-0.5 flex items-center gap-1 ${isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50"}`}
-            style={{ color: safeDataTypeColor(extra?.dataType) }}
-          >
-            {safeDataTypeDisplay(extra?.dataType)}
-          </span>
-        )}
-      </SidebarDraggableItem>
+        }
+      />
     );
   };
 
@@ -735,8 +513,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     return (
       <>
         {folderEntries.map((folder) => (
-          <CollapsibleSection
+          <SidebarCollapsibleSection
             key={`${type}-folder-${folder.path}`}
+            variant="nested"
             label={folder.name}
             expanded={isSectionExpanded(`graphs_${type}_folder_${folder.path}`)}
             onToggle={() => toggleSection(`graphs_${type}_folder_${folder.path}`)}
@@ -749,15 +528,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               folderPath: folder.path,
               name: folder.name,
             })}
-            headerContent={
-              <div className="flex items-center gap-2 min-w-0 text-muted-foreground">
-                <VscFolder size={12} className="shrink-0" />
-                <span className="flex-1 text-[12px] tracking-tight truncate">{folder.name}</span>
-              </div>
-            }
+            leading={<VscFolder size={12} className="text-muted-foreground" />}
           >
             {renderGraphTree(type, {}, depth + 1, folder)}
-          </CollapsibleSection>
+          </SidebarCollapsibleSection>
         ))}
         {graphEntries.map(([id, data]) =>
           renderItem(
@@ -780,13 +554,82 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     );
   };
 
+  const renderDataItem = (id: string, name: string, data: unknown) => {
+    const isLoading = (data as { loading?: unknown }).loading === true;
+    const loadError = (data as { loadError?: unknown }).loadError;
+    const isSelected = selectedItemId === id && selectedItemType === "data";
+
+    return (
+      <SidebarListItem
+        key={id}
+        id={id}
+        dragData={buildSidebarDragData(id, name, "data")}
+        isSelected={isSelected}
+        icon={<VscDatabase size={12} style={{ color: TYPE_ICON_COLORS.data }} />}
+        label={name}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedInfo(id, "data");
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          openDataViewWindow(id);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openContextMenu(e, { type: "database", id, name });
+        }}
+        trailing={
+          <>
+            {isLoading && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
+                </TooltipTrigger>
+                <TooltipContent side="top">{t("sidebar.dataLoading")}</TooltipContent>
+              </Tooltip>
+            )}
+            {!isLoading && typeof loadError === "string" && loadError.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                </TooltipTrigger>
+                <TooltipContent side="top">{String(loadError)}</TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDataViewWindow(id);
+                  }}
+                  className={sidebarRowActionClass(isSelected)}
+                >
+                  <VscEye size={11} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{t("sidebar.viewInDataViewer")}</TooltipContent>
+            </Tooltip>
+          </>
+        }
+      />
+    );
+  };
+
   const renderWorksheetItem = (id: string, name: string) => {
     const isSelected = selectedItemId === id && selectedItemType === "worksheet";
     return (
-      <SidebarDraggableItem
+      <SidebarListItem
         key={id}
         id={id}
-        dragData={null}
+        isSelected={isSelected}
+        icon={<VscGraphLine size={12} style={{ color: TYPE_ICON_COLORS.worksheet }} />}
+        label={name}
         onClick={(e) => {
           e.stopPropagation();
           setSelectedInfo(id, "worksheet");
@@ -796,38 +639,31 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           e.stopPropagation();
           void openWorksheet(id, name);
         }}
-        className={`group flex items-center gap-2 pr-2 py-1.5 transition-colors duration-150 ease-out ${
-          isSelected
-            ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
-            : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70"
-        }`}
-        style={{ paddingLeft: 16 }}
-      >
-        <span
-          className="shrink-0 flex items-center justify-center"
-          style={{ color: TYPE_ICON_COLORS.worksheet }}
-        >
-          <VscGraphLine size={12} />
-        </span>
-        <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                void openWorksheet(id, name);
-              }}
-              className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "text-sidebar-foreground" : "text-muted-foreground"}`}
-            >
-              <VscChevronRight size={11} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
-        </Tooltip>
-      </SidebarDraggableItem>
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openContextMenu(e, { type: "worksheet", id, name });
+        }}
+        trailing={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void openWorksheet(id, name);
+                }}
+                className={sidebarRowActionClass(isSelected)}
+              >
+                <VscChevronRight size={11} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
+          </Tooltip>
+        }
+      />
     );
   };
 
@@ -858,7 +694,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden p-0">
           {currentTab === "graphs" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Event"
                 expanded={isSectionExpanded("graphsEvent")}
                 onToggle={() => toggleSection("graphsEvent")}
@@ -876,9 +712,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No events</div>
                   )}
                 </div>
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
 
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Function"
                 expanded={isSectionExpanded("graphsFunction")}
                 onToggle={() => toggleSection("graphsFunction")}
@@ -896,13 +732,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No functions</div>
                   )}
                 </div>
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
 
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Variable"
                 expanded={isSectionExpanded("graphsVariable")}
                 onToggle={() => toggleSection("graphsVariable")}
-                onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", false)}
+                onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int32", false)}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
@@ -921,17 +757,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
                     <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No variables</div>
                   )}
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
             </div>
           )}
 
           {currentTab === "variables" && (
             <div className="flex flex-col flex-1 min-h-0">
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Global"
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
-                onAdd={() => addVariable(t("contextMenu.defaults.newVariable"), "Int32", true)}
+                onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int32", true)}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
@@ -943,16 +779,17 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 {Object.keys(variablesGlobal).length === 0 && (
                   <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
                 )}
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
 
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Local"
                 expanded={isSectionExpanded("variablesLocal")}
                 onToggle={() => toggleSection("variablesLocal")}
               >
                   {localVariablesByGraph.map(({ graphId, graphName, variables }) => (
-                    <CollapsibleSection
+                    <SidebarCollapsibleSection
                       key={graphId}
+                      variant="nested"
                       label={graphName}
                       expanded={isSectionExpanded(`variablesLocal_${graphId}`)}
                       onToggle={() => toggleSection(`variablesLocal_${graphId}`)}
@@ -962,18 +799,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                           openVariableContextMenu(e, id, data.name)
                         )
                       )}
-                    </CollapsibleSection>
+                    </SidebarCollapsibleSection>
                   ))}
                 {localVariablesByGraph.length === 0 && (
                   <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
                 )}
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
             </div>
           )}
 
           {currentTab === "data" && (
             <div className="flex flex-col flex-1 min-h-0">
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label="Data"
                 expanded={isSectionExpanded("dataData")}
                 onToggle={() => toggleSection("dataData")}
@@ -983,114 +820,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               >
                   {Object.entries(dataframes || {}).map(([id, data]) => {
                     const name = String((data as { name?: unknown }).name ?? "");
-                    const columns = (data as { columns?: Array<{ name: string; type: string }> }).columns ?? [];
-                    const isLoading = (data as { loading?: unknown }).loading === true;
-                    const loadError = (data as { loadError?: unknown }).loadError;
-                    const sectionKey = `dataData_${id}`;
-                    const isSelected = selectedItemId === id && selectedItemType === "data";
-                    const dragData = buildSidebarDragData(id, name, "data", data);
-                    return (
-                      <CollapsibleSection
-                        key={id}
-                        label={name}
-                        expanded={isSectionExpanded(sectionKey, false)}
-                        onToggle={() => toggleSection(sectionKey)}
-                        headerContentToggles={false}
-                        headerActive={isSelected}
-                        headerContent={
-                          <div className="flex items-center gap-2 min-w-0">
-                            <SidebarDraggableItem
-                              id={id}
-                              dragData={dragData}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedInfo(id, "data");
-                              }}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                openDataViewWindow(id);
-                              }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                openContextMenu(e, { type: "database", id, name });
-                              }}
-                              className={`group flex items-center gap-2 flex-1 min-w-0 py-0 pr-0 transition-colors duration-150 ease-out ${isSelected ? "text-sidebar-foreground" : "text-sidebar-foreground/70"}`}
-                            >
-                              <span
-                                className="shrink-0 flex items-center justify-center"
-                                style={{ color: TYPE_ICON_COLORS.data }}
-                              >
-                                <VscDatabase size={12} />
-                              </span>
-                              <span className="flex-1 text-[12px] font-normal tracking-tight truncate">{name}</span>
-                              {isLoading && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top">{t("sidebar.dataLoading")}</TooltipContent>
-                                </Tooltip>
-                              )}
-                              {!isLoading && typeof loadError === "string" && loadError.length > 0 && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top">{String(loadError)}</TooltipContent>
-                                </Tooltip>
-                              )}
-                            </SidebarDraggableItem>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openDataViewWindow(id);
-                                  }}
-                                  className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                                >
-                                  <VscEye size={12} />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">{t("sidebar.viewInDataViewer")}</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        }
-                      >
-                        {isLoading ? (
-                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-muted-foreground/80">
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            {t("sidebar.dataLoading")}
-                          </div>
-                        ) : typeof loadError === "string" && loadError.length > 0 ? (
-                          <div className="flex items-center gap-2 py-1 pl-8 pr-2 text-[12px] italic text-red-400">
-                            <span>{t("sidebar.dataLoadFailed")}</span>
-                          </div>
-                        ) : (
-                          columns.map((col, idx) => (
-                            <div
-                              key={`${id}-col-${idx}`}
-                              className="flex items-center gap-2 py-1 pl-8 pr-2 hover:bg-[var(--sidebar-hover)] text-[12px] text-muted-foreground group/col transition-colors"
-                            >
-                              <VscListUnordered size={10} className="opacity-40 shrink-0" />
-                              <span className="flex-1 truncate">{col.name}</span>
-                              <span className="text-[10px] opacity-0 group-hover/col:opacity-100 transition-opacity text-muted-foreground bg-sidebar-accent/50 px-1 py-0.5">
-                                {col.type.replace("Owned", "")}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </CollapsibleSection>
-                    );
+                    return renderDataItem(id, name, data);
                   })}
                   {Object.keys(dataframes || {}).length === 0 && (
                     <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noData")}</div>
                   )}
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
             </div>
           )}
           {currentTab === "commands" && (
@@ -1098,7 +833,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
           {currentTab === "charts" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
-              <StackedCollapsibleSection
+              <SidebarCollapsibleSection variant="stacked"
                 label={t("chartsSidebar.worksheets")}
                 expanded={isSectionExpanded("chartsWorksheets")}
                 onToggle={() => toggleSection("chartsWorksheets")}
@@ -1108,7 +843,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 {worksheets.length === 0 && (
                   <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("chartsSidebar.noWorksheets")}</div>
                 )}
-              </StackedCollapsibleSection>
+              </SidebarCollapsibleSection>
             </div>
           )}
         </div>
@@ -1197,7 +932,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <StackedCollapsibleSection
+      <SidebarCollapsibleSection variant="stacked"
         label={`${t("common.undo")} (${undoStack.length})`}
         expanded={true}
         onToggle={() => {}}
@@ -1205,20 +940,21 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         {reversedUndo.length > 0 ? reversedUndo.map((entry, i) => (
           <div
             key={entry.id}
-            className={`flex items-center gap-2 px-4 py-1.5 text-sidebar-foreground/70 ${i === 0 ? "bg-sidebar-accent/50" : ""}`}
+            className={cn(sidebarItemRowClass(i === 0), "pr-2")}
+            style={sidebarItemIndent(0)}
           >
             <VscDiscard size={11} className="shrink-0 text-muted-foreground" />
-            <span className="flex-1 text-[12px] tracking-tight truncate">
+            <span className="min-w-0 flex-1 truncate text-[12px] font-normal tracking-tight">
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatTime(entry.timestamp)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
           <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
         )}
-      </StackedCollapsibleSection>
+      </SidebarCollapsibleSection>
 
-      <StackedCollapsibleSection
+      <SidebarCollapsibleSection variant="stacked"
         label={`${t("common.redo")} (${redoStack.length})`}
         expanded={true}
         onToggle={() => {}}
@@ -1226,18 +962,19 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         {redoStack.length > 0 ? redoStack.map((entry) => (
           <div
             key={entry.id}
-            className="flex items-center gap-2 px-4 py-1.5 text-muted-foreground"
+            className={cn(sidebarItemRowClass(false), "pr-2")}
+            style={sidebarItemIndent(0)}
           >
             <VscRedo size={11} className="shrink-0 text-muted-foreground/60" />
-            <span className="flex-1 text-[12px] tracking-tight truncate">
+            <span className="min-w-0 flex-1 truncate text-[12px] font-normal tracking-tight">
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="text-[10px] text-muted-foreground/60 shrink-0">{formatTime(entry.timestamp)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
           <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
         )}
-      </StackedCollapsibleSection>
+      </SidebarCollapsibleSection>
     </div>
   );
 }

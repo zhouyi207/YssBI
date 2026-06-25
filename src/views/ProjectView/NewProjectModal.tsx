@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
 import { ProjectService } from "@/services/project/projectService";
 
 function joinPath(parent: string, child: string) {
@@ -78,7 +79,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
     let cancelled = false;
     setNotice(null);
     setPathError(null);
-    setName(t("projectPicker.newProjectModal.defaultName"));
+    setName(DEFAULT_PROJECT_NAME);
     setPath("");
     setParentBase("");
     setPathAuto(true);
@@ -87,7 +88,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       try {
         const parent = await ProjectService.defaultProjectParentDirectory();
         if (cancelled) return;
-        const defaultName = t("projectPicker.newProjectModal.defaultName");
+        const defaultName = DEFAULT_PROJECT_NAME;
         setParentBase(parent);
         setName(defaultName);
         setPath(joinPath(parent, sanitizeDirSegment(defaultName)));

@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+import { useState } from "react";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
+import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +23,8 @@ import { useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
+import { openExternalUrl } from "@/shared/utils/openExternalUrl";
+import { AboutModal } from "./AboutModal";
 
 interface MenuItem {
   label: string;
@@ -93,6 +96,7 @@ function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
 export function Menubar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [aboutOpen, setAboutOpen] = useState(false);
   const {
     importGraph,
     saveGraph,
@@ -207,12 +211,17 @@ export function Menubar() {
   ];
 
   const helpItems: MenuItem[] = [
-    { label: t("menubar.documentation") },
-    { label: t("menubar.releaseNotes") },
-    { label: t("menubar.about") },
+    { label: t("menubar.documentation"), onClick: () => void openExternalUrl(APP_LINKS.documentation) },
+    { label: "-" },
+    { label: t("menubar.releaseNotes"), onClick: () => void openExternalUrl(APP_LINKS.releaseNotes) },
+    { label: t("menubar.githubRepository"), onClick: () => void openExternalUrl(APP_LINKS.repository) },
+    { label: t("menubar.reportIssue"), onClick: () => void openExternalUrl(APP_LINKS.reportIssue) },
+    { label: "-" },
+    { label: t("menubar.about"), onClick: () => setAboutOpen(true) },
   ];
 
   return (
+    <>
     <WindowTitleBar
       elevated
       className="menubar-container"
@@ -287,5 +296,7 @@ export function Menubar() {
         <WindowChromeControls isMaximized={isMaximized} />
       </WindowTitleBarActions>
     </WindowTitleBar>
+    <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
+    </>
   );
 }

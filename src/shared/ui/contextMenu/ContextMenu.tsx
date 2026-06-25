@@ -94,7 +94,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 item.danger && menuItemDangerClass,
                 item.disabled && "pointer-events-none opacity-40",
               )}
-              onClick={() => {
+              onMouseDown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
                 if (item.disabled) return;
                 item.onClick?.();
                 onClose();

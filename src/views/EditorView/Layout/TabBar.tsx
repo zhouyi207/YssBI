@@ -6,9 +6,14 @@ import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import {
+  editorTabBarActionsClass,
+  editorTabBarShellClass,
+  editorTabDropIndicatorClass,
+  editorTabItemVariants,
+} from "./editorTabStyles";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
@@ -140,10 +145,10 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   }, [isDragging]);
 
   return (
-    <div 
+    <div
       ref={setDropRef}
-      className="flex items-center border-b w-full shrink-0 select-none overflow-hidden bg-[var(--workbench-bg)] border-[var(--strong-border)]"
-      style={{ height: 'var(--titlebar-height)' }}
+      className={editorTabBarShellClass}
+      style={{ height: "var(--titlebar-height)" }}
     >
       <div className="relative flex-1 flex items-start h-full min-w-0">
         {isDragging ? (
@@ -162,7 +167,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             ))}
             {dropIndicatorIndex !== null && (
               <div
-                className="absolute top-0 bottom-0 w-0.5 bg-[var(--accent-color)] z-50 pointer-events-none"
+                className={editorTabDropIndicatorClass}
                 style={{
                   left: (() => {
                     const container = containerRef.current;
@@ -198,7 +203,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
       </div>
 
       {/* Group Action Buttons */}
-      <div className="flex items-center gap-0.5 px-1 border-l border-[var(--strong-border)] h-full bg-[var(--workbench-bg)]">
+      <div className={editorTabBarActionsClass}>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -311,19 +316,9 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             {...listeners}
             data-tab-id={tab.id}
             onClick={onClick}
-            className={cn(
-                buttonVariants({ variant: "ghost", size: "sm" }),
-                "relative h-[var(--titlebar-height)] shrink-0 cursor-pointer gap-2 rounded-none border-r border-[var(--strong-border)] px-3",
-                isActive ? "bg-[var(--sidebar-bg)] text-foreground" : "text-muted-foreground hover:bg-muted",
-                isDragging ? "cursor-grabbing" : "cursor-pointer",
-            )}
+            className={editorTabItemVariants({ active: isActive, dragging: isDragging })}
         >
-            {/* Active Top Border */}
-            {isActive && (
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-[var(--accent-color)]" />
-            )}
-            
-            <span className={`text-xs truncate max-w-[120px]`}>
+            <span className="max-w-[120px] truncate">
                 {tab.title}
             </span>
             <Button

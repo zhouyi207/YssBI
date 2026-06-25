@@ -1,5 +1,6 @@
 //! 项目管理模块
 
+pub mod resource_reveal;
 pub mod project_data;
 pub mod project_error;
 pub mod project_execution;
@@ -14,6 +15,7 @@ pub mod project_store;
 pub mod unique_name;
 pub mod worksheet_io;
 
+pub use resource_reveal::*;
 pub use project_data::*;
 pub use project_error::*;
 pub use project_execution::*;

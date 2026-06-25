@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { Variable, VariableScope } from '@/shared/types/domain';
+import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
 import { dataTypeFromKey, getDefaultValue, dataTypeDisplay } from '@/shared/types/domain/dataType';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { useVariableStore, useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
@@ -51,7 +52,7 @@ export function useVariableManagement() {
 
   const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
     try {
-      const baseName = name || 'New Variable';
+      const baseName = name || DEFAULT_VARIABLE_NAME;
       const dataType = dataTypeFromKey(type);
       const variable: Omit<Variable, 'id'> = {
         name: baseName,

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -16,7 +17,7 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
     async (databaseId?: string) => {
       try {
         const document = await WorksheetService.createWorksheet(
-          t('worksheet.defaultName'),
+          DEFAULT_WORKSHEET_NAME,
           databaseId,
         );
         useWorksheetStore.getState().upsertDocument(document);

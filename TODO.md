@@ -345,54 +345,43 @@
 - [x] **shadcn P1 — PlotView 控件与外壳**：Line 工具栏 Switch + Button；图表容器 `#13151a` / `border-gray-*` → `border-border` / `bg-card`；新增 `plotShellStyles.ts`
 - [x] **shadcn P1 — InfoView 交互控件**：PanelComponent pill → ToggleGroup；MarginsBlock 原生 `<select>` → `shared/ui/Select` + shadcn Input/Label
 - [x] **shadcn P2 — ContextMenu 统一**：`shared/ui/contextMenu/ContextMenu.tsx` 使用 fixed portal + shadcn Button/Separator 样式（Radix 受控 ContextMenu 无法跟随光标）；Sidebar / Node / Pin / DataView / Canvas 变量菜单共用
-
-## 2026.06.28
-
 - [x] **shadcn P1 — InfoView 公式块 Toggle**：抽 `InfoSegmentedToggle` / `InfoAccentButton`（`InfoViewControls.tsx`）；FormulaBlock / BinaryFormulaBlock / VARFormulaBlock / FormulaBlock2SLS pill → ToggleGroup
 - [x] **shadcn P1 — InfoView 其它控件**：HypothesisTestBlock / ACFPACFBlock / SerialTestsBlock / DID / DFADF 原生 button → Button 或 InfoAccentButton；输入 → shadcn Input
 - [x] **shadcn P1 — Checkbox 统一**：VariableDetailPanel / SettingsView SettingItem / SerialTestsBlock → shadcn Checkbox + Label
 - [x] **shadcn P1 — Sidebar 树行**：列表行、折叠头应用 `buttonVariants(ghost)`（保留 DnD ref 结构）
 - [x] **shadcn P2 — TabBar 标签**：TabItem 应用 `buttonVariants(ghost)`（保留 DnD）
 - [x] **shadcn P2 — ImportModal / PinEditor**：ImportModal 分类与类型选项 → Button；PinEditor `title` → Tooltip
-
-## 2026.06.29
-
 - [x] **shadcn P1 — InfoStatsTable**：抽 `InfoStatsTable` 共享外壳；CoefficientTable / VifTable / AnovaTable 原生 `<table>` → shadcn `Table`
 - [x] **shadcn P2 — BottomBar Tooltip**：StatusItem `title=` → shadcn Tooltip
 - [x] **shadcn P2 — PinInput Switch**：bool pin 自定义 checkbox → shadcn `Switch`（size=sm）
 - [x] **shadcn P2 — ImportModal Tabs**：分类栏 Button 组 → shadcn `Tabs`（variant=line）
 - [x] **shadcn P2 — Shell Tooltip**：TabBar 分屏/关闭、Sidebar 行内图标按钮 → Tooltip
 - [x] **shadcn P2 — NodePalette token**：CategoryRow / 空状态 `text-gray-*` → 语义 token
-
-## 2026.06.30
-
 - [x] **shadcn P1 — InfoView 表格 batch 2**：抽 `FormulaMappingTable`；ClassificationTableBlock / MarginsBlock / DFADFSummaryList / VecRank / VARSoc / FormulaBlock / BinaryFormulaBlock / PanelFormulaBlock / VARFormulaBlock → shadcn `Table` 或 `InfoStatsTable`
 - [x] **shadcn P2 — LogView Tooltip**：工具栏 refresh / auto-scroll / filter / clear / close → shadcn Tooltip
 - [x] **shadcn P2 — Canvas 执行栏 Tooltip**：debug / replay / pause / stop / execute → shadcn Tooltip
-
-## 2026.07.01
-
 - [x] **shadcn P1 — InfoView 表格 batch 3**：抽 `IvFirstStageSummaryTables` / `VarModelTable`；2SLS / LIML / VAR / VEC / DataViewComponent 剩余原生 `<table>` → shadcn `Table`
 - [x] **shadcn P2 — 零散 token 清理**：Pin / PlotWindow / SidebarDragOverlay / LayoutNodeRenderer / 数据导入选择 Modal `text-gray-*` → 语义 token
 - [x] **shadcn P2 — ImportModal Tooltip**：comingSoon 类型选项 `title=` → Tooltip
-
-## 2026.07.02
-
 - [x] **shadcn P2 — Shell Tooltip batch**：ActivityBar / Menubar / WindowChromeControls / Pin / PanelComponent 警告 / Line 工具栏 → shadcn Tooltip
 - [x] **shadcn P2 — DataView Tooltip**：Toolbar 图标按钮、TitleBar 单元格预览、SQL 表选择 Modal 路径截断 → Tooltip
 - [x] **shadcn P2 — Log token 清理**：`logPresentation` / LogPanelContent `text-gray-*` / `border-gray-*` → 语义 token
 - [x] **shadcn P2 — 共享 ToolbarIconButton**：抽 `shared/ui/ToolbarIconButton.tsx`；Log / DataView / Menubar / Line 复用
-
-## 2026.07.03
-
 - [x] **shadcn P2 — ProjectPicker Tooltip**：refresh / clear search / theme / settings / favorite `title=` → shadcn Tooltip；项目路径截断 → Tooltip
 - [x] **shadcn P2 — ExcelSheetSelectModal Tooltip**：文件路径截断 `title=` → Tooltip（对齐 SqliteTableSelectModal）
 - [x] **shadcn P2 — InfoView 截断 Tooltip**：CoeffBarChart 变量名、CoefficientTable 几率比说明 `title=` → Tooltip
-
-## 2026.07.04
-
 - [x] **shadcn P1 — 零散控件收尾**：DIDComponent / ResidualPlot 原生 number input → shadcn Input；SettingsView 分区标题 token；SidebarDragOverlay token
 - [x] **shadcn P2 — PlotView 统一**：plotShellStyles 壳层；chartTheme 序列色（accent 驱动）；Sash token；LoadingOverlay Card+Progress；RegressionShared Badge/Card；Select `id` prop
+- [x] **TabBar 标签样式 token 化**：新增 `editorTabStyles.ts`（`editorTabItemVariants`、shell/action 类名）；`TabBar.tsx` 由 `--workbench-bg` / `--accent-color` 迁移为 `border-border`、`bg-background`、`before:bg-primary` 等语义 token（保留 DnD / 关闭 / 跨组，未改用 shadcn Tabs）
+- [x] **Sidebar 右键「在资源管理器中打开」**：后端 `project/resource_reveal.rs` + command `get_project_resource_path(kind, resourceId)`（graph / database / worksheet）；前端 `ProjectService.revealProjectResource()` → `invoke` + `@tauri-apps/plugin-opener` `revealItemInDir`；Sidebar / Worksheet 右键菜单 + i18n `contextMenu.sidebar.revealInExplorer` / `revealInExplorerFailed`
+- [x] **ContextMenu 点击无响应修复**：菜单项改用 `onMouseDown` + `preventDefault`；invoke 扁平参数；错误走 `formatErrorMessage` + `uiStore.showToast`
+- [x] **Data Sidebar 扁平化**：去掉每个 database 的 `CollapsibleSection` 展开/列子树；与 Worksheet 一致用 `renderDataItem` 单行展示
+- [x] **Sidebar 行样式统一**：抽 `Layout/sidebarUi/`（`sidebarStyles.ts`、`SidebarListItem`、`SidebarDraggableItem`、`SidebarCollapsibleSection` variant=`stacked|nested`）；`Sidebar.tsx` 的 event/function/variable/data/worksheet 行与折叠区统一复用（Windows 导入路径 `./sidebarUi`，避免与 `Sidebar.tsx` 冲突）
+- [x] **资源默认名固定英文**：新增 `shared/constants/defaultResourceNames.ts`（`New Event` / `New Function` / `New Variable` / `New Worksheet` / `New Folder` / `New Project`）；创建 event、function、variable、worksheet、folder、project 不再随 UI 语言用中文默认名；移除 i18n `contextMenu.defaults.*`、`worksheet.defaultName`、`projectPicker.newProjectModal.defaultName`；新建文件夹对话框预填 `"New Folder"`（标题仍 i18n）
+- [x] **Help 菜单 + About 对话框**：`app/appConfig/appLinks.ts` 集中外链；Help 按文档 / 发行说明 / GitHub 仓库 / 反馈问题 / 关于 布局；About 弹窗含版本与 GitHub / Issues 按钮；`openExternalUrl` + Tauri `openUrl`；`capabilities` 允许 `https://github.com/**`
+- [x] **ProjectPicker 标题栏**：「返回编辑器」补 `self-center` 垂直居中；主题切换左侧新增 GitHub 按钮（跳转仓库）
+- [x] **ProjectPicker 项目列表右键菜单**：复用 `ContextMenu` + `usePositionedContextMenu`；`projectPickerContextMenu/` 构建菜单（进入 / 在资源管理器中打开 / 收藏 / 从列表移除 / 移到回收站）；`ProjectService.revealProjectPath`
+- [x] **ProjectPicker 删除项目确认对话框**：`DeleteProjectConfirmDialog`；command `delete_registered_project_files`（删注册表 + 删当前加载项目时 `ProjectCleared`）；**移到系统回收站**（`trash` crate 替代 `remove_dir_all`），非永久删除
 
 ## v1.0 待办
 
@@ -403,6 +392,8 @@
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 - [ ] 类型推荐估计存在较大的问题，同时在批量节点复制的时候，粘贴是一个一个出现并连接的，这样感觉不太好？
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
+- [ ] 感觉 tooltip 太多了
+- [ ] 感觉创建节点连接的时候卡顿感觉很强烈
 
 # TODOLIST
 

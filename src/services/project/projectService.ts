@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
@@ -187,6 +188,11 @@ function convertGraphMap(map: Record<string, GraphInstanceDTO>): Record<string, 
 
 // ==================== 项目状态管理 API ====================
 
+export type RevealProjectResourceRequest = {
+  kind: "graph" | "database" | "worksheet";
+  resourceId: string;
+};
+
 export class ProjectService {
     // ==================== 项目级操作 ====================
 
@@ -292,6 +298,10 @@ export class ProjectService {
 
     static async removeRegisteredProject(id: string): Promise<void> {
         await invoke("remove_registered_project", { id });
+    }
+
+    static async deleteRegisteredProjectFiles(id: string): Promise<void> {
+        await invoke("delete_registered_project_files", { id });
     }
 
     static async toggleRegisteredProjectFavorite(id: string): Promise<boolean> {
@@ -422,6 +432,18 @@ export class ProjectService {
             { onEvent: channel, graphId: graphId ?? null },
         );
         return res;
+    }
+
+    static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {
+        const path = await invoke<string>("get_project_resource_path", {
+            kind: request.kind,
+            resourceId: request.resourceId,
+        });
+        await revealItemInDir(path);
+    }
+
+    static async revealProjectPath(projectPath: string): Promise<void> {
+        await revealItemInDir(projectPath);
     }
 
 }

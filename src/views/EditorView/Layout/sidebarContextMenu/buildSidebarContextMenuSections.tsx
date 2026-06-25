@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
-import { VscAdd, VscChevronRight, VscCopy, VscEdit, VscNewFolder, VscTrash } from "react-icons/vsc";
+import { VscAdd, VscChevronRight, VscCopy, VscEdit, VscFolderOpened, VscNewFolder, VscTrash } from "react-icons/vsc";
+import { DEFAULT_VARIABLE_NAME } from "@/shared/constants/defaultResourceNames";
 import type { ContextMenuSection } from "@/shared/ui/contextMenu";
 import type { SidebarContextMenuActions, SidebarContextMenuState } from "./sidebarContextMenuTypes";
 
@@ -10,13 +11,13 @@ export function buildSidebarContextMenuSections(
 ): ContextMenuSection[] {
   if (!contextMenu) return [];
   const target = contextMenu.target;
-  const defaultVarName = t("contextMenu.defaults.newVariable");
 
   if (target.type === "graph") {
     return [
       {
         items: [
           { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openGraph(target.id, target.name, target.graphType) },
+          { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "graph", resourceId: target.id }) },
           { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameGraphItem(target.id, target.name, target.graphType) },
           { id: "duplicate", label: t("contextMenu.sidebar.duplicate"), icon: <VscCopy size={12} />, onClick: () => void actions.duplicateGraphItem(target.id) },
         ],
@@ -76,7 +77,7 @@ export function buildSidebarContextMenuSections(
     return [
       {
         items: [
-          { id: "new-variable", label: t("contextMenu.sidebar.newVariable"), icon: <VscAdd size={12} />, onClick: () => void actions.addVariable(defaultVarName, "Int32", target.isGlobal) },
+          { id: "new-variable", label: t("contextMenu.sidebar.newVariable"), icon: <VscAdd size={12} />, onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int32", target.isGlobal) },
         ],
       },
     ];
@@ -87,6 +88,7 @@ export function buildSidebarContextMenuSections(
       {
         items: [
           { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openDatabase(target.id) },
+          { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "database", resourceId: target.id }) },
           { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameDatabaseItem(target.id, target.name) },
         ],
       },
@@ -103,6 +105,17 @@ export function buildSidebarContextMenuSections(
       {
         items: [
           { id: "import-data", label: t("contextMenu.sidebar.importData"), icon: <VscAdd size={12} />, onClick: () => actions.importData() },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "worksheet") {
+    return [
+      {
+        items: [
+          { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openWorksheet(target.id, target.name) },
+          { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "worksheet", resourceId: target.id }) },
         ],
       },
     ];
