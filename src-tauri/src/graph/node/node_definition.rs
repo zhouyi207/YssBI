@@ -67,11 +67,23 @@ pub struct ColumnSchema {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeDocumentation {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zh: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub en: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMetaData {
     pub ui_style: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documentation: Option<NodeDocumentation>,
 
     pub supports_dynamic_pins: bool,
 }
@@ -81,6 +93,7 @@ impl Default for NodeMetaData {
         Self {
             ui_style: "default".to_string(),
             description: None,
+            documentation: None,
             supports_dynamic_pins: false,
         }
     }
@@ -212,6 +225,18 @@ impl NodeDefinition {
 
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.metadata.description = Some(desc.into());
+        self
+    }
+
+    pub fn with_documentation(
+        mut self,
+        zh: impl Into<String>,
+        en: impl Into<String>,
+    ) -> Self {
+        self.metadata.documentation = Some(NodeDocumentation {
+            zh: Some(zh.into()),
+            en: Some(en.into()),
+        });
         self
     }
 

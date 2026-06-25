@@ -7,13 +7,27 @@ interface ContextMenuState {
   visible: boolean;
 }
 
+export type DetailSelectionType =
+  | 'variable'
+  | 'event'
+  | 'function'
+  | 'data'
+  | 'setting'
+  | 'log'
+  | 'node';
+
 interface EditorStore {
   contextMenu: ContextMenuState | null;
   setContextMenu: (menu: ContextMenuState | null) => void;
 
   selectedItemId: string | null;
-  selectedItemType: 'variable' | 'event' | 'function' | 'data' | 'setting' | 'log' | null;
-  setSelectedInfo: (id: string | null, type: 'variable' | 'event' | 'function' | 'data' | 'setting' | 'log' | null) => void;
+  selectedItemType: DetailSelectionType | null;
+  selectedGraphId: string | null;
+  setSelectedInfo: (
+    id: string | null,
+    type: DetailSelectionType | null,
+    graphId?: string | null,
+  ) => void;
 
   pendingConnection: Pin | null;
   setPendingConnection: (pin: Pin | null) => void;
@@ -25,7 +39,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   selectedItemId: null,
   selectedItemType: null,
-  setSelectedInfo: (id, type) => set({ selectedItemId: id, selectedItemType: type }),
+  selectedGraphId: null,
+  setSelectedInfo: (id, type, graphId = null) =>
+    set({
+      selectedItemId: id,
+      selectedItemType: type,
+      selectedGraphId: type === 'node' ? (graphId ?? null) : null,
+    }),
 
   pendingConnection: null,
   setPendingConnection: (pin) => set({ pendingConnection: pin }),

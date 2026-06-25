@@ -2,7 +2,7 @@ import React from 'react';
 import { GraphEditor } from "../Canvas/core/GraphEditor";
 import { SettingsView } from "../Layout/SettingsView";
 import Sidebar from "../Layout/Sidebar";
-import { Detail } from "../Layout/Detail";
+import { Detail } from "../Layout/Detail/Detail";
 import { LogPanel } from "@/views/LogView/LogPanel";
 
 /**

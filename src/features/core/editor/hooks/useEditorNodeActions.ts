@@ -5,6 +5,7 @@ import { useCallback, RefObject } from 'react';
 import { getGraphById, useGraphDataStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import type { LayoutState } from '@/features/core/layout/layoutStore';
+import { syncDetailFromNodeSelection } from '@/features/core/editor';
 import { Node } from '@/shared/types/ui';
 import { deserializeGraph } from '@/features/core/dataStore';
 
@@ -47,6 +48,7 @@ export function useEditorNodeActions(
               params: { ...node.data?.params, selectedNodeIds: next },
             },
           });
+          syncDetailFromNodeSelection(gid, next);
         }
       }
     },

@@ -321,6 +321,12 @@
 ## 2026.06.26
 
 - [x] sequence 节点目前只能执行前三个 then，then 4 这个 pin 无法执行（flow_processor 改为动态读取全部 Then pins）
+- [x] Detail 侧边栏按类型拆分 Panel（`Layout/Detail/panels/`：Variable / Event / Function / Data / Log / Node；`Detail.tsx` 薄路由）
+- [x] 画布单选节点同步 Detail：`useEditorStore` 增加 `node` 类型 + `selectedGraphId`；`syncDetailFromNodeSelection` 桥接 canvas 选择
+- [x] Node Detail：Pin 接口列表（类型、optional/required、repeatable/derived、连接状态）+ 中英 Markdown 文档（`react-markdown` + KaTeX）
+- [x] 后端 `NodeMetaData.documentation { zh, en }` + `with_documentation()`；`catalog/docs/` 目录；OLS / OLS Summary 首批完整文档
+- [x] 修复 Detail 点击节点报错：`nodeMetadata`（camelCase）与 `node_metadata` 字段不一致；Zustand pins selector 无限循环（`useShallow`）
+- [x] 修复 Detail 左侧 Sash 拖动卡顿：拖动过程 DOM 直改 + rAF 节流，松手再写 layout store；文档 Panel `memo` + 拖动时 `contain`
 
 ## v1.0 待办
 
@@ -328,6 +334,7 @@
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 连接 pin 的线在执行的时候只有一部分会亮
 - [ ] 断开连接后 pin 的状态有时还是连接状态
+- [ ] 给每一个节点都设置一个文档，然后点击节点的时候在 detail 侧边栏中显示这个文档，文档还能显示公式（**基础设施已完成**：Detail Node 面板 + 后端 `documentation` + OLS/OLS Summary 示例；其余统计/计量节点 Markdown 待批量补充）
 
 # TODOLIST
 

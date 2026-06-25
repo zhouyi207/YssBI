@@ -5,6 +5,7 @@ use crate::graph::node::{ColumnSchema, DataSchema, NodeDefinition, OutputSchemaC
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
+use crate::graph::register::catalog::docs;
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
@@ -1390,6 +1391,7 @@ fn register_ols(registry: &NodeRegistry) {
         .with_description(
             "Ordinary Least Squares regression — outputs the fitted model for prediction",
         )
+        .with_documentation(docs::ols::OLS_ZH, docs::ols::OLS_EN)
         .with_pin_slots(slots)
         .with_output_schema_resolver(Arc::new(regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
@@ -1453,6 +1455,7 @@ fn register_ols_summary(registry: &NodeRegistry) {
     .with_description(
         "Ordinary Least Squares regression — outputs results and opens the summary window",
     )
+    .with_documentation(docs::ols::OLS_SUMMARY_ZH, docs::ols::OLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_ols_regression(ctx)?;

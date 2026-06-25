@@ -3,7 +3,7 @@ import { Node } from '@/shared/types/ui';
 import { getGraphById } from '@/features/core/dataStore';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useClipboardStore } from '@/features/core/editor';
+import { useClipboardStore, syncDetailFromNodeSelection } from '@/features/core/editor';
 import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
 import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
 import { useHistoryStore, executeCommand } from '@/features/core/history';
@@ -48,6 +48,7 @@ export function useEditorOperations() {
             params: { ...node.data?.params, selectedNodeIds: next }
           }
         });
+        syncDetailFromNodeSelection(gid, next);
       }
     }
   }, [activeGroupId]);

@@ -23,7 +23,13 @@ export interface NodeMetaData {
     /** @deprecated 后端 DTO 格式，优先使用 uiStyle */
     ui_style?: string;
     description?: string;
+    documentation?: NodeDocumentation;
     supports_dynamic_pins: boolean;
+}
+
+export interface NodeDocumentation {
+    zh?: string;
+    en?: string;
 }
 
 // ─── Pin Definition Types (mirrors backend PinDefinition / PinSlot) ────
@@ -62,6 +68,7 @@ export interface PinDefinitionDTO {
     kind: PinKind;
     role: PinRoleDTO;
     dataType: PinDataTypeDefinition | null;
+    optional?: boolean;
     metaData: PinMetaDataDTO;
 }
 
@@ -82,9 +89,16 @@ export interface NodeDefinitionDTO {
     name: string;
     category: string[];
     nodeType: string;
-    node_metadata: NodeMetaData;
+    nodeMetadata: NodeMetaData;
+    /** @deprecated 旧字段名，优先使用 nodeMetadata */
+    node_metadata?: NodeMetaData;
     pinSlots: PinSlot[];
     typeCapabilities: PinTypeCapability[];
+}
+
+export function getNodeDefinitionMeta(def: NodeDefinition | undefined): NodeMetaData | undefined {
+    if (!def) return undefined;
+    return def.nodeMetadata ?? def.node_metadata;
 }
 
 export type NodeDefinition = NodeDefinitionDTO;

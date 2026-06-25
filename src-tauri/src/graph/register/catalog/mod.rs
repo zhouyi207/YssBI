@@ -4,6 +4,7 @@ pub mod control;
 pub mod dataframe;
 pub mod debug;
 pub mod distribution;
+pub mod docs;
 pub mod event;
 pub mod logic;
 pub mod math;

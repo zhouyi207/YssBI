@@ -47,6 +47,8 @@ export interface PinData {
   defaultValue?: unknown;
   userValue?: unknown;
   containerType?: string;
+  typeDisplay?: string;
+  optional?: boolean;
   ui?: PinUI;
 }
 

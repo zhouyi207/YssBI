@@ -110,6 +110,11 @@ body.layout-sash-dragging {
   -webkit-user-select: none;
 }
 
+body.layout-sash-dragging .right-sidebar-container {
+  contain: layout style paint;
+  pointer-events: none;
+}
+
 body.layout-sash-dragging iframe,
 body.layout-sash-dragging canvas {
   pointer-events: none !important;
