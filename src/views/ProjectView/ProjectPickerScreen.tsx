@@ -137,25 +137,17 @@ function SidebarBtn({
 }
 
 function TitleBar({
-  busy,
   filterQuery,
   sortMode,
-  onCreateProject,
   onGoEditor,
-  onOpenProject,
   onOpenSettings,
-  onRefresh,
   onSetFilterQuery,
   onSetSortMode,
 }: {
-  busy: "idle" | "new" | "open";
   filterQuery: string;
   sortMode: SortMode;
-  onCreateProject: () => void;
   onGoEditor: () => void;
-  onOpenProject: () => void;
   onOpenSettings: () => void;
-  onRefresh: () => void;
   onSetFilterQuery: (value: string) => void;
   onSetSortMode: (value: SortMode) => void;
 }) {
@@ -170,11 +162,10 @@ function TitleBar({
     updateTheme(pickThemeBase(isLightTheme ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME));
     saveDebounced();
   };
-  const isBusy = busy !== "idle";
 
   return (
     <WindowTitleBar>
-      <div className="flex items-center gap-2 px-4 pointer-events-none">
+      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
         <div className="flex h-5 w-5 items-center justify-center rounded bg-[var(--accent-color)]">
           <span className="text-xs font-black text-white">Y</span>
         </div>
@@ -182,46 +173,8 @@ function TitleBar({
           Yss<span className="text-[var(--accent-color)]">BI</span>
         </div>
       </div>
-      <div className="w-4 self-stretch" data-tauri-drag-region />
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onCreateProject}
-          disabled={isBusy}
-          className="h-7 gap-1 border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <VscNewFile size={14} /> {busy === "new" ? t("projectPicker.creating") : t("projectPicker.newProject")}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onOpenProject}
-          disabled={isBusy}
-          className="h-7 gap-1 border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <VscFolderOpened size={14} /> {busy === "open" ? t("projectPicker.opening") : t("projectPicker.importProject")}
-        </Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onRefresh}
-              className="h-7 gap-1 border-transparent px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <VscRefresh size={14} /> {t("projectPicker.scanProjects")}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("common.refresh")}</TooltipContent>
-        </Tooltip>
-      </div>
-
-      <div className="absolute left-1/2 top-1/2 flex w-[min(42vw,34rem)] -translate-x-1/2 -translate-y-1/2 items-center gap-2">
-        <div className="min-w-[12rem] flex-1">
+      <div className="flex shrink-0 items-center gap-2 self-center pl-2">
+        <div className="w-[min(16rem,28vw)] min-w-[10rem]">
           <div className="flex h-7 items-center rounded-md border border-input bg-muted/50 shadow-inner">
             <span className="pl-2 text-muted-foreground">
               <VscSearch size={14} />
@@ -247,7 +200,7 @@ function TitleBar({
         </div>
 
         <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
-          <Label htmlFor="project-sort" className="hidden shrink-0 text-sm text-muted-foreground xl:block">
+          <Label htmlFor="project-sort" className="hidden shrink-0 text-sm text-muted-foreground lg:block">
             {t("projectPicker.sortLabel")}:
           </Label>
           <Select value={sortMode} onValueChange={(value) => onSetSortMode(value as SortMode)}>
@@ -271,7 +224,7 @@ function TitleBar({
           </Select>
         </div>
       </div>
-      <div className="min-w-[48px] flex-1 self-stretch" data-tauri-drag-region />
+      <div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
       <WindowTitleBarActions>
         {currentPath ? (
           <Button
@@ -407,9 +360,9 @@ export function ProjectPickerScreen() {
     currentProjectId,
     projects,
     createProject,
-    openProjectFromDisk,
+    importProjectFromDisk,
     openRecentProject,
-    refresh,
+    scanProjectsFromFolder,
     removeProject,
     deleteProjectFiles,
     toggleFavorite,
@@ -479,14 +432,10 @@ export function ProjectPickerScreen() {
   return (
     <div className="flex h-screen min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <TitleBar
-        busy={busy}
         filterQuery={filterQuery}
         sortMode={sortMode}
-        onCreateProject={() => setNewProjectOpen(true)}
         onGoEditor={() => navigate("/editor")}
-        onOpenProject={() => void openProjectFromDisk()}
         onOpenSettings={() => setSettingsOpen(true)}
-        onRefresh={() => void refresh()}
         onSetFilterQuery={setFilterQuery}
         onSetSortMode={setSortMode}
       />
@@ -600,10 +549,38 @@ export function ProjectPickerScreen() {
           )}
         </div>
 
-        <Card className={cn(APP_CARD_OUTER_CLASS, "flex w-[200px] shrink-0 flex-col gap-0 rounded-none border-0 border-l border-border bg-card py-0 shadow-none ring-0 sm:w-[220px]")}>
+        <Card className={cn(APP_CARD_OUTER_CLASS, "flex w-[220px] shrink-0 flex-col gap-0 rounded-none border-0 border-l border-border bg-card py-0 shadow-none ring-0 sm:w-[240px]")}>
           <CardContent className="flex flex-col gap-2 p-2">
             <SidebarBtn
               primary
+              disabled={isBusy}
+              onClick={() => setNewProjectOpen(true)}
+            >
+              <span className="flex w-full min-w-0 items-center gap-2">
+                <VscNewFile className="shrink-0 opacity-90" size={14} />
+                <span className="min-w-0 flex-1 text-center">
+                  {busy === "new" ? t("projectPicker.creating") : t("projectPicker.newProject")}
+                </span>
+              </span>
+            </SidebarBtn>
+            <SidebarBtn disabled={isBusy} onClick={() => void importProjectFromDisk()}>
+              <span className="flex w-full min-w-0 items-center gap-2">
+                <VscFolderOpened className="shrink-0 opacity-90" size={14} />
+                <span className="min-w-0 flex-1 text-center">
+                  {busy === "import" ? t("projectPicker.importing") : t("projectPicker.importProject")}
+                </span>
+              </span>
+            </SidebarBtn>
+            <SidebarBtn disabled={isBusy} onClick={() => void scanProjectsFromFolder()}>
+              <span className="flex w-full min-w-0 items-center gap-2">
+                <VscRefresh className="shrink-0 opacity-90" size={14} />
+                <span className="min-w-0 flex-1 text-center">
+                  {busy === "scan" ? t("projectPicker.scanning") : t("projectPicker.scanProjects")}
+                </span>
+              </span>
+            </SidebarBtn>
+            <div className="my-1 border-t border-border/60" />
+            <SidebarBtn
               disabled={!selected || isBusy}
               onClick={() => selected && void openRecentProject(selected.path)}
             >
@@ -631,9 +608,6 @@ export function ProjectPickerScreen() {
                 <span className="min-w-0 flex-1 text-center">{t("projectPicker.removeFromList")}</span>
               </span>
             </SidebarBtn>
-            <div className="mt-1 rounded-md border border-border/60 bg-muted/30 p-2 text-[11px] leading-relaxed text-muted-foreground">
-              {selected ? selected.path : t("projectPicker.noSelection")}
-            </div>
           </CardContent>
         </Card>
       </div>

@@ -257,6 +257,48 @@ impl ProjectRegistry {
             .map_err(|e| e.to_string())?;
         Ok(next != 0)
     }
+
+    pub async fn scan_directory(&self, directory: &str) -> Result<crate::project::ScanProjectsResult, String> {
+        use crate::project::{discover_project_metadata_files, project_name_from_metadata_path, ScanProjectsResult};
+        use std::path::PathBuf;
+
+        let root = PathBuf::from(directory.trim());
+        let metadata_files = discover_project_metadata_files(&root)?;
+        let discovered = metadata_files.len();
+        let mut newly_registered = 0;
+        let mut projects = Vec::with_capacity(discovered);
+
+        for metadata_path in metadata_files {
+            let path = metadata_path.to_string_lossy().into_owned();
+            let Ok(normalized) = normalize_existing_path(&path) else {
+                continue;
+            };
+            let name = project_name_from_metadata_path(&metadata_path);
+            let (record, is_new) = self.register_discovered_project(&name, &normalized).await?;
+            if is_new {
+                newly_registered += 1;
+            }
+            projects.push(record);
+        }
+
+        Ok(ScanProjectsResult {
+            discovered,
+            newly_registered,
+            projects,
+        })
+    }
+
+    async fn register_discovered_project(
+        &self,
+        name: &str,
+        path: &str,
+    ) -> Result<(ProjectRecord, bool), String> {
+        if let Some(existing) = self.fetch_by_path(path).await.map_err(|e| e.to_string())? {
+            return Ok((existing, false));
+        }
+        let record = self.register_project(name, path).await?;
+        Ok((record, true))
+    }
 }
 
 pub fn default_project_parent_directory() -> Result<String, String> {

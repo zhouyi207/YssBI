@@ -86,8 +86,10 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
   const importGraph = useCallback(async () => {
     try {
-      const result = await ProjectService.loadProjectToState();
-      if (!result) return; // 用户取消选择文件
+      const path = await ProjectService.pickProjectMetadataFile();
+      if (!path) return;
+
+      await ProjectService.loadProjectToState(path);
 
       const projectData = await useProjectIOStore.getState().loadProject();
       if (!projectData) {

@@ -382,6 +382,15 @@
 - [x] **ProjectPicker 标题栏**：「返回编辑器」补 `self-center` 垂直居中；主题切换左侧新增 GitHub 按钮（跳转仓库）
 - [x] **ProjectPicker 项目列表右键菜单**：复用 `ContextMenu` + `usePositionedContextMenu`；`projectPickerContextMenu/` 构建菜单（进入 / 在资源管理器中打开 / 收藏 / 从列表移除 / 移到回收站）；`ProjectService.revealProjectPath`
 - [x] **ProjectPicker 删除项目确认对话框**：`DeleteProjectConfirmDialog`；command `delete_registered_project_files`（删注册表 + 删当前加载项目时 `ProjectCleared`）；**移到系统回收站**（`trash` crate 替代 `remove_dir_all`），非永久删除
+- [ ] - [x] **ProjectPicker 布局调整**：新建项目 / 导入 / 扫描移至右侧操作栏；移除「从列表移除」下方冗余路径展示（列表行已显示路径）
+- [x] **ProjectPicker 标题栏筛选左对齐**：搜索框与排序（最近打开）紧挨 Logo 左侧，不再居中
+- [x] **ProjectPicker 导入行为**：`importProjectFromDisk` 仅 `registerProject` 加入列表，不 `loadProject`、不跳转编辑器；**进入** / 双击列表项才打开项目
+- [x] **ProjectPicker 文件夹扫描**：选文件夹 → `scan_projects_in_directory` 递归发现 `metadata.yssbi`（跳过 `.git` / `node_modules` / `target` 等）→ 注册到列表；`project_scan.rs` + `ProjectService.pickProjectScanDirectory`
+- [x] **ProjectPicker 布局调整**：新建项目 / 导入 / 扫描移至右侧操作栏；移除「从列表移除」下方冗余路径展示（列表行已显示路径）
+- [x] **ProjectPicker 标题栏筛选左对齐**：搜索框与排序（最近打开）紧挨 Logo 左侧，不再居中
+- [x] **ProjectPicker 导入行为**：`importProjectFromDisk` 仅 `registerProject` 加入列表，不 `loadProject`、不跳转编辑器；**进入** / 双击列表项才打开项目
+- [x] **ProjectPicker 文件夹扫描**：选文件夹 → `scan_projects_in_directory` 递归发现 `metadata.yssbi`（跳过 `.git` / `node_modules` / `target` 等）→ 注册到列表；`project_scan.rs` + `ProjectService.pickProjectScanDirectory`
+
 
 ## v1.0 待办
 
@@ -394,6 +403,9 @@
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
 - [ ] 感觉创建节点连接的时候卡顿感觉很强烈
+- [ ] 类型推荐估计存在较大的问题，同时在批量节点复制的时候，粘贴是一个一个出现并连接的，这样感觉不太好？
+- [ ] 在项目选择界面扫描添加到进度条，还添加一个清理按钮清理掉失效的项目
+
 
 # TODOLIST
 

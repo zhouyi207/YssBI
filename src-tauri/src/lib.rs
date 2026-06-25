@@ -106,6 +106,7 @@ pub fn run() {
             default_project_parent_directory,
             validate_new_project_path,
             list_registered_projects,
+            scan_projects_in_directory,
             register_project,
             remove_registered_project,
             delete_registered_project_files,

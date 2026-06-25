@@ -22,6 +22,12 @@ export interface ProjectPathValidation {
     message?: string | null;
 }
 
+export interface ScanProjectsResult {
+    discovered: number;
+    newlyRegistered: number;
+    projects: ProjectRecordRow[];
+}
+
 export interface ProjectGraphIndexRow {
     id: string;
     name: string;
@@ -292,6 +298,20 @@ export class ProjectService {
         return await invoke("list_registered_projects");
     }
 
+    static async pickProjectScanDirectory(title?: string): Promise<string | null> {
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            title,
+        });
+        if (!selected || Array.isArray(selected)) return null;
+        return selected as string;
+    }
+
+    static async scanProjectsInDirectory(directory: string): Promise<ScanProjectsResult> {
+        return await invoke("scan_projects_in_directory", { directory });
+    }
+
     static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {
         return await invoke("register_project", { name, path });
     }
@@ -319,28 +339,24 @@ export class ProjectService {
     }
 
     /**
+     * 弹出对话框选择 metadata.yssbi；用户取消时返回 null。
+     */
+    static async pickProjectMetadataFile(): Promise<string | null> {
+        const selected = await open({
+            multiple: false,
+            filters: [{ name: "YssBI Project", extensions: ["yssbi"] }],
+        });
+        if (!selected || Array.isArray(selected)) return null;
+        return selected as string;
+    }
+
+    /**
      * 从文件加载项目到状态管理器
      * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
-    static async loadProjectToState(path?: string): Promise<{ path: string } | null> {
-        try {
-            let filePath = path;
-            if (!filePath) {
-                // 弹出文件选择对话框
-                const selected = await open({
-                    multiple: false,
-                    filters: [{ name: "YssBI Project", extensions: ["yssbi"] }]
-                });
-                if (!selected || Array.isArray(selected)) return null;
-                filePath = selected as string;
-            }
-
-            await invoke("load_project", { path: filePath });
-            return { path: filePath };
-        } catch (e) {
-            logger.app.error(`Failed to load project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
-            throw e;
-        }
+    static async loadProjectToState(path: string): Promise<{ path: string }> {
+        await invoke("load_project", { path });
+        return { path };
     }
 
     /**

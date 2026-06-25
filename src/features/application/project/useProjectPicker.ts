@@ -17,7 +17,7 @@ export interface ManagedProject {
   isFavorite?: boolean;
 }
 
-type BusyState = "idle" | "new" | "open";
+type BusyState = "idle" | "new" | "open" | "scan" | "import";
 
 function pathFileName(path: string): string {
   const normalized = path.replace(/\\/g, "/");
@@ -117,6 +117,39 @@ export function useProjectPicker() {
     [currentPath, projects],
   );
 
+  const scanProjectsFromFolder = useCallback(async () => {
+    const directory = await ProjectService.pickProjectScanDirectory(
+      t("projectPicker.scanFolderTitle"),
+    );
+    if (!directory) return;
+
+    setBusy("scan");
+    try {
+      const result = await ProjectService.scanProjectsInDirectory(directory);
+      const rows = await ProjectService.listRegisteredProjects();
+      setProjects(rows.map(rowToManagedProject));
+
+      if (result.discovered === 0) {
+        toast.info(t("projectPicker.scanNoneFound"));
+      } else if (result.newlyRegistered > 0) {
+        toast.success(
+          t("projectPicker.scanSuccess", {
+            added: result.newlyRegistered,
+            found: result.discovered,
+          }),
+        );
+      } else {
+        toast.info(
+          t("projectPicker.scanAlreadyRegistered", { found: result.discovered }),
+        );
+      }
+    } catch (error) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setBusy("idle");
+    }
+  }, [t]);
+
   const createProject = useCallback(async (name: string, path: string) => {
     setBusy("new");
     uiStore.startProgress({
@@ -154,7 +187,7 @@ export function useProjectPicker() {
     }
   }, [navigate, loadProject, t]);
 
-  const openProjectAtPath = useCallback(async (path?: string) => {
+  const openProjectAtPath = useCallback(async (path: string) => {
     setBusy("open");
     uiStore.startProgress({
       stage: t("projectPicker.loading.opening"),
@@ -163,7 +196,6 @@ export function useProjectPicker() {
     });
     try {
       const result = await ProjectService.loadProjectToState(path);
-      if (!result) return;
       uiStore.updateProgress({
         detail: t("projectPicker.loading.loadingData"),
         percent: 0.5,
@@ -193,7 +225,24 @@ export function useProjectPicker() {
     }
   }, [navigate, loadProject, t]);
 
-  const openProjectFromDisk = useCallback(() => openProjectAtPath(), [openProjectAtPath]);
+  const importProjectFromDisk = useCallback(async () => {
+    const path = await ProjectService.pickProjectMetadataFile();
+    if (!path) return;
+
+    setBusy("import");
+    try {
+      const row = await ProjectService.registerProject(pathFileName(path), path);
+      setProjects((previous) => [
+        rowToManagedProject(row),
+        ...previous.filter((project) => project.id !== row.id),
+      ]);
+      toast.success(t("projectPicker.importSuccess", { name: row.name }));
+    } catch (error) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setBusy("idle");
+    }
+  }, [t]);
 
   const openRecentProject = useCallback(
     (path: string) => openProjectAtPath(path),
@@ -246,9 +295,10 @@ export function useProjectPicker() {
     currentProjectId,
     projects,
     createProject,
-    openProjectFromDisk,
+    importProjectFromDisk,
     openRecentProject,
     refresh,
+    scanProjectsFromFolder,
     removeProject,
     deleteProjectFiles,
     toggleFavorite,

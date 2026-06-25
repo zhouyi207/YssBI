@@ -12,7 +12,8 @@ use crate::project::{
     paths_refer_to_same_project, resolve_reveal_path, save_project_as_to_directory,
     save_project_to_file, validate_new_project_path as validate_new_project_path_impl,
     LegacyProjectRecord, ProjectData, ProjectIndex, ProjectPathValidation, ProjectRecord,
-    ProjectRegistry, ProjectState, RevealProjectResourceRequest, PROJECT_METADATA_FILE,
+    ProjectRegistry, ProjectState, RevealProjectResourceRequest, ScanProjectsResult,
+    PROJECT_METADATA_FILE,
 };
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
@@ -308,6 +309,14 @@ pub async fn list_registered_projects(
     registry: State<'_, ProjectRegistry>,
 ) -> Result<Vec<ProjectRecord>, String> {
     registry.list_projects().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn scan_projects_in_directory(
+    registry: State<'_, ProjectRegistry>,
+    directory: String,
+) -> Result<ScanProjectsResult, String> {
+    registry.scan_directory(&directory).await
 }
 
 #[tauri::command]
