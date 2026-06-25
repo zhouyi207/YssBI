@@ -403,7 +403,6 @@
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
 - [ ] 感觉创建节点连接的时候卡顿感觉很强烈
-- [ ] 类型推荐估计存在较大的问题，同时在批量节点复制的时候，粘贴是一个一个出现并连接的，这样感觉不太好？
 - [ ] 在项目选择界面扫描添加到进度条，还添加一个清理按钮清理掉失效的项目
 
 
