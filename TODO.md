@@ -318,13 +318,16 @@
 - [ ] Dev/HMR 下 `[TAURI] Couldn't find callback id`：排查 WebView 热重载时 Rust 异步 `invoke` 回调失效；确认 release 构建是否仍出现
 - [ ] 旧 `.yssbi-event` / `.yssbi-function` 重新保存或批量迁移，以丢弃磁盘上的 legacy 冗余字段（完整 `definition`、四表 `connections`、`pinTypes` 等）
 
+## 2026.06.26
+
+- [x] sequence 节点目前只能执行前三个 then，then 4 这个 pin 无法执行（flow_processor 改为动态读取全部 Then pins）
+
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 连接 pin 的线在执行的时候只有一部分会亮
 - [ ] 断开连接后 pin 的状态有时还是连接状态
-- [ ] sequence 只有前三个才执行，后面加上的都不会执行
 
 # TODOLIST
 

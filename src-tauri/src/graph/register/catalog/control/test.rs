@@ -287,6 +287,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_sequence_node_with_four_steps() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let seq_node = graph
+            .create_node("Control Flow:Sequence")
+            .expect("Failed to create sequence node");
+        graph
+            .add_repeatable_pin(seq_node, 1)
+            .expect("Failed to add fourth Then pin");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(seq_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), seq_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+
+        assert_is_sequence(
+            &effect,
+            vec![
+                ExecRole::Steps(0),
+                ExecRole::Steps(1),
+                ExecRole::Steps(2),
+                ExecRole::Steps(3),
+            ],
+        );
+    }
+
     // ==================== Branch + Sequence 连接测试（使用 Executor 自动执行）====================
 
     #[test]

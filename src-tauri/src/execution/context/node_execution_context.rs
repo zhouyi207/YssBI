@@ -2,7 +2,7 @@ use super::NodeExecutionContextTrait;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId, NodeInstanceParams};
-use crate::graph::pin::{PinId, PinRole};
+use crate::graph::pin::{ExecRole, PinId, PinRole};
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::{DataFrame, Series};
 use std::any::Any;
@@ -161,6 +161,21 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             .ok_or_else(|| format!("Pin with role {:?} not found", role))?;
 
         graph.get_pin_data_value_by_pin_id(pin.id)
+    }
+
+    fn get_exec_step_outputs(&self) -> Vec<ExecRole> {
+        let graph = self.graph.lock().unwrap();
+        let mut steps: Vec<(usize, ExecRole)> = graph
+            .get_pin_instances_by_node_id(self.node_id)
+            .iter()
+            .filter(|pin| pin.is_output() && pin.is_exec())
+            .filter_map(|pin| match pin.definition.role {
+                PinRole::Exec(ExecRole::Steps(index)) => Some((index, ExecRole::Steps(index))),
+                _ => None,
+            })
+            .collect();
+        steps.sort_by_key(|(index, _)| *index);
+        steps.into_iter().map(|(_, role)| role).collect()
     }
 
     // ====================================================================

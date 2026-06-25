@@ -1,6 +1,6 @@
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeInstanceParams;
-use crate::graph::pin::PinRole;
+use crate::graph::pin::{ExecRole, PinRole};
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::{DataFrame, Series};
 use std::any::Any;
@@ -48,6 +48,9 @@ pub trait NodeExecutionContextTrait {
     ///
     /// 用于常数节点等仅输出、无输入的节点，获取输出 pin 的 user_value 或默认值
     fn get_resolved_value_by_role(&self, role: &PinRole) -> Result<DataValue, String>;
+
+    /// 获取当前节点所有 exec step 输出（如 Sequence 的 Then pins），按步骤索引排序
+    fn get_exec_step_outputs(&self) -> Vec<ExecRole>;
 
     // ====================================================================
     // 节点实例参数

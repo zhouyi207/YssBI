@@ -59,12 +59,9 @@ fn register_sequence(registry: &NodeRegistry) {
             ),
         ])
         .with_flow_processor(Arc::new(|ctx| {
-            ctx.log("Sequence: scheduling all steps".to_string());
-            Ok(ExecutionEffect::sequence(vec![
-                ExecRole::Steps(0),
-                ExecRole::Steps(1),
-                ExecRole::Steps(2),
-            ]))
+            let roles = ctx.get_exec_step_outputs();
+            ctx.log(format!("Sequence: scheduling {} steps", roles.len()));
+            Ok(ExecutionEffect::sequence(roles))
         }));
     registry.register(definition);
 }
