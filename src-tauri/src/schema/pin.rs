@@ -78,6 +78,9 @@ pub struct PinInstanceDTO {
     pub container_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub type_display: Option<String>,
+    /// 结构化类型（前端兼容判断的单一来源，serde 形如 {kind,inner}）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<DataType>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub optional: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,6 +130,7 @@ impl PinInstanceDTO {
             user_value: pin.user_value.clone(),
             container_type,
             type_display,
+            data_type: dt.clone(),
             optional: pin.definition.optional,
             ui: None,
         }
@@ -223,5 +227,23 @@ mod tests {
         assert_eq!(persist_json["name_prefix"], "X");
         assert_eq!(persist_json["min_count"], 1);
         assert!(persist_json.get("namePrefix").is_none());
+    }
+
+    /// 前端兼容判断的单一来源是结构化 `dataType`：锁定 DTO 序列化形如
+    /// `{kind:"DataSeries", inner:{kind:"Float64"}}`，与 Rust `DataType` serde 同源。
+    #[test]
+    fn pin_instance_dto_carries_structured_data_type() {
+        let def =
+            PinDefinition::data_input("col", DataRole::Inputs(0), PinDataTypeDefinition::Unknown);
+        let pin = PinInstance::from_definition(&def, NodeId::new(), 0);
+        let dt = DataType::DataSeries(Box::new(DataType::Float64));
+
+        let dto = PinInstanceDTO::from_pin_with_context(&pin, Some(&dt), Vec::new());
+        let json = serde_json::to_value(&dto).unwrap();
+
+        assert_eq!(json["dataType"]["kind"], "DataSeries");
+        assert_eq!(json["dataType"]["inner"]["kind"], "Float64");
+        // typeDisplay 仍随结构化字段同源下发，作展示用
+        assert_eq!(json["typeDisplay"], "DataSeries<Float64>");
     }
 }

@@ -456,6 +456,15 @@ package.json
   - 下游无需改动：`emit_pin_change_events` 从重排后的 `node.pin_ids` 派生 `pin_order`，前端 `NodePinsUpdatedHandler` 已处理 removed/added/updated/pinOrder
   - 测试：`graph_data_state.rs` 新增「重排保留 id+连接」「仅删缺失列」两例单测，连同原有 `round_trips_graph_with_dynamic_pins_values_and_connections` 全部通过
 
+## 2026.06.29
+
+- [x] 感觉 tooltip 太多了，去掉了菜单栏中最小化，最大化以及关闭的 tooltip
+- [x] **类型推荐/推断根治（前后端统一结构化 DataType，路线 B）**：解决「推荐对不上、刷新后类型停在旧值」三因——① 前端 Palette 变量/函数推荐走降级支路（扁平 `filterPin.type` + `dataTypeMatches` 纯字符串相等），与拖拽高亮 `isPinCompatible`（精确 `DataType` + `canAcceptDataType`）不一致，导致 `DataSeries<Float64>` 列漏推荐、`OneOf` pin 全推荐；② 后端 `infer_all` 逐边 `unify` 用 `?` 传播，一条脏边即整图推断失败，且调用处 `unwrap_or_default()` 静默吞错；③ 前端取结构化类型靠把 `typeDisplay` 字符串再 parse 回 `DataType`（`dataTypeFromDisplayString` 镜像 Rust `from_str`），「结构→字符串→再解析」往返是 2026.06.28 OLS 拖拽 bug 同源的持续漂移面：
+  - 后端下发结构化 `DataType`：`DataType` 已是 `#[serde(tag="kind", content="inner")]`，序列化形态恰等于前端 domain `DataType`（`{kind, inner}`）可直通。`event_node.rs` `InferredPinType` 与 `schema/pin.rs` `PinInstanceDTO` 各增 `data_type: Option<DataType>`（camelCase `dataType`，`skip_serializing_if=None`），后者在 `from_pin_with_context` 用与 `type_display` 同源的 `dt` 填充；`command_connection.rs` `emit_inferred_types` 与 `command_variable/mod.rs` 内联构造处补 `data_type`
+  - 前端统一到结构化单一来源：`PinTypesInferredPayload` / store `PinData` / domain `Pin` 增 `dataType`；`NodeEventHandler` 经 `dataTypeFromBackend` 归一写入 store；hydrate 路径（store spread + `useNodeView` spread）自然透传。`pinCompatibility.ts` `buildPinDataType` **优先读 `pin.dataType`**（无则回退 `typeDisplay`/`type`，兼容乐观 pin），新增导出 `pinAcceptsType(draggedPin, candidateType)`，`isPinCompatible` 复用之；`NodePalette.tsx` 变量 Get/Set 与函数子图分支改用 `pinAcceptsType`/`buildPinDataType` 精确判断；`optimisticNodeDraft.ts` 乐观 pin 写入 `dataType`；移除 `dataTypeMatches`（early-stage 直接删，无 shim）。`typeDisplay` 退化为纯展示/tooltip（Rust `Display` 唯一权威），不再参与兼容判断 → 根除 `from_str`↔`dataTypeFromDisplayString` 往返漂移
+  - 后端推断健壮性（不引入排序）：`type_inference_session.rs` `infer_all` 改逐边 best-effort——单条 `infer_connection` `Err` 记 `log_sys::warn!`（含 from/to）后 `continue`，一条脏边不再毒化整图（并查集+绑定合并对边序无关，`commit` 仍严格）；`graph_instance.rs` 两处 `infer_types().unwrap_or_default()` 改为失败时 `warn!` 记录再回退，不再无迹可循
+  - 测试：前端引入 vitest（`npm run test`）+ `pinCompatibility.test.ts` 12 例（DataSeries 列 Set/标量不误推、Float64 Get/String 不推、OneOf 仅兼容成员、函数 IO 精确筛选、`buildPinDataType` 回退回归）；后端新增 `PinInstanceDTO`/`InferredPinType` 序列化含 `dataType` 断言，及「含一条不兼容边的图 best-effort 仍推断其余 pin 为 Float64」单测；`cargo test --lib` 78 全绿（见 v1.0 待办「类型推断精度」项）
+
 
 ## v1.0 待办
 
@@ -463,9 +472,8 @@ package.json
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
-- [ ] 类型推荐估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
+- [ ] 类型推断估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
-- [ ] 感觉 tooltip 太多了
 - [ ] 我觉得在 tabs 中的所有窗口使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
 - [ ] 节点的 detail 信息布局很丑陋，input 和 ouput pins 需要重新设计调整
 - [ ] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上

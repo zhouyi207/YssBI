@@ -6,6 +6,7 @@
 
 import type { GraphPosition } from '../domain/graph';
 import type { PinDirection } from '../domain/pin';
+import type { DataType } from '../domain/dataType';
 
 // ==================== Node DTO ====================
 
@@ -61,6 +62,7 @@ export interface PinInstanceDTO {
   userValue?: unknown;
   containerType?: string;
   typeDisplay?: string;
+  dataType?: DataType;
   optional?: boolean;
   ui?: PinUIDTO;
 }

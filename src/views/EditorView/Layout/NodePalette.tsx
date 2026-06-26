@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
-import { dataTypeMatches, dataTypeDisplay } from "@/shared/types/domain/dataType";
-import { isNodeCompatibleWithPin } from "@/shared/utils/pinCompatibility";
+import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import { isNodeCompatibleWithPin, pinAcceptsType, buildPinDataType } from "@/shared/utils/pinCompatibility";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
@@ -165,7 +165,7 @@ export function NodePalette({
       let getCompatible = true;
       if (filterPin) {
         if (filterPin.direction === "output") getCompatible = false;
-        else getCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any" || filterPin.type === "oneof";
+        else getCompatible = pinAcceptsType(filterPin, varType);
       }
       if (getCompatible) {
         items.push({
@@ -179,7 +179,7 @@ export function NodePalette({
       let setCompatible = true;
       if (filterPin) {
         if (filterPin.direction === "input") setCompatible = false;
-        else setCompatible = dataTypeMatches(varType, filterPin.type) || filterPin.type === "any" || filterPin.type === "oneof";
+        else setCompatible = pinAcceptsType(filterPin, varType);
       }
       if (setCompatible) {
         items.push({
@@ -193,12 +193,12 @@ export function NodePalette({
 
     Object.values(functions).forEach((sub) => {
       if (!sub?.name || !sub?.id) return;
-      if (filterPin) {
+      if (filterPin && filterPin.type !== "exec") {
         const targetPins = filterPin.direction === "input" ? sub.outputs : sub.inputs;
         const hasCompatible = (targetPins || []).some(
-          (p: any) => p.type === filterPin.type || p.type === "any" || p.type === "oneof" || filterPin.type === "any" || filterPin.type === "oneof"
+          (p: Pin) => p.type !== "exec" && pinAcceptsType(filterPin, buildPinDataType(p))
         );
-        if (!hasCompatible && filterPin.type !== "exec") return;
+        if (!hasCompatible) return;
       }
       items.push({
         nodeType: "Functions:Call Function",

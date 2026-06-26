@@ -36,7 +36,13 @@ function canAcceptDataType(target: DataType, source: DataType): boolean {
   return false;
 }
 
-function buildPinDataType(pin: Pin): DataType {
+/**
+ * 取得 pin 的结构化 DataType（兼容判断的唯一来源）。
+ * 优先用后端下发的结构化 `dataType`;无则回退解析 `typeDisplay`/`type`
+ * （兼容尚未携带 dataType 的乐观 pin 或旧数据）。
+ */
+export function buildPinDataType(pin: Pin): DataType {
+  if (pin.dataType) return pin.dataType;
   if (pin.typeDisplay) {
     const parsed = dataTypeFromDisplayString(pin.typeDisplay);
     if (parsed) return parsed;
@@ -45,6 +51,19 @@ function buildPinDataType(pin: Pin): DataType {
   if (pin.containerType === 'array') return { kind: 'Array', inner: base };
   if (pin.containerType === 'dataseries') return { kind: 'DataSeries', inner: base };
   return base;
+}
+
+/**
+ * 被拖拽 pin 与一个候选类型是否可连接（方向感知）。
+ * - dragged 为 input:候选方为 output 产出 candidateType,需 dragged 的输入能接受它
+ * - dragged 为 output:候选方为 input,需其能接受 dragged 的输出类型
+ */
+export function pinAcceptsType(draggedPin: Pin, candidateType: DataType): boolean {
+  const draggedType = buildPinDataType(draggedPin);
+  if (draggedPin.direction === 'input') {
+    return canAcceptDataType(draggedType, candidateType);
+  }
+  return canAcceptDataType(candidateType, draggedType);
 }
 
 export function isPinCompatible(candidate: Pin, dragged: Pin): boolean {
@@ -56,13 +75,7 @@ export function isPinCompatible(candidate: Pin, dragged: Pin): boolean {
   if (candidateIsExec !== draggedIsExec) return false;
   if (candidateIsExec) return true;
 
-  const candidateType = buildPinDataType(candidate);
-  const draggedType = buildPinDataType(dragged);
-
-  if (candidate.direction === 'input') {
-    return canAcceptDataType(candidateType, draggedType);
-  }
-  return canAcceptDataType(draggedType, candidateType);
+  return pinAcceptsType(dragged, buildPinDataType(candidate));
 }
 
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {

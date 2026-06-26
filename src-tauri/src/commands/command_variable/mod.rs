@@ -103,6 +103,7 @@ pub fn update_variable(
                                     container_type: data_type_to_container(new_data_type)
                                         .map(|s| s.to_string()),
                                     type_display: Some(new_data_type.to_string()),
+                                    data_type: Some(new_data_type.clone()),
                                 });
                             }
                         }

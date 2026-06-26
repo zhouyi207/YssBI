@@ -1011,7 +1011,10 @@ impl GraphInstance {
         seed_nodes: &[NodeId],
     ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         self.propagate_schemas_from(seed_nodes);
-        let inferred = self.infer_types().unwrap_or_default();
+        let inferred = self
+            .infer_types()
+            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e))
+            .unwrap_or_default();
 
         let mut to_resolve: Vec<NodeId> = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -1475,7 +1478,10 @@ impl GraphInstance {
     pub fn materialize_dynamic_pins(&self) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         self.propagate_schemas();
         let change_sets = self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Materialize);
-        let inferred = self.infer_types().unwrap_or_default();
+        let inferred = self
+            .infer_types()
+            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e))
+            .unwrap_or_default();
         (change_sets, inferred)
     }
 

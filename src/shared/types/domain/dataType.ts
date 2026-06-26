@@ -195,12 +195,6 @@ export function getDefaultValue(dataType: DataType): unknown {
   }
 }
 
-/** 检查 DataType 是否与字符串类型匹配 */
-export function dataTypeMatches(dt: DataType, typeStr: string): boolean {
-  if (typeStr === 'any') return true;
-  return dataTypeDisplay(dt) === typeStr || dataTypeKind(dt) === typeStr;
-}
-
 /** 从 Pin 的 type 字符串（如 "string"、"int"）映射为 DataType */
 export function dataTypeFromPinType(pinType: string): DataType {
   const t = pinType?.toLowerCase() ?? 'any';

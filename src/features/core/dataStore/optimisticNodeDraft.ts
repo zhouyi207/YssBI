@@ -110,6 +110,7 @@ function pinFromDefinition(
     links: [],
     containerType: dt ? dataTypeToContainer(dt) : undefined,
     typeDisplay: dt ? dataTypeDisplay(dt) : undefined,
+    dataType: dt,
     optional: def.optional ?? false,
   };
 }

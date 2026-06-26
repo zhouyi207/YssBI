@@ -61,7 +61,11 @@ impl<'g> TypeInferenceSession<'g> {
         }
     }
 
-    /// 推断整张图（全量）
+    /// 推断整张图（全量，逐边 best-effort）
+    ///
+    /// 单条连接 unify 失败（历史脏边/类型冲突）只记 warn 并跳过，不再 `?` 传播
+    /// 而毒化整图——其余连接照常推断与传播。并查集 + 绑定合并对一致图与边序
+    /// 无关，故无需排序。`commit` 仍保持严格（绑定冲突属真错）。
     pub fn infer_all(&mut self) -> Result<(), String> {
         let connections = self
             .graph
@@ -71,8 +75,17 @@ impl<'g> TypeInferenceSession<'g> {
             .connections
             .all_connections();
         for connection in connections {
-            self.ctx
-                .infer_connection(connection.from_pin, connection.to_pin)?;
+            if let Err(e) = self
+                .ctx
+                .infer_connection(connection.from_pin, connection.to_pin)
+            {
+                crate::log::log_sys::warn!(
+                    "type inference skipped an incompatible connection {:?} -> {:?}: {}",
+                    connection.from_pin,
+                    connection.to_pin,
+                    e
+                );
+            }
         }
         // Convert 节点：不再将 Input 与 Output 统一，二者独立推断
         // - Input 由上游连接确定

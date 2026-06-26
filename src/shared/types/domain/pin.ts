@@ -5,6 +5,8 @@
  * 用于节点之间的数据和控制流连接
  */
 
+import type { DataType } from './dataType';
+
 /**
  * Pin 方向
  */
@@ -50,7 +52,8 @@ export interface Pin {
     defaultValue?: unknown;     // 默认值（数据针脚）
     userValue?: unknown;        // 用户设置的值（覆盖默认值）
     containerType?: string;     // 容器类型: "array" | "dataseries"，决定 pin 形状
-    typeDisplay?: string;       // 完整类型描述（如 DataSeries<Float64 | String>），用于 tooltip
+    typeDisplay?: string;       // 完整类型描述（如 DataSeries<Float64 | String>），仅用于 tooltip 展示
+    dataType?: DataType;        // 结构化类型（后端下发），兼容判断的单一来源
     optional?: boolean;         // 是否可选（true = 无需连接也可运行）
     ui?: PinUI;                 // UI 配置
 }

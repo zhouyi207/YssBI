@@ -1,4 +1,4 @@
-use crate::graph::{GraphId, NodeId, PinId};
+use crate::graph::{DataType, GraphId, NodeId, PinId};
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 
@@ -70,4 +70,30 @@ pub struct InferredPinType {
     /// 完整类型描述字符串（用于 tooltip），如 "DataSeries<Float64 | String>"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub type_display: Option<String>,
+    /// 结构化类型（前端兼容判断的单一来源，serde 形如 {kind,inner}）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<DataType>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::PinId;
+
+    /// `PinTypesInferred` 事件需携带结构化 `dataType` 作为前端兼容判断的单一来源，
+    /// 锁定其 serde 形如 `{kind:"DataSeries", inner:{kind:"Float64"}}`。
+    #[test]
+    fn inferred_pin_type_serializes_structured_data_type() {
+        let inferred = InferredPinType {
+            pin_id: PinId::new(),
+            pin_type: "Float64".to_string(),
+            container_type: Some("dataseries".to_string()),
+            type_display: Some("DataSeries<Float64>".to_string()),
+            data_type: Some(DataType::DataSeries(Box::new(DataType::Float64))),
+        };
+
+        let json = serde_json::to_value(&inferred).unwrap();
+        assert_eq!(json["dataType"]["kind"], "DataSeries");
+        assert_eq!(json["dataType"]["inner"]["kind"], "Float64");
+    }
 }

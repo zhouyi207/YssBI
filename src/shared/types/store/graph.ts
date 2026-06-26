@@ -8,6 +8,7 @@ import type { NodeId, PinId, GraphId, ConnectionId } from '../domain/ids';
 export type { NodeId, PinId, GraphId, ConnectionId };
 import type { GraphPosition, Graph } from '../domain/graph';
 import type { PinDirection, PinType, PinUI } from '../domain/pin';
+import type { DataType } from '../domain/dataType';
 import type { GraphInstanceDTO } from '../dto/graph';
 
 // ==================== NodeData ====================
@@ -48,6 +49,7 @@ export interface PinData {
   userValue?: unknown;
   containerType?: string;
   typeDisplay?: string;
+  dataType?: DataType;
   optional?: boolean;
   ui?: PinUI;
 }

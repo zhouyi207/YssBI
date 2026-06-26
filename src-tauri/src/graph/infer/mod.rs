@@ -28,14 +28,77 @@ pub fn infer_graph(graph_instance: &GraphInstance) -> Result<Vec<(PinId, DataTyp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::pin::{DataRole, PinRole};
     use crate::graph::register::NodeRegistry;
-    use crate::graph::{GraphInstance, GraphKind};
+    use crate::graph::{GraphInstance, GraphKind, NodeId};
     use std::sync::Arc;
 
     fn math_registry() -> Arc<NodeRegistry> {
         let registry = Arc::new(NodeRegistry::new());
         crate::graph::register::catalog::math::register(&registry);
         registry
+    }
+
+    /// best-effort 全图推断：含一条不兼容连接（String→数值）时，`infer_graph`
+    /// 不再整图失败，而是跳过脏边并继续推断其余正常连接（Float64→数值）。
+    #[test]
+    fn infer_all_skips_incompatible_edge_and_infers_the_rest() {
+        let registry = Arc::new(NodeRegistry::new());
+        crate::graph::register::catalog::math::register(&registry);
+        crate::graph::register::catalog::value::register(&registry);
+        let graph = GraphInstance::new("Test", GraphKind::Event, registry);
+
+        let string_node = graph
+            .create_node("Value:Constants:String")
+            .expect("string const");
+        let f64_node = graph
+            .create_node("Value:Constants:Float64")
+            .expect("float64 const");
+        let sqrt_bad = graph.create_node("Math:Functions:Sqrt").expect("sqrt bad");
+        let sqrt_good = graph.create_node("Math:Functions:Sqrt").expect("sqrt good");
+
+        let result_pin = |nid: NodeId| {
+            graph
+                .get_pin_instances_by_node_id(nid)
+                .into_iter()
+                .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
+                .expect("result pin")
+                .id
+        };
+        let input_pin = |nid: NodeId| {
+            graph
+                .get_pin_instances_by_node_id(nid)
+                .into_iter()
+                .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+                .expect("input pin")
+                .id
+        };
+
+        let string_out = result_pin(string_node);
+        let f64_out = result_pin(f64_node);
+        let sqrt_bad_in = input_pin(sqrt_bad);
+        let sqrt_good_in = input_pin(sqrt_good);
+
+        // 直接注入连接，绕过拓扑层的类型校验：模拟历史脏边 + 正常边并存。
+        {
+            let ds = graph.data_state.read().unwrap();
+            ds.connections.connect(string_out, sqrt_bad_in);
+            ds.connections.connect(f64_out, sqrt_good_in);
+        }
+
+        let resolved =
+            infer_graph(&graph).expect("infer must be Ok despite one incompatible edge");
+
+        // 正常边对应的输入 pin 仍被细化为 Float64，未被脏边毒化。
+        let good_type = resolved
+            .iter()
+            .find(|(pid, _)| *pid == sqrt_good_in)
+            .map(|(_, dt)| dt.clone());
+        assert_eq!(
+            good_type,
+            Some(DataType::Float64),
+            "valid edge should still resolve to Float64"
+        );
     }
 
     #[test]

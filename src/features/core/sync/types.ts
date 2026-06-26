@@ -1,6 +1,7 @@
 // src/features/core/sync/types.ts
 
 import type { ProjectData, Graph, Variable, VariableScope, Node } from '@/shared/types/domain';
+import type { DataTypeBackendFormat } from '@/shared/types/dto/dataType';
 import type { NodeInstanceDTO, PinInstanceDTO } from '@/shared/types/dto';
 
 // ==================== 基础事件类型 ====================
@@ -133,7 +134,7 @@ export interface NodePinsUpdatedPayload {
 /** 类型推断后 pin 的解析类型变化事件 */
 export interface PinTypesInferredPayload {
     graphId: string;
-    pinTypes: Array<{ pinId: string; pinType: string; containerType?: string; typeDisplay?: string }>;
+    pinTypes: Array<{ pinId: string; pinType: string; containerType?: string; typeDisplay?: string; dataType?: DataTypeBackendFormat }>;
 }
 
 // ==================== Connection 事件 Payload ====================

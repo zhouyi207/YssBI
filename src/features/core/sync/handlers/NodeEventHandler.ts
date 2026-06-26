@@ -10,6 +10,7 @@ import { isPending } from '../utils/echoSuppressor';
 import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
+import { dataTypeFromBackend } from '@/shared/types/dto/dataType';
 
 function resolveNodeTitle(dto: NodeInstanceDTO): string {
     const raw = dto.title ?? '';
@@ -182,12 +183,13 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
         this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphId);
 
         useGraphDataStore.getState().batchUpdatePinFields(
-            payload.pinTypes.map(({ pinId, pinType, containerType, typeDisplay }) => ({
+            payload.pinTypes.map(({ pinId, pinType, containerType, typeDisplay, dataType }) => ({
                 pinId,
                 patch: {
                     type: pinType,
                     containerType: containerType ?? undefined,
                     typeDisplay: typeDisplay ?? undefined,
+                    dataType: dataType ? dataTypeFromBackend(dataType) : undefined,
                 },
             })),
         );

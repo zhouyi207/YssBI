@@ -31,26 +31,32 @@ export function dataTypeToBackend(dt: DataType): DataTypeBackendFormat {
 
 /** 从后端格式解析为 DataType */
 export function dataTypeFromBackend(
-  v: string | { kind?: string; inner?: DataTypeBackendFormat; Array?: DataTypeBackendFormat }
+  v:
+    | string
+    | DataTypeBackendFormat
+    | { kind?: string; inner?: unknown; Array?: DataTypeBackendFormat }
 ): DataType {
   if (typeof v === 'string') {
     return dataTypeFromKey(v);
   }
   if (v && typeof v === 'object') {
-    if (v.kind === 'Array' && v.inner) {
-      return { kind: 'Array', inner: dataTypeFromBackend(v.inner) };
+    const kind = (v as { kind?: string }).kind;
+    const inner = (v as { inner?: unknown }).inner;
+    if (kind === 'Array' && inner) {
+      return { kind: 'Array', inner: dataTypeFromBackend(inner as DataTypeBackendFormat) };
     }
-    if (v.kind === 'DataSeries' && v.inner) {
-      return { kind: 'DataSeries', inner: dataTypeFromBackend(v.inner) };
+    if (kind === 'DataSeries' && inner) {
+      return { kind: 'DataSeries', inner: dataTypeFromBackend(inner as DataTypeBackendFormat) };
     }
-    if (v.kind === 'OneOf' && Array.isArray(v.inner)) {
-      return { kind: 'OneOf', inner: (v.inner as DataTypeBackendFormat[]).map(dataTypeFromBackend) };
+    if (kind === 'OneOf' && Array.isArray(inner)) {
+      return { kind: 'OneOf', inner: (inner as DataTypeBackendFormat[]).map(dataTypeFromBackend) };
     }
-    if (v.kind && v.kind !== 'Array' && v.kind !== 'DataSeries' && v.kind !== 'OneOf') {
-      return dataTypeFromKey(v.kind);
+    if (kind && kind !== 'Array' && kind !== 'DataSeries' && kind !== 'OneOf') {
+      return dataTypeFromKey(kind);
     }
-    if ('Array' in v && v.Array) {
-      return { kind: 'Array', inner: dataTypeFromBackend(v.Array) };
+    const legacyArray = (v as { Array?: DataTypeBackendFormat }).Array;
+    if (legacyArray) {
+      return { kind: 'Array', inner: dataTypeFromBackend(legacyArray) };
     }
   }
   return { kind: 'Any' };

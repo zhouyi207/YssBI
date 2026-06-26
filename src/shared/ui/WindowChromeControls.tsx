@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 function MinimizeIcon() {
   return (
@@ -47,6 +46,7 @@ export interface WindowChromeControlsProps {
 /**
  * 窗口标题栏右侧：最小化 / 最大化 / 关闭。
  * 按钮 hover 背景铺满标题栏高度；关闭钮默认直角贴边，与 Edit 主窗口一致。
+ * 图标含义直观，仅保留 aria-label 供辅助技术，不显示 hover tooltip。
  */
 export function WindowChromeControls({
   isMaximized = false,
@@ -75,49 +75,34 @@ export function WindowChromeControls({
 
   return (
     <div className={cn('flex self-stretch', className)}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={handleMinimize}
-            className={cn(chromeButtonBase, 'w-10')}
-            aria-label={t('common.minimize')}
-          >
-            <MinimizeIcon />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{t('common.minimize')}</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={handleMaximize}
-            className={cn(chromeButtonBase, 'w-10')}
-            aria-label={isMaximized ? t('common.restore') : t('common.maximize')}
-          >
-            <MaximizeIcon />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{isMaximized ? t('common.restore') : t('common.maximize')}</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={handleClose}
-            className={cn(
-              chromeButtonBase,
-              'w-11 hover:bg-red-600 hover:text-white dark:hover:bg-red-600',
-              closeCornerClassName,
-            )}
-            aria-label={t('common.close')}
-          >
-            <CloseIcon />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">{t('common.close')}</TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        onClick={handleMinimize}
+        className={cn(chromeButtonBase, 'w-10')}
+        aria-label={t('common.minimize')}
+      >
+        <MinimizeIcon />
+      </button>
+      <button
+        type="button"
+        onClick={handleMaximize}
+        className={cn(chromeButtonBase, 'w-10')}
+        aria-label={isMaximized ? t('common.restore') : t('common.maximize')}
+      >
+        <MaximizeIcon />
+      </button>
+      <button
+        type="button"
+        onClick={handleClose}
+        className={cn(
+          chromeButtonBase,
+          'w-11 hover:bg-red-600 hover:text-white dark:hover:bg-red-600',
+          closeCornerClassName,
+        )}
+        aria-label={t('common.close')}
+      >
+        <CloseIcon />
+      </button>
     </div>
   );
 }
