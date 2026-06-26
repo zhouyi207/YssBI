@@ -4,44 +4,46 @@ import { VscDatabase, VscClose, VscFile, VscTable, VscCloudDownload, VscChevronR
 import { BsDatabaseFill } from "react-icons/bs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
 import { OverlayScrollbar } from "./OverlayScrollbar";
 
+type CategoryId = "file" | "sql" | "other";
+
 type ImportTypeConfig = {
   id: ImportDataSourceType;
-  label: string;
-  description: string;
   icon: React.ReactNode;
   tone: string;
   comingSoon: boolean;
 };
 
-type CategoryId = "file" | "sql" | "other";
-
-const CATEGORIES: { id: CategoryId; label: string; icon: React.ReactNode; tone: string }[] = [
-  { id: "file", label: "文件", icon: <VscFile size={17} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300" },
-  { id: "sql", label: "SQL 数据库", icon: <BsDatabaseFill size={16} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300" },
-  { id: "other", label: "其他", icon: <VscCloudDownload size={17} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300" },
+const CATEGORIES: { id: CategoryId; icon: React.ReactNode; tone: string }[] = [
+  { id: "file", icon: <VscFile size={16} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300" },
+  { id: "sql", icon: <BsDatabaseFill size={15} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300" },
+  { id: "other", icon: <VscCloudDownload size={16} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300" },
 ];
 
 const FILE_TYPES: ImportTypeConfig[] = [
-  { id: "csv", label: "CSV", description: "导入逗号分隔文本数据", icon: <VscFile size={22} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300", comingSoon: false },
-  { id: "xlsx", label: "Excel", description: "导入 Excel 工作簿或表格", icon: <VscTable size={22} />, tone: "text-green-600 bg-green-500/10 dark:text-green-300", comingSoon: false },
+  { id: "csv", icon: <VscFile size={20} />, tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300", comingSoon: false },
+  { id: "xlsx", icon: <VscTable size={20} />, tone: "text-green-600 bg-green-500/10 dark:text-green-300", comingSoon: false },
 ];
 
 const SQL_TYPES: ImportTypeConfig[] = [
-  { id: "sqlite", label: "SQLite", description: "连接本地 SQLite 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300", comingSoon: false },
-  { id: "postgres", label: "PostgreSQL", description: "连接 PostgreSQL 服务", icon: <BsDatabaseFill size={21} />, tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300", comingSoon: false },
-  { id: "mysql", label: "MySQL", description: "连接 MySQL 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300", comingSoon: false },
-  { id: "mariadb", label: "MariaDB", description: "连接 MariaDB 数据库", icon: <BsDatabaseFill size={21} />, tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300", comingSoon: false },
+  { id: "sqlite", icon: <BsDatabaseFill size={19} />, tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300", comingSoon: false },
+  { id: "postgres", icon: <BsDatabaseFill size={19} />, tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300", comingSoon: false },
+  { id: "mysql", icon: <BsDatabaseFill size={19} />, tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300", comingSoon: false },
+  { id: "mariadb", icon: <BsDatabaseFill size={19} />, tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300", comingSoon: false },
 ];
 
 const OTHER_TYPES: ImportTypeConfig[] = [
-  { id: "api", label: "REST API", description: "从远程接口拉取数据", icon: <VscCloudDownload size={22} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300", comingSoon: true },
+  { id: "api", icon: <VscCloudDownload size={20} />, tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300", comingSoon: true },
 ];
 
 const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
@@ -50,7 +52,7 @@ const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
   other: OTHER_TYPES,
 };
 
-function TypeOptionButton({
+function TypeOptionCard({
   type,
   onSelect,
   onClose,
@@ -60,103 +62,114 @@ function TypeOptionButton({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const label = t(`importModal.types.${type.id}.label`);
+  const description = t(`importModal.types.${type.id}.description`);
 
-  const button = (
+  return (
     <Button
       type="button"
-      variant="ghost"
+      variant="outline"
       disabled={type.comingSoon}
       onClick={() => {
+        if (type.comingSoon) return;
         onSelect(type.id);
-        if (!type.comingSoon) onClose();
+        onClose();
       }}
       className={cn(
-        "group h-12 w-full justify-start gap-3 rounded-md px-2.5",
-        type.comingSoon && "cursor-default opacity-50",
+        "group h-auto min-h-[72px] w-full flex-col items-start gap-2 rounded-lg px-4 py-3 text-left",
+        type.comingSoon && "cursor-default opacity-60",
       )}
     >
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${type.tone}`}>{type.icon}</div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium text-foreground">{type.label}</span>
-          {type.comingSoon && <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{t("importModal.developing")}</Badge>}
+      <div className="flex w-full items-start gap-3">
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", type.tone)}>
+          {type.icon}
         </div>
-        <p className="truncate text-[11px] text-muted-foreground">{type.description}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{label}</span>
+            {type.comingSoon && (
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                {t("importModal.developing")}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+        {!type.comingSoon && (
+          <VscChevronRight
+            className="mt-1 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+            size={16}
+          />
+        )}
       </div>
-      {!type.comingSoon && (
-        <VscChevronRight className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent-color)]" size={16} />
-      )}
     </Button>
   );
-
-  if (type.comingSoon) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right">{t("importModal.comingSoon")}</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return button;
 }
 
 export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions; onClose: () => void }) => {
   const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
+  const types = CATEGORY_TYPES[selectedCategory];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="h-[332px] max-w-[520px]">
-        <DialogHeader className="shrink-0 border-b border-border bg-muted/20">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <DialogTitle className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--accent-color)]/12 text-[var(--accent-color)]">
-                  <VscDatabase size={17} />
+      <DialogContent className="flex h-[min(480px,85vh)] max-w-[640px] flex-col gap-0 p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <DialogTitle className="flex items-center gap-2 normal-case tracking-normal">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <VscDatabase size={18} />
                 </span>
                 {t("importModal.title")}
               </DialogTitle>
+              <DialogDescription>{t("importModal.subtitle")}</DialogDescription>
             </div>
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("importModal.close")}>
-              <VscClose size={20} />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              aria-label={t("importModal.close")}
+              className="shrink-0"
+            >
+              <VscClose size={18} />
             </Button>
           </div>
         </DialogHeader>
 
-        <Tabs
-          value={selectedCategory}
-          onValueChange={(value) => setSelectedCategory(value as CategoryId)}
-          className="flex min-h-0 flex-1 flex-col gap-0"
-        >
-          <TabsList
-            variant="line"
-            className="h-auto w-full shrink-0 justify-start gap-1 rounded-none border-b border-border bg-transparent px-3 py-2"
-          >
-            {CATEGORIES.map((cat) => (
-              <TabsTrigger key={cat.id} value={cat.id} className="h-8 gap-2 px-2.5 text-[12px]">
-                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${cat.tone}`}>
-                  {cat.icon}
-                </div>
-                <span className="truncate font-medium">{t(`importModal.categories.${cat.id}`)}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <div className="flex min-h-0 flex-1">
+          <nav className="flex w-[148px] shrink-0 flex-col gap-1 border-r border-border bg-muted/20 p-2">
+            {CATEGORIES.map((cat) => {
+              const active = selectedCategory === cat.id;
+              return (
+                <Button
+                  key={cat.id}
+                  type="button"
+                  variant={active ? "secondary" : "ghost"}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={cn(
+                    "h-9 w-full justify-start gap-2 px-2.5 text-xs font-medium",
+                    active && "bg-background shadow-sm",
+                  )}
+                >
+                  <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded", cat.tone)}>
+                    {cat.icon}
+                  </span>
+                  <span className="truncate">{t(`importModal.categories.${cat.id}`)}</span>
+                </Button>
+              );
+            })}
+          </nav>
 
-          {(Object.keys(CATEGORY_TYPES) as CategoryId[]).map((categoryId) => (
-            <TabsContent key={categoryId} value={categoryId} className="mt-0 flex h-[232px] min-w-0 flex-col overflow-hidden">
-              <OverlayScrollbar className="h-full">
-                <div className="p-2">
-                  <div className="space-y-1">
-                    {CATEGORY_TYPES[categoryId].map((type) => (
-                      <TypeOptionButton key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
-                    ))}
-                  </div>
-                </div>
-              </OverlayScrollbar>
-            </TabsContent>
-          ))}
-        </Tabs>
+          <OverlayScrollbar className="min-h-0 flex-1">
+            <div className="grid gap-2 p-4 sm:grid-cols-1">
+              {types.map((type) => (
+                <TypeOptionCard key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
+              ))}
+            </div>
+          </OverlayScrollbar>
+        </div>
       </DialogContent>
     </Dialog>
   );

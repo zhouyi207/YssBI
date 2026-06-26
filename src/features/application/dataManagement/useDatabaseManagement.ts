@@ -1,51 +1,96 @@
 import { useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { i18n } from '@/app/i18n';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { logger } from '@/utils/appLogger';
+import { runWithDataOperationProgress } from './dataOperationProgress';
 
 async function loadSqliteTable(dbPath: string, table: string) {
-  uiStore.showToast('正在从 SQLite 导入数据...', 'info');
-  const result = await DatabaseService.loadDatabase({
-    sql: {
-      engine: { sqlite: { autoCreate: false } },
-      connectionString: dbPath,
-      table,
-    },
-  });
+  const result = await runWithDataOperationProgress(
+    i18n.t('dataOperation.importing'),
+    i18n.t('dataOperation.importingSqlite', { table }),
+    () =>
+      DatabaseService.loadDatabase({
+        sql: {
+          engine: { sqlite: { autoCreate: false } },
+          connectionString: dbPath,
+          table,
+        },
+      }),
+  );
   useDatabaseStore.getState().addDatabase(result.id, { ...result });
-  uiStore.showToast(`SQLite 表 "${table}" 导入成功: ${result.rowCount} 行`, 'success');
+  uiStore.showToast(
+    i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }),
+    'success',
+  );
 }
 
 type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
 
 async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: string, table: string) {
-  const label = engine === 'postgres' ? 'PostgreSQL' : engine === 'mysql' ? 'MySQL' : 'MariaDB';
-  uiStore.showToast(`正在从 ${label} 导入数据...`, 'info');
+  const label =
+    engine === 'postgres' ? 'PostgreSQL' : engine === 'mysql' ? 'MySQL' : 'MariaDB';
   const engineSpec =
     engine === 'postgres'
       ? { postgres: { ssl: true } }
       : { mysql: { charset: 'utf8mb4' } };
-  const result = await DatabaseService.loadDatabase({
-    sql: {
-      engine: engineSpec,
-      connectionString,
-      table,
-    },
-  });
+  const result = await runWithDataOperationProgress(
+    i18n.t('dataOperation.importing'),
+    i18n.t('dataOperation.importingRemote', { label, table }),
+    () =>
+      DatabaseService.loadDatabase({
+        sql: {
+          engine: engineSpec,
+          connectionString,
+          table,
+        },
+      }),
+  );
   useDatabaseStore.getState().addDatabase(result.id, { ...result });
-  uiStore.showToast(`${label} 表 "${table}" 导入成功: ${result.rowCount} 行`, 'success');
+  uiStore.showToast(
+    i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }),
+    'success',
+  );
 }
 
 async function loadExcelSheet(filePath: string, sheet: string) {
-  uiStore.showToast('正在从 Excel 导入数据...', 'info');
-  const result = await DatabaseService.loadDatabase({
-    excel: { path: filePath, sheet },
-  });
+  const result = await runWithDataOperationProgress(
+    i18n.t('dataOperation.importing'),
+    i18n.t('dataOperation.importingExcel', { sheet }),
+    () =>
+      DatabaseService.loadDatabase({
+        excel: { path: filePath, sheet },
+      }),
+  );
   useDatabaseStore.getState().addDatabase(result.id, { ...result });
-  uiStore.showToast(`Excel Sheet "${sheet}" 导入成功: ${result.rowCount} 行`, 'success');
+  uiStore.showToast(
+    i18n.t('dataOperation.importSuccess', { name: sheet, rows: result.rowCount }),
+    'success',
+  );
+}
+
+async function loadCsv(path: string) {
+  const result = await runWithDataOperationProgress(
+    i18n.t('dataOperation.importing'),
+    i18n.t('dataOperation.importingCsv'),
+    () =>
+      DatabaseService.loadDatabase({
+        csv: {
+          path,
+          delimiter: ',',
+          hasHeader: true,
+          inferSchemaLength: 1000,
+        },
+      }),
+  );
+  useDatabaseStore.getState().addDatabase(result.id, { ...result });
+  uiStore.showToast(
+    i18n.t('dataOperation.importSuccess', { name: result.name, rows: result.rowCount }),
+    'success',
+  );
 }
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
@@ -59,21 +104,11 @@ export function triggerImportData() {
             filters: [{ name: 'CSV File', extensions: ['csv'] }],
           });
           if (selected && !Array.isArray(selected)) {
-            uiStore.showToast('正在从 CSV 导入数据...', 'info');
-            const result = await DatabaseService.loadDatabase({
-              csv: {
-                path: selected,
-                delimiter: ',',
-                hasHeader: true,
-                inferSchemaLength: 1000,
-              },
-            });
-            useDatabaseStore.getState().addDatabase(result.id, { ...result });
-            uiStore.showToast(`CSV 数据导入成功: ${result.rowCount} 行`, 'success');
+            await loadCsv(selected);
           }
         } catch (error) {
           logger.data.error('Failed to import CSV: ' + String(error), 'DatabaseManagement');
-          uiStore.showToast(`CSV 导入失败: ${error}`, 'error');
+          uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(error) }), 'error');
         }
       } else if (type === 'sqlite') {
         try {
@@ -85,9 +120,13 @@ export function triggerImportData() {
             ],
           });
           if (selected && !Array.isArray(selected)) {
-            const tables = await DatabaseService.listSqliteTables(selected);
+            const tables = await runWithDataOperationProgress(
+              i18n.t('dataOperation.reading'),
+              i18n.t('dataOperation.readingSqlite'),
+              () => DatabaseService.listSqliteTables(selected),
+            );
             if (tables.length === 0) {
-              uiStore.showToast('该数据库中没有用户表', 'warning');
+              uiStore.showToast(i18n.t('dataOperation.noSqliteTables'), 'warning');
               return;
             }
             if (tables.length === 1) {
@@ -99,7 +138,7 @@ export function triggerImportData() {
                 onSelect: (table) => {
                   loadSqliteTable(selected, table).catch((e) => {
                     logger.data.error('Failed to load SQLite table: ' + String(e), 'DatabaseManagement');
-                    uiStore.showToast(`导入失败: ${e}`, 'error');
+                    uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(e) }), 'error');
                   });
                 },
               });
@@ -107,7 +146,7 @@ export function triggerImportData() {
           }
         } catch (error) {
           logger.data.error('Failed to import SQLite: ' + String(error), 'DatabaseManagement');
-          uiStore.showToast(`SQLite 导入失败: ${error}`, 'error');
+          uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(error) }), 'error');
         }
       } else if (['postgres', 'mysql', 'mariadb'].includes(type)) {
         const engine = type as SqlRemoteEngine;
@@ -116,9 +155,13 @@ export function triggerImportData() {
           engine,
           onConnect: async (connectionString) => {
             try {
-              const tables = await DatabaseService.listSqlTables(engine, connectionString);
+              const tables = await runWithDataOperationProgress(
+                i18n.t('dataOperation.reading'),
+                i18n.t('dataOperation.readingRemote', { label }),
+                () => DatabaseService.listSqlTables(engine, connectionString),
+              );
               if (tables.length === 0) {
-                uiStore.showToast('该数据库中未找到用户表', 'warning');
+                uiStore.showToast(i18n.t('dataOperation.noRemoteTables'), 'warning');
                 return;
               }
               if (tables.length === 1) {
@@ -131,14 +174,14 @@ export function triggerImportData() {
                   onSelect: (table) => {
                     loadSqlRemoteTable(engine, connectionString, table).catch((e) => {
                       logger.data.error(`Failed to load ${label} table: ${String(e)}`, 'DatabaseManagement');
-                      uiStore.showToast(`导入失败: ${e}`, 'error');
+                      uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(e) }), 'error');
                     });
                   },
                 });
               }
             } catch (error) {
               logger.data.error(`Failed to list ${label} tables: ${String(error)}`, 'DatabaseManagement');
-              uiStore.showToast(`${label} 连接失败: ${error}`, 'error');
+              uiStore.showToast(i18n.t('dataOperation.connectFailed', { label, error: String(error) }), 'error');
             }
           },
         });
@@ -152,9 +195,13 @@ export function triggerImportData() {
             ],
           });
           if (selected && !Array.isArray(selected)) {
-            const sheets = await DatabaseService.listExcelSheets(selected);
+            const sheets = await runWithDataOperationProgress(
+              i18n.t('dataOperation.reading'),
+              i18n.t('dataOperation.readingExcel'),
+              () => DatabaseService.listExcelSheets(selected),
+            );
             if (sheets.length === 0) {
-              uiStore.showToast('该 Excel 文件中没有 Sheet', 'warning');
+              uiStore.showToast(i18n.t('dataOperation.noExcelSheets'), 'warning');
               return;
             }
             if (sheets.length === 1) {
@@ -166,7 +213,7 @@ export function triggerImportData() {
                 onSelect: (sheet) => {
                   loadExcelSheet(selected, sheet).catch((e) => {
                     logger.data.error('Failed to load Excel sheet: ' + String(e), 'DatabaseManagement');
-                    uiStore.showToast(`导入失败: ${e}`, 'error');
+                    uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(e) }), 'error');
                   });
                 },
               });
@@ -174,10 +221,10 @@ export function triggerImportData() {
           }
         } catch (error) {
           logger.data.error('Failed to import Excel: ' + String(error), 'DatabaseManagement');
-          uiStore.showToast(`Excel 导入失败: ${error}`, 'error');
+          uiStore.showToast(i18n.t('dataOperation.importFailed', { error: String(error) }), 'error');
         }
       } else {
-        uiStore.showToast(`${String(type).toUpperCase()} 导入功能开发中...`, 'warning');
+        uiStore.showToast(i18n.t('dataOperation.comingSoon', { type: String(type).toUpperCase() }), 'warning');
       }
     },
   });
@@ -197,12 +244,17 @@ export function useDatabaseManagement() {
     if (!previous) return;
 
     try {
-      await DatabaseService.deleteDatabase(id);
+      await runWithDataOperationProgress(
+        i18n.t('dataOperation.deleting'),
+        previous.name,
+        () => DatabaseService.deleteDatabase(id),
+      );
       useDatabaseStore.getState().deleteDatabase(id);
       if (selectedItemId === id) setSelectedInfo(null, null);
+      uiStore.showToast(i18n.t('dataOperation.deleteSuccess', { name: previous.name }), 'success');
     } catch (e) {
       logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement');
-      uiStore.showToast(`删除数据失败: ${e}`, 'error');
+      uiStore.showToast(i18n.t('dataOperation.deleteFailed', { error: String(e) }), 'error');
     }
   }, [selectedItemId, setSelectedInfo]);
 
@@ -215,7 +267,7 @@ export function useDatabaseManagement() {
       useDatabaseStore.getState().updateDatabase(id, { name: trimmed });
     } catch (e) {
       logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
-      uiStore.showToast(`重命名失败: ${e}`, 'error');
+      uiStore.showToast(i18n.t('dataOperation.renameFailed', { error: String(e) }), 'error');
     }
   }, []);
 

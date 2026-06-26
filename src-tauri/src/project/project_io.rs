@@ -576,7 +576,13 @@ fn read_graph_document(
     path: &Path,
     expected_kind: GraphDocumentKind,
 ) -> Result<GraphDocument, ProjectError> {
-    let mut document: GraphDocument = read_json(path)?;
+    let content = std::fs::read_to_string(path)?;
+    let mut document = match serde_json::from_str::<GraphDocument>(&content) {
+        Ok(document) => document,
+        // 过渡期：新格式解析失败时回退到旧（Phase A）格式，加载后下次保存即升级。
+        Err(primary_err) => read_legacy_graph_document(&content, path)
+            .map_err(|_| ProjectError::Deserialize(primary_err))?,
+    };
     if document.kind != expected_kind {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph file '{}' kind does not match manifest",
@@ -587,6 +593,54 @@ fn read_graph_document(
         document.graph.name = name;
     }
     Ok(document)
+}
+
+/// 过渡期：读取旧格式（`graph.dataState` 包裹）图文件。待所有开发项目重新保存后删除。
+fn read_legacy_graph_document(content: &str, path: &Path) -> Result<GraphDocument, ProjectError> {
+    let value: serde_json::Value = serde_json::from_str(content).map_err(ProjectError::Deserialize)?;
+    let graph_value = value.get("graph").ok_or_else(|| {
+        ProjectError::InvalidProjectFormat(format!(
+            "legacy graph file '{}' missing 'graph'",
+            path.display()
+        ))
+    })?;
+    let graph =
+        GraphInstance::from_legacy_graph_json(graph_value).map_err(ProjectError::InvalidProjectFormat)?;
+    let kind = value
+        .get("kind")
+        .cloned()
+        .and_then(|v| serde_json::from_value::<GraphDocumentKind>(v).ok())
+        .unwrap_or_else(|| (&graph.kind).into());
+    let local_variables = value
+        .get("localVariables")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    Ok(GraphDocument {
+        schema_version: SCHEMA_VERSION,
+        kind,
+        graph,
+        local_variables,
+    })
+}
+
+/// 仅读取图文件头部（`graph.id` / `graph.name`），新旧格式通用。
+/// 用于索引与按 id 查找，避免对每个文件做完整反序列化。
+#[derive(Deserialize)]
+struct GraphFileHeader {
+    graph: GraphFileHeaderGraph,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphFileHeaderGraph {
+    id: GraphId,
+    #[serde(default)]
+    name: String,
+}
+
+fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> {
+    read_json(path)
 }
 
 fn graph_name_from_file_path(path: &Path) -> Option<String> {
@@ -604,10 +658,11 @@ fn read_graph_index_entries(
 ) -> Result<Vec<ProjectGraphIndexEntry>, ProjectError> {
     let mut entries = Vec::new();
     for path in list_graph_files(root, dir, extension)? {
-        let document = read_graph_document(path.as_path(), expected_kind)?;
+        let header = read_graph_file_header(path.as_path())?;
+        let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.graph.name);
         entries.push(ProjectGraphIndexEntry {
-            id: document.graph.id,
-            name: document.graph.name,
+            id: header.graph.id,
+            name,
             graph_type: expected_kind,
             folder_path: folder_path_from_graph_file(root, dir, path.as_path()),
         });
@@ -737,8 +792,8 @@ fn find_graph_file_path(
     graph_id: &GraphId,
 ) -> Result<Option<PathBuf>, ProjectError> {
     for path in list_graph_files(root, dir, extension)? {
-        let document: GraphDocument = read_json(path.as_path())?;
-        if document.graph.id == *graph_id {
+        let header = read_graph_file_header(path.as_path())?;
+        if header.graph.id == *graph_id {
             return Ok(Some(path));
         }
     }
@@ -1000,6 +1055,111 @@ mod tests {
         assert_eq!(function_doc.kind, GraphDocumentKind::Function);
         assert_eq!(function_doc.local_variables.len(), 1);
 
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn round_trips_graph_with_dynamic_pins_values_and_connections() {
+        use crate::graph::{PinDirection, PinKind};
+
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("RoundTrip");
+        let graph = state.get_graph(&event.id).expect("event graph");
+
+        // 两个带可重复 Operands（动态 pin）的 Add 节点
+        let node_a = graph.create_node("Math:Operators:Add (+)").expect("node a");
+        let node_b = graph.create_node("Math:Operators:Add (+)").expect("node b");
+
+        // 收集 pin：A 的输出数据 pin、A 的某个 Operand 输入、B 的某个 Operand 输入
+        let (a_output, a_operand_input, b_operand_input, total_pins, dynamic_pin) = {
+            let ds = graph.data_state.read().unwrap();
+            let pins_of = |node_id| -> Vec<crate::graph::PinInstance> {
+                ds.nodes
+                    .get(&node_id)
+                    .unwrap()
+                    .pin_ids
+                    .iter()
+                    .filter_map(|pid| ds.pins.get(pid).cloned())
+                    .collect()
+            };
+            let a_pins = pins_of(node_a);
+            let b_pins = pins_of(node_b);
+            let a_output = a_pins
+                .iter()
+                .find(|p| p.definition.direction == PinDirection::Output && p.is_data())
+                .expect("a output")
+                .id;
+            let a_operand_input = a_pins
+                .iter()
+                .find(|p| p.definition.direction == PinDirection::Input && p.is_data())
+                .expect("a operand")
+                .id;
+            let b_operand_input = b_pins
+                .iter()
+                .find(|p| p.definition.direction == PinDirection::Input && p.is_data())
+                .expect("b operand")
+                .id;
+            let total_pins = ds.pins.len();
+            let dynamic_pin = a_pins
+                .iter()
+                .find(|p| p.definition.should_persist_full_definition() && p.is_data())
+                .map(|p| p.id)
+                .expect("a has a dynamic operand pin");
+            (a_output, a_operand_input, b_operand_input, total_pins, dynamic_pin)
+        };
+
+        // 设置一个 userValue，并建立一条连接
+        {
+            let mut ds = graph.data_state.write().unwrap();
+            ds.pins.get_mut(&a_operand_input).unwrap().user_value = Some(DataValue::Int64(7));
+            ds.connections.connect(a_output, b_operand_input);
+        }
+
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        // 重新从磁盘加载（新格式），与原图对比
+        let doc = load_project_graph_from_file(root.to_string_lossy().as_ref(), &event.id).unwrap();
+        let loaded = doc.graph;
+        let lds = loaded.data_state.read().unwrap();
+
+        assert_eq!(lds.nodes.len(), 2, "node count round-trips");
+        assert_eq!(lds.pins.len(), total_pins, "pin count round-trips");
+
+        // userValue 保留
+        assert_eq!(
+            lds.pins.get(&a_operand_input).unwrap().user_value,
+            Some(DataValue::Int64(7)),
+            "user value round-trips"
+        );
+
+        // 连接保留（pin id 不变）
+        assert!(
+            lds.connections
+                .all_connections()
+                .iter()
+                .any(|c| c.from_pin == a_output && c.to_pin == b_operand_input),
+            "connection round-trips"
+        );
+
+        // 动态/可重复 pin 保留完整定义（data_type 非空）；静态输出 pin 仅留契约（data_type 为空）
+        assert!(
+            lds.pins
+                .get(&dynamic_pin)
+                .unwrap()
+                .definition
+                .data_type
+                .is_some(),
+            "dynamic operand pin keeps its full definition override"
+        );
+        let output_pin = lds.pins.get(&a_output).unwrap();
+        assert_eq!(output_pin.definition.kind, PinKind::Data);
+        assert!(
+            output_pin.definition.data_type.is_none(),
+            "static pin persists only a contract; full definition re-attached from registry"
+        );
+
+        drop(lds);
         let _ = std::fs::remove_dir_all(root);
     }
 

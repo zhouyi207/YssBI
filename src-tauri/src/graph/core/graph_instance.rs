@@ -12,7 +12,7 @@ use crate::graph::node::OutputSchemaContext;
 pub use crate::graph::node::SchemaProvider;
 use crate::graph::node::{
     ColumnSchema, DataSchema, NodeDefinition, NodeId, NodeInstance, NodeInstanceParams,
-    PinResolverContext,
+    NodePosition, PinResolverContext,
 };
 use crate::graph::pin::{
     DataRole, PinDataTypeDefinition, PinDirection, PinId, PinInstance, PinKind, PinRole, PinSlot,
@@ -20,8 +20,9 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use crate::graph::value::DataValue;
-use crate::graph::GraphId;
-use serde::{Deserialize, Serialize};
+use crate::graph::{GraphId, TypeVarDefinition, TypeVarId};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// 动态 pin 解析模式
@@ -49,8 +50,7 @@ pub struct PinChangeSet {
 /// Graph 是唯一的运行时真实来源，管理：
 /// - 所有 Node, Pin 实例 和连接关系
 /// - 类型推断上下文
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone)]
 pub struct GraphInstance {
     // 图 id
     pub id: GraphId,
@@ -67,13 +67,303 @@ pub struct GraphInstance {
     // 数据状态 (node, pin, connection)
     pub data_state: Arc<RwLock<GraphDataState>>,
 
-    // 节点类型注册表（序列化时跳过，需要在加载后重新设置）
-    #[serde(skip)]
+    // 节点类型注册表（不持久化，需要在加载后重新设置）
     registry: Arc<NodeRegistry>,
 
-    // 模式提供器（序列化时跳过，运行时通过 ProjectState 注入）
-    #[serde(skip)]
+    // 模式提供器（不持久化，运行时通过 ProjectState 注入）
     schema_provider: Option<SchemaProvider>,
+}
+
+// ============================================================================
+// 持久化格式（Phase B）
+//
+// 磁盘格式与 `GraphRebuildSnapshot` 对齐：扁平的 `nodes[]`（pin 内联）+ 扁平的
+// `connections[]`。静态 pin 的完整定义在加载后由 registry 经 `set_registry`
+// 重新挂载；动态/可重复 pin 自带完整定义覆盖。运行期缓存
+// （`pin_types` / `type_var_bindings` / `resolved_schema`）不落盘。
+//
+// 该自定义 serde 是 `GraphInstance` 唯一的磁盘序列化路径；前端始终通过
+// `GraphInstanceDTO`（`From<&GraphInstance>`）获取数据，不经过此处。
+// ============================================================================
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphDocSer<'a> {
+    id: GraphId,
+    name: &'a str,
+    kind: GraphKind,
+    position: GraphPosition,
+    nodes: Vec<GraphNodeSer<'a>>,
+    connections: Vec<Connection>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphNodeSer<'a> {
+    id: NodeId,
+    node_type: &'a str,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    type_var_map: &'a HashMap<TypeVarId, TypeVarDefinition>,
+    position: NodePosition,
+    instance_params: &'a NodeInstanceParams,
+    pins: Vec<&'a PinInstance>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphDocDe {
+    id: GraphId,
+    name: String,
+    kind: GraphKind,
+    #[serde(default)]
+    position: GraphPosition,
+    #[serde(default)]
+    nodes: Vec<GraphNodeDe>,
+    #[serde(default)]
+    connections: Vec<Connection>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphNodeDe {
+    id: NodeId,
+    node_type: String,
+    #[serde(default)]
+    type_var_map: HashMap<TypeVarId, TypeVarDefinition>,
+    #[serde(default)]
+    position: NodePosition,
+    #[serde(default)]
+    instance_params: NodeInstanceParams,
+    #[serde(default)]
+    pins: Vec<PinInstance>,
+}
+
+impl Serialize for GraphInstance {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let data_state = self
+            .data_state
+            .read()
+            .map_err(|_| serde::ser::Error::custom("data_state lock poisoned"))?;
+
+        // 节点按 id 排序，保证落盘 JSON 稳定（避免 HashMap 迭代顺序导致的伪 diff）
+        let mut nodes: Vec<&NodeInstance> = data_state.nodes.values().collect();
+        nodes.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
+
+        let node_ser: Vec<GraphNodeSer> = nodes
+            .iter()
+            .map(|node| {
+                let pins: Vec<&PinInstance> = node
+                    .pin_ids
+                    .iter()
+                    .filter_map(|pin_id| data_state.pins.get(pin_id))
+                    .collect();
+                GraphNodeSer {
+                    id: node.id,
+                    node_type: &node.definition.node_type,
+                    type_var_map: &node.type_var_map,
+                    position: node.position.clone(),
+                    instance_params: &node.instance_params,
+                    pins,
+                }
+            })
+            .collect();
+
+        let mut connections = data_state.connections.all_connections();
+        connections.sort_by(|a, b| {
+            (a.from_pin.to_string(), a.to_pin.to_string())
+                .cmp(&(b.from_pin.to_string(), b.to_pin.to_string()))
+        });
+
+        GraphDocSer {
+            id: self.id,
+            name: &self.name,
+            kind: self.kind.clone(),
+            position: self.position.clone(),
+            nodes: node_ser,
+            connections,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GraphInstance {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let doc = GraphDocDe::deserialize(deserializer)?;
+        Ok(Self::from_persisted_parts(
+            doc.id,
+            doc.name,
+            doc.kind,
+            doc.position,
+            doc.nodes,
+            doc.connections,
+        ))
+    }
+}
+
+impl GraphInstance {
+    /// 从持久化的扁平节点 + 连接重建 `GraphInstance`（无 registry，
+    /// 静态 pin 的完整定义随后由 `set_registry` 重挂）。
+    fn from_persisted_parts(
+        id: GraphId,
+        name: String,
+        kind: GraphKind,
+        position: GraphPosition,
+        nodes: Vec<GraphNodeDe>,
+        connections: Vec<Connection>,
+    ) -> Self {
+        let mut data_state = GraphDataState::default();
+
+        for node in nodes {
+            let node_id = node.id;
+            let definition = Arc::new(NodeDefinition::placeholder(node.node_type));
+            let pin_ids: Vec<PinId> = node.pins.iter().map(|pin| pin.id).collect();
+
+            for pin in node.pins {
+                data_state.connections.register_pin(pin.id, node_id);
+                data_state.pins.insert(pin.id, pin);
+            }
+
+            data_state.add_node(NodeInstance {
+                id: node_id,
+                definition,
+                type_var_map: node.type_var_map,
+                position: node.position,
+                instance_params: node.instance_params,
+                pin_ids,
+            });
+        }
+
+        for connection in connections {
+            data_state
+                .connections
+                .connect(connection.from_pin, connection.to_pin);
+        }
+
+        Self {
+            id,
+            name,
+            kind,
+            position,
+            data_state: Arc::new(RwLock::new(data_state)),
+            registry: Default::default(),
+            schema_provider: None,
+        }
+    }
+}
+
+// ============================================================================
+// 过渡期：旧（Phase A）磁盘格式读取
+//
+// 旧格式将 `GraphInstance` 序列化为 `{ id, name, kind, position, dataState:
+// { nodes: {id:node}, pins: {id:pin}, connections: { links | connections } } }`。
+// 为让现有开发项目仍能打开并在下次保存时自动升级为新格式而保留；待所有开发
+// 项目重新保存后即可删除以下整段。
+// ============================================================================
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyGraphDe {
+    id: GraphId,
+    name: String,
+    kind: GraphKind,
+    #[serde(default)]
+    position: GraphPosition,
+    data_state: LegacyDataStateDe,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyDataStateDe {
+    #[serde(default)]
+    nodes: HashMap<NodeId, LegacyNodeDe>,
+    #[serde(default)]
+    pins: HashMap<PinId, PinInstance>,
+    #[serde(default)]
+    connections: LegacyConnectionsDe,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyNodeDe {
+    id: NodeId,
+    node_type: String,
+    #[serde(default)]
+    type_var_map: HashMap<TypeVarId, TypeVarDefinition>,
+    #[serde(default)]
+    position: NodePosition,
+    #[serde(default)]
+    instance_params: NodeInstanceParams,
+    #[serde(default)]
+    pin_ids: Vec<PinId>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct LegacyConnectionsDe {
+    #[serde(default)]
+    links: Vec<Connection>,
+    #[serde(default)]
+    connections: HashMap<PinId, Vec<PinId>>,
+}
+
+impl GraphInstance {
+    /// 过渡期：从旧格式的 `graph` JSON 对象重建 `GraphInstance`。
+    /// 仅在新格式解析失败时作为回退使用，加载后下次保存即升级为新格式。
+    pub(crate) fn from_legacy_graph_json(value: &serde_json::Value) -> Result<Self, String> {
+        let legacy: LegacyGraphDe =
+            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+
+        let mut data_state = GraphDataState::default();
+        for (pin_id, pin) in legacy.data_state.pins {
+            data_state.pins.insert(pin_id, pin);
+        }
+        for (node_id, node) in legacy.data_state.nodes {
+            let definition = Arc::new(NodeDefinition::placeholder(node.node_type));
+            data_state.add_node(NodeInstance {
+                id: node.id,
+                definition,
+                type_var_map: node.type_var_map,
+                position: node.position,
+                instance_params: node.instance_params,
+                pin_ids: node.pin_ids,
+            });
+            let _ = node_id;
+        }
+
+        let pin_to_node: Vec<(PinId, NodeId)> = data_state
+            .pins
+            .values()
+            .map(|pin| (pin.id, pin.node_id))
+            .collect();
+        for (pin_id, node_id) in pin_to_node {
+            data_state.connections.register_pin(pin_id, node_id);
+        }
+
+        for link in legacy.data_state.connections.links {
+            data_state.connections.connect(link.from_pin, link.to_pin);
+        }
+        for (from_pin, to_pins) in legacy.data_state.connections.connections {
+            for to_pin in to_pins {
+                data_state.connections.connect(from_pin, to_pin);
+            }
+        }
+
+        Ok(Self {
+            id: legacy.id,
+            name: legacy.name,
+            kind: legacy.kind,
+            position: legacy.position,
+            data_state: Arc::new(RwLock::new(data_state)),
+            registry: Default::default(),
+            schema_provider: None,
+        })
+    }
 }
 
 impl std::fmt::Debug for GraphInstance {

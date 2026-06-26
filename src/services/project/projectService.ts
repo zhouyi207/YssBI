@@ -6,6 +6,7 @@ import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 
 type CanvasState = GraphPosition;
 
@@ -348,27 +349,35 @@ export class ProjectService {
     static async cleanupInvalidRegisteredProjects(
         onProgress?: (event: ProjectCleanupProgressEvent) => void,
     ): Promise<CleanupInvalidProjectsResult> {
-        const channel = new Channel<ProjectCleanupProgressEvent>();
+        const channel = trackChannel(new Channel<ProjectCleanupProgressEvent>());
         channel.onmessage = (event) => {
             onProgress?.(event);
         };
-        return await invoke("cleanup_invalid_registered_projects", {
-            onProgress: channel,
-        });
+        try {
+            return await invoke("cleanup_invalid_registered_projects", {
+                onProgress: channel,
+            });
+        } finally {
+            untrackChannel(channel);
+        }
     }
 
     static async scanProjectsInDirectory(
         directory: string,
         onProgress?: (event: ProjectScanProgressEvent) => void,
     ): Promise<ScanProjectsResult> {
-        const channel = new Channel<ProjectScanProgressEvent>();
+        const channel = trackChannel(new Channel<ProjectScanProgressEvent>());
         channel.onmessage = (event) => {
             onProgress?.(event);
         };
-        return await invoke("scan_projects_in_directory", {
-            directory,
-            onProgress: channel,
-        });
+        try {
+            return await invoke("scan_projects_in_directory", {
+                directory,
+                onProgress: channel,
+            });
+        } finally {
+            untrackChannel(channel);
+        }
     }
 
     static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {
@@ -498,15 +507,19 @@ export class ProjectService {
         onEvent?: (event: ExecutionEvent) => void,
         graphId?: string,
     ): Promise<{ executedGraphs: number; logs: string[] }> {
-        const channel = new Channel<ExecutionEvent>();
+        const channel = trackChannel(new Channel<ExecutionEvent>());
         channel.onmessage = (msg) => {
             onEvent?.(msg);
         };
-        const res = await invoke<{ executedGraphs: number; logs: string[] }>(
-            "execute_project",
-            { onEvent: channel, graphId: graphId ?? null },
-        );
-        return res;
+        try {
+            const res = await invoke<{ executedGraphs: number; logs: string[] }>(
+                "execute_project",
+                { onEvent: channel, graphId: graphId ?? null },
+            );
+            return res;
+        } finally {
+            untrackChannel(channel);
+        }
     }
 
     static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {

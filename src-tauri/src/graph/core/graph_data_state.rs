@@ -2,25 +2,24 @@ use crate::graph::ConnectionManager;
 use crate::graph::DataType;
 use crate::graph::TypeVarId;
 use crate::graph::{NodeId, NodeInstance, PinId, PinInstance};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// - 所有 Node 实例
 /// - 所有 Pin 实例
 /// - 所有连接关系
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// 不再直接序列化：磁盘格式由 `GraphInstance` 的自定义 serde 负责，运行期缓存
+/// （`pin_types` / `type_var_bindings`）始终在加载后重建。
+#[derive(Clone, Debug)]
 pub struct GraphDataState {
     pub nodes: HashMap<NodeId, NodeInstance>,
     pub pins: HashMap<PinId, PinInstance>,
     pub connections: ConnectionManager,
 
     /// 类型推断缓存（不持久化；加载后 infer_types 重建）
-    #[serde(skip, default)]
     pub pin_types: HashMap<PinId, DataType>,
 
     // 运行时 TypeVar 绑定缓存（不持久化；加载后 infer_types 重建）
-    #[serde(skip, default)]
     pub type_var_bindings: HashMap<TypeVarId, DataType>,
 }
 

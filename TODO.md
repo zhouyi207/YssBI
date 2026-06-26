@@ -326,9 +326,7 @@ src-tauri/Cargo.toml
 - [x] 修复 `typeVarBindings` 推断泄漏：concrete pin 不再创建临时 TypeVarId；`commit_to_graph` 仅保留 `node.type_var_map` 中的绑定
 - [x] `.yssbi-event` 不再持久化 `typeVarBindings`（`#[serde(skip)]`）；图加载后 `prepare_graph_runtime` 重跑 `infer_types` 重建缓存
 - [x] `.yssbi-event` 体积优化（Phase A）：连接仅存 `links`；跳过 `pinTypes` / `resolvedSchema`；节点存 `nodeType` 替代完整 `definition`；静态 pin 存 `pinContract`；保存前 `reconcile_connections` 清理孤立连接；紧凑 JSON（`to_string`）
-- [ ] `.yssbi-event` 体积优化 Phase B：持久化格式对齐 `GraphRebuildSnapshot`（nodeType + pin id/userValue/动态 override + flat connections；加载时 registry 重建）
-- [ ] Dev/HMR 下 `[TAURI] Couldn't find callback id`：排查 WebView 热重载时 Rust 异步 `invoke` 回调失效；确认 release 构建是否仍出现
-- [ ] 旧 `.yssbi-event` / `.yssbi-function` 重新保存或批量迁移，以丢弃磁盘上的 legacy 冗余字段（完整 `definition`、四表 `connections`、`pinTypes` 等）
+
 
 ## 2026.06.26
 
@@ -425,7 +423,13 @@ src-tauri/Cargo.toml
 - [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（执行器在 `NodeStart` 后对节点全部已连线 data input 发 `ConnectionActive`，`EdgesOverlay` 读 store 连接，2026.06.28 根治）
 - [x] **Sequence 执行顺序修复**：`TriggerOutput` / `TriggerSequence` 触发后立即完成的子帧改挂 `frame.parent_frame`（最近 waiting 祖先），不再挂到即将出栈的本帧；`TriggerAndContinue` 仍挂 `frame.id`；Loop 路径不变 → Then1 整条下游子树执行完毕后再执行 Then2，避免 Then 分支交错（`executor.rs`）
 - [x] **Sequence 执行顺序回归测试**：`tests/common/mod.rs` 新增 `RecordingEmitter` 记录 `NodeStart` 顺序；`logic_test.rs` 新增 `test_sequence_runs_branch_fully_before_next`（Then1→A→A2、Then2→B→B2，断言 `[Seq, A, A2, B, B2]`）
-
+- [x] **导入数据窗口与卡顿修复**：
+  - 后端：`load_database` / `delete_database` / `list_sqlite_tables` / `list_sql_tables` / `list_excel_sheets` 改为 `spawn_blocking` 异步 command，重 I/O 不再阻塞主线程
+  - 前端：导入/删除/读表列表包裹 `ProgressOverlay`（`dataOperationProgress.ts`），先绘制蒙层再 invoke；toast 与进度文案 i18n 化
+  - UI：`ImportModal` 重构为左侧分类导航 + 右侧卡片选项，补 subtitle 与 `importModal.types.*` i18n
+- [x] `.yssbi-event` 体积优化 Phase B：磁盘格式对齐 `GraphRebuildSnapshot`——`GraphInstance` 自定义 serde 落盘为扁平 `nodes[]`（pin 内联）+ 扁平 `connections[]`，去除 HashMap 键冗余与 `dataState` 包裹；静态 pin 由 registry 经 `set_registry` 重挂，动态/可重复 pin 自带完整定义 override；运行期缓存（`pinTypes` / `typeVarBindings` / `resolvedSchema`）不落盘
+- [x] Dev/HMR 下 `[TAURI] Couldn't find callback id`：确认为 Vite HMR/整页重载期间长生命周期 `Channel`（`execute_project` 等）的残留回调所致——release 无 HMR 故天然干净；新增 `services/devHmrIpc.ts`（仅 `import.meta.hot` 守卫、生产 tree-shake）登记/拆除活跃 Channel，并仅过滤该条开发期噪声
+- [x] 旧 `.yssbi-event` / `.yssbi-function` 迁移：移除 legacy 读取分支（`node_instance` 完整 `definition` 回退、`ConnectionManagerLegacy` 四表）；保存即升级为新格式，并保留过渡期旧格式回退读取（`read_legacy_graph_document` / `from_legacy_graph_json`，全部项目重存后可删）
 
 ## v1.0 待办
 
@@ -436,7 +440,6 @@ src-tauri/Cargo.toml
 - [ ] 类型推荐估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
-- [ ] 导入数据窗口样式太丑，导入数据逻辑会将窗口卡死
 - [ ] 我觉得在 tabs 中的所有窗口使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
 
 # TODOLIST

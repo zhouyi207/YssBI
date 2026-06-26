@@ -8,7 +8,7 @@ pub mod connection_validator;
 use crate::graph::NodeId;
 use crate::graph::PinId;
 use crate::graph::PinInstance;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
@@ -42,61 +42,8 @@ pub struct ConnectionManager {
     node_to_pins: Mutex<HashMap<NodeId, Vec<PinId>>>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConnectionManagerPersist {
-    links: Vec<Connection>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConnectionManagerLegacy {
-    connections: HashMap<PinId, Vec<PinId>>,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ConnectionManagerLoad {
-    Slim(ConnectionManagerPersist),
-    Legacy(ConnectionManagerLegacy),
-}
-
-impl Serialize for ConnectionManager {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        ConnectionManagerPersist {
-            links: self.all_connections(),
-        }
-        .serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ConnectionManager {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let loaded = ConnectionManagerLoad::deserialize(deserializer)?;
-        let manager = ConnectionManager::new();
-        match loaded {
-            ConnectionManagerLoad::Slim(persist) => {
-                for link in persist.links {
-                    manager.connect(link.from_pin, link.to_pin);
-                }
-            }
-            ConnectionManagerLoad::Legacy(legacy) => {
-                for (from_pin, to_pins) in legacy.connections {
-                    for to_pin in to_pins {
-                        manager.connect(from_pin, to_pin);
-                    }
-                }
-            }
-        }
-        Ok(manager)
-    }
-}
+// `ConnectionManager` 不再单独序列化：磁盘格式由 `GraphInstance` 的自定义 serde
+// 统一负责（连接以扁平 `connections[]` 落盘）。
 
 // 手动实现 Clone，因为 Mutex 不支持 Clone
 impl Clone for ConnectionManager {

@@ -16,7 +16,7 @@ use std::sync::{Arc, RwLock};
 /// 项目状态
 ///
 /// 是不需要 序列化的
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ProjectState {
     pub project_data: Arc<RwLock<ProjectData>>,
     pub project_path: Arc<RwLock<Option<String>>>,

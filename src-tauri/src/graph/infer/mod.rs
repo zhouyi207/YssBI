@@ -73,8 +73,9 @@ mod tests {
             .expect("create add node");
         infer_graph(&graph).expect("infer");
 
-        let data_state = graph.data_state.read().unwrap();
-        let value = serde_json::to_value(&*data_state).expect("serialize data state");
+        let value = serde_json::to_value(&graph).expect("serialize graph");
+
+        // 运行期缓存绝不落盘
         assert!(
             value.get("typeVarBindings").is_none(),
             "typeVarBindings must not be written to project files"
@@ -83,14 +84,19 @@ mod tests {
             value.get("pinTypes").is_none(),
             "pinTypes must not be written to project files"
         );
-        let connections = value.get("connections").expect("connections");
+
+        // 扁平、与快照对齐的磁盘格式：无 dataState 包裹，nodes/connections 为数组
         assert!(
-            connections.get("links").is_some(),
-            "connections should serialize as {{ links: [...] }}"
+            value.get("dataState").is_none(),
+            "graph should serialize flat (no dataState wrapper)"
         );
         assert!(
-            connections.get("reverseConnections").is_none(),
-            "reverseConnections must not be written to project files"
+            value.get("nodes").and_then(|n| n.as_array()).is_some(),
+            "nodes should serialize as a flat array"
+        );
+        assert!(
+            value.get("connections").and_then(|c| c.as_array()).is_some(),
+            "connections should serialize as a flat array"
         );
     }
 }

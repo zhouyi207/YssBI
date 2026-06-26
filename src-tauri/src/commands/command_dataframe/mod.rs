@@ -6,6 +6,16 @@ mod types;
 
 use types::dataframe_to_row_matrix;
 
+async fn run_on_blocking_pool<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce() -> Result<R, String> + Send + 'static,
+    R: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DatabaseRowsPayload {
@@ -14,39 +24,49 @@ struct DatabaseRowsPayload {
 }
 
 #[tauri::command]
-pub fn load_database(
-    state: State<ProjectState>,
+pub async fn load_database(
+    state: State<'_, ProjectState>,
     engine: DatabaseEngineDTO,
 ) -> Result<serde_json::Value, String> {
-    let result = crate::application::database::load_database(state.inner(), engine)?;
+    let state = state.inner().clone();
+    let result = run_on_blocking_pool(move || {
+        crate::application::database::load_database(&state, engine)
+    })
+    .await?;
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, String> {
-    use crate::database::DatabaseEngineSql;
-    crate::database::sql_reader::list_tables(
-        &DatabaseEngineSql::Sqlite { auto_create: false },
-        &db_path,
-    )
+pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, String> {
+    run_on_blocking_pool(move || {
+        use crate::database::DatabaseEngineSql;
+        crate::database::sql_reader::list_tables(
+            &DatabaseEngineSql::Sqlite { auto_create: false },
+            &db_path,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn list_sql_tables(engine: String, connection_string: String) -> Result<Vec<String>, String> {
-    use crate::database::DatabaseEngineSql;
-    let engine_enum = match engine.as_str() {
-        "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
-        "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
-            charset: "utf8mb4".to_string(),
-        },
-        _ => return Err(format!("Unsupported SQL engine: {}", engine)),
-    };
-    crate::database::sql_reader::list_tables(&engine_enum, &connection_string)
+pub async fn list_sql_tables(engine: String, connection_string: String) -> Result<Vec<String>, String> {
+    run_on_blocking_pool(move || {
+        use crate::database::DatabaseEngineSql;
+        let engine_enum = match engine.as_str() {
+            "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
+            "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
+                charset: "utf8mb4".to_string(),
+            },
+            _ => return Err(format!("Unsupported SQL engine: {}", engine)),
+        };
+        crate::database::sql_reader::list_tables(&engine_enum, &connection_string)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn list_excel_sheets(file_path: String) -> Result<Vec<String>, String> {
-    crate::database::excel_reader::list_sheets(&file_path)
+pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, String> {
+    run_on_blocking_pool(move || crate::database::excel_reader::list_sheets(&file_path)).await
 }
 
 #[tauri::command]
@@ -59,9 +79,13 @@ pub fn get_database_meta(
 }
 
 #[tauri::command]
-pub fn delete_database(state: State<ProjectState>, id: String) -> Result<(), String> {
-    state.delete_database(&id);
-    Ok(())
+pub async fn delete_database(state: State<'_, ProjectState>, id: String) -> Result<(), String> {
+    let state = state.inner().clone();
+    run_on_blocking_pool(move || {
+        state.delete_database(&id);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
