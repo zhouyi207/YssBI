@@ -2,6 +2,18 @@
 # 在目前的开发环境中，不要这样做，可以取消 debug
 # 项目未发布 不做任何迁移处理
 
+每次更新版本都需要
+
+```
+同步改三处版本（例如 0.1.1）：
+
+src-tauri/tauri.conf.json
+package.json
+src-tauri/Cargo.toml
+
+提交并 push，或手动再跑 publish.yml
+```
+
 # DOLIST
 
 ## 2026.02.27
