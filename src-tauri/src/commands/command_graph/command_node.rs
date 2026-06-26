@@ -339,7 +339,8 @@ pub fn create_node_with_id(
         y.unwrap_or(0.0),
         params,
     )?;
-    let _ = graph.infer_types();
+    // 与 `create_node_with_position` 一致：id 指定的新建节点同样没有任何连接，
+    // 不会改变已有 pin 类型，故跳过全图类型推断，保持 O(1)。
 
     let node_instance = graph
         .get_node_instance(nid)

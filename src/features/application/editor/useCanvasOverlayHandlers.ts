@@ -5,7 +5,6 @@ import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
-import { findAutoConnectPinIndex } from "@/shared/utils/pinCompatibility";
 import type { Pin } from "@/shared/types/domain/pin";
 import { logger } from '@/utils/appLogger';
 
@@ -101,24 +100,26 @@ export function useCanvasOverlayHandlers({
       }
 
       const sourcePinForConnect = pendingConnection;
+      const definition =
+        sourcePinForConnect && activeTabId
+          ? useNodeRegistryStore.getState().getDefinition(item.nodeType)
+          : undefined;
 
-      const result = await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
-
-      if (sourcePinForConnect && result && activeTabId) {
+      if (sourcePinForConnect && activeTabId && definition) {
+        // 从 pin 拖拽创建：单步乐观完成「建节点 + 自动连线」，节点与连线同时即时出现。
         try {
-          const definition = useNodeRegistryStore.getState().getDefinition(item.nodeType);
-          if (definition?.pinSlots) {
-            const matchIdx = findAutoConnectPinIndex(definition.pinSlots, sourcePinForConnect);
-            if (matchIdx >= 0 && matchIdx < result.pinIds.length) {
-              await executeCommand(activeTabId, 'ConnectPins', {
-                pinA: sourcePinForConnect.id,
-                pinB: result.pinIds[matchIdx],
-              });
-            }
-          }
+          await executeCommand(activeTabId, 'CreateNodeWithConnection', {
+            nodeType: item.nodeType,
+            x,
+            y,
+            params: item.overrides ?? undefined,
+            sourcePin: sourcePinForConnect,
+          });
         } catch (err) {
-          logger.graph.warn(`Failed to auto-connect: ${err instanceof Error ? err.message : String(err)}`, 'CanvasOverlay');
+          logger.graph.warn(`Failed to create node with connection: ${err instanceof Error ? err.message : String(err)}`, 'CanvasOverlay');
         }
+      } else {
+        await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
       }
 
       setContextMenu(null);

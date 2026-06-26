@@ -25,11 +25,15 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
     handle(payload: NodeCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('Node created:', payload.nodeId, 'in graph:', payload.graphId);
 
+        // reconcileNode 同时处理两种情形：
+        // - 本地已乐观插入（创建命令，id 一致）：用后端权威字段覆盖，无重复节点；
+        // - 节点尚不存在（redo / 其它来源）：按普通添加路径插入。
         const store = useGraphDataStore.getState();
-        store.addNode(payload.graphId, dtoToNodeData(payload.graphId, payload.nodeId, payload.data));
-        payload.pins.forEach((pin) => {
-            store.addPin(payload.nodeId, pin as PinData);
-        });
+        store.reconcileNode(
+            payload.graphId,
+            dtoToNodeData(payload.graphId, payload.nodeId, payload.data),
+            payload.pins as PinData[],
+        );
         markGraphTabDirty(payload.graphId);
         callbacks?.onNodeCreated?.(payload.graphId, payload.nodeId, payload.data);
     }

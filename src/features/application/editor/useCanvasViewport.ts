@@ -6,6 +6,7 @@ import { DEFAULT_VIEWPORT, NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } fro
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { ProjectService } from "@/services/project/projectService";
 import { clamp } from "@/shared/utils";
+import { resolvePinOffsetWaiters } from "@/features/core/canvas/pinOffsetWaiter";
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
 function segmentIntersectsRect(
@@ -294,7 +295,10 @@ export function useCanvasViewport(
       }
       return nextOffsets;
     });
-  }, [canvasRef, scale, visibleNodeIds, nodes, nodeResizeVersion]);
+
+    // 兑现等待该 pin 偏移的创建流程（从 pin 拖拽建节点后的位置对齐）
+    if (graphId) resolvePinOffsetWaiters(graphId, nextOffsets);
+  }, [canvasRef, scale, visibleNodeIds, nodes, nodeResizeVersion, graphId]);
 
   const getPinWorldPos = useCallback(
     (pinId: string) => {

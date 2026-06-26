@@ -574,9 +574,11 @@ impl GraphInstance {
         y: f32,
         params: Option<NodeInstanceParams>,
     ) -> Result<NodeId, String> {
-        let node_id = self.create_node_raw(node_type, x, y, params)?;
-        let _ = self.infer_types();
-        Ok(node_id)
+        // 新建节点尚无任何连接，不会影响已有 pin 的类型；其数据 pin 类型已由
+        // pin 定义（`data_type`）或 `create_node_raw` 写入的 `variable_data_type`
+        // 覆盖确定。`infer_all` 只处理连接，对孤立节点没有贡献，故此处不做全图
+        // 类型推断，避免随图规模线性增长的无谓开销。
+        self.create_node_raw(node_type, x, y, params)
     }
 
     /// 创建节点但不运行类型推断（用于批量创建，外部负责最终调一次 infer_types）

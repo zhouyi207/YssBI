@@ -48,6 +48,18 @@ interface GraphDataStore {
   batchAddNodesAndPins(graphId: GraphId, items: Array<{ node: NodeData; pins: PinData[] }>): void;
   /** 批量删除节点（单次 set） */
   batchDeleteNodes(nodeIds: NodeId[]): void;
+  /**
+   * 乐观节点草稿：用客户端生成的 id 立即插入节点及其初始 pin，先于后端往返渲染。
+   * 后端权威数据通过 NodeCreated 事件回传后由 handler 对齐（id 一致，无重复）。
+   */
+  applyNodeDraft(graphId: GraphId, node: NodeData, pins: PinData[]): void;
+  /** 回滚 applyNodeDraft（后端创建失败时） */
+  revertNodeDraft(nodeId: NodeId): void;
+  /**
+   * 用后端权威数据覆盖已乐观插入的节点（id 一致）：更新节点字段、按 id 更新/补齐
+   * pin、并按权威顺序重排，使乐观渲染最终与后端一致。
+   */
+  reconcileNode(graphId: GraphId, node: NodeData, pins: PinData[]): void;
 
   // ======================
   // Pin
@@ -254,6 +266,66 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         pins: nextPins,
         nodePins: nextNodePins,
         graphNodes: { ...state.graphNodes, [graphId]: graphNodeIds },
+      };
+    }),
+
+  applyNodeDraft: (graphId, node, pins) =>
+    get().batchAddNodesAndPins(graphId, [{ node, pins }]),
+
+  revertNodeDraft: (nodeId) => get().deleteNode(nodeId),
+
+  reconcileNode: (graphId, node, pins) =>
+    set((state) => {
+      const existing = state.nodes[node.id];
+      // 节点尚未乐观插入（如来自其它来源）：走普通添加路径。
+      if (!existing) {
+        const nextPins = { ...state.pins };
+        const pinIds: PinId[] = [];
+        for (const pin of pins) {
+          nextPins[pin.id] = pin;
+          pinIds.push(pin.id);
+        }
+        const nextPinConnections = { ...state.pinConnections };
+        for (const pin of pins) {
+          if (!nextPinConnections[pin.id]) nextPinConnections[pin.id] = [];
+        }
+        return {
+          nodes: { ...state.nodes, [node.id]: node },
+          pins: nextPins,
+          nodePins: { ...state.nodePins, [node.id]: pinIds },
+          pinConnections: nextPinConnections,
+          graphNodes: {
+            ...state.graphNodes,
+            [graphId]: [...(state.graphNodes[graphId] ?? []), node.id],
+          },
+        };
+      }
+
+      // 已乐观插入：用权威字段覆盖，保留既有连接索引。
+      const nextNodes = { ...state.nodes, [node.id]: { ...existing, ...node } };
+      const nextPins = { ...state.pins };
+      const nextPinConnections = { ...state.pinConnections };
+      const existingPinIds = state.nodePins[node.id] ?? [];
+
+      for (const pin of pins) {
+        const prev = nextPins[pin.id];
+        nextPins[pin.id] = prev ? { ...prev, ...pin } : pin;
+        if (!nextPinConnections[pin.id]) nextPinConnections[pin.id] = [];
+      }
+      // 移除权威集合中不存在的乐观 pin（孤立新建一般不会发生）
+      const authoritativeIds = new Set(pins.map((p) => p.id));
+      for (const pid of existingPinIds) {
+        if (!authoritativeIds.has(pid)) {
+          delete nextPins[pid];
+          delete nextPinConnections[pid];
+        }
+      }
+
+      return {
+        nodes: nextNodes,
+        pins: nextPins,
+        nodePins: { ...state.nodePins, [node.id]: pins.map((p) => p.id) },
+        pinConnections: nextPinConnections,
       };
     }),
 

@@ -12,6 +12,7 @@ export type CommandType =
   | 'ConnectPins'
   | 'DisconnectPin'
   | 'CreateNode'
+  | 'CreateNodeWithConnection'
   | 'DeleteNodes'
   | 'Composite'
   | 'AddRepeatablePin'
