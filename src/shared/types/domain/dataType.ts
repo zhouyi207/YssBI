@@ -46,6 +46,94 @@ export function dataTypeDisplay(dt: DataType): string {
   return dt.kind;
 }
 
+/** 在顶层（不在 `<>` 内部）按分隔符拆分字符串，对齐 Rust split_top_level */
+function splitTopLevel(s: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '<') depth++;
+    else if (c === '>') depth = Math.max(0, depth - 1);
+    else if (c === sep && depth === 0) {
+      const part = s.slice(start, i).trim();
+      if (part) parts.push(part);
+      start = i + 1;
+    }
+  }
+  const tail = s.slice(start).trim();
+  if (tail) parts.push(tail);
+  return parts;
+}
+
+/** 构造 OneOf，自动展平嵌套并去重；对齐 Rust DataType::one_of */
+function oneOf(types: DataType[]): DataType {
+  const flat: DataType[] = [];
+  for (const t of types) {
+    if (t.kind === 'Any') return { kind: 'Any' };
+    const members = t.kind === 'OneOf' ? t.inner : [t];
+    for (const m of members) {
+      if (m.kind === 'Any') return { kind: 'Any' };
+      if (!flat.some(f => dataTypeDisplay(f) === dataTypeDisplay(m))) flat.push(m);
+    }
+  }
+  if (flat.length === 0) return { kind: 'Any' };
+  if (flat.length === 1) return flat[0];
+  return { kind: 'OneOf', inner: flat };
+}
+
+/**
+ * 从显示字符串解析为 DataType，对齐 Rust `DataType::from_str`。
+ * 支持 Date / Categorical / 裸 DataSeries / 嵌套容器 / `|` 联合类型。
+ * 解析失败返回 null（任一成员失败则整体失败，与 Rust collect 行为一致）。
+ */
+export function dataTypeFromDisplayString(s: string): DataType | null {
+  const trimmed = s.trim();
+
+  const parts = splitTopLevel(trimmed, '|');
+  if (parts.length > 1) {
+    const types: DataType[] = [];
+    for (const p of parts) {
+      const t = dataTypeFromDisplayString(p);
+      if (t === null) return null;
+      types.push(t);
+    }
+    return oneOf(types);
+  }
+
+  switch (trimmed) {
+    case 'Boolean': return { kind: 'Boolean' };
+    case 'Int32': return { kind: 'Int32' };
+    case 'Int64': return { kind: 'Int64' };
+    case 'Float32': return { kind: 'Float32' };
+    case 'Float64': return { kind: 'Float64' };
+    case 'String': return { kind: 'String' };
+    case 'Date': return { kind: 'Date' };
+    case 'Categorical': return { kind: 'Categorical' };
+    case 'Object': return { kind: 'Object' };
+    case 'DataFrame': return { kind: 'DataFrame' };
+    case 'DataSeries': return { kind: 'DataSeries', inner: { kind: 'Any' } };
+    case 'Any': return { kind: 'Any' };
+  }
+
+  const arrayMatch = trimmed.match(/^Array<(.+)>$/);
+  if (arrayMatch) {
+    const inner = dataTypeFromDisplayString(arrayMatch[1]);
+    return inner ? { kind: 'Array', inner } : null;
+  }
+  const dsMatch = trimmed.match(/^DataSeries<(.+)>$/);
+  if (dsMatch) {
+    const inner = dataTypeFromDisplayString(dsMatch[1]);
+    return inner ? { kind: 'DataSeries', inner } : null;
+  }
+  const structMatch = trimmed.match(/^Struct<(.+)>$/);
+  if (structMatch) {
+    return { kind: 'Struct', inner: structMatch[1] };
+  }
+
+  return null;
+}
+
 /** 从 kind 字符串创建 DataType（支持后端返回的 type 如 "Date"） */
 export function dataTypeFromKey(key: string, inner?: DataType | string): DataType {
   const k = (key?.trim() || 'Any') as DataType['kind'];

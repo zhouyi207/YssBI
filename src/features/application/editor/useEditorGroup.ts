@@ -2,6 +2,7 @@ import { useCallback, useContext, useMemo } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditor } from './useEditor';
+import type { Pin } from '@/shared/types/domain';
 
 export { GroupContext };
 
@@ -39,11 +40,11 @@ export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
     editor.onNodePointerDown(nodeId, e, groupId);
   }, [groupId, editor.onNodePointerDown, setActiveGroup]);
 
-  const wrappedOnPinPointerDown = useCallback((pinId: string, e: React.PointerEvent) => {
+  const wrappedOnPinPointerDown = useCallback((pin: Pin, e: React.PointerEvent) => {
     if (useLayoutStore.getState().activeGroupId !== groupId) {
       setActiveGroup(groupId);
     }
-    editor.onPinPointerDown(pinId, e, groupId);
+    editor.onPinPointerDown(pin, e, groupId);
   }, [groupId, editor.onPinPointerDown, setActiveGroup]);
 
   const wrappedSetCanvas = useCallback((updater: Parameters<typeof editor.setCanvas>[0]) => {

@@ -632,8 +632,117 @@ impl GraphInstance {
     }
 }
 
+/// `connect_topology` 的结果：仅描述拓扑变更，不含 schema/infer/动态 pin 副作用
+pub struct ConnectTopology {
+    /// 已确定方向的源 pin（output 端）
+    pub from_pin: PinId,
+    /// 已确定方向的目标 pin（input 端）
+    pub to_pin: PinId,
+    /// 被自动断开的旧连接（exec 单出边、input 单入边）
+    pub auto_disconnected: Vec<(PinId, PinId)>,
+    /// 受此次拓扑变更影响的节点（连接两端 + 被自动断开端），作为副作用传播的种子
+    pub seed_nodes: Vec<NodeId>,
+}
+
 /// 连接管理
 impl GraphInstance {
+    /// 仅修改连接拓扑（校验 → 自动断开 → 建立连接），不触发 schema/infer/动态 pin。
+    ///
+    /// 供单次 `connect` 与批量粘贴复用：批量场景下多条连接共享一次副作用收尾
+    /// （见 `finish_graph_effects`），避免每条连接都做全图传播。
+    pub fn connect_topology(&self, pin_a: PinId, pin_b: PinId) -> Result<ConnectTopology, String> {
+        use crate::graph::connection::connection_validator::validate_connection;
+
+        let mut auto_disconnected: Vec<(PinId, PinId)> = Vec::new();
+        let mut seed_nodes: Vec<NodeId> = Vec::new();
+        let from_pin;
+        let to_pin;
+        {
+            let data_state = self.data_state.write().unwrap();
+
+            let validated = validate_connection(&data_state, pin_a, pin_b)?;
+            from_pin = validated.from_pin;
+            to_pin = validated.to_pin;
+
+            if let Some(p) = data_state.pins.get(&from_pin) {
+                seed_nodes.push(p.node_id);
+            }
+            if let Some(p) = data_state.pins.get(&to_pin) {
+                seed_nodes.push(p.node_id);
+            }
+
+            // Exec output: enforce single outgoing connection
+            let is_exec = data_state
+                .pins
+                .get(&from_pin)
+                .map(|p| p.definition.kind == PinKind::Exec)
+                .unwrap_or(false);
+
+            if is_exec {
+                let old_targets = data_state.connections.get_downstream(from_pin);
+                for old_to in old_targets {
+                    if let Some(node_id) = data_state.pins.get(&old_to).map(|p| p.node_id) {
+                        seed_nodes.push(node_id);
+                    }
+                    data_state.connections.disconnect(from_pin, old_to);
+                    auto_disconnected.push((from_pin, old_to));
+                }
+            }
+
+            // Input pin auto-disconnect (existing behavior)
+            if let Some(old_from) = data_state.connections.get_upstream(to_pin) {
+                if let Some(node_id) = data_state.pins.get(&old_from).map(|p| p.node_id) {
+                    seed_nodes.push(node_id);
+                }
+            }
+            if let Some(pair) = data_state.connections.connect(from_pin, to_pin) {
+                auto_disconnected.push(pair);
+            }
+        }
+
+        Ok(ConnectTopology {
+            from_pin,
+            to_pin,
+            auto_disconnected,
+            seed_nodes,
+        })
+    }
+
+    /// 拓扑变更后的统一副作用入口：增量传播 schema → 运行类型推断 →
+    /// 重建受影响节点（种子 + 其下游消费者）的动态 pin。
+    ///
+    /// 所有连接/断开操作（含批量粘贴）都通过此入口收尾，保证「一次拓扑变更
+    /// 对应一次副作用」。批量场景累积所有种子后只调用一次。
+    pub fn finish_graph_effects(
+        &self,
+        seed_nodes: &[NodeId],
+    ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
+        self.propagate_schemas_from(seed_nodes);
+        let inferred = self.infer_types().unwrap_or_default();
+
+        let mut to_resolve: Vec<NodeId> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for &nid in seed_nodes {
+            if seen.insert(nid) {
+                to_resolve.push(nid);
+            }
+            for d in self.get_downstream_resolve_nodes(nid) {
+                if seen.insert(d) {
+                    to_resolve.push(d);
+                }
+            }
+        }
+
+        let mut change_sets = Vec::new();
+        for node_id in to_resolve {
+            if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
+                change_sets.push(cs);
+            }
+        }
+
+        (change_sets, inferred)
+    }
+
     /// 连接两个 pin（无序），后端自动验证方向、类型兼容性等
     ///
     /// 验证链：存在性 → 同 Pin → 同节点 → 方向推断 → Kind 兼容
@@ -657,77 +766,15 @@ impl GraphInstance {
         ),
         String,
     > {
-        use crate::graph::connection::connection_validator::validate_connection;
-        use crate::graph::pin::PinKind;
-
-        let from_node_id;
-        let to_node_id;
-        let mut auto_disconnected: Vec<(PinId, PinId)> = Vec::new();
-        let mut auto_disconnected_node_ids: Vec<NodeId> = Vec::new();
-        let from_pin;
-        let to_pin;
-        {
-            let data_state = self.data_state.write().unwrap();
-
-            let validated = validate_connection(&data_state, pin_a, pin_b)?;
-            from_pin = validated.from_pin;
-            to_pin = validated.to_pin;
-
-            from_node_id = data_state.pins.get(&from_pin).map(|p| p.node_id);
-            to_node_id = data_state.pins.get(&to_pin).map(|p| p.node_id);
-
-            // Exec output: enforce single outgoing connection
-            let is_exec = data_state
-                .pins
-                .get(&from_pin)
-                .map(|p| p.definition.kind == PinKind::Exec)
-                .unwrap_or(false);
-
-            if is_exec {
-                let old_targets = data_state.connections.get_downstream(from_pin);
-                for old_to in old_targets {
-                    if let Some(node_id) = data_state.pins.get(&old_to).map(|p| p.node_id) {
-                        auto_disconnected_node_ids.push(node_id);
-                    }
-                    data_state.connections.disconnect(from_pin, old_to);
-                    auto_disconnected.push((from_pin, old_to));
-                }
-            }
-
-            // Input pin auto-disconnect (existing behavior)
-            if let Some(old_from) = data_state.connections.get_upstream(to_pin) {
-                if let Some(node_id) = data_state.pins.get(&old_from).map(|p| p.node_id) {
-                    auto_disconnected_node_ids.push(node_id);
-                }
-            }
-            if let Some(pair) = data_state.connections.connect(from_pin, to_pin) {
-                auto_disconnected.push(pair);
-            }
-        }
-
-        self.propagate_schemas();
-        let inferred = self.infer_types().unwrap_or_default();
-
-        let mut to_resolve: Vec<NodeId> = [to_node_id, from_node_id]
-            .into_iter()
-            .flatten()
-            .chain(auto_disconnected_node_ids.into_iter())
-            .collect();
-        if let Some(nid) = to_node_id {
-            to_resolve.extend(self.get_downstream_resolve_nodes(nid));
-        }
-
-        let mut change_sets = Vec::new();
-        let mut resolved = std::collections::HashSet::new();
-        for node_id in to_resolve {
-            if resolved.insert(node_id) {
-                if let Some(cs) = self.resolve_dynamic_pins(node_id)? {
-                    change_sets.push(cs);
-                }
-            }
-        }
-
-        Ok((from_pin, to_pin, auto_disconnected, change_sets, inferred))
+        let topo = self.connect_topology(pin_a, pin_b)?;
+        let (change_sets, inferred) = self.finish_graph_effects(&topo.seed_nodes);
+        Ok((
+            topo.from_pin,
+            topo.to_pin,
+            topo.auto_disconnected,
+            change_sets,
+            inferred,
+        ))
     }
 
     /// 返回下游连接的 pin 列表，过滤掉不存在的 pin（孤儿连接，如导入后节点/引脚已删除）
@@ -758,31 +805,19 @@ impl GraphInstance {
         from_pin: PinId,
         to_pin: PinId,
     ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
-        let to_node_id = self
-            .data_state
-            .read()
-            .unwrap()
-            .pins
-            .get(&to_pin)
-            .map(|p| p.node_id);
+        let mut seed_nodes: Vec<NodeId> = Vec::new();
         {
             let mut data_state = self.data_state.write().unwrap();
+            if let Some(p) = data_state.pins.get(&from_pin) {
+                seed_nodes.push(p.node_id);
+            }
+            if let Some(p) = data_state.pins.get(&to_pin) {
+                seed_nodes.push(p.node_id);
+            }
             data_state.connections.disconnect(from_pin, to_pin);
         }
 
-        self.propagate_schemas();
-        let mut change_sets = Vec::new();
-        if let Some(nid) = to_node_id {
-            let mut to_resolve: Vec<NodeId> = vec![nid];
-            to_resolve.extend(self.get_downstream_resolve_nodes(nid));
-            for node_id in to_resolve {
-                if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
-                    change_sets.push(cs);
-                }
-            }
-        }
-        let inferred = self.infer_types().unwrap_or_default();
-        (change_sets, inferred)
+        self.finish_graph_effects(&seed_nodes)
     }
 
     /// 断开指定 Pin 的所有连接（输入和输出）
@@ -797,40 +832,28 @@ impl GraphInstance {
         Vec<(PinId, DataType)>,
     ) {
         let mut removed_connections = Vec::new();
-        let mut nodes_to_resolve = std::collections::HashSet::new();
+        let mut seed_nodes: Vec<NodeId> = Vec::new();
         {
             let mut data_state = self.data_state.write().unwrap();
             if let Some(p) = data_state.pins.get(&pin_id) {
-                nodes_to_resolve.insert(p.node_id);
+                seed_nodes.push(p.node_id);
             }
             for to_pin in data_state.connections.get_downstream(pin_id) {
                 removed_connections.push((pin_id, to_pin));
                 if let Some(p) = data_state.pins.get(&to_pin) {
-                    nodes_to_resolve.insert(p.node_id);
+                    seed_nodes.push(p.node_id);
                 }
             }
             if let Some(from_pin) = data_state.connections.get_upstream(pin_id) {
                 removed_connections.push((from_pin, pin_id));
                 if let Some(p) = data_state.pins.get(&from_pin) {
-                    nodes_to_resolve.insert(p.node_id);
+                    seed_nodes.push(p.node_id);
                 }
             }
             data_state.connections.disconnect_all(pin_id);
         }
 
-        self.propagate_schemas();
-        let mut to_resolve = std::collections::HashSet::new();
-        for nid in &nodes_to_resolve {
-            to_resolve.insert(*nid);
-            to_resolve.extend(self.get_downstream_resolve_nodes(*nid));
-        }
-        let mut change_sets = Vec::new();
-        for node_id in to_resolve {
-            if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
-                change_sets.push(cs);
-            }
-        }
-        let inferred = self.infer_types().unwrap_or_default();
+        let (change_sets, inferred) = self.finish_graph_effects(&seed_nodes);
         (removed_connections, change_sets, inferred)
     }
 
@@ -1015,6 +1038,44 @@ impl GraphInstance {
         matches!(type_key, "OLSModel" | "LogitModel" | "ProbitModel")
     }
 
+    /// 将计算出的 schema 写入节点的 output data pin（DataFrame / 模型 Struct）
+    fn assign_output_schema(
+        data_state: &mut std::sync::RwLockWriteGuard<'_, GraphDataState>,
+        node_id: NodeId,
+        schema: &DataSchema,
+    ) {
+        let pin_ids: Vec<PinId> = data_state
+            .nodes
+            .get(&node_id)
+            .map(|n| n.pin_ids.clone())
+            .unwrap_or_default();
+        let has_output_resolver = data_state
+            .nodes
+            .get(&node_id)
+            .map(|n| n.definition.output_schema_resolver.is_some())
+            .unwrap_or(false);
+        for pin_id in pin_ids {
+            if let Some(pin) = data_state.pins.get_mut(&pin_id) {
+                if !pin.is_output() || !pin.is_data() {
+                    continue;
+                }
+                let assign = match pin.definition.data_type.as_ref() {
+                    Some(PinDataTypeDefinition::Concrete(DataType::DataFrame)) => true,
+                    Some(PinDataTypeDefinition::Concrete(DataType::Struct(type_key)))
+                        if has_output_resolver && Self::is_model_struct_type_key(type_key) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
+                if assign {
+                    pin.resolved_schema = Some(schema.clone());
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn propagate_schemas(&self) {
         let node_order = self.topological_node_order();
         let mut data_state = self.data_state.write().unwrap();
@@ -1024,39 +1085,78 @@ impl GraphInstance {
         }
 
         for node_id in node_order {
-            let schema = self.compute_output_schema_for_node(&mut data_state, node_id);
-            if let Some(schema) = schema {
-                let pin_ids: Vec<PinId> = data_state
-                    .nodes
-                    .get(&node_id)
-                    .map(|n| n.pin_ids.clone())
-                    .unwrap_or_default();
-                let has_output_resolver = data_state
-                    .nodes
-                    .get(&node_id)
-                    .map(|n| n.definition.output_schema_resolver.is_some())
-                    .unwrap_or(false);
-                for pin_id in pin_ids {
-                    if let Some(pin) = data_state.pins.get_mut(&pin_id) {
-                        if !pin.is_output() || !pin.is_data() {
-                            continue;
-                        }
-                        let assign = match pin.definition.data_type.as_ref() {
-                            Some(PinDataTypeDefinition::Concrete(DataType::DataFrame)) => true,
-                            Some(PinDataTypeDefinition::Concrete(DataType::Struct(type_key)))
-                                if has_output_resolver
-                                    && Self::is_model_struct_type_key(type_key) =>
-                            {
-                                true
+            if let Some(schema) = self.compute_output_schema_for_node(&mut data_state, node_id) {
+                Self::assign_output_schema(&mut data_state, node_id, &schema);
+            }
+        }
+    }
+
+    /// 收集 seeds 沿 data output 边的下游闭包（含 seeds 自身）
+    fn collect_downstream_closure(&self, seeds: &[NodeId]) -> std::collections::HashSet<NodeId> {
+        let data_state = self.data_state.read().unwrap();
+        let mut visited = std::collections::HashSet::new();
+        let mut stack: Vec<NodeId> = seeds.to_vec();
+        while let Some(nid) = stack.pop() {
+            if !visited.insert(nid) {
+                continue;
+            }
+            if let Some(node) = data_state.nodes.get(&nid) {
+                for &pin_id in &node.pin_ids {
+                    if let Some(pin) = data_state.pins.get(&pin_id) {
+                        if pin.is_output() {
+                            for to_pid in data_state.connections.get_downstream(pin_id) {
+                                if let Some(p) = data_state.pins.get(&to_pid) {
+                                    if !visited.contains(&p.node_id) {
+                                        stack.push(p.node_id);
+                                    }
+                                }
                             }
-                            _ => false,
-                        };
-                        if assign {
-                            pin.resolved_schema = Some(schema.clone());
-                            break;
                         }
                     }
                 }
+            }
+        }
+        visited
+    }
+
+    /// 增量传播 schema：仅清空并重算受影响节点（seeds 及其下游闭包）的 output
+    /// schema，其余节点保留既有 resolved_schema。用于 connect/disconnect 等局部拓扑变更。
+    ///
+    /// schema 沿 data 边单向向下游流动，故下游闭包即完整受影响集合；上游节点的
+    /// schema 不会因本次变更而改变，无需重算。
+    fn propagate_schemas_from(&self, seeds: &[NodeId]) {
+        if seeds.is_empty() {
+            return;
+        }
+        let affected = self.collect_downstream_closure(seeds);
+        if affected.is_empty() {
+            return;
+        }
+
+        let node_order = self.topological_node_order();
+        let mut data_state = self.data_state.write().unwrap();
+
+        for &node_id in &affected {
+            let pin_ids: Vec<PinId> = data_state
+                .nodes
+                .get(&node_id)
+                .map(|n| n.pin_ids.clone())
+                .unwrap_or_default();
+            for pin_id in pin_ids {
+                if let Some(pin) = data_state.pins.get_mut(&pin_id) {
+                    if pin.is_output() && pin.is_data() {
+                        pin.resolved_schema = None;
+                    }
+                }
+            }
+        }
+
+        for node_id in node_order {
+            if !affected.contains(&node_id) {
+                continue;
+            }
+            if let Some(schema) = self.compute_output_schema_for_node(&mut data_state, node_id) {
+                Self::assign_output_schema(&mut data_state, node_id, &schema);
             }
         }
     }

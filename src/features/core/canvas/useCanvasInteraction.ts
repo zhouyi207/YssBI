@@ -6,13 +6,12 @@ import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { executeCommand } from "@/features/core/history";
 import { Node } from '@/shared/types/ui';
-import { Pin, GraphPosition } from "@/shared/types/domain";
+import { GraphPosition, Pin } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 import { logger } from '@/utils/appLogger';
 import { ProjectService } from "@/services/project/projectService";
 
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import { deserializeGraph } from "@/features/core/dataStore";
 import {
     getCanvasWorldPoint,
     getGestureScreenMovement,
@@ -56,7 +55,6 @@ export function useCanvasInteraction({
     canvasRef,
     groups,
     setSelectedNodeIds,
-    setNodes,
     enabled = true,
 }: UseCanvasInteractionProps) {
 
@@ -135,7 +133,7 @@ export function useCanvasInteraction({
 
 
 
-    const onPinPointerDown = useCallback(async (pinId: string, e: React.PointerEvent, groupId?: string) => {
+    const onPinPointerDown = useCallback(async (pin: Pin, e: React.PointerEvent, groupId?: string) => {
         e.stopPropagation();
 
         if (e.altKey && e.button === 0) {
@@ -143,7 +141,7 @@ export function useCanvasInteraction({
             if (!tid) return;
 
             try {
-                await executeCommand(tid, 'DisconnectPin', { pinId });
+                await executeCommand(tid, 'DisconnectPin', { pinId: pin.id });
             } catch (error) {
                 logger.graph.error(`Failed to disconnect pin: ${error instanceof Error ? error.message : String(error)}`, 'CanvasInteraction');
             }
@@ -152,23 +150,14 @@ export function useCanvasInteraction({
 
         if (e.button !== 0) return;
 
-        // Find pin in current store nodes
         const tid = activeTabIdRef.current;
         if (!tid) return;
-        const graphData = getGraphById(tid);
-        const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
-        let pin: Pin | undefined;
-        for (const n of currentNodes) {
-            pin = [...n.inputs, ...n.outputs].find(p => p.id === pinId);
-            if (pin) break;
-        }
-        if (!pin) return;
 
         // 计算初始世界坐标，避免第一帧在多 editor 中终点不一致
         const gid = groupId || activeGroupIdRef.current;
         const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
-    }, [activeTabIdRef, setNodes]);
+    }, [activeGroupIdRef, activeTabIdRef]);
 
 
     // Global Pointer Events (Move/Up) - 仅当 enabled 时注册，避免 Sidebar 等组件重复监听

@@ -7,7 +7,7 @@ import type {
   PinSlot,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
-import { dataTypeFromPinType } from '@/shared/types/domain/dataType';
+import { dataTypeFromPinType, dataTypeFromDisplayString } from '@/shared/types/domain/dataType';
 
 /**
  * Mirror of backend DataType.can_accept():
@@ -36,69 +36,9 @@ function canAcceptDataType(target: DataType, source: DataType): boolean {
   return false;
 }
 
-function splitTopLevel(s: string, sep: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === '<') depth++;
-    else if (c === '>') depth = Math.max(0, depth - 1);
-    else if (c === sep && depth === 0) {
-      const part = s.slice(start, i).trim();
-      if (part) parts.push(part);
-      start = i + 1;
-    }
-  }
-  const tail = s.slice(start).trim();
-  if (tail) parts.push(tail);
-  return parts;
-}
-
-function parseTypeDisplay(s: string): DataType | null {
-  const trimmed = s.trim();
-
-  const unionParts = splitTopLevel(trimmed, '|');
-  if (unionParts.length > 1) {
-    const types = unionParts.map(p => parseTypeDisplay(p)).filter((t): t is DataType => t !== null);
-    if (types.length === 0) return null;
-    if (types.length === 1) return types[0];
-    return { kind: 'OneOf', inner: types };
-  }
-
-  switch (trimmed) {
-    case 'Boolean': return { kind: 'Boolean' };
-    case 'Int32': return { kind: 'Int32' };
-    case 'Int64': return { kind: 'Int64' };
-    case 'Float32': return { kind: 'Float32' };
-    case 'Float64': return { kind: 'Float64' };
-    case 'String': return { kind: 'String' };
-    case 'Object': return { kind: 'Object' };
-    case 'DataFrame': return { kind: 'DataFrame' };
-    case 'Any': return { kind: 'Any' };
-  }
-
-  const arrayMatch = trimmed.match(/^Array<(.+)>$/);
-  if (arrayMatch) {
-    const inner = parseTypeDisplay(arrayMatch[1]);
-    return inner ? { kind: 'Array', inner } : null;
-  }
-  const dsMatch = trimmed.match(/^DataSeries<(.+)>$/);
-  if (dsMatch) {
-    const inner = parseTypeDisplay(dsMatch[1]);
-    return inner ? { kind: 'DataSeries', inner } : null;
-  }
-  const structMatch = trimmed.match(/^Struct<(.+)>$/);
-  if (structMatch) {
-    return { kind: 'Struct', inner: structMatch[1] };
-  }
-
-  return null;
-}
-
 function buildPinDataType(pin: Pin): DataType {
   if (pin.typeDisplay) {
-    const parsed = parseTypeDisplay(pin.typeDisplay);
+    const parsed = dataTypeFromDisplayString(pin.typeDisplay);
     if (parsed) return parsed;
   }
   const base = dataTypeFromPinType(pin.type);

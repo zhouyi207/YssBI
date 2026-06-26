@@ -4,7 +4,7 @@ import { getViewport } from "@/features/core/viewport";
 import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
-import { ConnectionService } from "@/services";
+import { executeCommand } from "@/features/core/history";
 import { findAutoConnectPinIndex } from "@/shared/utils/pinCompatibility";
 import type { Pin } from "@/shared/types/domain/pin";
 import { logger } from '@/utils/appLogger';
@@ -110,7 +110,10 @@ export function useCanvasOverlayHandlers({
           if (definition?.pinSlots) {
             const matchIdx = findAutoConnectPinIndex(definition.pinSlots, sourcePinForConnect);
             if (matchIdx >= 0 && matchIdx < result.pinIds.length) {
-              await ConnectionService.connectPins(activeTabId, sourcePinForConnect.id, result.pinIds[matchIdx]);
+              await executeCommand(activeTabId, 'ConnectPins', {
+                pinA: sourcePinForConnect.id,
+                pinB: result.pinIds[matchIdx],
+              });
             }
           }
         } catch (err) {

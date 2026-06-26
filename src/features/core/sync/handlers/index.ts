@@ -47,6 +47,7 @@ import {
     ConnectionCreatedHandler,
     ConnectionDeletedHandler,
     ConnectionsBatchDeletedHandler,
+    ConnectionsBatchCreatedHandler,
 } from './ConnectionEventHandler';
 
 /**
@@ -94,5 +95,6 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new ConnectionCreatedHandler() as EventHandler<unknown>,
         new ConnectionDeletedHandler() as EventHandler<unknown>,
         new ConnectionsBatchDeletedHandler() as EventHandler<unknown>,
+        new ConnectionsBatchCreatedHandler() as EventHandler<unknown>,
     ];
 }

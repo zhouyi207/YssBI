@@ -204,7 +204,6 @@ export function useEditorOperations() {
 
     try {
       await executeCommand(tid, 'Composite', { snapshot });
-      await new Promise(r => setTimeout(r, 50));
     } catch (e) {
       logger.graph.error(`Failed to paste nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("粘贴失败", "error", 2000);

@@ -24,4 +24,10 @@ pub enum EventConnection {
         graph_id: GraphId,
         removed_connections: Vec<(PinId, PinId)>,
     },
+    /// 一批连接已创建（批量粘贴/恢复时一次性建立，前端单次入库）
+    #[serde(rename_all = "camelCase")]
+    ConnectionsBatchCreated {
+        graph_id: GraphId,
+        connections: Vec<(PinId, PinId)>,
+    },
 }

@@ -3,15 +3,24 @@ import {
     ConnectionCreatedPayload,
     ConnectionDeletedPayload,
     ConnectionsBatchDeletedPayload,
+    ConnectionsBatchCreatedPayload,
     EventCallbacks,
 } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
+import { isPending } from '../utils/echoSuppressor';
+import { CONNECTION_ECHO_DOMAIN } from '@/features/core/history/commands/connectPins';
 
 export class ConnectionCreatedHandler extends BaseEventHandler<ConnectionCreatedPayload> {
     eventType = 'ConnectionCreated';
 
     handle(payload: ConnectionCreatedPayload, _callbacks?: EventCallbacks): void {
+        const connectionId = `${payload.fromPin}->${payload.toPin}`;
+        // 自发起的连接已乐观写入 store，跳过回声避免二次 set
+        if (isPending(CONNECTION_ECHO_DOMAIN, connectionId)) {
+            markGraphTabDirty(payload.graphId);
+            return;
+        }
         this.log('Connection created:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
         useGraphDataStore.getState().connect(payload.fromPin, payload.toPin);
         markGraphTabDirty(payload.graphId);
@@ -22,9 +31,25 @@ export class ConnectionDeletedHandler extends BaseEventHandler<ConnectionDeleted
     eventType = 'ConnectionDeleted';
 
     handle(payload: ConnectionDeletedPayload, _callbacks?: EventCallbacks): void {
-        this.log('Connection deleted:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
         const connectionId = `${payload.fromPin}->${payload.toPin}`;
+        // 自发起连接触发的自动断开已乐观处理，跳过回声
+        if (isPending(CONNECTION_ECHO_DOMAIN, connectionId)) {
+            markGraphTabDirty(payload.graphId);
+            return;
+        }
+        this.log('Connection deleted:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
         useGraphDataStore.getState().disconnect(connectionId);
+        markGraphTabDirty(payload.graphId);
+    }
+}
+
+export class ConnectionsBatchCreatedHandler extends BaseEventHandler<ConnectionsBatchCreatedPayload> {
+    eventType = 'ConnectionsBatchCreated';
+
+    handle(payload: ConnectionsBatchCreatedPayload, _callbacks?: EventCallbacks): void {
+        this.log('Connections batch created:', payload.connections.length, 'in graph:', payload.graphId);
+        const pairs = payload.connections.map(([from, to]) => ({ from, to }));
+        useGraphDataStore.getState().batchConnect(pairs);
         markGraphTabDirty(payload.graphId);
     }
 }

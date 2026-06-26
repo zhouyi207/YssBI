@@ -13,6 +13,14 @@ import {
 import { logger } from '@/utils/appLogger';
 import { getViewport } from '@/features/core/viewport';
 
+/** applyConnectionDraft 的结果：用于后端失败时回滚乐观连接 */
+export interface ConnectionDraft {
+  from: PinId;
+  to: PinId;
+  connectionId: ConnectionId;
+  disconnectedIds: ConnectionId[];
+}
+
 interface GraphDataStore {
   // ======================
   // 实体表
@@ -46,6 +54,8 @@ interface GraphDataStore {
   // ======================
   addPin(nodeId: NodeId, pin: PinData): void;
   updatePin(pinId: PinId, patch: Partial<PinData>): void;
+  /** 批量更新 pin 字段（单次 set，避免 N 次 re-render） */
+  batchUpdatePinFields(updates: Array<{ pinId: PinId; patch: Partial<PinData> }>): void;
   deletePin(pinId: PinId): void;
   /** 批量更新 pin（断连 + 删 pin + 更新 pin + 加 pin，单次 set） */
   batchUpdatePins(params: {
@@ -64,6 +74,15 @@ interface GraphDataStore {
   disconnect(connectionId: ConnectionId): void;
   /** 批量断开连接（单次 set） */
   batchDisconnect(connectionIds: ConnectionId[]): void;
+  /**
+   * 乐观连接草稿：单次 set 内解析方向、断开冲突连接（input 单入、exec output 单出）
+   * 并建立新连接。仅用于本地即时预览，后端仍是权威；返回值供失败回滚。
+   */
+  applyConnectionDraft(pinA: PinId, pinB: PinId): ConnectionDraft | null;
+  /** 回滚 applyConnectionDraft（后端连接失败时） */
+  revertConnectionDraft(draft: ConnectionDraft): void;
+  /** 批量建立连接（粘贴/恢复，单次 set，避免逐条 re-render） */
+  batchConnect(pairs: Array<{ from: PinId; to: PinId }>): void;
 
   // ======================
   // Graph
@@ -332,6 +351,18 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       };
     }),
 
+  batchUpdatePinFields: (updates) =>
+    set((state) => {
+      if (updates.length === 0) return state;
+      const nextPins = { ...state.pins };
+      for (const { pinId, patch } of updates) {
+        const prev = nextPins[pinId];
+        if (!prev) continue;
+        nextPins[pinId] = { ...prev, ...patch };
+      }
+      return { pins: nextPins };
+    }),
+
   deletePin: (pinId) =>
     set((state) => {
       const pin = state.pins[pinId];
@@ -528,6 +559,111 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         connections: nextConnections,
         pinConnections: nextPinConnections,
       };
+    }),
+
+  applyConnectionDraft: (pinA, pinB) => {
+    const state = get();
+    const dirA = state.pins[pinA]?.direction;
+    const dirB = state.pins[pinB]?.direction;
+    if (!dirA || !dirB) return null;
+
+    let from: PinId;
+    let to: PinId;
+    if (dirA === 'output' && dirB === 'input') {
+      from = pinA;
+      to = pinB;
+    } else if (dirA === 'input' && dirB === 'output') {
+      from = pinB;
+      to = pinA;
+    } else {
+      from = pinA;
+      to = pinB;
+    }
+
+    const fromPin = state.pins[from];
+    const toPin = state.pins[to];
+    if (!fromPin || !toPin) return null;
+
+    const connectionId: ConnectionId = `${from}->${to}`;
+    const disconnectedIds: ConnectionId[] = [];
+
+    // input pin 单入：断开已有上游
+    if (toPin.direction === 'input') {
+      for (const cid of state.pinConnections[to] ?? []) disconnectedIds.push(cid);
+    }
+    // exec output 单出：断开已有下游
+    if (fromPin.direction === 'output' && fromPin.type === 'exec') {
+      for (const cid of state.pinConnections[from] ?? []) {
+        const conn = state.connections[cid];
+        if (conn?.from === from && !disconnectedIds.includes(cid)) disconnectedIds.push(cid);
+      }
+    }
+
+    set((s) => {
+      const nextConnections = { ...s.connections };
+      const nextPinConnections = { ...s.pinConnections };
+
+      for (const cid of disconnectedIds) {
+        const conn = nextConnections[cid];
+        if (!conn) continue;
+        nextPinConnections[conn.from] =
+          (nextPinConnections[conn.from] ?? []).filter((id) => id !== cid);
+        nextPinConnections[conn.to] =
+          (nextPinConnections[conn.to] ?? []).filter((id) => id !== cid);
+        delete nextConnections[cid];
+      }
+
+      if (!nextConnections[connectionId]) {
+        nextConnections[connectionId] = { id: connectionId, from, to };
+        nextPinConnections[from] = [...(nextPinConnections[from] ?? []), connectionId];
+        nextPinConnections[to] = [...(nextPinConnections[to] ?? []), connectionId];
+      }
+
+      return { connections: nextConnections, pinConnections: nextPinConnections };
+    });
+
+    return { from, to, connectionId, disconnectedIds };
+  },
+
+  revertConnectionDraft: (draft) =>
+    set((s) => {
+      const nextConnections = { ...s.connections };
+      const nextPinConnections = { ...s.pinConnections };
+
+      const created = nextConnections[draft.connectionId];
+      if (created) {
+        nextPinConnections[created.from] =
+          (nextPinConnections[created.from] ?? []).filter((id) => id !== draft.connectionId);
+        nextPinConnections[created.to] =
+          (nextPinConnections[created.to] ?? []).filter((id) => id !== draft.connectionId);
+        delete nextConnections[draft.connectionId];
+      }
+
+      for (const cid of draft.disconnectedIds) {
+        const parts = cid.split('->');
+        if (parts.length !== 2 || nextConnections[cid]) continue;
+        const [f, t] = parts;
+        nextConnections[cid] = { id: cid, from: f, to: t };
+        nextPinConnections[f] = [...(nextPinConnections[f] ?? []), cid];
+        nextPinConnections[t] = [...(nextPinConnections[t] ?? []), cid];
+      }
+
+      return { connections: nextConnections, pinConnections: nextPinConnections };
+    }),
+
+  batchConnect: (pairs) =>
+    set((s) => {
+      if (pairs.length === 0) return s;
+      const nextConnections = { ...s.connections };
+      const nextPinConnections = { ...s.pinConnections };
+      for (const { from, to } of pairs) {
+        const id: ConnectionId = `${from}->${to}`;
+        if (nextConnections[id]) continue;
+        nextConnections[id] = { id, from, to };
+        nextPinConnections[from] = [...(nextPinConnections[from] ?? []), id];
+        nextPinConnections[to] = [...(nextPinConnections[to] ?? []), id];
+      }
+      return { connections: nextConnections, pinConnections: nextPinConnections };
     }),
 
   // ======================================================

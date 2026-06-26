@@ -177,10 +177,16 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
     handle(payload: PinTypesInferredPayload, _callbacks?: EventCallbacks): void {
         this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphId);
 
-        const store = useGraphDataStore.getState();
-        for (const { pinId, pinType, containerType, typeDisplay } of payload.pinTypes) {
-            store.updatePin(pinId, { type: pinType, containerType: containerType ?? undefined, typeDisplay: typeDisplay ?? undefined });
-        }
+        useGraphDataStore.getState().batchUpdatePinFields(
+            payload.pinTypes.map(({ pinId, pinType, containerType, typeDisplay }) => ({
+                pinId,
+                patch: {
+                    type: pinType,
+                    containerType: containerType ?? undefined,
+                    typeDisplay: typeDisplay ?? undefined,
+                },
+            })),
+        );
         markGraphTabDirty(payload.graphId);
     }
 }

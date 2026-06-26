@@ -398,6 +398,7 @@ src-tauri/Cargo.toml
 - [x] **ProjectPicker 标题栏筛选左对齐**：搜索框与排序（最近打开）紧挨 Logo 左侧，不再居中
 - [x] **ProjectPicker 导入行为**：`importProjectFromDisk` 仅 `registerProject` 加入列表，不 `loadProject`、不跳转编辑器；**进入** / 双击列表项才打开项目
 - [x] **ProjectPicker 文件夹扫描**：选文件夹 → `scan_projects_in_directory` 递归发现 `metadata.yssbi`（跳过 `.git` / `node_modules` / `target` 等）→ 注册到列表；`project_scan.rs` + `ProjectService.pickProjectScanDirectory`
+- [x] **执行动画连线样式区分 exec / data**：`Edge.tsx` 新增 `edgeKind: 'exec' | 'data'`；data 线执行高亮翠绿 `#10b981` + 长虚线缓流（`edgeFlowData`）；exec 线琥珀 `#f59e0b` + 短虚线快流（`edgeFlowExec`）+ 更强脉动光晕；`EdgesOverlay` 按 `fromPin.type === 'exec'` 传入类型
 
 ## 2026.06.28
 
@@ -412,19 +413,29 @@ src-tauri/Cargo.toml
 - [x] **NewProjectModal 重构**：路径与项目名表单位置对调；移除前端路径校验与异步 `validateNewProjectPath`；创建成功/失败由创建按钮处理（成功关窗，失败 toast + 输入框红框）；浏览按钮 `h-9` 与 Input 对齐；错误不再内联展示
 - [x] **DeleteProjectConfirmDialog 布局优化**：移除项目路径展示；标题 + 说明 + 底栏按钮（取消 / 移动到回收站），对齐 `NewProjectModal` 壳层；删除进行中禁止关闭；确认按钮文案与侧栏统一为「移动到回收站」
 - [x] **跨平台路径显示适配**：Windows `canonicalize` 产生的 `\\?\` / `\\?\UNC\` 扩展前缀在展示与存储时剥离；后端 `path_format.rs` + `normalize_existing_path`；注册表 `fetch_by_path` 等价路径匹配并迁移旧格式；前端 `formatDisplayPath` / `pathsEqualForCompare` 用于项目选择器、新建项目、编辑器 `currentPath` 与底部栏
+- [x] **连接 Pin 卡顿优化（前端）**：`connectPins` 乐观更新本地 store（`connectionOptimism.ts`）；`PinTypesInferred` 改为 `batchUpdatePinFields` 单次 set；`onPinPointerDown` 用 `pinFromStore` 替代整图 `deserializeGraph`；新建节点自动连线走 `executeCommand` 复用乐观路径
+- [x] **Pin 连接根治与高亮修复（统一管线 + echo/batch，替代上一条的临时补丁）**：
+  - 后端拓扑与副作用分离：`connect_topology` 仅改图结构，统一经 `finish_graph_effects(seeds)` 做「增量 schema 传播（`propagate_schemas_from` 下游闭包）+ 类型推断 + 受影响节点动态 pin 重建」；`connect` / `disconnect` / `disconnect_pin` 共用此入口
+  - 批量粘贴：`batch_create_with_connections` 改为「每轮仅 `connect_topology` + 每轮一次 `finish_graph_effects`」，结束后单次发 `ConnectionsBatchCreated` + 合并 `NodePinsUpdated` + 一次 `PinTypesInferred`；删除批末重复 `infer_types`
+  - 前端：`graphDataStore` 新增 `applyConnectionDraft` / `revertConnectionDraft` / `batchConnect`（单次 set）；`connectPins` 用 echo 抑制（`CONNECTION_ECHO_DOMAIN`）对齐 `MoveNodes` 模式；新增 `ConnectionsBatchCreatedHandler`；删除 `connectionOptimism.ts` / `pinFromStore.ts` / 粘贴 `setTimeout(50ms)`；拖拽链直接传 `Pin` 对象（`onPinPointerDown(pin, e)`）
+  - 类型解析单一源：`dataTypeFromDisplayString` 对齐 Rust `DataType::from_str`（补 `Categorical` / `Date` / 裸 `DataSeries`），`pinCompatibility` 删除私有 `parseTypeDisplay` → 修复 OLS `DataSeries<Float64 | Categorical>` 拖拽不高亮
+  - 执行 data 线高亮：执行器在每次 `NodeStart` 后调用 `emit_data_input_connections`，为该节点所有已连线 data input 发 `ConnectionActive`；`EdgesOverlay` 改读 `graphDataStore.connections` 作单一数据源
 
 
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
 - [ ] 变量切换类型 dataview 无法获取
-- [ ] 连接 pin 的线在执行的时候只有一部分会亮
+- [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（执行器在 `NodeStart` 后对节点全部已连线 data input 发 `ConnectionActive`，`EdgesOverlay` 读 store 连接，2026.06.28 根治）
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
-- [ ] 类型推荐估计存在较大的问题，同时在批量节点复制的时候，粘贴是一个一个出现并连接的，这样感觉不太好？
+- [x] 批量节点复制粘贴「一个一个出现并连接」：粘贴改为单次 `ConnectionsBatchCreated` + 一次 `PinTypesInferred`，前端 `batchConnect` 单次 set，节点与连线同时出现（2026.06.28）
+- [ ] 类型推荐估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
-- [ ] 感觉创建节点连接的时候卡顿感觉很强烈
+- [x] 连接 Pin 卡顿（后端）：schema 改为增量传播（`propagate_schemas_from` 下游闭包），连接/断开/批量统一经 `finish_graph_effects`，批量粘贴由 O(N) 次全图收尾降为每轮一次；类型推断暂保留全图以确保 unify 正确性（2026.06.28）
+- [ ] 导入数据窗口样式太丑，导入数据逻辑会将窗口卡死
+- [ ] 我觉得在 tabs 中的所有窗口使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
 
 # TODOLIST
 

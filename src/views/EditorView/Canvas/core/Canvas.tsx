@@ -169,7 +169,6 @@ export default function Canvas() {
         <TransformContainer graphId={activeTabId ?? ""}>
           <EdgesOverlay
             graphId={activeTabId ?? ""}
-            nodes={nodes}
             getPinWorldPos={getPinWorldPos}
             dimmed={isDraggingPin}
           />
@@ -194,7 +193,7 @@ export default function Canvas() {
                   onAddInput={handleNodeAddInput}
                   onRemovePin={handleNodeRemovePin}
                   onPinClick={handlePinClick}
-                  onPinPointerDown={(e, p) => onPinPointerDown(p.id, e)}
+                  onPinPointerDown={(e, p) => onPinPointerDown(p, e)}
                   onPinValueChange={handlePinValueChange}
                 />
               );

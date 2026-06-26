@@ -1,6 +1,8 @@
 use super::command_connection::{emit_inferred_types, emit_pin_change_events};
 use crate::event::{emit_project_event, Event, EventConnection, EventNode};
-use crate::graph::{DataValue, GraphId, NodeId, NodeInstanceParams, PinDirection, PinId};
+use crate::graph::{
+    DataType, DataValue, GraphId, NodeId, NodeInstanceParams, PinChangeSet, PinDirection, PinId,
+};
 use crate::log::log_app;
 use crate::project::ProjectState;
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
@@ -702,19 +704,26 @@ pub fn batch_create_with_connections(
         }),
     );
 
-    // Multi-pass connection restoration (same strategy as restore_nodes).
+    // Multi-pass connection restoration with one shared side-effect flush per pass.
     //
-    // Dynamic pins are created lazily when their trigger connection is established.
-    // Since the connection array order is not guaranteed to respect this dependency,
-    // connections referencing not-yet-existing dynamic pins will fail on the first
-    // pass. We retry until no more progress is made (fixed-point convergence).
+    // Each connection only mutates topology (`connect_topology`); schema propagation
+    // and type inference run once per pass via `finish_graph_effects`. This both
+    // materializes any dynamic pins later connections depend on and keeps the cost
+    // O(passes) instead of O(connections). All connection/pin/type events are emitted
+    // once at the end so the frontend renders the pasted subgraph atomically rather
+    // than wiring nodes "one by one".
     //
-    // Topological sort alternative: pre-sort connections so that those targeting
-    // nodes with pin_resolver come first. Single-pass but couples to pin_resolver
-    // internals and breaks on deep dynamic-pin chains without full topo-sort.
+    // Dynamic pins are created lazily by the per-pass flush; since the connection
+    // array order is not guaranteed to respect that dependency, connections targeting
+    // not-yet-materialized pins are retried until no more progress is made.
     let mut pending: Vec<usize> = (0..connections.len()).collect();
+    let mut established: Vec<(PinId, PinId)> = Vec::new();
+    let mut all_change_sets: Vec<PinChangeSet> = Vec::new();
+    let mut last_inferred: Vec<(PinId, DataType)> = Vec::new();
+
     loop {
         let mut next_pending = Vec::new();
+        let mut pass_seeds: Vec<NodeId> = Vec::new();
         let mut made_progress = false;
 
         for &idx in &pending {
@@ -722,64 +731,56 @@ pub fn batch_create_with_connections(
             let new_from = pin_mapping.get(&conn.from_pin).cloned();
             let new_to = pin_mapping.get(&conn.to_pin).cloned();
 
-            let connected = if let (Some(from_str), Some(to_str)) = (new_from, new_to) {
-                match (Uuid::parse_str(&from_str), Uuid::parse_str(&to_str)) {
-                    (Ok(from_uuid), Ok(to_uuid)) => {
-                        let from_pin = PinId::from(from_uuid);
-                        let to_pin = PinId::from(to_uuid);
-                        if let Ok((actual_from, actual_to, _, change_sets, inferred)) =
-                            graph.connect(from_pin, to_pin)
-                        {
-                            emit_project_event(
-                                &app,
-                                Event::Connection(EventConnection::ConnectionCreated {
-                                    graph_id,
-                                    from_pin: actual_from,
-                                    to_pin: actual_to,
-                                }),
-                            );
-                            emit_pin_change_events(&app, graph_id, &graph, change_sets);
-                            emit_inferred_types(&app, graph_id, inferred);
-                            true
-                        } else {
-                            false
-                        }
+            let topo = match (new_from, new_to) {
+                (Some(from_str), Some(to_str)) => {
+                    match (Uuid::parse_str(&from_str), Uuid::parse_str(&to_str)) {
+                        (Ok(from_uuid), Ok(to_uuid)) => graph
+                            .connect_topology(PinId::from(from_uuid), PinId::from(to_uuid))
+                            .ok(),
+                        _ => None,
                     }
-                    _ => false,
                 }
-            } else {
-                false
+                _ => None,
             };
 
-            if connected {
+            if let Some(topo) = topo {
                 made_progress = true;
-                // Re-scan all created nodes for newly created dynamic pins
-                for (entry_idx, entry) in entries.iter().enumerate() {
-                    let nid = created_node_ids[entry_idx];
-                    let current_pins = graph.get_pin_instances_by_node_id(nid);
-                    for old_pin in &entry.pins {
-                        if pin_mapping.contains_key(&old_pin.pin_id) {
-                            continue;
-                        }
-                        if let Some(new_pin) = current_pins.iter().find(|np| {
-                            np.definition.name == old_pin.name
-                                && np.definition.direction == old_pin.direction
-                                && !used_new_pins.contains(&np.id.to_string())
-                        }) {
-                            let new_id = new_pin.id.to_string();
-                            pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
-                            used_new_pins.insert(new_id);
-                            if let Some(ref raw_val) = old_pin.user_value {
-                                if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone())
-                                {
-                                    let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
-                                }
+                established.push((topo.from_pin, topo.to_pin));
+                pass_seeds.extend(topo.seed_nodes);
+            } else {
+                next_pending.push(idx);
+            }
+        }
+
+        if made_progress {
+            let (change_sets, inferred) = graph.finish_graph_effects(&pass_seeds);
+            all_change_sets.extend(change_sets);
+            last_inferred = inferred;
+
+            // Re-scan created nodes for dynamic pins materialized by this pass's flush,
+            // so the next pass can map connections targeting them.
+            for (entry_idx, entry) in entries.iter().enumerate() {
+                let nid = created_node_ids[entry_idx];
+                let current_pins = graph.get_pin_instances_by_node_id(nid);
+                for old_pin in &entry.pins {
+                    if pin_mapping.contains_key(&old_pin.pin_id) {
+                        continue;
+                    }
+                    if let Some(new_pin) = current_pins.iter().find(|np| {
+                        np.definition.name == old_pin.name
+                            && np.definition.direction == old_pin.direction
+                            && !used_new_pins.contains(&np.id.to_string())
+                    }) {
+                        let new_id = new_pin.id.to_string();
+                        pin_mapping.insert(old_pin.pin_id.clone(), new_id.clone());
+                        used_new_pins.insert(new_id);
+                        if let Some(ref raw_val) = old_pin.user_value {
+                            if let Ok(dv) = serde_json::from_value::<DataValue>(raw_val.clone()) {
+                                let _ = graph.set_pin_user_value_by_pin_id(new_pin.id, dv);
                             }
                         }
                     }
                 }
-            } else {
-                next_pending.push(idx);
             }
         }
 
@@ -789,7 +790,17 @@ pub fn batch_create_with_connections(
         pending = next_pending;
     }
 
-    let _ = graph.infer_types();
+    if !established.is_empty() {
+        emit_project_event(
+            &app,
+            Event::Connection(EventConnection::ConnectionsBatchCreated {
+                graph_id,
+                connections: established,
+            }),
+        );
+    }
+    emit_pin_change_events(&app, graph_id, &graph, all_change_sets);
+    emit_inferred_types(&app, graph_id, last_inferred);
     drop(bounding);
 
     Ok(BatchCreateWithConnectionsResult {

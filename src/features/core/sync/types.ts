@@ -155,6 +155,11 @@ export interface ConnectionsBatchDeletedPayload {
     removedConnections: Array<[string, string]>;
 }
 
+export interface ConnectionsBatchCreatedPayload {
+    graphId: string;
+    connections: Array<[string, string]>;
+}
+
 // ==================== 事件处理器接口 ====================
 
 export interface EventHandler<T = unknown> {

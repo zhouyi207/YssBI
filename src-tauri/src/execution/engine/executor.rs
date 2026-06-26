@@ -112,6 +112,7 @@ impl<E: EventEmitter> Executor<E> {
             self.emit(ExecutionEvent::NodeStart {
                 node_id: node_id_str.clone(),
             });
+            self.emit_data_input_connections(frame.node_id);
 
             match self.execute_node(&frame) {
                 Ok((effect, duration_ms)) => {
@@ -202,6 +203,33 @@ impl<E: EventEmitter> Executor<E> {
         result.map(|r| (r, node_duration_ms))
     }
 
+    /// 节点开始执行时，为其所有已连线的 data input 发射 ConnectionActive。
+    ///
+    /// 使「某 input 用到某 output 的值」的连线都能在前端高亮（含同一 output
+    /// 喂多个 input、Categorical 上游、已缓存值复用等场景）。
+    fn emit_data_input_connections(&self, node_id: NodeId) {
+        let connections: Vec<(String, String)> = {
+            let graph = self.graph.lock().unwrap();
+            graph
+                .get_node_pins(node_id)
+                .into_iter()
+                .filter(|pin| pin.is_input() && pin.is_data())
+                .filter_map(|pin| {
+                    graph
+                        .get_upstream_by_pin_id(pin.id)
+                        .map(|upstream_pin_id| (upstream_pin_id.to_string(), pin.id.to_string()))
+                })
+                .collect()
+        };
+
+        for (from_pin_id, to_pin_id) in connections {
+            self.emit(ExecutionEvent::ConnectionActive {
+                from_pin_id,
+                to_pin_id,
+            });
+        }
+    }
+
     /// 递归执行所有上游的纯数据节点
     fn execute_upstream_data_nodes(&mut self, node_id: NodeId) -> Result<(), String> {
         let pins = {
@@ -250,6 +278,7 @@ impl<E: EventEmitter> Executor<E> {
                     self.emit(ExecutionEvent::NodeStart {
                         node_id: upstream_node_id_str.clone(),
                     });
+                    self.emit_data_input_connections(upstream_node_id);
 
                     let upstream_start = Instant::now();
                     let mut ctx = NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
@@ -268,10 +297,6 @@ impl<E: EventEmitter> Executor<E> {
                             self.emit(ExecutionEvent::NodeComplete {
                                 node_id: upstream_node_id_str,
                                 duration_ms: upstream_duration_ms,
-                            });
-                            self.emit(ExecutionEvent::ConnectionActive {
-                                from_pin_id: upstream_pin_id.to_string(),
-                                to_pin_id: pin.id.to_string(),
                             });
                         }
                         Err(err) => {

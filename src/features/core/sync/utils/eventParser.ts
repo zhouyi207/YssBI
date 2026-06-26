@@ -52,7 +52,7 @@ export function isValidEventType(type: string): boolean {
         // Node
         'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred',
         // Connection
-        'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted',
+        'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted', 'ConnectionsBatchCreated',
     ];
     
     return validTypes.includes(type);
