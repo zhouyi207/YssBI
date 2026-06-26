@@ -79,6 +79,10 @@ npm run tauri dev
 npm run tauri build
 ```
 
+<!-- ## 致谢
+
+感谢曾参与过此项目的朋友以及北京师范大学和武汉理工大学的各位老师和同学！ -->
+
 ## License
 
 未发布，开发阶段。
