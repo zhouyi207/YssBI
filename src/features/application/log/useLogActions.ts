@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useLogStore } from "@/features/core/log/logStore";
+import { logBuffer } from "@/features/core/log/logBuffer";
 import { LogService } from "@/services/log";
 
 const DEFAULT_INITIAL_LIMIT = 100;
@@ -17,45 +17,30 @@ async function getLogCountFallback(fallback: number) {
 
 export function useLogActions() {
   const loadLogs = useCallback(async (offset = 0, limit = DEFAULT_INITIAL_LIMIT) => {
-    const store = useLogStore.getState();
-    store.setLogPageState({ loading: true });
-
+    logBuffer.setLoading(true);
     try {
       const response = await LogService.getLogs(offset, limit);
       const fileLogs = LogService.normalizeLogResponse(response);
       const total = await getLogCountFallback(fileLogs.length);
-      store.setLogs(fileLogs);
-      store.setLogPageState({
-        total,
-        hasMore: offset + fileLogs.length < total,
-        loading: false,
-      });
+      logBuffer.setInitial(fileLogs, total, offset + fileLogs.length < total);
     } catch (error) {
       console.error("[LogActions] Failed to load logs:", error);
-      store.setLogPageState({ loading: false });
+      logBuffer.setLoading(false);
     }
   }, []);
 
   const loadMoreLogs = useCallback(async () => {
-    const store = useLogStore.getState();
-    const { logs, hasMore, loading } = store;
-    if (!hasMore || loading) return;
-
-    store.setLogPageState({ loading: true });
+    // offset 用「已从后端加载的历史条数」，不受实时追加影响（修复 logs.length 偏移 bug）
+    const offset = logBuffer.getBackendCount();
+    logBuffer.setLoading(true);
     try {
-      const offset = Array.isArray(logs) ? logs.length : 0;
       const response = await LogService.getLogs(offset, DEFAULT_MORE_LIMIT);
       const olderLogs = LogService.normalizeLogResponse(response);
       const total = await getLogCountFallback(offset + olderLogs.length);
-      store.prependLogs(olderLogs);
-      store.setLogPageState({
-        total,
-        hasMore: offset + olderLogs.length < total,
-        loading: false,
-      });
+      logBuffer.prependOlder(olderLogs, total, offset + olderLogs.length < total);
     } catch (error) {
       console.error("[LogActions] Failed to load more logs:", error);
-      store.setLogPageState({ loading: false });
+      logBuffer.setLoading(false);
     }
   }, []);
 

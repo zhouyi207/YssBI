@@ -1,26 +1,22 @@
 import { create } from 'zustand';
 import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
 
+/**
+ * logStore - 日志「冷」控制状态
+ *
+ * 仅保存随人类操作（点击筛选 / 选中行）变化的低频状态。高频的日志列表数据
+ * 不在这里——它放在 React 之外的 `logBuffer`（见 logBuffer.ts / useLiveLogs.ts），
+ * 避免每条日志触发一次 store 提交与全量重渲染。
+ */
 export interface LogStore {
-  logs: LogMessage[];
   filter: LogFilter;
-  total: number;
-  hasMore: boolean;
-  loading: boolean;
   selectedLog: LogMessage | null;
-  
-  addLog: (log: LogMessage) => void;
-  setLogs: (logs: LogMessage[]) => void;
-  appendLogs: (logs: LogMessage[]) => void;
-  prependLogs: (logs: LogMessage[]) => void;
-  setLogPageState: (state: { total?: number; hasMore?: boolean; loading?: boolean }) => void;
-  clearLogs: () => void;
+
   setSelectedLog: (log: LogMessage | null) => void;
   setFilter: (filter: Partial<LogFilter>) => void;
   toggleLevel: (level: LogLevel) => void;
   toggleType: (type: LogType) => void;
   setSearchText: (text: string) => void;
-  getFilteredLogs: () => LogMessage[];
 }
 
 const initialFilter: LogFilter = {
@@ -29,32 +25,9 @@ const initialFilter: LogFilter = {
   searchText: '',
 };
 
-export const useLogStore = create<LogStore>((set, get) => ({
-  logs: [],
+export const useLogStore = create<LogStore>((set) => ({
   filter: initialFilter,
-  total: 0,
-  hasMore: false,
-  loading: false,
   selectedLog: null,
-
-  addLog: (log) => set((state) => ({
-    logs: [...state.logs, log],
-    total: state.total + 1,
-  })),
-
-  setLogs: (logs) => set({ logs }),
-  
-  appendLogs: (logs) => set((state) => ({
-    logs: [...state.logs, ...logs],
-  })),
-
-  prependLogs: (logs) => set((state) => ({
-    logs: [...logs, ...(Array.isArray(state.logs) ? state.logs : [])],
-  })),
-
-  setLogPageState: (pageState) => set(pageState),
-
-  clearLogs: () => set({ logs: [], total: 0, hasMore: false, selectedLog: null }),
 
   setSelectedLog: (log) => set({ selectedLog: log }),
 
@@ -89,20 +62,23 @@ export const useLogStore = create<LogStore>((set, get) => ({
   setSearchText: (text) => set((state) => ({
     filter: { ...state.filter, searchText: text },
   })),
-
-  getFilteredLogs: () => {
-    const { logs, filter } = get();
-    if (!Array.isArray(logs) || !filter?.levels || !filter?.types) return [];
-    return logs.filter((log) => {
-      if (!filter.levels.has(log.level)) return false;
-      if (!filter.types.has(log.log_type)) return false;
-      if (filter.searchText) {
-        const searchLower = filter.searchText.toLowerCase();
-        const matchMessage = log.message.toLowerCase().includes(searchLower);
-        const matchSource = log.source?.toLowerCase().includes(searchLower);
-        if (!matchMessage && !matchSource) return false;
-      }
-      return true;
-    });
-  },
 }));
+
+/**
+ * 纯函数：按筛选条件过滤日志。供 LogPanelContent 以 `useMemo([entries, filter])` 调用，
+ * 取代此前在 render body 内每次重算的 `getFilteredLogs`。
+ */
+export function applyLogFilter(logs: LogMessage[], filter: LogFilter): LogMessage[] {
+  if (!Array.isArray(logs) || !filter?.levels || !filter?.types) return [];
+  return logs.filter((log) => {
+    if (!filter.levels.has(log.level)) return false;
+    if (!filter.types.has(log.log_type)) return false;
+    if (filter.searchText) {
+      const searchLower = filter.searchText.toLowerCase();
+      const matchMessage = log.message.toLowerCase().includes(searchLower);
+      const matchSource = log.source?.toLowerCase().includes(searchLower);
+      if (!matchMessage && !matchSource) return false;
+    }
+    return true;
+  });
+}

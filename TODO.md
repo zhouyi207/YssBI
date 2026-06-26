@@ -327,7 +327,6 @@ src-tauri/Cargo.toml
 - [x] `.yssbi-event` 不再持久化 `typeVarBindings`（`#[serde(skip)]`）；图加载后 `prepare_graph_runtime` 重跑 `infer_types` 重建缓存
 - [x] `.yssbi-event` 体积优化（Phase A）：连接仅存 `links`；跳过 `pinTypes` / `resolvedSchema`；节点存 `nodeType` 替代完整 `definition`；静态 pin 存 `pinContract`；保存前 `reconcile_connections` 清理孤立连接；紧凑 JSON（`to_string`）
 
-
 ## 2026.06.26
 
 - [x] sequence 节点目前只能执行前三个 then，then 4 这个 pin 无法执行（flow_processor 改为动态读取全部 Then pins）
@@ -440,6 +439,22 @@ src-tauri/Cargo.toml
   - 阶段一·逐节点订阅渲染：`serialization.ts` 抽出共享纯函数 `resolveNodeViewMeta`（title/uiStyle/category/description 解析单一来源）；新增 `dataStore/useNodeView.ts`，仅订阅单节点切片（`nodes[id]` + 其 `pins[*]` + 各 `pinConnections[*]`，`useShallow` 比较），并由连接 id（`from->to`）直接派生 `links`（无需订阅整张连接表），返回引用稳定的 `UINode` 使 `Node` memo 真正生效；新增 `Nodes/CanvasNode.tsx`（memo 包装，`useNodeView(id)` → 渲染纯展示 `Node`）；`Canvas.tsx` 改为遍历稳定的 `graphNodes[graphId]` id 列表（`visibleNodeIds` 过滤）并下传稳定回调，不再遍历反序列化数组
   - 阶段二·停掉全图反序列化与全局重测量：`useEditorGraphData` 不再 `deserializeGraph`（`nodes` 从 `useEditorGroupWorkspace`/`useEditorState`/`useEditorGroup` 移除，`deserializeGraph` 仅保留给保存/按需）；`useCanvasViewport` 去除 `nodes` 入参，`nodePositionMap`/`pinNodeIdMap` 改由轻量 `useShallow` store 选择器派生，测量 `useLayoutEffect` 重新以 `visibleNodeIds + nodeResizeVersion`（而非位置）为依赖（pin 偏移相对节点原点，移动节点不再触发无关 pin 重测）
   - 净效果：对节点 X 的一次变更只重渲染 X（连接时加另一端）与连线层，告别「每次创建约 6 次 store 写入 × 全图反序列化/全节点重渲染/全 pin 重测量」的 O(N²)；阶段三（增量测量 + 逐边 memo）按「仅在仍卡顿时」前提暂缓
+- [x] 目前创建节点还是非常的卡顿（见 2026.06.28「创建节点卡顿根治」「从 pin 拖拽建节点」三条）
+- [x] 日志的更新会影响到其他组件卡顿，例如在这里我添加节点的时候，日志会发生更新，添加节点进而会卡顿，但是当我将日志隐藏起来之后，就不会卡顿了（见 2026.06.28「日志流解耦」）
+- [x] **日志流解耦（根治日志更新拖累画布卡顿）**：根因——每条 `log-message` 事件都 `addLog` → zustand `set` → `LogPanelContent` 整体重渲染做 O(n) 工作（`[...logs, log]` 拷贝、render body 内 `getFilteredLogs()` 全量过滤、`autoScroll` 的 `useEffect([logs])` 读 `scrollHeight` 触发回流）；加一个节点会爆发 K 条日志 → K 次同步渲染抢占画布主线程，隐藏面板（卸载）才不卡。改造为「热数据流移出 React + 帧级合并」，对标 VSCode 节流 OutputChannel + 虚拟化：
+  - 新增 `core/log/logBuffer.ts`（React-free 模块级环形缓冲，上限 `LOG_BUFFER_MAX=5000`）：`pushLive` 为 O(1)（超限丢最旧）并用 `requestAnimationFrame` 合并——一帧内涌入多少条都只重建一次快照、通知一次；`setInitial`/`prependOlder`/`clear`/`setLoading` 为人类频率操作，立即提交；`subscribe`/`getSnapshot` 供 `useSyncExternalStore`（快照引用稳定，仅 flush 时变化）；`getBackendCount()` 跟踪「已从后端加载的历史条数」作分页 offset
+  - 新增 `core/log/useLiveLogs.ts`：`useSyncExternalStore(logBuffer.subscribe, logBuffer.getSnapshot)` → `{ entries, total, hasMore, loading }`
+  - `logStore.ts` 瘦身为「冷」控制状态（`filter`/`selectedLog` + setters），移除 `logs`/`total`/`hasMore`/`loading`/`addLog`/`setLogs`/`appendLogs`/`prependLogs`/`setLogPageState`/`clearLogs`/`getFilteredLogs`；抽出纯函数 `applyLogFilter(logs, filter)` 供组件 `useMemo`
+  - `useLogActions.ts` 改为经 `logBuffer` 写入（`setInitial`/`prependOlder`），`loadMoreLogs` 的 offset 改用 `getBackendCount()` 而非 `logs.length` → 顺带修复实时追加污染后端分页 offset 的潜伏 bug
+  - `LogPanelContent.tsx` 改用 `useLiveLogs()` 取热数据、`useLogStore` 取冷状态；监听器 → `logBuffer.pushLive`；`filteredLogs = useMemo(() => applyLogFilter(logs, filter), [logs, filter])`；清空 → `logBuffer.clear()` + `setSelectedLog(null)`；autoScroll 因快照每帧至多变一次，回流风暴随之消失
+  - 净效果：快照标识每帧至多变一次，过滤/自动滚动/虚拟化均每帧至多跑一次，与日志条数无关；内存由环形缓冲封顶，历史仍可经后端分页回看；`LogPanel` 与独立 `LogWindow` 同享此优化
+- [x] **修复日志自动滚动失效（帧级合并的回归）**：原 autoScroll 用「内容追加后事后测量 `scrollHeight - scrollTop - clientHeight < 80`」判断是否贴底——逐条追加时每次高度跳变 < 阈值故持续跟随；改为帧级合并后一帧可新增大量行，高度跳变远超阈值被误判为「离底」而停止滚动。改为标准「贴底跟随」：新增 `pinnedToBottomRef`，由真实滚动事件（native onScroll + `handleScroll`）维护贴底状态，autoScroll effect 只要处于贴底就 `scrollTop = scrollHeight` 持续跟随（无关本帧新增行数），用户上滚离底即暂停、滚回底部即恢复；点亮「自动滚动」按钮时强制回到底部并贴底
+- [x] **修复刷新后 Decompose DataFrame 连线全部消失（动态 pin 身份保持）**：根因——重开图时 `materialize_dynamic_pins` → `resolve_dynamic_pins_with_mode` 用「对顺序敏感」的 `old_names == new_names` 判断变化，一旦不等（哪怕仅顺序不同）就调用 `replace_node_pins` 整组替换：给所有动态 pin 生成全新 `PinId` 并 `disconnect_all`；而连接以 `PinId` 为键，故未变列的连线全被销毁。Decompose 输出为动态 pin（`with_dynamic(true)`）受此影响、其静态 `DataFrame` 输入幸存；触发条件是「重载列序（DuckDB 查询序）≠ 持久化 pin 序」及 Interactive 路径缺空 resolver 保护。
+  - `graph_data_state.rs` 以 `reconcile_node_pins` 取代 `replace_node_pins`：按 `(PinDirection, name)`（列名即稳定身份，兼容 Decompose `Custom(name)` 与 prediction `Custom("pred_exog:{name}")`）对齐——存活列复用既有 `PinInstance`（保留 id + 连接，仅就地更新 `definition`/`order` → `updated_pins`），新增列建新 pin（`added_pins`），消失列删除并断连（`removed_pin_ids`/`removed_connections`）；`node.pin_ids` 重排为「静态 pin（原序）+ 动态 pin（目标序）」→ 纯重排不再改动任何 id；新增 `DynamicPinReconcile` 变更集
+  - `graph_instance.rs` 的 `resolve_dynamic_pins_with_mode` 尾部改调 `reconcile_node_pins`，保留两处早退（名称同序跳过、Materialize 空 resolver 保护），由结果构建 `PinChangeSet`（填充 `updated_pins`），保留 `infer_types()`
+  - 下游无需改动：`emit_pin_change_events` 从重排后的 `node.pin_ids` 派生 `pin_order`，前端 `NodePinsUpdatedHandler` 已处理 removed/added/updated/pinOrder
+  - 测试：`graph_data_state.rs` 新增「重排保留 id+连接」「仅删缺失列」两例单测，连同原有 `round_trips_graph_with_dynamic_pins_values_and_connections` 全部通过
+
 
 ## v1.0 待办
 
@@ -451,8 +466,9 @@ src-tauri/Cargo.toml
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
 - [ ] 我觉得在 tabs 中的所有窗口使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
-- [x] 目前创建节点还是非常的卡顿（见 2026.06.28「创建节点卡顿根治」「从 pin 拖拽建节点」三条）
 - [ ] 节点的 detail 信息布局很丑陋，input 和 ouput pins 需要重新设计调整
+- [ ] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上
+- [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
 
 # TODOLIST
 

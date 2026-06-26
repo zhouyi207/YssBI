@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LOGS_DRAG_TYPE, LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
 import { listen } from '@tauri-apps/api/event';
 import { createPersistedWindow } from '@/features/application/window';
-import { useLogStore } from '@/features/core/log/logStore';
+import { useLogStore, applyLogFilter } from '@/features/core/log/logStore';
+import { logBuffer } from '@/features/core/log/logBuffer';
+import { useLiveLogs } from '@/features/core/log/useLiveLogs';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useLogActions } from '@/features/application/log';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
@@ -18,7 +20,6 @@ import { logger } from '@/utils/appLogger';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import {
@@ -28,6 +29,9 @@ import {
   LOG_TYPE_BACKGROUND,
   LOG_TYPE_LABELS,
 } from './logPresentation';
+
+/** 判定「贴底」的容差（px）：用于自动滚动跟随 */
+const SCROLL_BOTTOM_THRESHOLD = 80;
 
 // ─── Log Item Row ───
 
@@ -74,22 +78,20 @@ export interface LogPanelContentProps {
 
 export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPanelContentProps) => {
   const { t } = useTranslation();
-  const logs = useLogStore((s) => s.logs);
+  // 高频日志数据来自 React 之外的 logBuffer（帧级合并），冷控制状态来自 zustand
+  const { entries: logs, total, hasMore, loading } = useLiveLogs();
   const filter = useLogStore((s) => s.filter);
-  const addLog = useLogStore((s) => s.addLog);
-  const clearLogs = useLogStore((s) => s.clearLogs);
   const toggleLevel = useLogStore((s) => s.toggleLevel);
   const toggleType = useLogStore((s) => s.toggleType);
   const setSearchText = useLogStore((s) => s.setSearchText);
-  const getFilteredLogs = useLogStore((s) => s.getFilteredLogs);
-  const loading = useLogStore((s) => s.loading);
-  const hasMore = useLogStore((s) => s.hasMore);
-  const total = useLogStore((s) => s.total);
   const selectedLog = useLogStore((s) => s.selectedLog);
   const setSelectedLog = useLogStore((s) => s.setSelectedLog);
   const { loadLogs, loadMoreLogs, refreshLogs } = useLogActions();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  // 用户是否「贴底」——由真实滚动事件维护，而非内容追加后的事后测量。
+  // 日志按帧合并后，一帧可能新增大量行（高度跳变远超阈值），事后测量会误判为「离底」。
+  const pinnedToBottomRef = useRef(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const filterPopoverRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     });
 
     const unlisten = listen<LogMessage>('log-message', (event) => {
-      addLog(event.payload);
+      logBuffer.pushLive(event.payload);
     });
 
     return () => {
@@ -120,11 +122,9 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   useEffect(() => {
     const el = logContainerRef.current;
     if (!autoScroll || !el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const nearBottom = scrollHeight - scrollTop - clientHeight < 80;
-    if (nearBottom) {
-      el.scrollTop = scrollHeight;
-    }
+    // 只要在「贴底」状态就持续跟随，无论本帧新增多少行
+    if (!pinnedToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [logs, autoScroll]);
 
   useEffect(() => {
@@ -147,6 +147,8 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     const el = logContainerRef.current;
     if (!el) return;
     const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      pinnedToBottomRef.current = scrollHeight - scrollTop - clientHeight < SCROLL_BOTTOM_THRESHOLD;
       const { hasMore, loading, loadMoreLogs } = loadMoreStateRef.current;
       if (el.scrollTop < 150 && hasMore && !loading) {
         const scrollHeight = el.scrollHeight;
@@ -185,7 +187,9 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (target.scrollTop < 150) tryLoadOlder();
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    pinnedToBottomRef.current = scrollHeight - scrollTop - clientHeight < SCROLL_BOTTOM_THRESHOLD;
+    if (scrollTop < 150) tryLoadOlder();
   };
 
   const openInNewWindow = useCallback(async (x?: number, y?: number) => {
@@ -272,7 +276,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     }
   }, [variant]);
 
-  const filteredLogs = getFilteredLogs() ?? [];
+  const filteredLogs = useMemo(() => applyLogFilter(logs, filter), [logs, filter]);
   const safeLogs = logs ?? [];
 
   const handleSelectLog = useCallback((index: number) => {
@@ -359,7 +363,15 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             type="button"
             variant="ghost"
             size="icon-sm"
-            onClick={() => setAutoScroll(!autoScroll)}
+            onClick={() => {
+              const next = !autoScroll;
+              setAutoScroll(next);
+              if (next) {
+                pinnedToBottomRef.current = true;
+                const el = logContainerRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+              }
+            }}
             className={autoScroll ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
             tooltip={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
           >
@@ -437,7 +449,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
             type="button"
             variant="destructive"
             size="icon-sm"
-            onClick={clearLogs}
+            onClick={() => { logBuffer.clear(); setSelectedLog(null); }}
             tooltip={t("log.clear")}
           >
             <FiTrash2 size={14} />

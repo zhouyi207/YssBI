@@ -15,7 +15,8 @@ use crate::graph::node::{
     NodePosition, PinResolverContext,
 };
 use crate::graph::pin::{
-    DataRole, PinDataTypeDefinition, PinDirection, PinId, PinInstance, PinKind, PinRole, PinSlot,
+    DataRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinId, PinInstance, PinKind,
+    PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
@@ -1240,15 +1241,9 @@ impl GraphInstance {
                 .collect();
         }
 
-        // 创建新的 PinInstance
         let base_order = static_pin_defs.len() as i32;
-        let new_pin_instances: Vec<PinInstance> = dynamic_new_defs
-            .iter()
-            .enumerate()
-            .map(|(i, pd)| PinInstance::from_definition(pd, node_id, base_order + i as i32))
-            .collect();
 
-        // 如果动态部分没有实质变化，跳过
+        // 如果动态部分名称与顺序完全一致，跳过（最常见的稳定情形）
         let old_names: Vec<String>;
         {
             let data_state = self.data_state.read().unwrap();
@@ -1267,23 +1262,25 @@ impl GraphInstance {
             return Ok(None);
         }
 
-        // 应用变更
-        let change_set;
-        {
+        // 按身份对齐动态 pin：存活列复用既有 pin id（保留连接），仅增删/重排实际差异
+        let target_defs: Vec<PinDefinition> =
+            dynamic_new_defs.iter().map(|pd| (*pd).clone()).collect();
+        let change_set = {
             let mut data_state = self.data_state.write().unwrap();
-            let (removed_ids, removed_conns) = data_state.replace_node_pins(
+            let reconcile = data_state.reconcile_node_pins(
                 node_id,
-                dynamic_old_pin_ids,
-                new_pin_instances.clone(),
+                &dynamic_old_pin_ids,
+                &target_defs,
+                base_order,
             );
-            change_set = PinChangeSet {
+            PinChangeSet {
                 node_id,
-                removed_pin_ids: removed_ids,
-                added_pins: new_pin_instances,
-                updated_pins: vec![],
-                removed_connections: removed_conns,
-            };
-        }
+                removed_pin_ids: reconcile.removed_pin_ids,
+                added_pins: reconcile.added_pins,
+                updated_pins: reconcile.updated_pins,
+                removed_connections: reconcile.removed_connections,
+            }
+        };
 
         // 重新运行类型推断
         let _ = self.infer_types();
