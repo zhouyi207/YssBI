@@ -436,6 +436,10 @@ src-tauri/Cargo.toml
   - 自回显对齐：`NodeCreatedHandler` 改用 `reconcileNode`——已乐观插入则按 id 覆盖权威字段（无重复、补齐 `defaultValue`/变量类型等），未插入则普通添加（redo/他端来源），时序无关
 - [x] **从 pin 拖拽建节点：节点 + 连线一步即时出现**：新增合并命令 `CreateNodeWithConnection`（注册表 + `CommandType` + `STRUCTURAL_COMMANDS`），在任何 await 之前同步完成「乐观建节点 + `applyConnectionDraft` 乐观连线」，再后台按序 `create_node_with_id`→`connect_pins`；整段为单个撤销项（undo 删节点并恢复源端被自动断开的连接）；`handleNodePaletteSelect` 在存在 `pendingConnection` 时改派该命令，消除「先有节点、隔一拍才有连线」的两段式卡顿
 - [x] **从 pin 拖拽建节点：自动对齐落点**：节点自动反向平移，使被连接的 pin 精确落在拖拽释放点（保持连线终点不动）；因节点宽高随内容动态变化（输出 pin 的 x 偏移=节点宽度），采用「测量后对齐」——`core/canvas/pinOffsetWaiter.ts` 的 `waitForPinOffset`/`resolvePinOffsetWaiters` 由 `useCanvasViewport` 测量布局后兑现，命令据测得偏移设最终位置（同步写入后端与撤销上下文，保证 redo 落点一致），超时回退不对齐
+- [x] **画布渲染架构重构（逐节点订阅，根治创建/连接残留卡顿）**：原先每次 store 变更都触发整图级流水线——`useEditorGraphData` 对全图跑 `deserializeGraph`（O(节点×pin)），且 `useEditorGroup()` 被 Sidebar/Menubar/Detail/CanvasOverlays 多处调用导致重复执行；反序列化产生全新节点对象使 `Node` 的 `prev.node===next.node` memo 永远失效 → 所有可见节点重渲染；`useCanvasViewport` 测量副作用依赖 `nodes`，每次变更都对所有可见 pin 重测 `getBoundingClientRect`。改造分两阶段：
+  - 阶段一·逐节点订阅渲染：`serialization.ts` 抽出共享纯函数 `resolveNodeViewMeta`（title/uiStyle/category/description 解析单一来源）；新增 `dataStore/useNodeView.ts`，仅订阅单节点切片（`nodes[id]` + 其 `pins[*]` + 各 `pinConnections[*]`，`useShallow` 比较），并由连接 id（`from->to`）直接派生 `links`（无需订阅整张连接表），返回引用稳定的 `UINode` 使 `Node` memo 真正生效；新增 `Nodes/CanvasNode.tsx`（memo 包装，`useNodeView(id)` → 渲染纯展示 `Node`）；`Canvas.tsx` 改为遍历稳定的 `graphNodes[graphId]` id 列表（`visibleNodeIds` 过滤）并下传稳定回调，不再遍历反序列化数组
+  - 阶段二·停掉全图反序列化与全局重测量：`useEditorGraphData` 不再 `deserializeGraph`（`nodes` 从 `useEditorGroupWorkspace`/`useEditorState`/`useEditorGroup` 移除，`deserializeGraph` 仅保留给保存/按需）；`useCanvasViewport` 去除 `nodes` 入参，`nodePositionMap`/`pinNodeIdMap` 改由轻量 `useShallow` store 选择器派生，测量 `useLayoutEffect` 重新以 `visibleNodeIds + nodeResizeVersion`（而非位置）为依赖（pin 偏移相对节点原点，移动节点不再触发无关 pin 重测）
+  - 净效果：对节点 X 的一次变更只重渲染 X（连接时加另一端）与连线层，告别「每次创建约 6 次 store 写入 × 全图反序列化/全节点重渲染/全 pin 重测量」的 O(N²)；阶段三（增量测量 + 逐边 memo）按「仅在仍卡顿时」前提暂缓
 
 ## v1.0 待办
 

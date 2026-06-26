@@ -9,4 +9,5 @@ export * from './projectIOStore';
 export * from './projectHelpers';
 export * from './variableStore';
 export * from './graphDataStore';
-export { serializeGraph, deserializeGraph } from './serialization';
+export { serializeGraph, deserializeGraph, resolveNodeViewMeta } from './serialization';
+export { useNodeView } from './useNodeView';

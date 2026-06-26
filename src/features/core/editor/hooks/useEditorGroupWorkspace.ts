@@ -8,7 +8,7 @@ import { useEditorGraphData } from './useEditorGraphData';
 
 export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   const active = useActiveEditorGroup(overrideGroupId);
-  const { nodes, variables } = useEditorGraphData(active.activeTabId);
+  const { variables } = useEditorGraphData();
 
   return useMemo(
     () => ({
@@ -16,10 +16,9 @@ export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
       activeGroupId: active.activeGroupId,
       tabs: active.tabs,
       activeTabId: active.activeTabId,
-      nodes,
       variables,
       selectedNodeIds: active.selectedNodeIds,
     }),
-    [active, nodes, variables]
+    [active, variables]
   );
 }

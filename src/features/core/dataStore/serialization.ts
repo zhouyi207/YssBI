@@ -89,6 +89,32 @@ export function serializeGraph(
 }
 
 /**
+ * 解析单个节点的展示元信息（title / category / uiStyle / description）。
+ *
+ * 这是 `deserializeGraph` 与 `useNodeView` 共用的纯逻辑：优先使用节点上已有的
+ * 字段，否则回退到节点定义（registry）。抽出为独立函数，保证「整图反序列化」
+ * 与「单节点订阅渲染」两条路径行为完全一致。
+ */
+export function resolveNodeViewMeta(n: {
+  nodeType?: string;
+  title?: string;
+  category?: string[];
+  uiStyle?: string;
+  description?: string;
+}): { nodeType: string; title: string; category: string[]; uiStyle: string; description?: string } {
+  const nodeType = n.nodeType ?? '';
+  const def = useNodeRegistryStore.getState().getDefinition(nodeType);
+  const rawTitle = n.title ?? '';
+  const useDefName = !rawTitle || rawTitle === nodeType;
+  const title = def && useDefName ? def.name : (rawTitle || nodeType);
+  const meta = def ? getNodeDefinitionMeta(def) : undefined;
+  const uiStyle = n.uiStyle ?? meta?.uiStyle ?? meta?.ui_style ?? 'default';
+  const category = n.category ?? def?.category ?? [];
+  const description = n.description ?? (def ? getLocalizedDescription(meta, 'en-US') : undefined);
+  return { nodeType, title, category, uiStyle, description };
+}
+
+/**
  * 将反序列化后的节点实例还原为运行时状态
  * 
  * 从 connections 对象重建 Pin.links 字段（仅用于运行时查询）
@@ -133,52 +159,25 @@ export function deserializeGraph(data: DeserializeGraphInput): {
   };
 
   const nodes = (data.nodes || []).map((n) => {
-    const nodeType = n.nodeType ?? '';
-    const def = useNodeRegistryStore.getState().getDefinition(nodeType);
-    const rawTitle = n.title ?? '';
-    const useDefName = !rawTitle || rawTitle === nodeType;
-    const title = def && useDefName ? def.name : (rawTitle || nodeType);
-
-    let node: DeserializedNode;
-    if (def) {
-      node = {
-        id: n.id,
-        nodeType,
-        category: n.category ?? def.category ?? [],
-        title,
-        position: n.position ?? { x: 0, y: 0 },
-        inputs: [],
-        outputs: [],
-        uiStyle: n.uiStyle ?? getNodeDefinitionMeta(def)?.uiStyle ?? getNodeDefinitionMeta(def)?.ui_style ?? 'default',
-        description: n.description ?? getLocalizedDescription(getNodeDefinitionMeta(def), 'en-US'),
-        isInternal: !!n.isInternal,
-        subGraphId: n.subGraphId,
-        variableId: n.variableId,
-        variableType: n.variableType,
-        variableName: n.variableName,
-        dataframeId: n.dataframeId,
-        dataframeName: n.dataframeName,
-      };
-    } else {
-      node = {
-        id: n.id,
-        nodeType,
-        category: n.category ?? [],
-        title,
-        position: n.position ?? { x: 0, y: 0 },
-        inputs: [],
-        outputs: [],
-        uiStyle: n.uiStyle ?? 'default',
-        description: n.description,
-        isInternal: !!n.isInternal,
-        subGraphId: n.subGraphId,
-        variableId: n.variableId,
-        variableType: n.variableType,
-        variableName: n.variableName,
-        dataframeId: n.dataframeId,
-        dataframeName: n.dataframeName,
-      };
-    }
+    const meta = resolveNodeViewMeta(n);
+    const node: DeserializedNode = {
+      id: n.id,
+      nodeType: meta.nodeType,
+      category: meta.category,
+      title: meta.title,
+      position: n.position ?? { x: 0, y: 0 },
+      inputs: [],
+      outputs: [],
+      uiStyle: meta.uiStyle,
+      description: meta.description,
+      isInternal: !!n.isInternal,
+      subGraphId: n.subGraphId,
+      variableId: n.variableId,
+      variableType: n.variableType,
+      variableName: n.variableName,
+      dataframeId: n.dataframeId,
+      dataframeName: n.dataframeName,
+    };
 
     // 从 pins 中按 nodeId 和 direction 派生 inputs/outputs，以支持动态 pin（如 Decompose DataFrame）
     const nodePinsList = (data.pins || []).filter((p: { nodeId?: string }) => p.nodeId === n.id);

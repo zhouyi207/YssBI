@@ -1,5 +1,7 @@
 import { useRef, useMemo, useCallback } from "react";
-import { Node } from "../../Nodes/Node";
+import { useShallow } from "zustand/react/shallow";
+import { CanvasNode } from "../../Nodes/CanvasNode";
+import { useGraphDataStore } from "@/features/core/dataStore";
 import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
@@ -28,9 +30,10 @@ const selectActivePin = (state: { gesture: any }) => {
 };
 const dragDeltaEq = (a: any, b: any) => a?.x === b?.x && a?.y === b?.y;
 
+const EMPTY_NODE_IDS: string[] = [];
+
 export default function Canvas() {
   const {
-    nodes,
     setCanvas,
     setNodes,
     onCanvasPointerDown,
@@ -79,10 +82,14 @@ export default function Canvas() {
     [dragNodeIds]
   );
 
+  // 稳定的节点 id 列表（仅在增删/排序时变化），逐节点订阅渲染。
+  const graphNodeIds = useGraphDataStore(
+    useShallow((s) => (activeTabId ? s.graphNodes[activeTabId] ?? EMPTY_NODE_IDS : EMPTY_NODE_IDS)),
+  );
+
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     ref,
     activeTabId,
-    nodes,
     scale,
     gestureType,
     setCanvas,
@@ -172,32 +179,29 @@ export default function Canvas() {
             getPinWorldPos={getPinWorldPos}
             dimmed={isDraggingPin}
           />
-          {nodes
-            .filter((n: { id: string }) => visibleNodeIds.has(n.id))
-            .map((node: { id: string }) => {
-              const isSelected = selectedNodeIdsSet.has(node.id);
-              const isDragging = dragNodeIdsSet.has(node.id);
-              return (
-                <Node
-                  key={node.id}
-                  id={node.id}
-                  node={node as unknown as import('@/shared/types/ui').Node}
-                  scale={scale}
-                  selected={isSelected}
-                  dragDelta={isDragging ? (dragDelta ?? undefined) : undefined}
-                  activePinId={activePin?.id}
-                  activePin={activePin}
-                  subgraphId={activeTabId || undefined}
-                  groupId={groupId}
-                  onPointerDown={onNodePointerDown}
-                  onAddInput={handleNodeAddInput}
-                  onRemovePin={handleNodeRemovePin}
-                  onPinClick={handlePinClick}
-                  onPinPointerDown={(e, p) => onPinPointerDown(p, e)}
-                  onPinValueChange={handlePinValueChange}
-                />
-              );
-            })}
+          {graphNodeIds.map((nodeId: string) => {
+            if (!visibleNodeIds.has(nodeId)) return null;
+            const isSelected = selectedNodeIdsSet.has(nodeId);
+            const isDragging = dragNodeIdsSet.has(nodeId);
+            return (
+              <CanvasNode
+                key={nodeId}
+                id={nodeId}
+                graphId={activeTabId || undefined}
+                groupId={groupId}
+                scale={scale}
+                selected={isSelected}
+                dragDelta={isDragging ? (dragDelta ?? undefined) : undefined}
+                activePin={activePin}
+                onPointerDown={onNodePointerDown}
+                onAddInput={handleNodeAddInput}
+                onRemovePin={handleNodeRemovePin}
+                onPinClick={handlePinClick}
+                onPinPointerDown={onPinPointerDown}
+                onPinValueChange={handlePinValueChange}
+              />
+            );
+          })}
         </TransformContainer>
       </div>
 

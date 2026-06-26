@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
-import { Pin } from "@/shared/types/domain";
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT, NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from "@/app/appConfig/default";
@@ -33,7 +33,6 @@ function segmentIntersectsRect(
 export function useCanvasViewport(
   canvasRef: React.RefObject<HTMLDivElement | null>,
   graphId: string | null,
-  nodes: { id: string; position: { x: number; y: number }; inputs: Pin[]; outputs: Pin[] }[],
   scale: number,
   gestureType: string | null,
   setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGraphId?: string) => void,
@@ -44,6 +43,34 @@ export function useCanvasViewport(
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
   const wheelPersistTimerRef = useRef<number | null>(null);
   const cullingTimerRef = useRef<number | null>(null);
+
+  // 轻量 store 订阅：仅在「位置 / pin 归属 / 连接」实际变化时更新，
+  // 不再依赖整图反序列化出的 nodes 数组。
+  const nodePositionMap = useGraphDataStore(
+    useShallow((s) => {
+      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const m: Record<string, { x: number; y: number }> = {};
+      for (const id of ids) {
+        const n = s.nodes[id];
+        if (n?.position) m[id] = n.position;
+      }
+      return m;
+    }),
+  );
+
+  const pinNodeIdMap = useGraphDataStore(
+    useShallow((s) => {
+      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const m: Record<string, string> = {};
+      for (const nid of ids) {
+        for (const pid of s.nodePins[nid] ?? []) m[pid] = nid;
+      }
+      return m;
+    }),
+  );
+
+  // 连接表引用：连接增删时重算 culling（保持「连线另一端节点」可见性）。
+  const connectionsRef = useGraphDataStore((s) => s.connections);
 
   const persistViewport = useCallback(() => {
     if (!graphId) return;
@@ -128,7 +155,7 @@ export function useCanvasViewport(
 
   useEffect(() => {
     updateVisibleNodes();
-  }, [scale, nodes, updateVisibleNodes]);
+  }, [scale, nodePositionMap, connectionsRef, updateVisibleNodes]);
 
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
@@ -216,21 +243,6 @@ export function useCanvasViewport(
     };
   }, []);
 
-  const pinNodeIdMap = useMemo(() => {
-    const map = new Map<string, string>();
-    nodes.forEach((node) => {
-      node.inputs.forEach((pin: Pin) => map.set(pin.id, node.id));
-      node.outputs.forEach((pin: Pin) => map.set(pin.id, node.id));
-    });
-    return map;
-  }, [nodes]);
-
-  const nodePositionMap = useMemo(() => {
-    const map = new Map<string, { x: number; y: number }>();
-    nodes.forEach((node) => map.set(node.id, node.position));
-    return map;
-  }, [nodes]);
-
   const [nodeResizeVersion, setNodeResizeVersion] = useState(0);
   const resizeRafRef = useRef(0);
 
@@ -261,8 +273,8 @@ export function useCanvasViewport(
     if (!root) return;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
 
-    nodes.filter((node) => visibleNodeIds.has(node.id)).forEach((node) => {
-      const nodeEl = root.querySelector(`[data-node-id="${node.id}"]`);
+    visibleNodeIds.forEach((nodeId) => {
+      const nodeEl = root.querySelector(`[data-node-id="${nodeId}"]`);
       if (!nodeEl) return;
 
       const nodeRect = nodeEl.getBoundingClientRect();
@@ -298,13 +310,13 @@ export function useCanvasViewport(
 
     // 兑现等待该 pin 偏移的创建流程（从 pin 拖拽建节点后的位置对齐）
     if (graphId) resolvePinOffsetWaiters(graphId, nextOffsets);
-  }, [canvasRef, scale, visibleNodeIds, nodes, nodeResizeVersion, graphId]);
+  }, [canvasRef, scale, visibleNodeIds, nodeResizeVersion, graphId]);
 
   const getPinWorldPos = useCallback(
     (pinId: string) => {
-      const nodeId = pinNodeIdMap.get(pinId);
+      const nodeId = pinNodeIdMap[pinId];
       if (!nodeId) return null;
-      const position = nodePositionMap.get(nodeId);
+      const position = nodePositionMap[nodeId];
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
       const ddx = dragDelta && dragNodeIds?.has(nodeId) ? dragDelta.x : 0;

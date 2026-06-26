@@ -12,7 +12,7 @@ import { useEditorUIState } from './useEditorUIState';
 
 export function useEditorState(overrideGroupId?: string | null) {
   const active = useActiveEditorGroup(overrideGroupId);
-  const { nodes, variables } = useEditorGraphData(active.activeTabId);
+  const { variables } = useEditorGraphData();
   const collections = useEditorCollections();
   const groups = useEditorGroups();
   const uiState = useEditorUIState();
@@ -24,13 +24,12 @@ export function useEditorState(overrideGroupId?: string | null) {
       activeTabId: active.activeTabId,
       groupId: active.groupId,
       tabs: active.tabs,
-      nodes,
       variables,
       selectedNodeIds: active.selectedNodeIds,
       ...collections,
       groups,
       ...uiState,
     }),
-    [active, nodes, variables, collections, groups, uiState]
+    [active, variables, collections, groups, uiState]
   );
 }

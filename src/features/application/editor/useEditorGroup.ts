@@ -22,7 +22,7 @@ export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
     options?.withCanvasInteraction ?? (overrideGroupId !== 'sidebar' && overrideGroupId !== 'detail');
   const editor = useEditor({ withCanvasInteraction });
 
-  const { groupId, tabs, activeTabId, nodes, variables, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
+  const { groupId, tabs, activeTabId, variables, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
   const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
 
   // Wrapped handlers that ensure the correct group is active
@@ -60,7 +60,6 @@ export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
     groupId,
     tabs,
     activeTabId,
-    nodes,
     variables,
     selectedNodeIds,
     onCanvasPointerDown: wrappedOnCanvasPointerDown,
@@ -72,7 +71,6 @@ export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
     groupId,
     tabs,
     activeTabId,
-    nodes,
     variables,
     selectedNodeIds,
     wrappedOnCanvasPointerDown,
