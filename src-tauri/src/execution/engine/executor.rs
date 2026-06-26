@@ -329,7 +329,10 @@ impl<E: EventEmitter> Executor<E> {
 
             ExecutionEffect::TriggerOutput(role) => {
                 self.log(format!("Triggering output {:?}", role));
-                self.trigger_output_from_node_and_check(frame.node_id, role, Some(frame.id))?;
+                // 本帧触发后立即完成，子帧应挂到「最近的 waiting 祖先」（frame.parent_frame），
+                // 而非即将出栈的本帧；否则等待中的 Sequence/Branch 祖先会因看不到本分支
+                // 的后续子树而提前恢复，导致 Then 分支交错执行。
+                self.trigger_output_from_node_and_check(frame.node_id, role, frame.parent_frame)?;
 
                 self.log(format!("Frame {:?} completed (after trigger)", frame.id));
                 self.handle_frame_completion(frame)?;
@@ -541,13 +544,16 @@ impl<E: EventEmitter> Executor<E> {
     }
 
     /// 触发序列（逆序压栈）
+    ///
+    /// 本帧触发后立即完成，故各步子帧挂到 `frame.parent_frame`（最近的 waiting 祖先），
+    /// 与 `TriggerOutput` 一致，避免祖先提前恢复。
     fn trigger_sequence(
         &mut self,
         frame: ExecutionFrame,
         roles: Vec<ExecRole>,
     ) -> Result<(), String> {
         for role in roles.into_iter().rev() {
-            self.trigger_output(frame.clone(), role)?;
+            self.trigger_output_from_node(frame.node_id, role, frame.parent_frame)?;
         }
         Ok(())
     }

@@ -934,3 +934,94 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
 
     assert_eq!(predict_exog_names, vec!["x1"]);
 }
+
+/// 回归测试：Sequence 的 Then1 整条子树必须先于 Then2 执行
+///
+/// 结构：
+///   Seq.Then1 -> A -> A2
+///   Seq.Then2 -> B -> B2
+///
+/// 正确顺序应为 [Seq, A, A2, B, B2]；修复前因子帧错挂导致 Then2 在 Then1
+/// 子树排空前插入，出现 [Seq, A, B, A2, B2] 之类的交错。
+#[test]
+fn test_sequence_runs_branch_fully_before_next() {
+    use yssbi_lib::graph::core::GraphRuntime;
+
+    let registry = create_test_registry();
+    let graph = Arc::new(GraphInstance::new(
+        "Sequence Order Test",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
+
+    let seq = graph
+        .create_node("Control Flow:Sequence")
+        .expect("create sequence");
+    let a = graph.create_node("Debug:Print").expect("create A");
+    let a2 = graph.create_node("Debug:Print").expect("create A2");
+    let b = graph.create_node("Debug:Print").expect("create B");
+    let b2 = graph.create_node("Debug:Print").expect("create B2");
+
+    // Print 的 Message 为可选输入，逐一设值避免执行期取值失败
+    for (node, msg) in [(a, "A"), (a2, "A2"), (b, "B"), (b2, "B2")] {
+        let pins = graph.get_pin_instances_by_node_id(node);
+        let msg_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+            .expect("print message pin");
+        graph
+            .set_pin_user_value_by_pin_id(msg_pin.id, DataValue::String(msg.to_string()))
+            .expect("set print message");
+    }
+
+    let exec_out = |node, role: ExecRole| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(role.clone()))
+            .unwrap_or_else(|| panic!("exec output {:?} not found", role))
+            .id
+    };
+    let exec_in = |node| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect("exec input not found")
+            .id
+    };
+
+    // Then1 -> A -> A2
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(0)), exec_in(a))
+        .expect("Then1 -> A");
+    graph
+        .connect(exec_out(a, ExecRole::ExecOut), exec_in(a2))
+        .expect("A -> A2");
+    // Then2 -> B -> B2
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(1)), exec_in(b))
+        .expect("Then2 -> B");
+    graph
+        .connect(exec_out(b, ExecRole::ExecOut), exec_in(b2))
+        .expect("B -> B2");
+
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
+    let (mut executor, recorder) = common::recording_executor_for_test(runtime);
+    executor.start(seq).expect("execute sequence");
+
+    let expected = vec![
+        seq.to_string(),
+        a.to_string(),
+        a2.to_string(),
+        b.to_string(),
+        b2.to_string(),
+    ];
+    assert_eq!(
+        recorder.order(),
+        expected,
+        "Then1 整条子树 (A, A2) 必须先于 Then2 (B, B2) 执行"
+    );
+}
