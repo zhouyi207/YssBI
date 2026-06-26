@@ -37,28 +37,35 @@ export function DeleteProjectConfirmDialog({
   };
 
   return (
-    <Dialog open={project != null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open={project != null}
+      onOpenChange={(open) => {
+        if (!busy) onOpenChange(open);
+      }}
+    >
+      <DialogContent
+        onInteractOutside={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md"
+      >
         <DialogHeader>
           <DialogTitle>{t("projectPicker.deleteProjectConfirm.title")}</DialogTitle>
-          <DialogDescription>
-            {t("projectPicker.deleteProjectConfirm.description", { name: project?.name ?? "" })}
-          </DialogDescription>
         </DialogHeader>
 
-        {project ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            <p className="mb-1 font-medium text-foreground">
-              {t("projectPicker.deleteProjectConfirm.pathLabel")}
-            </p>
-            <p className="break-all font-mono">{project.path}</p>
-          </div>
-        ) : null}
+        <div className="px-6 pb-5">
+          <DialogDescription className="text-[13px] leading-relaxed text-muted-foreground">
+            {t("projectPicker.deleteProjectConfirm.description", { name: project?.name ?? "" })}
+          </DialogDescription>
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:justify-end">
           <Button
             type="button"
-            variant="secondary"
+            variant="outline"
             disabled={busy}
             onClick={() => onOpenChange(false)}
           >
@@ -78,4 +85,4 @@ export function DeleteProjectConfirmDialog({
       </DialogContent>
     </Dialog>
   );
-}
+};

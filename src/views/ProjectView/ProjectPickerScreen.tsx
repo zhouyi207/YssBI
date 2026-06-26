@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   VscClose,
+  VscClearAll,
   VscDebugStart,
   VscFolder,
   VscFolderOpened,
@@ -15,6 +16,7 @@ import {
   VscStarEmpty,
   VscStarFull,
   VscTrash,
+  VscWarning,
 } from "react-icons/vsc";
 import { i18n, type AppLanguage } from "@/app/i18n";
 import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME, APP_LINKS } from "@/app/appConfig/default";
@@ -56,6 +58,7 @@ import type { ThemeSettings } from "@/shared/types/settings";
 import { NewProjectModal } from "./NewProjectModal";
 import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
 import { buildProjectPickerContextMenuSections } from "./projectPickerContextMenu";
+import type { ProjectPickerContextMenuTarget } from "./projectPickerContextMenu";
 
 type SortMode = "lastOpened" | "name";
 
@@ -363,6 +366,7 @@ export function ProjectPickerScreen() {
     importProjectFromDisk,
     openRecentProject,
     scanProjectsFromFolder,
+    cleanupInvalidProjects,
     removeProject,
     deleteProjectFiles,
     toggleFavorite,
@@ -385,7 +389,18 @@ export function ProjectPickerScreen() {
     contextMenu,
     openContextMenu,
     closeContextMenu,
-  } = usePositionedContextMenu<ManagedProject>();
+  } = usePositionedContextMenu<ProjectPickerContextMenuTarget>();
+
+  const openListContextMenu = useCallback((event: React.MouseEvent) => {
+    openContextMenu(event, { kind: "list" });
+  }, [openContextMenu]);
+
+  const handleListAreaClick = useCallback((event: React.MouseEvent) => {
+    if ((event.target as HTMLElement).closest("[data-project-picker-item]")) {
+      return;
+    }
+    setSelectedId(null);
+  }, []);
 
   const revealInExplorer = useCallback(async (projectPath: string) => {
     try {
@@ -407,9 +422,24 @@ export function ProjectPickerScreen() {
       removeProject,
       requestDeleteProjectFiles: setDeleteConfirmProject,
       revealInExplorer,
+      newProject: () => setNewProjectOpen(true),
+      importProject: () => void importProjectFromDisk(),
+      scanProjects: () => void scanProjectsFromFolder(),
+      cleanupProjects: () => void cleanupInvalidProjects(),
       isBusy,
     }, t),
-    [contextMenu, isBusy, openRecentProject, removeProject, revealInExplorer, t, toggleFavorite],
+    [
+      contextMenu,
+      cleanupInvalidProjects,
+      importProjectFromDisk,
+      isBusy,
+      openRecentProject,
+      removeProject,
+      revealInExplorer,
+      scanProjectsFromFolder,
+      t,
+      toggleFavorite,
+    ],
   );
 
   const handleConfirmDeleteProject = useCallback(async (project: ManagedProject) => {
@@ -454,7 +484,11 @@ export function ProjectPickerScreen() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+          onContextMenu={openListContextMenu}
+          onClick={handleListAreaClick}
+        >
           {filtered.length === 0 ? (
             <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
               <VscProject size={42} className="opacity-35" />
@@ -463,6 +497,7 @@ export function ProjectPickerScreen() {
             </div>
           ) : (
             <OverlayScrollbar className="flex-1">
+              <div className="min-h-full">
               <ul className="divide-y divide-border/60">
                 {filtered.map((project) => {
                   const isSelected = selectedId === project.id;
@@ -472,11 +507,12 @@ export function ProjectPickerScreen() {
                       <div
                         role="button"
                         tabIndex={0}
+                        data-project-picker-item
                         onClick={() => setSelectedId(project.id)}
                         onDoubleClick={() => void openRecentProject(project.path)}
                         onContextMenu={(event) => {
                           setSelectedId(project.id);
-                          openContextMenu(event, project);
+                          openContextMenu(event, { kind: "project", project });
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
@@ -545,6 +581,7 @@ export function ProjectPickerScreen() {
                   );
                 })}
               </ul>
+              </div>
             </OverlayScrollbar>
           )}
         </div>
@@ -602,10 +639,28 @@ export function ProjectPickerScreen() {
               </span>
             </SidebarBtn>
             <div className="my-1 border-t border-border/60" />
+            <SidebarBtn disabled={isBusy} onClick={() => void cleanupInvalidProjects()}>
+              <span className="flex w-full min-w-0 items-center gap-2">
+                <VscClearAll className="shrink-0 opacity-90" size={14} />
+                <span className="min-w-0 flex-1 text-center">
+                  {busy === "cleanup" ? t("projectPicker.cleaningUp") : t("projectPicker.cleanupProjects")}
+                </span>
+              </span>
+            </SidebarBtn>
             <SidebarBtn danger disabled={!selected} onClick={() => selected && removeProject(selected.id)}>
               <span className="flex w-full min-w-0 items-center gap-2">
                 <VscTrash className="shrink-0 opacity-90" size={14} />
                 <span className="min-w-0 flex-1 text-center">{t("projectPicker.removeFromList")}</span>
+              </span>
+            </SidebarBtn>
+            <SidebarBtn
+              danger
+              disabled={!selected || isBusy}
+              onClick={() => selected && setDeleteConfirmProject(selected)}
+            >
+              <span className="flex w-full min-w-0 items-center gap-2">
+                <VscWarning className="shrink-0 opacity-90" size={14} />
+                <span className="min-w-0 flex-1 text-center">{t("projectPicker.deleteProjectFiles")}</span>
               </span>
             </SidebarBtn>
           </CardContent>

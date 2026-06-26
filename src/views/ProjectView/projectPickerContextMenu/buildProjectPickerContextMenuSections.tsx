@@ -1,16 +1,64 @@
 import type { TFunction } from "i18next";
-import { VscChevronRight, VscFolderOpened, VscStarEmpty, VscStarFull, VscTrash, VscWarning } from "react-icons/vsc";
+import {
+  VscChevronRight,
+  VscClearAll,
+  VscFolderOpened,
+  VscNewFile,
+  VscRefresh,
+  VscStarEmpty,
+  VscStarFull,
+  VscTrash,
+  VscWarning,
+} from "react-icons/vsc";
+import type { ManagedProject } from "@/features/application/project";
 import type { ContextMenuSection } from "@/shared/ui/contextMenu";
 import type { ProjectPickerContextMenuActions, ProjectPickerContextMenuState } from "./projectPickerContextMenuTypes";
 
-export function buildProjectPickerContextMenuSections(
-  contextMenu: ProjectPickerContextMenuState | null,
+function buildListContextMenuSections(
   actions: ProjectPickerContextMenuActions,
   t: TFunction,
 ): ContextMenuSection[] {
-  if (!contextMenu) return [];
+  return [
+    {
+      items: [
+        {
+          id: "new-project",
+          label: t("projectPicker.newProject"),
+          icon: <VscNewFile size={12} />,
+          disabled: actions.isBusy,
+          onClick: () => actions.newProject(),
+        },
+        {
+          id: "import-project",
+          label: t("projectPicker.importProject"),
+          icon: <VscFolderOpened size={12} />,
+          disabled: actions.isBusy,
+          onClick: () => void actions.importProject(),
+        },
+        {
+          id: "scan-projects",
+          label: t("projectPicker.scanProjects"),
+          icon: <VscRefresh size={12} />,
+          disabled: actions.isBusy,
+          onClick: () => void actions.scanProjects(),
+        },
+        {
+          id: "cleanup-projects",
+          label: t("projectPicker.cleanupProjects"),
+          icon: <VscClearAll size={12} />,
+          disabled: actions.isBusy,
+          onClick: () => void actions.cleanupProjects(),
+        },
+      ],
+    },
+  ];
+}
 
-  const project = contextMenu.target;
+function buildProjectContextMenuSections(
+  project: ManagedProject,
+  actions: ProjectPickerContextMenuActions,
+  t: TFunction,
+): ContextMenuSection[] {
   const isFavorite = Boolean(project.isFavorite);
 
   return [
@@ -56,4 +104,18 @@ export function buildProjectPickerContextMenuSections(
       ],
     },
   ];
+}
+
+export function buildProjectPickerContextMenuSections(
+  contextMenu: ProjectPickerContextMenuState | null,
+  actions: ProjectPickerContextMenuActions,
+  t: TFunction,
+): ContextMenuSection[] {
+  if (!contextMenu) return [];
+
+  if (contextMenu.target.kind === "list") {
+    return buildListContextMenuSections(actions, t);
+  }
+
+  return buildProjectContextMenuSections(contextMenu.target.project, actions, t);
 }

@@ -3,9 +3,20 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useProjectIOStore } from "@/features/core/dataStore";
-import { uiStore } from "@/features/core/ui/UIStore";
-import { ProjectService, type ProjectRecordRow } from "@/services/project/projectService";
+import {
+  applyCleanupProgressEvent,
+  applyScanProgressEvent,
+  markProjectPickerProgressDone,
+  runWithProjectPickerProgress,
+  updateOpenProjectProgressStage,
+} from "@/features/application/project/projectPickerProgress";
+import {
+  ProjectService,
+  isPickerTaskCancelledError,
+  type ProjectRecordRow,
+} from "@/services/project/projectService";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 
 const RECENT_PROJECTS_STORAGE_KEY = "yssbi-recent-projects";
 
@@ -17,7 +28,7 @@ export interface ManagedProject {
   isFavorite?: boolean;
 }
 
-type BusyState = "idle" | "new" | "open" | "scan" | "import";
+type BusyState = "idle" | "new" | "open" | "scan" | "import" | "cleanup";
 
 function pathFileName(path: string): string {
   const normalized = path.replace(/\\/g, "/");
@@ -37,7 +48,9 @@ function readRecentProjects(): ManagedProject[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ManagedProject[];
     return Array.isArray(parsed)
-      ? parsed.filter((item) => item && typeof item.path === "string" && item.path.trim())
+      ? parsed
+          .filter((item) => item && typeof item.path === "string" && item.path.trim())
+          .map((item) => ({ ...item, path: formatDisplayPath(item.path) }))
       : [];
   } catch {
     return [];
@@ -53,10 +66,15 @@ function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
   return {
     id: row.id,
     name: row.name,
-    path: row.path,
+    path: formatDisplayPath(row.path),
     lastOpenedAt: row.lastOpenedAt ?? row.createdAt,
     isFavorite: row.isFavorite,
   };
+}
+
+async function listManagedProjects(): Promise<ManagedProject[]> {
+  const rows = await ProjectService.listRegisteredProjects();
+  return rows.map(rowToManagedProject);
 }
 
 export function useProjectPicker() {
@@ -69,8 +87,7 @@ export function useProjectPicker() {
 
   const refresh = useCallback(async () => {
     try {
-      const rows = await ProjectService.listRegisteredProjects();
-      setProjects(rows.map(rowToManagedProject));
+      setProjects(await listManagedProjects());
     } catch (error) {
       toast.error(formatErrorMessage(error));
     }
@@ -113,9 +130,14 @@ export function useProjectPicker() {
   }, [currentPath, refresh]);
 
   const currentProjectId = useMemo(
-    () => projects.find((project) => project.path === currentPath)?.id ?? null,
+    () => projects.find((project) => pathsEqualForCompare(project.path, currentPath ?? ""))?.id ?? null,
     [currentPath, projects],
   );
+
+  const handlePickerTaskCancelled = useCallback(async (messageKey: "scanCancelled" | "cleanupCancelled") => {
+    setProjects(await listManagedProjects());
+    toast.info(t(`projectPicker.${messageKey}`));
+  }, [t]);
 
   const scanProjectsFromFolder = useCallback(async () => {
     const directory = await ProjectService.pickProjectScanDirectory(
@@ -125,9 +147,35 @@ export function useProjectPicker() {
 
     setBusy("scan");
     try {
-      const result = await ProjectService.scanProjectsInDirectory(directory);
-      const rows = await ProjectService.listRegisteredProjects();
-      setProjects(rows.map(rowToManagedProject));
+      const { result, cancelled } = await runWithProjectPickerProgress(
+        {
+          initial: {
+            stage: t("projectPicker.loading.scanning"),
+            detail: t("projectPicker.loading.scanningFolder"),
+            cancelable: true,
+          },
+          onCancel: () => {
+            void ProjectService.cancelProjectPickerTask();
+          },
+        },
+        async ({ update, isCancelled }) => {
+          const scanResult = await ProjectService.scanProjectsInDirectory(directory, (event) => {
+            if (isCancelled()) return;
+            applyScanProgressEvent(t, event, update);
+          });
+          if (!isCancelled()) {
+            markProjectPickerProgressDone(t, update);
+          }
+          return scanResult;
+        },
+      );
+
+      if (cancelled) {
+        await handlePickerTaskCancelled("scanCancelled");
+        return;
+      }
+
+      setProjects(await listManagedProjects());
 
       if (result.discovered === 0) {
         toast.info(t("projectPicker.scanNoneFound"));
@@ -144,83 +192,121 @@ export function useProjectPicker() {
         );
       }
     } catch (error) {
+      if (isPickerTaskCancelledError(error)) {
+        await handlePickerTaskCancelled("scanCancelled");
+        return;
+      }
       toast.error(formatErrorMessage(error));
+    } finally {
+      setBusy("idle");
+    }
+  }, [handlePickerTaskCancelled, t]);
+
+  const cleanupInvalidProjects = useCallback(async () => {
+    setBusy("cleanup");
+    try {
+      const { result, cancelled } = await runWithProjectPickerProgress(
+        {
+          initial: {
+            stage: t("projectPicker.loading.cleanup"),
+            cancelable: true,
+          },
+          onCancel: () => {
+            void ProjectService.cancelProjectPickerTask();
+          },
+        },
+        async ({ update, isCancelled }) => {
+          const cleanupResult = await ProjectService.cleanupInvalidRegisteredProjects((event) => {
+            if (isCancelled()) return;
+            applyCleanupProgressEvent(t, event, update);
+          });
+          if (!isCancelled()) {
+            markProjectPickerProgressDone(t, update);
+          }
+          return cleanupResult;
+        },
+      );
+
+      if (cancelled) {
+        await handlePickerTaskCancelled("cleanupCancelled");
+        return;
+      }
+
+      setProjects(await listManagedProjects());
+
+      if (result.removed === 0) {
+        toast.info(t("projectPicker.cleanupNone"));
+      } else {
+        toast.success(t("projectPicker.cleanupSuccess", { count: result.removed }));
+      }
+    } catch (error) {
+      if (isPickerTaskCancelledError(error)) {
+        await handlePickerTaskCancelled("cleanupCancelled");
+        return;
+      }
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setBusy("idle");
+    }
+  }, [handlePickerTaskCancelled, t]);
+
+  const createProject = useCallback(async (name: string, path: string) => {
+    setBusy("new");
+    try {
+      await runWithProjectPickerProgress(
+        {
+          initial: {
+            stage: t("projectPicker.loading.creating"),
+            percent: 0.2,
+          },
+        },
+        async ({ update }) => {
+          const row = await ProjectService.createProject(name, path);
+          markProjectPickerProgressDone(t, update);
+          setProjects((previous) => [
+            rowToManagedProject(row),
+            ...previous.filter((project) => project.id !== row.id),
+          ]);
+          toast.success(t("projectPicker.createSuccess", { name: row.name }));
+        },
+      );
     } finally {
       setBusy("idle");
     }
   }, [t]);
 
-  const createProject = useCallback(async (name: string, path: string) => {
-    setBusy("new");
-    uiStore.startProgress({
-      stage: t("projectPicker.loading.creating"),
-      detail: t("projectPicker.loading.readingFile"),
-      percent: 0.1,
-    });
-    try {
-      const row = await ProjectService.createProject(name, path);
-      uiStore.updateProgress({
-        detail: t("projectPicker.loading.loadingData"),
-        percent: 0.5,
-      });
-      const projectData = await loadProject();
-      if (!projectData) {
-        const loadError = useProjectIOStore.getState().error;
-        toast.error(formatErrorMessage(loadError, "加载项目数据失败"));
-        return;
-      }
-      uiStore.updateProgress({
-        detail: t("projectPicker.loading.preparingEditor"),
-        percent: 0.9,
-      });
-      setProjects((previous) => [
-        rowToManagedProject(row),
-        ...previous.filter((project) => project.id !== row.id),
-      ]);
-      uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
-      navigate("/editor");
-    } catch (error) {
-      toast.error(formatErrorMessage(error));
-    } finally {
-      uiStore.finishProgress();
-      setBusy("idle");
-    }
-  }, [navigate, loadProject, t]);
-
   const openProjectAtPath = useCallback(async (path: string) => {
     setBusy("open");
-    uiStore.startProgress({
-      stage: t("projectPicker.loading.opening"),
-      detail: t("projectPicker.loading.readingFile"),
-      percent: 0.1,
-    });
     try {
-      const result = await ProjectService.loadProjectToState(path);
-      uiStore.updateProgress({
-        detail: t("projectPicker.loading.loadingData"),
-        percent: 0.5,
-      });
-      const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-      const projectData = await loadProject();
-      if (!projectData) {
-        const loadError = useProjectIOStore.getState().error;
-        toast.error(formatErrorMessage(loadError, "加载项目数据失败"));
-        return;
-      }
-      uiStore.updateProgress({
-        detail: t("projectPicker.loading.preparingEditor"),
-        percent: 0.9,
-      });
-      setProjects((previous) => [
-        rowToManagedProject(row),
-        ...previous.filter((project) => project.id !== row.id),
-      ]);
-      uiStore.updateProgress({ detail: t("projectPicker.loading.done"), percent: 1 });
-      navigate("/editor");
+      await runWithProjectPickerProgress(
+        {
+          initial: {
+            stage: t("projectPicker.loading.opening"),
+            detail: t("projectPicker.loading.readingFile"),
+            percent: 0.1,
+          },
+        },
+        async ({ update }) => {
+          const result = await ProjectService.loadProjectToState(path);
+          updateOpenProjectProgressStage(t, update, "loadingData");
+          const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
+          const projectData = await loadProject();
+          if (!projectData) {
+            const loadError = useProjectIOStore.getState().error;
+            throw new Error(formatErrorMessage(loadError, "加载项目数据失败"));
+          }
+          updateOpenProjectProgressStage(t, update, "preparingEditor");
+          setProjects((previous) => [
+            rowToManagedProject(row),
+            ...previous.filter((project) => project.id !== row.id),
+          ]);
+          markProjectPickerProgressDone(t, update);
+          navigate("/editor");
+        },
+      );
     } catch (error) {
       toast.error(formatErrorMessage(error));
     } finally {
-      uiStore.finishProgress();
       setBusy("idle");
     }
   }, [navigate, loadProject, t]);
@@ -299,6 +385,7 @@ export function useProjectPicker() {
     openRecentProject,
     refresh,
     scanProjectsFromFolder,
+    cleanupInvalidProjects,
     removeProject,
     deleteProjectFiles,
     toggleFavorite,

@@ -39,6 +39,7 @@ class UIStore {
   };
 
   private listeners = new Set<Listener>();
+  private progressOnCancel: (() => void) | null = null;
 
   // --- subscription ---
   subscribe(listener: Listener) {
@@ -239,8 +240,18 @@ class UIStore {
 
   // --- Progress Overlay ---
   /** 启动全局进度蒙层；同一时刻只有一个进度任务。 */
-  startProgress(progress: ProgressState) {
-    this.state = { ...this.state, progress };
+  startProgress(
+    progress: ProgressState,
+    options?: { onCancel?: () => void },
+  ) {
+    this.progressOnCancel = options?.onCancel ?? null;
+    this.state = {
+      ...this.state,
+      progress: {
+        ...progress,
+        cancelable: progress.cancelable ?? !!options?.onCancel,
+      },
+    };
     this.emit();
   }
 
@@ -257,9 +268,17 @@ class UIStore {
     this.emit();
   }
 
+  /** 用户点击进度蒙层关闭按钮时调用。 */
+  cancelProgress() {
+    if (!this.state.progress?.cancelable) return;
+    this.progressOnCancel?.();
+    this.finishProgress();
+  }
+
   /** 关闭全局进度蒙层。多次调用是幂等的。 */
   finishProgress() {
     if (!this.state.progress) return;
+    this.progressOnCancel = null;
     this.state = { ...this.state, progress: null };
     this.emit();
   }

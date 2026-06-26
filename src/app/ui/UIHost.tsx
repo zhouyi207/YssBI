@@ -5,8 +5,8 @@ import {
   ExcelSheetSelectModal,
   ImportModal,
   InputModal,
-  LoadingOverlay,
   Modal,
+  ProgressOverlay,
   SqlConnectionModal,
   SqliteTableSelectModal,
   SqlRemoteTableSelectModal,
@@ -26,7 +26,7 @@ export const UIHost = () => {
         <Toast key={message.id} message={message} onClose={() => uiStore.closeToast(message.id)} />
       ))}
 
-      {progress && <LoadingOverlay progress={progress} />}
+      {progress && <ProgressOverlay progress={progress} />}
 
       {top?.type === "confirm" && (
         <Modal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />

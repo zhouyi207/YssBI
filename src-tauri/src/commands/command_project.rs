@@ -8,11 +8,13 @@ use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
     default_project_parent_directory as default_project_parent_directory_impl,
-    delete_project_directory, execute_project_data, load_project_from_file, normalize_project_name,
+    delete_project_directory, execute_project_data, format_path_for_user_path, load_project_from_file, normalize_existing_path,
+    normalize_project_name,
     paths_refer_to_same_project, resolve_reveal_path, save_project_as_to_directory,
     save_project_to_file, validate_new_project_path as validate_new_project_path_impl,
     LegacyProjectRecord, ProjectData, ProjectIndex, ProjectPathValidation, ProjectRecord,
     ProjectRegistry, ProjectState, RevealProjectResourceRequest, ScanProjectsResult,
+    CleanupInvalidProjectsResult,
     PROJECT_METADATA_FILE,
 };
 use crate::schema::{
@@ -285,7 +287,7 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
         path
     );
 
-    path
+    path.map(|path| normalize_existing_path(&path).unwrap_or(path))
 }
 
 #[tauri::command]
@@ -314,9 +316,37 @@ pub async fn list_registered_projects(
 #[tauri::command]
 pub async fn scan_projects_in_directory(
     registry: State<'_, ProjectRegistry>,
+    task_cancel: State<'_, crate::project::ProjectPickerTaskCancelRegistry>,
     directory: String,
+    on_progress: Channel<crate::project::ProjectScanProgressEvent>,
 ) -> Result<ScanProjectsResult, String> {
-    registry.scan_directory(&directory).await
+    let cancel = task_cancel.begin();
+    let result = registry
+        .scan_directory(&directory, Some(on_progress), cancel.clone())
+        .await;
+    task_cancel.end(&cancel);
+    result
+}
+
+#[tauri::command]
+pub fn cancel_project_picker_task(
+    task_cancel: State<'_, crate::project::ProjectPickerTaskCancelRegistry>,
+) {
+    task_cancel.cancel_active();
+}
+
+#[tauri::command]
+pub async fn cleanup_invalid_registered_projects(
+    registry: State<'_, ProjectRegistry>,
+    task_cancel: State<'_, crate::project::ProjectPickerTaskCancelRegistry>,
+    on_progress: Channel<crate::project::ProjectCleanupProgressEvent>,
+) -> Result<CleanupInvalidProjectsResult, String> {
+    let cancel = task_cancel.begin();
+    let result = registry
+        .cleanup_invalid_projects(Some(on_progress), cancel.clone())
+        .await;
+    task_cancel.end(&cancel);
+    result
 }
 
 #[tauri::command]
@@ -397,6 +427,11 @@ pub fn load_project(
         path
     );
 
+    let path = normalize_existing_path(&path).map_err(|message| FrontendError {
+        code: "INVALID_PATH".into(),
+        message,
+    })?;
+
     let project_data = load_project_from_file(&path)?;
 
     log_app!(
@@ -466,8 +501,6 @@ pub async fn save_project_as(
 
 #[tauri::command]
 pub async fn create_project(
-    app: AppHandle,
-    state: State<'_, ProjectState>,
     registry: State<'_, ProjectRegistry>,
     name: String,
     path: String,
@@ -490,24 +523,12 @@ pub async fn create_project(
     save_project_to_file(&project_data, project_root.to_string_lossy().as_ref())
         .map_err(|e| e.to_string())?;
 
-    let record = registry
+    registry
         .register_project(
             &normalized_name,
             project_file_path.to_string_lossy().as_ref(),
         )
-        .await?;
-
-    state.set_path(Some(record.path.clone()));
-    state.set_data(project_data.clone());
-    emit_project_event(
-        &app,
-        Event::Project(EventProject::ProjectLoaded {
-            data: project_data,
-            path: Some(record.path.clone()),
-        }),
-    );
-
-    Ok(record)
+        .await
 }
 
 #[tauri::command]
@@ -608,5 +629,5 @@ pub fn get_project_resource_path(
     if !path.exists() {
         return Err(format!("File not found: {}", path.display()));
     }
-    Ok(path.to_string_lossy().into_owned())
+    Ok(format_path_for_user_path(&path))
 }

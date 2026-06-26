@@ -1,19 +1,28 @@
+import { useTranslation } from "react-i18next";
+import { VscClose } from "react-icons/vsc";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { uiStore } from "@/features/core/ui/UIStore";
 import type { ProgressState } from "@/shared/types/ui";
 
+export interface ProgressOverlayProps {
+  progress: ProgressState;
+}
+
 /**
- * 全局加载蒙层。
+ * 全局进度蒙层（项目选择页打开/新建/扫描/清理等共用）。
  *
- * - `progress.percent` 为 0~1 时显示确定型进度条；未提供时显示
- *   不确定型滑动条（依赖 `loading-indeterminate-bar` CSS 动画）。
- * - 蒙层会拦截所有指针事件，确保加载阶段用户无法触发其他操作。
+ * - `progress.percent` 为 0~1 时显示确定型进度条；未提供时显示不确定型滑动条。
+ * - `progress.cancelable` 为 true 时显示关闭按钮。
  */
-export const LoadingOverlay = ({ progress }: { progress: ProgressState }) => {
+export function ProgressOverlay({ progress }: ProgressOverlayProps) {
+  const { t } = useTranslation();
   const indeterminate = progress.percent === undefined;
   const pct = indeterminate
     ? 0
     : Math.min(100, Math.max(0, (progress.percent ?? 0) * 100));
+  const showCloseButton = progress.cancelable === true;
 
   return (
     <div
@@ -22,9 +31,21 @@ export const LoadingOverlay = ({ progress }: { progress: ProgressState }) => {
       aria-busy="true"
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/70 backdrop-blur-sm"
     >
-      <Card className="w-[min(420px,90vw)] border-border/60 shadow-lg">
+      <Card className="relative w-[min(420px,90vw)] border-border/60 shadow-lg">
+        {showCloseButton && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute right-3 top-3 z-10"
+            onClick={() => uiStore.cancelProgress()}
+            aria-label={t("common.close")}
+          >
+            <VscClose size={16} />
+          </Button>
+        )}
         <CardContent className="px-6 py-5">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
+          <div className={`mb-3 flex items-baseline justify-between gap-3 ${showCloseButton ? "pr-8" : ""}`}>
             <h3 className="truncate text-sm font-medium text-foreground">
               {progress.stage}
             </h3>
@@ -52,4 +73,7 @@ export const LoadingOverlay = ({ progress }: { progress: ProgressState }) => {
       </Card>
     </div>
   );
-};
+}
+
+/** @deprecated 使用 ProgressOverlay */
+export const LoadingOverlay = ProgressOverlay;

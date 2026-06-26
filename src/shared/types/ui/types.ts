@@ -34,6 +34,8 @@ export interface ProgressState {
     stage: string;
     detail?: string;
     percent?: number;
+    /** 为 true 时在蒙层右上角显示关闭/取消按钮。 */
+    cancelable?: boolean;
 }
 
 export interface InputDialogOptions {

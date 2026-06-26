@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,8 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
 import { ProjectService } from "@/services/project/projectService";
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 
 function joinPath(parent: string, child: string) {
   const base = parent.replace(/[/\\]+$/, "");
@@ -48,37 +52,30 @@ interface NewProjectModalProps {
   onCreate: (name: string, path: string) => Promise<void>;
 }
 
+type FieldErrors = {
+  path: boolean;
+  name: boolean;
+};
+
+const emptyFieldErrors = (): FieldErrors => ({ path: false, name: false });
+
 export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewProjectModalProps) {
   const { t } = useTranslation();
   const [parentBase, setParentBase] = useState("");
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [pathAuto, setPathAuto] = useState(true);
-  const [pathError, setPathError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>(emptyFieldErrors);
   const [busy, setBusy] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const validateSeq = useRef(0);
 
-  const validatePath = useCallback(async (nextPath: string) => {
-    if (!nextPath.trim()) {
-      setPathError(t("projectPicker.newProjectModal.pathRequired"));
-      return;
-    }
-    try {
-      const result = await ProjectService.validateNewProjectPath(nextPath);
-      setPathError(result.ok ? null : result.message ?? t("projectPicker.newProjectModal.invalidPath"));
-    } catch (error) {
-      setPathError(error instanceof Error ? error.message : String(error));
-    }
-  }, [t]);
+  function clearFieldErrors() {
+    setFieldErrors(emptyFieldErrors());
+  }
 
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    setNotice(null);
-    setPathError(null);
+    clearFieldErrors();
     setName(DEFAULT_PROJECT_NAME);
     setPath("");
     setParentBase("");
@@ -86,7 +83,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
 
     (async () => {
       try {
-        const parent = await ProjectService.defaultProjectParentDirectory();
+        const parent = formatDisplayPath(await ProjectService.defaultProjectParentDirectory());
         if (cancelled) return;
         const defaultName = DEFAULT_PROJECT_NAME;
         setParentBase(parent);
@@ -95,42 +92,24 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       } catch (error) {
         if (cancelled) return;
         setPathAuto(false);
-        setNotice(error instanceof Error ? error.message : String(error));
+        toast.error(formatErrorMessage(error));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, t]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const seq = ++validateSeq.current;
-    setValidating(true);
-    if (validateTimer.current) clearTimeout(validateTimer.current);
-    validateTimer.current = setTimeout(() => {
-      void validatePath(path).finally(() => {
-        if (validateSeq.current === seq) {
-          setValidating(false);
-        }
-      });
-    }, 250);
-    return () => {
-      validateSeq.current += 1;
-      if (validateTimer.current) clearTimeout(validateTimer.current);
-    };
-  }, [isOpen, path, validatePath]);
+  }, [isOpen]);
 
   function updateName(nextName: string) {
     setName(nextName);
-    setNotice(null);
+    clearFieldErrors();
     if (!pathAuto) return;
     setPath(joinPath(parentBase, sanitizeDirSegment(nextName)));
   }
 
   async function browseParentDirectory() {
-    setNotice(null);
+    clearFieldErrors();
     try {
       const selected = await open({
         directory: true,
@@ -139,48 +118,28 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
         defaultPath: parentBase || undefined,
       });
       if (!selected || Array.isArray(selected)) return;
-      setParentBase(selected);
+      const parent = formatDisplayPath(selected);
+      setParentBase(parent);
       setPathAuto(true);
-      setPath(joinPath(selected, sanitizeDirSegment(name)));
+      setPath(joinPath(parent, sanitizeDirSegment(name)));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      toast.error(formatErrorMessage(error));
     }
   }
 
   async function handleCreate() {
-    const trimmedName = name.trim();
-    const trimmedPath = path.trim();
-    setNotice(null);
-    if (!trimmedName) {
-      setNotice(t("projectPicker.newProjectModal.nameRequired"));
-      return;
-    }
-    if (!trimmedPath) {
-      setNotice(t("projectPicker.newProjectModal.pathRequired"));
-      return;
-    }
-
+    clearFieldErrors();
     setBusy(true);
     try {
-      const result = await ProjectService.validateNewProjectPath(trimmedPath);
-      if (!result.ok) {
-        setPathError(result.message ?? t("projectPicker.newProjectModal.invalidPath"));
-        setNotice(t("projectPicker.newProjectModal.fixErrors"));
-        return;
-      }
-      await onCreate(trimmedName, trimmedPath);
+      await onCreate(name.trim(), path.trim());
       onOpenChange(false);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      setFieldErrors({ path: true, name: true });
+      toast.error(formatErrorMessage(error));
     } finally {
       setBusy(false);
     }
   }
-
-  const canCreate = useMemo(
-    () => !busy && !validating && Boolean(name.trim()) && Boolean(path.trim()) && !pathError,
-    [busy, name, path, pathError, validating],
-  );
 
   return (
     <Dialog
@@ -203,11 +162,41 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
         </DialogHeader>
 
         <div className="space-y-4 px-6 pb-5">
-          {notice ? (
-            <p className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-[12px] text-destructive">
-              {notice}
-            </p>
-          ) : null}
+          <div className="space-y-1">
+            <Label htmlFor="new-project-path" className="text-[12px] text-muted-foreground">
+              {t("projectPicker.newProjectModal.pathLabel")}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="new-project-path"
+                value={path}
+                aria-invalid={fieldErrors.path}
+                onChange={(event) => {
+                  const nextPath = event.target.value;
+                  clearFieldErrors();
+                  setPathAuto(false);
+                  setPath(nextPath);
+                  const nextName = lastPathSegment(nextPath);
+                  if (nextName) setName(nextName);
+                  setParentBase(parentDirectoryOf(nextPath));
+                }}
+                className={cn(
+                  "min-w-0 flex-1 bg-muted/50 font-mono text-[12px] text-foreground",
+                  fieldErrors.path ? "border-destructive" : "border-input",
+                )}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void browseParentDirectory()}
+                className="h-9 shrink-0 border-border bg-muted px-3 text-[12px] text-foreground hover:bg-muted/80"
+              >
+                {t("projectPicker.newProjectModal.browse")}
+              </Button>
+            </div>
+          </div>
 
           <div className="space-y-1">
             <Label htmlFor="new-project-name" className="text-[12px] text-muted-foreground">
@@ -216,59 +205,14 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
             <Input
               id="new-project-name"
               value={name}
-              aria-invalid={!name.trim()}
+              aria-invalid={fieldErrors.name}
               onChange={(event) => updateName(event.target.value)}
-              className="bg-muted/50 text-[13px] text-foreground"
+              className={cn(
+                "bg-muted/50 text-[13px] text-foreground",
+                fieldErrors.name ? "border-destructive" : "border-input",
+              )}
               autoComplete="off"
             />
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="new-project-path" className="text-[12px] text-muted-foreground">
-              {t("projectPicker.newProjectModal.pathLabel")}
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="new-project-path"
-                value={path}
-                aria-invalid={Boolean(pathError)}
-                onChange={(event) => {
-                  const nextPath = event.target.value;
-                  setNotice(null);
-                  setPathAuto(false);
-                  setPath(nextPath);
-                  const nextName = lastPathSegment(nextPath);
-                  if (nextName) setName(nextName);
-                  setParentBase(parentDirectoryOf(nextPath));
-                }}
-                className={[
-                  "min-w-0 flex-1 bg-muted/50 font-mono text-[12px] text-foreground",
-                  pathError ? "border-destructive/80" : "border-input",
-                ].join(" ")}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void browseParentDirectory()}
-                className="shrink-0 border-border bg-muted text-[12px] text-foreground hover:bg-muted/80"
-              >
-                {t("projectPicker.newProjectModal.browse")}
-              </Button>
-            </div>
-            <div className="min-h-[1.25rem] text-[11px] leading-snug" aria-live="polite">
-              {validating ? (
-                <p className="text-muted-foreground">{t("projectPicker.newProjectModal.validating")}</p>
-              ) : pathError ? (
-                <p className="text-destructive">{pathError}</p>
-              ) : (
-                <span className="text-transparent select-none" aria-hidden>
-                  .
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
@@ -276,11 +220,11 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             {t("common.cancel")}
           </Button>
-          <Button type="button" onClick={() => void handleCreate()} disabled={!canCreate}>
+          <Button type="button" onClick={() => void handleCreate()} disabled={busy}>
             {busy ? t("projectPicker.creating") : t("projectPicker.newProjectModal.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
+};

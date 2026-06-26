@@ -20,6 +20,7 @@ import { useHistoryStore } from '@/features/core/history';
 import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -164,7 +165,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
   currentPath: null,
 
-  setCurrentPath: (path) => set({ currentPath: path }),
+  setCurrentPath: (path) => set({ currentPath: path ? formatDisplayPath(path) : null }),
 
   loadProject: async () => {
     if (loadProjectInFlight) {
@@ -207,7 +208,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         );
         useGraphDataStore.getState().hydrateGraphs({});
 
-        set({ status: LoadStatus.Ready, currentPath: path });
+        set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
         return {
           variables,
@@ -235,7 +236,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
     syncGraphViewportsFromRecords(project.graphs);
-    set({ status: LoadStatus.Ready, currentPath: path });
+    set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
 
   loadGraph: async (graphId) => {

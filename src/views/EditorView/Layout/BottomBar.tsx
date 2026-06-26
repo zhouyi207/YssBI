@@ -19,11 +19,13 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 import { LoadStatus } from "@/shared/types/ui";
 import { cn } from "@/lib/utils";
+import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function fileNameFromPath(path: string | null) {
   if (!path) return null;
-  return path.replace(/\\/g, "/").split("/").pop() || path;
+  const displayPath = formatDisplayPath(path);
+  return displayPath.replace(/\\/g, "/").split("/").pop() || displayPath;
 }
 
 function executionLabel(status: string, t: (key: string) => string) {

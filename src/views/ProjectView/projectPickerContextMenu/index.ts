@@ -2,4 +2,5 @@ export { buildProjectPickerContextMenuSections } from "./buildProjectPickerConte
 export type {
   ProjectPickerContextMenuActions,
   ProjectPickerContextMenuState,
+  ProjectPickerContextMenuTarget,
 } from "./projectPickerContextMenuTypes";

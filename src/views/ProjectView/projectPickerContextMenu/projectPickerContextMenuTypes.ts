@@ -1,7 +1,12 @@
 import type { ManagedProject } from "@/features/application/project";
 import type { PositionedContextMenuState } from "@/shared/ui/contextMenu";
 
-export type ProjectPickerContextMenuState = PositionedContextMenuState<ManagedProject>;
+export type ProjectPickerContextMenuTarget =
+  | { kind: "project"; project: ManagedProject }
+  | { kind: "list" };
+
+export type ProjectPickerContextMenuState =
+  PositionedContextMenuState<ProjectPickerContextMenuTarget>;
 
 export interface ProjectPickerContextMenuActions {
   openProject: (path: string) => void;
@@ -9,5 +14,9 @@ export interface ProjectPickerContextMenuActions {
   removeProject: (id: string) => void;
   requestDeleteProjectFiles: (project: ManagedProject) => void;
   revealInExplorer: (path: string) => void;
+  newProject: () => void;
+  importProject: () => void;
+  scanProjects: () => void;
+  cleanupProjects: () => void;
   isBusy: boolean;
 }

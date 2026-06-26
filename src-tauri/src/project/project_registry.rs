@@ -4,6 +4,8 @@ use sqlx::{FromRow, SqlitePool};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use super::{format_path_for_user, format_path_for_user_path};
+
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +17,12 @@ pub struct ProjectRecord {
     pub created_at: String,
     pub last_opened_at: Option<String>,
     pub is_favorite: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupInvalidProjectsResult {
+    pub removed: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -133,6 +141,25 @@ impl ProjectRegistry {
     pub async fn register_project(&self, name: &str, path: &str) -> Result<ProjectRecord, String> {
         let name = normalize_project_name(name);
         let path = normalize_existing_path(path)?;
+
+        if let Some(existing) = self.fetch_by_path(&path).await.map_err(|e| e.to_string())? {
+            sqlx::query(
+                r#"
+                UPDATE projects
+                SET last_opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(&existing.id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            return self
+                .fetch_by_id(&existing.id)
+                .await?
+                .ok_or_else(|| "写入项目记录后读取失败".to_string());
+        }
+
         let id = uuid::Uuid::new_v4().to_string();
 
         sqlx::query(
@@ -197,8 +224,8 @@ impl ProjectRegistry {
         Ok(())
     }
 
-    async fn fetch_by_path(&self, path: &str) -> Result<Option<ProjectRecord>, sqlx::Error> {
-        let row = sqlx::query_as::<_, ProjectRecordRow>(
+    async fn fetch_by_path_exact(&self, path: &str) -> Result<Option<ProjectRecordRow>, sqlx::Error> {
+        sqlx::query_as::<_, ProjectRecordRow>(
             r#"
             SELECT id, name, path, created_at, last_opened_at, is_favorite
             FROM projects
@@ -207,8 +234,48 @@ impl ProjectRegistry {
         )
         .bind(path)
         .fetch_optional(&self.pool)
-        .await?;
-        Ok(row.map(ProjectRecordRow::into_record))
+        .await
+    }
+
+    async fn reconcile_stored_path(&self, id: &str, path: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
+            .bind(path)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn fetch_by_path(&self, path: &str) -> Result<Option<ProjectRecord>, sqlx::Error> {
+        let normalized = normalize_existing_path(path).ok();
+
+        if let Some(ref canonical) = normalized {
+            if let Some(row) = self.fetch_by_path_exact(canonical).await? {
+                return Ok(Some(row.into_record()));
+            }
+
+            let rows = sqlx::query_as::<_, ProjectRecordRow>(
+                r#"
+                SELECT id, name, path, created_at, last_opened_at, is_favorite
+                FROM projects
+                "#,
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            if let Some(row) = rows
+                .into_iter()
+                .find(|row| paths_refer_to_same_project(&row.path, canonical))
+            {
+                let _ = self.reconcile_stored_path(&row.id, canonical).await;
+                return Ok(Some(row.into_record()));
+            }
+        }
+
+        Ok(self
+            .fetch_by_path_exact(path)
+            .await?
+            .map(ProjectRecordRow::into_record))
     }
 
     pub async fn remove_project(&self, id: &str) -> Result<(), String> {
@@ -258,22 +325,102 @@ impl ProjectRegistry {
         Ok(next != 0)
     }
 
-    pub async fn scan_directory(&self, directory: &str) -> Result<crate::project::ScanProjectsResult, String> {
-        use crate::project::{discover_project_metadata_files, project_name_from_metadata_path, ScanProjectsResult};
+    /// 从注册表移除磁盘上已不存在 `metadata.yssbi` 的项目记录（不删除项目文件）。
+    pub async fn cleanup_invalid_projects(
+        &self,
+        progress: Option<tauri::ipc::Channel<crate::project::ProjectCleanupProgressEvent>>,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<CleanupInvalidProjectsResult, String> {
+        use crate::project::{
+            is_picker_task_cancelled, picker_task_cancelled_error, ProjectCleanupProgressEvent,
+        };
+
+        let emit = |event: ProjectCleanupProgressEvent| {
+            if let Some(channel) = progress.as_ref() {
+                let _ = channel.send(event);
+            }
+        };
+
+        if is_picker_task_cancelled(&cancel) {
+            return Err(picker_task_cancelled_error());
+        }
+
+        let projects = self.list_projects().await.map_err(|e| e.to_string())?;
+        let total = projects.len();
+        let mut removed = 0usize;
+
+        for (index, project) in projects.iter().enumerate() {
+            if is_picker_task_cancelled(&cancel) {
+                return Err(picker_task_cancelled_error());
+            }
+
+            emit(ProjectCleanupProgressEvent::Checking {
+                current: index + 1,
+                total,
+            });
+
+            if is_registered_project_valid(&project.path) {
+                continue;
+            }
+
+            self.remove_project(&project.id).await?;
+            removed += 1;
+            emit(ProjectCleanupProgressEvent::Removing {
+                removed,
+                total,
+            });
+        }
+
+        Ok(CleanupInvalidProjectsResult { removed })
+    }
+
+    pub async fn scan_directory(
+        &self,
+        directory: &str,
+        progress: Option<tauri::ipc::Channel<crate::project::ProjectScanProgressEvent>>,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<crate::project::ScanProjectsResult, String> {
+        use crate::project::{
+            discover_project_metadata_files, is_picker_task_cancelled,
+            picker_task_cancelled_error, project_name_from_metadata_path, ProjectScanProgressEvent,
+            ScanProjectsResult,
+        };
         use std::path::PathBuf;
 
+        let emit = |event: ProjectScanProgressEvent| {
+            if let Some(channel) = progress.as_ref() {
+                let _ = channel.send(event);
+            }
+        };
+
+        if is_picker_task_cancelled(&cancel) {
+            return Err(picker_task_cancelled_error());
+        }
+
+        emit(ProjectScanProgressEvent::Scanning);
+
         let root = PathBuf::from(directory.trim());
-        let metadata_files = discover_project_metadata_files(&root)?;
+        let metadata_files = discover_project_metadata_files(&root, &cancel)?;
         let discovered = metadata_files.len();
+        emit(ProjectScanProgressEvent::Discovered { count: discovered });
+
         let mut newly_registered = 0;
         let mut projects = Vec::with_capacity(discovered);
 
-        for metadata_path in metadata_files {
+        for (index, metadata_path) in metadata_files.iter().enumerate() {
+            if is_picker_task_cancelled(&cancel) {
+                return Err(picker_task_cancelled_error());
+            }
+
+            emit(ProjectScanProgressEvent::Registering {
+                current: index + 1,
+                total: discovered,
+            });
             let path = metadata_path.to_string_lossy().into_owned();
             let Ok(normalized) = normalize_existing_path(&path) else {
                 continue;
             };
-            let name = project_name_from_metadata_path(&metadata_path);
+            let name = project_name_from_metadata_path(metadata_path);
             let (record, is_new) = self.register_discovered_project(&name, &normalized).await?;
             if is_new {
                 newly_registered += 1;
@@ -308,9 +455,9 @@ pub fn default_project_parent_directory() -> Result<String, String> {
             std::env::var("USERPROFILE").map_err(|_| "无法读取用户目录".to_string())?;
         let docs = PathBuf::from(&userprofile).join("Documents");
         if docs.is_dir() {
-            Ok(docs.to_string_lossy().into_owned())
+            Ok(format_path_for_user_path(&docs))
         } else {
-            Ok(userprofile)
+            Ok(format_path_for_user(&userprofile))
         }
     }
     #[cfg(not(windows))]
@@ -318,9 +465,9 @@ pub fn default_project_parent_directory() -> Result<String, String> {
         let home = std::env::var("HOME").map_err(|_| "无法读取 HOME".to_string())?;
         let docs = PathBuf::from(&home).join("Documents");
         if docs.is_dir() {
-            Ok(docs.to_string_lossy().into_owned())
+            Ok(format_path_for_user_path(&docs))
         } else {
-            Ok(home)
+            Ok(format_path_for_user(&home))
         }
     }
 }
@@ -391,6 +538,10 @@ pub fn normalize_project_name(name: &str) -> String {
     }
 }
 
+pub fn is_registered_project_valid(path: &str) -> bool {
+    normalize_existing_path(path).is_ok()
+}
+
 pub fn normalize_existing_path(path: &str) -> Result<String, String> {
     let path = path.trim();
     if path.is_empty() {
@@ -416,6 +567,28 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
         return Err(format!("项目文件必须是 {PROJECT_METADATA_FILE}"));
     }
     std::fs::canonicalize(&pb)
-        .map(|p| p.to_string_lossy().into_owned())
+        .map(|p| format_path_for_user_path(&p))
         .map_err(|e| format!("无法解析项目路径: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn registered_project_valid_when_metadata_exists() {
+        let root = std::env::temp_dir().join(format!("yssbi-cleanup-test-{}", uuid::Uuid::new_v4()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let metadata = root.join(PROJECT_METADATA_FILE);
+        fs::write(&metadata, "{}").unwrap();
+
+        assert!(is_registered_project_valid(&metadata.to_string_lossy()));
+        assert!(!is_registered_project_valid(
+            &root.join("missing-metadata.yssbi").to_string_lossy()
+        ));
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

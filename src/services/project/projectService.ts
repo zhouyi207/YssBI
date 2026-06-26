@@ -5,6 +5,7 @@ import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 import { logger } from '@/utils/appLogger';
+import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 
 type CanvasState = GraphPosition;
 
@@ -26,6 +27,33 @@ export interface ScanProjectsResult {
     discovered: number;
     newlyRegistered: number;
     projects: ProjectRecordRow[];
+}
+
+export interface CleanupInvalidProjectsResult {
+    removed: number;
+}
+
+export type ProjectScanProgressEvent =
+    | { kind: "scanning" }
+    | { kind: "discovered"; count: number }
+    | { kind: "registering"; current: number; total: number };
+
+export type ProjectCleanupProgressEvent =
+    | { kind: "checking"; current: number; total: number }
+    | { kind: "removing"; removed: number; total: number };
+
+export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
+
+/** @deprecated 使用 PICKER_TASK_CANCELLED */
+export const SCAN_CANCELLED = PICKER_TASK_CANCELLED;
+
+export function isPickerTaskCancelledError(error: unknown): boolean {
+    return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
+}
+
+/** @deprecated 使用 isPickerTaskCancelledError */
+export function isScanCancelledError(error: unknown): boolean {
+    return isPickerTaskCancelledError(error);
 }
 
 export interface ProjectGraphIndexRow {
@@ -308,8 +336,39 @@ export class ProjectService {
         return selected as string;
     }
 
-    static async scanProjectsInDirectory(directory: string): Promise<ScanProjectsResult> {
-        return await invoke("scan_projects_in_directory", { directory });
+    static async cancelProjectPickerTask(): Promise<void> {
+        await invoke("cancel_project_picker_task");
+    }
+
+    /** @deprecated 使用 cancelProjectPickerTask */
+    static async cancelProjectScan(): Promise<void> {
+        return ProjectService.cancelProjectPickerTask();
+    }
+
+    static async cleanupInvalidRegisteredProjects(
+        onProgress?: (event: ProjectCleanupProgressEvent) => void,
+    ): Promise<CleanupInvalidProjectsResult> {
+        const channel = new Channel<ProjectCleanupProgressEvent>();
+        channel.onmessage = (event) => {
+            onProgress?.(event);
+        };
+        return await invoke("cleanup_invalid_registered_projects", {
+            onProgress: channel,
+        });
+    }
+
+    static async scanProjectsInDirectory(
+        directory: string,
+        onProgress?: (event: ProjectScanProgressEvent) => void,
+    ): Promise<ScanProjectsResult> {
+        const channel = new Channel<ProjectScanProgressEvent>();
+        channel.onmessage = (event) => {
+            onProgress?.(event);
+        };
+        return await invoke("scan_projects_in_directory", {
+            directory,
+            onProgress: channel,
+        });
     }
 
     static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {

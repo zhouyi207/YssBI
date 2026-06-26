@@ -60,6 +60,7 @@ pub fn run() {
         // 注册全局状态管理器
         .manage(project::ProjectState::new())
         .manage(execution::WindowDataStore::new())
+        .manage(project::ProjectPickerTaskCancelRegistry::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
@@ -107,6 +108,8 @@ pub fn run() {
             validate_new_project_path,
             list_registered_projects,
             scan_projects_in_directory,
+            cancel_project_picker_task,
+            cleanup_invalid_registered_projects,
             register_project,
             remove_registered_project,
             delete_registered_project_files,

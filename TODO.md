@@ -399,6 +399,20 @@ src-tauri/Cargo.toml
 - [x] **ProjectPicker 导入行为**：`importProjectFromDisk` 仅 `registerProject` 加入列表，不 `loadProject`、不跳转编辑器；**进入** / 双击列表项才打开项目
 - [x] **ProjectPicker 文件夹扫描**：选文件夹 → `scan_projects_in_directory` 递归发现 `metadata.yssbi`（跳过 `.git` / `node_modules` / `target` 等）→ 注册到列表；`project_scan.rs` + `ProjectService.pickProjectScanDirectory`
 
+## 2026.06.28
+
+- [x] **ProjectPicker 扫描进度蒙层**：`scan_projects_in_directory` + Tauri Channel 推送扫描/注册进度；`ProgressOverlay` + `projectPickerProgress.ts` 统一打开/新建/扫描/清理进度生命周期；扫描可取消（`ProjectPickerTaskCancelRegistry` + `cancel_project_picker_task`）
+- [x] **ProjectPicker 清理失效项目**：command `cleanup_invalid_registered_projects` 校验 `metadata.yssbi` 存在性并从注册表移除；侧栏「清理项目」+ 进度蒙层与后端取消；`project_picker_task.rs` 共用任务取消注册表
+- [x] **ProjectPicker 侧栏按钮重排**：扩充列表（新建 / 导入 / 扫描）→ 选中项操作（进入 / 收藏）→ 维护（清理 / 从列表移除 / 移动到回收站）
+- [x] **ProjectPicker 列表空白右键菜单**：`ProjectPickerContextMenuTarget` 区分 `project` / `list`；空白区域菜单含新建 / 导入 / 扫描 / 清理（与侧栏一致）
+- [x] **ProjectPicker 侧栏「移动到回收站」**：与项目行右键相同，打开 `DeleteProjectConfirmDialog` 后移到系统回收站
+- [x] **ProjectPicker 文案**：侧栏与菜单「导入项目 / 扫描项目 / 进入项目 / 收藏项目 / 清理项目」；「移到回收站…」→「移动到回收站」
+- [x] **ProjectPicker 列表空白点击取消选中**：点击非项目行区域 `setSelectedId(null)`（`data-project-picker-item` + `closest` 判断）
+- [x] **新建项目不进入编辑器**：`create_project` 仅创建文件夹 + `metadata.yssbi` + 注册列表，不 `ProjectLoaded`；前端创建成功后 toast 并留在选择页，进入需点「进入项目」或双击
+- [x] **NewProjectModal 重构**：路径与项目名表单位置对调；移除前端路径校验与异步 `validateNewProjectPath`；创建成功/失败由创建按钮处理（成功关窗，失败 toast + 输入框红框）；浏览按钮 `h-9` 与 Input 对齐；错误不再内联展示
+- [x] **DeleteProjectConfirmDialog 布局优化**：移除项目路径展示；标题 + 说明 + 底栏按钮（取消 / 移动到回收站），对齐 `NewProjectModal` 壳层；删除进行中禁止关闭；确认按钮文案与侧栏统一为「移动到回收站」
+- [x] **跨平台路径显示适配**：Windows `canonicalize` 产生的 `\\?\` / `\\?\UNC\` 扩展前缀在展示与存储时剥离；后端 `path_format.rs` + `normalize_existing_path`；注册表 `fetch_by_path` 等价路径匹配并迁移旧格式；前端 `formatDisplayPath` / `pathsEqualForCompare` 用于项目选择器、新建项目、编辑器 `currentPath` 与底部栏
+
 
 ## v1.0 待办
 
@@ -411,8 +425,6 @@ src-tauri/Cargo.toml
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] 感觉 tooltip 太多了
 - [ ] 感觉创建节点连接的时候卡顿感觉很强烈
-- [ ] 在项目选择界面扫描添加到进度条，还添加一个清理按钮清理掉失效的项目
-
 
 # TODOLIST
 
