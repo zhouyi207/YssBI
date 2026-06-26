@@ -7,9 +7,10 @@
 ```
 同步改三处版本（例如 0.1.1）：
 
+src-tauri/Cargo.toml
 src-tauri/tauri.conf.json
 package.json
-src-tauri/Cargo.toml
+
 
 提交并 push，或手动再跑 publish.yml
 ```
