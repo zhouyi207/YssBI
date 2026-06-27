@@ -15,21 +15,10 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Pin } from '@/shared/types/domain';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
+import { derivePinLinks } from './pinLinks';
 import { resolveNodeViewMeta } from './serialization';
 
 const EMPTY_IDS: string[] = [];
-
-/**
- * 连接 id 形如 `fromPinId->toPinId`，据此解析出「另一端」的 pin id，
- * 无需订阅整张 connections 表。
- */
-function otherEndpoint(connId: string, pinId: string): string {
-  const sep = connId.indexOf('->');
-  if (sep < 0) return connId;
-  const from = connId.slice(0, sep);
-  const to = connId.slice(sep + 2);
-  return from === pinId ? to : from;
-}
 
 export function useNodeView(nodeId: string): UINode | null {
   const nodeData = useGraphDataStore((s) => s.nodes[nodeId]);
@@ -55,8 +44,7 @@ export function useNodeView(nodeId: string): UINode | null {
     for (let i = 0; i < pinObjs.length; i++) {
       const p = pinObjs[i];
       if (!p) continue;
-      const conns = pinConns[i] ?? EMPTY_IDS;
-      const links = conns.map((cid) => otherEndpoint(cid, p.id));
+      const links = derivePinLinks(p.id, pinConns[i] ?? EMPTY_IDS);
       const pin: Pin = { ...p, links };
       if (p.direction === 'output') outputs.push(pin);
       else inputs.push(pin);

@@ -480,19 +480,25 @@ package.json
 - [x] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上（已完成，见 2026.06.30「Pin 类型匹配 / TypeSystem 架构清理」）
 - [x] **Pin 类型匹配 / TypeSystem 架构清理**：合并并执行 `pin-type-architecture` 与 `type-system-cleanup` 计划，确立 `DataType + TypeSystemSnapshot` 为 pin 类型判断事实来源；后端新增 Struct 类型系统快照并下发 schema，`DataType::can_accept()` 支持 `Struct<Model>` 接受 `Struct<OLSModel>`，前端 `dataType` DTO 修复 `Struct` inner/key 丢失，`pinCompatibility` 统一使用 TypeSystem 做 Palette 推荐、pin 高亮与自动连接匹配；通用 `Predict` 的 Model input 改为 `Struct<Model>`，pin 落点连接前增加类型匹配防御，修复 OLS `model` output 拖拽不推荐 Predict / 已有 Predict pin 不高亮 / 不亮仍尝试连接的问题；补充前端 DTO 与 pin 匹配 vitest、后端 Struct 族匹配单测
 - [x] **Pin 类型架构后续收口**：完成第一轮类型系统收口——前端抽出统一 `canConnectPins(a, b)`，高亮、落点连接与旧 `connections.ts` 校验共用 `dataType + TypeSystem` 判断；`buildPinDataType()` 不再从 `typeDisplay`/`type`/`containerType` 回退推断，data pin 缺少结构化 `dataType` 直接视为 schema bug；后端将 `DataType::can_accept()` 收回为基础精确规则，Struct 族匹配迁移到显式 `TypeSystemSnapshot::can_accept(target, source)`；`NodeDefinition` 支持声明 Struct 类型元信息，`NodeRegistry` 聚合生成 TypeSystemSnapshot，`OLSModel -> Model` 由 OLS 节点注册声明并随 schema 下发；补充 `canConnectPins`、禁止 fallback、旧连接校验和后端 TypeSystem 单测
+- [x] event等其他 detail 的 head 中有修改名字的 input 框的时候，有bug，其修改名称不是失去焦点后保存而是修改保存，需要切换为失去焦点后保存或者回车保存（已完成：抽出 `DetailCommitInput` 本地草稿输入，Detail 名称、变量值、Function pin 名称均改为 blur / Enter 提交，Escape 回滚）
+- [x] 变量切换类型 dataview 无法获取
+- [x] **变量 Detail 类型切换后端不变量**：变量类型 Select 保持即时响应，但类型变化规则收进后端 `ProjectState::update_variable`——只提交 `dataType` 且未显式传 `dataValue` 时，后端用 `DataType::default_value()` 重置变量值，不再保留旧类型历史值；`update_variable` command 返回更新后的完整变量，前端 `VariableService.updateVariable()` 用后端结果刷新 store，修复 Int 切 Boolean 后 UI/值不同步的问题；补充后端类型切换重置默认值与显式值优先单测
+- [x] 断开连接后 pin 的状态有时还是连接状态（已完成：确认后端断开路径均更新 `ConnectionManager`；前端根因是 Node Detail 用非事实来源 `pin.links` 判断 connected，而连接/断开事实在 `pinConnections`。已抽出 `pinLinks` 派生工具，Canvas `useNodeView` 与 Node Detail 统一从 `pinConnections` 派生 runtime links，避免断开后残留连接状态）
+- [x] **Pin links 历史残留收口**：`PinData` / 前端 `PinInstanceDTO` / 后端 `PinInstanceDTO` 不再携带 `links`，连接事实统一由 `connections` / `pinConnections` 维护；Store 写入入口新增 `toStoredPin()` 剥离旧运行时 links，`replaceGraphNodes` 不再从传入 Pin 对象读取 links；旧 `graphConverters` 删除对外暴露的 `applyConnectionsToPins` / `extractConnectionsFromPins`，仅在需要兼容 runtime Graph 视图时从 `connections` 派生 `PinView.links`
 
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
 - [ ] 去掉项目所有的 LEGACY 逻辑，这个逻辑的主要目的是迁移旧项目的数据，没有必要；如 _yssbi_rowid 列 LEGACY_YSSBI_ROWID_COLUMN
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
-- [ ] 变量切换类型 dataview 无法获取
-- [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
-- [ ] event等其他 detail 的 head 中有修改名字的 input 框的时候，其修改名称不是失去焦点后保存而是修改保存，需要切换为失去焦点后保存或者回车保存
+- [ ] 右键 sidebar 中的列表 item 重命名的时候，延迟很重，同时 tabbar 中的名字没有更改；其次在 detail 重命名的时候 tabbar 上的名字仍然没有更改
+- [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
+- [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
+- [ ] 唯一还保留的“非最终历史痕迹”是：旧 runtime Pin 类型和 deserializeGraph() 这类旧视图工具仍然会生成 links，但它们现在只用于兼容 runtime Graph 视图，不再是事实来源。这个残留是可控的，不会影响当前连接状态逻辑。等后续彻底移除旧 runtime Graph / domain Pin.links 依赖时，可以再做一次更大的类型层清理。
 
 
 # TODOLIST

@@ -175,8 +175,7 @@ pub fn add_repeatable_pin(
         .ok_or_else(|| "No pin was created".to_string())?;
 
     let resolved_type = graph.get_pin_data_type_by_pin_id(added_pin.id);
-    let pin_dto =
-        PinInstanceDTO::from_pin_with_context(added_pin, resolved_type.as_ref(), Vec::new());
+    let pin_dto = PinInstanceDTO::from_pin_with_context(added_pin, resolved_type.as_ref());
     let pin_id_str = added_pin.id.to_string();
 
     let mut all_sets = vec![change_set];

@@ -2,13 +2,13 @@ import { useTranslation } from 'react-i18next';
 import { Select } from '@/shared/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   detailEmptyHintClass,
   detailInlineInputSmallClass,
   detailPinRowClass,
 } from './detailStyles';
+import { DetailCommitInput } from './DetailForm';
 import { DetailSectionHeader, DetailText } from './DetailText';
 
 interface PinEditorProps {
@@ -53,12 +53,12 @@ export function PinEditor({ title, emptyMessage, pins, onChange }: PinEditorProp
         <div className="space-y-1">
           {pins.map((pin, idx) => (
             <div key={pin.id} className={detailPinRowClass}>
-              <Input
+              <DetailCommitInput
                 className={detailInlineInputSmallClass}
                 value={pin.name}
-                onChange={(e) => {
+                onCommit={(name) => {
                   const newPins = [...pins];
-                  newPins[idx] = { ...newPins[idx], name: e.target.value };
+                  newPins[idx] = { ...newPins[idx], name };
                   onChange(newPins);
                 }}
               />

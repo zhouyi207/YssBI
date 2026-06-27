@@ -24,8 +24,6 @@ export {
   convertGraphsToDTO,
   convertProjectDataFromDTO,
   convertProjectDataToDTO,
-  applyConnectionsToPins,
-  extractConnectionsFromPins,
   validateGraphDTO,
   cloneDTO,
   mergeProjectData,

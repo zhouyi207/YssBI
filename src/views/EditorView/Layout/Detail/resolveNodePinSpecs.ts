@@ -1,4 +1,4 @@
-import type { PinData } from '@/shared/types/store/graph';
+import type { PinView } from '@/shared/types/store/graph';
 import type { NodeDefinition, PinDefinitionDTO, PinSlot } from '@/shared/types/domain/node';
 
 export interface ResolvedPinSpec {
@@ -46,7 +46,7 @@ function slotNote(slot: PinSlot): ResolvedPinSpec['slotNote'] {
 }
 
 function findDefinitionForPin(
-  pin: PinData,
+  pin: PinView,
   slots: PinSlot[] | undefined,
 ): { optional: boolean; slotKind?: ResolvedPinSpec['slotKind']; slotNote?: string } {
   if (!slots?.length) return { optional: pin.optional ?? false };
@@ -86,7 +86,7 @@ function findDefinitionForPin(
 }
 
 function resolvePin(
-  pin: PinData,
+  pin: PinView,
   definition: NodeDefinition | undefined,
 ): ResolvedPinSpec {
   const meta = findDefinitionForPin(pin, definition?.pinSlots);
@@ -106,7 +106,7 @@ function resolvePin(
 
 export function resolveNodePinSpecs(
   nodeId: string,
-  pins: PinData[],
+  pins: PinView[],
   definition: NodeDefinition | undefined,
 ): { inputs: ResolvedPinSpec[]; outputs: ResolvedPinSpec[] } {
   const nodePins = pins.filter((p) => p.nodeId === nodeId);

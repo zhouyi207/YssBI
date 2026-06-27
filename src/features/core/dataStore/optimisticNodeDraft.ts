@@ -107,7 +107,6 @@ function pinFromDefinition(
     name: nameOverride ?? def.name,
     type,
     direction: def.direction,
-    links: [],
     containerType: dt ? dataTypeToContainer(dt) : undefined,
     typeDisplay: dt ? dataTypeDisplay(dt) : undefined,
     dataType: dt,

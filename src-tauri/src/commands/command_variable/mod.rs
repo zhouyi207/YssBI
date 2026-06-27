@@ -56,7 +56,7 @@ pub fn update_variable(
     data_value: Option<DataValue>,
     description: Option<String>,
     tags: Option<Vec<String>>,
-) -> Result<(), String> {
+) -> Result<VariableInstanceDTO, String> {
     let type_changed = data_type.is_some();
     let name_changed = name.is_some();
 
@@ -162,7 +162,7 @@ pub fn update_variable(
     if persist_global {
         state.persist_current_project()?;
     }
-    Ok(())
+    Ok((&updated).into())
 }
 
 /// 删除变量（统一接口）

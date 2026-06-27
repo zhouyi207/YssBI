@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { PinData } from '@/shared/types/store/graph';
+import type { PinData, PinView } from '@/shared/types/store/graph';
 import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { derivePinLinks } from '@/features/core/dataStore/pinLinks';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
@@ -14,6 +15,8 @@ import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailText } from '../shared/DetailText';
 
 const EMPTY_PINS: PinData[] = [];
+const EMPTY_CONNECTIONS: string[] = [];
+const EMPTY_PIN_CONNECTIONS: string[][] = [];
 
 interface NodeDetailPanelProps {
   nodeId: string;
@@ -22,16 +25,32 @@ interface NodeDetailPanelProps {
 export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
   const { t, i18n } = useTranslation();
   const node = useGraphDataStore((s) => s.nodes[nodeId]);
-  const pins = useGraphDataStore(
+  const pinObjs = useGraphDataStore(
     useShallow((s) => {
       const pinIds = s.nodePins[nodeId];
       if (!pinIds?.length) return EMPTY_PINS;
       return pinIds.map((pid) => s.pins[pid]).filter(Boolean);
     }),
   );
+  const pinConns = useGraphDataStore(
+    useShallow((s) => {
+      const pinIds = s.nodePins[nodeId];
+      if (!pinIds?.length) return EMPTY_PIN_CONNECTIONS;
+      return pinIds.map((pid) => s.pinConnections[pid] ?? EMPTY_CONNECTIONS);
+    }),
+  );
   const nodeType = node?.nodeType;
   const definition = useNodeRegistryStore((s) =>
     nodeType ? s.definitions.get(nodeType) : undefined,
+  );
+
+  const pins = useMemo<PinView[]>(
+    () =>
+      pinObjs.map((pin, index) => ({
+        ...pin,
+        links: derivePinLinks(pin.id, pinConns[index]),
+      })),
+    [pinObjs, pinConns],
   );
 
   const pinSpecs = useMemo(

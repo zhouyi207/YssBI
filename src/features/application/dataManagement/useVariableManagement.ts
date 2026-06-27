@@ -96,9 +96,8 @@ export function useVariableManagement() {
     if (!previous) return;
 
     try {
-      await VariableService.updateVariable(id, data);
-      const next = { ...previous, ...data };
-      useVariableStore.getState().updateVariable(id, data);
+      const next = await VariableService.updateVariable(id, data);
+      useVariableStore.getState().updateVariable(id, next);
       updateVariableReferences(id, next);
     } catch (e) {
       logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableManagement');

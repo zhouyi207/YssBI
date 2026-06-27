@@ -37,14 +37,13 @@ export interface NodeData {
 }
 
 // ==================== PinData ====================
-/** Pin 数据（与 Domain Pin 一致，Store 直接存储） */
+/** Pin 实体数据。连接关系不在这里保存；运行时 links 从 pinConnections 派生。 */
 export interface PinData {
   id: string;
   nodeId: string;
   name: string;
   type: PinType | string;
   direction: PinDirection;
-  links: string[];
   defaultValue?: unknown;
   userValue?: unknown;
   containerType?: string;
@@ -53,6 +52,9 @@ export interface PinData {
   optional?: boolean;
   ui?: PinUI;
 }
+
+/** UI 运行时 Pin 视图，包含从 pinConnections 派生出的 links。 */
+export type PinView = PinData & { links: string[] };
 
 // ==================== ConnectionData ====================
 /** 连接数据（Store 格式，含派生 id） */
@@ -82,8 +84,8 @@ export interface RuntimeNodeInput {
   category?: string[];
   title?: string;
   position?: { x: number; y: number };
-  inputs?: (string | PinData)[];
-  outputs?: (string | PinData)[];
+  inputs?: (string | PinData | PinView)[];
+  outputs?: (string | PinData | PinView)[];
   uiStyle?: string;
   description?: string;
   isInternal?: boolean;

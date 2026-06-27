@@ -37,8 +37,8 @@ export class VariableService {
   /**
    * 更新变量（部分字段）
    */
-  static async updateVariable(id: string, patch: Partial<Variable>): Promise<void> {
-    await invoke('update_variable', {
+  static async updateVariable(id: string, patch: Partial<Variable>): Promise<Variable> {
+    const raw = await invoke<Record<string, unknown>>('update_variable', {
       variableId: id,
       name: patch.name ?? null,
       dataType: patch.dataType ? dataTypeToBackend(patch.dataType) : null,
@@ -46,6 +46,7 @@ export class VariableService {
       description: patch.description ?? null,
       tags: patch.tags ?? null,
     });
+    return normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
 
   /**

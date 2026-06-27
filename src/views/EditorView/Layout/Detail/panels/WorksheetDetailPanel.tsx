@@ -86,7 +86,7 @@ export function WorksheetDetailPanel({ document }: WorksheetDetailPanelProps) {
           label={t('detail.fields.name')}
           labelWidth="wide"
           value={document.name}
-          onChange={(name) => patch({ name })}
+          onCommit={(name) => patch({ name })}
         />
         <DetailFieldRow
           label={t('chartsSidebar.dataset')}

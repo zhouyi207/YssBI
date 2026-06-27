@@ -4,7 +4,7 @@
  * 前后端 Graph/Node/Connection 格式互转
  */
 
-import type { Node, Pin, Graph, Connection, ProjectData } from '../domain';
+import type { Node, Pin, Graph, ProjectData } from '../domain';
 import type {
   ConnectionItemDTO,
   GraphInstanceDTO,
@@ -33,7 +33,13 @@ export function convertGraphFromDTO(graphDTO: GraphInstanceDTO): Graph {
 
   const pinMap = new Map<string, Pin>();
   pins.forEach((pin) => {
-    pinMap.set(pin.id, pin as Pin);
+    pinMap.set(pin.id, { ...pin, links: [] } as Pin);
+  });
+  graphDTO.connections.connections.forEach(({ fromPin, toPin }) => {
+    const from = pinMap.get(fromPin);
+    const to = pinMap.get(toPin);
+    if (from && !from.links.includes(toPin)) from.links.push(toPin);
+    if (to && !to.links.includes(fromPin)) to.links.push(fromPin);
   });
 
   const convertedNodes = nodes.map((node: NodeInstanceDTO) => {
@@ -57,7 +63,7 @@ export function convertGraphFromDTO(graphDTO: GraphInstanceDTO): Graph {
   return {
     ...rest,
     nodes: convertedNodes as Node[],
-    pins,
+    pins: Array.from(pinMap.values()),
   };
 }
 
@@ -124,57 +130,6 @@ export function convertProjectDataToDTO(
     ...data,
     graphs: convertGraphsToDTO(data.graphs),
   };
-}
-
-/** 从 Connection DTO 构建 Pin 的 links 关系 */
-export function applyConnectionsToPins(
-  pins: Pin[],
-  connections: Connection
-): void {
-  pins.forEach((pin) => {
-    pin.links = [];
-  });
-
-  const pinMap = new Map<string, Pin>();
-  pins.forEach((pin) => {
-    pinMap.set(pin.id, pin);
-  });
-
-  connections.connections.forEach((conn: { fromPin: string; toPin: string }) => {
-    const fromId = conn.fromPin;
-    const toId = conn.toPin;
-    const fromPin = fromId ? pinMap.get(fromId) : undefined;
-    const toPin = toId ? pinMap.get(toId) : undefined;
-
-    if (fromPin && toPin) {
-      if (!fromPin.links.includes(toId)) {
-        fromPin.links.push(toId);
-      }
-      if (!toPin.links.includes(fromId)) {
-        toPin.links.push(fromId);
-      }
-    }
-  });
-}
-
-/** 从 Pins 的 links 构建 Connection DTO */
-export function extractConnectionsFromPins(pins: Pin[]): Connection {
-  const connections: { fromPin: string; toPin: string }[] = [];
-  const seen = new Set<string>();
-
-  pins.forEach((pin) => {
-    if (pin.direction === 'output') {
-      pin.links.forEach((targetPinId) => {
-        const key = `${pin.id}->${targetPinId}`;
-        if (!seen.has(key)) {
-          connections.push({ fromPin: pin.id, toPin: targetPinId });
-          seen.add(key);
-        }
-      });
-    }
-  });
-
-  return { connections };
 }
 
 /** 验证 Graph DTO */

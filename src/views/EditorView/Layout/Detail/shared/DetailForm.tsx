@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -24,22 +24,75 @@ export function DetailForm({ children, className }: DetailFormProps) {
 interface DetailNameFieldProps {
   label: ReactNode;
   value: string;
-  onChange: (value: string) => void;
+  onCommit: (value: string) => void | Promise<void>;
   labelWidth?: DetailLabelWidth;
+}
+
+interface DetailCommitInputProps {
+  value: string;
+  onCommit: (value: string) => void | Promise<void>;
+  className?: string;
+  type?: string;
+}
+
+export function DetailCommitInput({
+  value,
+  onCommit,
+  className,
+  type = 'text',
+}: DetailCommitInputProps) {
+  const [draft, setDraft] = useState(value);
+  const skipNextBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = () => {
+    if (skipNextBlurCommitRef.current) {
+      skipNextBlurCommitRef.current = false;
+      return;
+    }
+    if (draft === value) return;
+    void onCommit(draft);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === 'Escape') {
+      skipNextBlurCommitRef.current = true;
+      setDraft(value);
+      event.currentTarget.blur();
+    }
+  };
+
+  return (
+    <Input
+      className={className}
+      type={type}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={handleKeyDown}
+    />
+  );
 }
 
 export function DetailNameField({
   label,
   value,
-  onChange,
+  onCommit,
   labelWidth,
 }: DetailNameFieldProps) {
   return (
     <DetailFieldRow label={label} labelWidth={labelWidth}>
-      <Input
+      <DetailCommitInput
         className={detailInlineInputClass}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onCommit={onCommit}
       />
     </DetailFieldRow>
   );

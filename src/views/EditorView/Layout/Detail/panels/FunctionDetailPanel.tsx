@@ -22,7 +22,7 @@ export function FunctionDetailPanel({ fn, onUpdate }: FunctionDetailPanelProps) 
         <DetailNameField
           label={t('detail.fields.name')}
           value={fn.name}
-          onChange={(name) => onUpdate({ name })}
+          onCommit={(name) => onUpdate({ name })}
         />
         <DetailReadonlyField label={t('detail.fields.type')} className="italic">
           {t('detail.typeLabels.function')}

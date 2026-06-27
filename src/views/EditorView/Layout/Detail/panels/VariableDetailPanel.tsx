@@ -1,13 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
 import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from '@/shared/types/domain/dataType';
 import { dataValueToRaw, dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
-import { DetailForm, DetailNameField } from '../shared/DetailForm';
+import { DetailCommitInput, DetailForm, DetailNameField } from '../shared/DetailForm';
 import { detailInlineInputClass } from '../shared/detailStyles';
 
 interface VariableDetailPanelProps {
@@ -32,7 +31,7 @@ export function VariableDetailPanel({
         <DetailNameField
           label={t('detail.fields.name')}
           value={variable.name}
-          onChange={(name) => onUpdate({ name })}
+          onCommit={(name) => onUpdate({ name })}
         />
         <DetailFieldRow label={t('detail.fields.type')}>
           <Select
@@ -68,15 +67,15 @@ export function VariableDetailPanel({
                 </Label>
               </div>
             ) : (
-              <Input
+              <DetailCommitInput
                 className={detailInlineInputClass}
                 type={variable.dataType.kind === 'String' ? 'text' : 'number'}
                 value={String(dataValueToRaw(variable.dataValue) ?? '')}
-                onChange={(e) => {
+                onCommit={(draft) => {
                   const val =
                     variable.dataType.kind === 'String'
-                      ? e.target.value
-                      : Number(e.target.value);
+                      ? draft
+                      : Number(draft);
                   onUpdate({ dataValue: dataValueFromRaw(val, variable.dataType) });
                 }}
               />

@@ -16,7 +16,7 @@ export function EventDetailPanel({ event, onUpdate }: EventDetailPanelProps) {
         <DetailNameField
           label={t('detail.fields.name')}
           value={event.name}
-          onChange={(name) => onUpdate({ name })}
+          onCommit={(name) => onUpdate({ name })}
         />
       </DetailForm>
     </DetailPanelShell>

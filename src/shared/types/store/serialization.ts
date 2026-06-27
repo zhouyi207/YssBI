@@ -72,7 +72,7 @@ export interface DeserializeGraphInput {
   canvas?: GraphPosition;
 }
 
-/** 反序列化后的 Pin（含 nodeId, direction, links） */
+/** 反序列化后的 Pin 运行时视图（links 从 connections 派生） */
 export interface DeserializedPin extends SerializedPin {
   nodeId: string;
   direction: 'input' | 'output';

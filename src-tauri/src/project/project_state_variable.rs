@@ -75,7 +75,11 @@ impl ProjectState {
             var.name = n;
         }
         if let Some(dt) = data_type {
+            let changed = var.data_type != dt;
             var.data_type = dt;
+            if changed && data_value.is_none() {
+                var.data_value = var.data_type.default_value();
+            }
         }
         if let Some(dv) = data_value {
             var.data_value = dv;
@@ -87,5 +91,61 @@ impl ProjectState {
             var.tags = t;
         }
         Some(var.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn add_int_variable(state: &ProjectState) -> VariableInstance {
+        state.add_variable(
+            "x",
+            DataType::Int32,
+            DataValue::Int32(42),
+            "",
+            VariableScope::Global,
+            vec![],
+        )
+    }
+
+    #[test]
+    fn update_variable_resets_value_to_type_default_when_type_changes_without_value() {
+        let state = ProjectState::new();
+        let variable = add_int_variable(&state);
+
+        let updated = state
+            .update_variable(
+                &variable.id,
+                None,
+                Some(DataType::Boolean),
+                None,
+                None,
+                None,
+            )
+            .expect("updated variable");
+
+        assert_eq!(updated.data_type, DataType::Boolean);
+        assert_eq!(updated.data_value, DataValue::Boolean(false));
+    }
+
+    #[test]
+    fn update_variable_keeps_explicit_value_when_type_and_value_are_both_changed() {
+        let state = ProjectState::new();
+        let variable = add_int_variable(&state);
+
+        let updated = state
+            .update_variable(
+                &variable.id,
+                None,
+                Some(DataType::Boolean),
+                Some(DataValue::Boolean(true)),
+                None,
+                None,
+            )
+            .expect("updated variable");
+
+        assert_eq!(updated.data_type, DataType::Boolean);
+        assert_eq!(updated.data_value, DataValue::Boolean(true));
     }
 }

@@ -76,16 +76,7 @@ impl From<&GraphInstance> for GraphInstanceDTO {
             .values()
             .map(|pin| {
                 let resolved_type = data_state.pin_types.get(&pin.id);
-                let links = if pin.definition.direction == crate::graph::PinDirection::Output {
-                    data_state.connections.get_downstream(pin.id)
-                } else {
-                    data_state
-                        .connections
-                        .get_upstream(pin.id)
-                        .map(|p| vec![p])
-                        .unwrap_or_default()
-                };
-                PinInstanceDTO::from_pin_with_context(pin, resolved_type, links)
+                PinInstanceDTO::from_pin_with_context(pin, resolved_type)
             })
             .collect();
 
@@ -124,18 +115,9 @@ impl From<&GraphDataState> for GraphDataStateDTO {
                 .iter()
                 .map(|(id, pin)| {
                     let resolved_type = value.pin_types.get(&pin.id);
-                    let links = if pin.definition.direction == crate::graph::PinDirection::Output {
-                        value.connections.get_downstream(pin.id)
-                    } else {
-                        value
-                            .connections
-                            .get_upstream(pin.id)
-                            .map(|p| vec![p])
-                            .unwrap_or_default()
-                    };
                     (
                         *id,
-                        PinInstanceDTO::from_pin_with_context(pin, resolved_type, links),
+                        PinInstanceDTO::from_pin_with_context(pin, resolved_type),
                     )
                 })
                 .collect(),

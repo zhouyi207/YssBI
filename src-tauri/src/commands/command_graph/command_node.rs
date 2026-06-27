@@ -72,11 +72,7 @@ pub fn create_node(
             crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
         }
         let resolved_type = data_state.pin_types.get(&pin.id);
-        pins_dto.push(PinInstanceDTO::from_pin_with_context(
-            pin,
-            resolved_type,
-            Vec::new(),
-        ));
+        pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type));
     }
     drop(data_state);
     drop(bounding);
@@ -356,11 +352,7 @@ pub fn create_node_with_id(
             crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
         }
         let resolved_type = data_state_r.pin_types.get(&pin.id);
-        pins_dto.push(PinInstanceDTO::from_pin_with_context(
-            pin,
-            resolved_type,
-            Vec::new(),
-        ));
+        pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type));
     }
     drop(data_state_r);
 

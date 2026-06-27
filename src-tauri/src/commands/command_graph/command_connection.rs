@@ -23,7 +23,7 @@ pub fn emit_pin_change_events(
             .iter()
             .map(|pin| {
                 let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
-                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref(), Vec::new())
+                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref())
             })
             .collect();
 
@@ -32,7 +32,7 @@ pub fn emit_pin_change_events(
             .iter()
             .map(|pin| {
                 let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
-                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref(), Vec::new())
+                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref())
             })
             .collect();
 

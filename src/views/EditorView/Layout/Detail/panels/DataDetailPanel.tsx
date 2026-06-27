@@ -27,7 +27,7 @@ export function DataDetailPanel({ dataframe, onUpdate }: DataDetailPanelProps) {
         <DetailNameField
           label={t('detail.fields.name')}
           value={dataframe.name}
-          onChange={(name) => onUpdate({ name })}
+          onCommit={(name) => onUpdate({ name })}
         />
         <DetailReadonlyField label={t('detail.fields.columns')}>
           {t('detail.counts.columns', { count: columnCount })}

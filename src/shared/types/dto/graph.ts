@@ -57,7 +57,6 @@ export interface PinInstanceDTO {
   name: string;
   type: string;
   direction: PinDirection;
-  links: string[];
   defaultValue?: unknown;
   userValue?: unknown;
   containerType?: string;

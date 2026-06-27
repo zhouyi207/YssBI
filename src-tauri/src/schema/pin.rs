@@ -69,7 +69,6 @@ pub struct PinInstanceDTO {
     #[serde(rename = "type")]
     pub pin_type: String,
     pub direction: PinDirection,
-    pub links: Vec<PinId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,14 +87,9 @@ pub struct PinInstanceDTO {
 }
 
 impl PinInstanceDTO {
-    /// 从 PinInstance 构建 DTO，支持传入已解析的类型和连接关系
+    /// 从 PinInstance 构建 DTO，支持传入已解析的类型。
     /// - resolved_type: 类型推断后的 DataType，优先于 definition 中的类型
-    /// - links: 该 Pin 连接到的目标 Pin ID 列表
-    pub fn from_pin_with_context(
-        pin: &PinInstance,
-        resolved_type: Option<&DataType>,
-        links: Vec<PinId>,
-    ) -> Self {
+    pub fn from_pin_with_context(pin: &PinInstance, resolved_type: Option<&DataType>) -> Self {
         let dt = match pin.definition.kind {
             PinKind::Exec => None,
             PinKind::Data => resolved_type.cloned().or_else(|| {
@@ -125,7 +119,6 @@ impl PinInstanceDTO {
             name: pin.definition.name.clone(),
             pin_type,
             direction: pin.definition.direction,
-            links,
             default_value: pin.definition.default_value.clone(),
             user_value: pin.user_value.clone(),
             container_type,
@@ -139,7 +132,7 @@ impl PinInstanceDTO {
 
 impl From<&PinInstance> for PinInstanceDTO {
     fn from(value: &PinInstance) -> Self {
-        Self::from_pin_with_context(value, None, Vec::new())
+        Self::from_pin_with_context(value, None)
     }
 }
 
@@ -238,12 +231,13 @@ mod tests {
         let pin = PinInstance::from_definition(&def, NodeId::new(), 0);
         let dt = DataType::DataSeries(Box::new(DataType::Float64));
 
-        let dto = PinInstanceDTO::from_pin_with_context(&pin, Some(&dt), Vec::new());
+        let dto = PinInstanceDTO::from_pin_with_context(&pin, Some(&dt));
         let json = serde_json::to_value(&dto).unwrap();
 
         assert_eq!(json["dataType"]["kind"], "DataSeries");
         assert_eq!(json["dataType"]["inner"]["kind"], "Float64");
         // typeDisplay 仍随结构化字段同源下发，作展示用
         assert_eq!(json["typeDisplay"], "DataSeries<Float64>");
+        assert!(json.get("links").is_none());
     }
 }
