@@ -72,14 +72,14 @@ DuckDB 负责磁盘列存；**只有 Polars 整表路径会随行数线性占内
 
 ### 安全路径（O(分页) / O(列)）
 
-- DataView **`get_database_rows`**：`LIMIT/OFFSET` + 返回 `rowIds`（`_yssbi_rowid`）
+- DataView **`get_database_rows`**：`LIMIT/OFFSET` + 返回 `rowIds`（DuckDB 内置 `rowid` 伪列）
 - 列统计 / 分布 / 概览：DuckDB SQL 聚合（`duckdb_analytics.rs`）
 - 图节点按列：`load_database_series` / `load_columns`
 - CSV / Parquet 导入：DuckDB 直读；Excel：calamine → 临时 CSV → `read_csv`
 
 ### DataView 编辑（DuckDB SQL，不 Loaded）
 
-1. 每行有内部列 **`_yssbi_rowid`**（对用户 schema 隐藏）；旧表 reopen 时自动回填
+1. 行定位使用 DuckDB **`rowid` 伪列**（非物理用户列）；旧表若含 `_yssbi_rowid` 列，reopen 时自动 DROP
 2. `edit_cell` / `delete_rows` / schema 变更 → `duckdb_editing.rs` 打 SQL
 3. `DatabaseState::DuckDb` 挂 **`EditHistory`**；undo/redo 同样走 SQL
 4. **`save_database_changes`**：编辑已落盘，仅 `refresh_duckdb_meta` + 清历史（不全量 rebuild）

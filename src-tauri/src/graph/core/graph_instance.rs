@@ -1750,7 +1750,7 @@ impl GraphInstance {
                 return Err(format!(
                     "Slot index {} is not a Repeatable slot",
                     slot_index
-                ))
+                ));
             }
         };
 

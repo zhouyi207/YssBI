@@ -2,7 +2,7 @@ use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction};
 use crate::graph::{GraphId, GraphKind};
 use crate::log::log_app;
-use crate::project::{read_project_index, GraphDocumentKind};
+use crate::project::{GraphDocumentKind, read_project_index};
 use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
 use serde::Deserialize;

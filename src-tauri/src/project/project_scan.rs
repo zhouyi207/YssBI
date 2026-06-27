@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::{normalize_project_name, PROJECT_METADATA_FILE};
+use super::{PROJECT_METADATA_FILE, normalize_project_name};
 use crate::project::{is_picker_task_cancelled, picker_task_cancelled_error};
 
 #[derive(Debug, Clone, serde::Serialize)]

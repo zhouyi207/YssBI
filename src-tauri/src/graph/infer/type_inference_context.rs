@@ -1,11 +1,11 @@
 //! 类型推断系统
 
+use crate::graph::PinInstance;
+use crate::graph::TypeVarId;
 use crate::graph::infer::{TypeVarInference, TypeVarKey};
 use crate::graph::pin::PinDataTypeInference;
 use crate::graph::pin::PinId;
 use crate::graph::value::DataType;
-use crate::graph::PinInstance;
-use crate::graph::TypeVarId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -96,8 +96,7 @@ impl TypeInferenceContext {
                 // 这种情况下，pin 的类型已经确定，不需要推断
                 match data_type {
                     crate::graph::pin::PinDataTypeDefinition::Concrete(concrete_type) => {
-                        let data_type_inference =
-                            PinDataTypeInference::Concrete(concrete_type);
+                        let data_type_inference = PinDataTypeInference::Concrete(concrete_type);
                         self.pin_types.insert(pin_instance.id, data_type_inference);
                     }
                     crate::graph::pin::PinDataTypeDefinition::TypeVar(_) => {

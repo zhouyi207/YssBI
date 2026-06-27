@@ -49,10 +49,7 @@ impl WorksheetDocument {
             name: name.into(),
             database_id: database_id.into(),
             chart_type: "histogram".to_string(),
-            encodings: WorksheetEncodings {
-                x: None,
-                y: None,
-            },
+            encodings: WorksheetEncodings { x: None, y: None },
             folder_path: String::new(),
         }
     }
@@ -63,7 +60,9 @@ pub fn ensure_worksheets_dir(root: &Path) -> Result<(), ProjectError> {
     Ok(())
 }
 
-pub fn read_worksheet_index_entries(root: &Path) -> Result<Vec<ProjectWorksheetIndexEntry>, ProjectError> {
+pub fn read_worksheet_index_entries(
+    root: &Path,
+) -> Result<Vec<ProjectWorksheetIndexEntry>, ProjectError> {
     let dir = root.join(WORKSHEETS_DIR);
     if !dir.exists() {
         return Ok(Vec::new());
@@ -83,7 +82,10 @@ pub fn read_worksheet_index_entries(root: &Path) -> Result<Vec<ProjectWorksheetI
     Ok(entries)
 }
 
-pub fn load_worksheet_from_file(root: &Path, worksheet_id: &str) -> Result<WorksheetDocument, ProjectError> {
+pub fn load_worksheet_from_file(
+    root: &Path,
+    worksheet_id: &str,
+) -> Result<WorksheetDocument, ProjectError> {
     for path in list_worksheet_files(root)? {
         let document = read_worksheet_document_path(path.as_path())?;
         if document.id == worksheet_id {
@@ -96,7 +98,10 @@ pub fn load_worksheet_from_file(root: &Path, worksheet_id: &str) -> Result<Works
     )))
 }
 
-pub fn save_worksheet_to_file(root: &Path, document: &WorksheetDocument) -> Result<(), ProjectError> {
+pub fn save_worksheet_to_file(
+    root: &Path,
+    document: &WorksheetDocument,
+) -> Result<(), ProjectError> {
     ensure_worksheets_dir(root)?;
     let relative_path = worksheet_relative_path_for_save(root, &document.name, &document.id)?;
     write_json(root.join(&relative_path).as_path(), document)
@@ -109,7 +114,10 @@ pub fn delete_worksheet_from_file(root: &Path, worksheet_id: &str) -> Result<(),
     Ok(())
 }
 
-pub fn existing_worksheet_names(root: &Path, excluded_id: Option<&str>) -> Result<Vec<String>, ProjectError> {
+pub fn existing_worksheet_names(
+    root: &Path,
+    excluded_id: Option<&str>,
+) -> Result<Vec<String>, ProjectError> {
     let mut names = HashSet::new();
     for entry in read_worksheet_index_entries(root)? {
         if excluded_id.map(|id| id == entry.id).unwrap_or(false) {
@@ -154,7 +162,10 @@ fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, Projec
     read_json(path)
 }
 
-pub fn worksheet_absolute_path(root: &Path, worksheet_id: &str) -> Result<Option<PathBuf>, ProjectError> {
+pub fn worksheet_absolute_path(
+    root: &Path,
+    worksheet_id: &str,
+) -> Result<Option<PathBuf>, ProjectError> {
     for path in list_worksheet_files(root)? {
         let document = read_worksheet_document_path(path.as_path())?;
         if document.id == worksheet_id {

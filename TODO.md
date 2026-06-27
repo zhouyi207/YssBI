@@ -465,10 +465,14 @@ package.json
   - 后端推断健壮性（不引入排序）：`type_inference_session.rs` `infer_all` 改逐边 best-effort——单条 `infer_connection` `Err` 记 `log_sys::warn!`（含 from/to）后 `continue`，一条脏边不再毒化整图（并查集+绑定合并对边序无关，`commit` 仍严格）；`graph_instance.rs` 两处 `infer_types().unwrap_or_default()` 改为失败时 `warn!` 记录再回退，不再无迹可循
   - 测试：前端引入 vitest（`npm run test`）+ `pinCompatibility.test.ts` 12 例（DataSeries 列 Set/标量不误推、Float64 Get/String 不推、OneOf 仅兼容成员、函数 IO 精确筛选、`buildPinDataType` 回退回归）；后端新增 `PinInstanceDTO`/`InferredPinType` 序列化含 `dataType` 断言，及「含一条不兼容边的图 best-effort 仍推断其余 pin 为 Float64」单测；`cargo test --lib` 78 全绿（见 v1.0 待办「类型推断精度」项）
 
+## 2026.06.30
+
+- [x] 目前数据视图的数据库中老是出现：_yssbi_rowid 列 — 已改用 DuckDB `rowid` 伪列，ingest 不再写内部列，reopen 时 DROP 遗留 `_yssbi_rowid`
 
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
+- [ ] 去掉项目所有的 LEGACY 逻辑，这个逻辑的主要目的是迁移旧项目的数据，没有必要；如 _yssbi_rowid 列 LEGACY_YSSBI_ROWID_COLUMN
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
@@ -478,6 +482,7 @@ package.json
 - [ ] 节点的 detail 信息布局很丑陋，input 和 ouput pins 需要重新设计调整
 - [ ] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
+
 
 # TODOLIST
 

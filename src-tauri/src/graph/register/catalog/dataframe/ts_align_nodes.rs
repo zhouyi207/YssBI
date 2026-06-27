@@ -7,7 +7,7 @@
 //! - TS Lag: 严格时间对齐的滞后
 
 use crate::database::polars_dtype_to_data_type;
-use crate::graph::node::{passthrough_input_schema_resolver, NodeDefinition};
+use crate::graph::node::{NodeDefinition, passthrough_input_schema_resolver};
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
@@ -292,7 +292,7 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
             match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("window".to_string()))) {
                 Ok(DataValue::Int64(i)) if i > 0 => i as usize,
                 Ok(DataValue::Int64(_)) => {
-                    return Err("TS Rolling Mean: Window 必须为正整数".to_string())
+                    return Err("TS Rolling Mean: Window 必须为正整数".to_string());
                 }
                 _ => return Err("TS Rolling Mean: 请提供 Window（正整数）".to_string()),
             };

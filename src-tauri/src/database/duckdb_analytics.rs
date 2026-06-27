@@ -2,7 +2,7 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use super::{duckdb_table_sql, DuckDbColumnMeta};
+use super::{DuckDbColumnMeta, duckdb_table_sql};
 use yss_sci::database::{
     CategoryCount, ColumnDistribution, ColumnStats, DataCompleteness, DatasetOverview,
     HistogramBin, NumericColumnStats, NumericDistribution, SchemaOverview, SizeShape,
@@ -15,8 +15,16 @@ const DEFAULT_TOP_N: usize = 15;
 fn is_numeric_dtype_str(dtype: &str) -> bool {
     matches!(
         dtype,
-        "Int8" | "Int16" | "Int32" | "Int64" | "UInt8" | "UInt16" | "UInt32" | "UInt64"
-            | "Float32" | "Float64"
+        "Int8"
+            | "Int16"
+            | "Int32"
+            | "Int64"
+            | "UInt8"
+            | "UInt16"
+            | "UInt32"
+            | "UInt64"
+            | "Float32"
+            | "Float64"
     )
 }
 
@@ -231,7 +239,9 @@ fn numeric_column_distribution(
             table = table_sql,
             col = col_sql
         );
-        let count: i64 = conn.query_row(&count_sql, [], |row| row.get(0)).unwrap_or(0);
+        let count: i64 = conn
+            .query_row(&count_sql, [], |row| row.get(0))
+            .unwrap_or(0);
         return Ok(ColumnDistribution::Numeric(NumericDistribution {
             column_name: col.name.clone(),
             kind: "numeric",
@@ -267,9 +277,7 @@ fn numeric_column_distribution(
         .prepare(&hist_sql)
         .map_err(|e| format!("Failed to prepare histogram for '{}': {e}", col.name))?;
     let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
         .map_err(|e| e.to_string())?;
     for row in rows {
         let (idx, cnt) = row.map_err(|e| e.to_string())?;
@@ -336,10 +344,7 @@ fn string_column_distribution(
         .map_err(|e| format!("Failed to prepare distribution for '{}': {e}", col.name))?;
     let rows = stmt
         .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
         .map_err(|e| e.to_string())?;
 
@@ -398,16 +403,9 @@ pub fn compute_dataset_overview_duckdb(
 
     let mut null_parts = Vec::new();
     for col in columns {
-        null_parts.push(format!(
-            "COUNT(*) - COUNT({})",
-            quote_column(&col.name)
-        ));
+        null_parts.push(format!("COUNT(*) - COUNT({})", quote_column(&col.name)));
     }
-    let null_sql = format!(
-        "SELECT {} FROM {}",
-        null_parts.join(", "),
-        table_sql
-    );
+    let null_sql = format!("SELECT {} FROM {}", null_parts.join(", "), table_sql);
 
     let mut total_nulls = 0usize;
     let mut cols_with_nulls = 0usize;

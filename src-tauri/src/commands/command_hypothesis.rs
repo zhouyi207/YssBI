@@ -4,11 +4,11 @@
 
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-use yss_sci::stats::{t_test, wald_test, Alternative as SciAlternative};
+use yss_sci::stats::{Alternative as SciAlternative, t_test, wald_test};
 
 use crate::ast::{
-    collect_param_order, linear_expand, parse_hypothesis_with_registry, reorder_r_to_ols_columns,
     HypothesisExpr, HypothesisSpec, LinearConstraintKind, ParamRegistry, TestMethod,
+    collect_param_order, linear_expand, parse_hypothesis_with_registry, reorder_r_to_ols_columns,
 };
 
 /// 假设检验请求

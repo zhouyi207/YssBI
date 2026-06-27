@@ -1,9 +1,9 @@
 use crate::database::DatabaseInstance;
-use crate::project::{
-    ensure_worksheets_dir, existing_worksheet_names, load_worksheet_from_file, project_root_from_path,
-    save_worksheet_to_file, delete_worksheet_from_file, WorksheetDocument,
-};
 use crate::project::ProjectState;
+use crate::project::{
+    WorksheetDocument, delete_worksheet_from_file, ensure_worksheets_dir, existing_worksheet_names,
+    load_worksheet_from_file, project_root_from_path, save_worksheet_to_file,
+};
 use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
 use tauri::State;
@@ -91,8 +91,12 @@ fn compute_plot_column_pair(
     let x_cast = series_to_plot_f64(&x_series).map_err(|e| format!("X column: {e}"))?;
     let y_cast = series_to_plot_f64(&y_series).map_err(|e| format!("Y column: {e}"))?;
 
-    let x_f64 = x_cast.f64().map_err(|e| format!("X is not plottable: {e}"))?;
-    let y_f64 = y_cast.f64().map_err(|e| format!("Y is not plottable: {e}"))?;
+    let x_f64 = x_cast
+        .f64()
+        .map_err(|e| format!("X is not plottable: {e}"))?;
+    let y_f64 = y_cast
+        .f64()
+        .map_err(|e| format!("Y is not plottable: {e}"))?;
 
     let mut data: Vec<PlotPoint> = x_f64
         .into_iter()
@@ -104,7 +108,9 @@ fn compute_plot_column_pair(
         .collect();
 
     if data.is_empty() {
-        return Err("No valid (x, y) pairs after filtering nulls and non-finite values".to_string());
+        return Err(
+            "No valid (x, y) pairs after filtering nulls and non-finite values".to_string(),
+        );
     }
 
     let max_points = max_points.unwrap_or(DEFAULT_MAX_PLOT_POINTS);
@@ -115,8 +121,16 @@ fn compute_plot_column_pair(
 
     Ok(PlotColumnPairPayload {
         data,
-        x_label: if x_label.is_empty() { None } else { Some(x_label) },
-        y_label: if y_label.is_empty() { None } else { Some(y_label) },
+        x_label: if x_label.is_empty() {
+            None
+        } else {
+            Some(x_label)
+        },
+        y_label: if y_label.is_empty() {
+            None
+        } else {
+            Some(y_label)
+        },
         x_format: plot_format_for_series(&x_series).to_string(),
         y_format: plot_format_for_series(&y_series).to_string(),
     })
@@ -124,7 +138,11 @@ fn compute_plot_column_pair(
 
 fn unique_worksheet_name(existing: &[String], requested: &str) -> String {
     let base = requested.trim();
-    let base = if base.is_empty() { "New Worksheet" } else { base };
+    let base = if base.is_empty() {
+        "New Worksheet"
+    } else {
+        base
+    };
     if !existing.iter().any(|name| name == base) {
         return base.to_string();
     }
@@ -191,10 +209,7 @@ pub fn save_worksheet(
 }
 
 #[tauri::command]
-pub fn delete_worksheet(
-    state: State<ProjectState>,
-    worksheet_id: String,
-) -> Result<(), String> {
+pub fn delete_worksheet(state: State<ProjectState>, worksheet_id: String) -> Result<(), String> {
     let path = state
         .get_path()
         .ok_or_else(|| "No project is open".to_string())?;

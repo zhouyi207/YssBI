@@ -638,10 +638,7 @@ fn test_repeatable_pin_reindex_after_remove() {
     graph
         .add_repeatable_pin(add_node_id, 0)
         .expect("add third operand");
-    assert_eq!(
-        operand_pin_names(&graph, add_node_id),
-        vec!["A", "B", "C"]
-    );
+    assert_eq!(operand_pin_names(&graph, add_node_id), vec!["A", "B", "C"]);
 
     let pin_b = graph
         .get_pin_instances_by_node_id(add_node_id)
@@ -671,9 +668,9 @@ fn test_repeatable_pin_reindex_after_remove() {
 
 #[test]
 fn test_ts_align_schema_propagates_to_decompose() {
+    use yssbi_lib::graph::GraphKind;
     use yssbi_lib::graph::node::{ColumnSchema, DataSchema, NodeInstanceParams};
     use yssbi_lib::graph::value::DataType;
-    use yssbi_lib::graph::GraphKind;
 
     let registry = create_test_registry();
     let mut graph = GraphInstance::new("Schema Chain Test", GraphKind::Event, registry.clone());
@@ -740,7 +737,9 @@ fn test_ts_align_schema_propagates_to_decompose() {
         .expect("decompose input")
         .id;
 
-    graph.connect(get_out, align_in).expect("connect get->align");
+    graph
+        .connect(get_out, align_in)
+        .expect("connect get->align");
     graph
         .connect(align_out, decompose_in)
         .expect("connect align->decompose");
@@ -795,9 +794,9 @@ fn test_ts_align_schema_propagates_to_decompose() {
 
 #[test]
 fn test_ols_model_schema_propagates_to_predict_inputs() {
+    use yssbi_lib::graph::GraphKind;
     use yssbi_lib::graph::node::{ColumnSchema, DataSchema, NodeInstanceParams};
     use yssbi_lib::graph::value::DataType;
-    use yssbi_lib::graph::GraphKind;
 
     let registry = create_test_registry();
     let mut graph = GraphInstance::new("OLS Predict Schema", GraphKind::Event, registry.clone());
@@ -835,9 +834,7 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
     let decompose_node = graph
         .create_node("Data:Decompose DataFrame")
         .expect("decompose");
-    let ols_node = graph
-        .create_node("Data:Statistics:OLS")
-        .expect("ols");
+    let ols_node = graph.create_node("Data:Statistics:OLS").expect("ols");
     let predict_node = graph
         .create_node("Data:Statistics:Predict")
         .expect("predict");
@@ -855,7 +852,9 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
         .expect("decompose in")
         .id;
 
-    graph.connect(get_out, decompose_in).expect("get->decompose");
+    graph
+        .connect(get_out, decompose_in)
+        .expect("get->decompose");
 
     let decompose_pins: std::collections::HashMap<String, yssbi_lib::graph::PinId> = graph
         .get_pin_instances_by_node_id(decompose_node)
@@ -886,15 +885,12 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
         .get_pin_instances_by_node_id(predict_node)
         .into_iter()
         .find(|p| {
-            p.definition.role
-                == PinRole::Data(DataRole::Custom("prediction_model".to_string()))
+            p.definition.role == PinRole::Data(DataRole::Custom("prediction_model".to_string()))
         })
         .expect("predict model in")
         .id;
 
-    graph
-        .connect(decompose_pins["y"], ols_y)
-        .expect("y -> ols");
+    graph.connect(decompose_pins["y"], ols_y).expect("y -> ols");
     graph
         .connect(decompose_pins["x1"], ols_x)
         .expect("x1 -> ols");
@@ -907,10 +903,11 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
         .find(|p| p.id == ols_model_out)
         .expect("ols model pin");
     assert_eq!(
-        ols_model_pin
-            .resolved_schema
-            .as_ref()
-            .map(|s| s.columns.iter().map(|c| c.name.clone()).collect::<Vec<_>>()),
+        ols_model_pin.resolved_schema.as_ref().map(|s| s
+            .columns
+            .iter()
+            .map(|c| c.name.clone())
+            .collect::<Vec<_>>()),
         Some(vec!["x1".to_string()]),
         "OLS Model output should expose exog schema"
     );

@@ -3,12 +3,12 @@
 //! 前端只发送两个 Pin ID，后端按验证链逐步检查，
 //! 全部通过后返回已确定方向的 `ValidatedConnection`。
 
+use crate::graph::PinId;
 use crate::graph::core::GraphDataState;
 use crate::graph::infer::TypeVarKey;
 use crate::graph::node::NodeInstance;
 use crate::graph::pin::{PinDirection, PinKind};
 use crate::graph::value::DataType;
-use crate::graph::PinId;
 use std::fmt;
 
 /// 构建 TypeVarKey → 已绑定 DataType 的解析器（供 ConvertibleTo/From 约束使用）

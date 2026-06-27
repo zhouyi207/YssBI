@@ -1,7 +1,7 @@
 //! VECRANK — Johansen 协整秩检验（Stata vecrank）
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -11,7 +11,7 @@ use crate::graph::value::{DataType, DataValue};
 use ndarray::Array2;
 use polars::prelude::DataType as PolarsDataType;
 use std::sync::Arc;
-use yss_sci::ts::vec::{vec_vecrank_stats, VecRankResult, VecTrendSpec};
+use yss_sci::ts::vec::{VecRankResult, VecTrendSpec, vec_vecrank_stats};
 
 fn vecrank_input_slots() -> Vec<PinSlot> {
     vec![

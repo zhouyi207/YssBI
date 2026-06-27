@@ -13,12 +13,12 @@ pub mod validator;
 mod test;
 
 pub use lexer::{LexError, Lexer, Token};
-pub use parser::{parse_hypothesis, parse_hypothesis_with_registry, ParamRegistry, ParseError};
+pub use parser::{ParamRegistry, ParseError, parse_hypothesis, parse_hypothesis_with_registry};
 pub use spec::{
-    collect_param_order, linear_expand, reorder_r_to_ols_columns, Alternative, HypothesisSpec,
-    LinearConstraintKind, LinearExpandError, TestMethod, TestSpec,
+    Alternative, HypothesisSpec, LinearConstraintKind, LinearExpandError, TestMethod, TestSpec,
+    collect_param_order, linear_expand, reorder_r_to_ols_columns,
 };
 pub use types::{Expr, HypothesisExpr, ParamId};
 pub use validator::{
-    validate_hypotheses, validate_hypothesis, ConstraintDirection, ValidationError,
+    ConstraintDirection, ValidationError, validate_hypotheses, validate_hypothesis,
 };

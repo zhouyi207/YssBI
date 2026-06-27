@@ -228,7 +228,7 @@ impl<'a> Parser<'a> {
                             return Err(ParseError::UnexpectedToken(format!(
                                 "unknown function: {}",
                                 name
-                            )))
+                            )));
                         }
                     };
                     Ok(e)

@@ -58,7 +58,10 @@ fn kde_at(x: f64, values: &[f64], h: f64) -> f64 {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("KDE", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_localized_description("对数值 DataSeries 绘制核密度估计图", "Plot kernel density estimation from a numeric DataSeries")
+        .with_localized_description(
+            "对数值 DataSeries 绘制核密度估计图",
+            "Plot kernel density estimation from a numeric DataSeries",
+        )
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(

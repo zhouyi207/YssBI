@@ -4,27 +4,23 @@ use super::DatabaseEngine;
 use super::DatabaseState;
 use super::DatabaseView;
 use super::{
-    apply_edit_on_duckdb, duckdb_table_sql, fetch_cell_json, ingest_dataframe_to_duckdb,
-    query_columns_to_dataframe, query_page_with_rowids, query_to_dataframe_for_table,
-    refresh_duckdb_meta, resolve_row_id_by_index, resolve_row_ids_by_indices,
-    reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row, fetch_row_json,
-    PageQueryResult,
+    PageQueryResult, apply_edit_on_duckdb, duckdb_table_sql, fetch_cell_json, fetch_row_json,
+    ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_with_rowids,
+    query_to_dataframe_for_table, refresh_duckdb_meta, resolve_row_id_by_index,
+    resolve_row_ids_by_indices, reverse_edit_on_duckdb, should_use_in_memory_editing, sql_add_row,
 };
 use super::{
     compute_all_column_distributions_duckdb, compute_all_column_stats_duckdb,
     compute_dataset_overview_duckdb,
 };
-use crate::database::database_schema::{
-    dataframe_to_schema, duckdb_columns_to_schema,
-};
+use crate::database::database_schema::{dataframe_to_schema, duckdb_columns_to_schema};
 use crate::graph::node::DataSchema;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use yss_sci::api::database::{
-    anyvalue_to_json, apply_operation, capture_column_data, capture_row_data,
-    cast_column as sci_cast_column, dtype_to_string, reverse_operation, EditHistory, EditOperation,
-    EditState,
+    EditHistory, EditOperation, EditState, anyvalue_to_json, apply_operation, capture_column_data,
+    capture_row_data, cast_column as sci_cast_column, dtype_to_string, reverse_operation,
 };
 
 pub struct DatabaseInstance {
@@ -37,9 +33,7 @@ impl DatabaseInstance {
         match &self.state {
             DatabaseState::DuckDb { columns, .. } => Ok(duckdb_columns_to_schema(columns)),
             DatabaseState::Loaded { dataframe, .. } => Ok(dataframe_to_schema(dataframe)),
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
@@ -49,7 +43,7 @@ impl DatabaseInstance {
             .map(|page| page.dataframe)
     }
 
-    /// 分页读取，附带稳定 `_yssbi_rowid`（供 DataView 编辑）。
+    /// 分页读取，附带 DuckDB `rowid`（供 DataView 编辑）。
     pub fn query_page_with_rowids(
         &mut self,
         offset: usize,
@@ -57,9 +51,7 @@ impl DatabaseInstance {
     ) -> PolarsResult<PageQueryResult> {
         match &self.state {
             DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                ..
+                duckdb_path, table, ..
             } => query_page_with_rowids(Path::new(duckdb_path), table, offset, limit)
                 .map_err(|e| PolarsError::ComputeError(e.into())),
             DatabaseState::Loaded { dataframe, .. } => {
@@ -73,9 +65,7 @@ impl DatabaseInstance {
                     row_ids,
                 })
             }
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
@@ -83,27 +73,20 @@ impl DatabaseInstance {
     pub fn load_columns(&mut self, columns: &[&str]) -> PolarsResult<DataFrame> {
         match &self.state {
             DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                ..
+                duckdb_path, table, ..
             } => query_columns_to_dataframe(Path::new(duckdb_path), table, columns)
                 .map_err(|e| PolarsError::ComputeError(e.into())),
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(dataframe.clone().select(columns.to_vec())?)
             }
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
     /// 加载单列 Series，优先走列裁剪路径。
     pub fn load_column_series(&mut self, column: &str) -> PolarsResult<Series> {
         let df = self.load_columns(&[column])?;
-        Ok(df
-            .column(column)?
-            .clone()
-            .take_materialized_series())
+        Ok(df.column(column)?.clone().take_materialized_series())
     }
 
     /// 列出列名（不触发整表加载）。
@@ -125,19 +108,14 @@ impl DatabaseInstance {
                 columns,
                 row_count,
                 ..
-            } => compute_all_column_stats_duckdb(
-                Path::new(duckdb_path),
-                table,
-                columns,
-                *row_count,
-            )
-            .map_err(|e| PolarsError::ComputeError(e.into())),
+            } => {
+                compute_all_column_stats_duckdb(Path::new(duckdb_path), table, columns, *row_count)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))
+            }
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(yss_sci::database::compute_all_column_stats(dataframe))
             }
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
@@ -151,25 +129,17 @@ impl DatabaseInstance {
                 table,
                 columns,
                 ..
-            } => compute_all_column_distributions_duckdb(
-                Path::new(duckdb_path),
-                table,
-                columns,
-            )
-            .map_err(|e| PolarsError::ComputeError(e.into())),
-            DatabaseState::Loaded { dataframe, .. } => {
-                Ok(yss_sci::database::compute_all_column_distributions(dataframe))
-            }
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            } => compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, columns)
+                .map_err(|e| PolarsError::ComputeError(e.into())),
+            DatabaseState::Loaded { dataframe, .. } => Ok(
+                yss_sci::database::compute_all_column_distributions(dataframe),
+            ),
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
     /// 数据集概览：DuckDB 用缓存元数据 + SQL null 统计。
-    pub fn compute_dataset_overview(
-        &mut self,
-    ) -> PolarsResult<yss_sci::database::DatasetOverview> {
+    pub fn compute_dataset_overview(&mut self) -> PolarsResult<yss_sci::database::DatasetOverview> {
         match &self.state {
             DatabaseState::DuckDb {
                 duckdb_path,
@@ -177,19 +147,14 @@ impl DatabaseInstance {
                 columns,
                 row_count,
                 ..
-            } => compute_dataset_overview_duckdb(
-                Path::new(duckdb_path),
-                table,
-                columns,
-                *row_count,
-            )
-            .map_err(|e| PolarsError::ComputeError(e.into())),
+            } => {
+                compute_dataset_overview_duckdb(Path::new(duckdb_path), table, columns, *row_count)
+                    .map_err(|e| PolarsError::ComputeError(e.into()))
+            }
             DatabaseState::Loaded { dataframe, .. } => {
                 Ok(yss_sci::database::compute_dataset_overview(dataframe))
             }
-            DatabaseState::Failed { error } => {
-                Err(PolarsError::ComputeError(error.clone().into()))
-            }
+            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
 
@@ -210,9 +175,7 @@ impl DatabaseInstance {
             }
             let df = match &self.state {
                 DatabaseState::DuckDb {
-                    duckdb_path,
-                    table,
-                    ..
+                    duckdb_path, table, ..
                 } => {
                     let sql = format!("SELECT * FROM {}", duckdb_table_sql(table));
                     query_to_dataframe_for_table(Path::new(duckdb_path), &sql, Some(table))
@@ -250,21 +213,15 @@ impl DatabaseInstance {
 
         let df = match &self.state {
             DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                ..
+                duckdb_path, table, ..
             } => {
-                let sql = format!(
-                    "SELECT * FROM {} LIMIT {}",
-                    duckdb_table_sql(table),
-                    n
-                );
+                let sql = format!("SELECT * FROM {} LIMIT {}", duckdb_table_sql(table), n);
                 query_to_dataframe_for_table(Path::new(duckdb_path), &sql, Some(table))
                     .map_err(|e| PolarsError::ComputeError(e.into()))?
             }
             DatabaseState::Loaded { dataframe, .. } => dataframe.head(Some(n as usize)),
             DatabaseState::Failed { error } => {
-                return Err(PolarsError::NoData(error.clone().into()))
+                return Err(PolarsError::NoData(error.clone().into()));
             }
         };
 
@@ -293,21 +250,20 @@ impl DatabaseInstance {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
             let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
-            super::ensure_rowid_column(&conn, &table_name)?;
             let rid = match row_id {
                 Some(id) => id,
                 None => resolve_row_id_by_index(&conn, &table_name, row)?,
             };
             let old_value = fetch_cell_json(&conn, &table_name, rid, col_name)?;
             drop(conn);
-            let op = EditOperation::EditCell {
+            let mut op = EditOperation::EditCell {
                 row,
                 row_id: Some(rid),
                 col: col_name.to_string(),
                 old_value,
                 new_value,
             };
-            apply_edit_on_duckdb(&path, &table_name, &op)?;
+            apply_edit_on_duckdb(&path, &table_name, &mut op)?;
             history.push(op);
             return Ok(history.state());
         }
@@ -355,7 +311,6 @@ impl DatabaseInstance {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
             let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
-            super::ensure_rowid_column(&conn, &table_name)?;
             let idx = index.unwrap_or(*row_count);
             let new_id = sql_add_row(&conn, &table_name, Some(idx))?;
             drop(conn);
@@ -405,7 +360,6 @@ impl DatabaseInstance {
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
             let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
-            super::ensure_rowid_column(&conn, &table_name)?;
 
             let mut sorted_indices = indices.to_vec();
             sorted_indices.sort_unstable();
@@ -430,8 +384,8 @@ impl DatabaseInstance {
                 });
             }
             drop(conn);
-            for op in ops {
-                apply_edit_on_duckdb(&path, &table_name, &op)?;
+            for mut op in ops {
+                apply_edit_on_duckdb(&path, &table_name, &mut op)?;
                 history.push(op);
             }
             *row_count = row_count.saturating_sub(sorted_indices.len());
@@ -476,11 +430,11 @@ impl DatabaseInstance {
             ..
         } = &mut self.state
         {
-            let op = EditOperation::AddColumn {
+            let mut op = EditOperation::AddColumn {
                 name: name.to_string(),
                 dtype: dtype.to_string(),
             };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &op)?;
+            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
             columns.push(super::DuckDbColumnMeta {
                 name: name.to_string(),
                 dtype: dtype.to_string(),
@@ -518,11 +472,11 @@ impl DatabaseInstance {
             ..
         } = &mut self.state
         {
-            let op = EditOperation::DeleteColumn {
+            let mut op = EditOperation::DeleteColumn {
                 name: name.to_string(),
                 data: vec![],
             };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &op)?;
+            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
             columns.retain(|c| c.name != name);
             history.push(op);
             return Ok(history.state());
@@ -558,11 +512,11 @@ impl DatabaseInstance {
             ..
         } = &mut self.state
         {
-            let op = EditOperation::RenameColumn {
+            let mut op = EditOperation::RenameColumn {
                 old_name: old_name.to_string(),
                 new_name: new_name.to_string(),
             };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &op)?;
+            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
             if let Some(col) = columns.iter_mut().find(|c| c.name == old_name) {
                 col.name = new_name.to_string();
             }
@@ -609,13 +563,13 @@ impl DatabaseInstance {
                 .find(|c| c.name == col_name)
                 .map(|c| c.dtype.clone())
                 .ok_or_else(|| format!("Column '{col_name}' not found"))?;
-            let op = EditOperation::CastColumn {
+            let mut op = EditOperation::CastColumn {
                 col: col_name.to_string(),
                 old_data: vec![],
                 old_dtype: old_dtype.clone(),
                 new_dtype: new_dtype.to_string(),
             };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &op)?;
+            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
             if let Some(col) = columns.iter_mut().find(|c| c.name == col_name) {
                 col.dtype = new_dtype.to_string();
             }
@@ -662,10 +616,10 @@ impl DatabaseInstance {
             ..
         } = &mut self.state
         {
-            let op = history.pop_undo().ok_or("Nothing to undo")?;
+            let mut op = history.pop_undo().ok_or("Nothing to undo")?;
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
-            reverse_edit_on_duckdb(&path, &table_name, &op)?;
+            reverse_edit_on_duckdb(&path, &table_name, &mut op)?;
             let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
             *row_count = count;
             *columns = cols;
@@ -697,10 +651,10 @@ impl DatabaseInstance {
             ..
         } = &mut self.state
         {
-            let op = history.pop_redo().ok_or("Nothing to redo")?;
+            let mut op = history.pop_redo().ok_or("Nothing to redo")?;
             let path = PathBuf::from(duckdb_path.clone());
             let table_name = table.clone();
-            apply_edit_on_duckdb(&path, &table_name, &op)?;
+            apply_edit_on_duckdb(&path, &table_name, &mut op)?;
             let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
             *row_count = count;
             *columns = cols;
@@ -724,9 +678,7 @@ impl DatabaseInstance {
 
     pub fn save_changes(&mut self, project_root: Option<&Path>) -> Result<EditState, String> {
         if let DatabaseEngine::DuckDb { path, table } = &self.decl.engine {
-            let root = project_root.ok_or_else(|| {
-                "请先打开或创建项目后再保存数据".to_string()
-            })?;
+            let root = project_root.ok_or_else(|| "请先打开或创建项目后再保存数据".to_string())?;
             let duckdb_abs = root.join(path);
             let table_id = table.clone();
 
@@ -738,8 +690,7 @@ impl DatabaseInstance {
                 ..
             } = &mut self.state
             {
-                let (count, cols) =
-                    refresh_duckdb_meta(Path::new(duckdb_path), &table_id)?;
+                let (count, cols) = refresh_duckdb_meta(Path::new(duckdb_path), &table_id)?;
                 *row_count = count;
                 *columns = cols;
                 history.clear();

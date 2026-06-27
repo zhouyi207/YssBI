@@ -1,6 +1,6 @@
+use crate::graph::PinInstance;
 use crate::graph::pin::{PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::value::DataType;
-use crate::graph::PinInstance;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
 

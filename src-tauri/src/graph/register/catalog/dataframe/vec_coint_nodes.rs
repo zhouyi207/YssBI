@@ -2,8 +2,8 @@
 //!
 //! 对应 Stata vec x y z, lags(#) rank(#) trend(none|constant|trend) sindicators(varlist)
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -14,7 +14,7 @@ use ndarray::Array2;
 use polars::prelude::DataType as PolarsDataType;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use yss_sci::ts::vec::{vec_estimate, VECConfig, VecLmarRow, VecStableRow, VecTrendSpec};
+use yss_sci::ts::vec::{VECConfig, VecLmarRow, VecStableRow, VecTrendSpec, vec_estimate};
 
 // ======================== 结构体 ========================
 

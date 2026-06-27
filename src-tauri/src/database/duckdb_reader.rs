@@ -4,21 +4,27 @@
 //! 详见 [`README.md`](./README.md) 中「Categorical / ENUM 类型映射」一节。
 use std::path::{Path, PathBuf};
 
-use duckdb::arrow::array::{make_array, Array};
+use duckdb::Connection;
+use duckdb::arrow::array::{Array, make_array};
 use duckdb::arrow::compute::cast;
 use duckdb::arrow::datatypes::{DataType as ArrowDataType, Field, Schema};
-use duckdb::arrow::ffi::{from_ffi, to_ffi, FFI_ArrowArray, FFI_ArrowSchema};
+use duckdb::arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema, from_ffi, to_ffi};
 use duckdb::arrow::record_batch::RecordBatch;
-use duckdb::Connection;
 use polars::prelude::*;
-use polars_dtype::categorical::{CatSize, FrozenCategories};
 use polars_arrow::datatypes::Field as PlField;
-use polars_arrow::ffi::{export_array_to_c, export_field_to_c, import_array_from_c, import_field_from_c, ArrowArray, ArrowSchema};
+use polars_arrow::ffi::{
+    ArrowArray, ArrowSchema, export_array_to_c, export_field_to_c, import_array_from_c,
+    import_field_from_c,
+};
+use polars_dtype::categorical::{CatSize, FrozenCategories};
 
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
 pub const YSSBI_ENUM_PREFIX: &str = "_yssbi_enum_";
-pub const YSSBI_ROWID_COLUMN: &str = "_yssbi_rowid";
+const LEGACY_YSSBI_ROWID_COLUMN: &str = "_yssbi_rowid";
+
+/// Polars 列名：分页查询 `SELECT rowid, ...` 后用于提取 / drop。
+pub const DUCKDB_ROWID_COL: &str = "rowid";
 
 fn open_project_duckdb(duckdb_path: &Path) -> Result<Connection, String> {
     if let Some(parent) = duckdb_path.parent() {
@@ -106,62 +112,30 @@ pub fn sql_escape_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('\'', "''")
 }
 
-pub fn is_internal_column(name: &str) -> bool {
-    name == YSSBI_ROWID_COLUMN
-}
-
-/// 确保表含单调 `_yssbi_rowid`；对旧表（CSV 直 ingest 等）做一次性回填。
-pub fn ensure_rowid_column(conn: &Connection, table: &str) -> Result<(), String> {
-    let table_sql = duckdb_table_sql(table);
-    let rowid = format!(r#""{}""#, sql_escape_literal(YSSBI_ROWID_COLUMN));
-
-    let has_rowid: bool = conn
+/// 旧版物理列 `_yssbi_rowid` 在 reopen / meta 读取时直接 DROP（early-stage，不迁移值）。
+pub fn strip_legacy_yssbi_rowid(conn: &Connection, table: &str) -> Result<(), String> {
+    let has_legacy: bool = conn
         .query_row(
             &format!(
                 "SELECT COUNT(*) FROM information_schema.columns \
                  WHERE table_schema = 'main' AND table_name = '{}' AND column_name = '{}'",
                 sql_escape_literal(table),
-                sql_escape_literal(YSSBI_ROWID_COLUMN),
+                sql_escape_literal(LEGACY_YSSBI_ROWID_COLUMN),
             ),
             [],
             |row| row.get::<_, i64>(0),
         )
         .map(|n| n > 0)
-        .map_err(|e| format!("Failed to inspect rowid column on '{table}': {e}"))?;
+        .map_err(|e| format!("Failed to inspect legacy rowid column on '{table}': {e}"))?;
 
-    if !has_rowid {
-        conn.execute_batch(&format!(
-            "ALTER TABLE {table_sql} ADD COLUMN {rowid} BIGINT;"
-        ))
-        .map_err(|e| format!("Failed to add rowid column on '{table}': {e}"))?;
-    }
-
-    let null_count: i64 = conn
-        .query_row(
-            &format!("SELECT COUNT(*) FROM {table_sql} WHERE {rowid} IS NULL"),
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("Failed to count null rowids on '{table}': {e}"))?;
-
-    if null_count > 0 {
-        conn.execute_batch(&format!(
-            "UPDATE {table_sql} SET {rowid} = s.rn \
-             FROM ( \
-               SELECT rowid AS duck_rowid, row_number() OVER (ORDER BY rowid) - 1 AS rn \
-               FROM {table_sql} \
-             ) AS s \
-             WHERE {table_sql}.rowid = s.duck_rowid AND {table_sql}.{rowid} IS NULL;"
-        ))
-        .map_err(|e| format!("Failed to backfill rowids on '{table}': {e}"))?;
+    if has_legacy {
+        let table_sql = duckdb_table_sql(table);
+        let col_sql = format!(r#""{}""#, sql_escape_literal(LEGACY_YSSBI_ROWID_COLUMN));
+        conn.execute_batch(&format!("ALTER TABLE {table_sql} DROP COLUMN {col_sql};"))
+            .map_err(|e| format!("Failed to drop legacy rowid column on '{table}': {e}"))?;
     }
 
     Ok(())
-}
-
-pub fn ensure_rowid_on_table(duckdb_path: &Path, table: &str) -> Result<(), String> {
-    let conn = open_project_duckdb(duckdb_path)?;
-    ensure_rowid_column(&conn, table)
 }
 
 pub fn duckdb_path_literal(path: &Path) -> String {
@@ -202,8 +176,7 @@ pub fn is_yssbi_enum_type(type_name: &str) -> bool {
 }
 
 fn is_duckdb_enum_storage_type(storage_type: &str) -> bool {
-    is_yssbi_enum_type(storage_type)
-        || storage_type.trim().to_uppercase().starts_with("ENUM(")
+    is_yssbi_enum_type(storage_type) || storage_type.trim().to_uppercase().starts_with("ENUM(")
 }
 
 fn parse_inline_enum_categories(storage_type: &str) -> Option<Vec<String>> {
@@ -250,10 +223,7 @@ fn parse_inline_enum_categories(storage_type: &str) -> Option<Vec<String>> {
     Some(categories)
 }
 
-fn resolve_enum_categories(
-    conn: &Connection,
-    storage_type: &str,
-) -> Result<Vec<String>, String> {
+fn resolve_enum_categories(conn: &Connection, storage_type: &str) -> Result<Vec<String>, String> {
     if let Some(categories) = parse_inline_enum_categories(storage_type) {
         return Ok(categories);
     }
@@ -301,10 +271,7 @@ fn extract_categorical_categories(series: &Series) -> Result<Vec<String>, String
         return collect_categories_from_categorical_chunked(ca);
     }
 
-    Err(format!(
-        "Column '{}' is not categorical",
-        series.name()
-    ))
+    Err(format!("Column '{}' is not categorical", series.name()))
 }
 
 fn collect_categories_from_categorical_chunked<T: PolarsCategoricalType>(
@@ -425,9 +392,12 @@ fn string_series_to_categorical(series: &Series, categories: &[String]) -> Resul
     let fcats = FrozenCategories::new(categories.iter().map(|s| s.as_str()))
         .map_err(|e| format!("Failed to rebuild categorical categories: {e}"))?;
     let dtype = DataType::Enum(fcats.clone(), fcats.mapping().clone());
-    series
-        .cast(&dtype)
-        .map_err(|e| format!("Failed to cast column '{}' to categorical: {e}", series.name()))
+    series.cast(&dtype).map_err(|e| {
+        format!(
+            "Failed to cast column '{}' to categorical: {e}",
+            series.name()
+        )
+    })
 }
 
 /// 加载后根据 DuckDB 存储类型，将 ENUM / `_yssbi_enum_*` 列从 String 恢复为 Polars Categorical。
@@ -517,7 +487,6 @@ pub fn ingest_csv_to_duckdb(
 
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to ingest CSV into DuckDB: {e}"))?;
-    ensure_rowid_column(&conn, table)?;
     drop(conn);
 
     read_table_meta(duckdb_path, table)
@@ -530,7 +499,10 @@ pub fn ingest_parquet_to_duckdb(
     columns: Option<&[String]>,
 ) -> Result<DuckDbTableMeta, String> {
     if !parquet_path.is_file() {
-        return Err(format!("Parquet file not found: {}", parquet_path.display()));
+        return Err(format!(
+            "Parquet file not found: {}",
+            parquet_path.display()
+        ));
     }
 
     if let Some(parent) = duckdb_path.parent() {
@@ -560,7 +532,6 @@ pub fn ingest_parquet_to_duckdb(
 
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to ingest Parquet into DuckDB: {e}"))?;
-    ensure_rowid_column(&conn, table)?;
     drop(conn);
 
     read_table_meta(duckdb_path, table)
@@ -610,7 +581,7 @@ pub fn ingest_dataframe_to_duckdb(
         for start in (0..height).step_by(INGEST_CHUNK_ROWS) {
             let chunk_len = INGEST_CHUNK_ROWS.min(height - start);
             let chunk = df.slice(start as i64, chunk_len);
-            let batch = dataframe_to_record_batch(&chunk, &enum_by_column, start as i64)?;
+            let batch = dataframe_to_record_batch(&chunk, &enum_by_column)?;
             appender
                 .append_record_batch(batch)
                 .map_err(|e| format!("Failed to append Arrow batch to '{table}': {e}"))?;
@@ -648,13 +619,8 @@ fn create_table_for_ingest(
         })
         .collect::<Result<Vec<_>, String>>()?;
 
-    let rowid_def = format!(
-        r#""{}" BIGINT"#,
-        sql_escape_literal(YSSBI_ROWID_COLUMN)
-    );
     let sql = format!(
-        r#"CREATE TABLE "{table_literal}" ({}, {})"#,
-        rowid_def,
+        r#"CREATE TABLE "{table_literal}" ({})"#,
         column_defs.join(", ")
     );
     conn.execute_batch(&sql)
@@ -664,20 +630,9 @@ fn create_table_for_ingest(
 fn dataframe_to_record_batch(
     df: &DataFrame,
     enum_by_column: &std::collections::HashMap<String, EnumColumnSpec>,
-    rowid_start: i64,
 ) -> Result<RecordBatch, String> {
-    let mut arrays = Vec::with_capacity(df.width() + 1);
-    let mut fields = Vec::with_capacity(df.width() + 1);
-
-    let rowid_values: Vec<i64> = (rowid_start..rowid_start + df.height() as i64).collect();
-    let rowid_series = Series::new(YSSBI_ROWID_COLUMN.into(), rowid_values);
-    let rowid_array = polars_series_to_arrow_array(&rowid_series, false)?;
-    fields.push(Field::new(
-        YSSBI_ROWID_COLUMN,
-        rowid_array.data_type().clone(),
-        false,
-    ));
-    arrays.push(rowid_array);
+    let mut arrays = Vec::with_capacity(df.width());
+    let mut fields = Vec::with_capacity(df.width());
 
     for col in df.columns() {
         let series = col.as_materialized_series();
@@ -708,9 +663,12 @@ fn polars_series_to_arrow_array(
 ) -> Result<std::sync::Arc<dyn Array>, String> {
     let series = if for_enum_ingest {
         // ENUM Appender 仅接受 Utf8；Polars Categorical 的 Arrow 形态是 Dictionary，直接 append 会失败。
-        series
-            .cast(&DataType::String)
-            .map_err(|e| format!("Failed to cast categorical column '{}' for enum ingest: {e}", series.name()))?
+        series.cast(&DataType::String).map_err(|e| {
+            format!(
+                "Failed to cast categorical column '{}' for enum ingest: {e}",
+                series.name()
+            )
+        })?
     } else if series.n_chunks() > 1 {
         series.rechunk()
     } else {
@@ -729,21 +687,16 @@ fn polars_series_to_arrow_array(
     let ffi_array: FFI_ArrowArray = unsafe { std::mem::transmute(c_array) };
     let ffi_schema: FFI_ArrowSchema = unsafe { std::mem::transmute(c_schema) };
 
-    let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }
-        .map_err(|e| format!("Failed to import Polars column '{}' to Arrow: {e}", series.name()))?;
+    let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }.map_err(|e| {
+        format!(
+            "Failed to import Polars column '{}' to Arrow: {e}",
+            series.name()
+        )
+    })?;
     let arrow_array = make_array(array_data);
 
-    if !for_enum_ingest
-        && matches!(
-            arrow_array.data_type(),
-            ArrowDataType::Dictionary(_, _)
-        )
-    {
-        cast(
-            arrow_array.as_ref(),
-            &ArrowDataType::LargeUtf8,
-        )
-        .map_err(|e| {
+    if !for_enum_ingest && matches!(arrow_array.data_type(), ArrowDataType::Dictionary(_, _)) {
+        cast(arrow_array.as_ref(), &ArrowDataType::LargeUtf8).map_err(|e| {
             format!(
                 "Failed to cast dictionary column '{}' to string: {e}",
                 series.name()
@@ -777,12 +730,11 @@ fn arrow_dtype_to_create_table_sql(dtype: &ArrowDataType) -> Result<String, Stri
         ArrowDataType::Date32 | ArrowDataType::Date64 => "DATE".to_string(),
         ArrowDataType::Time32(_) | ArrowDataType::Time64(_) => "TIME".to_string(),
         ArrowDataType::Timestamp(_, _) => "TIMESTAMP".to_string(),
-        ArrowDataType::Decimal128(precision, scale) | ArrowDataType::Decimal256(precision, scale) => {
+        ArrowDataType::Decimal128(precision, scale)
+        | ArrowDataType::Decimal256(precision, scale) => {
             format!("DECIMAL({precision},{scale})")
         }
-        ArrowDataType::Dictionary(_, value_type) => {
-            arrow_dtype_to_create_table_sql(value_type)?
-        }
+        ArrowDataType::Dictionary(_, value_type) => arrow_dtype_to_create_table_sql(value_type)?,
         other => {
             return Err(format!(
                 "Unsupported Arrow type for DuckDB ingest: {other:?}"
@@ -822,6 +774,7 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
     }
 
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
+    strip_legacy_yssbi_rowid(&conn, table)?;
     let table_literal = sql_escape_literal(table);
 
     let mut columns = Vec::new();
@@ -842,9 +795,6 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
     for row in rows {
         columns.push(row.map_err(|e| e.to_string())?);
     }
-
-    ensure_rowid_column(&conn, table)?;
-    columns.retain(|c| !is_internal_column(&c.name));
 
     let count_sql = format!(r#"SELECT COUNT(*) FROM "{}""#, table_literal);
     let row_count: i64 = conn
@@ -878,9 +828,7 @@ pub fn read_display_name(duckdb_path: &Path, table_id: &str) -> Option<String> {
     let conn = Connection::open(duckdb_path).ok()?;
     let meta = sql_escape_literal(YSSBI_META_TABLE);
     let table_key = sql_escape_literal(table_id);
-    let sql = format!(
-        r#"SELECT display_name FROM "{meta}" WHERE table_id = '{table_key}'"#
-    );
+    let sql = format!(r#"SELECT display_name FROM "{meta}" WHERE table_id = '{table_key}'"#);
     conn.query_row(&sql, [], |row| row.get(0)).ok()
 }
 
@@ -932,7 +880,10 @@ fn record_batch_to_dataframe(batch: &RecordBatch) -> Result<DataFrame, String> {
     let mut columns = Vec::with_capacity(batch.num_columns());
     for i in 0..batch.num_columns() {
         let field = schema.field(i);
-        columns.push(arrow_rs_array_to_series(field.name(), batch.column(i).as_ref())?);
+        columns.push(arrow_rs_array_to_series(
+            field.name(),
+            batch.column(i).as_ref(),
+        )?);
     }
     DataFrame::new_infer_height(
         columns
@@ -1014,14 +965,14 @@ pub fn query_page_with_rowids(
     offset: usize,
     limit: usize,
 ) -> Result<PageQueryResult, String> {
-    ensure_rowid_on_table(duckdb_path, table)?;
+    use super::duckdb_editing::DUCKDB_ROWID_SQL;
+
     let meta = read_table_meta(duckdb_path, table)?;
     let user_cols = meta
         .columns
         .iter()
         .map(|c| format!(r#""{}""#, sql_escape_literal(&c.name)))
         .collect::<Vec<_>>();
-    let rowid = format!(r#""{}""#, sql_escape_literal(YSSBI_ROWID_COLUMN));
     let table_sql = duckdb_table_sql(table);
 
     if limit == 0 {
@@ -1036,23 +987,23 @@ pub fn query_page_with_rowids(
     }
 
     let select_list = if user_cols.is_empty() {
-        rowid.clone()
+        DUCKDB_ROWID_SQL.to_string()
     } else {
-        format!("{}, {}", rowid, user_cols.join(", "))
+        format!("{DUCKDB_ROWID_SQL}, {}", user_cols.join(", "))
     };
     let sql = format!(
-        "SELECT {select_list} FROM {table_sql} ORDER BY {rowid} LIMIT {limit} OFFSET {offset}"
+        "SELECT {select_list} FROM {table_sql} ORDER BY {DUCKDB_ROWID_SQL} LIMIT {limit} OFFSET {offset}"
     );
     let df = query_to_dataframe_for_table(duckdb_path, &sql, Some(table))?;
     let row_ids = df
-        .column(YSSBI_ROWID_COLUMN)
+        .column(DUCKDB_ROWID_COL)
         .map_err(|e| e.to_string())?
         .i64()
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|v| v.unwrap_or(0))
         .collect::<Vec<_>>();
-    let user_df = df.drop(YSSBI_ROWID_COLUMN).map_err(|e| e.to_string())?;
+    let user_df = df.drop(DUCKDB_ROWID_COL).map_err(|e| e.to_string())?;
     Ok(PageQueryResult {
         dataframe: user_df,
         row_ids,
@@ -1066,6 +1017,30 @@ pub fn resolve_duckdb_file(project_root: &Path, relative_path: &str) -> PathBuf 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn iris_page_rowids_are_stable() {
+        let csv_path = PathBuf::from("tests/data/iris.csv");
+        let duckdb_path = PathBuf::from(format!(
+            "target/test_iris_rowids_{}.duckdb",
+            uuid::Uuid::new_v4()
+        ));
+        ingest_csv_to_duckdb(
+            &csv_path,
+            &duckdb_path,
+            DEFAULT_DUCKDB_TABLE,
+            ',',
+            true,
+            Some(100),
+        )
+        .expect("ingest");
+        let page = query_page_with_rowids(&duckdb_path, DEFAULT_DUCKDB_TABLE, 0, 3).expect("page");
+        assert!(!page.row_ids.is_empty());
+        for w in page.row_ids.windows(2) {
+            assert!(w[0] < w[1], "rowids must be ascending: {:?}", page.row_ids);
+        }
+        let _ = std::fs::remove_file(&duckdb_path);
+    }
 
     #[test]
     fn ingest_categorical_enum_roundtrip() {
@@ -1120,10 +1095,16 @@ mod tests {
         let meta = read_table_meta(&duckdb_path, "test_table").expect("meta");
         assert_eq!(meta.row_count, 2);
         assert_eq!(meta.columns.len(), 2);
+        assert!(
+            meta.columns.iter().all(|c| c.name != "_yssbi_rowid"),
+            "ingest must not add _yssbi_rowid column"
+        );
 
-        let loaded =
-            query_to_dataframe(&duckdb_path, r#"SELECT * FROM "test_table" ORDER BY "value""#)
-                .expect("query");
+        let loaded = query_to_dataframe(
+            &duckdb_path,
+            r#"SELECT * FROM "test_table" ORDER BY "value""#,
+        )
+        .expect("query");
         assert_eq!(loaded.height(), 2);
         assert_eq!(
             loaded
@@ -1193,9 +1174,7 @@ mod tests {
         )
         .expect("setup enum table");
 
-        let mut stmt = conn
-            .prepare("SELECT * FROM t")
-            .expect("prepare select");
+        let mut stmt = conn.prepare("SELECT * FROM t").expect("prepare select");
         let mut arrow = stmt.query_arrow([]).expect("query_arrow");
         let batch = arrow.next().expect("missing record batch");
 
@@ -1226,7 +1205,9 @@ mod tests {
     }
 
     /// 测试专用：Polars → Arrow，**不**做 ENUM 写入所需的 String cast（用于验证 Dictionary 直写会失败）。
-    fn polars_series_to_arrow_array_raw(series: &Series) -> Result<std::sync::Arc<dyn Array>, String> {
+    fn polars_series_to_arrow_array_raw(
+        series: &Series,
+    ) -> Result<std::sync::Arc<dyn Array>, String> {
         let series = if series.n_chunks() > 1 {
             series.rechunk()
         } else {
@@ -1245,8 +1226,12 @@ mod tests {
         let ffi_array: FFI_ArrowArray = unsafe { std::mem::transmute(c_array) };
         let ffi_schema: FFI_ArrowSchema = unsafe { std::mem::transmute(c_schema) };
 
-        let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }
-            .map_err(|e| format!("Failed to import Polars column '{}' to Arrow: {e}", series.name()))?;
+        let array_data = unsafe { from_ffi(ffi_array, &ffi_schema) }.map_err(|e| {
+            format!(
+                "Failed to import Polars column '{}' to Arrow: {e}",
+                series.name()
+            )
+        })?;
         Ok(make_array(array_data))
     }
 
@@ -1305,13 +1290,14 @@ mod tests {
             let values = StringArray::from(vec![Some("M"), Some("F"), Some("M")]);
             let field = Field::new("gender", ArrowDataType::Utf8, true);
             let schema = std::sync::Arc::new(Schema::new(vec![field]));
-            let batch =
-                RecordBatch::try_new(schema, vec![std::sync::Arc::new(values)]).expect("utf8 batch");
+            let batch = RecordBatch::try_new(schema, vec![std::sync::Arc::new(values)])
+                .expect("utf8 batch");
 
             println!("[write A utf8] input schema: {:#?}", batch.schema());
             match append_record_batch_to_enum_table(&conn, "t_utf8", batch) {
                 Ok(()) => {
-                    let read_back = query_arrow_batch(&conn, "SELECT * FROM t_utf8").expect("read utf8 write");
+                    let read_back =
+                        query_arrow_batch(&conn, "SELECT * FROM t_utf8").expect("read utf8 write");
                     println!("[write A utf8] read schema: {:#?}", read_back.schema());
                     assert_eq!(read_back.num_rows(), 3);
                 }
@@ -1332,11 +1318,14 @@ mod tests {
 
             let dictionary_values = std::sync::Arc::new(StringArray::from(vec!["M", "F"]));
             let dictionary_keys = UInt8Array::from(vec![0u8, 1u8, 0u8]);
-            let dict_array =
-                DictionaryArray::try_new(dictionary_keys, dictionary_values).expect("build dictionary array");
+            let dict_array = DictionaryArray::try_new(dictionary_keys, dictionary_values)
+                .expect("build dictionary array");
             let field = Field::new(
                 "gender",
-                ArrowDataType::Dictionary(Box::new(ArrowDataType::UInt8), Box::new(ArrowDataType::Utf8)),
+                ArrowDataType::Dictionary(
+                    Box::new(ArrowDataType::UInt8),
+                    Box::new(ArrowDataType::Utf8),
+                ),
                 true,
             );
             let schema = std::sync::Arc::new(Schema::new(vec![field]));
@@ -1346,8 +1335,12 @@ mod tests {
             println!("[write B dictionary] input schema: {:#?}", batch.schema());
             match append_record_batch_to_enum_table(&conn, "t_dict", batch) {
                 Ok(()) => {
-                    let read_back = query_arrow_batch(&conn, "SELECT * FROM t_dict").expect("read dict write");
-                    println!("[write B dictionary] read schema: {:#?}", read_back.schema());
+                    let read_back =
+                        query_arrow_batch(&conn, "SELECT * FROM t_dict").expect("read dict write");
+                    println!(
+                        "[write B dictionary] read schema: {:#?}",
+                        read_back.schema()
+                    );
                     assert_eq!(read_back.num_rows(), 3);
                     let read_field = read_back.schema().field(0).clone();
                     let read_type = read_field.data_type();
@@ -1373,7 +1366,10 @@ mod tests {
             .expect("df");
             cast_column(&mut df, "gender", "Categorical", true).expect("cast categorical");
 
-            let series = df.column("gender").expect("gender").as_materialized_series();
+            let series = df
+                .column("gender")
+                .expect("gender")
+                .as_materialized_series();
             let arrow_array = polars_series_to_arrow_array_raw(series).expect("polars to arrow");
             println!(
                 "[write C polars categorical] polars dtype={:?}, arrow type={:?}",
@@ -1397,9 +1393,12 @@ mod tests {
 
             match append_record_batch_to_enum_table(&conn, "t_polars", batch) {
                 Ok(()) => {
-                    let read_back =
-                        query_arrow_batch(&conn, "SELECT * FROM t_polars").expect("read polars write");
-                    println!("[write C polars categorical] read schema: {:#?}", read_back.schema());
+                    let read_back = query_arrow_batch(&conn, "SELECT * FROM t_polars")
+                        .expect("read polars write");
+                    println!(
+                        "[write C polars categorical] read schema: {:#?}",
+                        read_back.schema()
+                    );
                     assert_eq!(read_back.num_rows(), 3);
                     let read_field = read_back.schema().field(0).clone();
                     let read_type = read_field.data_type();

@@ -249,11 +249,7 @@ impl NodeDefinition {
         self
     }
 
-    pub fn with_documentation(
-        mut self,
-        zh: impl Into<String>,
-        en: impl Into<String>,
-    ) -> Self {
+    pub fn with_documentation(mut self, zh: impl Into<String>, en: impl Into<String>) -> Self {
         self.metadata.documentation = Some(NodeDocumentation {
             zh: Some(zh.into()),
             en: Some(en.into()),

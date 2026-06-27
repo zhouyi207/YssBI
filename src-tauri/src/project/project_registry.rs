@@ -224,7 +224,10 @@ impl ProjectRegistry {
         Ok(())
     }
 
-    async fn fetch_by_path_exact(&self, path: &str) -> Result<Option<ProjectRecordRow>, sqlx::Error> {
+    async fn fetch_by_path_exact(
+        &self,
+        path: &str,
+    ) -> Result<Option<ProjectRecordRow>, sqlx::Error> {
         sqlx::query_as::<_, ProjectRecordRow>(
             r#"
             SELECT id, name, path, created_at, last_opened_at, is_favorite
@@ -332,7 +335,7 @@ impl ProjectRegistry {
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<CleanupInvalidProjectsResult, String> {
         use crate::project::{
-            is_picker_task_cancelled, picker_task_cancelled_error, ProjectCleanupProgressEvent,
+            ProjectCleanupProgressEvent, is_picker_task_cancelled, picker_task_cancelled_error,
         };
 
         let emit = |event: ProjectCleanupProgressEvent| {
@@ -365,10 +368,7 @@ impl ProjectRegistry {
 
             self.remove_project(&project.id).await?;
             removed += 1;
-            emit(ProjectCleanupProgressEvent::Removing {
-                removed,
-                total,
-            });
+            emit(ProjectCleanupProgressEvent::Removing { removed, total });
         }
 
         Ok(CleanupInvalidProjectsResult { removed })
@@ -381,9 +381,8 @@ impl ProjectRegistry {
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<crate::project::ScanProjectsResult, String> {
         use crate::project::{
-            discover_project_metadata_files, is_picker_task_cancelled,
-            picker_task_cancelled_error, project_name_from_metadata_path, ProjectScanProgressEvent,
-            ScanProjectsResult,
+            ProjectScanProgressEvent, ScanProjectsResult, discover_project_metadata_files,
+            is_picker_task_cancelled, picker_task_cancelled_error, project_name_from_metadata_path,
         };
         use std::path::PathBuf;
 
@@ -578,7 +577,8 @@ mod tests {
 
     #[test]
     fn registered_project_valid_when_metadata_exists() {
-        let root = std::env::temp_dir().join(format!("yssbi-cleanup-test-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("yssbi-cleanup-test-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let metadata = root.join(PROJECT_METADATA_FILE);

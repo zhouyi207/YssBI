@@ -1,7 +1,7 @@
 //! Logit (binary logistic regression) nodes
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use yss_sci::regression::discrete::{Logit, LogitConfig};
 
 use super::info_nodes::{
-    compute_classification_table, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult,
+    Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, compute_classification_table,
 };
 use super::ols_nodes::VariableSpec;
 
@@ -117,11 +117,7 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)

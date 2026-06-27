@@ -1,6 +1,6 @@
 use crate::database::DatabaseInstance;
-use crate::graph::register::catalog::register_builtin_nodes;
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::register_builtin_nodes;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ast::{
-    collect_param_order, linear_expand, parse_hypothesis_with_registry, ParamRegistry,
+    ParamRegistry, collect_param_order, linear_expand, parse_hypothesis_with_registry,
 };
 
 #[derive(Debug, Deserialize)]

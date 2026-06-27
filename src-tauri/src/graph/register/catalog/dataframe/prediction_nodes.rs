@@ -1,7 +1,7 @@
 //! 预测节点：基于模型进行预测，输入 pin 根据连接的上游节点（如 OLS 的 Exog 连接）动态生成
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::{NodeDefinition, PinResolverContext};
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot,
@@ -106,7 +106,7 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Predict: Exog '{}' is not connected", name));
                     }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
@@ -140,7 +140,7 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Predict: Exog '{}' is not connected", name));
                     }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
@@ -250,7 +250,10 @@ fn register_logit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("使用 Logit 模型预测概率，输出 P(y=1)", "Predict probabilities using a fitted Logit model. Outputs P(y=1).")
+    .with_localized_description(
+        "使用 Logit 模型预测概率，输出 P(y=1)",
+        "Predict probabilities using a fitted Logit model. Outputs P(y=1).",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -321,13 +324,13 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Logit Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Logit Predict: Exog '{}' is not connected", name));
                     }
                     _ => {
                         return Err(format!(
                             "Logit Predict: Exog '{}' is not a DataSeries",
                             name
-                        ))
+                        ));
                     }
                 };
                 let series = ctx.get_series(&series_id)?;
@@ -363,13 +366,13 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Logit Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Logit Predict: Exog '{}' is not connected", name));
                     }
                     _ => {
                         return Err(format!(
                             "Logit Predict: Exog '{}' is not a DataSeries",
                             name
-                        ))
+                        ));
                     }
                 };
                 let series = ctx.get_series(&series_id)?;
@@ -473,7 +476,10 @@ fn register_probit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("使用 Probit 模型预测概率，输出 P(y=1)", "Predict probabilities using a fitted Probit model. Outputs P(y=1).")
+    .with_localized_description(
+        "使用 Probit 模型预测概率，输出 P(y=1)",
+        "Predict probabilities using a fitted Probit model. Outputs P(y=1).",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -544,13 +550,13 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Probit Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Probit Predict: Exog '{}' is not connected", name));
                     }
                     _ => {
                         return Err(format!(
                             "Probit Predict: Exog '{}' is not a DataSeries",
                             name
-                        ))
+                        ));
                     }
                 };
                 let series = ctx.get_series(&series_id)?;
@@ -586,13 +592,13 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                 let series_id = match &val {
                     DataValue::DataSeries(v) => v.id.clone(),
                     DataValue::Null => {
-                        return Err(format!("Probit Predict: Exog '{}' is not connected", name))
+                        return Err(format!("Probit Predict: Exog '{}' is not connected", name));
                     }
                     _ => {
                         return Err(format!(
                             "Probit Predict: Exog '{}' is not a DataSeries",
                             name
-                        ))
+                        ));
                     }
                 };
                 let series = ctx.get_series(&series_id)?;

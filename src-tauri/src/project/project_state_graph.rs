@@ -1,5 +1,5 @@
-use super::unique_name;
 use super::ProjectState;
+use super::unique_name;
 use crate::graph::{GraphId, GraphInstance, GraphKind};
 use crate::variable::VariableScope;
 use std::sync::Arc;

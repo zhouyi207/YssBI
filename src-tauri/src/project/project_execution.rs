@@ -3,7 +3,7 @@ use crate::graph::{GraphId, GraphKind};
 use crate::log::LogLevel;
 use crate::log_exec;
 use crate::project::{ProjectData, ProjectStore};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::ipc::Channel;
 

@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ensure_worksheets_dir, read_worksheet_index_entries, ProjectData, ProjectError,
-    ProjectWorksheetIndexEntry, PROJECT_METADATA_FILE,
+    PROJECT_METADATA_FILE, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
+    ensure_worksheets_dir, read_worksheet_index_entries,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::{GraphId, GraphInstance, GraphKind};
@@ -130,18 +130,9 @@ pub fn save_project_graph_to_file(
         ),
     };
     let graph = graph.clone();
-    graph
-        .data_state
-        .write()
-        .unwrap()
-        .prepare_for_persistence();
-    let relative_path = graph_relative_path_for_save(
-        root.as_path(),
-        dir,
-        extension,
-        &graph.name,
-        graph_id,
-    )?;
+    graph.data_state.write().unwrap().prepare_for_persistence();
+    let relative_path =
+        graph_relative_path_for_save(root.as_path(), dir, extension, &graph.name, graph_id)?;
     write_json(
         root.join(&relative_path).as_path(),
         &GraphDocument {
@@ -188,11 +179,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         let relative_path =
             graph_relative_path_for_save(root, dir, extension, &graph.name, graph_id)?;
         let graph = graph.clone();
-        graph
-            .data_state
-            .write()
-            .unwrap()
-            .prepare_for_persistence();
+        graph.data_state.write().unwrap().prepare_for_persistence();
         write_json(
             root.join(&relative_path).as_path(),
             &GraphDocument {
@@ -486,7 +473,9 @@ pub fn delete_project_directory(path: &str) -> Result<(), ProjectError> {
     }
     if root.exists() {
         trash::delete(&root).map_err(|e| {
-            ProjectError::InvalidProjectFormat(format!("failed to move project to recycle bin: {e}"))
+            ProjectError::InvalidProjectFormat(format!(
+                "failed to move project to recycle bin: {e}"
+            ))
         })?;
     }
     Ok(())
@@ -523,15 +512,13 @@ pub fn save_project_as_to_directory(
     let validation = validate_new_project_path(new_root_path);
     if !validation.ok {
         return Err(ProjectError::InvalidProjectFormat(
-            validation
-                .message
-                .unwrap_or_else(|| "项目路径无效".into()),
+            validation.message.unwrap_or_else(|| "项目路径无效".into()),
         ));
     }
 
-    let old_path = state.get_path().ok_or_else(|| {
-        ProjectError::InvalidProjectFormat("项目尚未加载".into())
-    })?;
+    let old_path = state
+        .get_path()
+        .ok_or_else(|| ProjectError::InvalidProjectFormat("项目尚未加载".into()))?;
     state
         .persist_current_project()
         .map_err(ProjectError::InvalidProjectFormat)?;
@@ -597,15 +584,16 @@ fn read_graph_document(
 
 /// 过渡期：读取旧格式（`graph.dataState` 包裹）图文件。待所有开发项目重新保存后删除。
 fn read_legacy_graph_document(content: &str, path: &Path) -> Result<GraphDocument, ProjectError> {
-    let value: serde_json::Value = serde_json::from_str(content).map_err(ProjectError::Deserialize)?;
+    let value: serde_json::Value =
+        serde_json::from_str(content).map_err(ProjectError::Deserialize)?;
     let graph_value = value.get("graph").ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!(
             "legacy graph file '{}' missing 'graph'",
             path.display()
         ))
     })?;
-    let graph =
-        GraphInstance::from_legacy_graph_json(graph_value).map_err(ProjectError::InvalidProjectFormat)?;
+    let graph = GraphInstance::from_legacy_graph_json(graph_value)
+        .map_err(ProjectError::InvalidProjectFormat)?;
     let kind = value
         .get("kind")
         .cloned()
@@ -937,7 +925,9 @@ pub fn project_duckdb_abs(root: &Path) -> PathBuf {
 }
 
 /// 打开项目时枚举 `database/project.duckdb` 内的用户表，重建运行时 `DatabaseDecl` 索引。
-pub fn discover_databases_from_root(root: &Path) -> Result<HashMap<String, DatabaseDecl>, ProjectError> {
+pub fn discover_databases_from_root(
+    root: &Path,
+) -> Result<HashMap<String, DatabaseDecl>, ProjectError> {
     let mut map = HashMap::new();
     let duckdb_path = project_duckdb_abs(root);
     let tables = crate::database::list_data_tables(&duckdb_path).map_err(|e| {
@@ -946,8 +936,8 @@ pub fn discover_databases_from_root(root: &Path) -> Result<HashMap<String, Datab
 
     let relative_path = relative_project_duckdb_path();
     for table in tables {
-        let display_name =
-            crate::database::read_display_name(&duckdb_path, &table).unwrap_or_else(|| table.clone());
+        let display_name = crate::database::read_display_name(&duckdb_path, &table)
+            .unwrap_or_else(|| table.clone());
         let decl = DatabaseDecl {
             id: table.clone(),
             engine: DatabaseEngine::DuckDb {
@@ -1016,14 +1006,16 @@ mod tests {
 
         assert!(root.join(PROJECT_METADATA_FILE).is_file());
         assert!(root.join(GLOBAL_VARIABLES_FILE).is_file());
-        assert!(root
-            .join(EVENTS_DIR)
-            .join(format!("Startup.{}", EVENT_EXTENSION))
-            .is_file());
-        assert!(root
-            .join(FUNCTIONS_DIR)
-            .join(format!("Compute.{}", FUNCTION_EXTENSION))
-            .is_file());
+        assert!(
+            root.join(EVENTS_DIR)
+                .join(format!("Startup.{}", EVENT_EXTENSION))
+                .is_file()
+        );
+        assert!(
+            root.join(FUNCTIONS_DIR)
+                .join(format!("Compute.{}", FUNCTION_EXTENSION))
+                .is_file()
+        );
         std::fs::rename(
             root.join(EVENTS_DIR)
                 .join(format!("Startup.{}", EVENT_EXTENSION)),
@@ -1106,7 +1098,13 @@ mod tests {
                 .find(|p| p.definition.should_persist_full_definition() && p.is_data())
                 .map(|p| p.id)
                 .expect("a has a dynamic operand pin");
-            (a_output, a_operand_input, b_operand_input, total_pins, dynamic_pin)
+            (
+                a_output,
+                a_operand_input,
+                b_operand_input,
+                total_pins,
+                dynamic_pin,
+            )
         };
 
         // 设置一个 userValue，并建立一条连接
@@ -1180,14 +1178,18 @@ mod tests {
             .unwrap();
 
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(index
-            .folders
-            .iter()
-            .any(|folder| folder.folder_path == "Folder A"));
-        assert!(index
-            .folders
-            .iter()
-            .any(|folder| folder.folder_path == "Folder A/Sub"));
+        assert!(
+            index
+                .folders
+                .iter()
+                .any(|folder| folder.folder_path == "Folder A")
+        );
+        assert!(
+            index
+                .folders
+                .iter()
+                .any(|folder| folder.folder_path == "Folder A/Sub")
+        );
         let nested = index
             .graphs
             .iter()
@@ -1204,10 +1206,12 @@ mod tests {
         .unwrap();
         assert_eq!(renamed, "Folder A/Renamed");
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(index
-            .graphs
-            .iter()
-            .any(|graph| graph.folder_path == "Folder A/Renamed"));
+        assert!(
+            index
+                .graphs
+                .iter()
+                .any(|graph| graph.folder_path == "Folder A/Renamed")
+        );
 
         delete_project_graph_folder(
             root.to_string_lossy().as_ref(),

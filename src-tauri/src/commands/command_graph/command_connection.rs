@@ -1,10 +1,10 @@
 use crate::event::event_node::InferredPinType;
-use crate::event::{emit_project_event, Event, EventConnection, EventNode};
+use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::graph::{DataType, GraphId, NodeId, PinChangeSet, PinId};
 use crate::log::log_app;
-use crate::project::{read_project_index, GraphDocumentKind, ProjectState};
-use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
+use crate::project::{GraphDocumentKind, ProjectState, read_project_index};
 use crate::schema::PinInstanceDTO;
+use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, State};

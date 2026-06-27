@@ -29,10 +29,9 @@ pub async fn load_database(
     engine: DatabaseEngineDTO,
 ) -> Result<serde_json::Value, String> {
     let state = state.inner().clone();
-    let result = run_on_blocking_pool(move || {
-        crate::application::database::load_database(&state, engine)
-    })
-    .await?;
+    let result =
+        run_on_blocking_pool(move || crate::application::database::load_database(&state, engine))
+            .await?;
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
@@ -49,7 +48,10 @@ pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, String> 
 }
 
 #[tauri::command]
-pub async fn list_sql_tables(engine: String, connection_string: String) -> Result<Vec<String>, String> {
+pub async fn list_sql_tables(
+    engine: String,
+    connection_string: String,
+) -> Result<Vec<String>, String> {
     run_on_blocking_pool(move || {
         use crate::database::DatabaseEngineSql;
         let engine_enum = match engine.as_str() {
@@ -89,11 +91,7 @@ pub async fn delete_database(state: State<'_, ProjectState>, id: String) -> Resu
 }
 
 #[tauri::command]
-pub fn rename_database(
-    state: State<ProjectState>,
-    id: String,
-    name: String,
-) -> Result<(), String> {
+pub fn rename_database(state: State<ProjectState>, id: String, name: String) -> Result<(), String> {
     crate::application::database::rename_database(state.inner(), &id, &name)
 }
 
@@ -104,11 +102,10 @@ pub fn get_database_rows(
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, String> {
-    let page = state
-        .with_database_mut(&id, |db| {
-            db.query_page_with_rowids(offset, limit)
-                .map_err(|e| format!("Failed to query database page: {}", e))
-        })?;
+    let page = state.with_database_mut(&id, |db| {
+        db.query_page_with_rowids(offset, limit)
+            .map_err(|e| format!("Failed to query database page: {}", e))
+    })?;
 
     let payload = DatabaseRowsPayload {
         rows: dataframe_to_row_matrix(&page.dataframe),
@@ -189,9 +186,8 @@ pub fn delete_rows(
     indices: Vec<usize>,
     row_ids: Option<Vec<i64>>,
 ) -> Result<serde_json::Value, String> {
-    let edit_state = state.with_database_mut(&id, |db| {
-        db.delete_rows(&indices, row_ids.as_deref())
-    })?;
+    let edit_state =
+        state.with_database_mut(&id, |db| db.delete_rows(&indices, row_ids.as_deref()))?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 
@@ -258,8 +254,7 @@ pub fn save_database_changes(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    let edit_state =
-        crate::application::database::save_database_changes(state.inner(), &id)?;
+    let edit_state = crate::application::database::save_database_changes(state.inner(), &id)?;
     serde_json::to_value(edit_state).map_err(|e| e.to_string())
 }
 

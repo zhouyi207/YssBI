@@ -1,8 +1,8 @@
-use crate::event::{emit_project_event, Event, EventNode, EventVariable, InferredPinType};
+use crate::event::{Event, EventNode, EventVariable, InferredPinType, emit_project_event};
 use crate::graph::pin::PinKind;
 use crate::graph::value::{DataType, DataValue};
 use crate::project::ProjectState;
-use crate::schema::{data_type_to_container, data_type_to_pin_type, VariableInstanceDTO};
+use crate::schema::{VariableInstanceDTO, data_type_to_container, data_type_to_pin_type};
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 

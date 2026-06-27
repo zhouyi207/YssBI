@@ -1,5 +1,5 @@
-use super::unique_name;
 use super::ProjectState;
+use super::unique_name;
 use crate::graph::value::{DataType, DataValue};
 use crate::variable::VariableId;
 use crate::variable::{VariableInstance, VariableScope};

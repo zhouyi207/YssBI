@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::types::{Expr, HypothesisExpr};
-    use crate::ast::{parse_hypothesis, ParamRegistry};
+    use crate::ast::{ParamRegistry, parse_hypothesis};
 
     #[test]
     fn test_s_eq_0_1() {
@@ -115,7 +115,7 @@ mod tests {
 
     // ==================== 验证器测试 ====================
 
-    use crate::ast::{validate_hypotheses, ValidationError};
+    use crate::ast::{ValidationError, validate_hypotheses};
 
     #[test]
     fn test_validate_eq_linear_ok() {
@@ -168,7 +168,7 @@ mod tests {
     // ==================== 线性展开测试 ====================
 
     use crate::ast::{
-        linear_expand, Alternative, HypothesisSpec, LinearConstraintKind, TestMethod,
+        Alternative, HypothesisSpec, LinearConstraintKind, TestMethod, linear_expand,
     };
 
     #[test]

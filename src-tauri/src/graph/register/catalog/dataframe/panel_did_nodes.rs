@@ -3,12 +3,12 @@
 
 use super::info_nodes::{OLSResult, OmitInfo, OmittedVariable};
 use super::panel_did_auxiliary::{
-    adoption_time_ord, run_parallel_trends_test, run_placebo_test, DidEventStudyPoint,
+    DidEventStudyPoint, adoption_time_ord, run_parallel_trends_test, run_placebo_test,
 };
 use super::panel_did_engine::{DidFakeGroupEnginePayload, ExogLabelEntry};
-use super::panel_nodes::{panel_result_to_ols_result, series_to_group_indices, PanelConfigure};
-use crate::execution::context::NodeExecutionContextTrait;
+use super::panel_nodes::{PanelConfigure, panel_result_to_ols_result, series_to_group_indices};
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -178,11 +178,7 @@ fn build_panel_did_data(
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64 = endog_series
         .cast(&PDataType::Float64)

@@ -262,10 +262,7 @@ pub fn resolve_graph_dynamic_pins(
         state.load_graph_from_current_project(&graph_id)?;
     }
 
-    log_app::info!(
-        "[command.resolve_graph_dynamic_pins] graph={}",
-        graph_id
-    );
+    log_app::info!("[command.resolve_graph_dynamic_pins] graph={}", graph_id);
 
     let (graph, _change_sets, _inferred) = state.resolve_graph_dynamic_pins(&graph_id)?;
 

@@ -1,11 +1,11 @@
 //! Parallel-trends (event-study) Wald test and placebo timing test for Panel DID.
 //! Aligns with common Stata practice: `reghdfe Y i.rel#c.treat ..., absorb(id t) cluster(id)` then `test` on pre coeffs.
 
-use faer::{linalg::solvers::Solve, Mat, Side};
+use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
+use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 use std::collections::HashSet;

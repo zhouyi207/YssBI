@@ -3,8 +3,8 @@
 //! Stata ivregress liml: depvar [varlist1] (varlist2 = varlistiv)
 //! 与 IV:2SLS 相同的输入结构，共享数据提取逻辑
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -14,7 +14,7 @@ use crate::graph::value::{DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, NamedFrom, Series};
 use std::sync::Arc;
-use yss_sci::regression::linear_model::{CovParams, IVLIMLConfig, IVLIML};
+use yss_sci::regression::linear_model::{CovParams, IVLIML, IVLIMLConfig};
 
 use super::info_nodes::{
     Coefficient, Iv2slsFirstStageResult, Iv2slsFirstStageSummary, Iv2slsOveridDims,
@@ -22,7 +22,7 @@ use super::info_nodes::{
     ModelBasicInfo, OLSResult,
 };
 use super::iv_2sls_nodes::iv_2sls_input_slots;
-use super::ols_nodes::{format_covariance_type_display, OLSConfigure, OLSCovarianceConfig};
+use super::ols_nodes::{OLSConfigure, OLSCovarianceConfig, format_covariance_type_display};
 
 /// 提取的 IV 数据（2SLS 与 LIML 共用）
 pub fn extract_iv_data(
@@ -66,11 +66,7 @@ pub fn extract_iv_data(
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)

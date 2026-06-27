@@ -17,7 +17,7 @@ use ndarray::Array2;
 use polars::prelude::DataType;
 use std::sync::Arc;
 use yss_sci::api::time_series::{
-    var_regression_times_stata, var_varsoc, VARConfig, VARSocResult, VAR,
+    VAR, VARConfig, VARSocResult, var_regression_times_stata, var_varsoc,
 };
 
 // ======================== 辅助 ========================

@@ -7,9 +7,7 @@ use uuid::Uuid;
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::GraphId;
 
-use super::{
-    project_root_from_path, worksheet_absolute_path, ProjectError, ProjectState,
-};
+use super::{ProjectError, ProjectState, project_root_from_path, worksheet_absolute_path};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -40,9 +38,9 @@ pub fn resolve_reveal_path(
     state: &ProjectState,
     request: RevealProjectResourceRequest,
 ) -> Result<PathBuf, ProjectError> {
-    let project_path = state.get_path().ok_or_else(|| {
-        ProjectError::InvalidProjectFormat("No project is open".into())
-    })?;
+    let project_path = state
+        .get_path()
+        .ok_or_else(|| ProjectError::InvalidProjectFormat("No project is open".into()))?;
     let root = project_root_from_path(&project_path);
 
     match request {
@@ -53,13 +51,11 @@ pub fn resolve_reveal_path(
             let databases = state.get_data().databases;
             absolute_path_for_database(root.as_path(), &databases, &database_id)
         }
-        RevealProjectResourceRequest::Worksheet { worksheet_id } => worksheet_absolute_path(
-            root.as_path(),
-            &worksheet_id,
-        )?
-        .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("Worksheet '{worksheet_id}' not found"))
-        }),
+        RevealProjectResourceRequest::Worksheet { worksheet_id } => {
+            worksheet_absolute_path(root.as_path(), &worksheet_id)?.ok_or_else(|| {
+                ProjectError::InvalidProjectFormat(format!("Worksheet '{worksheet_id}' not found"))
+            })
+        }
     }
 }
 
@@ -67,9 +63,7 @@ pub fn absolute_path_for_graph(root: &Path, graph_id: &str) -> Result<PathBuf, P
     let graph_id = parse_graph_id(graph_id)?;
     super::find_graph_document_path(root, &graph_id)?
         .map(|(path, _, _)| path)
-        .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("Graph '{graph_id}' not found"))
-        })
+        .ok_or_else(|| ProjectError::InvalidProjectFormat(format!("Graph '{graph_id}' not found")))
 }
 
 pub fn absolute_path_for_database(
@@ -107,7 +101,7 @@ pub fn absolute_path_for_database(
 }
 
 fn parse_graph_id(graph_id: &str) -> Result<GraphId, ProjectError> {
-    Uuid::parse_str(graph_id)
-        .map(GraphId::from)
-        .map_err(|e| ProjectError::InvalidProjectFormat(format!("Invalid graph id '{graph_id}': {e}")))
+    Uuid::parse_str(graph_id).map(GraphId::from).map_err(|e| {
+        ProjectError::InvalidProjectFormat(format!("Invalid graph id '{graph_id}': {e}"))
+    })
 }

@@ -1,7 +1,7 @@
-use crate::graph::pin::{PinDefinition, PinDirection, PinOrder};
 use crate::graph::ConnectionManager;
 use crate::graph::DataType;
 use crate::graph::TypeVarId;
+use crate::graph::pin::{PinDefinition, PinDirection, PinOrder};
 use crate::graph::{NodeId, NodeInstance, PinId, PinInstance};
 use std::collections::{HashMap, HashSet};
 
@@ -253,7 +253,9 @@ mod tests {
 
         ds.add_node(NodeInstance {
             id: node_id,
-            definition: Arc::new(NodeDefinition::placeholder("Decompose DataFrame".to_string())),
+            definition: Arc::new(NodeDefinition::placeholder(
+                "Decompose DataFrame".to_string(),
+            )),
             type_var_map: Default::default(),
             position: NodePosition::default(),
             instance_params: NodeInstanceParams::default(),

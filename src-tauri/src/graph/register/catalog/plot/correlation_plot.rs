@@ -64,11 +64,7 @@ fn pearson_p_value(r: f64, n: usize) -> f64 {
         Err(_) => return f64::NAN,
     };
     let p = 2.0 * (1.0 - dist.cdf(t_abs));
-    if p.is_finite() {
-        p
-    } else {
-        f64::NAN
-    }
+    if p.is_finite() { p } else { f64::NAN }
 }
 
 fn numeric_dataseries_type() -> PinDataTypeDefinition {

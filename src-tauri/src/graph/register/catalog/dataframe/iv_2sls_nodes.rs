@@ -7,8 +7,8 @@
 //!
 //! Configure 与 OLS 一致：Constant, VCE, Time
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -18,17 +18,16 @@ use crate::graph::value::{DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, NamedFrom, Series};
 use std::sync::Arc;
-use yss_sci::regression::linear_model::{CovParams, IV2SLSConfig, IV2SLS};
+use yss_sci::regression::linear_model::{CovParams, IV2SLS, IV2SLSConfig};
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, Iv2slsEndogenousTest, Iv2slsFirstStageResult,
-    Iv2slsFirstStageSummary, Iv2slsHausmanTest, Iv2slsOveridDims, Iv2slsOveridTest,
-    Iv2slsStockYogoBiasRow, Iv2slsStockYogoCv, Iv2slsStockYogoSizeRow, ModelBasicInfo, OLSResult,
+    Coefficient, Iv2slsEndogenousTest, Iv2slsFirstStageResult, Iv2slsFirstStageSummary,
+    Iv2slsHausmanTest, Iv2slsOveridDims, Iv2slsOveridTest, Iv2slsStockYogoBiasRow,
+    Iv2slsStockYogoCv, Iv2slsStockYogoSizeRow, ModelBasicInfo, OLSResult, compute_aic_bic,
 };
 use super::ols_nodes::{
-    format_covariance_type_display, OLSClusterConfig, OLSConfigure, OLSCovarianceConfig,
-    OLSFixedScaleConfig, OLSHACConfig, OLSNeweyConfig, VCENonRobust, VCEHC0, VCEHC1, VCEHC2,
-    VCEHC3,
+    OLSClusterConfig, OLSConfigure, OLSCovarianceConfig, OLSFixedScaleConfig, OLSHACConfig,
+    OLSNeweyConfig, VCEHC0, VCEHC1, VCEHC2, VCEHC3, VCENonRobust, format_covariance_type_display,
 };
 
 // ======================== 共享辅助函数 ========================
@@ -124,11 +123,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)

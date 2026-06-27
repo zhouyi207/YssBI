@@ -2,10 +2,10 @@
 mod tests {
     use crate::execution::{Executor, NoopEmitter, WindowDataStore};
     use crate::graph::{
+        GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
         register::NodeRegistry,
         value::DataValue,
-        GraphInstance, GraphRuntime,
     };
     use std::sync::{Arc, Mutex};
 

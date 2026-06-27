@@ -1,7 +1,7 @@
 //! Panel Summary node — runs FE, FD, RE and displays all results
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -15,7 +15,7 @@ use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
-use yss_sci::regression::linear_model::{OLSConfig, OLS};
+use yss_sci::regression::linear_model::{OLS, OLSConfig};
 use yss_sci::regression::panel::{
     fit_panel_fd, fit_panel_fe, fit_panel_fe_time, fit_panel_fe_twoway, fit_panel_lsdv,
     fit_panel_lsdv_time, fit_panel_lsdv_twoway, fit_panel_re_be, fit_panel_re_be_time,
@@ -25,8 +25,8 @@ use yss_sci::regression::panel::{
 use yss_sci::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, ObsPerGroupInfo,
-    OmitInfo, OmittedVariable, PanelFEInfo, SigmaInfo, ThetaInfo,
+    Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, ObsPerGroupInfo, OmitInfo,
+    OmittedVariable, PanelFEInfo, SigmaInfo, ThetaInfo, compute_aic_bic,
 };
 
 // ======================== 结构体 ========================
@@ -297,11 +297,7 @@ fn build_panel_data(
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -1496,7 +1492,10 @@ fn register_panel_vce_cluster(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("面板 VCE：按 Entity ID 聚类稳健（默认）", "Panel VCE: cluster-robust by Entity ID (default)")
+    .with_localized_description(
+        "面板 VCE：按 Entity ID 聚类稳健（默认）",
+        "Panel VCE: cluster-robust by Entity ID (default)",
+    )
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "VCE",
         DataRole::Result,

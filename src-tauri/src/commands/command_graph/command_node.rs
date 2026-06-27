@@ -1,5 +1,5 @@
 use super::command_connection::{emit_inferred_types, emit_pin_change_events};
-use crate::event::{emit_project_event, Event, EventConnection, EventNode};
+use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::graph::{
     DataType, DataValue, GraphId, NodeId, NodeInstanceParams, PinChangeSet, PinDirection, PinId,
 };

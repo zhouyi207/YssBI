@@ -6,10 +6,10 @@ use std::collections::HashMap;
 
 use ndarray::{Array1, Array2};
 
+use crate::ast::ValidationError;
 use crate::ast::parser::ParamRegistry;
 use crate::ast::types::{Expr, HypothesisExpr, ParamId};
 use crate::ast::validator::ConstraintDirection;
-use crate::ast::ValidationError;
 
 /// 备择假设类型
 ///

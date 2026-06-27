@@ -3,7 +3,7 @@
 //! - XT Align: 按 (entity, time) 对齐面板数据
 //! - XT Diff: 在 align 后的数据上按 entity 做一阶差分
 
-use crate::graph::node::{passthrough_input_schema_resolver, NodeDefinition};
+use crate::graph::node::{NodeDefinition, passthrough_input_schema_resolver};
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};

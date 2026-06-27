@@ -109,18 +109,21 @@ impl<'de> Deserialize<'de> for PinInstance {
         D: Deserializer<'de>,
     {
         let raw = PinInstanceDe::deserialize(deserializer)?;
-        let definition = raw.definition.or_else(|| {
-            raw.pin_contract.map(|contract| PinDefinition {
-                name: contract.name,
-                direction: contract.direction,
-                kind: contract.kind,
-                role: contract.role,
-                data_type: None,
-                optional: contract.optional,
-                default_value: None,
-                meta_data: Default::default(),
+        let definition = raw
+            .definition
+            .or_else(|| {
+                raw.pin_contract.map(|contract| PinDefinition {
+                    name: contract.name,
+                    direction: contract.direction,
+                    kind: contract.kind,
+                    role: contract.role,
+                    data_type: None,
+                    optional: contract.optional,
+                    default_value: None,
+                    meta_data: Default::default(),
+                })
             })
-        }).ok_or_else(|| serde::de::Error::custom("pin requires definition or pinContract"))?;
+            .ok_or_else(|| serde::de::Error::custom("pin requires definition or pinContract"))?;
 
         Ok(Self {
             id: raw.id,

@@ -2,17 +2,19 @@ use std::path::PathBuf;
 
 use yssbi_lib::application::database::bind_duckdb_instance;
 use yssbi_lib::database::{
-    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, write_display_name,
-    DatabaseAccess, DatabaseState,
+    DatabaseAccess, DatabaseState, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
+    query_page_to_dataframe, write_display_name,
 };
 use yssbi_lib::project::{
-    discover_databases_from_root, ensure_project_database_dir, project_duckdb_abs, ProjectData,
-    ProjectState,
+    ProjectData, ProjectState, discover_databases_from_root, ensure_project_database_dir,
+    project_duckdb_abs,
 };
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
-    let project_root =
-        PathBuf::from(format!("target/test_project_duckdb_{}", uuid::Uuid::new_v4()));
+    let project_root = PathBuf::from(format!(
+        "target/test_project_duckdb_{}",
+        uuid::Uuid::new_v4()
+    ));
     let _ = std::fs::remove_dir_all(&project_root);
     ensure_project_database_dir(&project_root).expect("database dir");
 
@@ -77,13 +79,8 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
     assert_eq!(page.height(), 5);
     assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
 
-    let direct = query_page_to_dataframe(
-        &project_duckdb_abs(&project_root),
-        &db_id,
-        20,
-        3,
-    )
-    .expect("direct page");
+    let direct = query_page_to_dataframe(&project_duckdb_abs(&project_root), &db_id, 20, 3)
+        .expect("direct page");
     assert_eq!(direct.height(), 3);
 
     let _ = std::fs::remove_dir_all(&project_root);
@@ -97,19 +94,20 @@ fn test_project_reload_discovers_duckdb_from_directory() {
     state.set_path(Some(project_root.to_string_lossy().to_string()));
 
     let mut project_data = ProjectData::new();
-    project_data.databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    project_data.databases =
+        discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(project_data.databases.len(), 1);
     assert_eq!(
-        project_data.databases.get(&db_id).and_then(|d| d.name.as_deref()),
+        project_data
+            .databases
+            .get(&db_id)
+            .and_then(|d| d.name.as_deref()),
         Some("iris")
     );
     state.set_data(project_data);
 
     let mut store = state.project_store.write().unwrap();
-    let db = store
-        .databases
-        .get_mut(&db_id)
-        .expect("database in store");
+    let db = store.databases.get_mut(&db_id).expect("database in store");
     assert!(matches!(db.state, DatabaseState::DuckDb { .. }));
 
     let page = db.query_page(0, 20).expect("page after reload");
@@ -121,8 +119,10 @@ fn test_project_reload_discovers_duckdb_from_directory() {
 /// 同一 project.duckdb 可承载多张表。
 #[test]
 fn test_single_project_duckdb_multiple_tables() {
-    let project_root =
-        PathBuf::from(format!("target/test_project_multi_{}", uuid::Uuid::new_v4()));
+    let project_root = PathBuf::from(format!(
+        "target/test_project_multi_{}",
+        uuid::Uuid::new_v4()
+    ));
     let _ = std::fs::remove_dir_all(&project_root);
     ensure_project_database_dir(&project_root).expect("database dir");
     let duckdb_path = project_duckdb_abs(&project_root);
@@ -143,7 +143,10 @@ fn test_single_project_duckdb_multiple_tables() {
         databases.get("db-b").and_then(|d| d.name.as_deref()),
         Some("iris-b")
     );
-    assert_eq!(databases.get("db-a").unwrap().engine.duckdb_table(), Some(("database/project.duckdb", "db-a")));
+    assert_eq!(
+        databases.get("db-a").unwrap().engine.duckdb_table(),
+        Some(("database/project.duckdb", "db-a"))
+    );
 
     let _ = std::fs::remove_dir_all(&project_root);
 }
@@ -153,10 +156,7 @@ fn test_single_project_duckdb_multiple_tables() {
 fn test_parquet_ingest_to_duckdb() {
     use polars::prelude::*;
 
-    let parquet_path = PathBuf::from(format!(
-        "target/test_iris_{}.parquet",
-        uuid::Uuid::new_v4()
-    ));
+    let parquet_path = PathBuf::from(format!("target/test_iris_{}.parquet", uuid::Uuid::new_v4()));
     let csv_path = PathBuf::from("tests/data/iris.csv");
     let mut df = LazyCsvReader::new(PlRefPath::new(csv_path.to_string_lossy().as_ref()))
         .with_has_header(true)
@@ -175,13 +175,8 @@ fn test_parquet_ingest_to_duckdb() {
     ));
     let _ = std::fs::remove_file(&duckdb_path);
 
-    let meta = ingest_parquet_to_duckdb(
-        &parquet_path,
-        &duckdb_path,
-        "db-parquet-test",
-        None,
-    )
-    .expect("ingest parquet");
+    let meta = ingest_parquet_to_duckdb(&parquet_path, &duckdb_path, "db-parquet-test", None)
+        .expect("ingest parquet");
 
     assert_eq!(meta.row_count, 150);
     assert!(meta.columns.len() >= 5);
@@ -296,7 +291,9 @@ fn test_duckdb_sql_edit_without_full_load() {
 
     assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
 
-    let page2 = db_instance.query_page_with_rowids(0, 1).expect("page after edit");
+    let page2 = db_instance
+        .query_page_with_rowids(0, 1)
+        .expect("page after edit");
     let val = page2
         .dataframe
         .column("sepal_length")
@@ -308,4 +305,120 @@ fn test_duckdb_sql_edit_without_full_load() {
     assert!((val - 123.0).abs() < 1e-6);
 
     let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// ingest / schema 不含物理 `_yssbi_rowid` 列。
+#[test]
+fn test_duckdb_ingest_meta_has_no_legacy_rowid_column() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let meta = yssbi_lib::database::read_table_meta(&project_duckdb_abs(&project_root), &db_id)
+        .expect("meta");
+
+    assert!(
+        meta.columns.iter().all(|c| c.name != "_yssbi_rowid"),
+        "schema must not contain legacy _yssbi_rowid: {:?}",
+        meta.columns.iter().map(|c| &c.name).collect::<Vec<_>>()
+    );
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// 删行 → undo 恢复 → redo 再删（DatabaseInstance 路径）。
+#[test]
+fn test_duckdb_delete_undo_redo() {
+    let (project_root, db_id) = setup_iris_duckdb_project();
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    let decl = databases.get(&db_id).expect("decl");
+    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
+
+    let before = db_instance.query_page(0, 150).expect("page");
+    assert_eq!(before.height(), 150);
+
+    let page = db_instance.query_page_with_rowids(0, 1).expect("page");
+    let row_id = page.row_ids[0];
+    let original_val = page
+        .dataframe
+        .column("sepal_length")
+        .expect("col")
+        .f64()
+        .expect("f64")
+        .get(0)
+        .unwrap();
+
+    db_instance
+        .delete_rows(&[0], Some(&[row_id]))
+        .expect("delete");
+
+    let after_delete = db_instance.query_page(0, 150).expect("page");
+    assert_eq!(after_delete.height(), 149);
+
+    db_instance.undo_edit().expect("undo");
+    let after_undo = db_instance.query_page(0, 150).expect("page");
+    assert_eq!(after_undo.height(), 150);
+    let restored_exists = after_undo
+        .column("sepal_length")
+        .expect("col")
+        .f64()
+        .expect("f64")
+        .into_iter()
+        .flatten()
+        .any(|v| (v - original_val).abs() < 1e-6);
+    assert!(restored_exists, "undo should restore deleted row data");
+
+    db_instance.redo_edit().expect("redo");
+    let after_redo = db_instance.query_page(0, 150).expect("page");
+    assert_eq!(after_redo.height(), 149);
+
+    let _ = std::fs::remove_dir_all(&project_root);
+}
+
+/// 含遗留 `_yssbi_rowid` 列的旧表 reopen 后自动 DROP，编辑仍可用。
+#[test]
+fn test_duckdb_legacy_yssbi_rowid_column_stripped() {
+    use duckdb::Connection;
+    use yssbi_lib::database::{read_table_meta, strip_legacy_yssbi_rowid};
+
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_legacy_rowid_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let _ = std::fs::remove_file(&duckdb_path);
+
+    let conn = Connection::open(&duckdb_path).expect("open");
+    conn.execute_batch(
+        r#"
+        CREATE TABLE legacy_test (
+            "_yssbi_rowid" BIGINT,
+            name VARCHAR,
+            value DOUBLE
+        );
+        INSERT INTO legacy_test VALUES (0, 'a', 1.0), (1, 'b', 2.0);
+        "#,
+    )
+    .expect("setup legacy table");
+    drop(conn);
+
+    read_table_meta(&duckdb_path, "legacy_test").expect("read meta");
+
+    let conn = Connection::open(&duckdb_path).expect("reopen");
+    strip_legacy_yssbi_rowid(&conn, "legacy_test").expect("strip idempotent");
+    drop(conn);
+
+    let meta = read_table_meta(&duckdb_path, "legacy_test").expect("meta after strip");
+    assert_eq!(meta.row_count, 2);
+    assert_eq!(meta.columns.len(), 2);
+    assert!(meta.columns.iter().all(|c| c.name != "_yssbi_rowid"));
+
+    let page = query_page_to_dataframe(&duckdb_path, "legacy_test", 0, 10).expect("page");
+    assert_eq!(page.height(), 2);
+    assert_eq!(
+        page.column("name")
+            .expect("name")
+            .str()
+            .expect("str")
+            .get(0),
+        Some("a")
+    );
+
+    let _ = std::fs::remove_file(&duckdb_path);
 }

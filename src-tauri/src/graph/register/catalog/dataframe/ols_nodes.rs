@@ -5,8 +5,8 @@ use crate::graph::node::{ColumnSchema, DataSchema, NodeDefinition, OutputSchemaC
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
-use crate::graph::register::catalog::docs;
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
@@ -14,14 +14,14 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{OLSConfig, OLS};
+use yss_sci::regression::linear_model::{OLS, OLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
 use super::info_nodes::{
-    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
-    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
-    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+    BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest,
+    ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest,
+    OvTests, ResidualScatterData, VifEntry, compute_aic_bic,
 };
 use std::time::Instant;
 
@@ -291,11 +291,7 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -346,7 +342,8 @@ fn run_ols_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLSFitR
                 if ts.len() != endog_f64_series.len() {
                     return Err(format!(
                         "OLS: Time from config has {} observations, expected {} (must match Y length)",
-                        ts.len(), endog_f64_series.len()
+                        ts.len(),
+                        endog_f64_series.len()
                     ));
                 }
                 Some(ts)

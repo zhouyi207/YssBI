@@ -86,8 +86,7 @@ mod tests {
             ds.connections.connect(f64_out, sqrt_good_in);
         }
 
-        let resolved =
-            infer_graph(&graph).expect("infer must be Ok despite one incompatible edge");
+        let resolved = infer_graph(&graph).expect("infer must be Ok despite one incompatible edge");
 
         // 正常边对应的输入 pin 仍被细化为 Float64，未被脏边毒化。
         let good_type = resolved
@@ -158,7 +157,10 @@ mod tests {
             "nodes should serialize as a flat array"
         );
         assert!(
-            value.get("connections").and_then(|c| c.as_array()).is_some(),
+            value
+                .get("connections")
+                .and_then(|c| c.as_array())
+                .is_some(),
             "connections should serialize as a flat array"
         );
     }

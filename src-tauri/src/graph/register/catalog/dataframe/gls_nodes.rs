@@ -1,7 +1,7 @@
 //! GLS (Generalized Least Squares) 回归节点
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -14,14 +14,14 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{GLSConfig, GLS};
+use yss_sci::regression::linear_model::{GLS, GLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
 use super::info_nodes::{
-    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
-    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
-    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+    BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest,
+    ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest,
+    OvTests, ResidualScatterData, VifEntry, compute_aic_bic,
 };
 use super::ols_nodes::VariableSpec;
 use std::time::Instant;
@@ -177,11 +177,7 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -208,7 +204,9 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
     if sigma_full.nrows() != n_raw {
         return Err(format!(
             "GLS: Sigma is {}×{}, but Y has {} observations. Sigma must be n×n where n = number of observations.",
-            sigma_full.nrows(), sigma_full.ncols(), n_raw
+            sigma_full.nrows(),
+            sigma_full.ncols(),
+            n_raw
         ));
     }
 
@@ -257,7 +255,8 @@ fn run_gls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<GLSFitR
                 if ts.len() != n_raw {
                     return Err(format!(
                         "GLS: Time from config has {} observations, expected {} (must match Y length)",
-                        ts.len(), n_raw
+                        ts.len(),
+                        n_raw
                     ));
                 }
                 Some(ts)

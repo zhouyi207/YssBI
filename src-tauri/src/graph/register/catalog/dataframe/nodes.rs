@@ -107,7 +107,10 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
 fn register_combine_dataframe(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description("将多个 DataSeries 合并为 DataFrame（Decompose DataFrame 的逆操作）", "Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)")
+        .with_localized_description(
+            "将多个 DataSeries 合并为 DataFrame（Decompose DataFrame 的逆操作）",
+            "Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)",
+        )
         .with_output_schema_resolver(Arc::new(|ctx| {
             let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
                 .input_schemas

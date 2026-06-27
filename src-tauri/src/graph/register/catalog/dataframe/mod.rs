@@ -30,8 +30,8 @@ mod xt_align_nodes;
 use crate::graph::register::NodeRegistry;
 
 pub use panel_did_engine::{
-    compute_fake_group_ri, ComputeDidFakeGroupRequest, DidFakeGroupEnginePayload,
-    DidPlaceboFakeGroupBlock,
+    ComputeDidFakeGroupRequest, DidFakeGroupEnginePayload, DidPlaceboFakeGroupBlock,
+    compute_fake_group_ri,
 };
 
 pub fn register(registry: &NodeRegistry) {

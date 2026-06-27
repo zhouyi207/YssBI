@@ -6,8 +6,8 @@ use crate::graph::core::SchemaProvider;
 use crate::graph::{DataType, GraphId, GraphInstance, PinChangeSet, PinId};
 use crate::log::log_sys;
 use crate::project::{
-    load_project_graph_from_file, save_project_graph_to_file, save_project_to_file, GraphDocument,
-    ProjectData, ProjectStore,
+    GraphDocument, ProjectData, ProjectStore, load_project_graph_from_file,
+    save_project_graph_to_file, save_project_to_file,
 };
 use crate::variable::VariableInstance;
 use std::collections::HashMap;
@@ -84,10 +84,7 @@ impl ProjectState {
         let mut store = ProjectStore::default();
         for (id, decl) in databases.iter() {
             let instance = if matches!(decl.engine, DatabaseEngine::DuckDb { .. }) {
-                log_sys::info!(
-                    "[ProjectState.set_data] Database '{}' bound (DuckDb)",
-                    id
-                );
+                log_sys::info!("[ProjectState.set_data] Database '{}' bound (DuckDb)", id);
                 bind_duckdb_instance(decl, project_root.as_deref())
             } else {
                 log_sys::warn!(

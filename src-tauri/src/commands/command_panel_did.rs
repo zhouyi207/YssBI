@@ -1,7 +1,7 @@
 //! Panel DID 结果页按需调用：虚构处理组置换检验
 
 use crate::graph::register::catalog::dataframe::{
-    compute_fake_group_ri, ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock,
+    ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock, compute_fake_group_ri,
 };
 
 #[tauri::command]

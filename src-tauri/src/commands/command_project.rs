@@ -1,28 +1,27 @@
 use crate::application::database::name_from_path;
 use crate::database::{DatabaseInstance, DatabaseState};
-use crate::event::{emit_project_event, Event, EventProject};
+use crate::event::{Event, EventProject, emit_project_event};
 use crate::execution::ExecutionEvent;
 use crate::frontend::FrontendError;
 use crate::graph::GraphId;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
+    CleanupInvalidProjectsResult, LegacyProjectRecord, PROJECT_METADATA_FILE, ProjectData,
+    ProjectIndex, ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
+    RevealProjectResourceRequest, ScanProjectsResult,
     default_project_parent_directory as default_project_parent_directory_impl,
-    delete_project_directory, execute_project_data, format_path_for_user_path, load_project_from_file, normalize_existing_path,
-    normalize_project_name,
+    delete_project_directory, execute_project_data, format_path_for_user_path,
+    load_project_from_file, normalize_existing_path, normalize_project_name,
     paths_refer_to_same_project, resolve_reveal_path, save_project_as_to_directory,
     save_project_to_file, validate_new_project_path as validate_new_project_path_impl,
-    LegacyProjectRecord, ProjectData, ProjectIndex, ProjectPathValidation, ProjectRecord,
-    ProjectRegistry, ProjectState, RevealProjectResourceRequest, ScanProjectsResult,
-    CleanupInvalidProjectsResult,
-    PROJECT_METADATA_FILE,
 };
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
     GraphsWithValidationDTO, InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
 use polars::prelude::DataType;
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, ipc::Channel};
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -47,10 +46,7 @@ enum SchemaInfo {
         column_count: usize,
     },
     /// 上一次 IO 失败。
-    Failed {
-        name: String,
-        error: String,
-    },
+    Failed { name: String, error: String },
 }
 
 fn database_display_name(instance: &DatabaseInstance) -> String {
@@ -95,9 +91,7 @@ fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
             }
         }
         DatabaseState::DuckDb {
-            row_count,
-            columns,
-            ..
+            row_count, columns, ..
         } => {
             let columns: Vec<ColumnInfoDTO> = columns
                 .iter()
@@ -482,10 +476,7 @@ pub async fn save_project_as(
     state.set_data(project_data.clone());
 
     let record = registry
-        .register_project(
-            &project_data.metadata.project_name,
-            &new_metadata_path,
-        )
+        .register_project(&project_data.metadata.project_name, &new_metadata_path)
         .await?;
 
     emit_project_event(
@@ -532,10 +523,7 @@ pub async fn create_project(
 }
 
 #[tauri::command]
-pub fn flush_project(
-    app: AppHandle,
-    state: State<ProjectState>,
-) -> Result<(), String> {
+pub fn flush_project(app: AppHandle, state: State<ProjectState>) -> Result<(), String> {
     let path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
     log_app!(LogLevel::Info, "[command.flush_project] Flushing project");
 

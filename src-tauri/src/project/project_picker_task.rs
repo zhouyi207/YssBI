@@ -25,7 +25,8 @@ impl ProjectPickerTaskCancelRegistry {
 
     pub fn begin(&self) -> Arc<AtomicBool> {
         let flag = Arc::new(AtomicBool::new(false));
-        *self.active
+        *self
+            .active
             .lock()
             .expect("project picker task cancel registry lock") = Some(flag.clone());
         flag
@@ -47,7 +48,10 @@ impl ProjectPickerTaskCancelRegistry {
             .active
             .lock()
             .expect("project picker task cancel registry lock");
-        if active.as_ref().is_some_and(|current| Arc::ptr_eq(current, flag)) {
+        if active
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, flag))
+        {
             *active = None;
         }
     }

@@ -1,8 +1,8 @@
 //! Node 实例（运行时）
 
 use super::{NodeDefinition, NodePosition};
-use crate::graph::node::NodeId;
 use crate::graph::TypeVarDefinition;
+use crate::graph::node::NodeId;
 use crate::graph::{PinId, PinInstance, TypeVarId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

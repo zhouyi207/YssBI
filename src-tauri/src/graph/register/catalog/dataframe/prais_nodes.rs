@@ -2,8 +2,8 @@
 //!
 //! Stata: prais y x1 x2 [, corc]
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -19,8 +19,8 @@ use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{Prais, PraisConfig, PraisTransform};
 
 use super::info_nodes::{
-    compute_aic_bic, Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo,
-    OmittedVariable, PraisInfo, VifEntry,
+    Coefficient, DiagnosticInfo, ModelBasicInfo, OLSResult, OmitInfo, OmittedVariable, PraisInfo,
+    VifEntry, compute_aic_bic,
 };
 use super::ols_nodes::VariableSpec;
 
@@ -123,11 +123,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64 = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -529,7 +525,10 @@ fn register_prais_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("Prais-Winsten / Cochrane-Orcutt 配置", "Prais-Winsten / Cochrane-Orcutt configuration")
+    .with_localized_description(
+        "Prais-Winsten / Cochrane-Orcutt 配置",
+        "Prais-Winsten / Cochrane-Orcutt configuration",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(

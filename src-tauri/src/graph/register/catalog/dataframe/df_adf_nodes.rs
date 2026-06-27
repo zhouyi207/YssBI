@@ -2,8 +2,8 @@
 //!
 //! 对应 Stata dfuller y, lags(p) regress noconstant drift trend
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -12,7 +12,7 @@ use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataType, DataValue};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use yss_sci::ts::unit_root::{adf_test, AdfRegression};
+use yss_sci::ts::unit_root::{AdfRegression, adf_test};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DFADFRegRow {
@@ -58,7 +58,10 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("Dickey-Fuller / ADF 单位根检验（Stata dfuller）", "Dickey-Fuller / Augmented Dickey-Fuller unit root test (Stata dfuller)")
+    .with_localized_description(
+        "Dickey-Fuller / ADF 单位根检验（Stata dfuller）",
+        "Dickey-Fuller / Augmented Dickey-Fuller unit root test (Stata dfuller)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -124,7 +127,10 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("对所有组合（常数、趋势、滞后阶）批量 DF/ADF 单位根检验", "DF/ADF unit root test over all combinations (constant, trend, lags)")
+    .with_localized_description(
+        "对所有组合（常数、趋势、滞后阶）批量 DF/ADF 单位根检验",
+        "DF/ADF unit root test over all combinations (constant, trend, lags)",
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(

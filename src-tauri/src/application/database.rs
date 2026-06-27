@@ -6,11 +6,14 @@ use uuid::Uuid;
 
 use crate::database::database_schema::polars_dtype_to_raw_string;
 use crate::database::{
-    drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
-    ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name, DatabaseDecl,
-    DatabaseEngine, DatabaseEngineSql, DatabaseInstance, DatabaseState, DuckDbColumnMeta,
+    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseInstance, DatabaseState,
+    DuckDbColumnMeta, drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
+    ingest_excel_to_duckdb, ingest_parquet_to_duckdb, read_table_meta, sql_reader,
+    write_display_name,
 };
-use crate::project::{project_root_from_path, relative_project_duckdb_path, unique_name, ProjectState};
+use crate::project::{
+    ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,
+};
 use crate::schema::DatabaseEngineDTO;
 use yss_sci::api::database::{EditHistory, EditState};
 
@@ -52,19 +55,11 @@ pub fn load_database(
             delimiter,
             has_header,
             infer_schema_length,
-        } => load_csv_via_duckdb(
-            state,
-            path,
-            delimiter,
-            has_header,
-            infer_schema_length,
-        ),
+        } => load_csv_via_duckdb(state, path, delimiter, has_header, infer_schema_length),
         DatabaseEngineDTO::Parquet { path, columns } => {
             load_parquet_via_duckdb(state, path, columns)
         }
-        DatabaseEngineDTO::Excel { path, sheet } => {
-            load_excel_via_duckdb(state, path, sheet)
-        }
+        DatabaseEngineDTO::Excel { path, sheet } => load_excel_via_duckdb(state, path, sheet),
         DatabaseEngineDTO::Sql {
             engine,
             connection_string,
@@ -102,7 +97,15 @@ fn load_csv_via_duckdb(
         infer_schema_length,
     )?;
 
-    register_duckdb_instance(state, id, table, name_from_path(&csv_path), meta, duckdb_abs, relative_path)
+    register_duckdb_instance(
+        state,
+        id,
+        table,
+        name_from_path(&csv_path),
+        meta,
+        duckdb_abs,
+        relative_path,
+    )
 }
 
 fn load_parquet_via_duckdb(
@@ -137,12 +140,7 @@ fn load_excel_via_duckdb(
 ) -> Result<LoadDatabaseResult, String> {
     let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
 
-    let meta = ingest_excel_to_duckdb(
-        Path::new(&excel_path),
-        &sheet,
-        &duckdb_abs,
-        &table,
-    )?;
+    let meta = ingest_excel_to_duckdb(Path::new(&excel_path), &sheet, &duckdb_abs, &table)?;
 
     register_duckdb_instance(
         state,
@@ -218,7 +216,7 @@ fn register_duckdb_instance(
         row_count,
         column_count,
         columns,
-    }    )
+    })
 }
 
 fn load_sql_via_duckdb(
@@ -227,8 +225,7 @@ fn load_sql_via_duckdb(
     connection_string: String,
     table: String,
 ) -> Result<LoadDatabaseResult, String> {
-    let mut df =
-        sql_reader::read_table_to_dataframe(&engine, &connection_string, &table)?;
+    let mut df = sql_reader::read_table_to_dataframe(&engine, &connection_string, &table)?;
     let (id, table_id, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
     let meta = ingest_dataframe_to_duckdb(&mut df, &duckdb_abs, &table_id)?;
     let base_name = table.clone();
@@ -243,10 +240,7 @@ fn load_sql_via_duckdb(
     )
 }
 
-pub fn bind_duckdb_instance(
-    decl: &DatabaseDecl,
-    project_root: Option<&Path>,
-) -> DatabaseInstance {
+pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) -> DatabaseInstance {
     let DatabaseEngine::DuckDb { path, table, .. } = &decl.engine else {
         unreachable!("bind_duckdb_instance expects DuckDb engine");
     };
@@ -281,7 +275,10 @@ pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaR
     let db = store.databases.get(id).ok_or("Database not found")?;
     let name = database_display_name(db);
 
-    if let DatabaseState::DuckDb { row_count, columns, .. } = &db.state {
+    if let DatabaseState::DuckDb {
+        row_count, columns, ..
+    } = &db.state
+    {
         let columns = column_info_from_duckdb(columns);
         return Ok(DatabaseMetaResult {
             id: id.to_string(),
@@ -383,9 +380,10 @@ pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(),
         if !store.databases.contains_key(id) {
             return Err("Database not found".into());
         }
-        let duplicate = store.databases.iter().any(|(other_id, db)| {
-            other_id != id && database_display_name(db) == name
-        });
+        let duplicate = store
+            .databases
+            .iter()
+            .any(|(other_id, db)| other_id != id && database_display_name(db) == name);
         if duplicate {
             return Err(format!("Dataset name '{name}' already exists"));
         }
@@ -393,10 +391,7 @@ pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(),
 
     let engine = {
         let mut store = state.project_store.write().unwrap();
-        let db = store
-            .databases
-            .get_mut(id)
-            .ok_or("Database not found")?;
+        let db = store.databases.get_mut(id).ok_or("Database not found")?;
         db.decl.name = Some(name.to_string());
         db.decl.engine.clone()
     };

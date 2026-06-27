@@ -1,7 +1,7 @@
 //! WLS (Weighted Least Squares) 回归节点
 
-use crate::execution::context::NodeExecutionContextTrait;
 use crate::execution::ExecutionEffect;
+use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -13,17 +13,17 @@ use polars::prelude::{Column, DataFrame, Series};
 use std::sync::Arc;
 use yss_sci::regression::collinearity;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{CovParams, WLSConfig, WLS};
+use yss_sci::regression::linear_model::{CovParams, WLS, WLSConfig};
 use yss_sci::ts::align::infer_interval;
 use yss_sci::ts::lag::ts_lag;
 
 use super::info_nodes::{
-    compute_aic_bic, BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo,
-    DiagnosticTiming, ImTest, ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo,
-    OmittedVariable, OvTest, OvTests, ResidualScatterData, VifEntry,
+    BreuschPaganTest, BreuschPaganTests, Coefficient, DiagnosticInfo, DiagnosticTiming, ImTest,
+    ImTestComponent, ModelBasicInfo, NormalityTests, OLSResult, OmitInfo, OmittedVariable, OvTest,
+    OvTests, ResidualScatterData, VifEntry, compute_aic_bic,
 };
 use super::ols_nodes::{
-    format_covariance_type_display, OLSConfigure, OLSCovarianceConfig, VariableSpec,
+    OLSConfigure, OLSCovarianceConfig, VariableSpec, format_covariance_type_display,
 };
 use std::time::Instant;
 
@@ -123,11 +123,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
     let endog_series = ctx.get_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
-        if raw.is_empty() {
-            "y".to_string()
-        } else {
-            raw
-        }
+        if raw.is_empty() { "y".to_string() } else { raw }
     };
     let endog_f64_series = endog_series
         .cast(&polars::prelude::DataType::Float64)
@@ -206,7 +202,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
                 if ts.len() != endog_f64_series.len() {
                     return Err(format!(
                         "WLS: Time from config has {} observations, expected {} (must match Y length)",
-                        ts.len(), endog_f64_series.len()
+                        ts.len(),
+                        endog_f64_series.len()
                     ));
                 }
                 Some(ts)

@@ -3,8 +3,8 @@
 //!
 //! 因此不能将实例或者运行时的状态如 value 带入
 
-use crate::graph::value::DataValue;
 use crate::graph::TypeVarKey;
+use crate::graph::value::DataValue;
 
 use super::{DataRole, ExecRole, PinDataTypeDefinition, PinRole};
 use serde::{Deserialize, Serialize};
