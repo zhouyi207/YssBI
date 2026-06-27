@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Table, TableBody } from '@/components/ui/table';
 import { LogLevel, LogType } from '@/shared/types/ui';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
+import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
-import { detailTableClass, detailValueMutedClass } from '../shared/detailStyles';
+import { DetailBadge } from '../shared/DetailText';
+import { DetailText } from '../shared/DetailText';
 
 const getLevelColor = (level: LogLevel) => {
   switch (level) {
@@ -56,33 +57,39 @@ export function LogDetailPanel({ log }: LogDetailPanelProps) {
 
   return (
     <DetailPanelShell title={t('detail.titleLog')}>
-      <Table className={detailTableClass}>
-        <TableBody>
-          <DetailFieldRow label={t('detail.fields.time')} valueClassName="font-mono text-foreground">
-            {log.timestamp}
-          </DetailFieldRow>
-          <DetailFieldRow label={t('detail.fields.level')}>
-            <span className={`${getLevelColor(log.level)} font-bold uppercase`}>{log.level}</span>
-          </DetailFieldRow>
-          <DetailFieldRow label={t('detail.fields.type')}>
-            <span className={`${getTypeColor(log.log_type)} font-semibold`}>{logTypeLabel}</span>
-          </DetailFieldRow>
-          {log.source && (
-            <DetailFieldRow label={t('detail.fields.source')} valueClassName="font-mono text-cyan-400">
-              {log.source}
-            </DetailFieldRow>
-          )}
-          <DetailFieldRow
-            label={t('detail.fields.message')}
-            labelClassName="align-top"
-            valueClassName="align-top"
+      <DetailForm>
+        <DetailReadonlyField label={t('detail.fields.time')} tone="mono" className="text-foreground">
+          {log.timestamp}
+        </DetailReadonlyField>
+        <DetailFieldRow label={t('detail.fields.level')}>
+          <div className="flex min-h-8 items-center">
+            <DetailBadge className={getLevelColor(log.level)}>{log.level}</DetailBadge>
+          </div>
+        </DetailFieldRow>
+        <DetailFieldRow label={t('detail.fields.type')}>
+          <div className="flex min-h-8 items-center">
+            <DetailBadge className={getTypeColor(log.log_type)}>{logTypeLabel}</DetailBadge>
+          </div>
+        </DetailFieldRow>
+        {log.source && (
+          <DetailReadonlyField label={t('detail.fields.source')} tone="mono" className="text-cyan-400">
+            {log.source}
+          </DetailReadonlyField>
+        )}
+        <DetailFieldRow
+          label={t('detail.fields.message')}
+          labelClassName="align-top"
+          valueClassName="align-top"
+        >
+          <DetailText
+            as="pre"
+            tone="mono"
+            className="min-h-20 rounded-md border border-border bg-muted/20 p-3 whitespace-pre-wrap break-all text-foreground"
           >
-            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-foreground">
-              {log.message}
-            </pre>
-          </DetailFieldRow>
-        </TableBody>
-      </Table>
+            {log.message}
+          </DetailText>
+        </DetailFieldRow>
+      </DetailForm>
     </DetailPanelShell>
   );
 }

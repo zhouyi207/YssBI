@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorGroup } from '@/features/application/editor';
-import { useEditorStore } from '@/features/core/editor';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { Separator } from '@/components/ui/separator';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { DetailEmptyState } from './DetailEmptyState';
 import { VariableDetailPanel } from './panels/VariableDetailPanel';
@@ -24,18 +24,12 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     dataframes,
     selectedItemId,
     selectedItemType,
-    setSelectedInfo,
     updateVariable,
-    deleteVariable,
     updateEvent,
-    deleteEvent,
     updateFunction,
-    deleteFunction,
     updateDataFrame,
-    deleteDataFrame,
   } = useEditorGroup();
 
-  const selectedGraphId = useEditorStore((s) => s.selectedGraphId);
   const selectedLog = useLogStore((s) => s.selectedLog);
   const worksheetDocument = useWorksheetStore((s) =>
     selectedItemId && selectedItemType === 'worksheet'
@@ -60,8 +54,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     return null;
   }, [selectedItemId, selectedItemType, Variables, events, functions, dataframes]);
 
-  const clearSelection = () => setSelectedInfo(null, null);
-
   return (
     <div
       ref={ref}
@@ -70,49 +62,43 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     >
       {selectedItemType === 'log' && selectedLog ? (
         <LogDetailPanel log={selectedLog} />
-      ) : selectedItemType === 'node' && selectedItemId && selectedGraphId ? (
-        <NodeDetailPanel nodeId={selectedItemId} graphId={selectedGraphId} />
+      ) : selectedItemType === 'node' && selectedItemId ? (
+        <NodeDetailPanel nodeId={selectedItemId} />
       ) : selectedData && selectedItemType === 'variable' ? (
         <VariableDetailPanel
           variable={selectedData}
           onUpdate={(patch) => updateVariable(selectedItemId!, patch)}
-          onDelete={() => deleteVariable(selectedItemId!)}
-          onDeleted={clearSelection}
         />
       ) : selectedData && selectedItemType === 'event' ? (
         <EventDetailPanel
           event={selectedData}
           onUpdate={(patch) => updateEvent(selectedItemId!, patch)}
-          onDelete={() => deleteEvent(selectedItemId!)}
-          onDeleted={clearSelection}
         />
       ) : selectedData && selectedItemType === 'function' ? (
         <FunctionDetailPanel
           fn={selectedData}
           onUpdate={(patch) => updateFunction(selectedItemId!, patch)}
-          onDelete={() => deleteFunction(selectedItemId!)}
-          onDeleted={clearSelection}
         />
       ) : selectedItemType === 'worksheet' && worksheetDocument ? (
-        <WorksheetDetailPanel document={worksheetDocument} onDeleted={clearSelection} />
+        <WorksheetDetailPanel document={worksheetDocument} />
       ) : selectedData && selectedItemType === 'data' ? (
         <DataDetailPanel
           dataframe={selectedData}
           onUpdate={(patch) => updateDataFrame(selectedItemId!, patch)}
-          onDelete={() => deleteDataFrame(selectedItemId!)}
         />
       ) : (
-        <>
+        <div className="flex h-full min-h-0 flex-col bg-background/40">
           <div
-            className="flex shrink-0 items-center justify-between border-b border-border bg-[var(--workbench-bg)]/50 px-3"
+            className="flex shrink-0 items-center justify-between bg-background/80 px-3 backdrop-blur-sm"
             style={{ height: 'var(--titlebar-height)' }}
           >
             <span className={detailSectionTitleClass}>
               {t('detail.title')}
             </span>
           </div>
+          <Separator />
           <DetailEmptyState />
-        </>
+        </div>
       )}
     </div>
   );

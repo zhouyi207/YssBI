@@ -1,52 +1,73 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { NodePinSpecRow } from './NodePinSpecRow';
-import { detailEmptyHintClass, detailSectionTitleClass, detailSubsectionTitleClass } from '../shared/detailStyles';
+import { detailEmptyHintClass } from '../shared/detailStyles';
+import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 
 interface NodePinInterfacePanelProps {
   inputs: ResolvedPinSpec[];
   outputs: ResolvedPinSpec[];
 }
 
-function PinSection({
-  title,
-  emptyLabel,
-  pins,
-}: {
-  title: string;
-  emptyLabel: string;
-  pins: ResolvedPinSpec[];
-}) {
+type PinTab = 'inputs' | 'outputs';
+
+function PinList({ emptyLabel, pins }: { emptyLabel: string; pins: ResolvedPinSpec[] }) {
   return (
-    <div className="px-2 pt-3">
-      <div className={`mb-1 ${detailSubsectionTitleClass}`}>{title}</div>
-      <div className="space-y-1">
-        {pins.length > 0 ? (
-          pins.map((pin) => <NodePinSpecRow key={pin.id} pin={pin} />)
-        ) : (
-          <div className={detailEmptyHintClass}>{emptyLabel}</div>
-        )}
-      </div>
+    <div className="space-y-1">
+      {pins.length > 0 ? (
+        pins.map((pin) => <NodePinSpecRow key={pin.id} pin={pin} />)
+      ) : (
+        <div className={detailEmptyHintClass}>{emptyLabel}</div>
+      )}
     </div>
   );
 }
 
 export function NodePinInterfacePanel({ inputs, outputs }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<PinTab>(() =>
+    inputs.length === 0 && outputs.length > 0 ? 'outputs' : 'inputs',
+  );
+  const totalPins = inputs.length + outputs.length;
+
+  useEffect(() => {
+    if (activeTab === 'inputs' && inputs.length === 0 && outputs.length > 0) {
+      setActiveTab('outputs');
+      return;
+    }
+    if (activeTab === 'outputs' && outputs.length === 0 && inputs.length > 0) {
+      setActiveTab('inputs');
+    }
+  }, [activeTab, inputs.length, outputs.length]);
 
   return (
-    <div className="border-t border-border">
-      <div className={`px-2 pt-3 ${detailSectionTitleClass}`}>{t('detail.nodeDoc.pinInterface')}</div>
-      <PinSection
-        title={t('detail.nodeDoc.inputs')}
-        emptyLabel={t('detail.nodeDoc.noInputs')}
-        pins={inputs}
-      />
-      <PinSection
-        title={t('detail.nodeDoc.outputs')}
-        emptyLabel={t('detail.nodeDoc.noOutputs')}
-        pins={outputs}
-      />
-    </div>
+    <DetailCollapsibleSection title={t('detail.nodeDoc.pinInterface')}>
+      {totalPins > 0 ? (
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PinTab)}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="inputs" className="gap-1">
+              {t('detail.nodeDoc.inputs')}
+              <span className="text-[10px] text-muted-foreground">{inputs.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="outputs" className="gap-1">
+              {t('detail.nodeDoc.outputs')}
+              <span className="text-[10px] text-muted-foreground">{outputs.length}</span>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="inputs" className="mt-2">
+            <PinList emptyLabel={t('detail.nodeDoc.noInputs')} pins={inputs} />
+          </TabsContent>
+          <TabsContent value="outputs" className="mt-2">
+            <PinList emptyLabel={t('detail.nodeDoc.noOutputs')} pins={outputs} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className={detailEmptyHintClass}>
+          {t('detail.nodeDoc.noInputs')} / {t('detail.nodeDoc.noOutputs')}
+        </div>
+      )}
+    </DetailCollapsibleSection>
   );
 }

@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
-import { detailPinRowClass, detailValueMutedClass } from '../shared/detailStyles';
+import { detailPinRowClass } from '../shared/detailStyles';
+import { DetailBadge, DetailText } from '../shared/DetailText';
 
 interface NodePinSpecRowProps {
   pin: ResolvedPinSpec;
@@ -8,20 +10,6 @@ interface NodePinSpecRowProps {
 
 export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
   const { t } = useTranslation();
-
-  const badges: string[] = [];
-  if (pin.optional) badges.push(t('detail.nodeDoc.optional'));
-  else badges.push(t('detail.nodeDoc.required'));
-  if (pin.slotKind === 'repeatable') badges.push(t('detail.nodeDoc.repeatable'));
-  if (pin.slotKind === 'derivedFromInput') badges.push(t('detail.nodeDoc.derived'));
-  if (pin.connected) badges.push(t('detail.nodeDoc.connected'));
-
-  const directionLabel =
-    pin.direction === 'input'
-      ? t('detail.nodeDoc.directionInput')
-      : t('detail.nodeDoc.directionOutput');
-
-  const kindLabel = pin.kind === 'Exec' ? t('detail.nodeDoc.kindExec') : t('detail.nodeDoc.kindData');
 
   const slotNoteText =
     pin.slotNote?.kind === 'repeatableRange'
@@ -32,39 +20,61 @@ export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
       : pin.slotNote?.kind === 'derivedFromInput'
         ? t('detail.nodeDoc.derivedFromInput')
         : undefined;
+  const typeLabel = pin.typeDisplay ?? pin.type;
+  const badges: Array<{ label: string; tooltip?: string }> = [];
+  if (pin.optional) badges.push({ label: t('detail.nodeDoc.optional') });
+  if (pin.slotKind === 'repeatable') {
+    badges.push({ label: t('detail.nodeDoc.repeatable'), tooltip: slotNoteText });
+  }
+  if (pin.slotKind === 'derivedFromInput') {
+    badges.push({ label: t('detail.nodeDoc.derived'), tooltip: slotNoteText });
+  }
+
+  const renderBadge = (badge: { label: string; tooltip?: string }) => {
+    if (!badge.tooltip) {
+      return <DetailBadge key={badge.label}>{badge.label}</DetailBadge>;
+    }
+
+    return (
+      <Tooltip key={badge.label}>
+        <TooltipTrigger asChild>
+          <span>
+            <DetailBadge>{badge.label}</DetailBadge>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {badge.tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
 
   return (
-    <div className={`items-start gap-2 px-2 py-1.5 ${detailPinRowClass}`}>
-      <span
-        className={`mt-0.5 shrink-0 rounded px-1 py-0.5 text-[8px] font-black uppercase ${
-          pin.direction === 'input' ? 'bg-blue-500/20 text-blue-300' : 'bg-emerald-500/20 text-emerald-300'
-        }`}
-      >
-        {directionLabel}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] font-semibold text-foreground">
-            {pin.name || t('detail.nodeDoc.unnamed')}
-          </span>
-          <span className="text-[9px] text-muted-foreground/70">{kindLabel}</span>
-        </div>
-        <div className="mt-0.5 font-mono text-[9px] text-[var(--accent-color)]/80">
-          {pin.typeDisplay ?? pin.type}
-        </div>
-        {(slotNoteText || badges.length > 0) && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {badges.map((badge) => (
+    <div
+      className={`border-l-2 border-blue-400/70 px-2 py-1.5 ${detailPinRowClass}`}
+    >
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex min-w-0 flex-1 items-center">
+              <DetailText className="min-w-0 truncate font-semibold">
+                {pin.name || t('detail.nodeDoc.unnamed')}
+              </DetailText>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="font-mono">
+            {typeLabel}
+          </TooltipContent>
+        </Tooltip>
+        {(pin.connected || badges.length > 0) && (
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1">
+            {pin.connected && (
               <span
-                key={badge}
-                className={`rounded bg-muted px-1 py-0.5 text-[8px] uppercase tracking-wide ${detailValueMutedClass}`}
-              >
-                {badge}
-              </span>
-            ))}
-            {slotNoteText && (
-              <span className="text-[8px] italic text-muted-foreground/70">{slotNoteText}</span>
+                className="h-1.5 w-1.5 rounded-full bg-emerald-400/80"
+                title={t('detail.nodeDoc.connected')}
+              />
             )}
+            {badges.map(renderBadge)}
           </div>
         )}
       </div>

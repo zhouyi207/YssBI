@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { TableCell, TableRow } from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import {
   detailLabelCellClass,
@@ -32,9 +32,11 @@ export function DetailFieldRow({
         : detailLabelCellNarrowClass;
 
   return (
-    <TableRow className={rowClassName}>
-      <TableCell className={cn(labelWidthClass, labelClassName)}>{label}</TableCell>
-      <TableCell className={valueClassName}>{children}</TableCell>
-    </TableRow>
+    <div className={cn('grid min-h-10 grid-cols-[auto_minmax(0,1fr)] items-center gap-3', rowClassName)}>
+      <Label className={cn(labelWidthClass, 'shrink-0 justify-start', labelClassName)}>
+        {label}
+      </Label>
+      <div className={cn('min-w-0', valueClassName)}>{children}</div>
+    </div>
   );
 }

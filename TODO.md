@@ -459,6 +459,7 @@ package.json
 ## 2026.06.29
 
 - [x] 感觉 tooltip 太多了，去掉了菜单栏中最小化，最大化以及关闭的 tooltip
+- [x] 类型推断估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
 - [x] **类型推荐/推断根治（前后端统一结构化 DataType，路线 B）**：解决「推荐对不上、刷新后类型停在旧值」三因——① 前端 Palette 变量/函数推荐走降级支路（扁平 `filterPin.type` + `dataTypeMatches` 纯字符串相等），与拖拽高亮 `isPinCompatible`（精确 `DataType` + `canAcceptDataType`）不一致，导致 `DataSeries<Float64>` 列漏推荐、`OneOf` pin 全推荐；② 后端 `infer_all` 逐边 `unify` 用 `?` 传播，一条脏边即整图推断失败，且调用处 `unwrap_or_default()` 静默吞错；③ 前端取结构化类型靠把 `typeDisplay` 字符串再 parse 回 `DataType`（`dataTypeFromDisplayString` 镜像 Rust `from_str`），「结构→字符串→再解析」往返是 2026.06.28 OLS 拖拽 bug 同源的持续漂移面：
   - 后端下发结构化 `DataType`：`DataType` 已是 `#[serde(tag="kind", content="inner")]`，序列化形态恰等于前端 domain `DataType`（`{kind, inner}`）可直通。`event_node.rs` `InferredPinType` 与 `schema/pin.rs` `PinInstanceDTO` 各增 `data_type: Option<DataType>`（camelCase `dataType`，`skip_serializing_if=None`），后者在 `from_pin_with_context` 用与 `type_display` 同源的 `dt` 填充；`command_connection.rs` `emit_inferred_types` 与 `command_variable/mod.rs` 内联构造处补 `data_type`
   - 前端统一到结构化单一来源：`PinTypesInferredPayload` / store `PinData` / domain `Pin` 增 `dataType`；`NodeEventHandler` 经 `dataTypeFromBackend` 归一写入 store；hydrate 路径（store spread + `useNodeView` spread）自然透传。`pinCompatibility.ts` `buildPinDataType` **优先读 `pin.dataType`**（无则回退 `typeDisplay`/`type`，兼容乐观 pin），新增导出 `pinAcceptsType(draggedPin, candidateType)`，`isPinCompatible` 复用之；`NodePalette.tsx` 变量 Get/Set 与函数子图分支改用 `pinAcceptsType`/`buildPinDataType` 精确判断；`optimisticNodeDraft.ts` 乐观 pin 写入 `dataType`；移除 `dataTypeMatches`（early-stage 直接删，无 shim）。`typeDisplay` 退化为纯展示/tooltip（Rust `Display` 唯一权威），不再参与兼容判断 → 根除 `from_str`↔`dataTypeFromDisplayString` 往返漂移
@@ -468,18 +469,24 @@ package.json
 ## 2026.06.30
 
 - [x] 目前数据视图的数据库中老是出现：_yssbi_rowid 列 — 已改用 DuckDB `rowid` 伪列，ingest 不再写内部列，reopen 时 DROP 遗留 `_yssbi_rowid`
+- [x] 节点 Detail 信息布局重设计：input / output pins 展示存在太多重复信息，方向已可用颜色/分组/位置区分时不再重复声明 “input/output”；保留最基本且高价值的信息（pin 名称、类型、必要的连接/默认值状态），整体布局更紧凑、易扫读
+- [x] **Detail 面板 shadcn 化与共享组件抽离**：统一各类 Detail 的文本字号、字段行高和 Card/Form 视觉；新增共享 `DetailText` / `DetailBadge` / `DetailSectionHeader`、`DetailForm` / `DetailReadonlyField` / `DetailNameField`、`DetailColumnList`，将 Event / Function / Variable / Data / Worksheet / Log / Node 等 Detail 面板迁移到共享组件，减少散落样式和裸表格感
+- [x] **移除 Detail 面板删除按钮**：去掉 Variable / Event / Function / Data / Worksheet Detail 中的删除入口，清理 `DetailDeleteButton` 及相关 `onDelete/onDeleted` 传参，Detail 只负责信息查看与轻量编辑
+- [x] **Node Detail 头部信息精简**：移除节点 head 卡片中的内部 `type` 字段和 `graph` 字段，仅保留名称与必要分类信息，避免展示低价值实现细节
+- [x] **Node Detail Pin Interface 重设计**：Pin Interface 抽成可复用 `DetailCollapsibleSection` 折叠卡片；Pin 接口默认收起，展开后用 shadcn Tabs 在 Inputs / Outputs 间切换；Documentation 也复用同一折叠组件并默认展开
+- [x] **Node Detail pin item 紧凑化**：pin 类型不再直接占位显示，改为 hover 名称/左侧空白区域展示类型 tooltip；optional / repeatable / derived 等状态放到右侧 badge，长说明移到对应 badge tooltip；input/output pin item 统一样式，减少重复方向信息
+- [x] **Detail sash 拖拽卡顿优化**：定位到拖拽时 `OverlayScrollbar` 的 `ResizeObserver` 随宽度变化持续 `setState` 导致 Detail React 重渲染；改为 sash 拖动期间跳过滚动条 thumb 更新，拖动结束通过 `layout-sash-drag-end` 补一次更新
 
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
 - [ ] 去掉项目所有的 LEGACY 逻辑，这个逻辑的主要目的是迁移旧项目的数据，没有必要；如 _yssbi_rowid 列 LEGACY_YSSBI_ROWID_COLUMN
+- [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
 - [ ] 变量切换类型 dataview 无法获取
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
-- [ ] 类型推断估计存在较大的问题（推断精度本身，与粘贴卡顿无关，待单独排查）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
-- [ ] 我觉得在 tabs 中的所有窗口使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
-- [ ] 节点的 detail 信息布局很丑陋，input 和 ouput pins 需要重新设计调整
+- [ ] 我觉得在 tabs 中的所有 tab 内容使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
 - [ ] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
 

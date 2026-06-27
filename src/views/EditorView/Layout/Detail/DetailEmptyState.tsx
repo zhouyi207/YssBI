@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { DetailText } from './shared/DetailText';
 
 export function DetailEmptyState() {
   const { t } = useTranslation();
@@ -15,10 +16,12 @@ export function DetailEmptyState() {
         <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
         <polyline points="13 2 13 9 20 9" />
       </svg>
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      <DetailText tone="muted" className="font-bold uppercase tracking-widest">
         {t('detail.noSelection')}
-      </span>
-      <span className="mt-1 text-[9px] italic text-muted-foreground">{t('detail.noSelectionHint')}</span>
+      </DetailText>
+      <DetailText tone="smallMuted" className="mt-1 italic">
+        {t('detail.noSelectionHint')}
+      </DetailText>
     </div>
   );
 }

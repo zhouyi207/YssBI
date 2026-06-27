@@ -152,6 +152,7 @@ export const Sash: React.FC<SashProps> = ({
 
             document.body.classList.remove('layout-sash-dragging');
             document.body.classList.remove('col-resize', 'row-resize');
+            window.dispatchEvent(new CustomEvent('layout-sash-drag-end'));
 
             if (sashRef.current) {
                 sashRef.current.classList.remove('active');

@@ -100,6 +100,7 @@ export const OverlayScrollbar = forwardRef<
   const [isVisible, setIsVisible] = useState<{ v?: boolean; h?: boolean }>({});
   const [isHovered, setIsHovered] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const skippedSashResizeUpdate = useRef(false);
 
   useImperativeHandle(ref, () => viewportRef.current!);
 
@@ -153,11 +154,21 @@ export const OverlayScrollbar = forwardRef<
 
     let rafId: number | null = null;
     const throttledUpdate = () => {
+      if (document.body.classList.contains("layout-sash-dragging")) {
+        skippedSashResizeUpdate.current = true;
+        return;
+      }
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
         updateThumb();
       });
+    };
+
+    const updateAfterSashDrag = () => {
+      if (!skippedSashResizeUpdate.current) return;
+      skippedSashResizeUpdate.current = false;
+      throttledUpdate();
     };
 
     const ro = new ResizeObserver(throttledUpdate);
@@ -167,12 +178,14 @@ export const OverlayScrollbar = forwardRef<
     mo.observe(el, { childList: true, subtree: true });
 
     el.addEventListener("scroll", throttledUpdate, { passive: true });
+    window.addEventListener("layout-sash-drag-end", updateAfterSashDrag);
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       ro.disconnect();
       mo.disconnect();
       el.removeEventListener("scroll", throttledUpdate);
+      window.removeEventListener("layout-sash-drag-end", updateAfterSashDrag);
     };
   }, [updateThumb]);
 
