@@ -5,7 +5,8 @@ import { create } from "zustand";
 import { SchemaService } from "@/services/schema";
 import { LoadStatus } from "@/shared/types/ui";
 import { SchemaState } from "@/shared/types/state";
-import type { NodeDefinition } from "@/shared/types/domain";
+import type { NodeDefinition, TypeSystemSnapshot } from "@/shared/types/domain";
+import { EMPTY_TYPE_SYSTEM, setActiveTypeSystem } from "@/shared/types/domain";
 import { logger } from '@/utils/appLogger';
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 
@@ -14,6 +15,7 @@ interface SchemaStore extends SchemaState {
   status: LoadStatus;
   error: string | null;
   nodeDefinitions: NodeDefinition[];
+  typeSystem: TypeSystemSnapshot;
 
   // 操作
   syncFromBackend: () => Promise<void>;
@@ -25,6 +27,7 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
   status: LoadStatus.Idle,
   error: null,
   nodeDefinitions: [],
+  typeSystem: EMPTY_TYPE_SYSTEM,
 
   syncFromBackend: async () => {
     const { status } = get();
@@ -50,10 +53,12 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
 
       // 同步到 Node Registry，供节点渲染使用
       useNodeRegistryStore.getState().setDefinitionsFromSchema(definitions);
+      setActiveTypeSystem(schema.typeSystem);
 
       set({
         status: LoadStatus.Ready,
         nodeDefinitions: schema.nodeDefinitions ?? [],
+        typeSystem: schema.typeSystem,
       });
 
       const duration = performance.now() - startTime;
@@ -71,11 +76,14 @@ export const useSchemaStore = create<SchemaStore>((set, get) => ({
     }
   },
 
-  clear: () =>
+  clear: () => {
+    setActiveTypeSystem(EMPTY_TYPE_SYSTEM);
     set({
       status: LoadStatus.Idle,
       error: null,
       nodeDefinitions: [],
-    }),
+      typeSystem: EMPTY_TYPE_SYSTEM,
+    });
+  },
 
 }));

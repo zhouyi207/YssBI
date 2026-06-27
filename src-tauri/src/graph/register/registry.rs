@@ -1,8 +1,9 @@
 //! Node 注册中心
 
 use crate::graph::node::NodeDefinition;
+use crate::graph::value::{StructTypeMeta, TypeSystemSnapshot};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 
 /// Node 注册中心
@@ -56,6 +57,28 @@ impl NodeRegistry {
     /// 获取所有节点定义
     pub fn all(&self) -> Vec<Arc<NodeDefinition>> {
         self.definitions.read().unwrap().values().cloned().collect()
+    }
+
+    pub fn type_system_snapshot(&self) -> TypeSystemSnapshot {
+        let mut struct_types = BTreeMap::new();
+
+        struct_types.insert(
+            "Model".to_string(),
+            StructTypeMeta {
+                key: "Model".to_string(),
+                parents: vec![],
+                category: Some("model".to_string()),
+                display_name: Some("Model".to_string()),
+            },
+        );
+
+        for definition in self.definitions.read().unwrap().values() {
+            for meta in &definition.struct_types {
+                struct_types.insert(meta.key.clone(), meta.clone());
+            }
+        }
+
+        TypeSystemSnapshot { struct_types }
     }
 
     /// 获取所有节点类型

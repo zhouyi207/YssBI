@@ -7,6 +7,7 @@
 
 import { ConnectionItem, Pin } from '@/shared/types/domain';
 import { Node } from '@/shared/types/ui';
+import { canConnectPins } from '@/shared/utils/pinCompatibility';
 
 /**
  * Find all connections that involve a specific pin
@@ -265,16 +266,10 @@ export function validateConnections(
       );
     }
     
-    // Check type compatibility (if types are defined)
-    if (from_pin.type && to_pin.type) {
-      // Allow 'any' type to connect to anything
-      if (from_pin.type !== 'any' && to_pin.type !== 'any') {
-        if (from_pin.type !== to_pin.type) {
-          errors.push(
-            `ConnectionItem ${conn.fromPin}->${conn.toPin}: type mismatch (${from_pin.type} -> ${to_pin.type})`
-          );
-        }
-      }
+    if (!canConnectPins(from_pin, to_pin)) {
+      errors.push(
+        `ConnectionItem ${conn.fromPin}->${conn.toPin}: type mismatch (${from_pin.type} -> ${to_pin.type})`
+      );
     }
   });
   

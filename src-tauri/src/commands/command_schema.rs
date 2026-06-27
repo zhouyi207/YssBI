@@ -38,5 +38,8 @@ pub fn get_editor_schema_command(state: State<ProjectState>) -> EditorSchema {
 
     log_app::debug!("Editor schema: {} node definitions", node_definitions.len());
 
-    EditorSchema { node_definitions }
+    EditorSchema {
+        node_definitions,
+        type_system: node_register.type_system_snapshot(),
+    }
 }

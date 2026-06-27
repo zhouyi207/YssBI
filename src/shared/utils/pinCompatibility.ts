@@ -1,5 +1,6 @@
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
+import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
 import type {
   PinDataTypeDefinition,
   PinTypeCapability,
@@ -7,50 +8,47 @@ import type {
   PinSlot,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
-import { dataTypeFromPinType, dataTypeFromDisplayString } from '@/shared/types/domain/dataType';
+import { getActiveTypeSystem, structCanAccept } from '@/shared/types/domain/typeSystem';
 
 /**
  * Mirror of backend DataType.can_accept():
  * exact match, Any wildcard, recursive container check.
  */
-function canAcceptDataType(target: DataType, source: DataType): boolean {
+function canAcceptDataType(
+  target: DataType,
+  source: DataType,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
   if (target.kind === source.kind) {
     if (target.kind === 'Array' && source.kind === 'Array') {
-      return canAcceptDataType(target.inner, source.inner);
+      return canAcceptDataType(target.inner, source.inner, typeSystem);
     }
     if (target.kind === 'DataSeries' && source.kind === 'DataSeries') {
-      return canAcceptDataType(target.inner, source.inner);
+      return canAcceptDataType(target.inner, source.inner, typeSystem);
     }
     if (target.kind === 'Struct' && source.kind === 'Struct') {
-      return target.inner === source.inner;
+      return structCanAccept(target.inner, source.inner, typeSystem);
     }
     return true;
   }
   if (target.kind === 'Any' || source.kind === 'Any') return true;
   if (target.kind === 'OneOf') {
-    return target.inner.some(t => canAcceptDataType(t, source));
+    return target.inner.some(t => canAcceptDataType(t, source, typeSystem));
   }
   if (source.kind === 'OneOf') {
-    return source.inner.some(s => canAcceptDataType(target, s));
+    return source.inner.some(s => canAcceptDataType(target, s, typeSystem));
   }
   return false;
 }
 
 /**
- * 取得 pin 的结构化 DataType（兼容判断的唯一来源）。
- * 优先用后端下发的结构化 `dataType`;无则回退解析 `typeDisplay`/`type`
- * （兼容尚未携带 dataType 的乐观 pin 或旧数据）。
+ * 取得 pin 的结构化 DataType（类型判断的唯一来源）。
+ * Exec pin 不进入数据类型系统；Data pin 缺少 `dataType` 是 schema/乐观创建错误。
  */
 export function buildPinDataType(pin: Pin): DataType {
+  if (pin.type === 'exec') return { kind: 'Any' };
   if (pin.dataType) return pin.dataType;
-  if (pin.typeDisplay) {
-    const parsed = dataTypeFromDisplayString(pin.typeDisplay);
-    if (parsed) return parsed;
-  }
-  const base = dataTypeFromPinType(pin.type);
-  if (pin.containerType === 'array') return { kind: 'Array', inner: base };
-  if (pin.containerType === 'dataseries') return { kind: 'DataSeries', inner: base };
-  return base;
+  throw new Error(`Pin ${pin.id} (${pin.name}) is missing structured dataType`);
 }
 
 /**
@@ -58,24 +56,44 @@ export function buildPinDataType(pin: Pin): DataType {
  * - dragged 为 input:候选方为 output 产出 candidateType,需 dragged 的输入能接受它
  * - dragged 为 output:候选方为 input,需其能接受 dragged 的输出类型
  */
-export function pinAcceptsType(draggedPin: Pin, candidateType: DataType): boolean {
+export function pinAcceptsType(
+  draggedPin: Pin,
+  candidateType: DataType,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
   const draggedType = buildPinDataType(draggedPin);
   if (draggedPin.direction === 'input') {
-    return canAcceptDataType(draggedType, candidateType);
+    return canAcceptDataType(draggedType, candidateType, typeSystem);
   }
-  return canAcceptDataType(candidateType, draggedType);
+  return canAcceptDataType(candidateType, draggedType, typeSystem);
 }
 
-export function isPinCompatible(candidate: Pin, dragged: Pin): boolean {
-  if (candidate.direction === dragged.direction) return false;
-  if (candidate.nodeId === dragged.nodeId) return false;
+export function isPinCompatible(
+  candidate: Pin,
+  dragged: Pin,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
+  return canConnectPins(candidate, dragged, typeSystem);
+}
 
-  const candidateIsExec = candidate.type === 'exec';
-  const draggedIsExec = dragged.type === 'exec';
-  if (candidateIsExec !== draggedIsExec) return false;
-  if (candidateIsExec) return true;
+export function canConnectPins(
+  a: Pin,
+  b: Pin,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
+  if (a.id === b.id) return false;
+  if (a.nodeId === b.nodeId) return false;
+  if (a.direction === b.direction) return false;
 
-  return pinAcceptsType(dragged, buildPinDataType(candidate));
+  const source = a.direction === 'output' ? a : b;
+  const target = a.direction === 'input' ? a : b;
+
+  const sourceIsExec = source.type === 'exec';
+  const targetIsExec = target.type === 'exec';
+  if (sourceIsExec !== targetIsExec) return false;
+  if (sourceIsExec) return true;
+
+  return canAcceptDataType(buildPinDataType(target), buildPinDataType(source), typeSystem);
 }
 
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
@@ -89,7 +107,11 @@ function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
  * Check if a PinTypeCapability is compatible with a dragged Pin.
  * TypeVar / Unknown capabilities are treated as wildcard (always compatible).
  */
-function isCapabilityCompatible(cap: PinTypeCapability, draggedPin: Pin): boolean {
+function isCapabilityCompatible(
+  cap: PinTypeCapability,
+  draggedPin: Pin,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
   const neededDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
   if (cap.direction !== neededDir) return false;
 
@@ -102,18 +124,22 @@ function isCapabilityCompatible(cap: PinTypeCapability, draggedPin: Pin): boolea
 
   const draggedDataType = buildPinDataType(draggedPin);
   if (draggedPin.direction === 'input') {
-    return canAcceptDataType(draggedDataType, concreteType);
+    return canAcceptDataType(draggedDataType, concreteType, typeSystem);
   }
-  return canAcceptDataType(concreteType, draggedDataType);
+  return canAcceptDataType(concreteType, draggedDataType, typeSystem);
 }
 
 /**
  * Check if a NodeDefinition has at least one pin capability
  * compatible with the dragged pin.
  */
-export function isNodeCompatibleWithPin(def: NodeDefinition, draggedPin: Pin): boolean {
+export function isNodeCompatibleWithPin(
+  def: NodeDefinition,
+  draggedPin: Pin,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): boolean {
   if (!def.typeCapabilities || def.typeCapabilities.length === 0) return true;
-  return def.typeCapabilities.some((cap) => isCapabilityCompatible(cap, draggedPin));
+  return def.typeCapabilities.some((cap) => isCapabilityCompatible(cap, draggedPin, typeSystem));
 }
 
 // ─── Utilities for auto-connect pin matching ────
@@ -148,7 +174,11 @@ export function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO
  * Find the index (within pinIds) of the first pin that should be
  * auto-connected to the dragged pin.
  */
-export function findAutoConnectPinIndex(slots: PinSlot[], draggedPin: Pin): number {
+export function findAutoConnectPinIndex(
+  slots: PinSlot[],
+  draggedPin: Pin,
+  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+): number {
   const targetDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
   const isExecPin = draggedPin.type === 'exec';
   const draggedDataType = isExecPin ? null : buildPinDataType(draggedPin);
@@ -168,9 +198,9 @@ export function findAutoConnectPinIndex(slots: PinSlot[], draggedPin: Pin): numb
     const concrete = extractConcreteType(p.dataType);
     if (!concrete) return i; // TypeVar/Unknown -> compatible
     if (draggedPin.direction === 'input') {
-      if (canAcceptDataType(draggedDataType!, concrete)) return i;
+      if (canAcceptDataType(draggedDataType!, concrete, typeSystem)) return i;
     } else {
-      if (canAcceptDataType(concrete, draggedDataType!)) return i;
+      if (canAcceptDataType(concrete, draggedDataType!, typeSystem)) return i;
     }
   }
   return -1;

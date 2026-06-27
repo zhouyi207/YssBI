@@ -13,6 +13,7 @@ export type DataTypeBackendFormat =
   | { kind: string }
   | { kind: 'Array'; inner: DataTypeBackendFormat }
   | { kind: 'DataSeries'; inner: DataTypeBackendFormat }
+  | { kind: 'Struct'; inner: string }
   | { kind: 'OneOf'; inner: DataTypeBackendFormat[] };
 
 /** 转为后端期望的格式 */
@@ -25,6 +26,9 @@ export function dataTypeToBackend(dt: DataType): DataTypeBackendFormat {
   }
   if (dt.kind === 'OneOf') {
     return { kind: 'OneOf', inner: dt.inner.map(dataTypeToBackend) };
+  }
+  if (dt.kind === 'Struct') {
+    return { kind: 'Struct', inner: dt.inner };
   }
   return { kind: dt.kind };
 }
@@ -50,6 +54,9 @@ export function dataTypeFromBackend(
     }
     if (kind === 'OneOf' && Array.isArray(inner)) {
       return { kind: 'OneOf', inner: (inner as DataTypeBackendFormat[]).map(dataTypeFromBackend) };
+    }
+    if (kind === 'Struct' && typeof inner === 'string') {
+      return { kind: 'Struct', inner };
     }
     if (kind && kind !== 'Array' && kind !== 'DataSeries' && kind !== 'OneOf') {
       return dataTypeFromKey(kind);

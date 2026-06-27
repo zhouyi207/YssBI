@@ -2,6 +2,7 @@
 
 use crate::execution::{ExecutionEffect, NodeExecutionContextTrait};
 use crate::graph::pin::PinRole;
+use crate::graph::value::StructTypeMeta;
 use crate::graph::{PinDefinition, PinSlot, PinTypeCapability, TypeVarDefinition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -124,6 +125,9 @@ pub struct NodeDefinition {
     /// 声明式 pin 槽位定义（取代旧的 pin_generator 闭包）
     pub pin_slots: Vec<PinSlot>,
 
+    /// 节点注册时声明的 Struct 类型元信息，由 NodeRegistry 聚合成 TypeSystemSnapshot。
+    pub struct_types: Vec<StructTypeMeta>,
+
     /// 决定执行流向，返回下一个要触发的 ExecRole
     #[serde(skip)]
     pub flow_processor: Option<FlowProcessor>,
@@ -151,6 +155,7 @@ impl std::fmt::Debug for NodeDefinition {
             .field("node_type", &self.node_type)
             .field("type_vars", &self.type_vars)
             .field("pin_slots", &self.pin_slots)
+            .field("struct_types", &self.struct_types)
             .field(
                 "flow_processor",
                 &self.flow_processor.as_ref().map(|_| "<function>"),
@@ -183,6 +188,7 @@ impl NodeDefinition {
             node_type,
             type_vars: vec![],
             pin_slots: vec![],
+            struct_types: vec![],
             flow_processor: None,
             data_evaluator: None,
             pin_resolver: None,
@@ -200,6 +206,11 @@ impl NodeDefinition {
     pub fn with_pin_slots(mut self, slots: Vec<PinSlot>) -> Self {
         self.metadata.supports_dynamic_pins = slots.iter().any(|s| s.is_dynamic());
         self.pin_slots = slots;
+        self
+    }
+
+    pub fn with_struct_types(mut self, struct_types: Vec<StructTypeMeta>) -> Self {
+        self.struct_types = struct_types;
         self
     }
 
@@ -278,6 +289,7 @@ impl NodeDefinition {
             node_type: node_type.into(),
             type_vars: vec![],
             pin_slots: vec![],
+            struct_types: vec![],
             flow_processor: None,
             data_evaluator: None,
             pin_resolver: None,

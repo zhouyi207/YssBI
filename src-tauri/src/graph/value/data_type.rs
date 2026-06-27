@@ -78,6 +78,62 @@ impl DataType {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::DataType;
+    use crate::graph::value::{StructTypeMeta, TypeSystemSnapshot};
+    use std::collections::BTreeMap;
+
+    fn model_type_system() -> TypeSystemSnapshot {
+        let mut struct_types = BTreeMap::new();
+        struct_types.insert(
+            "Model".to_string(),
+            StructTypeMeta {
+                key: "Model".to_string(),
+                parents: vec![],
+                category: Some("model".to_string()),
+                display_name: Some("Model".to_string()),
+            },
+        );
+        struct_types.insert(
+            "OLSModel".to_string(),
+            StructTypeMeta {
+                key: "OLSModel".to_string(),
+                parents: vec!["Model".to_string()],
+                category: Some("model".to_string()),
+                display_name: Some("OLS Model".to_string()),
+            },
+        );
+        TypeSystemSnapshot { struct_types }
+    }
+
+    #[test]
+    fn data_type_struct_acceptance_is_exact_without_type_system() {
+        let target = DataType::Struct("Model".to_string());
+        let source = DataType::Struct("OLSModel".to_string());
+
+        assert!(!target.can_accept(&source));
+    }
+
+    #[test]
+    fn type_system_accepts_concrete_ols_model_for_model_family() {
+        let type_system = model_type_system();
+        let target = DataType::Struct("Model".to_string());
+        let source = DataType::Struct("OLSModel".to_string());
+
+        assert!(type_system.can_accept(&target, &source));
+    }
+
+    #[test]
+    fn type_system_rejects_unrelated_structs_for_model_family() {
+        let type_system = model_type_system();
+        let target = DataType::Struct("Model".to_string());
+        let source = DataType::Struct("OLSResult".to_string());
+
+        assert!(!type_system.can_accept(&target, &source));
+    }
+}
+
 impl fmt::Display for DataType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

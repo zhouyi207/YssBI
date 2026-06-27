@@ -21,6 +21,7 @@ export * from './pin';
 export * from './connection';
 export * from './graph';
 export * from './dataType';
+export * from './typeSystem';
 export * from './dataValue';
 export * from './variable';
 export * from './project';

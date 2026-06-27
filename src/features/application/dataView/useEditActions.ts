@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { DatabaseService } from '@/services/database/databaseService';
+import { invalidateWorksheetPreviewCacheForDatabase } from '@/services/worksheet/worksheetPreviewCache';
 import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
 import { EMPTY_EDIT_STATE } from '@/features/core/dataStore/editStateStore';
@@ -35,6 +36,7 @@ export function useEditActions({
 
   const handleEditResult = useCallback(async (editState: EditState) => {
     if (!selectedDfId) return;
+    invalidateWorksheetPreviewCacheForDatabase(selectedDfId);
     useEditStateStore.getState().updateEditState(selectedDfId, editState);
     await reloadAllData();
   }, [selectedDfId, reloadAllData]);

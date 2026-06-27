@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
+import { getCachedWorksheetPreview, getWorksheetPreview } from '@/services/worksheet/worksheetPreviewCache';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
 import Scatter from '@/views/PlotView/Scatter';
 import Line from '@/views/PlotView/Line';
@@ -29,11 +30,19 @@ export function WorksheetChartPreview({ document }: WorksheetChartPreviewProps) 
       setPreview({ kind: 'empty' });
       return;
     }
+
+    const cached = getCachedWorksheetPreview(document);
+    if (cached) {
+      setPreview(cached);
+      setLoading(false);
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       void (async () => {
         setLoading(true);
         try {
-          const result = await fetchWorksheetPreview(document);
+          const result = await getWorksheetPreview(document, () => fetchWorksheetPreview(document));
           setPreview(result);
         } finally {
           setLoading(false);

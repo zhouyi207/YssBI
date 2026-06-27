@@ -10,6 +10,7 @@ import { GraphPosition, Pin } from "@/shared/types/domain";
 import { EditorGesture, EditorGroup } from "@/shared/types/ui";
 import { logger } from '@/utils/appLogger';
 import { ProjectService } from "@/services/project/projectService";
+import { canConnectPins } from "@/shared/utils/pinCompatibility";
 
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import {
@@ -78,6 +79,14 @@ export function useCanvasInteraction({
     const connectPins = useCallback(async (a: string, b: string) => {
         const tid = activeTabIdRef.current;
         if (!tid) return;
+
+        const graph = getGraphById(tid);
+        const pinA = graph?.pins.find((pin) => pin.id === a);
+        const pinB = graph?.pins.find((pin) => pin.id === b);
+        if (pinA && pinB && !canConnectPins(pinA as Pin, pinB as Pin)) {
+            logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
+            return;
+        }
 
         try {
             await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });

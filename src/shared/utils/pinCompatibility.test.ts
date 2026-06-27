@@ -1,12 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
-import { buildPinDataType, pinAcceptsType, isPinCompatible } from './pinCompatibility';
+import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
+import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins } from './pinCompatibility';
 
 const FLOAT64: DataType = { kind: 'Float64' };
 const STRING: DataType = { kind: 'String' };
 const INT32: DataType = { kind: 'Int32' };
 const SERIES_FLOAT64: DataType = { kind: 'DataSeries', inner: { kind: 'Float64' } };
+const MODEL: DataType = { kind: 'Struct', inner: 'Model' };
+const OLS_MODEL: DataType = { kind: 'Struct', inner: 'OLSModel' };
+const OLS_RESULT: DataType = { kind: 'Struct', inner: 'OLSResult' };
+
+const TYPE_SYSTEM: TypeSystemSnapshot = {
+  structTypes: {
+    Model: { key: 'Model', parents: [], category: 'model' },
+    OLSModel: { key: 'OLSModel', parents: ['Model'], category: 'model' },
+    OLSResult: { key: 'OLSResult', parents: [], category: 'result' },
+  },
+};
 
 function pin(partial: Partial<Pin> & { direction: PinDirection }): Pin {
   return {
@@ -30,14 +42,19 @@ describe('buildPinDataType', () => {
     expect(buildPinDataType(p)).toEqual(SERIES_FLOAT64);
   });
 
-  it('falls back to typeDisplay when no structured dataType is present', () => {
+  it('throws for data pins without structured dataType', () => {
     const p = pin({ direction: 'output', type: 'object', typeDisplay: 'Float64' });
-    expect(buildPinDataType(p)).toEqual(FLOAT64);
+    expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 
-  it('falls back to type + containerType when neither dataType nor typeDisplay exist', () => {
+  it('does not infer data pin types from type + containerType', () => {
     const p = pin({ direction: 'output', type: 'number', containerType: 'dataseries' });
-    expect(buildPinDataType(p)).toEqual(SERIES_FLOAT64);
+    expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
+  });
+
+  it('keeps exec pins outside the data type system', () => {
+    const p = pin({ direction: 'output', type: 'exec' });
+    expect(buildPinDataType(p)).toEqual({ kind: 'Any' });
   });
 });
 
@@ -90,6 +107,19 @@ describe('pinAcceptsType - function IO filtered by precise type', () => {
   });
 });
 
+describe('pinAcceptsType - Struct family matching', () => {
+  const draggedModelOutput = pin({ direction: 'output', dataType: OLS_MODEL });
+
+  it('allows a concrete model output to connect to a Model family input', () => {
+    expect(pinAcceptsType(draggedModelOutput, MODEL, TYPE_SYSTEM)).toBe(true);
+  });
+
+  it('does not allow unrelated Struct outputs into a Model family input', () => {
+    const draggedResultOutput = pin({ direction: 'output', dataType: OLS_RESULT });
+    expect(pinAcceptsType(draggedResultOutput, MODEL, TYPE_SYSTEM)).toBe(false);
+  });
+});
+
 describe('isPinCompatible reuses pinAcceptsType', () => {
   it('matches output -> input of the same structured type', () => {
     const out = pin({ id: 'o', nodeId: 'a', direction: 'output', dataType: SERIES_FLOAT64 });
@@ -105,5 +135,32 @@ describe('isPinCompatible reuses pinAcceptsType', () => {
     const sameNodeInput = pin({ id: 'i', nodeId: 'a', direction: 'input', dataType: FLOAT64 });
     expect(isPinCompatible(out2, out1)).toBe(false); // same direction
     expect(isPinCompatible(sameNodeInput, out1)).toBe(false); // same node
+  });
+
+  it('highlights concrete Struct model outputs for Model family inputs', () => {
+    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
+    const input = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });
+    expect(isPinCompatible(input, out, TYPE_SYSTEM)).toBe(true);
+  });
+});
+
+describe('canConnectPins', () => {
+  it('accepts compatible pins regardless of argument order', () => {
+    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
+    const input = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });
+
+    expect(canConnectPins(out, input, TYPE_SYSTEM)).toBe(true);
+    expect(canConnectPins(input, out, TYPE_SYSTEM)).toBe(true);
+  });
+
+  it('rejects same-node, same-direction, and unrelated Struct pins', () => {
+    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
+    const sameNodeInput = pin({ id: 'same', nodeId: 'ols', direction: 'input', dataType: MODEL });
+    const otherOutput = pin({ id: 'otherOut', nodeId: 'other', direction: 'output', dataType: OLS_MODEL });
+    const resultInput = pin({ id: 'resultIn', nodeId: 'consumer', direction: 'input', dataType: OLS_RESULT });
+
+    expect(canConnectPins(out, sameNodeInput, TYPE_SYSTEM)).toBe(false);
+    expect(canConnectPins(out, otherOutput, TYPE_SYSTEM)).toBe(false);
+    expect(canConnectPins(out, resultInput, TYPE_SYSTEM)).toBe(false);
   });
 });

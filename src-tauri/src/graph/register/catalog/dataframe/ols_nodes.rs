@@ -7,7 +7,7 @@ use crate::graph::pin::{
 };
 use crate::graph::register::NodeRegistry;
 use crate::graph::register::catalog::docs;
-use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
+use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue, StructTypeMeta};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
 use serde::{Deserialize, Serialize};
@@ -1401,6 +1401,12 @@ fn register_ols(registry: &NodeRegistry) {
         .with_localized_description(docs::ols::OLS_DESC_ZH, docs::ols::OLS_DESC_EN)
         .with_documentation(docs::ols::OLS_ZH, docs::ols::OLS_EN)
         .with_pin_slots(slots)
+        .with_struct_types(vec![StructTypeMeta {
+            key: "OLSModel".to_string(),
+            parents: vec!["Model".to_string()],
+            category: Some("model".to_string()),
+            display_name: Some("OLS Model".to_string()),
+        }])
         .with_output_schema_resolver(Arc::new(regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_ols_regression(ctx)?;

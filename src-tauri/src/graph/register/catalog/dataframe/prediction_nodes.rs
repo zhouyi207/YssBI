@@ -45,7 +45,7 @@ fn register_predict(registry: &NodeRegistry) {
         PinSlot::fixed(PinDefinition::data_input(
             "Model",
             DataRole::Custom(MODEL_ROLE.to_string()),
-            PinDataTypeDefinition::concrete(DataType::Struct("OLSModel".to_string())),
+            PinDataTypeDefinition::concrete(DataType::Struct("Model".to_string())),
         )),
         PinSlot::derived_from_input(
             model_role.clone(),

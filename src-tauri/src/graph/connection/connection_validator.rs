@@ -8,7 +8,7 @@ use crate::graph::core::GraphDataState;
 use crate::graph::infer::TypeVarKey;
 use crate::graph::node::NodeInstance;
 use crate::graph::pin::{PinDirection, PinKind};
-use crate::graph::value::DataType;
+use crate::graph::value::{DataType, TypeSystemSnapshot};
 use std::fmt;
 
 /// 构建 TypeVarKey → 已绑定 DataType 的解析器（供 ConvertibleTo/From 约束使用）
@@ -81,6 +81,7 @@ pub fn validate_connection(
     data_state: &GraphDataState,
     pin_a: PinId,
     pin_b: PinId,
+    type_system: &TypeSystemSnapshot,
 ) -> Result<ValidatedConnection, ConnectionError> {
     // 1. Pin 存在性
     let inst_a = data_state
@@ -146,7 +147,7 @@ pub fn validate_connection(
             .unwrap_or(DataType::Any);
 
         // 基础 can_accept 检查
-        if !to_type.can_accept(&from_type) && from_type != DataType::Any {
+        if !type_system.can_accept(&to_type, &from_type) && from_type != DataType::Any {
             return Err(ConnectionError::TypeIncompatible {
                 from: from_type,
                 to: to_type,

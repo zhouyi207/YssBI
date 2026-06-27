@@ -1,9 +1,10 @@
-import { NodeDefinition, NodeDefinitionDTO } from "@/shared/types";
+import { NodeDefinition, NodeDefinitionDTO, TypeSystemSnapshot } from "@/shared/types";
 import { invoke } from "@tauri-apps/api/core";
 import { logger } from '@/utils/appLogger';
 
 export interface EditorSchemaDTO {
     nodeDefinitions: NodeDefinition[];
+    typeSystem: TypeSystemSnapshot;
 }
 
 export class SchemaService {

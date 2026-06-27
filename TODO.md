@@ -476,6 +476,10 @@ package.json
 - [x] **Node Detail Pin Interface 重设计**：Pin Interface 抽成可复用 `DetailCollapsibleSection` 折叠卡片；Pin 接口默认收起，展开后用 shadcn Tabs 在 Inputs / Outputs 间切换；Documentation 也复用同一折叠组件并默认展开
 - [x] **Node Detail pin item 紧凑化**：pin 类型不再直接占位显示，改为 hover 名称/左侧空白区域展示类型 tooltip；optional / repeatable / derived 等状态放到右侧 badge，长说明移到对应 badge tooltip；input/output pin item 统一样式，减少重复方向信息
 - [x] **Detail sash 拖拽卡顿优化**：定位到拖拽时 `OverlayScrollbar` 的 `ResizeObserver` 随宽度变化持续 `setState` 导致 Detail React 重渲染；改为 sash 拖动期间跳过滚动条 thumb 更新，拖动结束通过 `layout-sash-drag-end` 补一次更新
+- [x] **Worksheet preview 缓存第一阶段**：新增 `worksheetPreviewCache`，按 worksheet spec 缓存 `WorksheetPreviewPayload`，支持 LRU、并发请求去重、同步缓存命中读取；`WorksheetChartPreview` 切回 tab 时优先同步读缓存，命中时不再等待 300ms debounce；DataView 编辑成功后按 `databaseId` 失效相关 preview 缓存；补充缓存 key 稳定、命中、并发去重、按数据库失效等 vitest 用例
+- [x] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上（已完成，见 2026.06.30「Pin 类型匹配 / TypeSystem 架构清理」）
+- [x] **Pin 类型匹配 / TypeSystem 架构清理**：合并并执行 `pin-type-architecture` 与 `type-system-cleanup` 计划，确立 `DataType + TypeSystemSnapshot` 为 pin 类型判断事实来源；后端新增 Struct 类型系统快照并下发 schema，`DataType::can_accept()` 支持 `Struct<Model>` 接受 `Struct<OLSModel>`，前端 `dataType` DTO 修复 `Struct` inner/key 丢失，`pinCompatibility` 统一使用 TypeSystem 做 Palette 推荐、pin 高亮与自动连接匹配；通用 `Predict` 的 Model input 改为 `Struct<Model>`，pin 落点连接前增加类型匹配防御，修复 OLS `model` output 拖拽不推荐 Predict / 已有 Predict pin 不高亮 / 不亮仍尝试连接的问题；补充前端 DTO 与 pin 匹配 vitest、后端 Struct 族匹配单测
+- [x] **Pin 类型架构后续收口**：完成第一轮类型系统收口——前端抽出统一 `canConnectPins(a, b)`，高亮、落点连接与旧 `connections.ts` 校验共用 `dataType + TypeSystem` 判断；`buildPinDataType()` 不再从 `typeDisplay`/`type`/`containerType` 回退推断，data pin 缺少结构化 `dataType` 直接视为 schema bug；后端将 `DataType::can_accept()` 收回为基础精确规则，Struct 族匹配迁移到显式 `TypeSystemSnapshot::can_accept(target, source)`；`NodeDefinition` 支持声明 Struct 类型元信息，`NodeRegistry` 聚合生成 TypeSystemSnapshot，`OLSModel -> Model` 由 OLS 节点注册声明并随 schema 下发；补充 `canConnectPins`、禁止 fallback、旧连接校验和后端 TypeSystem 单测
 
 ## v1.0 待办
 
@@ -486,9 +490,9 @@ package.json
 - [ ] 断开连接后 pin 的状态有时还是连接状态
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
-- [ ] 我觉得在 tabs 中的所有 tab 内容使用 hiden？ 进行隐藏？？ 不然每次打开都需要重新渲染？
-- [ ] pin 拖动的时候，不亮的也能合并，需要修复；以及拖动的时候出现的节点好像有点儿匹配不上
+- [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
+- [ ] event等其他 detail 的 head 中有修改名字的 input 框的时候，其修改名称不是失去焦点后保存而是修改保存，需要切换为失去焦点后保存或者回车保存
 
 
 # TODOLIST

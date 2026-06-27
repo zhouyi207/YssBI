@@ -952,8 +952,9 @@ impl GraphInstance {
         let to_pin;
         {
             let data_state = self.data_state.write().unwrap();
+            let type_system = self.registry.type_system_snapshot();
 
-            let validated = validate_connection(&data_state, pin_a, pin_b)?;
+            let validated = validate_connection(&data_state, pin_a, pin_b, &type_system)?;
             from_pin = validated.from_pin;
             to_pin = validated.to_pin;
 
@@ -1103,7 +1104,7 @@ impl GraphInstance {
     ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         let mut seed_nodes: Vec<NodeId> = Vec::new();
         {
-            let mut data_state = self.data_state.write().unwrap();
+            let data_state = self.data_state.write().unwrap();
             if let Some(p) = data_state.pins.get(&from_pin) {
                 seed_nodes.push(p.node_id);
             }
@@ -1130,7 +1131,7 @@ impl GraphInstance {
         let mut removed_connections = Vec::new();
         let mut seed_nodes: Vec<NodeId> = Vec::new();
         {
-            let mut data_state = self.data_state.write().unwrap();
+            let data_state = self.data_state.write().unwrap();
             if let Some(p) = data_state.pins.get(&pin_id) {
                 seed_nodes.push(p.node_id);
             }

@@ -119,6 +119,7 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
                     links: [],
                     containerType: pin.containerType,
                     typeDisplay: pin.typeDisplay,
+                    dataType: pin.dataType,
                     optional: pin.optional ?? false,
                     defaultValue: pin.defaultValue,
                     userValue: pin.userValue,
