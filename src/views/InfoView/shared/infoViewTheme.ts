@@ -1,5 +1,5 @@
 /**
- * InfoView 统一样式（shadcn token），替代 legacy `bg-[#13151a]` / `text-gray-*` 硬编码。
+ * InfoView 统一样式（shadcn token），替代旧的 `bg-[#13151a]` / `text-gray-*` 硬编码。
  */
 export const infoCard = 'rounded-lg border border-border bg-card overflow-hidden';
 export const infoCardPadded = 'rounded-lg border border-border bg-card p-4';

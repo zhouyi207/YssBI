@@ -32,17 +32,6 @@ pub struct ProjectPathValidation {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyProjectRecord {
-    pub id: String,
-    pub name: String,
-    pub path: String,
-    pub last_opened_at: String,
-    #[serde(default)]
-    pub is_favorite: Option<bool>,
-}
-
 #[derive(Debug, FromRow)]
 struct ProjectRecordRow {
     id: String,
@@ -181,47 +170,6 @@ impl ProjectRegistry {
             .await
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "写入项目记录后读取失败".to_string())
-    }
-
-    pub async fn migrate_legacy_projects(
-        &self,
-        projects: Vec<LegacyProjectRecord>,
-    ) -> Result<(), String> {
-        for project in projects {
-            let Ok(path) = normalize_existing_path(&project.path) else {
-                continue;
-            };
-            let id = if project.id.trim().is_empty() {
-                uuid::Uuid::new_v4().to_string()
-            } else {
-                project.id
-            };
-            let name = normalize_project_name(&project.name);
-            let favorite = if project.is_favorite.unwrap_or(false) {
-                1
-            } else {
-                0
-            };
-            sqlx::query(
-                r#"
-                INSERT INTO projects (id, name, path, created_at, last_opened_at, is_favorite)
-                VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?, ?)
-                ON CONFLICT(path) DO UPDATE SET
-                    name = excluded.name,
-                    last_opened_at = COALESCE(excluded.last_opened_at, last_opened_at),
-                    is_favorite = MAX(is_favorite, excluded.is_favorite)
-                "#,
-            )
-            .bind(id)
-            .bind(name)
-            .bind(path)
-            .bind(Some(project.last_opened_at))
-            .bind(favorite)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        }
-        Ok(())
     }
 
     async fn fetch_by_path_exact(

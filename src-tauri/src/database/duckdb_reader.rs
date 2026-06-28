@@ -21,7 +21,6 @@ use polars_dtype::categorical::{CatSize, FrozenCategories};
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
 pub const YSSBI_ENUM_PREFIX: &str = "_yssbi_enum_";
-const LEGACY_YSSBI_ROWID_COLUMN: &str = "_yssbi_rowid";
 
 /// Polars 列名：分页查询 `SELECT rowid, ...` 后用于提取 / drop。
 pub const DUCKDB_ROWID_COL: &str = "rowid";
@@ -110,32 +109,6 @@ pub struct DuckDbTableMeta {
 
 pub fn sql_escape_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('\'', "''")
-}
-
-/// 旧版物理列 `_yssbi_rowid` 在 reopen / meta 读取时直接 DROP（early-stage，不迁移值）。
-pub fn strip_legacy_yssbi_rowid(conn: &Connection, table: &str) -> Result<(), String> {
-    let has_legacy: bool = conn
-        .query_row(
-            &format!(
-                "SELECT COUNT(*) FROM information_schema.columns \
-                 WHERE table_schema = 'main' AND table_name = '{}' AND column_name = '{}'",
-                sql_escape_literal(table),
-                sql_escape_literal(LEGACY_YSSBI_ROWID_COLUMN),
-            ),
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|n| n > 0)
-        .map_err(|e| format!("Failed to inspect legacy rowid column on '{table}': {e}"))?;
-
-    if has_legacy {
-        let table_sql = duckdb_table_sql(table);
-        let col_sql = format!(r#""{}""#, sql_escape_literal(LEGACY_YSSBI_ROWID_COLUMN));
-        conn.execute_batch(&format!("ALTER TABLE {table_sql} DROP COLUMN {col_sql};"))
-            .map_err(|e| format!("Failed to drop legacy rowid column on '{table}': {e}"))?;
-    }
-
-    Ok(())
 }
 
 pub fn duckdb_path_literal(path: &Path) -> String {
@@ -774,7 +747,6 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
     }
 
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
-    strip_legacy_yssbi_rowid(&conn, table)?;
     let table_literal = sql_escape_literal(table);
 
     let mut columns = Vec::new();

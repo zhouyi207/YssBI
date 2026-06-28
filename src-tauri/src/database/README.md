@@ -79,7 +79,7 @@ DuckDB 负责磁盘列存；**只有 Polars 整表路径会随行数线性占内
 
 ### DataView 编辑（DuckDB SQL，不 Loaded）
 
-1. 行定位使用 DuckDB **`rowid` 伪列**（非物理用户列）；旧表若含 `_yssbi_rowid` 列，reopen 时自动 DROP
+1. 行定位使用 DuckDB **`rowid` 伪列**（非物理用户列）
 2. `edit_cell` / `delete_rows` / schema 变更 → `duckdb_editing.rs` 打 SQL
 3. `DatabaseState::DuckDb` 挂 **`EditHistory`**；undo/redo 同样走 SQL
 4. **`save_database_changes`**：编辑已落盘，仅 `refresh_duckdb_meta` + 清历史（不全量 rebuild）

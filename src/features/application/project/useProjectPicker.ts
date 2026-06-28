@@ -18,8 +18,6 @@ import {
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 
-const RECENT_PROJECTS_STORAGE_KEY = "yssbi-recent-projects";
-
 export interface ManagedProject {
   id: string;
   name: string;
@@ -39,27 +37,6 @@ function pathFileName(path: string): string {
     return parent || file.replace(/\.[^.]+$/, "") || file;
   }
   return file.replace(/\.[^.]+$/, "") || file;
-}
-
-function readRecentProjects(): ManagedProject[] {
-  if (typeof localStorage === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(RECENT_PROJECTS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ManagedProject[];
-    return Array.isArray(parsed)
-      ? parsed
-          .filter((item) => item && typeof item.path === "string" && item.path.trim())
-          .map((item) => ({ ...item, path: formatDisplayPath(item.path) }))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function clearLegacyRecentProjects(): void {
-  if (typeof localStorage === "undefined") return;
-  localStorage.removeItem(RECENT_PROJECTS_STORAGE_KEY);
 }
 
 function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
@@ -96,15 +73,6 @@ export function useProjectPicker() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const legacyProjects = readRecentProjects();
-      if (legacyProjects.length > 0) {
-        try {
-          await ProjectService.migrateLegacyRegisteredProjects(legacyProjects);
-          clearLegacyRecentProjects();
-        } catch (error) {
-          toast.error(formatErrorMessage(error));
-        }
-      }
       if (!cancelled) {
         await refresh();
       }

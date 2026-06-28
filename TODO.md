@@ -299,7 +299,7 @@ package.json
 
 ### Phase 6 — 大表内存边界（DuckDB SQL 编辑，避免整表 Loaded）
 
-- [x] ingest / reopen 写入稳定行键 `_yssbi_rowid`；`read_table_meta` / schema 对用户隐藏内部列
+- [x] DataView 行定位改用 DuckDB `rowid` 伪列；ingest 不再写入物理内部行键列
 - [x] DataView 分页返回 `rowIds`；`edit_cell` / `delete_rows` 走 DuckDB SQL，不再 `ensure_loaded`
 - [x] `DatabaseState::DuckDb` 挂 `EditHistory`；`save_changes` 大表仅刷新元数据 + 清历史，不全量 `ingest`
 - [x] 小表（≤ `MAX_IN_MEMORY_EDIT_ROWS` = 50_000）保留 `Loaded` 路径（cast / 复杂 schema 编辑）
@@ -314,7 +314,7 @@ package.json
 - [x] light 模式下 Summary Equation KaTeX 文字过浅：FormulaBlock 等改为 `[&_.katex]:text-foreground`
 - [x] light 模式主题兼容补全：`App.css` 覆盖 hover 变体、语义 accent 色、tooltip、`[&_.katex]` 兜底、分隔线 `bg-gray-700/800`
 - [x] 图表主题：`shared/theme/chartTheme.ts` + PlotView / InfoView D3 轴网格画布随 light/dark 重绘（12 个图表）
-- [x] InfoView legacy 深色类名迁移为 shadcn token（`bg-card` / `bg-muted` / `text-foreground` / `border-border` 等；新增 `shared/infoViewTheme.ts`）
+- [x] InfoView 旧深色类名迁移为 shadcn token（`bg-card` / `bg-muted` / `text-foreground` / `border-border` 等；新增 `shared/infoViewTheme.ts`）
 - [x] 窗口控制按钮统一：`WindowChromeControls` + `WindowTitleBar` / `WindowTitleBarActions`；hover 背景铺满标题栏高度（去掉 `buttonVariants` 默认 `h-7`，改用 `self-stretch`）
 - [x] 各页面标题栏与 Edit 对齐：`h-10`、`bg-[var(--workbench-bg)]`、`shadow-xl`（Editor Menubar、ProjectPicker、DataView、Info / Plot / Log）
 - [x] 关闭钮右上角与系统窗口圆角贴合：子窗口移除 CSS `rounded-tr-lg`，直角贴边由 OS 裁剪（与 Edit 主窗口一致）
@@ -338,7 +338,7 @@ package.json
 - [x] 修复 Detail 点击节点报错：`nodeMetadata`（camelCase）与 `node_metadata` 字段不一致；Zustand pins selector 无限循环（`useShallow`）
 - [x] 修复 Detail 左侧 Sash 拖动卡顿：拖动过程 DOM 直改 + rAF 节流，松手再写 layout store；文档 Panel `memo` + 拖动时 `contain`
 - [x] Detail 面板 UI i18n：`detail.*` 键（`en-US` / `zh-CN`）；NodeDetailPanel、Pin 接口、文档区、空状态等按当前语言展示
-- [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → legacy `description`
+- [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → 旧 `description`
 - [x] OLS / OLS Summary Markdown 文档去重：移除与 Pin 接口重复的 Input/Output 表格，保留公式与 Usage
 - [x] Tableau 式 Worksheet 工作区（Phase 1）：ActivityBar **Charts**（位于 Data 与 Commands 之间）；Sidebar 折叠 **Worksheets** 列表（与 Event/Variable 同风格）；Menubar **Data → 新建 Worksheet**
 - [x] Worksheet 配置迁至 **Detail** 面板（数据集 / 图表类型 / X·Y 编码 / 列列表）；打开 Worksheet Tab 自动展开 Detail
@@ -429,7 +429,7 @@ package.json
   - UI：`ImportModal` 重构为左侧分类导航 + 右侧卡片选项，补 subtitle 与 `importModal.types.*` i18n
 - [x] `.yssbi-event` 体积优化 Phase B：磁盘格式对齐 `GraphRebuildSnapshot`——`GraphInstance` 自定义 serde 落盘为扁平 `nodes[]`（pin 内联）+ 扁平 `connections[]`，去除 HashMap 键冗余与 `dataState` 包裹；静态 pin 由 registry 经 `set_registry` 重挂，动态/可重复 pin 自带完整定义 override；运行期缓存（`pinTypes` / `typeVarBindings` / `resolvedSchema`）不落盘
 - [x] Dev/HMR 下 `[TAURI] Couldn't find callback id`：确认为 Vite HMR/整页重载期间长生命周期 `Channel`（`execute_project` 等）的残留回调所致——release 无 HMR 故天然干净；新增 `services/devHmrIpc.ts`（仅 `import.meta.hot` 守卫、生产 tree-shake）登记/拆除活跃 Channel，并仅过滤该条开发期噪声
-- [x] 旧 `.yssbi-event` / `.yssbi-function` 迁移：移除 legacy 读取分支（`node_instance` 完整 `definition` 回退、`ConnectionManagerLegacy` 四表）；保存即升级为新格式，并保留过渡期旧格式回退读取（`read_legacy_graph_document` / `from_legacy_graph_json`，全部项目重存后可删）
+- [x] 旧 `.yssbi-event` / `.yssbi-function` 迁移：移除早期读取分支（`node_instance` 完整 `definition` 回退、旧连接四表）；当前已删除过渡期旧格式回退读取
 - [x] **创建节点卡顿根治（前后端双层）**：
   - 后端：`create_node_with_position` 与 `create_node_with_id` 去除孤立新建时的全图 `infer_types()`（新节点无连接，不影响既有 pin 类型，数据 pin 类型由定义 `data_type` / `variable_data_type` 覆盖确定）；`batch_create` / `connect` / `delete` 推断路径不变 → 单节点创建从 O(图) 降为 O(1)，且不再占用全局写锁
   - 前端乐观插入：`optimisticNodeDraft.ts` 依据注册表定义（对齐后端 `generate_initial_pins` + `from_pin_with_context`）在客户端生成 `nodeId`/`pinIds` 与初始 `NodeData`+`PinData`；`graphDataStore` 新增 `applyNodeDraft` / `revertNodeDraft` / `reconcileNode`；`createNodeCommand` 走 `create_node_with_id` + `trackPending(NODE_CREATE_ECHO_DOMAIN)`，失败回滚
@@ -468,7 +468,7 @@ package.json
 
 ## 2026.06.30
 
-- [x] 目前数据视图的数据库中老是出现：_yssbi_rowid 列 — 已改用 DuckDB `rowid` 伪列，ingest 不再写内部列，reopen 时 DROP 遗留 `_yssbi_rowid`
+- [x] 目前数据视图的数据库中老是出现：`_yssbi_rowid` 列 — 已改用 DuckDB `rowid` 伪列，ingest 不再写内部列；后续移除旧列清理分支
 - [x] 节点 Detail 信息布局重设计：input / output pins 展示存在太多重复信息，方向已可用颜色/分组/位置区分时不再重复声明 “input/output”；保留最基本且高价值的信息（pin 名称、类型、必要的连接/默认值状态），整体布局更紧凑、易扫读
 - [x] **Detail 面板 shadcn 化与共享组件抽离**：统一各类 Detail 的文本字号、字段行高和 Card/Form 视觉；新增共享 `DetailText` / `DetailBadge` / `DetailSectionHeader`、`DetailForm` / `DetailReadonlyField` / `DetailNameField`、`DetailColumnList`，将 Event / Function / Variable / Data / Worksheet / Log / Node 等 Detail 面板迁移到共享组件，减少散落样式和裸表格感
 - [x] **移除 Detail 面板删除按钮**：去掉 Variable / Event / Function / Data / Worksheet Detail 中的删除入口，清理 `DetailDeleteButton` 及相关 `onDelete/onDeleted` 传参，Detail 只负责信息查看与轻量编辑
@@ -486,16 +486,19 @@ package.json
 - [x] 断开连接后 pin 的状态有时还是连接状态（已完成：确认后端断开路径均更新 `ConnectionManager`；前端根因是 Node Detail 用非事实来源 `pin.links` 判断 connected，而连接/断开事实在 `pinConnections`。已抽出 `pinLinks` 派生工具，Canvas `useNodeView` 与 Node Detail 统一从 `pinConnections` 派生 runtime links，避免断开后残留连接状态）
 - [x] **Pin links 历史残留收口**：`PinData` / 前端 `PinInstanceDTO` / 后端 `PinInstanceDTO` 不再携带 `links`，连接事实统一由 `connections` / `pinConnections` 维护；Store 写入入口新增 `toStoredPin()` 剥离旧运行时 links，`replaceGraphNodes` 不再从传入 Pin 对象读取 links；旧 `graphConverters` 删除对外暴露的 `applyConnectionsToPins` / `extractConnectionsFromPins`，仅在需要兼容 runtime Graph 视图时从 `connections` 派生 `PinView.links`
 
+## 2026.07.01
+
+- [x] 去掉项目所有旧数据迁移 / 兼容读取逻辑；如 `_yssbi_rowid` 旧列清理分支
+
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
-- [ ] 去掉项目所有的 LEGACY 逻辑，这个逻辑的主要目的是迁移旧项目的数据，没有必要；如 _yssbi_rowid 列 LEGACY_YSSBI_ROWID_COLUMN
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
-- [ ] 右键 sidebar 中的列表 item 重命名的时候，延迟很重，同时 tabbar 中的名字没有更改；其次在 detail 重命名的时候 tabbar 上的名字仍然没有更改
+- [ ] 右键 sidebar 中的列表 item 重命名的时候，延迟很重，同时如果 tab 如果有这个 item 的选项卡的时候呢，这个选项卡会消失，重新打开的时候发现 tabbar 中的名字没有更改；其次在 detail 重命名的时候 tabbar 上的名字更改了，但是当我关闭这个 tab 重新打开的时候，tab 上选项卡的名称变成更改之后的了，但是 detail 和 sidebar 中的字符串又是原来的；我再次执行关闭更改操作的时候，全部恢复为原来的了；
 - [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 - [ ] 唯一还保留的“非最终历史痕迹”是：旧 runtime Pin 类型和 deserializeGraph() 这类旧视图工具仍然会生成 links，但它们现在只用于兼容 runtime Graph 视图，不再是事实来源。这个残留是可控的，不会影响当前连接状态逻辑。等后续彻底移除旧 runtime Graph / domain Pin.links 依赖时，可以再做一次更大的类型层清理。

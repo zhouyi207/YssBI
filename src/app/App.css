@@ -253,7 +253,7 @@ body.layout-sash-dragging canvas {
   }
 }
 
-/* Light mode compatibility for legacy dark-editor utility classes.
+/* Light mode compatibility for older dark-editor utility classes.
    New UI should use shadcn tokens directly; these rules keep older result and plot
    surfaces readable when the app is switched to the shadcn light theme. */
 :root:not(.dark) .text-white,

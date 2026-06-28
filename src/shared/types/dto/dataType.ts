@@ -38,7 +38,7 @@ export function dataTypeFromBackend(
   v:
     | string
     | DataTypeBackendFormat
-    | { kind?: string; inner?: unknown; Array?: DataTypeBackendFormat }
+    | { kind?: string; inner?: unknown }
 ): DataType {
   if (typeof v === 'string') {
     return dataTypeFromKey(v);
@@ -60,10 +60,6 @@ export function dataTypeFromBackend(
     }
     if (kind && kind !== 'Array' && kind !== 'DataSeries' && kind !== 'OneOf') {
       return dataTypeFromKey(kind);
-    }
-    const legacyArray = (v as { Array?: DataTypeBackendFormat }).Array;
-    if (legacyArray) {
-      return { kind: 'Array', inner: dataTypeFromBackend(legacyArray) };
     }
   }
   return { kind: 'Any' };

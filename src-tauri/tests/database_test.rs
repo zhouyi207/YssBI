@@ -307,16 +307,16 @@ fn test_duckdb_sql_edit_without_full_load() {
     let _ = std::fs::remove_dir_all(&project_root);
 }
 
-/// ingest / schema 不含物理 `_yssbi_rowid` 列。
+/// ingest / schema 不含物理行键列。
 #[test]
-fn test_duckdb_ingest_meta_has_no_legacy_rowid_column() {
+fn test_duckdb_ingest_meta_has_no_physical_rowid_column() {
     let (project_root, db_id) = setup_iris_duckdb_project();
     let meta = yssbi_lib::database::read_table_meta(&project_duckdb_abs(&project_root), &db_id)
         .expect("meta");
 
     assert!(
         meta.columns.iter().all(|c| c.name != "_yssbi_rowid"),
-        "schema must not contain legacy _yssbi_rowid: {:?}",
+        "schema must not contain physical rowid column: {:?}",
         meta.columns.iter().map(|c| &c.name).collect::<Vec<_>>()
     );
 
@@ -370,55 +370,4 @@ fn test_duckdb_delete_undo_redo() {
     assert_eq!(after_redo.height(), 149);
 
     let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// 含遗留 `_yssbi_rowid` 列的旧表 reopen 后自动 DROP，编辑仍可用。
-#[test]
-fn test_duckdb_legacy_yssbi_rowid_column_stripped() {
-    use duckdb::Connection;
-    use yssbi_lib::database::{read_table_meta, strip_legacy_yssbi_rowid};
-
-    let duckdb_path = PathBuf::from(format!(
-        "target/test_legacy_rowid_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let _ = std::fs::remove_file(&duckdb_path);
-
-    let conn = Connection::open(&duckdb_path).expect("open");
-    conn.execute_batch(
-        r#"
-        CREATE TABLE legacy_test (
-            "_yssbi_rowid" BIGINT,
-            name VARCHAR,
-            value DOUBLE
-        );
-        INSERT INTO legacy_test VALUES (0, 'a', 1.0), (1, 'b', 2.0);
-        "#,
-    )
-    .expect("setup legacy table");
-    drop(conn);
-
-    read_table_meta(&duckdb_path, "legacy_test").expect("read meta");
-
-    let conn = Connection::open(&duckdb_path).expect("reopen");
-    strip_legacy_yssbi_rowid(&conn, "legacy_test").expect("strip idempotent");
-    drop(conn);
-
-    let meta = read_table_meta(&duckdb_path, "legacy_test").expect("meta after strip");
-    assert_eq!(meta.row_count, 2);
-    assert_eq!(meta.columns.len(), 2);
-    assert!(meta.columns.iter().all(|c| c.name != "_yssbi_rowid"));
-
-    let page = query_page_to_dataframe(&duckdb_path, "legacy_test", 0, 10).expect("page");
-    assert_eq!(page.height(), 2);
-    assert_eq!(
-        page.column("name")
-            .expect("name")
-            .str()
-            .expect("str")
-            .get(0),
-        Some("a")
-    );
-
-    let _ = std::fs::remove_file(&duckdb_path);
 }

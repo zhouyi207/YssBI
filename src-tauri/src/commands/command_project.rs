@@ -7,8 +7,8 @@ use crate::graph::GraphId;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
-    CleanupInvalidProjectsResult, LegacyProjectRecord, PROJECT_METADATA_FILE, ProjectData,
-    ProjectIndex, ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
+    CleanupInvalidProjectsResult, PROJECT_METADATA_FILE, ProjectData, ProjectIndex,
+    ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
     RevealProjectResourceRequest, ScanProjectsResult,
     default_project_parent_directory as default_project_parent_directory_impl,
     delete_project_directory, execute_project_data, format_path_for_user_path,
@@ -393,14 +393,6 @@ pub async fn toggle_registered_project_favorite(
     id: String,
 ) -> Result<bool, String> {
     registry.toggle_favorite(&id).await
-}
-
-#[tauri::command]
-pub async fn migrate_legacy_registered_projects(
-    registry: State<'_, ProjectRegistry>,
-    projects: Vec<LegacyProjectRecord>,
-) -> Result<(), String> {
-    registry.migrate_legacy_projects(projects).await
 }
 
 #[tauri::command]

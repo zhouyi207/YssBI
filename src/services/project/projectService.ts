@@ -396,16 +396,6 @@ export class ProjectService {
         return await invoke("toggle_registered_project_favorite", { id });
     }
 
-    static async migrateLegacyRegisteredProjects(projects: Array<{
-        id: string;
-        name: string;
-        path: string;
-        lastOpenedAt: string;
-        isFavorite?: boolean;
-    }>): Promise<void> {
-        await invoke("migrate_legacy_registered_projects", { projects });
-    }
-
     /**
      * 弹出对话框选择 metadata.yssbi；用户取消时返回 null。
      */

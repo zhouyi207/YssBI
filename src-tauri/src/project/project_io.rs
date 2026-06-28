@@ -564,12 +564,8 @@ fn read_graph_document(
     expected_kind: GraphDocumentKind,
 ) -> Result<GraphDocument, ProjectError> {
     let content = std::fs::read_to_string(path)?;
-    let mut document = match serde_json::from_str::<GraphDocument>(&content) {
-        Ok(document) => document,
-        // 过渡期：新格式解析失败时回退到旧（Phase A）格式，加载后下次保存即升级。
-        Err(primary_err) => read_legacy_graph_document(&content, path)
-            .map_err(|_| ProjectError::Deserialize(primary_err))?,
-    };
+    let mut document: GraphDocument =
+        serde_json::from_str(&content).map_err(ProjectError::Deserialize)?;
     if document.kind != expected_kind {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph file '{}' kind does not match manifest",
@@ -582,37 +578,7 @@ fn read_graph_document(
     Ok(document)
 }
 
-/// 过渡期：读取旧格式（`graph.dataState` 包裹）图文件。待所有开发项目重新保存后删除。
-fn read_legacy_graph_document(content: &str, path: &Path) -> Result<GraphDocument, ProjectError> {
-    let value: serde_json::Value =
-        serde_json::from_str(content).map_err(ProjectError::Deserialize)?;
-    let graph_value = value.get("graph").ok_or_else(|| {
-        ProjectError::InvalidProjectFormat(format!(
-            "legacy graph file '{}' missing 'graph'",
-            path.display()
-        ))
-    })?;
-    let graph = GraphInstance::from_legacy_graph_json(graph_value)
-        .map_err(ProjectError::InvalidProjectFormat)?;
-    let kind = value
-        .get("kind")
-        .cloned()
-        .and_then(|v| serde_json::from_value::<GraphDocumentKind>(v).ok())
-        .unwrap_or_else(|| (&graph.kind).into());
-    let local_variables = value
-        .get("localVariables")
-        .cloned()
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default();
-    Ok(GraphDocument {
-        schema_version: SCHEMA_VERSION,
-        kind,
-        graph,
-        local_variables,
-    })
-}
-
-/// 仅读取图文件头部（`graph.id` / `graph.name`），新旧格式通用。
+/// 仅读取当前图文件头部（`graph.id` / `graph.name`）。
 /// 用于索引与按 id 查找，避免对每个文件做完整反序列化。
 #[derive(Deserialize)]
 struct GraphFileHeader {

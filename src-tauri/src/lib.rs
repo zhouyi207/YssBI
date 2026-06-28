@@ -112,7 +112,6 @@ pub fn run() {
             remove_registered_project,
             delete_registered_project_files,
             toggle_registered_project_favorite,
-            migrate_legacy_registered_projects,
             get_project_registry_path,
             create_project,
             new_project,
