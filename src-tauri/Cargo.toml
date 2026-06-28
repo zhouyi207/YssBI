@@ -61,6 +61,7 @@ rand = "0.8"
 faer = "0.24.0"
 duckdb = { version = "1.10504.0", features = ["bundled", "appender-arrow"] }
 trash = "5.2"
+notify = "8.2.0"
 
 # [profile.release]
 # opt-level = "z"      # 优化体积而非速度

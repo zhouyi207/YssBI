@@ -5,6 +5,7 @@ import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/de
 import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { renameResource } from '@/features/application/resource/resourceActions';
 import { logger } from '@/utils/appLogger';
 
 interface PendingAction {
@@ -126,6 +127,11 @@ export function useGraphManagement(
   }, [showToast]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<Graph>) => {
+    if (data.name !== undefined && !data.nodes && !data.pins && !data.connections) {
+      await renameResource({ id, kind: 'event' }, data.name);
+      return;
+    }
+
     const currentGraph = getGraphById(id);
     if (!currentGraph) return;
     
@@ -216,6 +222,11 @@ export function useGraphManagement(
   }, [showToast]);
 
   const updateFunction = useCallback(async (id: string, data: Partial<Graph>) => {
+    if (data.name !== undefined && !data.nodes && !data.pins && !data.connections) {
+      await renameResource({ id, kind: 'function' }, data.name);
+      return;
+    }
+
     const currentGraph = getGraphById(id);
     if (!currentGraph) return;
     

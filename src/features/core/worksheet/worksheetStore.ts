@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import {
+  clearResourceDocumentState,
+  markResourceDirty,
+  markResourceLoaded,
+  updateOpenResourceLabels,
+  useResourceStore,
+} from '@/features/core/resource';
 
 interface WorksheetStore {
   index: WorksheetIndexEntry[];
@@ -22,39 +28,45 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
   setIndex: (entries) => set({ index: entries }),
 
   upsertDocument: (document) =>
-    set((state) => ({
-      documents: { ...state.documents, [document.id]: document },
-      index: state.index.some((e) => e.id === document.id)
-        ? state.index.map((e) =>
-            e.id === document.id
-              ? {
-                  id: document.id,
-                  name: document.name,
-                  databaseId: document.databaseId,
-                  chartType: document.chartType,
-                  folderPath: document.folderPath ?? '',
-                }
-              : e,
-          )
-        : [
-            ...state.index,
-            {
-              id: document.id,
-              name: document.name,
-              databaseId: document.databaseId,
-              chartType: document.chartType,
-              folderPath: document.folderPath ?? '',
-            },
-          ],
-    })),
+    set((state) => {
+      markResourceLoaded({ id: document.id, kind: 'worksheet' });
+      return {
+        documents: { ...state.documents, [document.id]: document },
+        index: state.index.some((e) => e.id === document.id)
+          ? state.index.map((e) =>
+              e.id === document.id
+                ? {
+                    id: document.id,
+                    name: document.name,
+                    databaseId: document.databaseId,
+                    chartType: document.chartType,
+                    folderPath: document.folderPath ?? '',
+                  }
+                : e,
+            )
+          : [
+              ...state.index,
+              {
+                id: document.id,
+                name: document.name,
+                databaseId: document.databaseId,
+                chartType: document.chartType,
+                folderPath: document.folderPath ?? '',
+              },
+            ],
+      };
+    }),
 
   removeDocument: (worksheetId) =>
-    set((state) => ({
-      index: state.index.filter((e) => e.id !== worksheetId),
-      documents: Object.fromEntries(
-        Object.entries(state.documents).filter(([id]) => id !== worksheetId),
-      ),
-    })),
+    set((state) => {
+      clearResourceDocumentState({ id: worksheetId, kind: 'worksheet' });
+      return {
+        index: state.index.filter((e) => e.id !== worksheetId),
+        documents: Object.fromEntries(
+          Object.entries(state.documents).filter(([id]) => id !== worksheetId),
+        ),
+      };
+    }),
 
   clear: () => set({ index: [], documents: {} }),
 
@@ -70,26 +82,25 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
     get().markDirty(worksheetId);
 
     if (patch.name) {
-      useLayoutStore.setState((state) => {
-        for (const node of Object.values(state.nodes)) {
-          const tab = node.data?.tabs?.find((item) => item.id === worksheetId);
-          if (tab) tab.title = patch.name;
-        }
-      });
+      useResourceStore.getState().patchResource(
+        { id: worksheetId, kind: 'worksheet' },
+        { name: patch.name },
+      );
+      updateOpenResourceLabels({ id: worksheetId, kind: 'worksheet' }, patch.name);
     }
 
     return next;
   },
 
   markDirty: (worksheetId) => {
-    useLayoutStore.getState().setTabDirty(worksheetId, true);
+    markResourceDirty({ id: worksheetId, kind: 'worksheet' }, true);
   },
 
   saveDocument: async (worksheetId) => {
     const document = get().documents[worksheetId];
     if (!document) return;
     await WorksheetService.saveWorksheet(document);
-    useLayoutStore.getState().setTabDirty(worksheetId, false);
+    markResourceDirty({ id: worksheetId, kind: 'worksheet' }, false);
   },
 }));
 

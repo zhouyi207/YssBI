@@ -5,6 +5,7 @@ import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { Separator } from '@/components/ui/separator';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { renameResource } from '@/features/application/resource/resourceActions';
 import { DetailEmptyState } from './DetailEmptyState';
 import { VariableDetailPanel } from './panels/VariableDetailPanel';
 import { EventDetailPanel } from './panels/EventDetailPanel';
@@ -67,7 +68,13 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
       ) : selectedData && selectedItemType === 'variable' ? (
         <VariableDetailPanel
           variable={selectedData}
-          onUpdate={(patch) => updateVariable(selectedItemId!, patch)}
+          onUpdate={(patch) => {
+            if (typeof patch.name === 'string') {
+              void renameResource({ id: selectedItemId!, kind: 'variable' }, patch.name);
+              return;
+            }
+            updateVariable(selectedItemId!, patch);
+          }}
         />
       ) : selectedData && selectedItemType === 'event' ? (
         <EventDetailPanel
@@ -84,7 +91,13 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
       ) : selectedData && selectedItemType === 'data' ? (
         <DataDetailPanel
           dataframe={selectedData}
-          onUpdate={(patch) => updateDataFrame(selectedItemId!, patch)}
+          onUpdate={(patch) => {
+            if (typeof patch.name === 'string') {
+              void renameResource({ id: selectedItemId!, kind: 'database' }, patch.name);
+              return;
+            }
+            updateDataFrame(selectedItemId!, patch);
+          }}
         />
       ) : (
         <div className="flex h-full min-h-0 flex-col bg-background/40">

@@ -19,6 +19,7 @@ import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useHistoryStore } from '@/features/core/history';
 import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { markResourceLoaded, resourceKey, useDocumentStateStore, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 
@@ -31,6 +32,8 @@ interface ProjectIOStore {
   setCurrentPath(path: string | null): void;
   /** 从 Rust 当前项目状态拉取并灌入前端 store（路径、变量、库、图索引）；合并并发调用 */
   loadProject(): Promise<ProjectData | null>;
+  /** 只刷新资源索引，不重置 tab、viewport、history 或已加载 graph 正文。 */
+  refreshResourceIndex(): Promise<boolean>;
   loadProjectFromData(project: ProjectData, path: string | null): void;
   loadGraph(graphId: string): Promise<boolean>;
   exportSnapshot(): ProjectData;
@@ -94,6 +97,129 @@ function normalizeVariables(
   return result;
 }
 
+function buildResourceIndex(params: {
+  graphs: Array<{ id: string; name: string; type: 'event' | 'function'; folderPath?: string }>;
+  worksheets: Array<{ id: string; name: string; folderPath?: string }>;
+  variables: Record<string, Variable>;
+  databases: Record<string, DatabaseRecord>;
+}): ProjectResourceMeta[] {
+  const resources: ProjectResourceMeta[] = [];
+  for (const graph of params.graphs) {
+    resources.push({
+      id: graph.id,
+      kind: graph.type,
+      name: graph.name,
+      uri: `yssbi://graph/${graph.type}/${graph.id}`,
+      folderPath: graph.folderPath,
+      exists: true,
+      loaded: Boolean(useGraphDataStore.getState().graphNodes[graph.id]),
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+  }
+  for (const worksheet of params.worksheets) {
+    resources.push({
+      id: worksheet.id,
+      kind: 'worksheet',
+      name: worksheet.name,
+      uri: `yssbi://worksheet/${worksheet.id}`,
+      folderPath: worksheet.folderPath,
+      exists: true,
+      loaded: Boolean(useWorksheetStore.getState().documents[worksheet.id]),
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+  }
+  for (const [id, variable] of Object.entries(params.variables)) {
+    const scope = variable.scope.type === 'event'
+      ? { type: 'event' as const, graphId: variable.scope.eventId }
+      : variable.scope.type === 'function'
+        ? { type: 'function' as const, graphId: variable.scope.functionId }
+        : { type: 'global' as const };
+    resources.push({
+      id,
+      kind: 'variable',
+      name: variable.name,
+      uri: `yssbi://variable/${id}`,
+      scope,
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+  }
+  for (const [id, database] of Object.entries(params.databases)) {
+    const name = typeof database.name === 'string' ? database.name : id;
+    resources.push({
+      id,
+      kind: 'database',
+      name,
+      uri: `yssbi://database/${id}`,
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+  }
+  return resources;
+}
+
+function preserveResourceRuntimeState(resources: ProjectResourceMeta[]): ProjectResourceMeta[] {
+  const current = useResourceStore.getState().resources;
+  return resources.map((resource) => {
+    const previous = current[resourceKey(resource)];
+    if (!previous) return resource;
+    return {
+      ...resource,
+      loaded: previous.loaded || resource.loaded,
+      hasDirtyDocument: previous.hasDirtyDocument,
+      hasStaleDocument: previous.hasStaleDocument,
+      hasConflictDocument: previous.hasConflictDocument,
+    };
+  });
+}
+
+async function refreshProjectResourceIndex(): Promise<boolean> {
+  try {
+    const index = await ProjectService.getProjectIndex();
+    const graphMetaMap = Object.fromEntries(
+      index.graphs.map((graph) => [
+        graph.id,
+        { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
+      ])
+    );
+    useGraphMetaStore.getState().setGraphs(graphMetaMap);
+    useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
+
+    const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
+      id: ws.id,
+      name: ws.name,
+      databaseId: ws.databaseId,
+      chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
+      folderPath: ws.folderPath ?? '',
+    }));
+    useWorksheetStore.getState().setIndex(worksheetIndex);
+
+    const resources = buildResourceIndex({
+      graphs: index.graphs,
+      worksheets: worksheetIndex,
+      variables: useVariableStore.getState().variables,
+      databases: useDatabaseStore.getState().databases,
+    });
+    useResourceStore.getState().setResources(preserveResourceRuntimeState(resources));
+    return true;
+  } catch (err) {
+    const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
+    logger.sys.error('Failed to refresh resource index: ' + errorMessage, 'ProjectIOStore');
+    useProjectIOStore.setState({ error: errorMessage });
+    return false;
+  }
+}
+
 function buildGraphSnapshot(): ProjectData['graphs'] {
   const metaStore = useGraphMetaStore.getState();
   const dataStore = useGraphDataStore.getState();
@@ -152,6 +278,8 @@ function resetClientProjectState(): void {
   useColumnDistributionStore.getState().clear();
   useDatasetOverviewStore.getState().clear();
   useWorksheetStore.getState().clear();
+  useResourceStore.getState().clear();
+  useDocumentStateStore.getState().clear();
 }
 
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
@@ -185,8 +313,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
         // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
         const { databases, variables } = await ProjectService.getDatabasesVariables();
-        useVariableStore.getState().setVariables(normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]));
-        useDatabaseStore.getState().setDatabases(normalizeDatabases(databases as Record<string, DatabaseRecord>));
+        const normalizedVariables = normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]);
+        const normalizedDatabases = normalizeDatabases(databases as Record<string, DatabaseRecord>);
+        useVariableStore.getState().setVariables(normalizedVariables);
+        useDatabaseStore.getState().setDatabases(normalizedDatabases);
 
         const index = await ProjectService.getProjectIndex();
         const graphMetaMap = Object.fromEntries(
@@ -197,16 +327,23 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         );
         useGraphMetaStore.getState().setGraphs(graphMetaMap);
         useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
-        useWorksheetStore.getState().setIndex(
-          (index.worksheets ?? []).map((ws) => ({
+        const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
             id: ws.id,
             name: ws.name,
             databaseId: ws.databaseId,
             chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
             folderPath: ws.folderPath ?? '',
-          })),
+          }));
+        useWorksheetStore.getState().setIndex(
+          worksheetIndex,
         );
         useGraphDataStore.getState().hydrateGraphs({});
+        useResourceStore.getState().setResources(buildResourceIndex({
+          graphs: index.graphs,
+          worksheets: worksheetIndex,
+          variables: normalizedVariables,
+          databases: normalizedDatabases,
+        }));
 
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -229,12 +366,26 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     return loadProjectInFlight;
   },
 
+  refreshResourceIndex: refreshProjectResourceIndex,
+
   loadProjectFromData: (project, path) => {
     resetClientProjectState();
-    useVariableStore.getState().setVariables(normalizeVariables(project.variables));
-    useDatabaseStore.getState().setDatabases(normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>));
+    const normalizedVariables = normalizeVariables(project.variables);
+    const normalizedDatabases = normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>);
+    useVariableStore.getState().setVariables(normalizedVariables);
+    useDatabaseStore.getState().setDatabases(normalizedDatabases);
     useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
+    useResourceStore.getState().setResources(buildResourceIndex({
+      graphs: Object.values(project.graphs).map((graph) => ({
+        id: graph.id,
+        name: graph.name,
+        type: graph.type,
+      })),
+      worksheets: [],
+      variables: normalizedVariables,
+      databases: normalizedDatabases,
+    }));
     syncGraphViewportsFromRecords(project.graphs);
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
@@ -268,6 +419,21 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           name: frontendGraph.name,
           type: frontendGraph.type,
         });
+        const resourceKey = `graph:${frontendGraph.type}:${graphId}` as const;
+        const existingResource = useResourceStore.getState().resources[resourceKey];
+        useResourceStore.getState().upsertResource({
+          id: graphId,
+          kind: frontendGraph.type,
+          name: frontendGraph.name,
+          uri: `yssbi://graph/${frontendGraph.type}/${graphId}`,
+          folderPath: existingResource?.folderPath,
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        });
+        markResourceLoaded({ id: graphId, kind: frontendGraph.type });
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
         ensureGraphViewport(graphId, frontendGraph.canvas);
         return true;

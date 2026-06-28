@@ -9,7 +9,7 @@ export interface ParsedEvent {
 
 /** 顶层事件分类（需递归解析到具体类型） */
 const TOP_LEVEL_TYPES = new Set([
-    'Project', 'Event', 'Function', 'Variable', 'Node', 'Connection', 'DataFrame',
+    'Project', 'Event', 'Function', 'Variable', 'Node', 'Connection', 'DataFrame', 'Resource',
 ]);
 
 /**
@@ -49,6 +49,8 @@ export function isValidEventType(type: string): boolean {
         'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted', 'DataFrameSchemaUpdated',
+        // Resource
+        'ResourceChanged', 'ResourceDeleted',
         // Node
         'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred',
         // Connection

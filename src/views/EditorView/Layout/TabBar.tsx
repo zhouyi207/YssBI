@@ -19,6 +19,7 @@ import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
 import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
 import { syncDetailFromEditorTab } from "@/features/application/editor/syncDetailFromEditorTab";
+import { resourceKey, resourceRefFromLayoutTab, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
 interface TabBarProps {
     layoutNodeId: string;
@@ -260,6 +261,24 @@ interface TabItemProps {
 
 const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, isActive, onClick, onClose, onDragOver }) => {
     const tabRef = React.useRef<HTMLDivElement>(null);
+    const resourceRef = resourceRefFromLayoutTab(tab);
+    const resourceTitle = useResourceStore((state) => {
+        if (!resourceRef) return undefined;
+        return state.resources[resourceKey(resourceRef)]?.name;
+    });
+    const documentState = useDocumentStateStore((state) => {
+        if (!resourceRef) return undefined;
+        return state.documents[resourceKey(resourceRef)];
+    });
+    const title = resourceTitle ?? tab.title;
+    const statusLabel = documentState?.missing
+        ? "missing"
+        : documentState?.conflict
+            ? "conflict"
+            : documentState?.stale
+                ? "stale"
+                : null;
+    const isDirty = documentState?.dirty ?? tab.isDirty;
     
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `tab-${layoutNodeId}-${tab.id}`,
@@ -319,8 +338,13 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             className={editorTabItemVariants({ active: isActive, dragging: isDragging })}
         >
             <span className="max-w-[120px] truncate">
-                {tab.title}
+                {title}
             </span>
+            {statusLabel ? (
+                <span className="ml-1 text-[10px] uppercase text-amber-500">
+                    {statusLabel}
+                </span>
+            ) : null}
             <Button
                 type="button"
                 variant="ghost"
@@ -328,7 +352,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
                 onClick={onClose}
                 className="text-muted-foreground hover:text-foreground"
             >
-                {tab.isDirty ? (
+                {isDirty ? (
                     <span className="h-2 w-2 rounded-full bg-current" />
                 ) : (
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

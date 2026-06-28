@@ -59,6 +59,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 注册全局状态管理器
         .manage(project::ProjectState::new())
+        .manage(project::ProjectWatcherState::new())
         .manage(execution::WindowDataStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .setup(|app| {
@@ -137,6 +138,7 @@ pub fn run() {
             delete_graph_folder,
             move_graph_to_folder,
             duplicate_graph,
+            rename_graph_resource,
             create_event,
             update_event,
             create_function,

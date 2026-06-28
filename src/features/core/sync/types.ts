@@ -3,6 +3,7 @@
 import type { ProjectData, Graph, Variable, VariableScope, Node } from '@/shared/types/domain';
 import type { DataTypeBackendFormat } from '@/shared/types/dto/dataType';
 import type { NodeInstanceDTO, PinInstanceDTO } from '@/shared/types/dto';
+import type { BackendProjectResourceMeta, ResourceKind } from '@/features/core/resource';
 
 // ==================== 基础事件类型 ====================
 
@@ -47,6 +48,19 @@ export interface GraphDeletedPayload {
 export interface GraphCreatedFailedPayload {
     name: string;
     error: string;
+}
+
+export interface ResourceChangedPayload {
+    id: string;
+    kind: ResourceKind;
+    source?: 'command' | 'watcher';
+    data: BackendProjectResourceMeta;
+}
+
+export interface ResourceDeletedPayload {
+    id: string;
+    kind: ResourceKind;
+    source?: 'command' | 'watcher';
 }
 
 /** 变量创建/更新事件 payload（与后端 EventVariable 对应） */

@@ -3,6 +3,7 @@ import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { GraphService } from "@/services/graph/graphService";
 import { releaseGraphCacheIfClosed } from "./releaseGraphCache";
+import { clearResourceDocumentState, markResourceDirty } from "@/features/core/resource";
 
 function findTab(graphId: string): { nodeId: string; tab: LayoutTab } | null {
   for (const node of Object.values(useLayoutStore.getState().nodes)) {
@@ -30,7 +31,11 @@ export async function closeGraphTab(graphId: string, nodeId?: string, skipDirtyP
     if (shouldSave) {
       try {
         await GraphService.saveProjectGraph(graphId);
-        useLayoutStore.getState().setTabDirty(graphId, false);
+        if (located.tab.type === "event" || located.tab.type === "function") {
+          markResourceDirty({ id: graphId, kind: located.tab.type }, false);
+        } else {
+          useLayoutStore.getState().setTabDirty(graphId, false);
+        }
       } catch (error) {
         uiStore.showToast(`保存失败：${error instanceof Error ? error.message : String(error)}`, "error", 3000);
         return false;
@@ -39,6 +44,9 @@ export async function closeGraphTab(graphId: string, nodeId?: string, skipDirtyP
   }
 
   useLayoutStore.getState().removeTab(located.nodeId, graphId);
+  if (located.tab.type === "event" || located.tab.type === "function") {
+    clearResourceDocumentState({ id: graphId, kind: located.tab.type });
+  }
   releaseGraphCacheIfClosed(graphId);
   return true;
 }

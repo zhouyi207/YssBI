@@ -489,6 +489,13 @@ package.json
 ## 2026.07.01
 
 - [x] 去掉项目所有旧数据迁移 / 兼容读取逻辑；如 `_yssbi_rowid` 旧列清理分支
+- [x] **VSCode 式 Project / Resource / Tab 架构重做边界**：已新增 `ResourceStore` / `DocumentStateStore` / `ResourceRef` / `ResourceKey`，以 `resourceId + kind + uri` 作为资源稳定身份；graph / worksheet / database / variable 元信息统一进入资源索引，TabBar 标题从资源索引派生，旧 `LayoutTab.title` 仅作为 fallback。
+- [x] **ProjectWatcher / 文件系统监听层**：Rust 侧新增 `ProjectWatcherState`（基于 `notify`），项目加载 / 另存后监听项目目录；外部 graph / worksheet 新增、删除、重命名、移动等变更经 debounce 后重扫 `ProjectIndex`，通过 `ResourceChanged` / `ResourceDeleted` 增量同步前端，并将已打开资源标记为 `stale` / `missing` / `conflict`。
+- [x] **统一 ResourceActions 与后端原子资源命令**：新增 `resourceActions` 收口 Sidebar / Detail / ContextMenu 的资源创建、重命名、删除、folder 操作；后端新增 `command_resource.rs` 与 `rename_graph_resource`，graph 重命名会更新内存 graph、持久化 document name / 文件名，并广播 `ResourceChanged`，避免重开恢复旧名。
+- [x] **Tab 模型改为资源引用模型**：TabBar 渲染时优先从 `ResourceStore` 读取资源名；新增统一 `updateOpenResourceLabels(resourceRef, name)` 同步仍保留的 legacy title fallback；graph / worksheet 等名称同步不再散落在各 UI 层。
+- [x] **轻量资源索引刷新替代全量项目重载**：`ProjectIOStore` 新增 `refreshResourceIndex()`，普通资源 create / duplicate / folder rename / delete 后只刷新 graph meta、worksheet index 与 ResourceStore，不再调用破坏性的 `loadProject()`，避免关闭 tab、清 viewport/history/cache。
+- [x] **Dirty / Loaded / Missing 状态机标准化**：graph / worksheet 的 loaded、dirty、save、close 接入 `DocumentStateStore`；ResourceStore 只保留 `hasDirtyDocument` / `hasStaleDocument` / `hasConflictDocument` 摘要；watcher 来源外部变化会让打开资源进入 `stale` / `missing` / `conflict`，TabBar 增加最小状态提示。
+- [ ] 在资源管理器中添加新的 yysbi-event 文件，项目的 event 并不会更新
 
 ## v1.0 待办
 

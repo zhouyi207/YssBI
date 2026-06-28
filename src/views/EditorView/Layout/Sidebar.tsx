@@ -34,18 +34,24 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_EVENT_NAME,
   DEFAULT_FOLDER_NAME,
-  DEFAULT_FUNCTION_NAME,
   DEFAULT_VARIABLE_NAME,
 } from "@/shared/constants/defaultResourceNames";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
-import { GraphService } from "@/services/graph/graphService";
 import { ProjectService } from "@/services/project/projectService";
-import { useGraphMetaStore, useProjectIOStore } from "@/features/core/dataStore";
+import { useGraphMetaStore } from "@/features/core/dataStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
+import {
+  createGraphFolderResource,
+  createGraphResource,
+  deleteGraphFolderResource,
+  deleteResource,
+  duplicateGraphResource,
+  renameGraphFolderResource,
+  renameResource,
+} from "@/features/application/resource/resourceActions";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 import {
   buildSidebarContextMenuSections,
@@ -118,20 +124,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     selectedItemType,
     setSelectedInfo,
     addVariable,
-    updateVariable,
-    deleteVariable,
     promoteVariable,
     demoteVariable,
     functions,
-    addFunction,
-    deleteFunction,
     events,
-    addEvent,
-    deleteEvent,
     dataframes,
     triggerImportData,
-    deleteDataFrame,
-    renameDataFrame,
     openGraph,
     addWorksheet,
     openWorksheet,
@@ -162,10 +160,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-
-  const refreshProjectIndex = useCallback(async () => {
-    await useProjectIOStore.getState().loadProject();
-  }, []);
 
   // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
   const { Variables: globalVariables, graphScopeVariables } = (() => {
@@ -250,70 +244,67 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   }, [eventsCount, functionsCount, graphVarsCount, dataframesCount]);
 
   const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
-    if (type === "event") {
-      await GraphService.createEvent(DEFAULT_EVENT_NAME, folderPath);
-    } else {
-      await GraphService.createFunction(DEFAULT_FUNCTION_NAME, folderPath);
-    }
-    await refreshProjectIndex();
-  }, [refreshProjectIndex]);
+    await createGraphResource(type, folderPath);
+  }, []);
+
+  const createRootEvent = useCallback(() => {
+    void createGraphResource("event");
+  }, []);
+
+  const createRootFunction = useCallback(() => {
+    void createGraphResource("function");
+  }, []);
 
   const createFolderInFolder = useCallback((type: GraphResourceType, parentFolderPath = "") => {
     const title = t("contextMenu.dialog.newFolderTitle");
     openInputDialog(title, DEFAULT_FOLDER_NAME, async (name) => {
-      await GraphService.createGraphFolder(type, joinFolderPath(parentFolderPath, name));
-      await refreshProjectIndex();
+      await createGraphFolderResource(type, joinFolderPath(parentFolderPath, name));
     }, t("contextMenu.dialog.createSubmit"));
-  }, [openInputDialog, refreshProjectIndex, t]);
+  }, [openInputDialog, t]);
 
   const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
     openInputDialog(t("contextMenu.dialog.renameGraphTitle"), name, async (nextName) => {
-      if (type === "event") {
-        await GraphService.updateEvent(id, { name: nextName } as any);
-      } else {
-        await GraphService.updateFunction(id, { name: nextName } as any);
-      }
-      await refreshProjectIndex();
+      await renameResource({ id, kind: type }, nextName);
     }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, refreshProjectIndex, t]);
+  }, [openInputDialog, t]);
 
   const deleteGraphItem = useCallback(async (id: string, type: GraphResourceType) => {
-    if (type === "event") {
-      await deleteEvent(id);
-    } else {
-      await deleteFunction(id);
-    }
-    await refreshProjectIndex();
-  }, [deleteEvent, deleteFunction, refreshProjectIndex]);
+    await deleteResource({ id, kind: type });
+  }, []);
 
   const duplicateGraphItem = useCallback(async (id: string) => {
-    await GraphService.duplicateGraph(id);
-    await refreshProjectIndex();
-  }, [refreshProjectIndex]);
+    await duplicateGraphResource(id);
+  }, []);
 
   const renameFolderItem = useCallback((type: GraphResourceType, folderPath: string, name: string) => {
     openInputDialog(t("contextMenu.dialog.renameFolderTitle"), name, async (nextName) => {
-      await GraphService.renameGraphFolder(type, folderPath, nextName);
-      await refreshProjectIndex();
+      await renameGraphFolderResource(type, folderPath, nextName);
     }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, refreshProjectIndex, t]);
+  }, [openInputDialog, t]);
 
   const deleteFolderItem = useCallback(async (type: GraphResourceType, folderPath: string) => {
-    await GraphService.deleteGraphFolder(type, folderPath);
-    await refreshProjectIndex();
-  }, [refreshProjectIndex]);
+    await deleteGraphFolderResource(type, folderPath);
+  }, []);
 
   const renameVariableItem = useCallback((id: string, name: string) => {
     openInputDialog(t("contextMenu.dialog.renameVariableTitle"), name, async (nextName) => {
-      await updateVariable(id, { name: nextName } as any);
+      await renameResource({ id, kind: "variable" }, nextName);
     }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, updateVariable, t]);
+  }, [openInputDialog, t]);
 
   const renameDatabaseItem = useCallback((id: string, name: string) => {
     openInputDialog(t("contextMenu.dialog.renameDataTitle"), name, async (nextName) => {
-      await renameDataFrame(id, nextName);
+      await renameResource({ id, kind: "database" }, nextName);
     }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, renameDataFrame, t]);
+  }, [openInputDialog, t]);
+
+  const deleteVariableItem = useCallback(async (id: string) => {
+    await deleteResource({ id, kind: "variable" });
+  }, []);
+
+  const deleteDatabaseItem = useCallback(async (id: string) => {
+    await deleteResource({ id, kind: "database" });
+  }, []);
 
   const revealInExplorer = useCallback(async (request: Parameters<typeof ProjectService.revealProjectResource>[0]) => {
     try {
@@ -339,10 +330,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     deleteFolderItem,
     addVariable,
     renameVariableItem,
-    deleteVariable,
+    deleteVariable: deleteVariableItem,
     openDatabase: openDataViewWindow,
     renameDatabaseItem,
-    deleteDatabaseItem: deleteDataFrame,
+    deleteDatabaseItem,
     importData: triggerImportData,
     openWorksheet,
     revealInExplorer,
@@ -698,7 +689,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label="Event"
                 expanded={isSectionExpanded("graphsEvent")}
                 onToggle={() => toggleSection("graphsEvent")}
-                onAdd={addEvent}
+                onAdd={createRootEvent}
                 dropTarget={{ graphType: "event", folderPath: "" }}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
@@ -718,7 +709,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label="Function"
                 expanded={isSectionExpanded("graphsFunction")}
                 onToggle={() => toggleSection("graphsFunction")}
-                onAdd={addFunction}
+                onAdd={createRootFunction}
                 dropTarget={{ graphType: "function", folderPath: "" }}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}

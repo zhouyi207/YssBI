@@ -5,6 +5,7 @@ export * from './ProjectEventHandler';
 export * from './GraphEventHandler';
 export * from './VariableEventHandler';
 export * from './DataFrameEventHandler';
+export * from './ResourceEventHandler';
 export * from './NodeEventHandler';
 export * from './ConnectionEventHandler';
 
@@ -34,6 +35,10 @@ import {
     DataFrameDeletedHandler,
     DataFrameSchemaUpdatedHandler,
 } from './DataFrameEventHandler';
+import {
+    ResourceChangedHandler,
+    ResourceDeletedHandler,
+} from './ResourceEventHandler';
 import {
     NodeCreatedHandler,
     NodesBatchCreatedHandler,
@@ -81,6 +86,10 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new DataFrameCreatedHandler() as EventHandler<unknown>,
         new DataFrameDeletedHandler() as EventHandler<unknown>,
         new DataFrameSchemaUpdatedHandler() as EventHandler<unknown>,
+
+        // Resource
+        new ResourceChangedHandler() as EventHandler<unknown>,
+        new ResourceDeletedHandler() as EventHandler<unknown>,
         
         // Node
         new NodeCreatedHandler() as EventHandler<unknown>,

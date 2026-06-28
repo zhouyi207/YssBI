@@ -8,6 +8,7 @@ import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore'
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { useResourceStore } from '@/features/core/resource';
 import { logger } from '@/utils/appLogger';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
@@ -98,6 +99,9 @@ export function useVariableManagement() {
     try {
       const next = await VariableService.updateVariable(id, data);
       useVariableStore.getState().updateVariable(id, next);
+      if (data.name !== undefined) {
+        useResourceStore.getState().patchResource({ id, kind: 'variable' }, { name: next.name });
+      }
       updateVariableReferences(id, next);
     } catch (e) {
       logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableManagement');

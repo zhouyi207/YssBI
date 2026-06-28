@@ -4,6 +4,7 @@ import { i18n } from '@/app/i18n';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { logger } from '@/utils/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
@@ -265,6 +266,7 @@ export function useDatabaseManagement() {
     try {
       await DatabaseService.renameDatabase(id, trimmed);
       useDatabaseStore.getState().updateDatabase(id, { name: trimmed });
+      useResourceStore.getState().patchResource({ id, kind: 'database' }, { name: trimmed });
     } catch (e) {
       logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
       uiStore.showToast(i18n.t('dataOperation.renameFailed', { error: String(e) }), 'error');

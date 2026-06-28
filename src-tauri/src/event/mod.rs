@@ -6,6 +6,7 @@ pub mod event_event;
 pub mod event_function;
 pub mod event_node;
 pub mod event_project;
+pub mod event_resource;
 pub mod event_variable;
 
 pub use event_connection::*;
@@ -14,6 +15,7 @@ pub use event_event::*;
 pub use event_function::*;
 pub use event_node::*;
 pub use event_project::*;
+pub use event_resource::*;
 pub use event_variable::*;
 
 use serde::{Deserialize, Serialize};
@@ -37,6 +39,8 @@ pub enum Event {
     Connection(EventConnection),
     // DataFrame 事件
     DataFrame(EventDataframe),
+    // 统一资源事件
+    Resource(EventResource),
 }
 
 /// 发送项目事件到前端

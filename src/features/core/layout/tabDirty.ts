@@ -1,8 +1,22 @@
 import type { LayoutTab } from "@/shared/types/ui";
 import { useLayoutStore } from "./layoutStore";
+import { markResourceDirty } from "@/features/core/resource";
 
 export function markGraphTabDirty(graphId: string): void {
+    const tab = findResourceTab(graphId);
+    if (tab?.type === "event" || tab?.type === "function") {
+        markResourceDirty({ id: graphId, kind: tab.type }, true);
+        return;
+    }
     useLayoutStore.getState().setTabDirty(graphId, true);
+}
+
+function findResourceTab(tabId: string): LayoutTab | null {
+    for (const node of Object.values(useLayoutStore.getState().nodes)) {
+        const tab = node.data?.tabs?.find((item) => item.id === tabId);
+        if (tab) return tab;
+    }
+    return null;
 }
 
 export interface DirtyTabSnapshot {

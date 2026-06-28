@@ -8,7 +8,7 @@ use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
     CleanupInvalidProjectsResult, PROJECT_METADATA_FILE, ProjectData, ProjectIndex,
-    ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState,
+    ProjectPathValidation, ProjectRecord, ProjectRegistry, ProjectState, ProjectWatcherState,
     RevealProjectResourceRequest, ScanProjectsResult,
     default_project_parent_directory as default_project_parent_directory_impl,
     delete_project_directory, execute_project_data, format_path_for_user_path,
@@ -405,6 +405,7 @@ pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
 pub fn load_project(
     app: AppHandle,
     state: State<ProjectState>,
+    watcher: State<ProjectWatcherState>,
     path: String,
 ) -> Result<(), FrontendError> {
     log_app!(
@@ -434,6 +435,9 @@ pub fn load_project(
     state.clear();
     state.set_path(Some(path.clone()));
     state.set_data(project_data.clone());
+    if let Err(error) = watcher.watch_project(app.clone(), &path) {
+        tauri_plugin_log::log::warn!("Failed to start project watcher: {}", error);
+    }
     emit_project_event(
         &app,
         Event::Project(EventProject::ProjectLoaded {
@@ -449,6 +453,7 @@ pub fn load_project(
 pub async fn save_project_as(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
     path: String,
 ) -> Result<ProjectRecord, String> {
@@ -466,6 +471,9 @@ pub async fn save_project_as(
     state.clear();
     state.set_path(Some(new_metadata_path.clone()));
     state.set_data(project_data.clone());
+    if let Err(error) = watcher.watch_project(app.clone(), &new_metadata_path) {
+        tauri_plugin_log::log::warn!("Failed to start project watcher: {}", error);
+    }
 
     let record = registry
         .register_project(&project_data.metadata.project_name, &new_metadata_path)

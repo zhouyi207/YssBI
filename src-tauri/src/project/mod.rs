@@ -14,6 +14,7 @@ pub mod project_state_database;
 pub mod project_state_graph;
 pub mod project_state_variable;
 pub mod project_store;
+pub mod project_watcher;
 pub mod resource_reveal;
 pub mod unique_name;
 pub mod worksheet_io;
@@ -28,8 +29,8 @@ pub use project_picker_task::*;
 pub use project_registry::*;
 pub use project_scan::*;
 pub use project_state::*;
-pub use project_state_variable::*;
 pub use project_store::*;
+pub use project_watcher::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;
 // pub use project_state_database::*;  // 暂时未使用

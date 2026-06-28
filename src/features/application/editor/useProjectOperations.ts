@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { markResourceDirty } from '@/features/core/resource';
 import { ProjectService } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
@@ -76,7 +77,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       }
 
       await GraphService.saveProjectGraph(activeTabId);
-      layoutStore.setTabDirty(activeTabId, false);
+      markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
       uiStore.showToast("图已保存", "success", 2000);
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
