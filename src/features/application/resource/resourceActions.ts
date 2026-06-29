@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useGraphDataStore, useGraphMetaStore, useProjectIOStore, useVariableStore, useDatabaseStore } from '@/features/core/dataStore';
+import { useGraphDataStore, useProjectIOStore, useVariableStore, useDatabaseStore } from '@/features/core/dataStore';
 import {
   graphResourceRef,
   normalizeBackendResourceMeta,
@@ -30,14 +30,8 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
       newName: name,
     });
     const meta = normalizeBackendResourceMeta(backendMeta);
-    const graphKind = meta.kind === 'function' ? 'function' : 'event';
     useResourceStore.getState().upsertResource(meta);
-    useGraphMetaStore.getState().updateGraph(ref.id, {
-      name: meta.name,
-      type: graphKind,
-      folderPath: meta.folderPath,
-    });
-    updateOpenResourceLabels(graphResourceRef(ref.id, graphKind), meta.name);
+    updateOpenResourceLabels(graphResourceRef(ref.id, meta.kind === 'function' ? 'function' : 'event'), meta.name);
     return;
   }
 
@@ -95,7 +89,6 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
   if (ref.kind === 'event' || ref.kind === 'function') {
     await GraphService.removeGraph(ref.id);
     useGraphDataStore.getState().clearGraph(ref.id);
-    useGraphMetaStore.getState().deleteGraph(ref.id);
     useResourceStore.getState().removeResource(ref);
     await closeEditorTab(ref.id, undefined, true);
     await refreshResourceIndex();

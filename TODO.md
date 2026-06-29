@@ -495,7 +495,11 @@ package.json
 - [x] **Tab 模型改为资源引用模型**：TabBar 渲染时优先从 `ResourceStore` 读取资源名；新增统一 `updateOpenResourceLabels(resourceRef, name)` 同步仍保留的 legacy title fallback；graph / worksheet 等名称同步不再散落在各 UI 层。
 - [x] **轻量资源索引刷新替代全量项目重载**：`ProjectIOStore` 新增 `refreshResourceIndex()`，普通资源 create / duplicate / folder rename / delete 后只刷新 graph meta、worksheet index 与 ResourceStore，不再调用破坏性的 `loadProject()`，避免关闭 tab、清 viewport/history/cache。
 - [x] **Dirty / Loaded / Missing 状态机标准化**：graph / worksheet 的 loaded、dirty、save、close 接入 `DocumentStateStore`；ResourceStore 只保留 `hasDirtyDocument` / `hasStaleDocument` / `hasConflictDocument` 摘要；watcher 来源外部变化会让打开资源进入 `stale` / `missing` / `conflict`，TabBar 增加最小状态提示。
-- [ ] 在资源管理器中添加新的 yysbi-event 文件，项目的 event 并不会更新
+- [x] 在资源管理器中添加新的 yysbi-event 文件，项目的 event 并不会更新（已修复：watcher 发来的 `ResourceChanged` 对 graph meta 投影改为 upsert，新增 event/function 会进入 Explorer 列表；`read_project_index()` 跳过单个非法 graph 文件，避免坏 `.yssbi-event` 阻断整个资源索引刷新；资源管理器复制出的重复 graph id 文件会在索引扫描时自动规范化为新 graph id）
+- [x] **Resource Snapshot Sync 架构切换**：外部文件系统变更不再走 watcher 增量 `ResourceChanged` / `ResourceDeleted`；Rust watcher debounce 后只广播 `ProjectIndexInvalidated { source, version }`，前端 `ProjectIndexInvalidatedHandler` 合并突发事件并通过唯一入口 `refreshResourceIndex()` 拉取完整 `ProjectIndex` 快照。
+- [x] **ResourceStore 成为 Explorer 唯一事实来源**：Event / Function 列表、graph folder、graph order、auto-open-first-graph、Sidebar 与项目打开首图逻辑均改为从 `ResourceStore` selectors 派生；`GraphMetaStore` 不再驱动资源列表 / 顺序 / 文件夹。
+- [x] **ProjectIndex 快照原子替换与打开文档 reconcile**：`refreshResourceIndex()` 会重建 `ResourceStore` 与 worksheet index；保留已加载资源的 loaded / dirty 摘要；快照缺失的已打开资源保留为 `missing`，快照元数据变化时 clean 文档标记 `stale`、dirty 文档标记 `conflict`，避免打开 tab 静默消失。
+- [x] **Resource sync 测试与格式收口**：新增/更新 `ResourceEventHandler.test.ts`、`resourceSnapshotReconcile.test.ts` 与 watcher 路径测试，覆盖 invalidation coalescing、ResourceStore selector、snapshot reconcile；修复 `ResourceEventHandler.ts` / 测试文件多余空行格式问题。
 
 ## v1.0 待办
 

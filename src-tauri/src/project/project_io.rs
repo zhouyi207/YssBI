@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -611,8 +611,19 @@ fn read_graph_index_entries(
     expected_kind: GraphDocumentKind,
 ) -> Result<Vec<ProjectGraphIndexEntry>, ProjectError> {
     let mut entries = Vec::new();
+    let mut seen_ids = HashSet::new();
     for path in list_graph_files(root, dir, extension)? {
-        let header = read_graph_file_header(path.as_path())?;
+        let mut header = match read_graph_file_header(path.as_path()) {
+            Ok(header) => header,
+            Err(_) => continue,
+        };
+        if seen_ids.contains(&header.graph.id) {
+            header = match repair_copied_graph_document(path.as_path(), expected_kind, &seen_ids) {
+                Ok(header) => header,
+                Err(_) => continue,
+            };
+        }
+        seen_ids.insert(header.graph.id);
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.graph.name);
         entries.push(ProjectGraphIndexEntry {
             id: header.graph.id,
@@ -622,6 +633,25 @@ fn read_graph_index_entries(
         });
     }
     Ok(entries)
+}
+
+fn repair_copied_graph_document(
+    path: &Path,
+    expected_kind: GraphDocumentKind,
+    existing_ids: &HashSet<GraphId>,
+) -> Result<GraphFileHeader, ProjectError> {
+    let mut document = read_graph_document(path, expected_kind)?;
+    while existing_ids.contains(&document.graph.id) {
+        document.graph.id = GraphId::new();
+    }
+    document.local_variables.clear();
+    write_json(path, &document)?;
+    Ok(GraphFileHeader {
+        graph: GraphFileHeaderGraph {
+            id: document.graph.id,
+            name: document.graph.name,
+        },
+    })
 }
 
 fn read_folder_index_entries(
@@ -1188,6 +1218,60 @@ mod tests {
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
         assert!(index.graphs.is_empty());
         assert!(index.folders.is_empty());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_project_index_skips_invalid_graph_files() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("Valid Event");
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+        std::fs::write(
+            root.join(EVENTS_DIR)
+                .join(format!("Broken.{}", EVENT_EXTENSION)),
+            "",
+        )
+        .unwrap();
+
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+
+        assert_eq!(index.graphs.len(), 1);
+        assert!(index.graphs.iter().any(|graph| graph.id == event.id));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_project_index_repairs_copied_graph_files_with_duplicate_ids() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("Copied Event");
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let original_path = root
+            .join(EVENTS_DIR)
+            .join(format!("Copied Event.{}", EVENT_EXTENSION));
+        let copied_path = root
+            .join(EVENTS_DIR)
+            .join(format!("Copied Event 1.{}", EVENT_EXTENSION));
+        std::fs::copy(&original_path, &copied_path).unwrap();
+
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+
+        assert_eq!(index.graphs.len(), 2);
+        let ids: std::collections::HashSet<_> = index.graphs.iter().map(|graph| graph.id).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&event.id));
+        let original_doc =
+            read_graph_document(original_path.as_path(), GraphDocumentKind::Event).unwrap();
+        let copied_doc =
+            read_graph_document(copied_path.as_path(), GraphDocumentKind::Event).unwrap();
+        assert_ne!(original_doc.graph.id, copied_doc.graph.id);
+        assert!(ids.contains(&original_doc.graph.id));
+        assert!(ids.contains(&copied_doc.graph.id));
+        assert!(copied_doc.local_variables.is_empty());
 
         let _ = std::fs::remove_dir_all(root);
     }

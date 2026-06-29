@@ -3,12 +3,12 @@ import type { Variable, VariableScope } from '@/shared/types/domain';
 import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
 import { dataTypeFromKey, getDefaultValue, dataTypeDisplay } from '@/shared/types/domain/dataType';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
-import { useVariableStore, useGraphMetaStore, useGraphDataStore } from '@/features/core/dataStore';
+import { useVariableStore, useGraphDataStore } from '@/features/core/dataStore';
+import { useResourceStore } from '@/features/core/resource';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { VariableService } from '@/services/variable/variableService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useResourceStore } from '@/features/core/resource';
 import { logger } from '@/utils/appLogger';
 
 /** 根据 activeTabId 和 graph 类型构建 scope */
@@ -45,10 +45,13 @@ export function useVariableManagement() {
   const graphTypeFromTab = activeTabId && activeEditorNode?.data?.tabs
     ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === activeTabId)?.type
     : undefined;
-  const graphTypeFromMeta = useGraphMetaStore((s) =>
-    activeTabId ? s.graphs[activeTabId]?.type : undefined
-  );
-  const rawType = graphTypeFromTab || graphTypeFromMeta;
+  const graphTypeFromResource = useResourceStore((s) => {
+    if (!activeTabId) return undefined;
+    if (s.resources[`graph:event:${activeTabId}`]?.exists) return 'event';
+    if (s.resources[`graph:function:${activeTabId}`]?.exists) return 'function';
+    return undefined;
+  });
+  const rawType = graphTypeFromTab || graphTypeFromResource;
   const graphType = (rawType === 'event' || rawType === 'function' ? rawType : undefined) as 'event' | 'function' | undefined;
 
   const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {

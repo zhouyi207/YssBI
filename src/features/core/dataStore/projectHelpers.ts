@@ -8,15 +8,28 @@ import { useShallow } from 'zustand/react/shallow';
 import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
-import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
+import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { getViewport } from '@/features/core/viewport';
 
+function getGraphMetaFromResourceStore(graphId: string): { id: string; name: string; type: 'event' | 'function'; folderPath?: string } | null {
+  const resources = useResourceStore.getState().resources;
+  const eventMeta = resources[resourceKey({ id: graphId, kind: 'event' })];
+  if (eventMeta?.exists) {
+    return { id: graphId, name: eventMeta.name, type: 'event', folderPath: eventMeta.folderPath };
+  }
+  const functionMeta = resources[resourceKey({ id: graphId, kind: 'function' })];
+  if (functionMeta?.exists) {
+    return { id: graphId, name: functionMeta.name, type: 'function', folderPath: functionMeta.folderPath };
+  }
+  return null;
+}
+
 /**
- * 从 GraphMetaStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
+ * 从 ResourceStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
  */
 export function getGraphById(graphId: string): GraphData | null {
-  const meta = useGraphMetaStore.getState().graphs[graphId];
+  const meta = getGraphMetaFromResourceStore(graphId);
   if (!meta) return null;
 
   const dataState = useGraphDataStore.getState();
@@ -36,12 +49,12 @@ export function getGraphById(graphId: string): GraphData | null {
 }
 
 /**
- * 获取所有 graphs（按 graphOrder 顺序）
+ * 获取所有 graphs（按 ResourceStore graphOrder 顺序）
  */
 export function getGraphs(): Record<string, GraphData> {
-  const metaStore = useGraphMetaStore.getState();
+  const graphOrder = useResourceStore.getState().graphOrder;
   const result: Record<string, GraphData> = {};
-  for (const gid of metaStore.graphOrder) {
+  for (const gid of graphOrder) {
     const g = getGraphById(gid);
     if (g) result[gid] = g;
   }
@@ -53,7 +66,18 @@ export function getGraphs(): Record<string, GraphData> {
  * 注意：selector 必须返回稳定引用，避免 "getSnapshot should be cached" 无限循环
  */
 export function useGraphData(activeTabId: string | null) {
-  const meta = useGraphMetaStore((s) => (activeTabId ? s.graphs[activeTabId] : null));
+  const meta = useResourceStore((s) => {
+    if (!activeTabId) return null;
+    const eventMeta = s.resources[resourceKey({ id: activeTabId, kind: 'event' })];
+    if (eventMeta?.exists) {
+      return { id: activeTabId, name: eventMeta.name, type: 'event' as const, folderPath: eventMeta.folderPath };
+    }
+    const functionMeta = s.resources[resourceKey({ id: activeTabId, kind: 'function' })];
+    if (functionMeta?.exists) {
+      return { id: activeTabId, name: functionMeta.name, type: 'function' as const, folderPath: functionMeta.folderPath };
+    }
+    return null;
+  });
 
   // 只提取当前图的 node 数组，useShallow 对比每个 node 引用，
   // 其他图变化时 node 引用不变 → 不触发 re-render

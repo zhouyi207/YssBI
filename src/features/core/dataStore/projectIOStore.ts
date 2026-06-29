@@ -9,7 +9,6 @@ import { logger } from '@/utils/appLogger';
 import type { DatabaseRecord } from './databaseStore';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
-import { useGraphMetaStore } from './graphMetaStore';
 import { useGraphDataStore } from './graphDataStore';
 import { useEditStateStore } from './editStateStore';
 import { useColumnStatsStore } from './columnStatsStore';
@@ -20,6 +19,11 @@ import { useHistoryStore } from '@/features/core/history';
 import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { markResourceLoaded, resourceKey, useDocumentStateStore, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+import {
+  applySnapshotDocumentPatches,
+  reconcileResourceSnapshot,
+  type GraphFolderMeta,
+} from '@/features/core/resource/resourceSnapshotReconcile';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 
@@ -37,16 +41,6 @@ interface ProjectIOStore {
   loadProjectFromData(project: ProjectData, path: string | null): void;
   loadGraph(graphId: string): Promise<boolean>;
   exportSnapshot(): ProjectData;
-}
-
-/** 将 Graph 转为 GraphMeta 格式 */
-function toGraphMetaMap(graphs: Record<string, { id: string; name: string; type: 'event' | 'function'; entryNodeId?: string }>): Record<string, { id: string; name: string; type: 'event' | 'function'; entryNodeId?: string }> {
-  return Object.fromEntries(
-    Object.entries(graphs).map(([id, g]) => [
-      id,
-      { id: g.id, name: g.name, type: g.type, entryNodeId: g.entryNodeId },
-    ])
-  );
 }
 
 /** 从 engine path 提取显示名称 */
@@ -168,32 +162,46 @@ function buildResourceIndex(params: {
   return resources;
 }
 
-function preserveResourceRuntimeState(resources: ProjectResourceMeta[]): ProjectResourceMeta[] {
-  const current = useResourceStore.getState().resources;
-  return resources.map((resource) => {
-    const previous = current[resourceKey(resource)];
-    if (!previous) return resource;
-    return {
-      ...resource,
-      loaded: previous.loaded || resource.loaded,
-      hasDirtyDocument: previous.hasDirtyDocument,
-      hasStaleDocument: previous.hasStaleDocument,
-      hasConflictDocument: previous.hasConflictDocument,
-    };
-  });
+function normalizeGraphFolders(
+  folders: Array<{ name: string; type: 'event' | 'function'; folderPath: string }> | undefined,
+): GraphFolderMeta[] {
+  return (folders ?? []).map((folder) => ({
+    name: folder.name,
+    type: folder.type,
+    folderPath: folder.folderPath,
+  }));
 }
 
+let refreshResourceIndexInFlight: Promise<boolean> | null = null;
+let refreshResourceIndexPending = false;
+
 async function refreshProjectResourceIndex(): Promise<boolean> {
+  if (refreshResourceIndexInFlight) {
+    refreshResourceIndexPending = true;
+    return refreshResourceIndexInFlight;
+  }
+
+  refreshResourceIndexInFlight = (async () => {
+    let lastResult = false;
+    try {
+      do {
+        refreshResourceIndexPending = false;
+        lastResult = await refreshProjectResourceIndexOnce();
+      } while (refreshResourceIndexPending);
+      return lastResult;
+    } finally {
+      refreshResourceIndexInFlight = null;
+    }
+  })();
+
+  return refreshResourceIndexInFlight;
+}
+
+async function refreshProjectResourceIndexOnce(): Promise<boolean> {
   try {
     const index = await ProjectService.getProjectIndex();
-    const graphMetaMap = Object.fromEntries(
-      index.graphs.map((graph) => [
-        graph.id,
-        { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
-      ])
-    );
-    useGraphMetaStore.getState().setGraphs(graphMetaMap);
-    useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
+    const graphOrder = index.graphs.map((graph) => graph.id);
+    const graphFolders = normalizeGraphFolders(index.folders);
 
     const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
       id: ws.id,
@@ -204,13 +212,22 @@ async function refreshProjectResourceIndex(): Promise<boolean> {
     }));
     useWorksheetStore.getState().setIndex(worksheetIndex);
 
-    const resources = buildResourceIndex({
+    const incoming = buildResourceIndex({
       graphs: index.graphs,
       worksheets: worksheetIndex,
       variables: useVariableStore.getState().variables,
       databases: useDatabaseStore.getState().databases,
     });
-    useResourceStore.getState().setResources(preserveResourceRuntimeState(resources));
+
+    const previousByKey = useResourceStore.getState().resources;
+    const { resources, documentPatches } = reconcileResourceSnapshot(incoming, previousByKey);
+    applySnapshotDocumentPatches(documentPatches);
+
+    useResourceStore.getState().setSnapshot({
+      resources,
+      graphFolders,
+      graphOrder,
+    });
     return true;
   } catch (err) {
     const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
@@ -221,14 +238,16 @@ async function refreshProjectResourceIndex(): Promise<boolean> {
 }
 
 function buildGraphSnapshot(): ProjectData['graphs'] {
-  const metaStore = useGraphMetaStore.getState();
+  const resourceStore = useResourceStore.getState();
   const dataStore = useGraphDataStore.getState();
 
   return Object.fromEntries(
-    metaStore.graphOrder
+    resourceStore.graphOrder
       .map((graphId) => {
-        const meta = metaStore.graphs[graphId];
-        if (!meta) return null;
+        const eventMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'event' })];
+        const functionMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'function' })];
+        const meta = eventMeta ?? functionMeta;
+        if (!meta || !meta.exists) return null;
 
         const nodeIds = dataStore.graphNodes[graphId] ?? [];
         const nodes = nodeIds.map((nodeId) => dataStore.nodes[nodeId]).filter(Boolean);
@@ -249,7 +268,9 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
         return [
           graphId,
           {
-            ...meta,
+            id: graphId,
+            name: meta.name,
+            type: meta.kind === 'function' ? 'function' : 'event',
             nodes,
             pins,
             connections: { connections },
@@ -319,14 +340,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         useDatabaseStore.getState().setDatabases(normalizedDatabases);
 
         const index = await ProjectService.getProjectIndex();
-        const graphMetaMap = Object.fromEntries(
-          index.graphs.map((graph) => [
-            graph.id,
-            { id: graph.id, name: graph.name, type: graph.type, folderPath: graph.folderPath },
-          ])
-        );
-        useGraphMetaStore.getState().setGraphs(graphMetaMap);
-        useGraphMetaStore.getState().setGraphFolders(index.folders ?? []);
+        const graphOrder = index.graphs.map((graph) => graph.id);
         const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
             id: ws.id,
             name: ws.name,
@@ -338,12 +352,16 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           worksheetIndex,
         );
         useGraphDataStore.getState().hydrateGraphs({});
-        useResourceStore.getState().setResources(buildResourceIndex({
-          graphs: index.graphs,
-          worksheets: worksheetIndex,
-          variables: normalizedVariables,
-          databases: normalizedDatabases,
-        }));
+        useResourceStore.getState().setSnapshot({
+          resources: buildResourceIndex({
+            graphs: index.graphs,
+            worksheets: worksheetIndex,
+            variables: normalizedVariables,
+            databases: normalizedDatabases,
+          }),
+          graphFolders: normalizeGraphFolders(index.folders),
+          graphOrder,
+        });
 
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -374,18 +392,21 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
     const normalizedDatabases = normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>);
     useVariableStore.getState().setVariables(normalizedVariables);
     useDatabaseStore.getState().setDatabases(normalizedDatabases);
-    useGraphMetaStore.getState().setGraphs(toGraphMetaMap(project.graphs));
     useGraphDataStore.getState().hydrateGraphs(project.graphs);
-    useResourceStore.getState().setResources(buildResourceIndex({
-      graphs: Object.values(project.graphs).map((graph) => ({
-        id: graph.id,
-        name: graph.name,
-        type: graph.type,
-      })),
-      worksheets: [],
-      variables: normalizedVariables,
-      databases: normalizedDatabases,
-    }));
+    useResourceStore.getState().setSnapshot({
+      resources: buildResourceIndex({
+        graphs: Object.values(project.graphs).map((graph) => ({
+          id: graph.id,
+          name: graph.name,
+          type: graph.type,
+        })),
+        worksheets: [],
+        variables: normalizedVariables,
+        databases: normalizedDatabases,
+      }),
+      graphFolders: [],
+      graphOrder: Object.keys(project.graphs),
+    });
     syncGraphViewportsFromRecords(project.graphs);
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
@@ -415,12 +436,8 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           ...useVariableStore.getState().variables,
           ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
         });
-        useGraphMetaStore.getState().updateGraph(graphId, {
-          name: frontendGraph.name,
-          type: frontendGraph.type,
-        });
-        const resourceKey = `graph:${frontendGraph.type}:${graphId}` as const;
-        const existingResource = useResourceStore.getState().resources[resourceKey];
+        const resourceKeyValue = `graph:${frontendGraph.type}:${graphId}` as const;
+        const existingResource = useResourceStore.getState().resources[resourceKeyValue];
         useResourceStore.getState().upsertResource({
           id: graphId,
           kind: frontendGraph.type,

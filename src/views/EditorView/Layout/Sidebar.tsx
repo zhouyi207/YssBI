@@ -40,7 +40,7 @@ import {
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { ProjectService } from "@/services/project/projectService";
-import { useGraphMetaStore } from "@/features/core/dataStore";
+import { useResourceStore } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import {
@@ -145,7 +145,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   );
 
   const listRef = useRef<HTMLDivElement>(null);
-  const graphFolders = useGraphMetaStore((s) => s.graphFolders);
+  const graphFolders = useResourceStore((s) => s.graphFolders);
   const {
     contextMenu,
     closeContextMenu,

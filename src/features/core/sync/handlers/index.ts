@@ -38,6 +38,7 @@ import {
 import {
     ResourceChangedHandler,
     ResourceDeletedHandler,
+    ProjectIndexInvalidatedHandler,
 } from './ResourceEventHandler';
 import {
     NodeCreatedHandler,
@@ -88,6 +89,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new DataFrameSchemaUpdatedHandler() as EventHandler<unknown>,
 
         // Resource
+        new ProjectIndexInvalidatedHandler() as EventHandler<unknown>,
         new ResourceChangedHandler() as EventHandler<unknown>,
         new ResourceDeletedHandler() as EventHandler<unknown>,
         

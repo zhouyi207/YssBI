@@ -63,6 +63,11 @@ export interface ResourceDeletedPayload {
     source?: 'command' | 'watcher';
 }
 
+export interface ProjectIndexInvalidatedPayload {
+    source: string;
+    version: number;
+}
+
 /** 变量创建/更新事件 payload（与后端 EventVariable 对应） */
 export interface VariableCreatedPayload {
     variableId: string;

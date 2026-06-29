@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useGraphMetaStore } from '@/features/core/dataStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useFirstGraphResource } from '@/features/core/resource';
 import { useEditor } from './useEditor';
 
 /**
@@ -10,7 +10,7 @@ import { useEditor } from './useEditor';
 export function useAutoOpenFirstGraph() {
   const { openGraph } = useEditor({ withCanvasInteraction: false });
   const currentPath = useProjectIOStore((s) => s.currentPath);
-  const graphOrder = useGraphMetaStore((s) => s.graphOrder);
+  const firstGraph = useFirstGraphResource();
   const openedForPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -24,11 +24,9 @@ export function useAutoOpenFirstGraph() {
       return;
     }
 
-    const firstId = graphOrder[0];
-    const first = firstId ? useGraphMetaStore.getState().graphs[firstId] : null;
-    if (!first) return;
+    if (!firstGraph || (firstGraph.kind !== 'event' && firstGraph.kind !== 'function')) return;
 
     openedForPathRef.current = currentPath;
-    void openGraph(first.id, first.name, first.type);
-  }, [currentPath, graphOrder, openGraph]);
+    void openGraph(firstGraph.id, firstGraph.name, firstGraph.kind);
+  }, [currentPath, firstGraph, openGraph]);
 }

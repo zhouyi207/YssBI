@@ -31,4 +31,6 @@ pub enum EventResource {
         kind: String,
         source: String,
     },
+    #[serde(rename_all = "camelCase")]
+    ProjectIndexInvalidated { source: String, version: u64 },
 }

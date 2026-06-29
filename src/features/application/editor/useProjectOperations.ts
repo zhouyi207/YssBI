@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectIOStore, getGraphById, useGraphMetaStore } from '@/features/core/dataStore';
+import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
+import { selectFirstGraphResource, useResourceStore } from '@/features/core/resource';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
@@ -108,9 +109,13 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         });
       }
 
-      const firstId = useGraphMetaStore.getState().graphOrder[0];
-      const first = firstId ? useGraphMetaStore.getState().graphs[firstId] : null;
-      if (first) void openGraph(first.id, first.name, first.type);
+      const first = selectFirstGraphResource(
+        useResourceStore.getState().resources,
+        useResourceStore.getState().graphOrder,
+      );
+      if (first && (first.kind === 'event' || first.kind === 'function')) {
+        void openGraph(first.id, first.name, first.kind);
+      }
 
       uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {

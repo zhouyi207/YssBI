@@ -2,7 +2,8 @@ import { useCallback, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
-import { useGraphMetaStore, useGraphDataStore, getGraphById } from '@/features/core/dataStore';
+import { useGraphDataStore, getGraphById } from '@/features/core/dataStore';
+import { useResourceStore } from '@/features/core/resource';
 import { GraphService } from '@/services/graph/graphService';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { renameResource } from '@/features/application/resource/resourceActions';
@@ -15,14 +16,22 @@ interface PendingAction {
     name: string;
 }
 
-function toGraphMetaPatch(data: Partial<Graph>) {
-  const patch: { name?: string; type?: 'event' | 'function'; entryNodeId?: string } = {};
-  if (data.name !== undefined) patch.name = data.name;
-  if (data.type === 'event' || data.type === 'function') patch.type = data.type;
-  if ((data as Graph & { entryNodeId?: string }).entryNodeId !== undefined) {
-    patch.entryNodeId = (data as Graph & { entryNodeId?: string }).entryNodeId;
-  }
-  return patch;
+function upsertGraphResource(graph: Graph, kind: 'event' | 'function'): void {
+  useResourceStore.getState().upsertResource({
+    id: graph.id,
+    kind,
+    name: graph.name,
+    uri: `yssbi://graph/${kind}/${graph.id}`,
+    exists: true,
+    loaded: true,
+    hasDirtyDocument: false,
+    hasStaleDocument: false,
+    hasConflictDocument: false,
+  });
+}
+
+function patchGraphResource(id: string, kind: 'event' | 'function', patch: Partial<{ name: string }>): void {
+  useResourceStore.getState().patchResource({ id, kind }, patch);
 }
 
 /**
@@ -79,7 +88,7 @@ export function useGraphManagement(
       if (openAfterCreate) {
         // 方案 A：创建成功后立即用 get_graph 拉取数据并打开，不依赖事件
         const graph = await GraphService.getGraph(id);
-        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'event', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
+        upsertGraphResource(graph, 'event');
         useGraphDataStore.getState().addGraphFromData(id, {
           ...graph,
           nodes: graph.nodes ?? [],
@@ -139,7 +148,7 @@ export function useGraphManagement(
     
     try {
       await GraphService.updateEvent(id, fullData as any);
-      useGraphMetaStore.getState().updateGraph(id, toGraphMetaPatch(data));
+      if (data.name !== undefined) patchGraphResource(id, 'event', { name: data.name });
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
@@ -153,7 +162,7 @@ export function useGraphManagement(
     try {
       await GraphService.removeGraph(id);
       useGraphDataStore.getState().clearGraph(id);
-      useGraphMetaStore.getState().deleteGraph(id);
+      useResourceStore.getState().removeResource({ id, kind: 'event' });
       closeTab(id, undefined, { skipDirtyPrompt: true });
     } catch (error) {
       logger.graph.error(`Failed to delete event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
@@ -177,7 +186,7 @@ export function useGraphManagement(
 
       if (openAfterCreate) {
         const graph = await GraphService.getGraph(id);
-        useGraphMetaStore.getState().addGraph({ id: graph.id, name: graph.name, type: 'function', entryNodeId: (graph as Graph & { entryNodeId?: string }).entryNodeId });
+        upsertGraphResource(graph, 'function');
         useGraphDataStore.getState().addGraphFromData(id, {
           ...graph,
           nodes: graph.nodes ?? [],
@@ -234,7 +243,7 @@ export function useGraphManagement(
     
     try {
       await GraphService.updateFunction(id, fullData as any);
-      useGraphMetaStore.getState().updateGraph(id, toGraphMetaPatch(data));
+      if (data.name !== undefined) patchGraphResource(id, 'function', { name: data.name });
       if (data.nodes || data.pins || data.connections) {
         useGraphDataStore.getState().addGraphFromData(id, { ...currentGraph, ...data } as any);
       }
@@ -248,7 +257,7 @@ export function useGraphManagement(
     try {
       await GraphService.removeGraph(id);
       useGraphDataStore.getState().clearGraph(id);
-      useGraphMetaStore.getState().deleteGraph(id);
+      useResourceStore.getState().removeResource({ id, kind: 'function' });
       closeTab(id, undefined, { skipDirtyPrompt: true });
     } catch (error) {
       logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
