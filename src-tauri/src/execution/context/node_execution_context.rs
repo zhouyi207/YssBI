@@ -1,5 +1,9 @@
 use super::NodeExecutionContextTrait;
-use crate::execution::WindowDataSource;
+use crate::execution::{
+    ExecutionEvent, ResultSourceRecord, ResultSourceStore, build_dataframe_source,
+    build_json_source_from_data_value, build_series_source, build_struct_source,
+};
+use crate::graph::GraphId;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId, NodeInstanceParams};
@@ -12,8 +16,9 @@ use std::sync::{Arc, Mutex};
 /// 窗口打开请求
 pub struct WindowAction {
     pub window_type: String,
-    pub data: String,
-    pub source: Option<WindowDataSource>,
+    pub data: Option<String>,
+    pub source_record: Option<ResultSourceRecord>,
+    pub existing_source_id: Option<String>,
 }
 
 /// 具体的执行上下文实现
@@ -22,16 +27,82 @@ pub struct NodeExecutionContext {
     pub graph: Arc<Mutex<GraphRuntime>>,
     pub logs: Vec<String>,
     pub window_actions: Vec<WindowAction>,
+    pub pin_result_events: Vec<ExecutionEvent>,
+    result_source_store: ResultSourceStore,
+    run_id: String,
 }
 
 impl NodeExecutionContext {
     pub fn new(graph: Arc<Mutex<GraphRuntime>>, node_id: NodeId) -> Self {
+        Self::with_result_sources(graph, node_id, ResultSourceStore::new(), "test".to_string())
+    }
+
+    pub fn with_result_sources(
+        graph: Arc<Mutex<GraphRuntime>>,
+        node_id: NodeId,
+        result_source_store: ResultSourceStore,
+        run_id: String,
+    ) -> Self {
         Self {
             node_id,
             graph,
             logs: Vec::new(),
             window_actions: Vec::new(),
+            pin_result_events: Vec::new(),
+            result_source_store,
+            run_id,
         }
+    }
+
+    fn register_output_source(
+        &mut self,
+        graph_id: GraphId,
+        pin_id: PinId,
+        value: &DataValue,
+    ) -> Result<(), String> {
+        let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_id, pin_id);
+        let record = match value {
+            DataValue::DataFrame(id) => {
+                let df = {
+                    let mut graph = self.graph.lock().unwrap();
+                    graph.get_dataframe(id)?
+                };
+                build_dataframe_source(source_id.clone(), "Output: DataFrame", df, None)
+            }
+            DataValue::DataSeries(v) => {
+                let series = {
+                    let graph = self.graph.lock().unwrap();
+                    graph.get_series(&v.id)?
+                };
+                build_series_source(source_id.clone(), "Output: Series", series, None)
+            }
+            DataValue::Struct {
+                type_key,
+                handle_id,
+            } => {
+                let handle = {
+                    let graph = self.graph.lock().unwrap();
+                    graph.get_handle(handle_id)
+                };
+                build_struct_source(source_id.clone(), type_key, handle_id, handle, None)?
+            }
+            other => build_json_source_from_data_value(source_id.clone(), "Output", other, None),
+        };
+
+        let descriptor = self.result_source_store.insert_runtime_pin_source(
+            graph_id.to_string(),
+            pin_id.to_string(),
+            self.run_id.clone(),
+            record,
+        );
+        self.pin_result_events.push(ExecutionEvent::PinResultReady {
+            graph_id: graph_id.to_string(),
+            node_id: self.node_id.to_string(),
+            pin_id: pin_id.to_string(),
+            source_id,
+            descriptor,
+        });
+        Ok(())
     }
 }
 
@@ -89,16 +160,21 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     }
 
     fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String> {
-        let mut graph = self.graph.lock().unwrap();
-        let pin = graph
-            .get_pin_instance_by_pin_role(self.node_id, role)
-            .ok_or_else(|| format!("Output pin with role {:?} not found", role))?;
+        let (graph_id, pin_id) = {
+            let mut graph = self.graph.lock().unwrap();
+            let pin = graph
+                .get_pin_instance_by_pin_role(self.node_id, role)
+                .ok_or_else(|| format!("Output pin with role {:?} not found", role))?;
 
-        if pin.is_input() {
-            return Err(format!("Pin {:?} is not an output", role));
-        }
+            if pin.is_input() {
+                return Err(format!("Pin {:?} is not an output", role));
+            }
 
-        graph.set_pin_current_value(pin.id, value);
+            graph.set_pin_current_value(pin.id, value.clone());
+            (graph.graph_id(), pin.id)
+        };
+
+        self.register_output_source(graph_id, pin_id, &value)?;
 
         Ok(())
     }
@@ -108,14 +184,16 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         role: &PinRole,
         values: Vec<DataValue>,
     ) -> Result<(), String> {
-        let mut graph = self.graph.lock().unwrap();
-        let pins = graph.get_pin_instances_by_pin_role(self.node_id, role);
-
-        let output_pins: Vec<PinId> = pins
-            .iter()
-            .filter(|p| !p.is_input())
-            .map(|p| p.id)
-            .collect();
+        let (graph_id, output_pins) = {
+            let graph = self.graph.lock().unwrap();
+            let pins = graph.get_pin_instances_by_pin_role(self.node_id, role);
+            let output_pins: Vec<PinId> = pins
+                .iter()
+                .filter(|p| !p.is_input())
+                .map(|p| p.id)
+                .collect();
+            (graph.graph_id(), output_pins)
+        };
 
         if output_pins.len() != values.len() {
             return Err(format!(
@@ -126,7 +204,11 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         }
 
         for (pin_id, value) in output_pins.into_iter().zip(values) {
-            graph.set_pin_current_value(pin_id, value);
+            {
+                let mut graph = self.graph.lock().unwrap();
+                graph.set_pin_current_value(pin_id, value.clone());
+            }
+            self.register_output_source(graph_id, pin_id, &value)?;
         }
 
         Ok(())
@@ -256,17 +338,40 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     fn open_window(&mut self, window_type: String, data: String) {
         self.window_actions.push(WindowAction {
             window_type,
-            data,
-            source: None,
+            data: Some(data),
+            source_record: None,
+            existing_source_id: None,
         });
     }
 
-    fn open_source_window(&mut self, window_type: String, data: String, source: WindowDataSource) {
+    fn open_result_source_window(&mut self, window_type: String, record: ResultSourceRecord) {
         self.window_actions.push(WindowAction {
             window_type,
-            data,
-            source: Some(source),
+            data: None,
+            source_record: Some(record),
+            existing_source_id: None,
         });
+    }
+
+    fn open_existing_source_window(&mut self, window_type: String, source_id: String) {
+        self.window_actions.push(WindowAction {
+            window_type,
+            data: None,
+            source_record: None,
+            existing_source_id: Some(source_id),
+        });
+    }
+
+    fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String> {
+        let (graph_id, upstream_pin_id) = {
+            let graph = self.graph.lock().ok()?;
+            let input = graph.get_pin_instance_by_pin_role(self.node_id, role)?;
+            let upstream = graph.get_upstream_by_pin_id(input.id)?;
+            (graph.graph_id().to_string(), upstream.to_string())
+        };
+        self.result_source_store
+            .get_pin_descriptor(&graph_id, &upstream_pin_id)
+            .map(|descriptor| descriptor.source_id)
     }
 
     fn log(&mut self, message: String) {

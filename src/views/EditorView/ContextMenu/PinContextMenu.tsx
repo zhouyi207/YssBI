@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
+import { VscEye, VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
 import { ContextMenu, type ContextMenuPosition, type ContextMenuSection } from "./ContextMenu";
 
 export interface PinContextMenuProps {
@@ -10,6 +10,7 @@ export interface PinContextMenuProps {
   canReset?: boolean;
   onBreakLinks?: () => void;
   onResetValue?: () => void;
+  onInspectResult?: () => void;
   onRemove?: () => void;
   onClose: () => void;
 }
@@ -21,6 +22,7 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   canReset,
   onBreakLinks,
   onResetValue,
+  onInspectResult,
   onRemove,
   onClose,
 }) => {
@@ -33,6 +35,7 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         items: [
           { id: "breakLinks", label: p("breakLinks"), icon: <VscLink size={12} />, disabled: !hasLinks, onClick: onBreakLinks },
           { id: "resetValue", label: p("resetValue"), icon: <VscRefresh size={12} />, disabled: !canReset, onClick: onResetValue },
+          { id: "inspectResult", label: "Inspect result", icon: <VscEye size={12} />, disabled: !onInspectResult, onClick: onInspectResult },
           { id: "promoteToVar", label: p("promoteToVar"), icon: <VscSymbolVariable size={12} />, disabled: true },
         ],
       },
@@ -49,7 +52,7 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         ],
       },
     ];
-  }, [t, removable, hasLinks, canReset, onBreakLinks, onResetValue, onRemove]);
+  }, [t, removable, hasLinks, canReset, onBreakLinks, onResetValue, onInspectResult, onRemove]);
 
   return (
     <ContextMenu

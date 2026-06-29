@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WindowDataService } from '@/services/window';
+import { SourceService, type SourceDescriptor } from '@/features/core/dataView';
 import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';
@@ -23,9 +23,13 @@ import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 import { logger } from '@/utils/appLogger';
 
-function isDataView(data: unknown): data is { viewType: 'data_view'; [k: string]: unknown } {
-  const d = data as Record<string, unknown>;
-  return typeof d === 'object' && d != null && d.viewType === 'data_view';
+function isDataView(data: unknown): data is SourceDescriptor {
+  const d = data as SourceDescriptor;
+  return (
+    typeof d === 'object' &&
+    d != null &&
+    ['dataframe', 'series', 'scalar', 'null', 'struct_ols', 'struct_generic'].includes(d.renderer)
+  );
 }
 
 function isVARSummary(data: unknown): data is { title: string; var_names?: string[]; oirf?: unknown } {
@@ -107,9 +111,9 @@ function isPanelSummary(data: unknown): data is PanelSummaryResult {
   );
 }
 
-function getDataKeyFromHash(): string | null {
+function getSourceIdFromHash(): string | null {
   const hash = window.location.hash;
-  const match = hash.match(/[?&]key=([^&]+)/);
+  const match = hash.match(/[?&]sourceId=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
@@ -128,38 +132,31 @@ export const InfoWindow: React.FC = () => {
     const initializeWindow = async () => {
       try {
         const currentWindow = getCurrentWindow();
-        const dataKey = getDataKeyFromHash();
+        const sourceId = getSourceIdFromHash();
 
-        if (!dataKey) {
+        if (!sourceId) {
           setError(t('info.missingDataKey'));
           setIsReady(true);
           await currentWindow.show().catch(() => {});
           return;
         }
 
-        const json = await WindowDataService.getWindowData(dataKey);
+        const metadata = await SourceService.getDescriptor(sourceId);
         if (!mounted) return;
 
-        if (json) {
-          try {
-            const metadata = JSON.parse(json);
-            if (metadata?.title) {
-              currentWindow.setTitle(metadata.title).catch(() => {});
-            }
+        if (metadata) {
+          currentWindow.setTitle(metadata.title).catch(() => {});
 
-            if (isDataView(metadata)) {
-              setOlsData(metadata);
-            } else {
-              const sourceJson = await WindowDataService.getWindowSourceValue(metadata.sourceId ?? dataKey);
-              if (!mounted) return;
-              if (!sourceJson) {
-                setError(t('info.noData'));
-                return;
-              }
-              setOlsData(JSON.parse(sourceJson));
+          if (isDataView(metadata)) {
+            setOlsData(metadata);
+          } else {
+            const value = await SourceService.getValue(metadata.sourceId);
+            if (!mounted) return;
+            if (!value) {
+              setError(t('info.noData'));
+              return;
             }
-          } catch (e) {
-            setError(`Failed to parse data: ${e instanceof Error ? e.message : String(e)}`);
+            setOlsData(value.value ?? value.structured ?? value);
           }
         } else {
             setError(t('info.noData'));

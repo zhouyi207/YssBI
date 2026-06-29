@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { PinData, PinView } from '@/shared/types/store/graph';
@@ -6,6 +6,8 @@ import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
+import { useExecutionStore } from '@/features/core/execution';
+import { UnifiedDataView } from '@/features/core/dataView';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
@@ -13,6 +15,7 @@ import { resolveNodeDocumentationContent } from '../nodeDocumentation';
 import { resolveNodePinSpecs } from '../resolveNodePinSpecs';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailText } from '../shared/DetailText';
+import type { PinResultState } from '@/shared/types/ui';
 
 const EMPTY_PINS: PinData[] = [];
 const EMPTY_CONNECTIONS: string[] = [];
@@ -40,6 +43,7 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     }),
   );
   const nodeType = node?.nodeType;
+  const [selectedResultPinId, setSelectedResultPinId] = useState<string | null>(null);
   const definition = useNodeRegistryStore((s) =>
     nodeType ? s.definitions.get(nodeType) : undefined,
   );
@@ -57,6 +61,17 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     () => resolveNodePinSpecs(nodeId, pins, definition),
     [nodeId, pins, definition],
   );
+  const executionGraphs = useExecutionStore((s) => s.graphs);
+  const pinResults = useMemo(() => {
+    const result = new Map<string, PinResultState>();
+    for (const graph of Object.values(executionGraphs)) {
+      for (const [pinId, pinResult] of graph.pinResults) {
+        if (pinResult.nodeId === nodeId) result.set(pinId, pinResult);
+      }
+    }
+    return result;
+  }, [executionGraphs, nodeId]);
+  const selectedResult = selectedResultPinId ? pinResults.get(selectedResultPinId) : null;
 
   const documentation = useMemo(() => {
     const meta = getNodeDefinitionMeta(definition);
@@ -85,7 +100,14 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
           </DetailReadonlyField>
         )}
       </DetailForm>
-      <NodePinInterfacePanel inputs={pinSpecs.inputs} outputs={pinSpecs.outputs} />
+      <NodePinInterfacePanel
+        inputs={pinSpecs.inputs}
+        outputs={pinSpecs.outputs}
+        pinResults={pinResults}
+        selectedResultPinId={selectedResultPinId}
+        onInspectResult={setSelectedResultPinId}
+      />
+      {selectedResult ? <UnifiedDataView payload={selectedResult.descriptor} /> : null}
       {documentation && <NodeDocumentationPanel markdown={documentation} />}
     </DetailPanelShell>
   );

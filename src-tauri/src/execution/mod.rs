@@ -9,9 +9,11 @@
 pub mod context;
 pub mod data_store;
 pub mod engine;
+pub mod source_builder;
 pub mod window_data_store;
 
 pub use context::*;
 pub use data_store::*;
 pub use engine::*;
+pub use source_builder::*;
 pub use window_data_store::*;

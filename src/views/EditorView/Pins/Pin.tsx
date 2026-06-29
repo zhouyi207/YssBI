@@ -10,6 +10,8 @@ import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
+import { useExecutionStore } from "@/features/core/execution";
+import { createPersistedWindow } from "@/features/application/window";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -99,6 +101,9 @@ export const Pin: React.FC<PinProps> = (props) => {
   const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id);
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
+  const pinResult = useExecutionStore((s) =>
+    subgraphId && direction === "output" ? s.graphs[subgraphId]?.pinResults.get(id) : undefined,
+  );
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -107,6 +112,17 @@ export const Pin: React.FC<PinProps> = (props) => {
     }
     void menuActions?.removeRepeatablePin(nodeId, id);
   }, [onRemovePin, menuActions, nodeId, id]);
+
+  const handleInspectResult = useCallback(() => {
+    if (!pinResult) return;
+    const params = new URLSearchParams({ sourceId: pinResult.sourceId });
+    void createPersistedWindow({
+      kind: "dataView",
+      label: `source-${Math.random().toString(36).substring(2, 10)}`,
+      url: `index.html#/dataview?${params.toString()}`,
+      title: pinResult.descriptor.title,
+    });
+  }, [pinResult]);
 
   const hasLinks = linkCount > 0;
   const canReset =
@@ -368,6 +384,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           canReset={canReset}
           onBreakLinks={menuActions ? () => void menuActions.disconnectPin(id) : undefined}
           onResetValue={menuActions ? () => void menuActions.resetPinValue(nodeId, id) : undefined}
+          onInspectResult={pinResult ? handleInspectResult : undefined}
           onRemove={handleRemovePin}
           onClose={() => setContextMenu(null)}
         />

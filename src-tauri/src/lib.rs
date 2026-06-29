@@ -60,7 +60,7 @@ pub fn run() {
         // 注册全局状态管理器
         .manage(project::ProjectState::new())
         .manage(project::ProjectWatcherState::new())
-        .manage(execution::WindowDataStore::new())
+        .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .setup(|app| {
             // 初始化日志管理器
@@ -120,9 +120,10 @@ pub fn run() {
             flush_project,
             save_project_as,
             execute_project,
-            get_window_data,
-            get_window_source_value,
-            get_window_source_page,
+            get_result_source_descriptor,
+            get_result_source_value,
+            get_result_source_page,
+            get_pin_result_descriptor,
             // ==================== 设置 ====================
             load_settings,
             save_settings,

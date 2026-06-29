@@ -2,7 +2,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { InfoStatsTable } from '@/views/InfoView/shared/InfoStatsTable';
 import { OLSComponent } from '@/views/InfoView/OLSComponent';
 import type { OLSResultData } from '@/views/InfoView/shared/types';
-import type { DataViewPayload } from '../../types';
+import type { SourceDescriptor } from '../../types';
 import { useDataViewSourceValue } from '../../useDataViewSourceValue';
 import { usePagedDataViewRows } from '../../usePagedDataViewRows';
 import { DataViewPageToolbar } from '../DataViewPageToolbar';
@@ -19,7 +19,7 @@ function SourceError({ error }: { error: string }) {
   return <p className="text-sm text-destructive">{error}</p>;
 }
 
-export function DataFrameSourceView({ payload }: { payload: DataViewPayload }) {
+export function DataFrameSourceView({ payload }: { payload: SourceDescriptor }) {
   const totalRows = payload.totalRows ?? 0;
   const columns = payload.columns ?? [];
   const paging = usePagedDataViewRows(payload.sourceId, totalRows);
@@ -59,7 +59,7 @@ export function DataFrameSourceView({ payload }: { payload: DataViewPayload }) {
   );
 }
 
-export function SeriesSourceView({ payload }: { payload: DataViewPayload }) {
+export function SeriesSourceView({ payload }: { payload: SourceDescriptor }) {
   const length = payload.length ?? 0;
   const paging = usePagedDataViewRows(payload.sourceId, length);
 
@@ -109,7 +109,7 @@ export function SeriesSourceView({ payload }: { payload: DataViewPayload }) {
   );
 }
 
-export function ScalarSourceView({ payload }: { payload: DataViewPayload }) {
+export function ScalarSourceView({ payload }: { payload: SourceDescriptor }) {
   const { value, loading, error } = useDataViewSourceValue(payload.sourceId);
 
   return (
@@ -130,7 +130,7 @@ export function ScalarSourceView({ payload }: { payload: DataViewPayload }) {
   );
 }
 
-export function NullSourceView({ payload }: { payload: DataViewPayload }) {
+export function NullSourceView({ payload }: { payload: SourceDescriptor }) {
   const { value, error } = useDataViewSourceValue(payload.sourceId);
 
   return (
@@ -144,7 +144,7 @@ export function NullSourceView({ payload }: { payload: DataViewPayload }) {
   );
 }
 
-export function GenericStructSourceView({ payload }: { payload: DataViewPayload }) {
+export function GenericStructSourceView({ payload }: { payload: SourceDescriptor }) {
   const { value, error } = useDataViewSourceValue(payload.sourceId);
 
   return (
@@ -168,7 +168,7 @@ export function GenericStructSourceView({ payload }: { payload: DataViewPayload 
   );
 }
 
-export function OlsStructSourceView({ payload }: { payload: DataViewPayload }) {
+export function OlsStructSourceView({ payload }: { payload: SourceDescriptor }) {
   const { value, loading, error } = useDataViewSourceValue(payload.sourceId);
 
   if (error) {

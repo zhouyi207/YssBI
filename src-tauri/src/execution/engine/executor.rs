@@ -8,32 +8,16 @@ use super::execution_effect::{ExecutionEffect, ResumeToken};
 use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
-use crate::execution::NodeExecutionContext;
-use crate::execution::WindowDataStore;
+use crate::execution::{
+    NodeExecutionContext, ResultSourceStore, build_presentation, build_window_source_record,
+};
 use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
 use crate::log_exec;
-use serde_json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-
-/// 向窗口数据 JSON 注入 executionTimeMs，供前端 summary 页面做性能分析
-fn inject_execution_time(data_json: &str, duration_ms: u64) -> String {
-    match serde_json::from_str::<serde_json::Value>(data_json) {
-        Ok(mut v) => {
-            if let Some(obj) = v.as_object_mut() {
-                obj.insert(
-                    "executionTimeMs".to_string(),
-                    serde_json::json!(duration_ms),
-                );
-            }
-            serde_json::to_string(&v).unwrap_or_else(|_| data_json.to_string())
-        }
-        Err(_) => data_json.to_string(),
-    }
-}
 
 /// 执行器
 ///
@@ -59,8 +43,10 @@ pub struct Executor<E: EventEmitter> {
     /// 事件发送器
     emitter: E,
 
-    /// 窗口数据存储（节点产生的数据暂存于此，前端新窗口通过 command 拉取）
-    window_data_store: WindowDataStore,
+    /// 结果 source 存储（窗口结果与运行时 pin 结果共用）
+    result_source_store: ResultSourceStore,
+
+    run_id: String,
 }
 
 impl<E: EventEmitter> Executor<E> {
@@ -68,7 +54,7 @@ impl<E: EventEmitter> Executor<E> {
     pub fn new(
         graph: Arc<Mutex<GraphRuntime>>,
         emitter: E,
-        window_data_store: WindowDataStore,
+        result_source_store: ResultSourceStore,
     ) -> Self {
         Self {
             stack: ExecutionStack::new(),
@@ -76,7 +62,8 @@ impl<E: EventEmitter> Executor<E> {
             graph,
             logs: Vec::new(),
             emitter,
-            window_data_store,
+            result_source_store,
+            run_id: uuid::Uuid::new_v4().simple().to_string(),
         }
     }
 
@@ -99,6 +86,8 @@ impl<E: EventEmitter> Executor<E> {
 
     /// 主执行循环（错误容错）
     fn run(&mut self) -> Result<(), String> {
+        let graph_id = { self.graph.lock().unwrap().graph_id().to_string() };
+        self.result_source_store.clear_runtime_graph(&graph_id);
         self.emit(ExecutionEvent::ExecutionStart);
         let mut has_error = false;
 
@@ -165,7 +154,12 @@ impl<E: EventEmitter> Executor<E> {
             .map_err(|e| (e, 0u64))?;
 
         // 创建执行上下文
-        let mut ctx = NodeExecutionContext::new(self.graph.clone(), node_id);
+        let mut ctx = NodeExecutionContext::with_result_sources(
+            self.graph.clone(),
+            node_id,
+            self.result_source_store.clone(),
+            self.run_id.clone(),
+        );
 
         // 测量主节点计算耗时（用于性能分析）
         let node_start = Instant::now();
@@ -185,39 +179,61 @@ impl<E: EventEmitter> Executor<E> {
 
         // 收集日志
         self.logs.extend(ctx.logs);
+        for event in ctx.pin_result_events {
+            self.emit(event);
+        }
 
         let node_duration_ms = node_start.elapsed().as_millis() as u64;
 
         for action in ctx.window_actions {
-            let data_key = format!("win_{}", uuid::Uuid::new_v4().simple());
-            // 注入 executionTimeMs 到窗口数据，供前端 summary 页面做性能分析
-            let data_with_timing = inject_execution_time(&action.data, node_duration_ms);
-            if let Some(source) = action.source {
-                self.window_data_store
-                    .insert_source_window(
-                        data_key.clone(),
-                        action.window_type.clone(),
-                        data_with_timing,
-                        source,
-                    )
-                    .unwrap_or_else(|err| {
-                        self.log(format!("Failed to store window source: {}", err));
+            if let Some(source_id) = action.existing_source_id {
+                if let Some(descriptor) = self.result_source_store.get_descriptor(&source_id) {
+                    let presentation =
+                        build_presentation(source_id.clone(), &action.window_type, &descriptor);
+                    self.emit(ExecutionEvent::OpenSourceWindow {
+                        source_id,
+                        presentation,
                     });
-            } else {
-                self.window_data_store
-                    .insert_json_window(
-                        data_key.clone(),
-                        action.window_type.clone(),
-                        data_with_timing,
-                    )
-                    .unwrap_or_else(|err| {
-                        self.log(format!("Failed to store window JSON source: {}", err));
-                    });
+                } else {
+                    self.log(format!("Existing source '{}' was not found", source_id));
+                }
+                continue;
             }
-            self.emit(ExecutionEvent::OpenWindow {
-                window_type: action.window_type,
-                data_key,
-            });
+
+            if let Some(record) = action.source_record {
+                let source_id = record.descriptor.source_id.clone();
+                let presentation =
+                    build_presentation(source_id.clone(), &action.window_type, &record.descriptor);
+                self.result_source_store.insert_window_source(record);
+                self.emit(ExecutionEvent::OpenSourceWindow {
+                    source_id,
+                    presentation,
+                });
+                continue;
+            }
+
+            let Some(data) = action.data else {
+                self.log("Window action had no source or payload".to_string());
+                continue;
+            };
+            let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
+            match build_window_source_record(
+                source_id.clone(),
+                &action.window_type,
+                &data,
+                Some(node_duration_ms),
+            ) {
+                Ok((record, presentation)) => {
+                    self.result_source_store.insert_window_source(record);
+                    self.emit(ExecutionEvent::OpenSourceWindow {
+                        source_id,
+                        presentation,
+                    });
+                }
+                Err(err) => {
+                    self.log(format!("Failed to store result source: {}", err));
+                }
+            }
         }
 
         result.map(|r| (r, node_duration_ms))
@@ -301,7 +317,12 @@ impl<E: EventEmitter> Executor<E> {
                     self.emit_data_input_connections(upstream_node_id);
 
                     let upstream_start = Instant::now();
-                    let mut ctx = NodeExecutionContext::new(self.graph.clone(), upstream_node_id);
+                    let mut ctx = NodeExecutionContext::with_result_sources(
+                        self.graph.clone(),
+                        upstream_node_id,
+                        self.result_source_store.clone(),
+                        self.run_id.clone(),
+                    );
 
                     let eval_result = if let Some(evaluator) = &upstream_definition.data_evaluator {
                         evaluator(&mut ctx)
@@ -310,6 +331,9 @@ impl<E: EventEmitter> Executor<E> {
                     };
 
                     self.logs.extend(ctx.logs);
+                    for event in ctx.pin_result_events {
+                        self.emit(event);
+                    }
                     let upstream_duration_ms = upstream_start.elapsed().as_millis() as u64;
 
                     match eval_result {

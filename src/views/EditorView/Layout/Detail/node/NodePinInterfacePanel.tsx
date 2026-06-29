@@ -5,19 +5,43 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { NodePinSpecRow } from './NodePinSpecRow';
 import { detailEmptyHintClass } from '../shared/detailStyles';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
+import type { PinResultState } from '@/shared/types/ui';
 
 interface NodePinInterfacePanelProps {
   inputs: ResolvedPinSpec[];
   outputs: ResolvedPinSpec[];
+  pinResults?: Map<string, PinResultState>;
+  selectedResultPinId?: string | null;
+  onInspectResult?: (pinId: string) => void;
 }
 
 type PinTab = 'inputs' | 'outputs';
 
-function PinList({ emptyLabel, pins }: { emptyLabel: string; pins: ResolvedPinSpec[] }) {
+function PinList({
+  emptyLabel,
+  pins,
+  pinResults,
+  selectedResultPinId,
+  onInspectResult,
+}: {
+  emptyLabel: string;
+  pins: ResolvedPinSpec[];
+  pinResults?: Map<string, PinResultState>;
+  selectedResultPinId?: string | null;
+  onInspectResult?: (pinId: string) => void;
+}) {
   return (
     <div className="space-y-1">
       {pins.length > 0 ? (
-        pins.map((pin) => <NodePinSpecRow key={pin.id} pin={pin} />)
+        pins.map((pin) => (
+          <NodePinSpecRow
+            key={pin.id}
+            pin={pin}
+            result={pinResults?.get(pin.id)}
+            selected={selectedResultPinId === pin.id}
+            onInspect={onInspectResult}
+          />
+        ))
       ) : (
         <div className={detailEmptyHintClass}>{emptyLabel}</div>
       )}
@@ -25,7 +49,13 @@ function PinList({ emptyLabel, pins }: { emptyLabel: string; pins: ResolvedPinSp
   );
 }
 
-export function NodePinInterfacePanel({ inputs, outputs }: NodePinInterfacePanelProps) {
+export function NodePinInterfacePanel({
+  inputs,
+  outputs,
+  pinResults,
+  selectedResultPinId,
+  onInspectResult,
+}: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PinTab>(() =>
     inputs.length === 0 && outputs.length > 0 ? 'outputs' : 'inputs',
@@ -60,7 +90,13 @@ export function NodePinInterfacePanel({ inputs, outputs }: NodePinInterfacePanel
             <PinList emptyLabel={t('detail.nodeDoc.noInputs')} pins={inputs} />
           </TabsContent>
           <TabsContent value="outputs" className="mt-2">
-            <PinList emptyLabel={t('detail.nodeDoc.noOutputs')} pins={outputs} />
+            <PinList
+              emptyLabel={t('detail.nodeDoc.noOutputs')}
+              pins={outputs}
+              pinResults={pinResults}
+              selectedResultPinId={selectedResultPinId}
+              onInspectResult={onInspectResult}
+            />
           </TabsContent>
         </Tabs>
       ) : (

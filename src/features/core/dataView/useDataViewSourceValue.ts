@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { DataViewService } from './dataViewService';
-import type { DataViewSourceValue } from './types';
+import { SourceService } from './dataViewService';
+import type { SourceValue } from './types';
 
 export function useDataViewSourceValue(sourceId: string | null) {
-  const [value, setValue] = useState<DataViewSourceValue | null>(null);
+  const [value, setValue] = useState<SourceValue | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef(0);
@@ -20,7 +20,7 @@ export function useDataViewSourceValue(sourceId: string | null) {
     setLoading(true);
     setError(null);
 
-    DataViewService.getValue(sourceId)
+    SourceService.getValue(sourceId)
       .then((next) => {
         if (requestId !== requestRef.current) return;
         setValue(next);

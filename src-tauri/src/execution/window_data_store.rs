@@ -1,31 +1,55 @@
 use polars::prelude::{DataFrame, Series};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use yss_sci::api::database::anyvalue_to_json;
 
-/// Typed source attached to a window metadata key.
+pub type SourceId = String;
+
+/// Typed source data retained in the backend for lazy frontend reads.
 #[derive(Clone)]
-pub enum WindowDataSource {
-    Json(String),
+pub enum ResultSource {
+    Json(serde_json::Value),
     DataFrame(Arc<DataFrame>),
     Series(Series),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceKind {
+    Json,
+    Dataframe,
+    Series,
+    Scalar,
+    Null,
+    Struct,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceRenderer {
+    Dataframe,
+    Series,
+    Scalar,
+    Null,
+    StructOls,
+    StructGeneric,
+    Plot,
+    Info,
+}
+
+/// Data-only descriptor. Window routing and layout live in `SourcePresentation`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WindowSourceMetadata {
-    pub source_id: String,
-    pub window_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub view_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub renderer: Option<String>,
+pub struct SourceDescriptor {
+    pub source_id: SourceId,
+    pub kind: SourceKind,
+    pub renderer: SourceRenderer,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_time_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub columns: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,14 +68,43 @@ pub struct WindowSourceMetadata {
     pub handle_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub struct_kind: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub execution_time_ms: Option<u64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WindowDataPageResponse {
-    pub kind: String,
+pub struct SourcePresentation {
+    pub source_id: SourceId,
+    pub route: String,
+    pub window_title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plot_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceValue {
+    pub kind: SourceKind,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handle_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub struct_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourcePage {
+    pub kind: SourceKind,
     pub offset: usize,
     pub limit: usize,
     pub total_count: usize,
@@ -63,73 +116,117 @@ pub struct WindowDataPageResponse {
     pub values: Option<Vec<serde_json::Value>>,
 }
 
-/// Temporary store for child-window sources. `get_window_data` returns metadata only;
-/// source values/pages are fetched through typed commands.
 #[derive(Clone)]
-pub struct WindowDataStore {
-    metadata: Arc<Mutex<HashMap<String, String>>>,
-    sources: Arc<Mutex<HashMap<String, WindowDataSource>>>,
+pub struct ResultSourceRecord {
+    pub descriptor: SourceDescriptor,
+    pub source: ResultSource,
 }
 
-impl WindowDataStore {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum SourceOwner {
+    Window,
+    RuntimePin {
+        graph_id: String,
+        pin_id: String,
+        run_id: String,
+    },
+}
+
+#[derive(Default)]
+struct ResultSourceRegistry {
+    descriptors: HashMap<SourceId, SourceDescriptor>,
+    sources: HashMap<SourceId, ResultSource>,
+    runtime_index: HashMap<(String, String), SourceId>,
+    owners: HashMap<SourceId, SourceOwner>,
+}
+
+/// Session-scoped registry for all inspectable execution results.
+#[derive(Clone, Default)]
+pub struct ResultSourceStore {
+    registry: Arc<RwLock<ResultSourceRegistry>>,
+}
+
+impl ResultSourceStore {
     pub fn new() -> Self {
-        Self {
-            metadata: Arc::new(Mutex::new(HashMap::new())),
-            sources: Arc::new(Mutex::new(HashMap::new())),
+        Self::default()
+    }
+
+    pub fn insert_window_source(&self, record: ResultSourceRecord) {
+        let source_id = record.descriptor.source_id.clone();
+        let mut registry = self.registry.write().unwrap();
+        registry
+            .descriptors
+            .insert(source_id.clone(), record.descriptor);
+        registry.sources.insert(source_id.clone(), record.source);
+        registry.owners.insert(source_id, SourceOwner::Window);
+    }
+
+    pub fn insert_runtime_pin_source(
+        &self,
+        graph_id: String,
+        pin_id: String,
+        run_id: String,
+        record: ResultSourceRecord,
+    ) -> SourceDescriptor {
+        let source_id = record.descriptor.source_id.clone();
+        let descriptor = record.descriptor.clone();
+        let mut registry = self.registry.write().unwrap();
+        if let Some(previous) = registry
+            .runtime_index
+            .insert((graph_id.clone(), pin_id.clone()), source_id.clone())
+        {
+            registry.descriptors.remove(&previous);
+            registry.sources.remove(&previous);
+            registry.owners.remove(&previous);
         }
+        registry
+            .descriptors
+            .insert(source_id.clone(), record.descriptor);
+        registry.sources.insert(source_id.clone(), record.source);
+        registry.owners.insert(
+            source_id,
+            SourceOwner::RuntimePin {
+                graph_id,
+                pin_id,
+                run_id,
+            },
+        );
+        descriptor
     }
 
-    pub fn insert_json_window(
-        &self,
-        key: String,
-        window_type: String,
-        value: String,
-    ) -> Result<(), String> {
-        let metadata = build_json_metadata(&key, &window_type, &value)?;
-        self.metadata.lock().unwrap().insert(key.clone(), metadata);
-        self.sources
-            .lock()
+    pub fn get_descriptor(&self, source_id: &str) -> Option<SourceDescriptor> {
+        self.registry
+            .read()
             .unwrap()
-            .insert(key, WindowDataSource::Json(value));
-        Ok(())
+            .descriptors
+            .get(source_id)
+            .cloned()
     }
 
-    pub fn insert_source(&self, key: String, source: WindowDataSource) {
-        self.sources.lock().unwrap().insert(key, source);
+    pub fn get_pin_descriptor(&self, graph_id: &str, pin_id: &str) -> Option<SourceDescriptor> {
+        let registry = self.registry.read().unwrap();
+        let source_id = registry
+            .runtime_index
+            .get(&(graph_id.to_string(), pin_id.to_string()))?;
+        registry.descriptors.get(source_id).cloned()
     }
 
-    pub fn insert_source_window(
-        &self,
-        key: String,
-        window_type: String,
-        metadata: String,
-        source: WindowDataSource,
-    ) -> Result<(), String> {
-        let metadata = inject_source_metadata(&metadata, &key, &window_type)?;
-        self.metadata.lock().unwrap().insert(key.clone(), metadata);
-        self.sources.lock().unwrap().insert(key, source);
-        Ok(())
-    }
+    pub fn get_value(&self, source_id: &str) -> Result<Option<SourceValue>, String> {
+        let (descriptor, source) = {
+            let registry = self.registry.read().unwrap();
+            let descriptor = match registry.descriptors.get(source_id) {
+                Some(descriptor) => descriptor.clone(),
+                None => return Ok(None),
+            };
+            let source = registry.sources.get(source_id).cloned();
+            (descriptor, source)
+        };
 
-    /// Non-destructive metadata read (React Strict Mode double-mount safe).
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.metadata.lock().unwrap().get(key).cloned()
-    }
-
-    pub fn has_tabular_source(&self, key: &str) -> bool {
-        matches!(
-            self.sources.lock().unwrap().get(key),
-            Some(WindowDataSource::DataFrame(_) | WindowDataSource::Series(_))
-        )
-    }
-
-    pub fn get_source_value(&self, key: &str) -> Result<Option<String>, String> {
-        let sources = self.sources.lock().unwrap();
-        match sources.get(key) {
-            Some(WindowDataSource::Json(value)) => Ok(Some(value.clone())),
-            Some(WindowDataSource::DataFrame(_) | WindowDataSource::Series(_)) => Err(format!(
-                "Window source '{}' is paged, not a JSON value",
-                key
+        match source {
+            Some(ResultSource::Json(value)) => Ok(Some(json_to_source_value(&descriptor, value))),
+            Some(ResultSource::DataFrame(_) | ResultSource::Series(_)) => Err(format!(
+                "Result source '{}' is paged, not a JSON value",
+                source_id
             )),
             None => Ok(None),
         }
@@ -137,185 +234,134 @@ impl WindowDataStore {
 
     pub fn get_page(
         &self,
-        key: &str,
+        source_id: &str,
         offset: usize,
         limit: usize,
-    ) -> Result<WindowDataPageResponse, String> {
+    ) -> Result<SourcePage, String> {
         let limit = limit.max(1);
-        let sources = self.sources.lock().unwrap();
-        let source = sources
-            .get(key)
-            .ok_or_else(|| format!("No tabular data source for window key '{}'", key))?;
+        let source = {
+            let registry = self.registry.read().unwrap();
+            registry.sources.get(source_id).cloned()
+        }
+        .ok_or_else(|| format!("No data source for source id '{}'", source_id))?;
 
         match source {
-            WindowDataSource::DataFrame(df) => {
-                let total_count = df.height();
-                let start = offset.min(total_count);
-                let end = (offset.saturating_add(limit)).min(total_count);
-                let sliced = df.slice(start as i64, (end - start) as usize);
-                let columns: Vec<String> =
-                    df.columns().iter().map(|c| c.name().to_string()).collect();
-                let rows = dataframe_rows_to_json(&sliced);
-                Ok(WindowDataPageResponse {
-                    kind: "dataframe".to_string(),
-                    offset: start,
-                    limit,
-                    total_count,
-                    columns: Some(columns),
-                    rows: Some(rows),
-                    values: None,
-                })
-            }
-            WindowDataSource::Series(series) => {
-                let total_count = series.len();
-                let start = offset.min(total_count);
-                let end = (offset.saturating_add(limit)).min(total_count);
-                let values: Vec<serde_json::Value> = (start..end)
-                    .map(|i| {
-                        series
-                            .get(i)
-                            .map(anyvalue_to_json)
-                            .unwrap_or(serde_json::Value::Null)
-                    })
-                    .collect();
-                Ok(WindowDataPageResponse {
-                    kind: "series".to_string(),
-                    offset: start,
-                    limit,
-                    total_count,
-                    columns: None,
-                    rows: None,
-                    values: Some(values),
-                })
-            }
-            WindowDataSource::Json(_) => Err(format!(
-                "Window source '{}' is JSON, not a tabular source",
-                key
+            ResultSource::DataFrame(df) => dataframe_page(&df, offset, limit),
+            ResultSource::Series(series) => series_page(&series, offset, limit),
+            ResultSource::Json(_) => Err(format!(
+                "Result source '{}' is JSON, not a tabular source",
+                source_id
             )),
         }
     }
 
-    pub fn remove(&self, key: &str) {
-        self.metadata.lock().unwrap().remove(key);
-        self.sources.lock().unwrap().remove(key);
+    pub fn clear_runtime_graph(&self, graph_id: &str) {
+        let mut registry = self.registry.write().unwrap();
+        let source_ids: Vec<_> = registry
+            .owners
+            .iter()
+            .filter_map(|(source_id, owner)| match owner {
+                SourceOwner::RuntimePin {
+                    graph_id: owner_graph,
+                    ..
+                } if owner_graph == graph_id => Some(source_id.clone()),
+                _ => None,
+            })
+            .collect();
+        for source_id in source_ids {
+            registry.descriptors.remove(&source_id);
+            registry.sources.remove(&source_id);
+            registry.owners.remove(&source_id);
+        }
+        registry
+            .runtime_index
+            .retain(|(owner_graph_id, _), _| owner_graph_id != graph_id);
+    }
+
+    pub fn clear_all(&self) {
+        let mut registry = self.registry.write().unwrap();
+        registry.descriptors.clear();
+        registry.sources.clear();
+        registry.runtime_index.clear();
+        registry.owners.clear();
+    }
+
+    pub fn remove(&self, source_id: &str) {
+        let mut registry = self.registry.write().unwrap();
+        registry.descriptors.remove(source_id);
+        registry.sources.remove(source_id);
+        registry.owners.remove(source_id);
+        registry.runtime_index.retain(|_, v| v != source_id);
     }
 }
 
-fn build_json_metadata(key: &str, window_type: &str, value: &str) -> Result<String, String> {
-    let parsed = serde_json::from_str::<serde_json::Value>(value)
-        .map_err(|e| format!("Invalid window JSON for '{}': {}", window_type, e))?;
-
-    let title = parsed
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or_else(|| default_window_title(window_type))
-        .to_string();
-    let execution_time_ms = parsed.get("executionTimeMs").and_then(|v| v.as_u64());
-
-    let metadata = if parsed.get("viewType").and_then(|v| v.as_str()) == Some("data_view") {
-        WindowSourceMetadata {
-            source_id: key.to_string(),
-            window_type: window_type.to_string(),
-            view_type: Some("data_view".to_string()),
-            data_type: parsed
-                .get("dataType")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            renderer: parsed
-                .get("structKind")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .or_else(|| {
-                    parsed
-                        .get("dataType")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_string)
-                }),
-            title,
-            message: parsed
-                .get("message")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            columns: None,
-            total_rows: None,
-            name: parsed
-                .get("name")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            dtype: parsed
-                .get("dtype")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            length: parsed
-                .get("length")
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize),
-            value_type: parsed
-                .get("valueType")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            type_key: parsed
-                .get("typeKey")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            handle_id: parsed
-                .get("handleId")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            struct_kind: parsed
-                .get("structKind")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-            execution_time_ms,
-        }
-    } else {
-        WindowSourceMetadata {
-            source_id: key.to_string(),
-            window_type: window_type.to_string(),
-            view_type: Some("window_source".to_string()),
-            data_type: Some("json".to_string()),
-            renderer: Some(window_type.to_string()),
-            title,
-            message: None,
-            columns: None,
-            total_rows: None,
-            name: None,
-            dtype: None,
-            length: None,
-            value_type: None,
-            type_key: None,
-            handle_id: None,
-            struct_kind: None,
-            execution_time_ms,
-        }
-    };
-
-    serde_json::to_string(&metadata).map_err(|e| e.to_string())
-}
-
-fn inject_source_metadata(metadata: &str, key: &str, window_type: &str) -> Result<String, String> {
-    let mut parsed = serde_json::from_str::<serde_json::Value>(metadata)
-        .map_err(|e| format!("Invalid window metadata JSON: {}", e))?;
-    let obj = parsed
-        .as_object_mut()
-        .ok_or_else(|| "Window metadata must be a JSON object".to_string())?;
-    obj.insert("sourceId".to_string(), serde_json::json!(key));
-    obj.insert("windowType".to_string(), serde_json::json!(window_type));
-    serde_json::to_string(&parsed).map_err(|e| e.to_string())
-}
-
-fn default_window_title(window_type: &str) -> &str {
-    match window_type {
-        "data_view" => "Data View",
-        "scatter" => "Scatter Plot",
-        "line" => "Line Plot",
-        "ecdf" => "ECDF Plot",
-        "kde" => "KDE Plot",
-        "histogram" => "Histogram",
-        "correlation" => "Correlation Plot",
-        "correlogram" => "Correlogram",
-        _ => "Results",
+fn json_to_source_value(descriptor: &SourceDescriptor, json: serde_json::Value) -> SourceValue {
+    SourceValue {
+        kind: descriptor.kind.clone(),
+        title: descriptor.title.clone(),
+        message: json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| descriptor.message.clone()),
+        value: json.get("value").cloned().or_else(|| {
+            if descriptor.kind == SourceKind::Json || descriptor.renderer == SourceRenderer::Plot {
+                Some(json.clone())
+            } else {
+                None
+            }
+        }),
+        value_type: json
+            .get("valueType")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| descriptor.value_type.clone()),
+        type_key: descriptor.type_key.clone(),
+        handle_id: descriptor.handle_id.clone(),
+        struct_kind: descriptor.struct_kind.clone(),
+        structured: json.get("structured").cloned(),
     }
+}
+
+fn dataframe_page(df: &DataFrame, offset: usize, limit: usize) -> Result<SourcePage, String> {
+    let total_count = df.height();
+    let start = offset.min(total_count);
+    let end = (offset.saturating_add(limit)).min(total_count);
+    let sliced = df.slice(start as i64, end - start);
+    let columns: Vec<String> = df.columns().iter().map(|c| c.name().to_string()).collect();
+    let rows = dataframe_rows_to_json(&sliced);
+    Ok(SourcePage {
+        kind: SourceKind::Dataframe,
+        offset: start,
+        limit,
+        total_count,
+        columns: Some(columns),
+        rows: Some(rows),
+        values: None,
+    })
+}
+
+fn series_page(series: &Series, offset: usize, limit: usize) -> Result<SourcePage, String> {
+    let total_count = series.len();
+    let start = offset.min(total_count);
+    let end = (offset.saturating_add(limit)).min(total_count);
+    let values: Vec<serde_json::Value> = (start..end)
+        .map(|i| {
+            series
+                .get(i)
+                .map(anyvalue_to_json)
+                .unwrap_or(serde_json::Value::Null)
+        })
+        .collect();
+    Ok(SourcePage {
+        kind: SourceKind::Series,
+        offset: start,
+        limit,
+        total_count,
+        columns: None,
+        rows: None,
+        values: Some(values),
+    })
 }
 
 fn dataframe_rows_to_json(df: &DataFrame) -> Vec<Vec<serde_json::Value>> {
@@ -338,22 +384,70 @@ mod tests {
     use super::*;
     use polars::prelude::{NamedFrom, Series, df};
 
+    fn descriptor(source_id: &str, kind: SourceKind, renderer: SourceRenderer) -> SourceDescriptor {
+        SourceDescriptor {
+            source_id: source_id.to_string(),
+            kind,
+            renderer,
+            title: "Result".to_string(),
+            message: None,
+            execution_time_ms: None,
+            columns: None,
+            total_rows: None,
+            name: None,
+            dtype: None,
+            length: None,
+            value_type: None,
+            type_key: None,
+            handle_id: None,
+            struct_kind: None,
+        }
+    }
+
     #[test]
-    fn metadata_reads_remain_non_destructive() {
-        let store = WindowDataStore::new();
-        store
-            .insert_json_window(
-                "k".to_string(),
-                "ols_summary".to_string(),
-                "{\"title\":\"Result\",\"a\":1}".to_string(),
-            )
-            .unwrap();
-        let metadata = store.get("k").unwrap();
-        assert!(metadata.contains("\"sourceId\":\"k\""));
-        assert_eq!(store.get("k").as_deref(), Some(metadata.as_str()));
+    fn descriptors_are_typed_objects() {
+        let store = ResultSourceStore::new();
+        store.insert_window_source(ResultSourceRecord {
+            descriptor: descriptor("source-1", SourceKind::Scalar, SourceRenderer::Scalar),
+            source: ResultSource::Json(serde_json::json!({"value": 42, "valueType": "Int64"})),
+        });
+
+        let descriptor = store.get_descriptor("source-1").unwrap();
+        assert_eq!(descriptor.source_id, "source-1");
+        assert_eq!(descriptor.kind, SourceKind::Scalar);
+        assert_eq!(descriptor.renderer, SourceRenderer::Scalar);
+    }
+
+    #[test]
+    fn runtime_pin_sources_replace_previous_index_entry() {
+        let store = ResultSourceStore::new();
+        store.insert_runtime_pin_source(
+            "graph".to_string(),
+            "pin".to_string(),
+            "run-a".to_string(),
+            ResultSourceRecord {
+                descriptor: descriptor("runtime-a", SourceKind::Scalar, SourceRenderer::Scalar),
+                source: ResultSource::Json(serde_json::json!({"value": 1})),
+            },
+        );
+        store.insert_runtime_pin_source(
+            "graph".to_string(),
+            "pin".to_string(),
+            "run-b".to_string(),
+            ResultSourceRecord {
+                descriptor: descriptor("runtime-b", SourceKind::Scalar, SourceRenderer::Scalar),
+                source: ResultSource::Json(serde_json::json!({"value": 2})),
+            },
+        );
+
+        assert!(store.get_descriptor("runtime-a").is_none());
         assert_eq!(
-            store.get_source_value("k").unwrap().as_deref(),
-            Some("{\"title\":\"Result\",\"a\":1}")
+            store
+                .get_pin_descriptor("graph", "pin")
+                .unwrap()
+                .source_id
+                .as_str(),
+            "runtime-b"
         );
     }
 
@@ -364,11 +458,14 @@ mod tests {
             "b" => ["x", "y", "z", "w", "v"]
         )
         .unwrap();
-        let store = WindowDataStore::new();
-        store.insert_source("k".to_string(), WindowDataSource::DataFrame(Arc::new(df)));
+        let store = ResultSourceStore::new();
+        store.insert_window_source(ResultSourceRecord {
+            descriptor: descriptor("k", SourceKind::Dataframe, SourceRenderer::Dataframe),
+            source: ResultSource::DataFrame(Arc::new(df)),
+        });
 
         let page = store.get_page("k", 1, 2).unwrap();
-        assert_eq!(page.kind, "dataframe");
+        assert_eq!(page.kind, SourceKind::Dataframe);
         assert_eq!(page.offset, 1);
         assert_eq!(page.total_count, 5);
         assert_eq!(page.rows.as_ref().unwrap().len(), 2);
@@ -378,11 +475,14 @@ mod tests {
     #[test]
     fn series_page_slices_values() {
         let series = Series::new("s".into(), &[10i64, 20, 30, 40]);
-        let store = WindowDataStore::new();
-        store.insert_source("k".to_string(), WindowDataSource::Series(series));
+        let store = ResultSourceStore::new();
+        store.insert_window_source(ResultSourceRecord {
+            descriptor: descriptor("k", SourceKind::Series, SourceRenderer::Series),
+            source: ResultSource::Series(series),
+        });
 
         let page = store.get_page("k", 2, 10).unwrap();
-        assert_eq!(page.kind, "series");
+        assert_eq!(page.kind, SourceKind::Series);
         assert_eq!(page.offset, 2);
         assert_eq!(page.total_count, 4);
         assert_eq!(page.values.as_ref().unwrap().len(), 2);

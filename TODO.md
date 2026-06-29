@@ -512,6 +512,7 @@ package.json
 - [x] **统一 DataView 组件体系**：新增 `features/core/dataView`（`UnifiedDataView` + source-only renderer resolver + `DataViewShell`）；Debug View 节点、Info summary 与 Plot 窗口统一注册为 `WindowDataStore` backend source；前端窗口先读取 source metadata，再通过 `get_window_source_value` / `get_window_source_page` 获取实际 JSON 或 DataFrame/DataSeries 分页数据；OLSResult struct 走 `OLSComponent` 结构化展示。
 - [x] **变量测试补齐**：Rust 覆盖 VariableIndex、复制 graph local 修复、runtime 作用域、`update_variable` 类型切换默认值；Vitest 覆盖 `variableCatalog` 灌入与 resource projection。
 - [x] **DataView source-only 收口**：所有窗口化结果（Debug View 节点、Info summary、Plot）统一注册为 `WindowDataStore` backend source，前端 DataView 只消费 source metadata；删除 inline/pageable renderer 分支和 legacy inline snapshot 新路径；旧 InfoWindow summary / Plot 窗口也改为 metadata + source value 读取。
+- [x] **Unified Result Source 清理收口**：项目 load / save-as / new / 删除当前项目时同步清空 `ResultSourceStore`；删除后端旧 `get` / `get_source_value` 兼容 API 与前端 `DataViewService`、`DataViewPayload`、`WindowSourceMetadata` 等别名；View 节点改为直接构造 typed `ResultSourceRecord`，不再生成 legacy `viewType/dataType` JSON；`source_builder` 只保留普通 JSON 窗口与 plot payload 解析，DataFrame / Series / Struct 统一走 typed builder。
 
 ## v1.0 待办
 
@@ -524,6 +525,7 @@ package.json
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 - [ ] **所有节点运行结果 Source 化**：所有节点 output pin 的运行结果统一注册为 backend `RuntimeResultSource`，前端 Detail / Debug / View 窗口都通过 source descriptor + typed read API 查看结果；View 节点只作为打开结果窗口的入口之一，不再是查看运行结果的唯一入口。需要设计执行缓存生命周期、pin result 索引、重跑覆盖、图切换清理与 Detail/Debug UI 入口。
 - [ ] 运行完毕后，节点的 backend source 什么时候删除的问题：是断开连接之后就删除还是？？？？破坏了连接之后就删除？？？
+- [ ] view 节点出现的窗口样式调整，目前 data series 无法滑动，同时样式也很丑
 
 
 # TODOLIST

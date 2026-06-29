@@ -4,6 +4,8 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
+import type { SourceDescriptor, SourcePresentation } from '@/features/core/dataView';
+
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
 export type ExecutionEvent =
@@ -13,7 +15,17 @@ export type ExecutionEvent =
   | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
   | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
-  | { event: 'openWindow'; data: { windowType: string; dataKey: string } };
+  | { event: 'openSourceWindow'; data: { sourceId: string; presentation: SourcePresentation } }
+  | {
+      event: 'pinResultReady';
+      data: {
+        graphId: string;
+        nodeId: string;
+        pinId: string;
+        sourceId: string;
+        descriptor: SourceDescriptor;
+      };
+    };
 
 /** 带时间戳的录制事件 */
 export interface RecordedEvent {
@@ -33,6 +45,14 @@ export interface NodeExecutionState {
   durationMs?: number;
 }
 
+export interface PinResultState {
+  graphId: string;
+  nodeId: string;
+  pinId: string;
+  sourceId: string;
+  descriptor: SourceDescriptor;
+}
+
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
@@ -45,6 +65,8 @@ export interface GraphExecutionState {
   graphDirty: boolean;
   /** 节点 ID -> 后端计算耗时(ms)，用于性能分析 */
   nodeDurations: Map<string, number>;
+  /** output pin id -> latest backend source descriptor */
+  pinResults: Map<string, PinResultState>;
 }
 
 /** 全局执行状态 */

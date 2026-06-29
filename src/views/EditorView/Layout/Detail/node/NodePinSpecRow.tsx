@@ -1,14 +1,19 @@
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { detailPinRowClass } from '../shared/detailStyles';
 import { DetailBadge, DetailText } from '../shared/DetailText';
+import type { PinResultState } from '@/shared/types/ui';
 
 interface NodePinSpecRowProps {
   pin: ResolvedPinSpec;
+  result?: PinResultState;
+  selected?: boolean;
+  onInspect?: (pinId: string) => void;
 }
 
-export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
+export function NodePinSpecRow({ pin, result, selected, onInspect }: NodePinSpecRowProps) {
   const { t } = useTranslation();
 
   const slotNoteText =
@@ -66,7 +71,7 @@ export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
             {typeLabel}
           </TooltipContent>
         </Tooltip>
-        {(pin.connected || badges.length > 0) && (
+        {(pin.connected || badges.length > 0 || result) && (
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-1">
             {pin.connected && (
               <span
@@ -75,6 +80,17 @@ export function NodePinSpecRow({ pin }: NodePinSpecRowProps) {
               />
             )}
             {badges.map(renderBadge)}
+            {result ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={selected ? 'secondary' : 'ghost'}
+                className="h-5 px-1.5 text-[10px]"
+                onClick={() => onInspect?.(pin.id)}
+              >
+                Inspect
+              </Button>
+            ) : null}
           </div>
         )}
       </div>

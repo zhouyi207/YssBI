@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { WindowDataService } from '@/services/window';
+import { SourceService } from '@/features/core/dataView';
 import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -45,15 +45,15 @@ interface CorrelogramData {
   n: number;
 }
 
-function getDataKeyFromHash(): string | null {
+function getSourceIdFromHash(): string | null {
   const hash = window.location.hash;
-  const match = hash.match(/[?&]key=([^&]+)/);
+  const match = hash.match(/[?&]sourceId=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
 function getPlotTypeFromHash(): string {
   const hash = window.location.hash;
-  const match = hash.match(/[?&]type=([^&]+)/);
+  const match = hash.match(/[?&]plotType=([^&]+)/);
   return match ? decodeURIComponent(match[1]) : 'scatter';
 }
 
@@ -82,21 +82,21 @@ export const PlotWindow: React.FC = () => {
       try {
         logger.sys.debug('Initializing plot window...', 'PlotWindow');
         const currentWindow = getCurrentWindow();
-        const dataKey = getDataKeyFromHash();
+        const sourceId = getSourceIdFromHash();
         setPlotType(getPlotTypeFromHash());
 
-        if (dataKey) {
-          const metadataJson = await WindowDataService.getWindowData(dataKey);
-          if (mounted && metadataJson) {
+        if (sourceId) {
+          const descriptor = await SourceService.getDescriptor(sourceId);
+          if (mounted && descriptor) {
             try {
-              const metadata = JSON.parse(metadataJson);
-              const sourceJson = await WindowDataService.getWindowSourceValue(metadata.sourceId ?? dataKey);
+              currentWindow.setTitle(descriptor.title).catch(() => {});
+              const sourceValue = await SourceService.getValue(descriptor.sourceId);
               if (!mounted) return;
-              if (!sourceJson) {
+              if (!sourceValue) {
                 setError('No data available for this window');
                 return;
               }
-              const parsed = JSON.parse(sourceJson);
+              const parsed = sourceValue.value ?? sourceValue.structured ?? sourceValue;
               const ptype = getPlotTypeFromHash();
               if (ptype === 'correlogram') {
                 if (parsed.acf && Array.isArray(parsed.acf) && parsed.pacf && Array.isArray(parsed.pacf)) {

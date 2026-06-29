@@ -1,4 +1,4 @@
-use crate::execution::WindowDataSource;
+use crate::execution::ResultSourceRecord;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::{ExecRole, PinRole};
@@ -105,8 +105,14 @@ pub trait NodeExecutionContextTrait {
     /// 请求前端打开一个展示窗口
     fn open_window(&mut self, window_type: String, data: String);
 
-    /// 打开带后端 source 的窗口（metadata JSON + typed source）。
-    fn open_source_window(&mut self, window_type: String, data: String, source: WindowDataSource);
+    /// 打开已构造好的后端 source 窗口。
+    fn open_result_source_window(&mut self, window_type: String, record: ResultSourceRecord);
+
+    /// 打开已经注册过的 source，避免为 View 节点重复复制上游数据。
+    fn open_existing_source_window(&mut self, window_type: String, source_id: String);
+
+    /// 读取输入 pin 上游 output pin 已注册的 source id。
+    fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String>;
 
     // ====================================================================
     // 日志

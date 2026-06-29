@@ -365,6 +365,7 @@ pub async fn remove_registered_project(
 pub async fn delete_registered_project_files(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    source_store: State<'_, crate::execution::ResultSourceStore>,
     registry: State<'_, ProjectRegistry>,
     id: String,
 ) -> Result<(), String> {
@@ -382,6 +383,7 @@ pub async fn delete_registered_project_files(
 
     if deleting_active {
         state.clear();
+        source_store.clear_all();
         emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     }
 
@@ -406,6 +408,7 @@ pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
 pub fn load_project(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<crate::execution::ResultSourceStore>,
     watcher: State<ProjectWatcherState>,
     path: String,
 ) -> Result<(), FrontendError> {
@@ -434,6 +437,7 @@ pub fn load_project(
     // explicit `clear()` keeps the contract simple: every project switch
     // starts from a clean state.
     state.clear();
+    source_store.clear_all();
     state.set_path(Some(path.clone()));
     state.set_data(project_data.clone());
     if let Err(error) = watcher.watch_project(app.clone(), &path) {
@@ -454,6 +458,7 @@ pub fn load_project(
 pub async fn save_project_as(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    source_store: State<'_, crate::execution::ResultSourceStore>,
     watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
     path: String,
@@ -470,6 +475,7 @@ pub async fn save_project_as(
     let project_data = load_project_from_file(&new_metadata_path).map_err(|e| e.to_string())?;
 
     state.clear();
+    source_store.clear_all();
     state.set_path(Some(new_metadata_path.clone()));
     state.set_data(project_data.clone());
     if let Err(error) = watcher.watch_project(app.clone(), &new_metadata_path) {
@@ -536,10 +542,15 @@ pub fn flush_project(app: AppHandle, state: State<ProjectState>) -> Result<(), S
 
 /// 新建项目（清空当前状态）
 #[tauri::command]
-pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), String> {
+pub fn new_project(
+    app: AppHandle,
+    state: State<ProjectState>,
+    source_store: State<crate::execution::ResultSourceStore>,
+) -> Result<(), String> {
     log_app!(LogLevel::Info, "[command.new_project] Creating new project");
 
     state.clear();
+    source_store.clear_all();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
 }
@@ -549,12 +560,12 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Str
 #[tauri::command]
 pub async fn execute_project(
     state: State<'_, ProjectState>,
-    window_store: State<'_, crate::execution::WindowDataStore>,
+    source_store: State<'_, crate::execution::ResultSourceStore>,
     on_event: Channel<ExecutionEvent>,
     graph_id: Option<String>,
 ) -> Result<Value, String> {
     let project_data = state.get_data();
-    let window_store = window_store.inner().clone();
+    let source_store = source_store.inner().clone();
     let project_data_state = state.project_data.clone();
     let project_store = state.project_store.clone();
 
@@ -572,7 +583,7 @@ pub async fn execute_project(
             project_data,
             project_data_state,
             project_store,
-            window_store,
+            source_store,
             on_event,
             target_graph_id,
         )
@@ -581,33 +592,43 @@ pub async fn execute_project(
     .map_err(|e| e.to_string())?
 }
 
-/// 新窗口通过 key 拉取数据（非破坏性读取，兼容 React Strict Mode）
+/// 读取 source descriptor。
 #[tauri::command]
-pub fn get_window_data(
-    state: State<crate::execution::WindowDataStore>,
-    key: String,
-) -> Result<Option<String>, String> {
-    Ok(state.get(&key))
+pub fn get_result_source_descriptor(
+    state: State<crate::execution::ResultSourceStore>,
+    source_id: String,
+) -> Result<Option<crate::execution::SourceDescriptor>, String> {
+    Ok(state.get_descriptor(&source_id))
 }
 
-/// 新窗口通过 key 拉取 JSON source value（metadata 之外的实际内容）。
+/// 通过 graphId + pinId 读取最新 runtime pin source descriptor。
 #[tauri::command]
-pub fn get_window_source_value(
-    state: State<crate::execution::WindowDataStore>,
-    key: String,
-) -> Result<Option<String>, String> {
-    state.get_source_value(&key)
+pub fn get_pin_result_descriptor(
+    state: State<crate::execution::ResultSourceStore>,
+    graph_id: String,
+    pin_id: String,
+) -> Result<Option<crate::execution::SourceDescriptor>, String> {
+    Ok(state.get_pin_descriptor(&graph_id, &pin_id))
 }
 
-/// 分页拉取窗口 source 中的 DataFrame / DataSeries 数据
+/// 读取 JSON source value。
 #[tauri::command]
-pub fn get_window_source_page(
-    state: State<crate::execution::WindowDataStore>,
-    key: String,
+pub fn get_result_source_value(
+    state: State<crate::execution::ResultSourceStore>,
+    source_id: String,
+) -> Result<Option<crate::execution::SourceValue>, String> {
+    state.get_value(&source_id)
+}
+
+/// 分页拉取 source 中的 DataFrame / DataSeries 数据。
+#[tauri::command]
+pub fn get_result_source_page(
+    state: State<crate::execution::ResultSourceStore>,
+    source_id: String,
     offset: usize,
     limit: usize,
-) -> Result<crate::execution::WindowDataPageResponse, String> {
-    state.get_page(&key, offset, limit)
+) -> Result<crate::execution::SourcePage, String> {
+    state.get_page(&source_id, offset, limit)
 }
 
 #[tauri::command]

@@ -1,21 +1,28 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DataViewSourceValue, WindowDataPageResponse } from './types';
+import type { SourceDescriptor, SourcePage, SourceValue } from './types';
 
-export class DataViewService {
+export class SourceService {
+  static async getDescriptor(sourceId: string): Promise<SourceDescriptor | null> {
+    return invoke<SourceDescriptor | null>('get_result_source_descriptor', { sourceId });
+  }
+
+  static async getPinDescriptor(graphId: string, pinId: string): Promise<SourceDescriptor | null> {
+    return invoke<SourceDescriptor | null>('get_pin_result_descriptor', { graphId, pinId });
+  }
+
   static async getPage(
     sourceId: string,
     offset: number,
     limit: number,
-  ): Promise<WindowDataPageResponse> {
-    return invoke<WindowDataPageResponse>('get_window_source_page', {
-      key: sourceId,
+  ): Promise<SourcePage> {
+    return invoke<SourcePage>('get_result_source_page', {
+      sourceId,
       offset,
       limit,
     });
   }
 
-  static async getValue(sourceId: string): Promise<DataViewSourceValue | null> {
-    const json = await invoke<string | null>('get_window_source_value', { key: sourceId });
-    return json ? (JSON.parse(json) as DataViewSourceValue) : null;
+  static async getValue(sourceId: string): Promise<SourceValue | null> {
+    return invoke<SourceValue | null>('get_result_source_value', { sourceId });
   }
 }

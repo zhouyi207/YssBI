@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ExecutionState, GraphExecutionState, ExecutionEvent, RecordedEvent } from '@/shared/types/ui';
+import type { ExecutionState, GraphExecutionState, ExecutionEvent, RecordedEvent, PinResultState } from '@/shared/types/ui';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -11,6 +11,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   recording: [],
   graphDirty: false,
   nodeDurations: new Map(),
+  pinResults: new Map(),
 });
 
 interface ExecutionStore extends ExecutionState {
@@ -24,6 +25,7 @@ interface ExecutionStore extends ExecutionState {
   markNodeCompleted: (graphId: string, nodeId: string, durationMs?: number) => void;
   markNodeError: (graphId: string, nodeId: string, durationMs?: number) => void;
   markConnectionCompleted: (graphId: string, fromPinId: string, toPinId: string) => void;
+  recordPinResult: (graphId: string, result: PinResultState) => void;
   setRecording: (graphId: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphId?: string) => void;
   markGraphDirty: (graphId: string) => void;
@@ -61,6 +63,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     errorConnections: new Set(),
     graphDirty: false,
     nodeDurations: new Map(),
+    pinResults: new Map(),
   })),
 
   completeExecution: (graphId) => set((state) => updateGraph(state, graphId, {
@@ -105,6 +108,13 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return updateGraph(state, graphId, { completedConnections: next });
   }),
 
+  recordPinResult: (graphId, result) => set((state) => {
+    const g = state.graphs[graphId] ?? emptyGraphState();
+    const next = new Map(g.pinResults);
+    next.set(result.pinId, result);
+    return updateGraph(state, graphId, { pinResults: next });
+  }),
+
   setRecording: (graphId, recording) => set((state) => updateGraph(state, graphId, { recording })),
 
   setPlaying: (playing, graphId) => set({
@@ -127,6 +137,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         errorConnections: new Set(),
         recording: [],
         nodeDurations: new Map(),
+        pinResults: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,
@@ -144,6 +155,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         completedConnections: new Set(),
         errorConnections: new Set(),
         nodeDurations: new Map(),
+        pinResults: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,
@@ -170,6 +182,9 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         break;
       case 'connectionActive':
         store.markConnectionCompleted(graphId, event.data.fromPinId, event.data.toPinId);
+        break;
+      case 'pinResultReady':
+        store.recordPinResult(graphId, event.data);
         break;
     }
   },

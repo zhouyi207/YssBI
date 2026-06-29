@@ -54,6 +54,10 @@ impl GraphRuntime {
         )
     }
 
+    pub fn graph_id(&self) -> crate::graph::GraphId {
+        self.graph_instance.id
+    }
+
     pub fn set_pin_current_value(&mut self, pin_id: PinId, value: DataValue) {
         let pin_instance = self.get_pin_instance_by_pin_id(pin_id).unwrap();
         let pin_runtime_state = self.pins_runtime_state.get_mut(&pin_id);

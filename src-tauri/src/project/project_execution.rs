@@ -1,4 +1,4 @@
-use crate::execution::{ChannelEventEmitter, ExecutionEvent, Executor, WindowDataStore};
+use crate::execution::{ChannelEventEmitter, ExecutionEvent, Executor, ResultSourceStore};
 use crate::graph::{GraphId, GraphKind};
 use crate::log::LogLevel;
 use crate::log_exec;
@@ -11,7 +11,7 @@ pub fn execute_project_data(
     project_data: ProjectData,
     project_data_state: Arc<RwLock<ProjectData>>,
     project_store: Arc<RwLock<ProjectStore>>,
-    window_store: WindowDataStore,
+    source_store: ResultSourceStore,
     on_event: Channel<ExecutionEvent>,
     target_graph_id: Option<GraphId>,
 ) -> Result<Value, String> {
@@ -65,7 +65,7 @@ pub fn execute_project_data(
         let mut executor = Executor::new(
             Arc::new(Mutex::new(runtime)),
             ChannelEventEmitter(on_event.clone()),
-            window_store.clone(),
+            source_store.clone(),
         );
         executor.start(entry_node)?;
 

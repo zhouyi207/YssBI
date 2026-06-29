@@ -124,28 +124,22 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     }
   }, [openGraph]);
 
-  const handleOpenWindow = useCallback(async (windowType: string, dataKey: string) => {
+  const handleOpenSourceWindow = useCallback(async (
+    sourceId: string,
+    presentation: { route: string; windowTitle: string; plotType?: string },
+  ) => {
     try {
-      const label = `${windowType}-${Math.random().toString(36).substring(2, 10)}`;
-      const isPlot = windowType === 'scatter' || windowType === 'line' || windowType === 'plot' || windowType === 'ecdf' || windowType === 'kde' || windowType === 'histogram' || windowType === 'correlation' || windowType === 'correlogram';
-      const url = isPlot ? `index.html#/plot?key=${dataKey}&type=${windowType}` : `index.html#/info?key=${dataKey}`;
-      const plotTitles: Record<string, string> = {
-        ecdf: 'ECDF Plot',
-        scatter: 'Scatter Plot',
-        line: 'Line Plot',
-        kde: 'KDE Plot',
-        histogram: 'Histogram',
-        correlation: 'Correlation Plot',
-        correlogram: 'Correlogram',
-      };
-      const title = isPlot
-        ? plotTitles[windowType] ?? 'Plot'
-        : 'Regression Results';
+      const route = presentation.route || '/info';
+      const labelKind = route.replace(/^\//, '') || 'source';
+      const label = `${labelKind}-${Math.random().toString(36).substring(2, 10)}`;
+      const params = new URLSearchParams({ sourceId });
+      if (presentation.plotType) params.set('plotType', presentation.plotType);
+      const url = `index.html#${route}?${params.toString()}`;
       await createPersistedWindow({
-        kind: isPlot ? 'plot' : 'info',
+        kind: route === '/plot' ? 'plot' : 'info',
         label,
         url,
-        title,
+        title: presentation.windowTitle,
       });
     } catch (e) {
       logger.exec.error(`Failed to open window: ${e instanceof Error ? e.message : String(e)}`);
@@ -182,8 +176,8 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
-        if (event.event === 'openWindow') {
-          handleOpenWindow(event.data.windowType, event.data.dataKey);
+        if (event.event === 'openSourceWindow') {
+          handleOpenSourceWindow(event.data.sourceId, event.data.presentation);
           return;
         }
         applyEvent(graphId, event);
@@ -211,7 +205,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       })();
       if (graphId) useExecutionStore.getState().failExecution(graphId);
     }
-  }, [handleOpenWindow, syncActiveToCollection]);
+  }, [handleOpenSourceWindow, syncActiveToCollection]);
 
   return {
     saveGraph,

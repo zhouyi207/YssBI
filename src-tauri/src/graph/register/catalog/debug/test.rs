@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::execution::{Executor, NoopEmitter, WindowDataStore};
+    use crate::execution::{Executor, NoopEmitter, ResultSourceStore};
     use crate::graph::{
         GraphInstance, GraphRuntime,
         pin::{DataRole, ExecRole, PinRole},
@@ -11,7 +11,7 @@ mod tests {
 
     /// 创建用于测试的执行器（无需 Tauri Channel）
     fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitter> {
-        Executor::new(graph, NoopEmitter, WindowDataStore::new())
+        Executor::new(graph, NoopEmitter, ResultSourceStore::new())
     }
 
     /// 创建测试用的注册表

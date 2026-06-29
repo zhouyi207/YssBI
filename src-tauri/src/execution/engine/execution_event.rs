@@ -1,3 +1,4 @@
+use crate::execution::{SourceDescriptor, SourcePresentation};
 use serde::Serialize;
 
 /// 执行事件（通过 Tauri Channel 流式发送到前端）
@@ -39,10 +40,20 @@ pub enum ExecutionEvent {
         to_pin_id: String,
     },
 
-    /// 请求前端打开新窗口（只传 key，大数据留在后端由新窗口拉取）
+    /// 请求前端打开新窗口（source 已注册，窗口只消费 sourceId）
     #[serde(rename_all = "camelCase")]
-    OpenWindow {
-        window_type: String,
-        data_key: String,
+    OpenSourceWindow {
+        source_id: String,
+        presentation: SourcePresentation,
+    },
+
+    /// 数据输出 pin 已注册为可检查 source。
+    #[serde(rename_all = "camelCase")]
+    PinResultReady {
+        graph_id: String,
+        node_id: String,
+        pin_id: String,
+        source_id: String,
+        descriptor: SourceDescriptor,
     },
 }

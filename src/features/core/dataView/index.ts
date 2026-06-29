@@ -1,15 +1,15 @@
 export type {
-  DataViewDataType,
-  DataViewPayload,
   DataViewPageState,
   DataViewRendererKind,
   DataViewStructKind,
-  DataViewSourceValue,
-  WindowSourceMetadata,
-  WindowDataPageResponse,
+  SourceDescriptor,
+  SourceKind,
+  SourcePage,
+  SourcePresentation,
+  SourceValue,
 } from './types';
 
-export { DataViewService } from './dataViewService';
+export { SourceService } from './dataViewService';
 export { resolveDataViewRenderer } from './resolveRenderer';
 export { useDataViewSourceValue } from './useDataViewSourceValue';
 export { usePagedDataViewRows } from './usePagedDataViewRows';

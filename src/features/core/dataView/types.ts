@@ -1,22 +1,25 @@
-/** Metadata-only DataView contract. Actual values live in backend sources. */
-export type DataViewDataType = 'dataframe' | 'series' | 'scalar' | 'null' | 'struct';
+/** Metadata-only source contract. Actual values live in backend sources. */
+export type SourceKind = 'json' | 'dataframe' | 'series' | 'scalar' | 'null' | 'struct';
 
 export type DataViewStructKind = 'ols_result' | 'unknown';
 
-export interface WindowSourceMetadata {
+export type DataViewRendererKind =
+  | 'dataframe'
+  | 'series'
+  | 'scalar'
+  | 'null'
+  | 'struct_ols'
+  | 'struct_generic'
+  | 'plot'
+  | 'info';
+
+export interface SourceDescriptor {
   sourceId: string;
-  windowType: string;
-  viewType?: 'data_view' | 'window_source';
-  dataType?: string;
-  renderer?: string;
+  kind: SourceKind;
+  renderer: DataViewRendererKind;
   title: string;
   message?: string;
   executionTimeMs?: number;
-}
-
-export interface DataViewPayload extends WindowSourceMetadata {
-  viewType: 'data_view';
-  dataType: DataViewDataType;
   columns?: string[];
   totalRows?: number;
   name?: string;
@@ -28,17 +31,15 @@ export interface DataViewPayload extends WindowSourceMetadata {
   structKind?: DataViewStructKind;
 }
 
-export type DataViewRendererKind =
-  | 'dataframe'
-  | 'series'
-  | 'scalar'
-  | 'null'
-  | 'struct_ols'
-  | 'struct_generic';
+export interface SourcePresentation {
+  sourceId: string;
+  route: '/dataview' | '/info' | '/plot' | string;
+  windowTitle: string;
+  plotType?: string;
+}
 
-export interface DataViewSourceValue {
-  viewType: 'data_view';
-  dataType: DataViewDataType;
+export interface SourceValue {
+  kind: SourceKind;
   title: string;
   message?: string;
   value?: unknown;
@@ -49,7 +50,7 @@ export interface DataViewSourceValue {
   structured?: unknown;
 }
 
-export interface WindowDataPageResponse {
+export interface SourcePage {
   kind: 'dataframe' | 'series';
   offset: number;
   limit: number;

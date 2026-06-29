@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DATA_VIEW_CHUNK_SIZE } from '@/app/appConfig/default';
-import { DataViewService } from './dataViewService';
+import { SourceService } from './dataViewService';
 import type { DataViewPageState } from './types';
 
 const EMPTY_ROWS: unknown[][] = [];
@@ -34,7 +34,7 @@ export function usePagedDataViewRows(
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {
-        const page = await DataViewService.getPage(sourceId, safeOffset, pageSize);
+        const page = await SourceService.getPage(sourceId, safeOffset, pageSize);
         if (requestId !== requestRef.current || sourceIdRef.current !== sourceId) return;
         setState({
           offset: page.offset,

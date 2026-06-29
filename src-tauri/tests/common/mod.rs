@@ -2,12 +2,14 @@
 #![allow(dead_code)] // 各集成测试 crate 各自取用部分 helper，未用到的不算死代码
 
 use std::sync::{Arc, Mutex};
-use yssbi_lib::execution::{EventEmitter, ExecutionEvent, Executor, NoopEmitter, WindowDataStore};
+use yssbi_lib::execution::{
+    EventEmitter, ExecutionEvent, Executor, NoopEmitter, ResultSourceStore,
+};
 use yssbi_lib::graph::core::GraphRuntime;
 
 /// 创建用于测试的执行器（无需 Tauri Channel）
 pub fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitter> {
-    Executor::new(graph, NoopEmitter, WindowDataStore::new())
+    Executor::new(graph, NoopEmitter, ResultSourceStore::new())
 }
 
 /// 记录型事件发送器：按 `NodeStart` 顺序收集 node_id，用于断言执行顺序
@@ -40,6 +42,6 @@ pub fn recording_executor_for_test(
     graph: Arc<Mutex<GraphRuntime>>,
 ) -> (Executor<RecordingEmitter>, RecordingEmitter) {
     let emitter = RecordingEmitter::new();
-    let executor = Executor::new(graph, emitter.clone(), WindowDataStore::new());
+    let executor = Executor::new(graph, emitter.clone(), ResultSourceStore::new());
     (executor, emitter)
 }

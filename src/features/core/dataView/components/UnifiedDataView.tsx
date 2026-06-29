@@ -1,4 +1,4 @@
-import type { DataViewPayload } from '../types';
+import type { SourceDescriptor } from '../types';
 import { resolveDataViewRenderer } from '../resolveRenderer';
 import {
   DataFrameSourceView,
@@ -10,7 +10,7 @@ import {
 } from './renderers/DataViewSourceRenderers';
 
 export interface UnifiedDataViewProps {
-  payload: DataViewPayload;
+  payload: SourceDescriptor;
 }
 
 export function UnifiedDataView({ payload }: UnifiedDataViewProps) {
