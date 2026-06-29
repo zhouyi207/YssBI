@@ -264,6 +264,9 @@ impl GraphInstance {
                 };
                 if pin.definition.kind == PinKind::Data {
                     pin.definition.name = dataframe_label.clone();
+                    pin.definition.data_type =
+                        Some(PinDataTypeDefinition::concrete(DataType::DataFrame));
+                    data_state.pin_types.insert(pin_id, DataType::DataFrame);
                 }
             }
         }

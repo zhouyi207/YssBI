@@ -1696,6 +1696,16 @@ mod tests {
             .find(|pin| pin.definition.kind == crate::graph::PinKind::Data)
             .unwrap();
         assert_eq!(data_pin.definition.name, "SalesData");
+        assert_eq!(
+            data_pin.definition.data_type,
+            Some(crate::graph::pin::PinDataTypeDefinition::concrete(
+                DataType::DataFrame
+            ))
+        );
+        assert_eq!(
+            data_state.pin_types.get(&data_pin.id),
+            Some(&DataType::DataFrame)
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }
