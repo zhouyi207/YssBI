@@ -11,7 +11,7 @@
 当满足以下条件时，Pin 会自动显示输入控件：
 - Pin 是输入方向（`direction === "input"`）
 - Pin 是数据类型（`type !== "exec"`）
-- Pin 未连接（`links.length === 0`）
+- Pin 未连接（`connected === false` 且 `linkCount === 0`）
 - 有有效的 `subgraphId` 和 `nodeId`
 
 ### 2. 支持的数据类型

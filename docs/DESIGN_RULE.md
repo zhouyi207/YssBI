@@ -174,7 +174,7 @@ src/
 | `settings/` | 应用设置                    | -                                           |
 
 - API 调用使用 domain 或 dto 类型；Store 读写使用 store 类型。
-- DTO → Domain 使用 `convertGraphFromDTO` 等；DTO → Store 可直接传入 `addGraphFromData`（支持 GraphInstanceDTO）。
+- DTO → Store 可直接传入 `addGraphFromData`（支持 GraphInstanceDTO）；Canvas 视图从 Store 的 `pinConnections` 派生连接状态，不再在 domain `Pin` 上维护 `links`。
 
 ### 2.5 状态管理（Zustand）
 

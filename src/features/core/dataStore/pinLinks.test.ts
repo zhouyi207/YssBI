@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { derivePinLinks, otherEndpointFromConnectionId } from './pinLinks';
+import {
+  derivePinConnectionView,
+  derivePinLinks,
+  otherEndpointFromConnectionId,
+} from './pinLinks';
 
 describe('pinLinks', () => {
   it('derives the other pin id from a connection id', () => {
@@ -12,5 +16,18 @@ describe('pinLinks', () => {
       'pin-b',
       'pin-c',
     ]);
+  });
+
+  it('derives connected state from pinConnections ids', () => {
+    expect(derivePinConnectionView(undefined)).toEqual({
+      connected: false,
+      linkCount: 0,
+      connectionIds: [],
+    });
+    expect(derivePinConnectionView(['pin-a->pin-b'])).toEqual({
+      connected: true,
+      linkCount: 1,
+      connectionIds: ['pin-a->pin-b'],
+    });
   });
 });

@@ -62,7 +62,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 ### 3.2 字段说明
 
 - **nodeType**：后端来自 `NodeInstance.definition.name`，即节点定义的完整类型名；DTO 中 `node_type` 通过 `#[serde(rename = "nodeType")]` 序列化。
-- **inputs / outputs**：后端按 Pin 的 direction 从 GraphDataState 汇总；DTO 仅传 Pin ID，前端 `convertGraphFromDTO` 会从 pins 数组组装完整 Pin 对象填入 Node.inputs/outputs。
+- **inputs / outputs**：后端按 Pin 的 direction 从 GraphDataState 汇总；DTO 和 Store 均只保存 Pin ID，前端渲染层从 Store 的 `pins` / `pinConnections` 派生完整 `PinView`。
 - **position**：后端 `NodePosition` 为 `{ x: f32, y: f32 }`，与前端一致。
 - **命名差异**：DTO 使用 camelCase（nodeType, uiStyle），Domain/Store 使用 snake_case（node_type, ui_style）；转换时需注意映射。
 
@@ -79,7 +79,6 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | name | definition.name | name | string | string | 显示名称 |
 | type | (从 definition.kind/data_type 推导) | type (pin_type → rename) | PinType | string | "exec" 或数据类型（"int","float" 等） |
 | direction | definition.direction | direction | PinDirection | PinDirection | "input" \| "output" |
-| links | (在 ConnectionManager 中) | links: PinId[] | string[] | string[] | 连接的目标 Pin ID，DTO 常为空由前端填充 |
 | defaultValue | - | default_value? (→ defaultValue) | defaultValue? | defaultValue? | 默认值 |
 | userValue | user_value | user_value? (→ userValue) | userValue? | userValue? | 用户覆盖值 |
 | isArray | - | is_array? (→ isArray) | isArray? | isArray? | 是否为数组类型 |
@@ -89,7 +88,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 
 - **type**：后端 `pin_type` 通过 `#[serde(rename = "type")]` 序列化为 `type`；Exec Pin 为 `"exec"`，Data Pin 从 `data_type` 推导（如 `"int"`, `"float"`）。
 - **direction**：后端 enum 序列化为 `"input"` / `"output"`（lowercase）。
-- **links**：连接关系由 ConnectionManager 管理，DTO 的 links 常为空；前端 `applyConnectionsToPins` 会根据 connections 填充。
+- **连接状态**：连接关系由 ConnectionManager / `connections` 表达；前端 Store 使用 `pinConnections` 作为索引，渲染时派生 `connected` / `linkCount` / `connectionIds`，不再在 Pin 上保存 peer pin ids。
 
 ---
 
@@ -194,17 +193,17 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 
 | 场景 | 转换函数/位置 | 说明 |
 |------|---------------|------|
-| DTO → Domain (单图) | `convertGraphFromDTO` (dtoConverters.ts) | 将 GraphInstanceDTO 转为 Graph，从 pins 组装 Node.inputs/outputs 为完整 Pin 对象 |
-| DTO → Store | `connectionItemToConnectionData` (dtoConverters) | ConnectionItemDTO → ConnectionData |
-| Store → DTO | `connectionDataToItem` (dtoConverters) | ConnectionData → ConnectionItemDTO |
-| 项目加载 | `convertProjectDataFromDTO` → `convertGraphsFromDTO` | ProjectDataDTO.graphs 逐图调用 convertGraphFromDTO |
-| Pin links 填充 | `applyConnectionsToPins` (dtoConverters) | 根据 connections 更新 Pin.links |
+| DTO → Store | `addGraphFromData` (graphDataStore) | GraphInstanceDTO 直接 hydrate 到规范化 Store；`toStoredPin()` 剥离旧运行时 links |
+| DTO → Store (连接) | `connectionItemToConnectionData` (graphConverters) | ConnectionItemDTO → ConnectionData |
+| Store → DTO | `connectionDataToItem` (graphConverters) | ConnectionData → ConnectionItemDTO |
+| 项目加载 | `loadProject` / `refreshResourceIndex` | 后端 ProjectIndex + graph 文档直接写入 Store |
+| Pin 连接状态派生 | `derivePinConnectionView` (pinLinks) | 从 `pinConnections[pinId]` 派生 `connected` / `linkCount` / `connectionIds` |
 
 ---
 
 ## 十一、注意事项
 
-1. **inputs/outputs 双态**：DTO 和 Store 使用 Pin ID 数组；Domain 的 Node 在渲染时使用完整 Pin 对象，由 `convertGraphFromDTO` 从 pins 数组组装。
+1. **inputs/outputs 双态**：DTO 和 Store 使用 Pin ID 数组；Canvas / Detail 渲染时由 `useNodeView` / `NodeDetailPanel` 从 `pins` + `pinConnections` 组装 `PinView`（含派生连接状态）。
 2. **Connection 命名**：JSON 统一使用 camelCase `fromPin`/`toPin`；Store 的 ConnectionData 使用 `from`/`to` 并派生 `id`。
 3. **Pin direction**：后端序列化为 `"input"`/`"output"`，与前端 PinDirection 一致。
 4. **Node 命名**：Domain/Store 使用 snake_case（node_type, ui_style），DTO 使用 camelCase（nodeType, uiStyle）；转换时需注意字段映射。

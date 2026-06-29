@@ -100,7 +100,7 @@ function resolvePin(
     optional: meta.optional,
     slotKind: meta.slotKind,
     slotNote: meta.slotNote,
-    connected: (pin.links?.length ?? 0) > 0,
+    connected: pin.connected,
   };
 }
 

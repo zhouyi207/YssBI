@@ -25,6 +25,9 @@ const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int32", "Int64", "Float32", "Float
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 
 export interface PinProps extends PinModel {
+  connected?: boolean;
+  linkCount?: number;
+  connectionIds?: string[];
   /** 来自 schema 的 pin metaData（如 dropdown 的 widgetOptions） */
   metaData?: PinMetaDataDTO;
   subgraphId?: string;
@@ -63,7 +66,8 @@ export const Pin: React.FC<PinProps> = (props) => {
     name,
     type,
     direction,
-    links,
+    connected = false,
+    linkCount = 0,
     ui,
     metaData,
     subgraphId,
@@ -82,7 +86,7 @@ export const Pin: React.FC<PinProps> = (props) => {
   } = props;
 
   const { theme: appTheme } = useTheme();
-  const isConnected = links.length > 0 || (isActive ?? false);
+  const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const baseColor = ui?.color ?? getPinTypeColor(type ?? "any", appTheme);
 
   const theme = useMemo(
@@ -104,7 +108,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     void menuActions?.removeRepeatablePin(nodeId, id);
   }, [onRemovePin, menuActions, nodeId, id]);
 
-  const hasLinks = links.length > 0;
+  const hasLinks = linkCount > 0;
   const canReset =
     direction === "input" &&
     PRIMITIVE_PIN_TYPES.has(type) &&

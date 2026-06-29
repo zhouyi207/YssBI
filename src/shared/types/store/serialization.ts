@@ -1,13 +1,11 @@
 /**
- * 序列化相关类型
- * 用于 serializeGraph / deserializeGraph 的输入输出
+ * 序列化相关类型（历史遗留；连接事实在 connections / pinConnections）
  */
 
 import type { GraphPosition } from '../domain/graph';
-import type { Pin } from '../domain/pin';
 import type { Variable } from '../domain/variable';
 
-/** 序列化后的 Pin（不含 links） */
+/** 序列化后的 Pin（不含连接状态） */
 export interface SerializedPin {
   id: string;
   name: string;
@@ -40,58 +38,6 @@ export interface SerializedGraphData {
   type: 'event' | 'function';
   canvas: GraphPosition;
   variables: Record<string, Variable>;
-  inputs: Pin[];
-  outputs: Pin[];
   connections: { connections: Array<{ fromPin: string; toPin: string }> };
   nodes: SerializedNode[];
-}
-
-/** 反序列化输入（来自后端 DTO，camelCase） */
-export interface DeserializeGraphInput {
-  nodes?: Array<{
-    id: string;
-    nodeType?: string;
-    category?: string[];
-    title?: string;
-    position?: { x: number; y: number };
-    uiStyle?: string;
-    description?: string;
-    isInternal?: boolean;
-    subGraphId?: string;
-    variableId?: string;
-    variableType?: string;
-    variableName?: string;
-    dataframeId?: string;
-    inputs?: (string | SerializedPin)[];
-    outputs?: (string | SerializedPin)[];
-  }>;
-  pins?: SerializedPin[];
-  connections?: { connections?: Array<{ fromPin?: string; toPin?: string; from?: string; to?: string }> } | Array<{ fromPin?: string; toPin?: string; from?: string; to?: string }>;
-  canvas?: GraphPosition;
-}
-
-/** 反序列化后的 Pin 运行时视图（links 从 connections 派生） */
-export interface DeserializedPin extends SerializedPin {
-  nodeId: string;
-  direction: 'input' | 'output';
-  links: string[];
-}
-
-/** 反序列化后的节点（运行时格式，含 links，camelCase） */
-export interface DeserializedNode {
-  id: string;
-  nodeType: string;
-  category: string[];
-  title: string;
-  position: { x: number; y: number };
-  inputs: DeserializedPin[];
-  outputs: DeserializedPin[];
-  uiStyle: string;
-  description?: string;
-  isInternal?: boolean;
-  subGraphId?: string;
-  variableId?: string;
-  variableType?: string;
-  variableName?: string;
-  dataframeId?: string;
 }

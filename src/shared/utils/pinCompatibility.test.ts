@@ -26,7 +26,6 @@ function pin(partial: Partial<Pin> & { direction: PinDirection }): Pin {
     nodeId: partial.nodeId ?? 'n1',
     name: partial.name ?? 'pin',
     type: partial.type ?? 'object',
-    links: partial.links ?? [],
     ...partial,
   } as Pin;
 }

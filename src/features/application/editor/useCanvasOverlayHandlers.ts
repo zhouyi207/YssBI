@@ -1,7 +1,6 @@
 import { useCallback } from "react";
-import { getGraphById } from "@/features/core/dataStore";
+import { findInternalNodeInGraph } from "@/features/core/dataStore";
 import { getViewport } from "@/features/core/viewport";
-import { deserializeGraph } from "@/features/core/dataStore";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
@@ -62,11 +61,9 @@ export function useCanvasOverlayHandlers({
       ];
 
       if (internalNodeTypes.includes(item.nodeType)) {
-        const graphData = getGraphById(activeTabId || "");
-        const currentNodes = graphData ? deserializeGraph(graphData).nodes : [];
-        const existingNode = currentNodes.find(
-          (n: any) => n.nodeType === item.nodeType && n.isInternal
-        );
+        const existingNode = activeTabId
+          ? findInternalNodeInGraph(activeTabId, item.nodeType)
+          : undefined;
         if (existingNode) {
           const rect = canvasRef.current.getBoundingClientRect();
           const centerX = rect.width / 2;

@@ -15,7 +15,6 @@ function pin(partial: Partial<Pin> & Pick<Pin, 'id' | 'nodeId' | 'direction'>): 
   return {
     name: partial.id,
     type: 'struct',
-    links: [],
     ...partial,
   } as Pin;
 }

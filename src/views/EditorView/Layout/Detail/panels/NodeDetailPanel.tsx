@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { PinData, PinView } from '@/shared/types/store/graph';
 import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { derivePinLinks } from '@/features/core/dataStore/pinLinks';
+import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
@@ -48,7 +48,7 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     () =>
       pinObjs.map((pin, index) => ({
         ...pin,
-        links: derivePinLinks(pin.id, pinConns[index]),
+        ...derivePinConnectionView(pinConns[index]),
       })),
     [pinObjs, pinConns],
   );

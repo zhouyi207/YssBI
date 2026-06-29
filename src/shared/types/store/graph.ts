@@ -36,7 +36,7 @@ export interface NodeData {
 }
 
 // ==================== PinData ====================
-/** Pin 实体数据。连接关系不在这里保存；运行时 links 从 pinConnections 派生。 */
+/** Pin 实体数据。连接关系不在这里保存；运行时连接状态从 pinConnections 派生。 */
 export interface PinData {
   id: string;
   nodeId: string;
@@ -52,8 +52,12 @@ export interface PinData {
   ui?: PinUI;
 }
 
-/** UI 运行时 Pin 视图，包含从 pinConnections 派生出的 links。 */
-export type PinView = PinData & { links: string[] };
+/** UI 运行时 Pin 视图，连接状态从 pinConnections 派生。 */
+export type PinView = PinData & {
+  connected: boolean;
+  linkCount: number;
+  connectionIds: string[];
+};
 
 // ==================== ConnectionData ====================
 /** 连接数据（Store 格式，含派生 id） */

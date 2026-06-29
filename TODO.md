@@ -484,11 +484,12 @@ package.json
 - [x] 变量切换类型 dataview 无法获取
 - [x] **变量 Detail 类型切换后端不变量**：变量类型 Select 保持即时响应，但类型变化规则收进后端 `ProjectState::update_variable`——只提交 `dataType` 且未显式传 `dataValue` 时，后端用 `DataType::default_value()` 重置变量值，不再保留旧类型历史值；`update_variable` command 返回更新后的完整变量，前端 `VariableService.updateVariable()` 用后端结果刷新 store，修复 Int 切 Boolean 后 UI/值不同步的问题；补充后端类型切换重置默认值与显式值优先单测
 - [x] 断开连接后 pin 的状态有时还是连接状态（已完成：确认后端断开路径均更新 `ConnectionManager`；前端根因是 Node Detail 用非事实来源 `pin.links` 判断 connected，而连接/断开事实在 `pinConnections`。已抽出 `pinLinks` 派生工具，Canvas `useNodeView` 与 Node Detail 统一从 `pinConnections` 派生 runtime links，避免断开后残留连接状态）
-- [x] **Pin links 历史残留收口**：`PinData` / 前端 `PinInstanceDTO` / 后端 `PinInstanceDTO` 不再携带 `links`，连接事实统一由 `connections` / `pinConnections` 维护；Store 写入入口新增 `toStoredPin()` 剥离旧运行时 links，`replaceGraphNodes` 不再从传入 Pin 对象读取 links；旧 `graphConverters` 删除对外暴露的 `applyConnectionsToPins` / `extractConnectionsFromPins`，仅在需要兼容 runtime Graph 视图时从 `connections` 派生 `PinView.links`
+- [x] **Pin links 历史残留收口**：`PinData` / 前端 `PinInstanceDTO` / 后端 `PinInstanceDTO` 不再携带 `links`，连接事实统一由 `connections` / `pinConnections` 维护；Store 写入入口新增 `toStoredPin()` 剥离旧运行时 links，`replaceGraphNodes` 不再从传入 Pin 对象读取 links；旧 `graphConverters` 删除对外暴露的 `applyConnectionsToPins` / `extractConnectionsFromPins`，视图层改为从 `pinConnections` 派生 `connected` / `linkCount` / `connectionIds`
 
 ## 2026.07.01
 
 - [x] 去掉项目所有旧数据迁移 / 兼容读取逻辑；如 `_yssbi_rowid` 旧列清理分支
+- [x] 已经修复 ~~右键 sidebar 中的列表 item 重命名的时候，延迟很重，同时如果 tab 如果有这个 item 的选项卡的时候呢，这个选项卡会消失，重新打开的时候发现 tabbar 中的名字没有更改；其次在 detail 重命名的时候 tabbar 上的名字更改了，但是当我关闭这个 tab 重新打开的时候，tab 上选项卡的名称变成更改之后的了，但是 detail 和 sidebar 中的字符串又是原来的；我再次执行关闭更改操作的时候，全部恢复为原来的了~~
 - [x] **VSCode 式 Project / Resource / Tab 架构重做边界**：已新增 `ResourceStore` / `DocumentStateStore` / `ResourceRef` / `ResourceKey`，以 `resourceId + kind + uri` 作为资源稳定身份；graph / worksheet / database / variable 元信息统一进入资源索引，TabBar 标题从资源索引派生，旧 `LayoutTab.title` 仅作为 fallback。
 - [x] **ProjectWatcher / 文件系统监听层**：Rust 侧新增 `ProjectWatcherState`（基于 `notify`），项目加载 / 另存后监听项目目录；外部 graph / worksheet 新增、删除、重命名、移动等变更经 debounce 后重扫 `ProjectIndex`，通过 `ResourceChanged` / `ResourceDeleted` 增量同步前端，并将已打开资源标记为 `stale` / `missing` / `conflict`。
 - [x] **统一 ResourceActions 与后端原子资源命令**：新增 `resourceActions` 收口 Sidebar / Detail / ContextMenu 的资源创建、重命名、删除、folder 操作；后端新增 `command_resource.rs` 与 `rename_graph_resource`，graph 重命名会更新内存 graph、持久化 document name / 文件名，并广播 `ResourceChanged`，避免重开恢复旧名。
@@ -507,6 +508,7 @@ package.json
 - [x] **后端变量 command 薄化**：`command_variable` 委托 `ProjectState::sync_variable_references` 处理节点引用与 pin type 同步；`get_variable` / `delete_variable` 返回明确 `Result` 错误而非 `unwrap()`。
 - [x] **变量节点显示派生**：Get/Set Variable 节点标题固定为节点语义名称，变量名与类型从后端 `VariableIndex` / runtime symbol table 解析到 data pin；前端 pin label 从 `VariableStore` 响应式派生且保留原始大小写；移除 hook/handler/拖拽路径中冗余 `variableName`/`variableType` 快照与手动同步。
 - [x] **DataFrame 节点显示派生与快照清理**：Get DataFrame 与 Get Variable 保持同一模式——节点标题固定为 `Get DataFrame`，节点参数只保存稳定 `dataframeId`，data pin 名称由 database catalog 动态解析；移除后端 `NodeInstanceParams::DataFrame.dataframeName` 与前端 DTO/store/serialization/node view 中的 `dataframeName` 快照字段，并补充序列化与 graph load pin 名解析回归测试。
+- [x] **彻底移除 Pin.links / deserializeGraph 遗留**：连接事实仅保留 `GraphDataStore.connections` / `pinConnections`；Canvas 与 Node Detail 统一消费派生 `connected` / `linkCount` / `connectionIds`；删除 `deserializeGraph` / `serializeGraph` / `convertGraphFromDTO` 等旧 runtime 视图转换；新增 `derivePinConnectionView`、`findInternalNodeInGraph`、`buildRuntimeNodesFromStore` 等 store-native 查询；domain `Pin` 不再携带 `links` 字段。
 - [x] **变量测试补齐**：Rust 覆盖 VariableIndex、复制 graph local 修复、runtime 作用域、`update_variable` 类型切换默认值；Vitest 覆盖 `variableCatalog` 灌入与 resource projection。
 
 ## v1.0 待办
@@ -517,10 +519,8 @@ package.json
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
-- [ ] 右键 sidebar 中的列表 item 重命名的时候，延迟很重，同时如果 tab 如果有这个 item 的选项卡的时候呢，这个选项卡会消失，重新打开的时候发现 tabbar 中的名字没有更改；其次在 detail 重命名的时候 tabbar 上的名字更改了，但是当我关闭这个 tab 重新打开的时候，tab 上选项卡的名称变成更改之后的了，但是 detail 和 sidebar 中的字符串又是原来的；我再次执行关闭更改操作的时候，全部恢复为原来的了；
 - [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
-- [ ] 唯一还保留的“非最终历史痕迹”是：旧 runtime Pin 类型和 deserializeGraph() 这类旧视图工具仍然会生成 links，但它们现在只用于兼容 runtime Graph 视图，不再是事实来源。这个残留是可控的，不会影响当前连接状态逻辑。等后续彻底移除旧 runtime Graph / domain Pin.links 依赖时，可以再做一次更大的类型层清理。
 
 
 # TODOLIST

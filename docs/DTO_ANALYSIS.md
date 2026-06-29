@@ -59,7 +59,7 @@
 1. **Node inputs/outputs 双态**：后端和 Store 用 Pin ID 数组；Domain/序列化用完整 Pin 对象
 2. **Connection 命名**：后端/序列化用 `from_pin`/`to_pin`；Store 用 `from`/`to` + 派生 `id`
 3. **缺失类型定义**：`NodeData`、`PinData`、`ConnectionData`、`GraphData` 未在 shared/types 中定义
-4. **Node 的 type vs node_type**：deserializeGraph 同时支持 `n.type` 和 `n.node_type`
+4. **Node 的 type vs node_type**：历史视图转换曾同时兼容 `n.type` 和 `n.node_type`，现已收口到 Store hydrate / 视图选择器路径
 
 ---
 

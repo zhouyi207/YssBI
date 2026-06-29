@@ -48,7 +48,6 @@ export interface Pin {
     name: string;               // 显示名称
     type: PinType;              // 数据类型
     direction: PinDirection;    // 方向（输入/输出）
-    links: string[];            // 连接的其他 Pin ID 列表
     defaultValue?: unknown;     // 默认值（数据针脚）
     userValue?: unknown;        // 用户设置的值（覆盖默认值）
     containerType?: string;     // 容器类型: "array" | "dataseries"，决定 pin 形状

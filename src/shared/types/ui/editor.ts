@@ -1,4 +1,5 @@
 import type { Pin, Node as DomainNode } from '../domain';
+import type { PinView } from '../store/graph';
 
 /**
  * UI Types - Editor
@@ -11,7 +12,7 @@ import type { Pin, Node as DomainNode } from '../domain';
  * UI 节点
  * 扩展领域节点，添加 UI 特定的属性和方法
  */
-export interface UINode extends DomainNode {
+export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
     position: { x: number; y: number };
     isInternal?: boolean;
     paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
@@ -21,6 +22,8 @@ export interface UINode extends DomainNode {
     subGraphId?: string;
     dataframeId?: string;
     centerSymbol?: string;
+    inputs: PinView[];
+    outputs: PinView[];
 }
 
 /**
@@ -32,8 +35,8 @@ export class Node implements UINode {
     nodeType: string;
     category: string[];
     title: string;
-    inputs: Pin[];
-    outputs: Pin[];
+    inputs: PinView[];
+    outputs: PinView[];
     uiStyle: string;
     description?: string;
     position: { x: number; y: number };
@@ -80,8 +83,8 @@ export class Node implements UINode {
             nodeType: this.nodeType,
             category: [...this.category],
             title: this.title,
-            inputs: this.inputs.map(p => ({ ...p, links: p.links ? [...p.links] : [] })),
-            outputs: this.outputs.map(p => ({ ...p, links: p.links ? [...p.links] : [] })),
+            inputs: this.inputs.map((p) => ({ ...p, connectionIds: [...p.connectionIds] })),
+            outputs: this.outputs.map((p) => ({ ...p, connectionIds: [...p.connectionIds] })),
             uiStyle: this.uiStyle,
             description: this.description,
             position: { ...this.position },

@@ -2,12 +2,11 @@
  * 编辑器节点操作：setNodes、setSelectedNodeIds
  */
 import { useCallback, RefObject } from 'react';
-import { getGraphById, useGraphDataStore } from '@/features/core/dataStore';
+import { buildRuntimeNodesFromStore, useGraphDataStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import type { LayoutState } from '@/features/core/layout/layoutStore';
 import { syncDetailFromNodeSelection } from '@/features/core/editor';
 import { Node } from '@/shared/types/ui';
-import { deserializeGraph } from '@/features/core/dataStore';
 
 function areStringArraysEqual(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
@@ -22,10 +21,8 @@ export function useEditorNodeActions(
   const setNodes = useCallback((updater: Node[] | ((prev: Node[]) => Node[])) => {
     const tId = activeTabIdRef.current;
     if (!tId) return;
-    const graphData = getGraphById(tId);
-    if (!graphData) return;
 
-    const { nodes: currentNodes } = deserializeGraph(graphData);
+    const currentNodes = buildRuntimeNodesFromStore(tId);
     const nextNodes = typeof updater === 'function' ? updater(currentNodes as unknown as Node[]) : updater;
 
     useGraphDataStore.getState().replaceGraphNodes(tId, nextNodes as import('@/shared/types/store/graph').RuntimeNodeInput[]);

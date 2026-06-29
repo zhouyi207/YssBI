@@ -1,6 +1,6 @@
 /**
- * Runtime pin links are derived from `pinConnections`.
- * `Pin.links` is a view field and must not become a second source of truth.
+ * Runtime pin connection state is derived from `pinConnections`.
+ * Store pins never persist peer pin ids — only connection ids.
  */
 export function otherEndpointFromConnectionId(connectionId: string, pinId: string): string {
   const sep = connectionId.indexOf('->');
@@ -14,4 +14,17 @@ export function derivePinLinks(pinId: string, connectionIds: readonly string[] |
   return (connectionIds ?? []).map((connectionId) =>
     otherEndpointFromConnectionId(connectionId, pinId),
   );
+}
+
+export function derivePinConnectionView(connectionIds: readonly string[] | undefined): {
+  connected: boolean;
+  linkCount: number;
+  connectionIds: string[];
+} {
+  const ids = connectionIds ? [...connectionIds] : [];
+  return {
+    connected: ids.length > 0,
+    linkCount: ids.length,
+    connectionIds: ids,
+  };
 }
