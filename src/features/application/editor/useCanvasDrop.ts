@@ -17,8 +17,6 @@ export interface VariableDropMenu {
   worldY: number;
   variableId: string;
   variableName: string;
-  variableType: string;
-  containerType?: string;
 }
 
 interface UseCanvasDropParams {
@@ -164,8 +162,6 @@ export function useCanvasDrop({
 
         const varParams = {
           variableId: dragState.template.variableId,
-          variableName: dragState.template.variableName,
-          variableType: dragState.template.variableType,
         };
 
         let spawnType: "Variables:Get Variable" | "Variables:Set Variable" | null = null;
@@ -193,8 +189,6 @@ export function useCanvasDrop({
           worldY: y,
           variableId: dragState.template.variableId,
           variableName: dragState.template.variableName,
-          variableType: dragState.template.variableType,
-          containerType: dragState.template.containerType,
         });
         return;
       }

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useGraphDataStore, useProjectIOStore, useVariableStore, useDatabaseStore } from '@/features/core/dataStore';
+import { useGraphDataStore, useProjectIOStore, useDatabaseStore } from '@/features/core/dataStore';
 import {
   graphResourceRef,
   normalizeBackendResourceMeta,
@@ -10,9 +10,9 @@ import {
 } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
-import { VariableService } from '@/services/variable/variableService';
 import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
 
 export type GraphResourceKind = 'event' | 'function';
 
@@ -43,9 +43,7 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   }
 
   if (ref.kind === 'variable') {
-    const variable = await VariableService.updateVariable(ref.id, { name });
-    useVariableStore.getState().updateVariable(ref.id, variable);
-    useResourceStore.getState().patchResource(ref, { name: variable.name });
+    await renameVariableAction(ref.id, name);
     return;
   }
 
@@ -103,8 +101,7 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
   }
 
   if (ref.kind === 'variable') {
-    await VariableService.deleteVariable(ref.id);
-    useVariableStore.getState().deleteVariable(ref.id);
-    useResourceStore.getState().removeResource(ref);
+    await deleteVariableAction(ref.id);
+    return;
   }
 }

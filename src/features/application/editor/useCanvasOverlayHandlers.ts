@@ -13,8 +13,6 @@ export interface PaletteItem {
   overrides?: {
     subGraphId?: string;
     variableId?: string;
-    variableName?: string;
-    variableType?: string;
     dataframeId?: string;
   };
 }
@@ -24,8 +22,6 @@ export interface VariableDropMenu {
   worldY: number;
   variableId: string;
   variableName: string;
-  variableType: string;
-  containerType?: string;
 }
 
 export function useCanvasOverlayHandlers({
@@ -148,8 +144,6 @@ export function useCanvasOverlayHandlers({
       }
       await createNode("Variables:Get Variable", { x: menu.worldX, y: menu.worldY }, {
         variableId: menu.variableId,
-        variableName: menu.variableName,
-        variableType: menu.variableType,
       });
       setVariableDropMenu(null);
     },
@@ -166,8 +160,6 @@ export function useCanvasOverlayHandlers({
       }
       await createNode("Variables:Set Variable", { x: menu.worldX, y: menu.worldY }, {
         variableId: menu.variableId,
-        variableName: menu.variableName,
-        variableType: menu.variableType,
       });
       setVariableDropMenu(null);
     },

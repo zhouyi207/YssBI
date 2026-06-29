@@ -65,7 +65,6 @@ export function useNodeView(nodeId: string): UINode | null {
       variableType: nodeData.variableType,
       subGraphId: nodeData.subGraphId,
       dataframeId: nodeData.dataframeId,
-      dataframeName: nodeData.dataframeName,
       inputs,
       outputs,
     };

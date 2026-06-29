@@ -500,6 +500,14 @@ package.json
 - [x] **ResourceStore 成为 Explorer 唯一事实来源**：Event / Function 列表、graph folder、graph order、auto-open-first-graph、Sidebar 与项目打开首图逻辑均改为从 `ResourceStore` selectors 派生；`GraphMetaStore` 不再驱动资源列表 / 顺序 / 文件夹。
 - [x] **ProjectIndex 快照原子替换与打开文档 reconcile**：`refreshResourceIndex()` 会重建 `ResourceStore` 与 worksheet index；保留已加载资源的 loaded / dirty 摘要；快照缺失的已打开资源保留为 `missing`，快照元数据变化时 clean 文档标记 `stale`、dirty 文档标记 `conflict`，避免打开 tab 静默消失。
 - [x] **Resource sync 测试与格式收口**：新增/更新 `ResourceEventHandler.test.ts`、`resourceSnapshotReconcile.test.ts` 与 watcher 路径测试，覆盖 invalidation coalescing、ResourceStore selector、snapshot reconcile；修复 `ResourceEventHandler.ts` / 测试文件多余空行格式问题。
+- [x] **Document-owned variables + derived VariableIndex**：后端 `ProjectIndex.variables` 索引全局 `variables.yssbi-vars` 与各 graph 文档 `localVariables`（含 owner graph 元数据）；复制 graph 时保留并重写 local variable id/scope 与节点 `variableId` 引用。
+- [x] **Runtime SymbolTable 作用域**：`GraphRuntime::get/set_variable_value` 仅允许全局变量与当前执行 graph 拥有的局部变量，拒绝其他 graph 的 hidden locals。
+- [x] **前端 VariableStore catalog + ResourceStore projection**：`loadProject()` / `refreshResourceIndex()` 从 `ProjectIndex.variables` 灌入 `VariableStore`，经 `variableCatalog.ts` 统一投影到 `ResourceStore`；graph cache release 仍只清除该 graph 的局部变量。
+- [x] **变量 Application Action 收口**：新增 `variableActions.ts`（create/update/delete/rename + `rebuildVariableResourceProjection`）；`useVariableManagement` 与 `resourceActions` 变量路径改为委托 action；`VariableEventHandler` 不再手动 patch 节点快照。
+- [x] **后端变量 command 薄化**：`command_variable` 委托 `ProjectState::sync_variable_references` 处理节点引用与 pin type 同步；`get_variable` / `delete_variable` 返回明确 `Result` 错误而非 `unwrap()`。
+- [x] **变量节点显示派生**：Get/Set Variable 节点标题固定为节点语义名称，变量名与类型从后端 `VariableIndex` / runtime symbol table 解析到 data pin；前端 pin label 从 `VariableStore` 响应式派生且保留原始大小写；移除 hook/handler/拖拽路径中冗余 `variableName`/`variableType` 快照与手动同步。
+- [x] **DataFrame 节点显示派生与快照清理**：Get DataFrame 与 Get Variable 保持同一模式——节点标题固定为 `Get DataFrame`，节点参数只保存稳定 `dataframeId`，data pin 名称由 database catalog 动态解析；移除后端 `NodeInstanceParams::DataFrame.dataframeName` 与前端 DTO/store/serialization/node view 中的 `dataframeName` 快照字段，并补充序列化与 graph load pin 名解析回归测试。
+- [x] **变量测试补齐**：Rust 覆盖 VariableIndex、复制 graph local 修复、runtime 作用域、`update_variable` 类型切换默认值；Vitest 覆盖 `variableCatalog` 灌入与 resource projection。
 
 ## v1.0 待办
 

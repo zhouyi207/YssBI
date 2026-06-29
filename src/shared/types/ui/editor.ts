@@ -20,7 +20,6 @@ export interface UINode extends DomainNode {
     variableType?: string;
     subGraphId?: string;
     dataframeId?: string;
-    dataframeName?: string;
     centerSymbol?: string;
 }
 
@@ -45,7 +44,6 @@ export class Node implements UINode {
     variableType?: string;
     subGraphId?: string;
     dataframeId?: string;
-    dataframeName?: string;
     centerSymbol?: string;
 
     constructor(data: UINode) {
@@ -65,7 +63,6 @@ export class Node implements UINode {
         this.variableType = data.variableType;
         this.subGraphId = data.subGraphId;
         this.dataframeId = data.dataframeId;
-        this.dataframeName = data.dataframeName;
         this.centerSymbol = data.centerSymbol;
     }
 
@@ -95,7 +92,6 @@ export class Node implements UINode {
             variableType: this.variableType,
             subGraphId: this.subGraphId,
             dataframeId: this.dataframeId,
-            dataframeName: this.dataframeName,
             centerSymbol: this.centerSymbol,
         });
     }

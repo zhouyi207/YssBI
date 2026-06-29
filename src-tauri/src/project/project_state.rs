@@ -1,15 +1,15 @@
 //! 状态管理模块
 
 use crate::application::database::bind_duckdb_instance;
-use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState};
+use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
-use crate::graph::{DataType, GraphId, GraphInstance, PinChangeSet, PinId};
+use crate::graph::{DataType, GraphId, GraphInstance, GraphKind, PinChangeSet, PinId};
 use crate::log::log_sys;
 use crate::project::{
     GraphDocument, ProjectData, ProjectStore, load_project_graph_from_file,
     save_project_graph_to_file, save_project_to_file,
 };
-use crate::variable::VariableInstance;
+use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -132,8 +132,60 @@ impl ProjectState {
         };
         graph.set_registry(registry);
         graph.set_schema_provider(self.build_schema_provider());
+        let variable_symbols = self.variable_symbols_for_graph(&graph.id, &graph.kind);
+        graph.resolve_variable_nodes(&variable_symbols);
+        let dataframe_symbols = self.dataframe_symbols();
+        graph.resolve_dataframe_nodes(&dataframe_symbols);
         graph.propagate_schemas();
         let _ = graph.infer_types();
+    }
+
+    pub(crate) fn variable_symbols_for_graph(
+        &self,
+        graph_id: &GraphId,
+        graph_kind: &GraphKind,
+    ) -> HashMap<String, (String, DataType)> {
+        let data = self.project_data.read().unwrap();
+        Self::variable_symbols_from_variables(&data.variables, graph_id, graph_kind)
+    }
+
+    pub(crate) fn variable_symbols_from_variables(
+        variables: &HashMap<VariableId, VariableInstance>,
+        graph_id: &GraphId,
+        graph_kind: &GraphKind,
+    ) -> HashMap<String, (String, DataType)> {
+        let graph_id = graph_id.to_string();
+        variables
+            .values()
+            .filter(|variable| match (&variable.scope, graph_kind) {
+                (VariableScope::Global, _) => true,
+                (VariableScope::Event { event_id }, GraphKind::Event) => event_id == &graph_id,
+                (VariableScope::Function { function_id }, GraphKind::Function) => {
+                    function_id == &graph_id
+                }
+                _ => false,
+            })
+            .map(|variable| {
+                (
+                    variable.id.to_string(),
+                    (variable.name.clone(), variable.data_type.clone()),
+                )
+            })
+            .collect()
+    }
+
+    pub(crate) fn dataframe_symbols(&self) -> HashMap<String, String> {
+        let data = self.project_data.read().unwrap();
+        Self::dataframe_symbols_from_databases(&data.databases)
+    }
+
+    pub(crate) fn dataframe_symbols_from_databases(
+        databases: &HashMap<String, DatabaseDecl>,
+    ) -> HashMap<String, String> {
+        databases
+            .iter()
+            .map(|(id, decl)| (id.clone(), decl.name.clone().unwrap_or_else(|| id.clone())))
+            .collect()
     }
 
     /// Materialize schema-derived pins for a loaded graph (tab open path).
@@ -175,7 +227,6 @@ impl ProjectState {
         graph: GraphInstance,
         local_variables: HashMap<crate::variable::VariableId, VariableInstance>,
     ) -> GraphInstance {
-        let inserted = self.insert_graph(graph);
         if !local_variables.is_empty() {
             self.project_data
                 .write()
@@ -183,7 +234,7 @@ impl ProjectState {
                 .variables
                 .extend(local_variables);
         }
-        inserted
+        self.insert_graph(graph)
     }
 
     pub fn load_graph_from_current_project(
@@ -191,17 +242,29 @@ impl ProjectState {
         graph_id: &GraphId,
     ) -> Result<GraphDocument, String> {
         if let Some(existing) = self.get_graph(graph_id) {
+            let graph = self.insert_graph(existing);
             return Ok(GraphDocument {
                 schema_version: crate::project::SCHEMA_VERSION,
-                kind: (&existing.kind).into(),
-                graph: existing,
+                kind: (&graph.kind).into(),
+                graph,
                 local_variables: HashMap::new(),
             });
         }
         let path = self.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
         let document = load_project_graph_from_file(&path, graph_id).map_err(|e| e.to_string())?;
-        self.insert_loaded_graph(document.graph.clone(), document.local_variables.clone());
-        Ok(document)
+        let GraphDocument {
+            schema_version,
+            kind,
+            graph,
+            local_variables,
+        } = document;
+        let graph = self.insert_loaded_graph(graph, local_variables.clone());
+        Ok(GraphDocument {
+            schema_version,
+            kind,
+            graph,
+            local_variables,
+        })
     }
 
     /// 获取当前路径

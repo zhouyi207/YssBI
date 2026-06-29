@@ -26,6 +26,10 @@ import {
 } from '@/features/core/resource/resourceSnapshotReconcile';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
+import {
+  applyVariableCatalogFromIndex,
+  variableCatalogToResourceMetas,
+} from '@/features/core/variable/variableCatalog';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -126,25 +130,7 @@ function buildResourceIndex(params: {
       hasConflictDocument: false,
     });
   }
-  for (const [id, variable] of Object.entries(params.variables)) {
-    const scope = variable.scope.type === 'event'
-      ? { type: 'event' as const, graphId: variable.scope.eventId }
-      : variable.scope.type === 'function'
-        ? { type: 'function' as const, graphId: variable.scope.functionId }
-        : { type: 'global' as const };
-    resources.push({
-      id,
-      kind: 'variable',
-      name: variable.name,
-      uri: `yssbi://variable/${id}`,
-      scope,
-      exists: true,
-      loaded: true,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
-  }
+  resources.push(...variableCatalogToResourceMetas(params.variables));
   for (const [id, database] of Object.entries(params.databases)) {
     const name = typeof database.name === 'string' ? database.name : id;
     resources.push({
@@ -200,6 +186,9 @@ async function refreshProjectResourceIndex(): Promise<boolean> {
 async function refreshProjectResourceIndexOnce(): Promise<boolean> {
   try {
     const index = await ProjectService.getProjectIndex();
+    const variableCatalog = applyVariableCatalogFromIndex(index.variables);
+    useVariableStore.getState().setVariables(variableCatalog);
+
     const graphOrder = index.graphs.map((graph) => graph.id);
     const graphFolders = normalizeGraphFolders(index.folders);
 
@@ -215,7 +204,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     const incoming = buildResourceIndex({
       graphs: index.graphs,
       worksheets: worksheetIndex,
-      variables: useVariableStore.getState().variables,
+      variables: variableCatalog,
       databases: useDatabaseStore.getState().databases,
     });
 
@@ -332,14 +321,14 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         // values. Backend authoritatively cleared its in-memory state already.
         resetClientProjectState();
 
-        // 分阶段加载：先 databases + variables，再只加载图索引；图体在打开 Tab 时按需加载。
-        const { databases, variables } = await ProjectService.getDatabasesVariables();
-        const normalizedVariables = normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]);
+        const { databases } = await ProjectService.getDatabasesVariables();
         const normalizedDatabases = normalizeDatabases(databases as Record<string, DatabaseRecord>);
+
+        const index = await ProjectService.getProjectIndex();
+        const normalizedVariables = applyVariableCatalogFromIndex(index.variables);
         useVariableStore.getState().setVariables(normalizedVariables);
         useDatabaseStore.getState().setDatabases(normalizedDatabases);
 
-        const index = await ProjectService.getProjectIndex();
         const graphOrder = index.graphs.map((graph) => graph.id);
         const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
             id: ws.id,
@@ -366,7 +355,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
         return {
-          variables,
+          variables: normalizedVariables,
           databases,
           graphs: {},
           metadata: { exportTime: index.exportTime, appVersion: index.appVersion },

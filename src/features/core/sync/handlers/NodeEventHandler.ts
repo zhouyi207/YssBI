@@ -58,7 +58,6 @@ function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): Nod
         variableType: d.variableType,
         subGraphId: d.subGraphId,
         dataframeId: d.dataframeId,
-        dataframeName: d.dataframeName,
     };
 }
 

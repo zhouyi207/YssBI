@@ -208,6 +208,67 @@ impl<'de> Deserialize<'de> for GraphInstance {
 }
 
 impl GraphInstance {
+    pub fn resolve_variable_nodes(&self, variables: &HashMap<String, (String, DataType)>) {
+        let mut data_state = self.data_state.write().unwrap();
+        let variable_nodes: Vec<_> = data_state
+            .nodes
+            .values()
+            .filter_map(|node| {
+                node.instance_params
+                    .variable_id()
+                    .and_then(|variable_id| variables.get(variable_id))
+                    .map(|(name, data_type)| (node.id, name.clone(), data_type.clone()))
+            })
+            .collect();
+
+        for (node_id, variable_name, data_type) in variable_nodes {
+            let Some(node) = data_state.nodes.get(&node_id) else {
+                continue;
+            };
+            let pin_ids = node.pin_ids.clone();
+            for pin_id in pin_ids {
+                let Some(pin) = data_state.pins.get_mut(&pin_id) else {
+                    continue;
+                };
+                if pin.definition.kind != PinKind::Data {
+                    continue;
+                }
+                pin.definition.name = variable_name.clone();
+                data_state.pin_types.insert(pin_id, data_type.clone());
+            }
+        }
+    }
+
+    pub fn resolve_dataframe_nodes(&self, dataframes: &HashMap<String, String>) {
+        let mut data_state = self.data_state.write().unwrap();
+        let dataframe_nodes: Vec<_> = data_state
+            .nodes
+            .values()
+            .filter(|node| node.definition.node_type == "Data:Get DataFrame")
+            .filter_map(|node| {
+                node.instance_params
+                    .dataframe_id()
+                    .and_then(|dataframe_id| dataframes.get(dataframe_id))
+                    .map(|name| (node.id, name.clone()))
+            })
+            .collect();
+
+        for (node_id, dataframe_label) in dataframe_nodes {
+            let Some(node) = data_state.nodes.get(&node_id) else {
+                continue;
+            };
+            let pin_ids = node.pin_ids.clone();
+            for pin_id in pin_ids {
+                let Some(pin) = data_state.pins.get_mut(&pin_id) else {
+                    continue;
+                };
+                if pin.definition.kind == PinKind::Data {
+                    pin.definition.name = dataframe_label.clone();
+                }
+            }
+        }
+    }
+
     /// 从持久化的扁平节点 + 连接重建 `GraphInstance`（无 registry，
     /// 静态 pin 的完整定义随后由 `set_registry` 重挂）。
     fn from_persisted_parts(
@@ -417,19 +478,6 @@ impl GraphInstance {
 
             node.pin_ids = pins.iter().map(|p| p.id).collect();
 
-            if let Some(dt) = node_snap
-                .params
-                .as_ref()
-                .and_then(|p| p.variable_type())
-                .and_then(|vt| vt.parse::<DataType>().ok())
-            {
-                for pin in &pins {
-                    if pin.definition.kind == PinKind::Data {
-                        data_state.pin_types.insert(pin.id, dt.clone());
-                    }
-                }
-            }
-
             for pin in &pins {
                 data_state.connections.register_pin(pin.id, target_node_id);
             }
@@ -494,21 +542,8 @@ impl GraphInstance {
             node = node.with_instance_params(p.clone());
         }
 
-        // 根据 instance_params 中的类型信息设置数据 pin 的具体类型
-        let variable_data_type = params
-            .as_ref()
-            .and_then(|p| p.variable_type())
-            .and_then(|vt| vt.parse::<DataType>().ok());
-
         {
             let mut data_state = self.data_state.write().unwrap();
-            if let Some(ref dt) = variable_data_type {
-                for pin in &result.pins {
-                    if pin.definition.kind == PinKind::Data {
-                        data_state.pin_types.insert(pin.id, dt.clone());
-                    }
-                }
-            }
             data_state.add_node(node);
             data_state.add_pins(result.pins);
         }
@@ -539,20 +574,8 @@ impl GraphInstance {
             node = node.with_instance_params(p.clone());
         }
 
-        let variable_data_type = params
-            .as_ref()
-            .and_then(|p| p.variable_type())
-            .and_then(|vt| vt.parse::<DataType>().ok());
-
         {
             let mut data_state = self.data_state.write().unwrap();
-            if let Some(ref dt) = variable_data_type {
-                for pin in &result.pins {
-                    if pin.definition.kind == PinKind::Data {
-                        data_state.pin_types.insert(pin.id, dt.clone());
-                    }
-                }
-            }
             data_state.add_node(node);
             data_state.add_pins(result.pins);
         }
@@ -583,20 +606,8 @@ impl GraphInstance {
             node = node.with_instance_params(p.clone());
         }
 
-        let variable_data_type = params
-            .as_ref()
-            .and_then(|p| p.variable_type())
-            .and_then(|vt| vt.parse::<DataType>().ok());
-
         {
             let mut data_state = self.data_state.write().unwrap();
-            if let Some(ref dt) = variable_data_type {
-                for pin in &result.pins {
-                    if pin.definition.kind == PinKind::Data {
-                        data_state.pin_types.insert(pin.id, dt.clone());
-                    }
-                }
-            }
             data_state.add_node(node);
             data_state.add_pins(result.pins);
         }

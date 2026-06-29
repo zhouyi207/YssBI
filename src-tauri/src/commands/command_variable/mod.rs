@@ -1,8 +1,7 @@
-use crate::event::{Event, EventNode, EventVariable, InferredPinType, emit_project_event};
-use crate::graph::pin::PinKind;
+use crate::event::{Event, EventNode, EventVariable, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
 use crate::project::ProjectState;
-use crate::schema::{VariableInstanceDTO, data_type_to_container, data_type_to_pin_type};
+use crate::schema::VariableInstanceDTO;
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 
@@ -41,7 +40,9 @@ pub fn get_variable(
     state: State<ProjectState>,
     variable_id: VariableId,
 ) -> Result<VariableInstanceDTO, String> {
-    let variable = state.get_variable(&variable_id).unwrap();
+    let variable = state
+        .get_variable(&variable_id)
+        .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
     Ok((&variable).into())
 }
 
@@ -74,89 +75,14 @@ pub fn update_variable(
         }),
     );
 
-    // 当变量类型或名称改变时，更新所有引用该变量的节点
-    if type_changed || name_changed {
-        let var_id_str = variable_id.to_string();
-        let new_data_type = &updated.data_type;
-        let new_name = &updated.name;
-        let project_data = state.project_data.read().unwrap();
-
-        for (graph_id, graph) in project_data.graphs.iter() {
-            let data_state = graph.data_state.read().unwrap();
-            let mut inferred_pins = Vec::new();
-
-            for node in data_state.nodes.values() {
-                let refs_this_var = node.instance_params.variable_id() == Some(&var_id_str);
-                if !refs_this_var {
-                    continue;
-                }
-
-                // 更新 instance_params 中的 type 和 name
-                // (需要 drop read lock 先, 故收集后再写)
-                if type_changed {
-                    for &pin_id in &node.pin_ids {
-                        if let Some(pin) = data_state.pins.get(&pin_id) {
-                            if pin.definition.kind == PinKind::Data {
-                                inferred_pins.push(InferredPinType {
-                                    pin_id,
-                                    pin_type: data_type_to_pin_type(new_data_type).to_string(),
-                                    container_type: data_type_to_container(new_data_type)
-                                        .map(|s| s.to_string()),
-                                    type_display: Some(new_data_type.to_string()),
-                                    data_type: Some(new_data_type.clone()),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 收集需要更新 instance_params 的节点 ID
-            let nodes_to_update: Vec<_> = data_state
-                .nodes
-                .values()
-                .filter(|n| n.instance_params.variable_id() == Some(&var_id_str))
-                .map(|n| n.id)
-                .collect();
-
-            drop(data_state);
-
-            // 写回 pin_types 和 instance_params
-            {
-                let mut data_state = graph.data_state.write().unwrap();
-                for ipt in &inferred_pins {
-                    let dt = new_data_type.clone();
-                    data_state.pin_types.insert(ipt.pin_id, dt);
-                }
-                for nid in &nodes_to_update {
-                    if let Some(node) = data_state.nodes.get_mut(nid) {
-                        if let crate::graph::NodeInstanceParams::Variable {
-                            ref mut variable_type,
-                            ref mut variable_name,
-                            ..
-                        } = node.instance_params
-                        {
-                            if type_changed {
-                                *variable_type = Some(new_data_type.to_string());
-                            }
-                            if name_changed {
-                                *variable_name = Some(new_name.clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !inferred_pins.is_empty() {
-                emit_project_event(
-                    &app,
-                    Event::Node(EventNode::PinTypesInferred {
-                        graph_id: *graph_id,
-                        pin_types: inferred_pins,
-                    }),
-                );
-            }
-        }
+    for sync in state.sync_variable_references(&variable_id, name_changed, type_changed, &updated) {
+        emit_project_event(
+            &app,
+            Event::Node(EventNode::PinTypesInferred {
+                graph_id: sync.graph_id,
+                pin_types: sync.pin_types,
+            }),
+        );
     }
 
     if persist_global {
@@ -172,7 +98,9 @@ pub fn delete_variable(
     state: State<ProjectState>,
     variable_id: VariableId,
 ) -> Result<(), String> {
-    let variable = state.remove_variable(&variable_id).unwrap();
+    let variable = state
+        .remove_variable(&variable_id)
+        .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
     if matches!(variable.scope, VariableScope::Global) {
         state.persist_current_project()?;
     }

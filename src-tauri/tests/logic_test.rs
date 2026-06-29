@@ -701,7 +701,6 @@ fn test_ts_align_schema_propagates_to_decompose() {
             0.0,
             Some(NodeInstanceParams::DataFrame {
                 dataframe_id: "test_df".to_string(),
-                dataframe_name: None,
             }),
         )
         .expect("create get dataframe");
@@ -827,7 +826,6 @@ fn test_ols_model_schema_propagates_to_predict_inputs() {
             0.0,
             Some(NodeInstanceParams::DataFrame {
                 dataframe_id: "reg_df".to_string(),
-                dataframe_name: None,
             }),
         )
         .expect("get dataframe");

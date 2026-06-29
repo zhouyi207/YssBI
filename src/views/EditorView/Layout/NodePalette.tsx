@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
-import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import { isNodeCompatibleWithPin, pinAcceptsType, buildPinDataType } from "@/shared/utils/pinCompatibility";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
@@ -14,8 +13,6 @@ import { Input } from "@/components/ui/input";
 export interface PaletteItemOverrides extends Partial<Node> {
   subGraphId?: string;
   variableId?: string;
-  variableName?: string;
-  variableType?: string;
 }
 
 export interface PaletteItem {
@@ -172,7 +169,7 @@ export function NodePalette({
           nodeType: "Variables:Get Variable",
           title: `Get ${varName}`,
           category: ["Variables"],
-          overrides: { title: `Get ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) },
+          overrides: { title: "Get Variable", variableId: varId },
         });
       }
 
@@ -186,7 +183,7 @@ export function NodePalette({
           nodeType: "Variables:Set Variable",
           title: `Set ${varName}`,
           category: ["Variables"],
-          overrides: { title: `Set ${varName}`, variableId: varId, variableName: varName, variableType: dataTypeDisplay(varType) },
+          overrides: { title: "Set Variable", variableId: varId },
         });
       }
     });

@@ -331,7 +331,7 @@ export const Pin: React.FC<PinProps> = (props) => {
       {/* Label - 增加 hover 效果，右键菜单打开时高亮 */}
       <span
         className={`
-          text-[10px] font-bold select-none uppercase tracking-wider px-1 z-10 pointer-events-none
+          text-[10px] font-bold select-none tracking-wide px-1 z-10 pointer-events-none
           transition-colors
           ${contextMenu
             ? "text-[var(--accent-color)]"

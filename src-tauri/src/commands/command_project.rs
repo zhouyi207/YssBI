@@ -287,6 +287,7 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
 #[tauri::command]
 pub fn get_project_index(state: State<ProjectState>) -> Result<ProjectIndex, String> {
     let path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
+    state.apply_global_variables_from_disk(&path)?;
     crate::project::read_project_index(&path).map_err(|e| e.to_string())
 }
 

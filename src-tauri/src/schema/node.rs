@@ -23,35 +23,17 @@ pub struct NodeInstanceDTO {
 
 impl From<&NodeInstance> for NodeInstanceDTO {
     fn from(value: &NodeInstance) -> Self {
-        let p = &value.instance_params;
-        let title = match value.definition.node_type.as_str() {
-            "Variables:Get Variable" | "Variables:Set Variable" => {
-                let prefix = if value.definition.node_type == "Variables:Get Variable" {
-                    "Get"
-                } else {
-                    "Set"
-                };
-                p.variable_name()
-                    .map(|n| format!("{} {}", prefix, n))
-                    .unwrap_or_else(|| value.definition.name.clone())
-            }
-            "Data:Get DataFrame" => p
-                .dataframe_name()
-                .map(|n| format!("Get {}", n))
-                .unwrap_or_else(|| value.definition.name.clone()),
-            _ => value.definition.name.clone(),
-        };
         Self {
             id: value.id,
             node_type: value.definition.node_type.clone(),
             category: value.definition.category.clone(),
-            title,
+            title: value.definition.name.clone(),
             inputs: Vec::new(),
             outputs: Vec::new(),
             ui_style: value.definition.metadata.ui_style.clone(),
             description: value.definition.metadata.description.clone(),
             position: value.position.clone(),
-            instance_params: p.clone(),
+            instance_params: value.instance_params.clone(),
         }
     }
 }

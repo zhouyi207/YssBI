@@ -33,8 +33,6 @@ export class NodeService {
         y?: number,
         params?: {
             variableId?: string;
-            variableName?: string;
-            variableType?: string;
             subGraphId?: string;
             dataframeId?: string;
         }
@@ -64,8 +62,6 @@ export class NodeService {
         y?: number,
         params?: {
             variableId?: string;
-            variableName?: string;
-            variableType?: string;
             subGraphId?: string;
             dataframeId?: string;
         }
@@ -118,8 +114,6 @@ export class NodeService {
             y?: number;
             params?: {
                 variableId?: string;
-                variableName?: string;
-                variableType?: string;
                 subGraphId?: string;
                 dataframeId?: string;
             };
@@ -177,8 +171,6 @@ export class NodeService {
             y: number;
             params?: {
                 variableId?: string;
-                variableName?: string;
-                variableType?: string;
                 subGraphId?: string;
                 dataframeId?: string;
             };
@@ -207,8 +199,6 @@ export class NodeService {
 
     private static buildTaggedParams(params: {
         variableId?: string;
-        variableName?: string;
-        variableType?: string;
         subGraphId?: string;
         dataframeId?: string;
     }): Record<string, unknown> {
@@ -216,8 +206,6 @@ export class NodeService {
             return {
                 paramsKind: 'variable',
                 variableId: params.variableId,
-                variableName: params.variableName,
-                variableType: params.variableType,
             };
         }
         if (params.subGraphId) {

@@ -1,4 +1,3 @@
-import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import type { DataType } from "@/shared/types/domain";
 import { DRAG_TYPES } from "@/features/core/dnd";
 
@@ -16,15 +15,6 @@ export function buildSidebarDragData(
     : undefined;
 
   if (type === "variable") {
-    const dt = extra?.dataType;
-    const variableType = dt
-      ? typeof dt === "string"
-        ? dt
-        : dataTypeDisplay(dt)
-      : undefined;
-    const containerType = dt && typeof dt === "object" && "kind" in dt
-      ? dt.kind === "Array" ? "array" : dt.kind === "DataSeries" ? "dataseries" : undefined
-      : undefined;
     return {
       type: DRAG_TYPES.NODE_TEMPLATE,
       template: {
@@ -33,8 +23,6 @@ export function buildSidebarDragData(
         category: "Variable",
         variableId: id,
         variableName: name,
-        variableType,
-        containerType,
       },
     };
   }

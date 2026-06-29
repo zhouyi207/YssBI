@@ -78,6 +78,20 @@ export interface ProjectWorksheetIndexRow {
   folderPath: string;
 }
 
+export interface ProjectVariableIndexRow {
+  id: string;
+  name: string;
+  dataType: import('@/shared/types/domain').DataType;
+  dataValue: import('@/shared/types/domain').DataValue;
+  description: string;
+  scope: import('@/shared/types/domain/variable').VariableScope;
+  tags: string[];
+  ownerGraphId?: string | null;
+  ownerGraphName?: string | null;
+  ownerGraphKind?: 'event' | 'function' | null;
+  ownerFolderPath?: string | null;
+}
+
 export interface ProjectIndexRow {
   projectName: string;
   appVersion: string;
@@ -85,6 +99,7 @@ export interface ProjectIndexRow {
   graphs: ProjectGraphIndexRow[];
   folders: ProjectFolderIndexRow[];
   worksheets?: ProjectWorksheetIndexRow[];
+  variables?: ProjectVariableIndexRow[];
 }
 
 export interface LoadedProjectGraphRow {

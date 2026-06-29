@@ -55,8 +55,6 @@ pub enum NodeInstanceParams {
     DataFrame {
         #[serde(rename = "dataframeId")]
         dataframe_id: String,
-        #[serde(rename = "dataframeName", skip_serializing_if = "Option::is_none")]
-        dataframe_name: Option<String>,
     },
 }
 
@@ -79,22 +77,6 @@ impl NodeInstanceParams {
         }
     }
 
-    /// 便捷方法：获取 variable_name（仅 Variable 变体）
-    pub fn variable_name(&self) -> Option<&str> {
-        match self {
-            NodeInstanceParams::Variable { variable_name, .. } => variable_name.as_deref(),
-            _ => Option::None,
-        }
-    }
-
-    /// 便捷方法：获取 variable_type（仅 Variable 变体）
-    pub fn variable_type(&self) -> Option<&str> {
-        match self {
-            NodeInstanceParams::Variable { variable_type, .. } => variable_type.as_deref(),
-            _ => Option::None,
-        }
-    }
-
     /// 便捷方法：获取 sub_graph_id（仅 SubGraph 变体）
     pub fn sub_graph_id(&self) -> Option<&str> {
         match self {
@@ -106,15 +88,7 @@ impl NodeInstanceParams {
     /// 便捷方法：获取 dataframe_id（仅 DataFrame 变体）
     pub fn dataframe_id(&self) -> Option<&str> {
         match self {
-            NodeInstanceParams::DataFrame { dataframe_id, .. } => Some(dataframe_id),
-            _ => Option::None,
-        }
-    }
-
-    /// 便捷方法：获取 dataframe_name（仅 DataFrame 变体）
-    pub fn dataframe_name(&self) -> Option<&str> {
-        match self {
-            NodeInstanceParams::DataFrame { dataframe_name, .. } => dataframe_name.as_deref(),
+            NodeInstanceParams::DataFrame { dataframe_id } => Some(dataframe_id),
             _ => Option::None,
         }
     }
@@ -333,3 +307,21 @@ impl NodeInstance {
 
 // `NodeInstance` 不再单独序列化：磁盘格式由 `GraphInstance` 的自定义 serde 统一
 // 负责（节点以 `nodeType` 落盘，完整定义在加载后由 registry 重挂）。
+
+#[cfg(test)]
+mod tests {
+    use super::NodeInstanceParams;
+
+    #[test]
+    fn dataframe_params_serialize_only_stable_id() {
+        let params = NodeInstanceParams::DataFrame {
+            dataframe_id: "df-1".to_string(),
+        };
+
+        let value = serde_json::to_value(params).unwrap();
+
+        assert_eq!(value["paramsKind"], "dataFrame");
+        assert_eq!(value["dataframeId"], "df-1");
+        assert!(value.get("dataframeName").is_none());
+    }
+}

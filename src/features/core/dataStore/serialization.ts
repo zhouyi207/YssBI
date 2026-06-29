@@ -81,7 +81,6 @@ export function serializeGraph(
       variableName: node.variableName,
       subGraphId: node.subGraphId,
       dataframeId: node.dataframeId,
-      dataframeName: node.dataframeName,
       inputs: node.inputs.map(toSerializedPin),
       outputs: node.outputs.map(toSerializedPin),
     })),
@@ -176,7 +175,6 @@ export function deserializeGraph(data: DeserializeGraphInput): {
       variableType: n.variableType,
       variableName: n.variableName,
       dataframeId: n.dataframeId,
-      dataframeName: n.dataframeName,
     };
 
     // 从 pins 中按 nodeId 和 direction 派生 inputs/outputs，以支持动态 pin（如 Decompose DataFrame）

@@ -4,7 +4,7 @@ use crate::graph::node::NodeInstanceParams;
 use crate::graph::{DataType, DataValue, GraphInstance, PinInstance, PinRole};
 use crate::graph::{NodeId, NodeRuntimeState, PinId, PinRuntimeState};
 use crate::project::{ProjectData, ProjectStore};
-use crate::variable::VariableId;
+use crate::variable::{VariableId, VariableScope};
 use polars::prelude::{DataFrame, Series};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -384,20 +384,38 @@ impl GraphRuntime {
     // 变量操作
     // ========================================================================
 
-    /// 读取变量值
+    /// 读取变量值（仅当前图可见的全局变量与本图局部变量）
     pub fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {
         let var_id = Self::parse_variable_id(variable_id)?;
         let data = self.project_data.read().map_err(|e| e.to_string())?;
-        data.variables
+        let var = data
+            .variables
             .get(&var_id)
-            .map(|v| v.data_value.clone())
-            .ok_or_else(|| format!("Variable '{}' not found", variable_id))
+            .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+        if !Self::variable_visible_in_graph(&var.scope, &self.graph_instance.id) {
+            return Err(format!(
+                "Variable '{}' is not visible in graph '{}'",
+                variable_id, self.graph_instance.id
+            ));
+        }
+        Ok(var.data_value.clone())
     }
 
-    /// 写入变量值
+    /// 写入变量值（仅当前图可见的全局变量与本图局部变量）
     pub fn set_variable_value(&self, variable_id: &str, value: DataValue) -> Result<(), String> {
         let var_id = Self::parse_variable_id(variable_id)?;
         let mut data = self.project_data.write().map_err(|e| e.to_string())?;
+        let scope = data
+            .variables
+            .get(&var_id)
+            .map(|v| v.scope.clone())
+            .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+        if !Self::variable_visible_in_graph(&scope, &self.graph_instance.id) {
+            return Err(format!(
+                "Variable '{}' is not visible in graph '{}'",
+                variable_id, self.graph_instance.id
+            ));
+        }
         let var = data
             .variables
             .get_mut(&var_id)
@@ -406,9 +424,93 @@ impl GraphRuntime {
         Ok(())
     }
 
+    fn variable_visible_in_graph(scope: &VariableScope, graph_id: &crate::graph::GraphId) -> bool {
+        match scope {
+            VariableScope::Global => true,
+            VariableScope::Event { event_id } => event_id == &graph_id.to_string(),
+            VariableScope::Function { function_id } => function_id == &graph_id.to_string(),
+        }
+    }
+
     fn parse_variable_id(id: &str) -> Result<VariableId, String> {
         let uuid =
             Uuid::parse_str(id).map_err(|e| format!("Invalid variable ID '{}': {}", id, e))?;
         Ok(VariableId::from(uuid))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::value::{DataType, DataValue};
+    use crate::project::{ProjectState, ProjectStore};
+    use crate::variable::VariableScope;
+    use std::sync::{Arc, RwLock};
+
+    #[test]
+    fn get_variable_value_allows_globals_and_own_graph_locals() {
+        let state = ProjectState::new();
+        let event = state.add_event("Runtime Event");
+        let global = state.add_variable(
+            "global",
+            DataType::Int32,
+            DataValue::Int32(1),
+            "",
+            VariableScope::Global,
+            vec![],
+        );
+        let local = state.add_variable(
+            "local",
+            DataType::Int32,
+            DataValue::Int32(2),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
+        let graph = state.get_graph(&event.id).unwrap();
+        let runtime = GraphRuntime::new(
+            Arc::new(graph.clone()),
+            Arc::new(RwLock::new(state.get_data())),
+            Arc::new(RwLock::new(ProjectStore::default())),
+        );
+
+        assert_eq!(
+            runtime.get_variable_value(&global.id.to_string()).unwrap(),
+            DataValue::Int32(1)
+        );
+        assert_eq!(
+            runtime.get_variable_value(&local.id.to_string()).unwrap(),
+            DataValue::Int32(2)
+        );
+    }
+
+    #[test]
+    fn get_variable_value_rejects_other_graph_local_variable() {
+        let state = ProjectState::new();
+        let event_a = state.add_event("Graph A");
+        let event_b = state.add_event("Graph B");
+        let local = state.add_variable(
+            "foreign local",
+            DataType::Int32,
+            DataValue::Int32(9),
+            "",
+            VariableScope::Event {
+                event_id: event_a.id.to_string(),
+            },
+            vec![],
+        );
+        let graph_b = state.get_graph(&event_b.id).unwrap();
+        let runtime = GraphRuntime::new(
+            Arc::new(graph_b.clone()),
+            Arc::new(RwLock::new(state.get_data())),
+            Arc::new(RwLock::new(ProjectStore::default())),
+        );
+
+        let err = runtime
+            .get_variable_value(&local.id.to_string())
+            .unwrap_err();
+        assert!(err.contains("not visible"));
     }
 }

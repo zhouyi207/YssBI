@@ -29,7 +29,6 @@ export interface SerializedNode {
   variableName?: string;
   subGraphId?: string;
   dataframeId?: string;
-  dataframeName?: string;
   inputs: SerializedPin[];
   outputs: SerializedPin[];
 }
@@ -63,7 +62,6 @@ export interface DeserializeGraphInput {
     variableType?: string;
     variableName?: string;
     dataframeId?: string;
-    dataframeName?: string;
     inputs?: (string | SerializedPin)[];
     outputs?: (string | SerializedPin)[];
   }>;
@@ -96,5 +94,4 @@ export interface DeserializedNode {
   variableType?: string;
   variableName?: string;
   dataframeId?: string;
-  dataframeName?: string;
 }

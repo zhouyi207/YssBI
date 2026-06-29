@@ -8,6 +8,7 @@ use super::{
     ensure_worksheets_dir, read_worksheet_index_entries,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
+use crate::graph::NodeInstanceParams;
 use crate::graph::{GraphId, GraphInstance, GraphKind};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
@@ -73,6 +74,41 @@ pub struct ProjectFolderIndexEntry {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectVariableIndexEntry {
+    pub id: String,
+    pub name: String,
+    pub data_type: crate::graph::value::DataType,
+    pub data_value: crate::graph::value::DataValue,
+    pub description: String,
+    pub scope: VariableScope,
+    pub tags: Vec<String>,
+    pub owner_graph_id: Option<String>,
+    pub owner_graph_name: Option<String>,
+    #[serde(rename = "ownerGraphKind", skip_serializing_if = "Option::is_none")]
+    pub owner_graph_kind: Option<GraphDocumentKind>,
+    pub owner_folder_path: Option<String>,
+}
+
+impl From<VariableInstance> for ProjectVariableIndexEntry {
+    fn from(value: VariableInstance) -> Self {
+        Self {
+            id: value.id.to_string(),
+            name: value.name,
+            data_type: value.data_type,
+            data_value: value.data_value,
+            description: value.description,
+            scope: value.scope,
+            tags: value.tags,
+            owner_graph_id: None,
+            owner_graph_name: None,
+            owner_graph_kind: None,
+            owner_folder_path: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectIndex {
     pub project_name: String,
     pub app_version: String,
@@ -81,6 +117,8 @@ pub struct ProjectIndex {
     pub folders: Vec<ProjectFolderIndexEntry>,
     #[serde(default)]
     pub worksheets: Vec<ProjectWorksheetIndexEntry>,
+    #[serde(default)]
+    pub variables: Vec<ProjectVariableIndexEntry>,
 }
 
 impl From<&GraphKind> for GraphDocumentKind {
@@ -248,6 +286,7 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         GraphDocumentKind::Function,
     )?);
     let worksheets = read_worksheet_index_entries(root.as_path())?;
+    let variables = read_variable_index_entries(root.as_path())?;
 
     Ok(ProjectIndex {
         project_name: manifest.project_name,
@@ -256,6 +295,7 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         graphs,
         folders,
         worksheets,
+        variables,
     })
 }
 
@@ -425,7 +465,7 @@ pub fn duplicate_project_graph_file(
     .collect();
     document.graph.id = GraphId::new();
     document.graph.name = crate::project::unique_name::unique_name(&document.graph.name, names);
-    document.local_variables.clear();
+    remap_graph_document_local_variables(&mut document, kind);
     let file_name = unique_graph_file_name(
         source_dir,
         &document.graph.name,
@@ -641,17 +681,129 @@ fn repair_copied_graph_document(
     existing_ids: &HashSet<GraphId>,
 ) -> Result<GraphFileHeader, ProjectError> {
     let mut document = read_graph_document(path, expected_kind)?;
-    while existing_ids.contains(&document.graph.id) {
-        document.graph.id = GraphId::new();
+    if !existing_ids.contains(&document.graph.id) {
+        return Ok(GraphFileHeader {
+            graph: GraphFileHeaderGraph {
+                id: document.graph.id,
+                name: document.graph.name.clone(),
+            },
+        });
     }
-    document.local_variables.clear();
+
+    document.graph.id = GraphId::new();
+    remap_graph_document_local_variables(&mut document, expected_kind);
+
     write_json(path, &document)?;
     Ok(GraphFileHeader {
         graph: GraphFileHeaderGraph {
             id: document.graph.id,
-            name: document.graph.name,
+            name: document.graph.name.clone(),
         },
     })
+}
+
+fn remap_graph_document_local_variables(document: &mut GraphDocument, kind: GraphDocumentKind) {
+    let graph_id_string = document.graph.id.to_string();
+    let mut variable_id_map: HashMap<String, String> = HashMap::new();
+    let mut remapped_locals = HashMap::new();
+    for (_, mut variable) in document.local_variables.drain() {
+        let new_variable_id = VariableId::new();
+        variable_id_map.insert(variable.id.to_string(), new_variable_id.to_string());
+        variable.id = new_variable_id;
+        variable.scope = scoped_variable_scope(kind, &graph_id_string);
+        remapped_locals.insert(new_variable_id, variable);
+    }
+    document.local_variables = remapped_locals;
+
+    {
+        let mut data_state = document.graph.data_state.write().unwrap();
+        for node in data_state.nodes.values_mut() {
+            if let NodeInstanceParams::Variable { variable_id, .. } = &mut node.instance_params {
+                if let Some(next_id) = variable_id_map.get(variable_id) {
+                    *variable_id = next_id.clone();
+                }
+            }
+        }
+    }
+}
+
+fn scoped_variable_scope(kind: GraphDocumentKind, graph_id: &str) -> VariableScope {
+    match kind {
+        GraphDocumentKind::Event => VariableScope::Event {
+            event_id: graph_id.to_string(),
+        },
+        GraphDocumentKind::Function => VariableScope::Function {
+            function_id: graph_id.to_string(),
+        },
+    }
+}
+
+pub(crate) fn read_global_variable_index_entries(
+    root: &Path,
+) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
+    let variables_path = root.join(GLOBAL_VARIABLES_FILE);
+    if !variables_path.exists() {
+        return Ok(Vec::new());
+    }
+    let document: GlobalVariablesDocument = read_json(variables_path.as_path())?;
+    Ok(document
+        .variables
+        .into_values()
+        .map(ProjectVariableIndexEntry::from)
+        .collect())
+}
+
+fn read_graph_local_variable_index_entries(
+    root: &Path,
+    dir: &str,
+    extension: &str,
+    expected_kind: GraphDocumentKind,
+) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
+    let mut entries = Vec::new();
+    for path in list_graph_files(root, dir, extension)? {
+        let document = match read_graph_document(path.as_path(), expected_kind) {
+            Ok(document) => document,
+            Err(_) => continue,
+        };
+        let graph_name = graph_name_from_file_path(path.as_path()).unwrap_or(document.graph.name);
+        let folder_path = folder_path_from_graph_file(root, dir, path.as_path());
+        let owner_graph_id = document.graph.id.to_string();
+        for variable in document.local_variables.into_values() {
+            entries.push(ProjectVariableIndexEntry {
+                id: variable.id.to_string(),
+                name: variable.name,
+                data_type: variable.data_type,
+                data_value: variable.data_value,
+                description: variable.description,
+                scope: variable.scope,
+                tags: variable.tags,
+                owner_graph_id: Some(owner_graph_id.clone()),
+                owner_graph_name: Some(graph_name.clone()),
+                owner_graph_kind: Some(expected_kind),
+                owner_folder_path: Some(folder_path.clone()),
+            });
+        }
+    }
+    Ok(entries)
+}
+
+fn read_variable_index_entries(
+    root: &Path,
+) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
+    let mut entries = read_global_variable_index_entries(root)?;
+    entries.extend(read_graph_local_variable_index_entries(
+        root,
+        EVENTS_DIR,
+        EVENT_EXTENSION,
+        GraphDocumentKind::Event,
+    )?);
+    entries.extend(read_graph_local_variable_index_entries(
+        root,
+        FUNCTIONS_DIR,
+        FUNCTION_EXTENSION,
+        GraphDocumentKind::Function,
+    )?);
+    Ok(entries)
 }
 
 fn read_folder_index_entries(
@@ -1244,10 +1396,75 @@ mod tests {
     }
 
     #[test]
+    fn read_project_index_includes_global_and_graph_local_variables() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("Indexed Event");
+        let function = state.add_function("Indexed Function");
+
+        state.add_variable(
+            "Global Var",
+            DataType::String,
+            DataValue::String("g".into()),
+            "",
+            VariableScope::Global,
+            vec![],
+        );
+        state.add_variable(
+            "Event Local",
+            DataType::Int32,
+            DataValue::Int32(1),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
+        state.add_variable(
+            "Function Local",
+            DataType::Float64,
+            DataValue::Float64(2.0),
+            "",
+            VariableScope::Function {
+                function_id: function.id.to_string(),
+            },
+            vec![],
+        );
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+        assert_eq!(index.variables.len(), 3);
+        assert!(
+            index
+                .variables
+                .iter()
+                .any(|v| v.name == "Global Var" && v.owner_graph_id.is_none())
+        );
+        assert!(index.variables.iter().any(|v| v.name == "Event Local"
+            && v.owner_graph_id.as_deref() == Some(&event.id.to_string())));
+        assert!(index.variables.iter().any(|v| {
+            v.name == "Function Local"
+                && v.owner_graph_id.as_deref() == Some(&function.id.to_string())
+        }));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn read_project_index_repairs_copied_graph_files_with_duplicate_ids() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let event = state.add_event("Copied Event");
+        let _local = state.add_variable(
+            "Copied Local",
+            DataType::Int32,
+            DataValue::Int32(7),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
         save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
 
         let original_path = root
@@ -1271,7 +1488,214 @@ mod tests {
         assert_ne!(original_doc.graph.id, copied_doc.graph.id);
         assert!(ids.contains(&original_doc.graph.id));
         assert!(ids.contains(&copied_doc.graph.id));
-        assert!(copied_doc.local_variables.is_empty());
+
+        assert_eq!(original_doc.local_variables.len(), 1);
+        assert_eq!(copied_doc.local_variables.len(), 1);
+        let original_local = original_doc.local_variables.values().next().unwrap();
+        let copied_local = copied_doc.local_variables.values().next().unwrap();
+        assert_eq!(original_local.name, "Copied Local");
+        assert_eq!(copied_local.name, "Copied Local");
+        assert_ne!(original_local.id, copied_local.id);
+        assert_eq!(
+            copied_local.scope,
+            VariableScope::Event {
+                event_id: copied_doc.graph.id.to_string(),
+            }
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn duplicate_project_graph_file_preserves_and_remaps_local_variables() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("Duplicate Command Event");
+        let local = state.add_variable(
+            "Command Local",
+            DataType::Int32,
+            DataValue::Int32(7),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
+        let graph = state.get_graph(&event.id).unwrap();
+        graph
+            .create_node_raw(
+                "Variables:Get Variable",
+                0.0,
+                0.0,
+                Some(NodeInstanceParams::Variable {
+                    variable_id: local.id.to_string(),
+                    variable_name: Some(local.name.clone()),
+                    variable_type: Some(local.data_type.to_string()),
+                }),
+            )
+            .unwrap();
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let duplicated =
+            duplicate_project_graph_file(root.to_string_lossy().as_ref(), &event.id).unwrap();
+
+        assert_ne!(duplicated.graph.id, event.id);
+        assert_eq!(duplicated.local_variables.len(), 1);
+        let duplicated_local = duplicated.local_variables.values().next().unwrap();
+        assert_eq!(duplicated_local.name, "Command Local");
+        assert_ne!(duplicated_local.id, local.id);
+        assert_eq!(
+            duplicated_local.scope,
+            VariableScope::Event {
+                event_id: duplicated.graph.id.to_string(),
+            }
+        );
+
+        let data_state = duplicated.graph.data_state.read().unwrap();
+        assert!(data_state.nodes.values().any(|node| {
+            node.instance_params.variable_id() == Some(duplicated_local.id.to_string().as_str())
+        }));
+        assert!(
+            data_state
+                .nodes
+                .values()
+                .all(|node| node.instance_params.variable_id()
+                    != Some(local.id.to_string().as_str()))
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loading_graph_resolves_variable_node_pins_from_local_variable_table() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("Variable Pin Event");
+        let local = state.add_variable(
+            "Resolved Local",
+            DataType::Float64,
+            DataValue::Float64(1.5),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
+        let graph = state.get_graph(&event.id).unwrap();
+        graph
+            .create_node_raw(
+                "Variables:Get Variable",
+                0.0,
+                0.0,
+                Some(NodeInstanceParams::Variable {
+                    variable_id: local.id.to_string(),
+                    variable_name: None,
+                    variable_type: None,
+                }),
+            )
+            .unwrap();
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let loaded_data = load_project_from_file(root.to_string_lossy().as_ref()).unwrap();
+        let loaded_state = ProjectState::new();
+        loaded_state.set_path(Some(root.to_string_lossy().to_string()));
+        loaded_state.set_data(loaded_data);
+        let loaded_document = loaded_state
+            .load_graph_from_current_project(&event.id)
+            .unwrap();
+
+        let data_state = loaded_document.graph.data_state.read().unwrap();
+        let variable_node = data_state
+            .nodes
+            .values()
+            .find(|node| node.instance_params.variable_id() == Some(local.id.to_string().as_str()))
+            .unwrap();
+        let data_pin = variable_node
+            .pin_ids
+            .iter()
+            .filter_map(|pin_id| data_state.pins.get(pin_id))
+            .find(|pin| pin.definition.kind == crate::graph::PinKind::Data)
+            .unwrap();
+
+        assert_eq!(data_pin.definition.name, "Resolved Local");
+        assert_eq!(
+            data_state.pin_types.get(&data_pin.id),
+            Some(&DataType::Float64)
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn loading_graph_resolves_get_dataframe_pin_name_from_database_catalog() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let event = state.add_event("DataFrame Pin Event");
+        {
+            let mut data = state.project_data.write().unwrap();
+            data.databases.insert(
+                "df-1".to_string(),
+                DatabaseDecl {
+                    id: "df-1".to_string(),
+                    engine: DatabaseEngine::DuckDb {
+                        path: "database/project.duckdb".to_string(),
+                        table: "SalesTable".to_string(),
+                    },
+                    schema_version: 1,
+                    required: true,
+                    name: Some("SalesData".to_string()),
+                },
+            );
+        }
+        let graph = state.get_graph(&event.id).unwrap();
+        graph
+            .create_node_raw(
+                "Data:Get DataFrame",
+                0.0,
+                0.0,
+                Some(NodeInstanceParams::DataFrame {
+                    dataframe_id: "df-1".to_string(),
+                }),
+            )
+            .unwrap();
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let mut loaded_data = load_project_from_file(root.to_string_lossy().as_ref()).unwrap();
+        loaded_data.databases.insert(
+            "df-1".to_string(),
+            DatabaseDecl {
+                id: "df-1".to_string(),
+                engine: DatabaseEngine::DuckDb {
+                    path: "database/project.duckdb".to_string(),
+                    table: "SalesTable".to_string(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some("SalesData".to_string()),
+            },
+        );
+        let loaded_state = ProjectState::new();
+        loaded_state.set_path(Some(root.to_string_lossy().to_string()));
+        loaded_state.set_data(loaded_data);
+        let loaded_document = loaded_state
+            .load_graph_from_current_project(&event.id)
+            .unwrap();
+
+        let data_state = loaded_document.graph.data_state.read().unwrap();
+        let dataframe_node = data_state
+            .nodes
+            .values()
+            .find(|node| node.instance_params.dataframe_id() == Some("df-1"))
+            .unwrap();
+        assert_eq!(dataframe_node.definition.name, "Get DataFrame");
+
+        let data_pin = dataframe_node
+            .pin_ids
+            .iter()
+            .filter_map(|pin_id| data_state.pins.get(pin_id))
+            .find(|pin| pin.definition.kind == crate::graph::PinKind::Data)
+            .unwrap();
+        assert_eq!(data_pin.definition.name, "SalesData");
 
         let _ = std::fs::remove_dir_all(root);
     }

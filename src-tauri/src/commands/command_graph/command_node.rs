@@ -50,10 +50,15 @@ pub fn create_node(
         .graphs
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    let variable_symbols =
+        ProjectState::variable_symbols_from_variables(&bounding.variables, &graph_id, &graph.kind);
+    let dataframe_symbols = ProjectState::dataframe_symbols_from_databases(&bounding.databases);
 
     // 创建节点并设置位置
     let node_id =
         graph.create_node_with_position(node_type, x.unwrap_or(0.0), y.unwrap_or(0.0), params)?;
+    graph.resolve_variable_nodes(&variable_symbols);
+    graph.resolve_dataframe_nodes(&dataframe_symbols);
 
     // 获取创建的节点实例并转换为 DTO
     let node_instance = graph
@@ -124,6 +129,9 @@ pub fn batch_create_nodes(
         .graphs
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    let variable_symbols =
+        ProjectState::variable_symbols_from_variables(&bounding.variables, &graph_id, &graph.kind);
+    let dataframe_symbols = ProjectState::dataframe_symbols_from_databases(&bounding.databases);
 
     let mut results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> =
         Vec::with_capacity(requests.len());
@@ -141,6 +149,8 @@ pub fn batch_create_nodes(
     }
 
     // 所有节点就位后统一推断一次类型
+    graph.resolve_variable_nodes(&variable_symbols);
+    graph.resolve_dataframe_nodes(&dataframe_symbols);
     let _ = graph.infer_types();
 
     // 构建 DTO
@@ -152,14 +162,17 @@ pub fn batch_create_nodes(
         let mut node_dto: NodeInstanceDTO = (&node_instance).into();
 
         let pin_instances = graph.get_pin_instances_by_node_id(node_id);
+        let data_state = graph.data_state.read().unwrap();
         let mut pins_dto = Vec::with_capacity(pin_instances.len());
         for pin in &pin_instances {
             match pin.definition.direction {
                 crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
                 crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
             }
-            pins_dto.push(PinInstanceDTO::from(pin));
+            let resolved_type = data_state.pin_types.get(&pin.id);
+            pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type));
         }
+        drop(data_state);
 
         results.push((node_id, node_dto, pins_dto));
     }
@@ -326,6 +339,9 @@ pub fn create_node_with_id(
         .graphs
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    let variable_symbols =
+        ProjectState::variable_symbols_from_variables(&bounding.variables, &graph_id, &graph.kind);
+    let dataframe_symbols = ProjectState::dataframe_symbols_from_databases(&bounding.databases);
 
     graph.create_node_raw_with_ids(
         &node_type,
@@ -335,6 +351,8 @@ pub fn create_node_with_id(
         y.unwrap_or(0.0),
         params,
     )?;
+    graph.resolve_variable_nodes(&variable_symbols);
+    graph.resolve_dataframe_nodes(&dataframe_symbols);
     // 与 `create_node_with_position` 一致：id 指定的新建节点同样没有任何连接，
     // 不会改变已有 pin 类型，故跳过全图类型推断，保持 O(1)。
 
@@ -421,6 +439,9 @@ pub fn restore_nodes(
         .graphs
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    let variable_symbols =
+        ProjectState::variable_symbols_from_variables(&bounding.variables, &graph_id, &graph.kind);
+    let dataframe_symbols = ProjectState::dataframe_symbols_from_databases(&bounding.databases);
 
     let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
     let mut pin_mapping: HashMap<String, String> = HashMap::new();
@@ -459,20 +480,25 @@ pub fn restore_nodes(
                 }
             }
         }
+        graph.resolve_variable_nodes(&variable_symbols);
+        graph.resolve_dataframe_nodes(&dataframe_symbols);
 
         let node_instance = graph
             .get_node_instance(nid)
             .ok_or_else(|| format!("Restored node '{}' not found", node_snap.node_id))?;
         let mut node_dto: NodeInstanceDTO = (&node_instance).into();
         let pin_instances = graph.get_pin_instances_by_node_id(nid);
+        let data_state = graph.data_state.read().unwrap();
         let mut pins_dto = Vec::with_capacity(pin_instances.len());
         for pin in &pin_instances {
             match pin.definition.direction {
                 crate::graph::PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
                 crate::graph::PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
             }
-            pins_dto.push(PinInstanceDTO::from(pin));
+            let resolved_type = data_state.pin_types.get(&pin.id);
+            pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type));
         }
+        drop(data_state);
         all_results.push((nid, node_dto, pins_dto));
     }
 
@@ -640,6 +666,9 @@ pub fn batch_create_with_connections(
         .graphs
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+    let variable_symbols =
+        ProjectState::variable_symbols_from_variables(&bounding.variables, &graph_id, &graph.kind);
+    let dataframe_symbols = ProjectState::dataframe_symbols_from_databases(&bounding.databases);
 
     let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
     let mut created_node_ids: Vec<NodeId> = Vec::new();
@@ -670,20 +699,25 @@ pub fn batch_create_with_connections(
                 }
             }
         }
+        graph.resolve_variable_nodes(&variable_symbols);
+        graph.resolve_dataframe_nodes(&dataframe_symbols);
 
         let node_instance = graph
             .get_node_instance(node_id)
             .ok_or_else(|| format!("Node '{}' not found after creation", node_id))?;
         let mut node_dto: NodeInstanceDTO = (&node_instance).into();
         let pin_instances = graph.get_pin_instances_by_node_id(node_id);
+        let data_state = graph.data_state.read().unwrap();
         let mut pins_dto = Vec::with_capacity(pin_instances.len());
         for pin in &pin_instances {
             match pin.definition.direction {
                 PinDirection::Input => node_dto.inputs.push(pin.id.to_string()),
                 PinDirection::Output => node_dto.outputs.push(pin.id.to_string()),
             }
-            pins_dto.push(PinInstanceDTO::from(pin));
+            let resolved_type = data_state.pin_types.get(&pin.id);
+            pins_dto.push(PinInstanceDTO::from_pin_with_context(pin, resolved_type));
         }
+        drop(data_state);
         all_results.push((node_id, node_dto, pins_dto));
     }
 

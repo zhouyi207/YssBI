@@ -22,36 +22,12 @@ interface DefaultNodeLayoutProps {
   onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
-/** get_variable/set_variable 节点从 variable store 响应式读取显示名 */
-function useVariableNodeTitle(
-  nodeType: string | undefined,
-  variableId: string | undefined,
-  fallbackTitle: string
-): string {
-  const variable = useVariableStore((s) =>
-    variableId && (nodeType === "Variables:Get Variable" || nodeType === "Variables:Set Variable")
-      ? s.variables[variableId]
-      : null
-  );
-  if (!variable) return fallbackTitle;
-  const prefix = nodeType === "Variables:Set Variable" ? "Set " : "Get ";
-  return prefix + variable.name;
+function isVariableNode(nodeType: string | undefined): boolean {
+  return nodeType === "Variables:Get Variable" || nodeType === "Variables:Set Variable";
 }
 
-/** get_dataframe 节点从 database store 响应式读取显示名 */
-function useDataframeNodeTitle(
-  nodeType: string | undefined,
-  dataframeId: string | undefined,
-  fallbackTitle: string
-): string {
-  const db = useDatabaseStore((s) =>
-    dataframeId && nodeType === "Data:Get DataFrame"
-      ? s.databases[dataframeId]
-      : null
-  );
-  if (!db) return fallbackTitle;
-  const name = (db as Record<string, unknown>).name as string | undefined;
-  return name ? `Get ${name}` : fallbackTitle;
+function isDataframeNode(nodeType: string | undefined): boolean {
+  return nodeType === "Data:Get DataFrame";
 }
 
 /**
@@ -59,7 +35,7 @@ function useDataframeNodeTitle(
  * 
  * 职责：
  * - 渲染默认节点布局（标题 + Pins）
- * - get_variable/set_variable 从 variable store 响应式读取标题，确保刷新后重命名也能更新
+ * - get_variable/set_variable/get_dataframe 标题保持节点语义，资源名显示在 data pin 上
  */
 export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
@@ -72,21 +48,34 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const varTitle = useVariableNodeTitle(
-    node.nodeType,
-    node.variableId,
-    node.title
+  const variable = useVariableStore((s) =>
+    node.variableId && isVariableNode(node.nodeType)
+      ? s.variables[node.variableId]
+      : null
   );
-  const displayTitle = useDataframeNodeTitle(
-    node.nodeType,
-    node.dataframeId,
-    varTitle
+  const database = useDatabaseStore((s) =>
+    node.dataframeId && isDataframeNode(node.nodeType)
+      ? s.databases[node.dataframeId]
+      : null
   );
+  const displayTitle = node.title;
   const isConstantNode = node.category?.[1] === "Constants";
+  const resolveResourcePin = useCallback((pin: PinModel): PinModel => {
+    if (pin.type === 'exec') return pin;
+    if (variable && isVariableNode(node.nodeType)) {
+      return { ...pin, name: variable.name };
+    }
+    if (database && isDataframeNode(node.nodeType)) {
+      const name = (database as Record<string, unknown>).name;
+      return typeof name === 'string' && name ? { ...pin, name } : pin;
+    }
+    return pin;
+  }, [database, node.nodeType, variable]);
+
   const inputsExec = node.inputs.filter(p => p.type === 'exec');
-  const inputsData = node.inputs.filter(p => p.type !== 'exec');
+  const inputsData = node.inputs.filter(p => p.type !== 'exec').map(resolveResourcePin);
   const outputsExec = node.outputs.filter(p => p.type === 'exec');
-  const outputsData = node.outputs.filter(p => p.type !== 'exec');
+  const outputsData = node.outputs.filter(p => p.type !== 'exec').map(resolveResourcePin);
 
   const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
 
