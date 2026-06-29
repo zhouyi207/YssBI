@@ -121,6 +121,8 @@ pub fn run() {
             save_project_as,
             execute_project,
             get_window_data,
+            get_window_source_value,
+            get_window_source_page,
             // ==================== 设置 ====================
             load_settings,
             save_settings,

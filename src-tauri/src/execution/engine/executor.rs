@@ -192,8 +192,28 @@ impl<E: EventEmitter> Executor<E> {
             let data_key = format!("win_{}", uuid::Uuid::new_v4().simple());
             // 注入 executionTimeMs 到窗口数据，供前端 summary 页面做性能分析
             let data_with_timing = inject_execution_time(&action.data, node_duration_ms);
-            self.window_data_store
-                .insert(data_key.clone(), data_with_timing);
+            if let Some(source) = action.source {
+                self.window_data_store
+                    .insert_source_window(
+                        data_key.clone(),
+                        action.window_type.clone(),
+                        data_with_timing,
+                        source,
+                    )
+                    .unwrap_or_else(|err| {
+                        self.log(format!("Failed to store window source: {}", err));
+                    });
+            } else {
+                self.window_data_store
+                    .insert_json_window(
+                        data_key.clone(),
+                        action.window_type.clone(),
+                        data_with_timing,
+                    )
+                    .unwrap_or_else(|err| {
+                        self.log(format!("Failed to store window JSON source: {}", err));
+                    });
+            }
             self.emit(ExecutionEvent::OpenWindow {
                 window_type: action.window_type,
                 data_key,

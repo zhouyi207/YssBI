@@ -590,6 +590,26 @@ pub fn get_window_data(
     Ok(state.get(&key))
 }
 
+/// 新窗口通过 key 拉取 JSON source value（metadata 之外的实际内容）。
+#[tauri::command]
+pub fn get_window_source_value(
+    state: State<crate::execution::WindowDataStore>,
+    key: String,
+) -> Result<Option<String>, String> {
+    state.get_source_value(&key)
+}
+
+/// 分页拉取窗口 source 中的 DataFrame / DataSeries 数据
+#[tauri::command]
+pub fn get_window_source_page(
+    state: State<crate::execution::WindowDataStore>,
+    key: String,
+    offset: usize,
+    limit: usize,
+) -> Result<crate::execution::WindowDataPageResponse, String> {
+    state.get_page(&key, offset, limit)
+}
+
 #[tauri::command]
 pub fn load_project_graph(
     state: State<ProjectState>,

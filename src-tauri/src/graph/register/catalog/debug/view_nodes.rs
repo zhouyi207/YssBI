@@ -1,20 +1,18 @@
 //! View 节点：查看各种类型数据的具体内容
 //!
-//! 通过 open_window 将数据序列化后存入 WindowDataStore，执行结束后仍可刷新查看
+//! 通过 open_window 将 metadata 存入 WindowDataStore；DataFrame/DataSeries 另存 page source 供分页拉取。
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, WindowDataSource};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::dataframe::OLSResult;
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::DataFrame;
 use serde_json::json;
 use std::sync::Arc;
-use yss_sci::api::database::anyvalue_to_json;
-
-const PREVIEW_ROWS: usize = 100;
 
 /// 将 DataValue 标量转为 JSON
 fn scalar_to_json(v: &DataValue) -> serde_json::Value {
@@ -42,65 +40,61 @@ fn scalar_to_json(v: &DataValue) -> serde_json::Value {
     }
 }
 
-/// DataFrame 转为预览 JSON
-fn dataframe_to_view_json(df: &DataFrame) -> serde_json::Value {
-    let total_rows = df.height();
-    let preview_count = total_rows.min(PREVIEW_ROWS);
-    let sliced = df.slice(0, preview_count);
-
+fn dataframe_metadata(df: &DataFrame) -> serde_json::Value {
     let columns: Vec<String> = df.columns().iter().map(|c| c.name().to_string()).collect();
-
-    let rows: Vec<Vec<serde_json::Value>> = (0..sliced.height())
-        .map(|row_idx| {
-            sliced
-                .columns()
-                .iter()
-                .map(|s| {
-                    s.get(row_idx)
-                        .map(anyvalue_to_json)
-                        .unwrap_or(serde_json::Value::Null)
-                })
-                .collect()
-        })
-        .collect();
-
     json!({
         "viewType": "data_view",
         "dataType": "dataframe",
         "title": "View: DataFrame",
         "columns": columns,
-        "rows": rows,
-        "totalRows": total_rows,
-        "previewRows": preview_count,
+        "totalRows": df.height(),
     })
 }
 
-/// Series 转为预览 JSON
-fn series_to_view_json(series: &polars::prelude::Series) -> serde_json::Value {
+fn series_metadata(series: &polars::prelude::Series) -> serde_json::Value {
     let name = series.name().to_string();
-    let len = series.len();
-    let dtype = format!("{:?}", series.dtype());
-    let preview_count = len.min(PREVIEW_ROWS);
-
-    let values: Vec<serde_json::Value> = (0..preview_count)
-        .map(|i| {
-            series
-                .get(i)
-                .map(anyvalue_to_json)
-                .unwrap_or(serde_json::Value::Null)
-        })
-        .collect();
-
     json!({
         "viewType": "data_view",
         "dataType": "series",
         "title": format!("View: {}", if name.is_empty() { "Series" } else { &name }),
         "name": name,
-        "dtype": dtype,
-        "values": values,
-        "length": len,
-        "previewCount": preview_count,
+        "dtype": format!("{:?}", series.dtype()),
+        "length": series.len(),
     })
+}
+
+fn struct_view_json(
+    ctx: &mut dyn crate::execution::NodeExecutionContextTrait,
+    type_key: &str,
+    handle_id: &str,
+) -> Result<serde_json::Value, String> {
+    if type_key == "OLSResult" {
+        let handle = ctx.get_handle(handle_id)?;
+        let ols = handle
+            .downcast::<OLSResult>()
+            .map_err(|_| format!("Handle '{}' is not OLSResult", handle_id))?;
+        let structured = serde_json::to_value(ols.as_ref())
+            .map_err(|e| format!("View: failed to serialize OLSResult: {}", e))?;
+        return Ok(json!({
+            "viewType": "data_view",
+            "dataType": "struct",
+            "structKind": "ols_result",
+            "title": ols.title.clone(),
+            "typeKey": type_key,
+            "handleId": handle_id,
+            "structured": structured,
+        }));
+    }
+
+    Ok(json!({
+        "viewType": "data_view",
+        "dataType": "struct",
+        "structKind": "unknown",
+        "title": format!("View: {}", type_key),
+        "typeKey": type_key,
+        "handleId": handle_id,
+        "message": format!("Struct type '{}' has no dedicated viewer yet.", type_key),
+    }))
 }
 
 pub fn register(registry: &NodeRegistry) {
@@ -122,51 +116,86 @@ pub fn register(registry: &NodeRegistry) {
         .with_flow_processor(Arc::new(|ctx| {
             let input_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
 
-            let view_json = match &input_value {
+            match &input_value {
                 DataValue::Null => {
-                    json!({
+                    let view_json = json!({
                         "viewType": "data_view",
                         "dataType": "null",
                         "title": "View: (null)",
                         "message": "No data connected",
-                    })
+                    });
+                    let json_str = serde_json::to_string(&view_json)
+                        .map_err(|e| format!("View: failed to serialize: {}", e))?;
+                    ctx.open_window("data_view".to_string(), json_str);
                 }
                 DataValue::DataFrame(id) => {
                     let df = ctx.get_dataframe(id)?;
-                    dataframe_to_view_json(&df)
+                    let view_json = dataframe_metadata(&df);
+                    let json_str = serde_json::to_string(&view_json)
+                        .map_err(|e| format!("View: failed to serialize: {}", e))?;
+                    ctx.open_source_window(
+                        "data_view".to_string(),
+                        json_str,
+                        WindowDataSource::DataFrame(df),
+                    );
                 }
                 DataValue::DataSeries(v) => {
                     let series = ctx.get_series(&v.id)?;
-                    series_to_view_json(&series)
+                    let view_json = series_metadata(&series);
+                    let json_str = serde_json::to_string(&view_json)
+                        .map_err(|e| format!("View: failed to serialize: {}", e))?;
+                    ctx.open_source_window(
+                        "data_view".to_string(),
+                        json_str,
+                        WindowDataSource::Series(series),
+                    );
                 }
                 DataValue::Struct { type_key, handle_id } => {
-                    json!({
-                        "viewType": "data_view",
-                        "dataType": "struct",
-                        "title": format!("View: {}", type_key),
-                        "typeKey": type_key,
-                        "handleId": handle_id,
-                        "message": "Struct handles are not directly viewable. Use specialized nodes to extract data.",
-                    })
+                    let view_json = struct_view_json(ctx, type_key, handle_id)?;
+                    let json_str = serde_json::to_string(&view_json)
+                        .map_err(|e| format!("View: failed to serialize: {}", e))?;
+                    ctx.open_window("data_view".to_string(), json_str);
                 }
                 scalar => {
-                    json!({
+                    let view_json = json!({
                         "viewType": "data_view",
                         "dataType": "scalar",
                         "title": "View: Scalar",
                         "value": scalar_to_json(scalar),
                         "valueType": format!("{:?}", scalar.value_type().unwrap_or(DataType::Any)),
-                    })
+                    });
+                    let json_str = serde_json::to_string(&view_json)
+                        .map_err(|e| format!("View: failed to serialize: {}", e))?;
+                    ctx.open_window("data_view".to_string(), json_str);
                 }
-            };
+            }
 
-            let json_str = serde_json::to_string(&view_json)
-                .map_err(|e| format!("View: failed to serialize: {}", e))?;
-
-            ctx.open_window("data_view".to_string(), json_str);
             ctx.log("View: opened data view window".to_string());
-
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));
     registry.register(definition);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use polars::prelude::NamedFrom;
+
+    #[test]
+    fn dataframe_metadata_is_source_only_without_rows() {
+        let df = polars::df!("a" => [1, 2, 3]).unwrap();
+        let meta = dataframe_metadata(&df);
+        assert_eq!(meta["dataType"], "dataframe");
+        assert_eq!(meta["totalRows"], 3);
+        assert!(meta.get("rows").is_none());
+    }
+
+    #[test]
+    fn series_metadata_is_source_only_without_values() {
+        let series = polars::prelude::Series::new("x".into(), &[1i64, 2, 3]);
+        let meta = series_metadata(&series);
+        assert_eq!(meta["dataType"], "series");
+        assert_eq!(meta["length"], 3);
+        assert!(meta.get("values").is_none());
+    }
 }

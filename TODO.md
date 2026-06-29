@@ -509,7 +509,9 @@ package.json
 - [x] **变量节点显示派生**：Get/Set Variable 节点标题固定为节点语义名称，变量名与类型从后端 `VariableIndex` / runtime symbol table 解析到 data pin；前端 pin label 从 `VariableStore` 响应式派生且保留原始大小写；移除 hook/handler/拖拽路径中冗余 `variableName`/`variableType` 快照与手动同步。
 - [x] **DataFrame 节点显示派生与快照清理**：Get DataFrame 与 Get Variable 保持同一模式——节点标题固定为 `Get DataFrame`，节点参数只保存稳定 `dataframeId`，data pin 名称由 database catalog 动态解析；移除后端 `NodeInstanceParams::DataFrame.dataframeName` 与前端 DTO/store/serialization/node view 中的 `dataframeName` 快照字段，并补充序列化与 graph load pin 名解析回归测试。
 - [x] **彻底移除 Pin.links / deserializeGraph 遗留**：连接事实仅保留 `GraphDataStore.connections` / `pinConnections`；Canvas 与 Node Detail 统一消费派生 `connected` / `linkCount` / `connectionIds`；删除 `deserializeGraph` / `serializeGraph` / `convertGraphFromDTO` 等旧 runtime 视图转换；新增 `derivePinConnectionView`、`findInternalNodeInGraph`、`buildRuntimeNodesFromStore` 等 store-native 查询；domain `Pin` 不再携带 `links` 字段。
+- [x] **统一 DataView 组件体系**：新增 `features/core/dataView`（`UnifiedDataView` + source-only renderer resolver + `DataViewShell`）；Debug View 节点、Info summary 与 Plot 窗口统一注册为 `WindowDataStore` backend source；前端窗口先读取 source metadata，再通过 `get_window_source_value` / `get_window_source_page` 获取实际 JSON 或 DataFrame/DataSeries 分页数据；OLSResult struct 走 `OLSComponent` 结构化展示。
 - [x] **变量测试补齐**：Rust 覆盖 VariableIndex、复制 graph local 修复、runtime 作用域、`update_variable` 类型切换默认值；Vitest 覆盖 `variableCatalog` 灌入与 resource projection。
+- [x] **DataView source-only 收口**：所有 View 节点输出都注册为 backend source，前端 DataView 只消费 source metadata；删除 inline/pageable renderer 分支和 legacy inline snapshot 新路径；旧 InfoWindow summary / Plot 窗口也改为 metadata + source value 读取。
 
 ## v1.0 待办
 
@@ -518,7 +520,6 @@ package.json
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
-- [ ] dataview 节点的窗口显示不够，只能显示前100行，同时我需要其显示结构体如 ols struct 等等内容
 - [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 

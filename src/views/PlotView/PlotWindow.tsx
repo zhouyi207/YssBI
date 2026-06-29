@@ -86,10 +86,17 @@ export const PlotWindow: React.FC = () => {
         setPlotType(getPlotTypeFromHash());
 
         if (dataKey) {
-          const json = await WindowDataService.getWindowData(dataKey);
-          if (mounted && json) {
+          const metadataJson = await WindowDataService.getWindowData(dataKey);
+          if (mounted && metadataJson) {
             try {
-              const parsed = JSON.parse(json);
+              const metadata = JSON.parse(metadataJson);
+              const sourceJson = await WindowDataService.getWindowSourceValue(metadata.sourceId ?? dataKey);
+              if (!mounted) return;
+              if (!sourceJson) {
+                setError('No data available for this window');
+                return;
+              }
+              const parsed = JSON.parse(sourceJson);
               const ptype = getPlotTypeFromHash();
               if (ptype === 'correlogram') {
                 if (parsed.acf && Array.isArray(parsed.acf) && parsed.pacf && Array.isArray(parsed.pacf)) {

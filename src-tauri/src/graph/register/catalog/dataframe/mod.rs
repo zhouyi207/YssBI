@@ -29,6 +29,7 @@ mod xt_align_nodes;
 
 use crate::graph::register::NodeRegistry;
 
+pub use info_nodes::OLSResult;
 pub use panel_did_engine::{
     ComputeDidFakeGroupRequest, DidFakeGroupEnginePayload, DidPlaceboFakeGroupBlock,
     compute_fake_group_ri,

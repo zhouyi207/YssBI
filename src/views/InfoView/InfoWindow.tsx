@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WindowDataService } from '@/services/window';
 import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
-import { OLSComponent, type OLSResultData } from './OLSComponent';
+import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';
 import { VECComponent } from './VECComponent';
@@ -117,7 +117,7 @@ export const InfoWindow: React.FC = () => {
   const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const isMaximized = useWindowMaximized('InfoWindow');
-  const [olsData, setOlsData] = useState<OLSResultData | PanelSummaryResult | PanelDidResultData | null>(null);
+  const [olsData, setOlsData] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   usePersistedWindow('info');
@@ -142,10 +142,21 @@ export const InfoWindow: React.FC = () => {
 
         if (json) {
           try {
-            const parsed = JSON.parse(json);
-            setOlsData(parsed);
-            if (parsed?.title) {
-              currentWindow.setTitle(parsed.title).catch(() => {});
+            const metadata = JSON.parse(json);
+            if (metadata?.title) {
+              currentWindow.setTitle(metadata.title).catch(() => {});
+            }
+
+            if (isDataView(metadata)) {
+              setOlsData(metadata);
+            } else {
+              const sourceJson = await WindowDataService.getWindowSourceValue(metadata.sourceId ?? dataKey);
+              if (!mounted) return;
+              if (!sourceJson) {
+                setError(t('info.noData'));
+                return;
+              }
+              setOlsData(JSON.parse(sourceJson));
             }
           } catch (e) {
             setError(`Failed to parse data: ${e instanceof Error ? e.message : String(e)}`);

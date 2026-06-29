@@ -1,4 +1,5 @@
 use super::NodeExecutionContextTrait;
+use crate::execution::WindowDataSource;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId, NodeInstanceParams};
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 pub struct WindowAction {
     pub window_type: String,
     pub data: String,
+    pub source: Option<WindowDataSource>,
 }
 
 /// 具体的执行上下文实现
@@ -252,7 +254,19 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     // ====================================================================
 
     fn open_window(&mut self, window_type: String, data: String) {
-        self.window_actions.push(WindowAction { window_type, data });
+        self.window_actions.push(WindowAction {
+            window_type,
+            data,
+            source: None,
+        });
+    }
+
+    fn open_source_window(&mut self, window_type: String, data: String, source: WindowDataSource) {
+        self.window_actions.push(WindowAction {
+            window_type,
+            data,
+            source: Some(source),
+        });
     }
 
     fn log(&mut self, message: String) {

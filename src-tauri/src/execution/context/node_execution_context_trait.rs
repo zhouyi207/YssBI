@@ -1,3 +1,4 @@
+use crate::execution::WindowDataSource;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::{ExecRole, PinRole};
@@ -103,6 +104,9 @@ pub trait NodeExecutionContextTrait {
 
     /// 请求前端打开一个展示窗口
     fn open_window(&mut self, window_type: String, data: String);
+
+    /// 打开带后端 source 的窗口（metadata JSON + typed source）。
+    fn open_source_window(&mut self, window_type: String, data: String, source: WindowDataSource);
 
     // ====================================================================
     // 日志
