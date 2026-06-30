@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useResourceStore } from '@/features/core/resource';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useSidebarStore } from '@/features/core/sidebar';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import {
   createVariableAction,
@@ -30,16 +31,26 @@ export function useVariableManagement() {
   const rawType = graphTypeFromTab || graphTypeFromResource;
   const graphType = (rawType === 'event' || rawType === 'function' ? rawType : undefined) as 'event' | 'function' | undefined;
 
-  const addVariable = useCallback(async (name?: string, type: string = 'Int32', isGlobal: boolean = false) => {
+  const addVariable = useCallback(async (
+    name?: string,
+    type: string = 'Int32',
+    isGlobal: boolean = false,
+  ) => {
     const created = await createVariableAction({
       name,
       type,
       isGlobal,
-      activeGraphId: activeTabId,
-      graphType,
+      activeGraphId: isGlobal ? null : activeTabId,
+      graphType: isGlobal ? undefined : graphType,
     });
     if (created) {
-      switchSidebarTab('graphs');
+      switchSidebarTab('variables');
+      const sidebar = useSidebarStore.getState();
+      if (isGlobal) {
+        sidebar.setSectionExpanded('variablesGlobal', true);
+      } else {
+        sidebar.setSectionExpanded('variablesLocal', true);
+      }
     }
   }, [activeTabId, graphType, switchSidebarTab]);
 

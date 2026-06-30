@@ -2,10 +2,9 @@ import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import {
-  VscEye,
-  VscEyeClosed,
   VscChevronRight,
   VscDatabase,
+  VscEye,
   VscSymbolEvent,
   VscSymbolMethod,
   VscSymbolVariable,
@@ -118,14 +117,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null;
 
   const {
-    variables: graphVariables,
     Variables: allVariables,
     selectedItemId,
     selectedItemType,
     setSelectedInfo,
     addVariable,
-    promoteVariable,
-    demoteVariable,
     functions,
     events,
     dataframes,
@@ -160,68 +156,42 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const activeGraphType: GraphResourceType | undefined = activeTabId
+    ? (activeTabId in events ? "event" : activeTabId in functions ? "function" : undefined)
+    : undefined;
 
-  // Graphs > Variable: 只显示当前选择的 graph 的 variable 和 global variable
-  const { Variables: globalVariables, graphScopeVariables } = (() => {
+  const { variablesGlobal, localVariables } = (() => {
     const global: Record<string, { name: string; dataType?: unknown }> = {};
     const local: Record<string, { name: string; dataType?: unknown }> = {};
-    for (const [id, v] of Object.entries(allVariables)) {
-      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
-      if (scope?.type === "global") {
-        global[id] = v as { name: string; dataType?: unknown };
-      } else if (
-        activeTabId &&
-        scope &&
-        (scope.eventId === activeTabId || scope.functionId === activeTabId)
-      ) {
-        local[id] = v as { name: string; dataType?: unknown };
-      }
-    }
-    return { Variables: global, graphScopeVariables: { ...graphVariables, ...local } };
-  })();
 
-  // Variables (read-only): Global + Local(按 graph 分组)
-  const { variablesGlobal, localVariablesByGraph } = (() => {
-    const global: Record<string, { name: string; dataType?: unknown }> = {};
-    const byGraph: Record<string, { graphName: string; graphType: string; variables: Record<string, { name: string; dataType?: unknown }> }> = {};
     for (const [id, v] of Object.entries(allVariables)) {
       const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
       const data = v as { name: string; dataType?: unknown };
       if (scope?.type === "global") {
         global[id] = data;
-      } else {
-        const graphId = scope?.eventId ?? scope?.functionId;
-        if (graphId) {
-          if (!byGraph[graphId]) {
-            const meta = events[graphId] ?? functions[graphId];
-            byGraph[graphId] = {
-              graphName: (meta as { name?: string })?.name ?? graphId,
-              graphType: (meta as { type?: string })?.type ?? "event",
-              variables: {},
-            };
-          }
-          byGraph[graphId].variables[id] = data;
-        }
+        continue;
+      }
+      if (
+        activeTabId &&
+        scope &&
+        (scope.eventId === activeTabId || scope.functionId === activeTabId)
+      ) {
+        local[id] = data;
       }
     }
-    const localList = Object.entries(byGraph).map(([graphId, { graphName, graphType, variables }]) => ({
-      graphId,
-      graphName,
-      graphType,
-      variables,
-    }));
-    return { variablesGlobal: global, localVariablesByGraph: localList };
+
+    return { variablesGlobal: global, localVariables: local };
   })();
 
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
-  const graphVarsCount = Object.keys(graphScopeVariables).length + Object.keys(globalVariables).length;
+  const variablesCount = Object.keys(allVariables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
   const prevCounts = useRef({
     events: eventsCount,
     functions: functionsCount,
-    variables: graphVarsCount,
+    variables: variablesCount,
     dataframes: dataframesCount,
   });
 
@@ -229,7 +199,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const isAdded =
       eventsCount > prevCounts.current.events ||
       functionsCount > prevCounts.current.functions ||
-      graphVarsCount > prevCounts.current.variables ||
+      variablesCount > prevCounts.current.variables ||
       dataframesCount > prevCounts.current.dataframes;
 
     if (isAdded && listRef.current) {
@@ -238,10 +208,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     prevCounts.current = {
       events: eventsCount,
       functions: functionsCount,
-      variables: graphVarsCount,
+      variables: variablesCount,
       dataframes: dataframesCount,
     };
-  }, [eventsCount, functionsCount, graphVarsCount, dataframesCount]);
+  }, [eventsCount, functionsCount, variablesCount, dataframesCount]);
 
   const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
     await createGraphResource(type, folderPath);
@@ -418,60 +388,21 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </Tooltip>
             )}
             {type === "variable" && !readOnly && (
-              <>
-                {!extra?.isGlobal ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          promoteVariable(id);
-                        }}
-                        className={sidebarRowActionClass(isSelected)}
-                      >
-                        <VscEye size={11} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{t("sidebar.promoteToGlobal")}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          demoteVariable(id);
-                        }}
-                        className={sidebarRowActionClass(isSelected)}
-                      >
-                        <VscEyeClosed size={11} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{t("sidebar.demoteToLocal")}</TooltipContent>
-                  </Tooltip>
+              <span
+                className={cn(
+                  "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
+                  isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
                 )}
-                <span
-                  className={cn(
-                    "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
-                    isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
-                  )}
-                  style={{ color: safeDataTypeColor(extra?.dataType) }}
-                >
-                  {safeDataTypeDisplay(extra?.dataType)}
-                  {extra?.dataType &&
-                    typeof extra.dataType === "object" &&
-                    "kind" in extra.dataType &&
-                    (extra.dataType as DataType).kind === "Array"
-                    ? <span className="text-[8px]">[]</span>
-                    : null}
-                </span>
-              </>
+                style={{ color: safeDataTypeColor(extra?.dataType) }}
+              >
+                {safeDataTypeDisplay(extra?.dataType)}
+                {extra?.dataType &&
+                  typeof extra.dataType === "object" &&
+                  "kind" in extra.dataType &&
+                  (extra.dataType as DataType).kind === "Array"
+                  ? <span className="text-[8px]">[]</span>
+                  : null}
+              </span>
             )}
             {type === "variable" && readOnly && (
               <span
@@ -724,36 +655,32 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   )}
                 </div>
               </SidebarCollapsibleSection>
-
-              <SidebarCollapsibleSection variant="stacked"
-                label="Variable"
-                expanded={isSectionExpanded("graphsVariable")}
-                onToggle={() => toggleSection("graphsVariable")}
-                onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int32", false)}
-                onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
-                onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
-              >
-                  {Object.keys(globalVariables).length > 0 &&
-                    Object.entries(globalVariables).map(([id, data]: [string, { name: string }]) =>
-                      renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, false, (e) =>
-                        openVariableContextMenu(e, id, data.name)
-                      )
-                    )}
-                  {Object.entries(graphScopeVariables).map(([id, data]: [string, { name: string }]) => {
-                    if (id in globalVariables) return null;
-                    return renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, false, (e) =>
-                      openVariableContextMenu(e, id, data.name)
-                    );
-                  })}
-                  {Object.keys(graphScopeVariables).length === 0 && Object.keys(globalVariables).length === 0 && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No variables</div>
-                  )}
-              </SidebarCollapsibleSection>
             </div>
           )}
 
           {currentTab === "variables" && (
-            <div className="flex flex-col flex-1 min-h-0">
+            <div ref={listRef} className="flex flex-col flex-1 min-h-0">
+              <SidebarCollapsibleSection variant="stacked"
+                label="Local"
+                expanded={isSectionExpanded("variablesLocal")}
+                onToggle={() => toggleSection("variablesLocal")}
+                onAdd={activeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int32", false) : undefined}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
+              >
+                {Object.entries(localVariables).map(([id, data]: [string, { name: string }]) =>
+                  renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, false, (e) =>
+                    openVariableContextMenu(e, id, data.name)
+                  )
+                )}
+                {!activeGraphType && (
+                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">{t("sidebar.noActiveGraph")}</div>
+                )}
+                {activeGraphType && Object.keys(localVariables).length === 0 && (
+                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
+                )}
+              </SidebarCollapsibleSection>
+
               <SidebarCollapsibleSection variant="stacked"
                 label="Global"
                 expanded={isSectionExpanded("variablesGlobal")}
@@ -763,36 +690,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
                   {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, true, false, (e) =>
+                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, false, (e) =>
                       openVariableContextMenu(e, id, data.name)
                     )
                   )}
                 {Object.keys(variablesGlobal).length === 0 && (
-                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
-                )}
-              </SidebarCollapsibleSection>
-
-              <SidebarCollapsibleSection variant="stacked"
-                label="Local"
-                expanded={isSectionExpanded("variablesLocal")}
-                onToggle={() => toggleSection("variablesLocal")}
-              >
-                  {localVariablesByGraph.map(({ graphId, graphName, variables }) => (
-                    <SidebarCollapsibleSection
-                      key={graphId}
-                      variant="nested"
-                      label={graphName}
-                      expanded={isSectionExpanded(`variablesLocal_${graphId}`)}
-                      onToggle={() => toggleSection(`variablesLocal_${graphId}`)}
-                    >
-                      {Object.entries(variables).map(([id, data]: [string, { name: string }]) =>
-                        renderItem(id, data.name, "variable", { ...data, isGlobal: false }, true, true, (e) =>
-                          openVariableContextMenu(e, id, data.name)
-                        )
-                      )}
-                    </SidebarCollapsibleSection>
-                  ))}
-                {localVariablesByGraph.length === 0 && (
                   <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
                 )}
               </SidebarCollapsibleSection>

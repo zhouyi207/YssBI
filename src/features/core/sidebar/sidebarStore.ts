@@ -30,17 +30,16 @@ function saveToStorage(key: string, value: unknown) {
 
 /** 堆叠列表：同一 group 内仅一个 section 可展开 */
 const SECTION_GROUPS: Record<string, string[]> = {
-  graphs: ["graphsEvent", "graphsFunction", "graphsVariable"],
-  variables: ["variablesGlobal", "variablesLocal"],
+  graphs: ["graphsEvent", "graphsFunction"],
+  variables: ["variablesLocal", "variablesGlobal"],
   data: ["dataData"],
 };
 
 const DEFAULT_SECTIONS: Record<string, boolean> = {
   graphsEvent: true,
   graphsFunction: false,
-  graphsVariable: false,
-  variablesGlobal: true,
-  variablesLocal: false,
+  variablesLocal: true,
+  variablesGlobal: false,
   dataData: true,
 };
 
@@ -48,6 +47,7 @@ export interface SidebarStore {
   expandedSections: Record<string, boolean>;
   expandedDataFrames: Record<string, boolean>;
   toggleSection: (key: string) => void;
+  setSectionExpanded: (key: string, expanded: boolean) => void;
   toggleDataFrame: (id: string) => void;
   isSectionExpanded: (key: string, defaultExpanded?: boolean) => boolean;
   isDataFrameExpanded: (id: string) => boolean;
@@ -72,6 +72,14 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
       } else {
         next[key] = !current;
       }
+      saveToStorage(SECTIONS_KEY, next);
+      return { expandedSections: next };
+    });
+  },
+
+  setSectionExpanded: (key: string, expanded: boolean) => {
+    set((state) => {
+      const next = { ...state.expandedSections, [key]: expanded };
       saveToStorage(SECTIONS_KEY, next);
       return { expandedSections: next };
     });

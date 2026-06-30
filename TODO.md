@@ -534,6 +534,10 @@ package.json
 - [x] **Function signature meta 同步收口**：新增 `syncFunctionSignatureMeta()` 作为前端唯一 signature meta 同步 helper；`projectIOStore.loadGraph()`、`graphDocumentActions`、`FunctionCreatedHandler`、`FunctionUpdatedHandler` 统一使用该 helper；helper 明确忽略非 Function graph，避免 Event graph 写入 function signature meta。
 - [x] **Graph event handler 清理**：`FunctionUpdatedHandler` 不再在缺少 resource meta 且 payload 没有 name 时用 graph id 兜底创建 meta；`GraphUpdatedPayload` 显式补充 `functionInputs` / `functionOutputs` 字段；`GraphEventHandler` 抽出 `buildGraphUpdateData()`，去掉 inline `as unknown as import(...)` 双重 cast。
 - [x] **Graph Document Actions 测试与验证**：新增 `graphDocumentActions.test.ts`、`graphDocumentMeta.test.ts`、`GraphEventHandler.test.ts`、`FunctionDetailPanel.test.tsx`，覆盖 signature action 同步、Event graph 忽略、FunctionCreated / FunctionUpdated 事件同步、缺少 resource/name 时不创建 meta、Detail rename/signature 回调分流；通过 `npm run build`、`npm test -- --run`、`cargo fmt --check`、`cargo test --lib`（后端验证在引入 Rust command / DTO 时完成）。
+- [x] **Variables 侧栏从 Graphs 迁出**：Graphs 侧栏移除 Variable 区块，变量浏览与管理统一收口到 ActivityBar → Variables；Global / Local 均支持拖拽、重命名、删除；创建变量后自动切换到 Variables tab 并展开对应分组。
+- [x] **Variables 侧栏 Local 上下文化**：Local 仅展示 tabbar 当前激活 Event/Function tab 的局部变量，不再按 graph 分组展示其他图/函数变量；移除 `localVariablesByGraph`、嵌套 graph 分组、`AddVariableTargetGraph` / `targetGraph` 与 `variablesLocal_${graphId}` 等逻辑；无激活 graph tab 时 Local 显示「无活动图」并禁用新建。
+- [x] **Variables 侧栏顺序与默认展开**：Variables tab 顺序调整为 Local 在上、Global 在下；`sidebarStore` 分组顺序与默认展开状态同步为 Local 默认展开、Global 默认折叠。
+- [x] **Sidebar Data 图标回归修复**：清理变量 promote/demote UI 时误删 `VscEye` import，恢复 Data 侧栏「在数据视图中查看」按钮渲染。
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 
 ## v1.0 待办
@@ -547,6 +551,7 @@ package.json
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 - [ ] 运行完毕后，节点的 backend source 什么时候删除的问题：是断开连接之后就删除还是？？？？破坏了连接之后就删除？？？
 - [ ] view 节点出现的窗口样式调整，目前 data series 无法滑动，同时样式也很丑
+- [ ] 去掉 event, function, variable 等等文件夹的逻辑，感觉没有必要？
 
 
 # TODOLIST
