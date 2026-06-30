@@ -2,9 +2,9 @@
  * useNodeView - 单节点订阅 Hook
  *
  * 为画布上的「每个节点」提供一个**仅订阅自身切片**的视图：
- *   - `nodes[nodeId]`            位置 / 标题 / 类型 / 参数
- *   - `nodePins[nodeId]` + 各 `pins[pid]`        输入/输出 Pin
- *   - 各 `pinConnections[pid]`   连接状态（派生 connected / connectionIds）
+ *   - graph-scoped node bucket: 位置 / 标题 / 类型 / 参数
+ *   - graph-scoped pins        输入/输出 Pin
+ *   - graph-scoped connections 连接状态（派生 connected / connectionIds）
  */
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -16,15 +16,23 @@ import { resolveNodeViewMeta } from './serialization';
 
 const EMPTY_IDS: string[] = [];
 
-export function useNodeView(nodeId: string): UINode | null {
-  const nodeData = useGraphDataStore((s) => s.nodes[nodeId]);
+export function useNodeView(nodeId: string, graphId?: string): UINode | null {
+  const nodeData = useGraphDataStore((s) =>
+    graphId ? s.getGraphNode(graphId, nodeId) : s.nodes[nodeId],
+  );
 
   const pinObjs = useGraphDataStore(
-    useShallow((s) => (s.nodePins[nodeId] ?? EMPTY_IDS).map((pid) => s.pins[pid])),
+    useShallow((s) =>
+      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
+        .map((pid) => (graphId ? s.getGraphPin(graphId, pid) : s.pins[pid])),
+    ),
   );
 
   const pinConns = useGraphDataStore(
-    useShallow((s) => (s.nodePins[nodeId] ?? EMPTY_IDS).map((pid) => s.pinConnections[pid])),
+    useShallow((s) =>
+      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
+        .map((pid) => (graphId ? s.getGraphPinConnections(graphId, pid) : s.pinConnections[pid])),
+    ),
   );
 
   return useMemo(() => {

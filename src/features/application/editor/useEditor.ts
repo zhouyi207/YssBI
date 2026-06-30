@@ -22,7 +22,7 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
   const worksheetMgmt = useWorksheetManagement(openWorksheet);
   const projectOps = useProjectOperations(tabMgmt.openGraph);
   
-  const graphMgmt = useGraphManagement(tabMgmt.openGraph, tabMgmt.closeTab);
+  const graphMgmt = useGraphManagement(tabMgmt.openGraph);
   const variableMgmt = useVariableManagement();
   const dataFrameMgmt = useDatabaseManagement();
   const nodeMgmt = useNodeManagement();

@@ -1,5 +1,6 @@
 //! 项目管理模块
 
+pub mod graph_resource_index;
 pub mod path_format;
 pub mod project_data;
 pub mod project_error;
@@ -19,6 +20,7 @@ pub mod resource_reveal;
 pub mod unique_name;
 pub mod worksheet_io;
 
+pub use graph_resource_index::*;
 pub use path_format::*;
 pub use project_data::*;
 pub use project_error::*;

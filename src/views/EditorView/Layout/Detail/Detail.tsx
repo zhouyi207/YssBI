@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useEditorGroup } from '@/features/application/editor';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { useGraphMetaStore } from '@/features/core/dataStore';
 import { Separator } from '@/components/ui/separator';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { renameResource } from '@/features/application/resource/resourceActions';
+import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
 import { DetailEmptyState } from './DetailEmptyState';
 import { VariableDetailPanel } from './panels/VariableDetailPanel';
 import { EventDetailPanel } from './panels/EventDetailPanel';
@@ -26,8 +28,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     selectedItemId,
     selectedItemType,
     updateVariable,
-    updateEvent,
-    updateFunction,
     updateDataFrame,
   } = useEditorGroup();
 
@@ -36,6 +36,11 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     selectedItemId && selectedItemType === 'worksheet'
       ? s.documents[selectedItemId] ?? null
       : null,
+  );
+  const selectedFunctionSignature = useGraphMetaStore((s) =>
+    selectedItemId && selectedItemType === 'function'
+      ? s.graphs[selectedItemId]
+      : undefined,
   );
 
   useEffect(() => {
@@ -50,10 +55,18 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     if (!selectedItemId || !selectedItemType) return null;
     if (selectedItemType === 'variable') return Variables[selectedItemId];
     if (selectedItemType === 'event') return events[selectedItemId];
-    if (selectedItemType === 'function') return functions[selectedItemId];
+    if (selectedItemType === 'function') {
+      const fn = functions[selectedItemId];
+      if (!fn) return null;
+      return {
+        ...fn,
+        inputs: selectedFunctionSignature?.functionInputs ?? [],
+        outputs: selectedFunctionSignature?.functionOutputs ?? [],
+      };
+    }
     if (selectedItemType === 'data') return dataframes[selectedItemId];
     return null;
-  }, [selectedItemId, selectedItemType, Variables, events, functions, dataframes]);
+  }, [selectedItemId, selectedItemType, Variables, events, functions, dataframes, selectedFunctionSignature]);
 
   return (
     <div
@@ -79,12 +92,21 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
       ) : selectedData && selectedItemType === 'event' ? (
         <EventDetailPanel
           event={selectedData}
-          onUpdate={(patch) => updateEvent(selectedItemId!, patch)}
+          onUpdate={(patch) => {
+            if (typeof patch.name === 'string') {
+              void renameResource({ id: selectedItemId!, kind: 'event' }, patch.name);
+            }
+          }}
         />
       ) : selectedData && selectedItemType === 'function' ? (
         <FunctionDetailPanel
           fn={selectedData}
-          onUpdate={(patch) => updateFunction(selectedItemId!, patch)}
+          onRename={(name) => {
+            void renameResource({ id: selectedItemId!, kind: 'function' }, name);
+          }}
+          onSignatureChange={(patch) => {
+            void updateFunctionSignature(selectedItemId!, patch);
+          }}
         />
       ) : selectedItemType === 'worksheet' && worksheetDocument ? (
         <WorksheetDetailPanel document={worksheetDocument} />

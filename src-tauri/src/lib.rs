@@ -143,9 +143,8 @@ pub fn run() {
             duplicate_graph,
             rename_graph_resource,
             create_event,
-            update_event,
             create_function,
-            update_function,
+            update_function_signature,
             // ==================== Variable CRUD ====================
             create_variable,
             get_variable,

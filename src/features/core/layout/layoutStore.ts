@@ -6,6 +6,16 @@ import { logger } from '@/utils/appLogger';
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).slice(2, 11);
 
+function clearSelectedNodeIds(data: LayoutNode['data']): LayoutNode['data'] {
+    return {
+        ...data,
+        params: {
+            ...data?.params,
+            selectedNodeIds: [],
+        },
+    };
+}
+
 export interface LayoutState {
     rootId: string;
     nodes: LayoutTree;
@@ -590,6 +600,9 @@ export const useLayoutStore = create<LayoutState>()(
                     newActiveTabId = newTabs[nextIndex]?.id;
                 }
                 node.data.tabs = newTabs;
+                if (node.data.activeTabId !== newActiveTabId) {
+                    node.data = clearSelectedNodeIds(node.data);
+                }
                 node.data.activeTabId = newActiveTabId;
             }
 
@@ -611,13 +624,16 @@ export const useLayoutStore = create<LayoutState>()(
             const tabs = node.data?.tabs || [];
             // 如果标签已存在，则激活它
             if (tabs.find(t => t.id === tab.id)) {
+                if (node.data!.activeTabId !== tab.id) {
+                    node.data = clearSelectedNodeIds(node.data);
+                }
                 node.data!.activeTabId = tab.id;
                 return;
             }
 
             // 添加新标签
             node.data = {
-                ...node.data,
+                ...clearSelectedNodeIds(node.data),
                 tabs: [...tabs, tab],
                 activeTabId: tab.id,
                 component: node.data?.component || 'GraphEditor'

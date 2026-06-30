@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GraphId, NodeId } from '@/shared/types';
+import { GraphId, NodeId, type FunctionSignaturePin } from '@/shared/types';
 import { logger } from '@/utils/appLogger';
 
 export interface GraphMeta {
@@ -8,6 +8,8 @@ export interface GraphMeta {
   type: 'event' | 'function';
   entryNodeId?: NodeId;
   folderPath?: string;
+  functionInputs?: FunctionSignaturePin[];
+  functionOutputs?: FunctionSignaturePin[];
 }
 
 export interface GraphFolderMeta {

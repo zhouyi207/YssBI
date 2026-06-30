@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    graph::{GraphDataState, GraphId, GraphInstance, GraphKind, GraphPosition, NodeId, PinId},
+    graph::{
+        FunctionSignaturePin, GraphDataState, GraphId, GraphInstance, GraphKind, GraphPosition,
+        NodeId, PinId,
+    },
     schema::{ConnectionDTO, NodeInstanceDTO, PinInstanceDTO},
 };
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,10 @@ pub struct GraphInstanceDTO {
     pub pins: Vec<PinInstanceDTO>,
     pub connections: ConnectionDTO,
     pub canvas: GraphPosition,
+    #[serde(default)]
+    pub function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default)]
+    pub function_outputs: Vec<FunctionSignaturePin>,
 }
 
 impl From<&GraphInstance> for GraphInstanceDTO {
@@ -88,6 +95,8 @@ impl From<&GraphInstance> for GraphInstanceDTO {
             pins,
             connections: ConnectionDTO::from(&data_state.connections),
             canvas: value.position.clone(),
+            function_inputs: value.function_inputs.clone(),
+            function_outputs: value.function_outputs.clone(),
         }
     }
 }

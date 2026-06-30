@@ -1,12 +1,9 @@
 use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction};
-use crate::graph::{GraphId, GraphKind};
-use crate::log::log_app;
+use crate::graph::{FunctionSignaturePin, GraphId, GraphKind};
 use crate::project::{GraphDocumentKind, read_project_index};
 use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
-use serde::Deserialize;
-use serde_json::Value;
 use tauri::{AppHandle, State};
 
 // #[tauri::command]
@@ -129,84 +126,24 @@ pub fn remove_graph(
     Ok(())
 }
 
-/// 从 Value 中提取可更新的图属性
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GraphUpdateData {
-    name: Option<String>,
-}
-
-/// 通用的图更新逻辑
-fn update_graph_inner(
-    app: &AppHandle,
-    state: &State<ProjectState>,
-    id: GraphId,
-    data: Value,
-) -> Result<(), String> {
-    let update: GraphUpdateData =
-        serde_json::from_value(data).map_err(|e| format!("Invalid update data: {}", e))?;
-
-    if state.get_graph(&id).is_none() {
-        state.load_graph_from_current_project(&id)?;
-    }
-
-    let next_name = if let Some(name) = update.name {
-        let graph_kind = state
-            .project_data
-            .read()
-            .unwrap()
-            .graphs
-            .get(&id)
-            .map(|graph| graph.kind.clone())
-            .ok_or_else(|| format!("Graph '{}' not found", id))?;
-        let existing_names = existing_graph_names(state, graph_kind, Some(id))?;
-        Some(crate::project::unique_name::unique_name(
-            &name,
-            existing_names,
-        ))
-    } else {
-        None
-    };
-
-    let mut project_data = state.project_data.write().unwrap();
-    let graph = project_data
-        .graphs
-        .get_mut(&id)
-        .ok_or_else(|| format!("Graph '{}' not found", id))?;
-
-    if let Some(name) = next_name {
-        log_app::info!("[command.update_graph] graph={}, new_name={}", id, name);
-        graph.name = name;
-    }
-
-    let dto: GraphInstanceDTO = (&*graph).into();
-    let event = match graph.kind {
-        GraphKind::Event => Event::Event(EventEvent::EventUpdated { id, data: dto }),
-        GraphKind::Function => Event::Function(EventFunction::FunctionUpdated { id, data: dto }),
-    };
-    drop(project_data);
-    emit_project_event(app, event);
-    Ok(())
-}
-
 #[tauri::command]
-pub fn update_event(
+pub fn update_function_signature(
     app: AppHandle,
     state: State<ProjectState>,
-    id: GraphId,
-    event: Value,
-) -> Result<(), String> {
-    update_graph_inner(&app, &state, id, event)
-}
-
-#[tauri::command]
-pub fn update_function(
-    app: AppHandle,
-    state: State<ProjectState>,
-    id: GraphId,
-    function: Value,
-) -> Result<(), String> {
-    update_graph_inner(&app, &state, id, function)
+    function_id: GraphId,
+    inputs: Option<Vec<FunctionSignaturePin>>,
+    outputs: Option<Vec<FunctionSignaturePin>>,
+) -> Result<GraphInstanceDTO, String> {
+    let graph = state.update_function_signature(&function_id, inputs, outputs)?;
+    let dto: GraphInstanceDTO = (&graph).into();
+    emit_project_event(
+        &app,
+        Event::Function(EventFunction::FunctionUpdated {
+            id: function_id,
+            data: dto.clone(),
+        }),
+    );
+    Ok(dto)
 }
 
 #[tauri::command]

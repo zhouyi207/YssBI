@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
+import type { FunctionSignaturePatch } from "@/shared/types";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
 import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
@@ -58,32 +59,17 @@ export class GraphService {
         }
     }
 
-    /**
-     * 更新 Event
-     * @param id - Event 的 ID
-     * @param event - 更新的 Event 数据
-     */
-    static async updateEvent(id: string, event: Graph): Promise<void> {
+    static async updateFunctionSignature(functionId: string, patch: FunctionSignaturePatch): Promise<Graph> {
         try {
-            await invoke("update_event", { id, event });
-            logger.graph.info(`Event '${id}' updated successfully`, 'GraphService');
+            const graph = await invoke<GraphInstanceDTO>("update_function_signature", {
+                functionId,
+                inputs: patch.inputs,
+                outputs: patch.outputs,
+            });
+            logger.graph.info(`Function '${functionId}' signature updated successfully`, 'GraphService');
+            return toFrontendGraph(graph);
         } catch (error) {
-            logger.graph.error(`Error updating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
-
-    /**
-     * 更新 Function
-     * @param id - Function 的 ID
-     * @param functionData - 更新的 Function 数据
-     */
-    static async updateFunction(id: string, functionData: Graph): Promise<void> {
-        try {
-            await invoke("update_function", { id, function: functionData });
-            logger.graph.info(`Function '${id}' updated successfully`, 'GraphService');
-        } catch (error) {
-            logger.graph.error(`Error updating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
+            logger.graph.error(`Error updating function signature: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }

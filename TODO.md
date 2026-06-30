@@ -516,6 +516,26 @@ package.json
 - [x] **Unified Result Source 清理收口**：项目 load / save-as / new / 删除当前项目时同步清空 `ResultSourceStore`；删除后端旧 `get` / `get_source_value` 兼容 API 与前端 `DataViewService`、`DataViewPayload`、`WindowSourceMetadata` 等别名；View 节点改为直接构造 typed `ResultSourceRecord`，不再生成 legacy `viewType/dataType` JSON；`source_builder` 只保留普通 JSON 窗口与 plot payload 解析，DataFrame / Series / Struct 统一走 typed builder。
 - [x] **DataFrame pin structured dataType 恢复**：修复 Get DataFrame 节点从项目文件加载后 data pin 名称已派生为数据集名（如 `iris`）但 `pinContract` 精简持久化导致 `dataType` 丢失的问题；`resolve_dataframe_nodes()` 在保留显示名的同时补回 `PinDataTypeDefinition::DataFrame` 与 `pin_types` 缓存，拖拽 data pin 时不再触发 `missing structured dataType` 报错，并补充加载回归测试。
 
+## 2026.07.02
+
+- [x] 如果在 tabbar 中打开了两张以上的选项卡，那么删除其中一个选项卡后，显示的第二张选项卡是空白的，如果删除了第二张选项卡，则会出现很多的 GRAPH [GraphDataStore] deleteNode: Node "9971537d-69e1-41ca-bb16-4049f81179e0" not found 错误；接着删除则会接着出现这个错误（已完成：关闭 active graph tab 后立即加载并同步新的 active graph；`clearGraph` / `NodeDeletedHandler` 改为幂等；tab 切换清理 selected nodes；补充 tab close、layout selection 与 graph clear 回归测试）
+- [x] Event 只改名称；Function 除名称外还可能通过 PinEditor 改 inputs/outputs。因此 updateEvent/updateFunction 不能全部删除，但可以明确职责：名称走 renameResource，Function 结构性更新暂时保留为 graph document 更新，后续可单独抽到 graphDocumentActions。现在开始按这个边界改代码。 这一部分有更好的处理方式吗？（已完成：`useGraphManagement` 收口为 UI 编排层；Event/Function 创建、删除、重命名委托 `resourceActions`；Event 更新仅走资源重命名，Function 结构性更新暂留 graph document 路径）
+- [x] **Graph resource identity 改为项目维护**：graph 文件不再持久化 / 读取自身 `graph.id`，新增 `graph_resource_index.rs` 维护 `resourcePath -> GraphId` manifest；`read_project_index()`、graph 加载、移动、删除、复制均通过显式资源表解析 graph id；资源管理器复制出的同内容 graph 文件会获得独立项目 graph id。
+- [x] **移除 hash / remap 身份桥接残留**：删除 `GraphId` / `NodeId` / `PinId` / `VariableId` 的 `stable_uuid_from_key` / `from_stable_key`；删除旧 graph 文件扫描匹配、稳定 hash 与 entity remap helper；复制 graph 不再为了资源身份重写 node / pin / local variable id。
+- [x] **Node / Pin / Local Variable graph-local 化**：后端复制 graph 时保留 node、pin、local variable 本地 id，只重绑 local variable scope 到新 graph；变量节点继续引用本 graph 内 local variable id；补充 graph-local node/pin/local variable 复制回归测试。
+- [x] **GraphDataStore graph bucket 架构**：前端 `GraphDataStore` 新增 `graphEntities[graphId]` 作为 graph 数据权威 bucket；所有 node / pin / connection mutation API 收紧为必传 `graphId`；sync handlers、history commands、editor 操作、clipboard、project snapshot、Node Detail / Canvas node 读取路径改为 `graphId + localId`。
+- [x] **关闭 tab 空白根因收口**：修复 duplicated graph local id 导致 `releaseGraphCacheIfClosed` 清理一个 graph 时误伤另一个 graph 的问题；`clearGraph` 只删除目标 graph bucket；graph-scoped selector 不再在已存在 bucket 时 fallback 到 flat mirror，避免错读同 local id 的其他 graph。
+- [x] **EdgesOverlay graph-scoped 渲染**：Canvas 连线层不再读取全局 `connections` / `pins` flat mirror，改为读取当前 graph 的 connections 与 pins；补充两个 graph 拥有相同 local pin id 时只渲染当前 graph 连线的回归测试。
+- [x] **GraphDataStore mirror 性能收口**：flat `nodes/pins/connections/nodePins/pinConnections` 降级为 legacy/read mirror；单 graph bucket mutation 改为增量 patch 受影响 mirror key，不再每次 mutation 全量 `flattenGraphBuckets`；全量 flatten 仅保留在整项目 hydrate 场景。
+- [x] **Clean Graph Identity 验证**：新增/更新 `graphDataStore.test.ts`、`NodeEventHandler.test.ts`、`EdgesOverlay.test.tsx` 与后端 `project_io` identity 回归测试；通过 `npm run build`、`npm test -- --run`、`cargo fmt --check`、`cargo test --lib`；残留 hash / remap helper 搜索无匹配。
+- [x] **Graph Document Actions 收口**：新增 `graphDocumentActions.updateFunctionSignature()` 与窄类型 `FunctionSignaturePatch` / `FunctionPinSpec`；Function inputs / outputs 结构更新改走独立 application action 与后端 `update_function_signature` command；名称更新继续走 `resourceActions.renameResource()`，不再混用 `updateFunction(Partial<Graph>)`。
+- [x] **Detail / useGraphManagement 边界清理**：`FunctionDetailPanel` 将 `onUpdate(Record<string, unknown>)` 拆为 `onRename(name)` 与 `onSignatureChange(patch)`；`Detail` 中 Event / Function 名称直接委托 `renameResource`，Function pins 委托 `updateFunctionSignature`；`useGraphManagement` 删除 `updateEvent` / `updateFunction`，只保留创建后打开、sidebar 切换、toast/logger 等 UI 编排。
+- [x] **Function signature 文档模型持久化**：后端 `GraphInstance` / `GraphInstanceDTO` 新增 `functionInputs` / `functionOutputs`，只允许 `GraphKind::Function` 通过 `ProjectState::update_function_signature()` 更新；Event 调用返回错误；DTO 始终返回 signature 数组，确保清空 signature 也能同步到前端。
+- [x] **Function signature meta 同步收口**：新增 `syncFunctionSignatureMeta()` 作为前端唯一 signature meta 同步 helper；`projectIOStore.loadGraph()`、`graphDocumentActions`、`FunctionCreatedHandler`、`FunctionUpdatedHandler` 统一使用该 helper；helper 明确忽略非 Function graph，避免 Event graph 写入 function signature meta。
+- [x] **Graph event handler 清理**：`FunctionUpdatedHandler` 不再在缺少 resource meta 且 payload 没有 name 时用 graph id 兜底创建 meta；`GraphUpdatedPayload` 显式补充 `functionInputs` / `functionOutputs` 字段；`GraphEventHandler` 抽出 `buildGraphUpdateData()`，去掉 inline `as unknown as import(...)` 双重 cast。
+- [x] **Graph Document Actions 测试与验证**：新增 `graphDocumentActions.test.ts`、`graphDocumentMeta.test.ts`、`GraphEventHandler.test.ts`、`FunctionDetailPanel.test.tsx`，覆盖 signature action 同步、Event graph 忽略、FunctionCreated / FunctionUpdated 事件同步、缺少 resource/name 时不创建 meta、Detail rename/signature 回调分流；通过 `npm run build`、`npm test -- --run`、`cargo fmt --check`、`cargo test --lib`（后端验证在引入 Rust command / DTO 时完成）。
+- [ ] 复制粘贴撤回逻辑的快捷键效果有问题
+
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新

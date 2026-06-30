@@ -83,7 +83,7 @@ export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext
         ),
       );
     } catch (error) {
-      store.revertNodeDraft(nodeId);
+      store.revertNodeDraft(nodeId, graphId);
       throw error;
     }
 

@@ -9,8 +9,13 @@ import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
 import { useGraphDataStore } from './graphDataStore';
+import { useGraphMetaStore } from './graphMetaStore';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { getViewport } from '@/features/core/viewport';
+
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value != null;
+}
 
 function getGraphMetaFromResourceStore(graphId: string): { id: string; name: string; type: 'event' | 'function'; folderPath?: string } | null {
   const resources = useResourceStore.getState().resources;
@@ -33,19 +38,30 @@ export function getGraphById(graphId: string): GraphData | null {
   if (!meta) return null;
 
   const dataState = useGraphDataStore.getState();
+  const graphMeta = useGraphMetaStore.getState().graphs[graphId];
   const nodeIds = dataState.graphNodes[graphId] ?? [];
-  const nodes = nodeIds.map((nid) => dataState.nodes[nid]).filter(Boolean);
-  const pins = nodeIds.flatMap((nid) => (dataState.nodePins[nid] ?? []).map((pid) => dataState.pins[pid]).filter(Boolean));
+  const nodes = nodeIds.map((nid) => dataState.getGraphNode(graphId, nid)).filter(isPresent);
+  const pins = nodeIds.flatMap((nid) =>
+    dataState.getGraphNodePins(graphId, nid).map((pid) => dataState.getGraphPin(graphId, pid)).filter(isPresent),
+  );
   const connIds = new Set<string>();
   pins.forEach((p) => {
-    (dataState.pinConnections[p?.id] ?? []).forEach((cid) => connIds.add(cid));
+    (p ? dataState.getGraphPinConnections(graphId, p.id) : []).forEach((cid) => connIds.add(cid));
   });
   const connections = Array.from(connIds)
-    .map((cid) => dataState.connections[cid])
-    .filter(Boolean)
+    .map((cid) => dataState.graphEntities[graphId]?.connections[cid] ?? dataState.connections[cid])
+    .filter(isPresent)
     .map((conn) => ({ fromPin: conn.from, toPin: conn.to }));
 
-  return { ...meta, nodes, pins, connections: { connections }, canvas: getViewport(graphId) };
+  return {
+    ...meta,
+    functionInputs: graphMeta?.functionInputs ?? [],
+    functionOutputs: graphMeta?.functionOutputs ?? [],
+    nodes,
+    pins,
+    connections: { connections },
+    canvas: getViewport(graphId),
+  };
 }
 
 /**
@@ -86,7 +102,7 @@ export function useGraphData(activeTabId: string | null) {
       if (!activeTabId) return null;
       const ids = s.graphNodes[activeTabId];
       if (!ids) return null;
-      return ids.map((nid) => s.nodes[nid]).filter(Boolean);
+      return ids.map((nid) => s.getGraphNode(activeTabId, nid)).filter(isPresent);
     })
   );
 
@@ -96,7 +112,7 @@ export function useGraphData(activeTabId: string | null) {
       const nodeIds = s.graphNodes[activeTabId];
       if (!nodeIds) return null;
       return nodeIds.flatMap((nid) =>
-        (s.nodePins[nid] ?? []).map((pid) => s.pins[pid]).filter(Boolean)
+        s.getGraphNodePins(activeTabId, nid).map((pid) => s.getGraphPin(activeTabId, pid)).filter(isPresent)
       );
     })
   );
@@ -108,13 +124,15 @@ export function useGraphData(activeTabId: string | null) {
       if (!nodeIds) return null;
       const connIds = new Set<string>();
       for (const nid of nodeIds) {
-        for (const pid of s.nodePins[nid] ?? []) {
-          for (const cid of s.pinConnections[pid] ?? []) {
+        for (const pid of s.getGraphNodePins(activeTabId, nid)) {
+          for (const cid of s.getGraphPinConnections(activeTabId, pid)) {
             connIds.add(cid);
           }
         }
       }
-      return Array.from(connIds).map((cid) => s.connections[cid]).filter(Boolean);
+      return Array.from(connIds)
+        .map((cid) => s.graphEntities[activeTabId]?.connections[cid] ?? s.connections[cid])
+        .filter(isPresent);
     })
   );
 

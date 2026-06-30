@@ -24,7 +24,7 @@ export interface CanvasNodeProps {
 /**
  * CanvasNode - 画布节点容器
  *
- * 仅通过 `useNodeView(id)` 订阅该节点自身的 store 切片，再渲染纯展示组件 `Node`。
+ * 仅通过 `useNodeView(id, graphId)` 订阅该节点自身的 store 切片，再渲染纯展示组件 `Node`。
  * 配合稳定的交互回调与 `React.memo`，一次图变更只会让受影响的节点重渲染，
  * 而不会牵动整张画布。
  */
@@ -45,7 +45,7 @@ export const CanvasNode = React.memo(function CanvasNode(props: CanvasNodeProps)
     onPinValueChange,
   } = props;
 
-  const node = useNodeView(id);
+  const node = useNodeView(id, graphId);
 
   const handlePinPointerDown = useCallback(
     (e: React.PointerEvent, pin: PinModel) => {

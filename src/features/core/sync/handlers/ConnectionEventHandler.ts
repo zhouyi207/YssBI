@@ -22,7 +22,7 @@ export class ConnectionCreatedHandler extends BaseEventHandler<ConnectionCreated
             return;
         }
         this.log('Connection created:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
-        useGraphDataStore.getState().connect(payload.fromPin, payload.toPin);
+        useGraphDataStore.getState().connect(payload.fromPin, payload.toPin, payload.graphId);
         markGraphTabDirty(payload.graphId);
     }
 }
@@ -38,7 +38,7 @@ export class ConnectionDeletedHandler extends BaseEventHandler<ConnectionDeleted
             return;
         }
         this.log('Connection deleted:', payload.fromPin, '->', payload.toPin, 'in graph:', payload.graphId);
-        useGraphDataStore.getState().disconnect(connectionId);
+        useGraphDataStore.getState().disconnect(connectionId, payload.graphId);
         markGraphTabDirty(payload.graphId);
     }
 }
@@ -49,7 +49,7 @@ export class ConnectionsBatchCreatedHandler extends BaseEventHandler<Connections
     handle(payload: ConnectionsBatchCreatedPayload, _callbacks?: EventCallbacks): void {
         this.log('Connections batch created:', payload.connections.length, 'in graph:', payload.graphId);
         const pairs = payload.connections.map(([from, to]) => ({ from, to }));
-        useGraphDataStore.getState().batchConnect(pairs);
+        useGraphDataStore.getState().batchConnect(pairs, payload.graphId);
         markGraphTabDirty(payload.graphId);
     }
 }
@@ -63,15 +63,15 @@ export class ConnectionsBatchDeletedHandler extends BaseEventHandler<Connections
 
         const connectionIds = new Set<string>();
         for (const [fromPin, toPin] of payload.removedConnections) {
-            for (const cid of store.pinConnections[fromPin] ?? []) {
-                const conn = store.connections[cid];
+            for (const cid of store.getGraphPinConnections(payload.graphId, fromPin)) {
+                const conn = store.graphEntities[payload.graphId]?.connections[cid] ?? store.connections[cid];
                 if (conn && (conn.to === toPin || conn.from === toPin)) {
                     connectionIds.add(cid);
                     break;
                 }
             }
-            for (const cid of store.pinConnections[toPin] ?? []) {
-                const conn = store.connections[cid];
+            for (const cid of store.getGraphPinConnections(payload.graphId, toPin)) {
+                const conn = store.graphEntities[payload.graphId]?.connections[cid] ?? store.connections[cid];
                 if (conn && (conn.from === fromPin || conn.to === fromPin)) {
                     connectionIds.add(cid);
                     break;
@@ -79,7 +79,7 @@ export class ConnectionsBatchDeletedHandler extends BaseEventHandler<Connections
             }
         }
         if (connectionIds.size > 0) {
-            store.batchDisconnect(Array.from(connectionIds));
+            store.batchDisconnect(Array.from(connectionIds), payload.graphId);
             markGraphTabDirty(payload.graphId);
             return;
         }

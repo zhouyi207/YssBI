@@ -64,10 +64,14 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
   const handleTabClick = (id: string) => {
     setActiveGroup(layoutNodeId);
+    const currentData = useLayoutStore.getState().nodes[layoutNodeId].data;
     updateNode(layoutNodeId, {
         data: {
-            ...useLayoutStore.getState().nodes[layoutNodeId].data,
-            activeTabId: id
+            ...currentData,
+            activeTabId: id,
+            params: currentData?.activeTabId === id
+              ? currentData?.params
+              : { ...currentData?.params, selectedNodeIds: [] },
         }
     });
     const tab = tabs.find((item) => item.id === id);

@@ -31,8 +31,24 @@ export interface Graph {
     id: string;                 // 图 ID
     name: string;               // 图名称
     type: GraphType;            // 图类型
+    functionInputs?: FunctionSignaturePin[];
+    functionOutputs?: FunctionSignaturePin[];
     nodes: Node[];              // 节点列表
     pins: Pin[];                // Pin 列表（所有节点的 Pin）
     connections: Connection;    // 连接关系
     canvas: GraphPosition;      // 画布状态
+}
+
+export interface FunctionSignaturePin {
+    id: string;
+    name: string;
+    type: string;
+    containerType?: string;
+}
+
+export type FunctionPinSpec = FunctionSignaturePin;
+
+export interface FunctionSignaturePatch {
+    inputs?: FunctionPinSpec[];
+    outputs?: FunctionPinSpec[];
 }

@@ -27,7 +27,7 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     const updates: MoveNodesContext['updates'] = [];
 
     for (const id of args.nodeIds) {
-      const node = store.nodes[id];
+      const node = store.getGraphNode(graphId, id);
       if (node?.position) {
         updates.push({
           nodeId: id,
@@ -42,7 +42,7 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     if (updates.length > 0) {
       const positions = updates.map((u) => ({ nodeId: u.nodeId, x: u.newX, y: u.newY }));
       const ids = positions.map((p) => p.nodeId);
-      store.batchUpdateNodePositions(positions);
+      store.batchUpdateNodePositions(positions, graphId);
       trackPending(
         NODE_POSITION_ECHO_DOMAIN,
         ids,
@@ -59,7 +59,7 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     const store = useGraphDataStore.getState();
     const positions = context.updates.map((u) => ({ nodeId: u.nodeId, x: u.oldX, y: u.oldY }));
     const ids = positions.map((p) => p.nodeId);
-    store.batchUpdateNodePositions(positions);
+    store.batchUpdateNodePositions(positions, graphId);
     await trackPending(
       NODE_POSITION_ECHO_DOMAIN,
       ids,
@@ -71,7 +71,7 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     const store = useGraphDataStore.getState();
     const positions = context.updates.map((u) => ({ nodeId: u.nodeId, x: u.newX, y: u.newY }));
     const ids = positions.map((p) => p.nodeId);
-    store.batchUpdateNodePositions(positions);
+    store.batchUpdateNodePositions(positions, graphId);
     await trackPending(
       NODE_POSITION_ECHO_DOMAIN,
       ids,

@@ -21,25 +21,39 @@ const EMPTY_PINS: PinData[] = [];
 const EMPTY_CONNECTIONS: string[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
 
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value != null;
+}
+
 interface NodeDetailPanelProps {
   nodeId: string;
 }
 
 export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
   const { t, i18n } = useTranslation();
-  const node = useGraphDataStore((s) => s.nodes[nodeId]);
+  const graphId = useGraphDataStore((s) => {
+    for (const [gid, bucket] of Object.entries(s.graphEntities)) {
+      if (bucket.nodes[nodeId]) return gid;
+    }
+    return s.nodes[nodeId]?.graphId;
+  });
+  const node = useGraphDataStore((s) =>
+    graphId ? s.getGraphNode(graphId, nodeId) : s.nodes[nodeId],
+  );
   const pinObjs = useGraphDataStore(
     useShallow((s) => {
-      const pinIds = s.nodePins[nodeId];
+      const pinIds = graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId];
       if (!pinIds?.length) return EMPTY_PINS;
-      return pinIds.map((pid) => s.pins[pid]).filter(Boolean);
+      return pinIds.map((pid) => (graphId ? s.getGraphPin(graphId, pid) : s.pins[pid])).filter(isPresent);
     }),
   );
   const pinConns = useGraphDataStore(
     useShallow((s) => {
-      const pinIds = s.nodePins[nodeId];
+      const pinIds = graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId];
       if (!pinIds?.length) return EMPTY_PIN_CONNECTIONS;
-      return pinIds.map((pid) => s.pinConnections[pid] ?? EMPTY_CONNECTIONS);
+      return pinIds.map((pid) =>
+        graphId ? s.getGraphPinConnections(graphId, pid) : s.pinConnections[pid] ?? EMPTY_CONNECTIONS,
+      );
     }),
   );
   const nodeType = node?.nodeType;

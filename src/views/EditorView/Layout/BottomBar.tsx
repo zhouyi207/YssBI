@@ -125,8 +125,8 @@ export function BottomBar() {
       const nodeIds = state.graphNodes[editor.activeTabId] ?? [];
       const connectionIds = new Set<string>();
       for (const nodeId of nodeIds) {
-        for (const pinId of state.nodePins[nodeId] ?? []) {
-          for (const connectionId of state.pinConnections[pinId] ?? []) {
+        for (const pinId of state.getGraphNodePins(editor.activeTabId, nodeId)) {
+          for (const connectionId of state.getGraphPinConnections(editor.activeTabId, pinId)) {
             connectionIds.add(connectionId);
           }
         }

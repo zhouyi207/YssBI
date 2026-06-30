@@ -1,7 +1,7 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { ClipboardEntry, ClipboardPinEntry, ClipboardSnapshot } from './stores/useClipboardStore';
 
-export function buildClipboardSnapshot(nodeIds: string[]): ClipboardSnapshot | null {
+export function buildClipboardSnapshot(nodeIds: string[], graphId?: string): ClipboardSnapshot | null {
   if (nodeIds.length === 0) return null;
 
   const dataStore = useGraphDataStore.getState();
@@ -9,14 +9,14 @@ export function buildClipboardSnapshot(nodeIds: string[]): ClipboardSnapshot | n
   const entries: ClipboardEntry[] = [];
 
   for (const nodeId of nodeIds) {
-    const node = dataStore.nodes[nodeId];
+    const node = graphId ? dataStore.getGraphNode(graphId, nodeId) : dataStore.nodes[nodeId];
     if (!node || node.isInternal) continue;
 
-    const pinIds = dataStore.nodePins[nodeId] ?? [];
+    const pinIds = graphId ? dataStore.getGraphNodePins(graphId, nodeId) : dataStore.nodePins[nodeId] ?? [];
     const pins: ClipboardPinEntry[] = [];
 
     for (const pinId of pinIds) {
-      const pin = dataStore.pins[pinId];
+      const pin = graphId ? dataStore.getGraphPin(graphId, pinId) : dataStore.pins[pinId];
       if (!pin) continue;
       allSelectedPinIds.add(pinId);
       pins.push({
@@ -48,11 +48,13 @@ export function buildClipboardSnapshot(nodeIds: string[]): ClipboardSnapshot | n
   const seenConnIds = new Set<string>();
 
   for (const pinId of allSelectedPinIds) {
-    const connIds = dataStore.pinConnections[pinId] ?? [];
+    const connIds = graphId ? dataStore.getGraphPinConnections(graphId, pinId) : dataStore.pinConnections[pinId] ?? [];
     for (const connId of connIds) {
       if (seenConnIds.has(connId)) continue;
       seenConnIds.add(connId);
-      const conn = dataStore.connections[connId];
+      const conn = graphId
+        ? dataStore.graphEntities[graphId]?.connections[connId] ?? dataStore.connections[connId]
+        : dataStore.connections[connId];
       if (!conn) continue;
       if (allSelectedPinIds.has(conn.from) && allSelectedPinIds.has(conn.to)) {
         internalConnections.push({ fromPin: conn.from, toPin: conn.to });

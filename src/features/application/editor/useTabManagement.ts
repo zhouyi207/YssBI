@@ -21,10 +21,14 @@ export function useTabManagement() {
   const setActiveTabId = useCallback((id: string | null, targetGroupId?: string) => {
     const groupId = targetGroupId || activeGroupId;
     if (groupId) {
+      const currentData = useLayoutStore.getState().nodes[groupId].data;
       useLayoutStore.getState().updateNode(groupId, {
         data: {
-          ...useLayoutStore.getState().nodes[groupId].data,
-          activeTabId: id || undefined
+          ...currentData,
+          activeTabId: id || undefined,
+          params: currentData?.activeTabId === (id || undefined)
+            ? currentData?.params
+            : { ...currentData?.params, selectedNodeIds: [] },
         }
       });
       const tab = id

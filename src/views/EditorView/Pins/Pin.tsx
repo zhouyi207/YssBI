@@ -98,7 +98,7 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuActions = useCanvasContextMenuActionsOptional();
-  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id);
+  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, subgraphId);
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
   const pinResult = useExecutionStore((s) =>

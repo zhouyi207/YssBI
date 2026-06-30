@@ -46,6 +46,17 @@ pub struct PinChangeSet {
     pub removed_connections: Vec<(PinId, PinId)>,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FunctionSignaturePin {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub pin_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_type: Option<String>,
+}
+
 /// Graph（运行时世界）
 ///
 /// Graph 是唯一的运行时真实来源，管理：
@@ -64,6 +75,10 @@ pub struct GraphInstance {
 
     // 位置
     pub position: GraphPosition,
+
+    // Function graph 对外签名。Event 始终为空。
+    pub function_inputs: Vec<FunctionSignaturePin>,
+    pub function_outputs: Vec<FunctionSignaturePin>,
 
     // 数据状态 (node, pin, connection)
     pub data_state: Arc<RwLock<GraphDataState>>,
@@ -90,10 +105,13 @@ pub struct GraphInstance {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphDocSer<'a> {
-    id: GraphId,
     name: &'a str,
     kind: GraphKind,
     position: GraphPosition,
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    function_inputs: &'a [FunctionSignaturePin],
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    function_outputs: &'a [FunctionSignaturePin],
     nodes: Vec<GraphNodeSer<'a>>,
     connections: Vec<Connection>,
 }
@@ -113,11 +131,16 @@ struct GraphNodeSer<'a> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphDocDe {
-    id: GraphId,
+    #[serde(default)]
+    id: Option<GraphId>,
     name: String,
     kind: GraphKind,
     #[serde(default)]
     position: GraphPosition,
+    #[serde(default)]
+    function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default)]
+    function_outputs: Vec<FunctionSignaturePin>,
     #[serde(default)]
     nodes: Vec<GraphNodeDe>,
     #[serde(default)]
@@ -179,10 +202,11 @@ impl Serialize for GraphInstance {
         });
 
         GraphDocSer {
-            id: self.id,
             name: &self.name,
             kind: self.kind.clone(),
             position: self.position.clone(),
+            function_inputs: &self.function_inputs,
+            function_outputs: &self.function_outputs,
             nodes: node_ser,
             connections,
         }
@@ -197,10 +221,12 @@ impl<'de> Deserialize<'de> for GraphInstance {
     {
         let doc = GraphDocDe::deserialize(deserializer)?;
         Ok(Self::from_persisted_parts(
-            doc.id,
+            doc.id.unwrap_or_else(GraphId::new),
             doc.name,
             doc.kind,
             doc.position,
+            doc.function_inputs,
+            doc.function_outputs,
             doc.nodes,
             doc.connections,
         ))
@@ -279,6 +305,8 @@ impl GraphInstance {
         name: String,
         kind: GraphKind,
         position: GraphPosition,
+        function_inputs: Vec<FunctionSignaturePin>,
+        function_outputs: Vec<FunctionSignaturePin>,
         nodes: Vec<GraphNodeDe>,
         connections: Vec<Connection>,
     ) -> Self {
@@ -315,6 +343,8 @@ impl GraphInstance {
             name,
             kind,
             position,
+            function_inputs,
+            function_outputs,
             data_state: Arc::new(RwLock::new(data_state)),
             registry: Default::default(),
             schema_provider: None,
@@ -329,6 +359,8 @@ impl std::fmt::Debug for GraphInstance {
             .field("name", &self.name)
             .field("kind", &self.kind)
             .field("position", &self.position)
+            .field("function_inputs", &self.function_inputs)
+            .field("function_outputs", &self.function_outputs)
             .field("data_state", &self.data_state)
             .finish_non_exhaustive()
     }
@@ -342,6 +374,8 @@ impl GraphInstance {
             name: name.into(),
             position: GraphPosition::default(),
             kind,
+            function_inputs: Vec::new(),
+            function_outputs: Vec::new(),
             data_state: Default::default(),
             registry,
             schema_provider: None,

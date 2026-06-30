@@ -87,8 +87,17 @@ export interface GraphInstanceDTO {
   id: string;
   name: string;
   type: GraphTypeDTO;
+  functionInputs?: FunctionSignaturePinDTO[];
+  functionOutputs?: FunctionSignaturePinDTO[];
   nodes: NodeInstanceDTO[];
   pins: PinInstanceDTO[];
   connections: ConnectionDTO;
   canvas: GraphPosition;
+}
+
+export interface FunctionSignaturePinDTO {
+  id: string;
+  name: string;
+  type: string;
+  containerType?: string;
 }

@@ -218,6 +218,8 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
         id: data.id,
         name: data.name,
         type: graphType,
+        functionInputs: data.functionInputs ?? [],
+        functionOutputs: data.functionOutputs ?? [],
         nodes,
         pins,
         connections: { connections: connectionsArray },

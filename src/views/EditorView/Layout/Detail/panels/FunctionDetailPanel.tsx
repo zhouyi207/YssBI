@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
@@ -7,13 +8,14 @@ interface FunctionDetailPanelProps {
   fn: {
     id: string;
     name: string;
-    inputs?: Array<{ id: string; name: string; type: string; containerType?: string }>;
-    outputs?: Array<{ id: string; name: string; type: string; containerType?: string }>;
+    inputs?: FunctionPinSpec[];
+    outputs?: FunctionPinSpec[];
   };
-  onUpdate: (patch: Record<string, unknown>) => void;
+  onRename: (name: string) => void;
+  onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
 
-export function FunctionDetailPanel({ fn, onUpdate }: FunctionDetailPanelProps) {
+export function FunctionDetailPanel({ fn, onRename, onSignatureChange }: FunctionDetailPanelProps) {
   const { t } = useTranslation();
 
   return (
@@ -22,7 +24,7 @@ export function FunctionDetailPanel({ fn, onUpdate }: FunctionDetailPanelProps) 
         <DetailNameField
           label={t('detail.fields.name')}
           value={fn.name}
-          onCommit={(name) => onUpdate({ name })}
+          onCommit={onRename}
         />
         <DetailReadonlyField label={t('detail.fields.type')} className="italic">
           {t('detail.typeLabels.function')}
@@ -32,13 +34,13 @@ export function FunctionDetailPanel({ fn, onUpdate }: FunctionDetailPanelProps) 
         title={t('detail.pinEditor.inputs')}
         emptyMessage={t('detail.pinEditor.noInputs')}
         pins={fn.inputs ?? []}
-        onChange={(inputs) => onUpdate({ inputs })}
+        onChange={(inputs) => onSignatureChange({ inputs })}
       />
       <PinEditor
         title={t('detail.pinEditor.outputs')}
         emptyMessage={t('detail.pinEditor.noOutputs')}
         pins={fn.outputs ?? []}
-        onChange={(outputs) => onUpdate({ outputs })}
+        onChange={(outputs) => onSignatureChange({ outputs })}
       />
     </DetailPanelShell>
   );

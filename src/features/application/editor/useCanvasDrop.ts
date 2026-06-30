@@ -76,7 +76,7 @@ export function useCanvasDrop({
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
       if (!graphId) return;
-      const nodeData = useGraphDataStore.getState().nodes[nodeId];
+      const nodeData = useGraphDataStore.getState().getGraphNode(graphId, nodeId);
       const nodeType = nodeData?.nodeType;
       let slotIndex = 0;
       if (nodeType) {

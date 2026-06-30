@@ -74,19 +74,20 @@ export function useEditorOperations() {
     const dataStore = useGraphDataStore.getState();
     const graphNodeIds = dataStore.graphNodes[tid] ?? [];
     const selectedNodeIdList = graphNodeIds.filter((nid) => sIds.has(nid));
-    const snapshot = buildClipboardSnapshot(selectedNodeIdList);
+    const snapshot = buildClipboardSnapshot(selectedNodeIdList, tid);
     if (snapshot) setClipboard(snapshot);
   }, [setClipboard]);
 
   const copyNodes = useCallback((nodeIds: string[]) => {
-    const snapshot = buildClipboardSnapshot(nodeIds);
+    const tid = activeTabIdRef.current;
+    const snapshot = buildClipboardSnapshot(nodeIds, tid ?? undefined);
     if (snapshot) setClipboard(snapshot);
   }, [setClipboard]);
 
   const duplicateNodes = useCallback(async (nodeIds: string[], offset = { x: 40, y: 40 }) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const snapshot = buildClipboardSnapshot(nodeIds);
+    const snapshot = buildClipboardSnapshot(nodeIds, tid);
     if (!snapshot) return;
 
     const dupSnapshot: ClipboardSnapshot = {
@@ -111,7 +112,7 @@ export function useEditorOperations() {
 
     const dataStore = useGraphDataStore.getState();
     const idsToDelete = nodeIds.filter((id) => {
-      const node = dataStore.nodes[id];
+      const node = dataStore.getGraphNode(tid, id);
       return node && !node.isInternal;
     });
     if (idsToDelete.length === 0) return;
@@ -127,9 +128,9 @@ export function useEditorOperations() {
   const breakAllNodeLinks = useCallback(async (nodeId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const pinIds = useGraphDataStore.getState().nodePins[nodeId] ?? [];
+    const pinIds = useGraphDataStore.getState().getGraphNodePins(tid, nodeId);
     for (const pinId of pinIds) {
-      const connIds = useGraphDataStore.getState().pinConnections[pinId] ?? [];
+      const connIds = useGraphDataStore.getState().getGraphPinConnections(tid, pinId);
       if (connIds.length === 0) continue;
       try {
         await executeCommand(tid, 'DisconnectPin', { pinId });
@@ -141,16 +142,18 @@ export function useEditorOperations() {
 
   const selectLinkedNodes = useCallback((nodeId: string) => {
     const store = useGraphDataStore.getState();
-    const pinIds = store.nodePins[nodeId] ?? [];
+    const tid = activeTabIdRef.current;
+    if (!tid) return;
+    const pinIds = store.getGraphNodePins(tid, nodeId);
     const linked = new Set<string>();
 
     for (const pinId of pinIds) {
-      const connIds = store.pinConnections[pinId] ?? [];
+      const connIds = store.getGraphPinConnections(tid, pinId);
       for (const connId of connIds) {
-        const conn = store.connections[connId];
+        const conn = store.graphEntities[tid]?.connections[connId] ?? store.connections[connId];
         if (!conn) continue;
         const otherPinId = conn.from === pinId ? conn.to : conn.from;
-        const otherPin = store.pins[otherPinId];
+        const otherPin = store.getGraphPin(tid, otherPinId);
         if (otherPin?.nodeId && otherPin.nodeId !== nodeId) {
           linked.add(otherPin.nodeId);
         }
@@ -176,7 +179,7 @@ export function useEditorOperations() {
     try {
       const { PinService } = await import('@/services');
       await PinService.clearPinUserValue(tid, nodeId, pinId);
-      useGraphDataStore.getState().updatePin(pinId, { userValue: undefined });
+      useGraphDataStore.getState().updatePin(pinId, { userValue: undefined }, tid);
     } catch (e) {
       logger.graph.error(`Failed to reset pin value: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("恢复默认值失败", "error", 2000);

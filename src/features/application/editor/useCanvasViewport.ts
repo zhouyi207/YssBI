@@ -51,7 +51,7 @@ export function useCanvasViewport(
       const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
       const m: Record<string, { x: number; y: number }> = {};
       for (const id of ids) {
-        const n = s.nodes[id];
+        const n = graphId ? s.getGraphNode(graphId, id) : undefined;
         if (n?.position) m[id] = n.position;
       }
       return m;
@@ -63,14 +63,17 @@ export function useCanvasViewport(
       const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
       const m: Record<string, string> = {};
       for (const nid of ids) {
-        for (const pid of s.nodePins[nid] ?? []) m[pid] = nid;
+        if (!graphId) continue;
+        for (const pid of s.getGraphNodePins(graphId, nid)) m[pid] = nid;
       }
       return m;
     }),
   );
 
   // 连接表引用：连接增删时重算 culling（保持「连线另一端节点」可见性）。
-  const connectionsRef = useGraphDataStore((s) => s.connections);
+  const connectionsRef = useGraphDataStore(
+    useShallow((s) => (graphId ? s.getGraphConnections(graphId) : [])),
+  );
 
   const persistViewport = useCallback(() => {
     if (!graphId) return;
@@ -107,7 +110,7 @@ export function useCanvasViewport(
 
     const visible = new Set<string>();
     for (const nid of nodeIds) {
-      const node = store.nodes[nid];
+      const node = store.getGraphNode(graphId, nid);
       if (!node?.position) continue;
       const isVisible =
         node.position.x + NODE_WIDTH > worldViewLeft &&
@@ -119,19 +122,19 @@ export function useCanvasViewport(
 
     const pinToNode = new Map<string, string>();
     for (const nid of nodeIds) {
-      for (const pid of store.nodePins[nid] ?? []) {
+      for (const pid of store.getGraphNodePins(graphId, nid)) {
         pinToNode.set(pid, nid);
       }
     }
     const nodeCenter = (nid: string) => {
-      const node = store.nodes[nid];
+      const node = store.getGraphNode(graphId, nid);
       if (!node?.position) return null;
       return {
         x: node.position.x + NODE_WIDTH / 2,
         y: node.position.y + NODE_HEIGHT / 2,
       };
     };
-    for (const conn of Object.values(store.connections)) {
+    for (const conn of store.getGraphConnections(graphId)) {
       const fromNode = pinToNode.get(conn.from);
       const toNode = pinToNode.get(conn.to);
       if (!fromNode || !toNode) continue;

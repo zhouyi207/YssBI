@@ -30,7 +30,7 @@ export interface ConnectPinsContext {
 export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsContext> = {
   async execute(_graphId, args) {
     const store = useGraphDataStore.getState();
-    const draft = store.applyConnectionDraft(args.pinA, args.pinB);
+    const draft = store.applyConnectionDraft(args.pinA, args.pinB, _graphId);
     const keys = draft ? [draft.connectionId, ...draft.disconnectedIds] : [];
     try {
       const result = await trackPending(
@@ -49,7 +49,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
         autoDisconnectedList: result.autoDisconnected,
       };
     } catch (error) {
-      if (draft) store.revertConnectionDraft(draft);
+      if (draft) store.revertConnectionDraft(draft, _graphId);
       throw error;
     }
   },

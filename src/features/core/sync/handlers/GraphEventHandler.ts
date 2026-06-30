@@ -2,10 +2,12 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
-import { useGraphDataStore } from '@/features/core/dataStore';
+import { syncFunctionSignatureMeta, useGraphDataStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { updateOpenResourceLabels, useResourceStore, resourceKey } from '@/features/core/resource';
 import type { Graph } from '@/shared/types/domain';
+import type { ProjectResourceMeta } from '@/features/core/resource';
+import type { GraphDataLike } from '@/shared/types/store/graph';
 
 type GraphWithMeta = Graph & { entryNodeId?: string };
 
@@ -18,6 +20,23 @@ function syncGraphResource(payload: GraphUpdatedPayload, kind: 'event' | 'functi
     if (name === undefined) return;
     useResourceStore.getState().patchResource({ id: payload.id, kind }, { name });
     updateOpenResourceLabels({ id: payload.id, kind }, name);
+}
+
+function buildGraphUpdateData(
+  payload: GraphUpdatedPayload,
+  meta: ProjectResourceMeta,
+  kind: 'event' | 'function',
+): GraphDataLike {
+  return {
+    id: payload.id,
+    name: payload.data.name ?? meta.name,
+    type: kind,
+    ...payload.data,
+    nodes: payload.data.nodes ?? [],
+    pins: payload.data.pins ?? [],
+    connections: payload.data.connections ?? { connections: [] },
+    canvas: payload.data.canvas ?? { x: 0, y: 0, scale: 1 },
+  };
 }
 
 // ==================== Event Handlers ====================
@@ -54,13 +73,10 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
         const meta = getGraphResourceMeta(payload.id, 'event');
         syncGraphResource(payload, 'event');
         if (payload.data.nodes && meta) {
-          useGraphDataStore.getState().addGraphFromData(payload.id, {
-            id: payload.id,
-            name: meta.name,
-            type: 'event',
-            ...payload.data,
-            nodes: payload.data.nodes,
-          } as unknown as import('@/shared/types/store/graph').GraphDataLike);
+          useGraphDataStore.getState().addGraphFromData(
+            payload.id,
+            buildGraphUpdateData(payload, meta, 'event'),
+          );
         }
         markGraphTabDirty(payload.id);
     }
@@ -107,6 +123,7 @@ export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload
             hasStaleDocument: false,
             hasConflictDocument: false,
         });
+        syncFunctionSignatureMeta(g);
         
         callbacks?.onFunctionCreated?.(payload.id, payload.data);
     }
@@ -120,14 +137,22 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
         
         const meta = getGraphResourceMeta(payload.id, 'function');
         syncGraphResource(payload, 'function');
-        if (payload.data.nodes && meta) {
-          useGraphDataStore.getState().addGraphFromData(payload.id, {
+        const name = payload.data.name ?? meta?.name;
+        if (name) {
+          syncFunctionSignatureMeta({
             id: payload.id,
-            name: meta.name,
+            name,
             type: 'function',
-            ...payload.data,
-            nodes: payload.data.nodes,
-          } as unknown as import('@/shared/types/store/graph').GraphDataLike);
+            functionInputs: payload.data.functionInputs,
+            functionOutputs: payload.data.functionOutputs,
+            folderPath: meta?.folderPath,
+          });
+        }
+        if (payload.data.nodes && meta) {
+          useGraphDataStore.getState().addGraphFromData(
+            payload.id,
+            buildGraphUpdateData(payload, meta, 'function'),
+          );
         }
         markGraphTabDirty(payload.id);
     }

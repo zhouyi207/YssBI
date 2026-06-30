@@ -80,7 +80,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
       : -1;
     if (matchIdx >= 0 && matchIdx < pinIds.length) {
       targetPinId = pinIds[matchIdx];
-      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId);
+      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphId);
     }
 
     // 3) 位置对齐：等待目标 pin 偏移被测量出来后，反向平移节点，使该 pin 精确落在
@@ -92,7 +92,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
       if (offset) {
         finalX = args.x - offset.x;
         finalY = args.y - offset.y;
-        store.updateNode(nodeId, { position: { x: finalX, y: finalY } });
+        store.updateNode(nodeId, { position: { x: finalX, y: finalY } }, graphId);
       }
     }
 
@@ -112,8 +112,8 @@ export const createNodeWithConnectionCommand: CommandHandler<
         ),
       );
     } catch (error) {
-      if (connDraft) store.revertConnectionDraft(connDraft);
-      store.revertNodeDraft(nodeId);
+      if (connDraft) store.revertConnectionDraft(connDraft, graphId);
+      store.revertNodeDraft(nodeId, graphId);
       throw error;
     }
 
@@ -129,7 +129,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
         );
         autoDisconnectedList = result.autoDisconnected;
       } catch {
-        store.revertConnectionDraft(connDraft);
+        store.revertConnectionDraft(connDraft, graphId);
         targetPinId = null;
       }
     }

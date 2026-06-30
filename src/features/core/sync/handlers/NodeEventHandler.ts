@@ -90,7 +90,10 @@ export class NodeDeletedHandler extends BaseEventHandler<NodeDeletedPayload> {
 
     handle(payload: NodeDeletedPayload, callbacks?: EventCallbacks): void {
         this.log('Node deleted:', payload.nodeId, 'from graph:', payload.graphId);
-        useGraphDataStore.getState().deleteNode(payload.nodeId);
+        const store = useGraphDataStore.getState();
+        if (store.getGraphNode(payload.graphId, payload.nodeId)) {
+            store.deleteNode(payload.nodeId, payload.graphId);
+        }
         markGraphTabDirty(payload.graphId);
         callbacks?.onNodeDeleted?.(payload.graphId, payload.nodeId);
     }
@@ -102,7 +105,7 @@ export class NodesBatchDeletedHandler extends BaseEventHandler<NodesBatchDeleted
     handle(payload: NodesBatchDeletedPayload, callbacks?: EventCallbacks): void {
         this.log('Batch nodes deleted:', payload.nodeIds.length, 'from graph:', payload.graphId);
         const store = useGraphDataStore.getState();
-        store.batchDeleteNodes(payload.nodeIds);
+        store.batchDeleteNodes(payload.nodeIds, payload.graphId);
         markGraphTabDirty(payload.graphId);
 
         if (callbacks?.onNodeDeleted) {
@@ -134,7 +137,7 @@ export class NodePositionsUpdatedHandler extends BaseEventHandler<NodePositionsU
         }
 
         this.log('Node positions updated:', payload.graphId, updates.length, 'nodes');
-        useGraphDataStore.getState().batchUpdateNodePositions(updates);
+        useGraphDataStore.getState().batchUpdateNodePositions(updates, payload.graphId);
         markGraphTabDirty(payload.graphId);
     }
 }
@@ -166,10 +169,11 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
                 nodeId: payload.nodeId,
                 pin: pin as PinData,
             })),
+            graphId: payload.graphId,
         });
 
         if (payload.pinOrder) {
-            store.reorderNodePins(payload.nodeId, payload.pinOrder);
+            store.reorderNodePins(payload.nodeId, payload.pinOrder, payload.graphId);
         }
         markGraphTabDirty(payload.graphId);
     }
@@ -191,6 +195,7 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
                     dataType: dataType ? dataTypeFromBackend(dataType) : undefined,
                 },
             })),
+            payload.graphId,
         );
         markGraphTabDirty(payload.graphId);
     }

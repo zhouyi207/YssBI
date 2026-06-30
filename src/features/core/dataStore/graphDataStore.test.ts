@@ -7,6 +7,7 @@ describe('graphDataStore connection truth', () => {
       nodes: {},
       pins: {},
       connections: {},
+      graphEntities: {},
       graphNodes: {},
       nodePins: {},
       pinConnections: {},
@@ -63,5 +64,65 @@ describe('graphDataStore connection truth', () => {
       from: 'pin-out',
       to: 'pin-in',
     });
+  });
+
+  it('clears a graph even when its graphNodes index contains stale node ids', () => {
+    useGraphDataStore.setState({
+      graphNodes: { 'graph-1': ['missing-node'] },
+    });
+
+    useGraphDataStore.getState().clearGraph('graph-1');
+
+    expect(useGraphDataStore.getState().graphNodes['graph-1']).toBeUndefined();
+  });
+
+  it('keeps remaining graph bucket when graph-local node and pin ids overlap', () => {
+    const graph = (id: string, title: string) => ({
+      id,
+      name: title,
+      type: 'event' as const,
+      canvas: { x: 0, y: 0, scale: 1 },
+      nodes: [
+        {
+          id: 'local-node',
+          nodeType: 'Data:Constant',
+          category: ['Data'],
+          title,
+          position: { x: 0, y: 0 },
+          inputs: ['local-in'],
+          outputs: ['local-out'],
+        },
+      ],
+      pins: [
+        {
+          id: 'local-in',
+          nodeId: 'local-node',
+          name: 'In',
+          type: 'Float64',
+          direction: 'input',
+        },
+        {
+          id: 'local-out',
+          nodeId: 'local-node',
+          name: 'Out',
+          type: 'Float64',
+          direction: 'output',
+        },
+      ],
+      connections: { connections: [{ fromPin: 'local-out', toPin: 'local-in' }] },
+    });
+
+    useGraphDataStore.getState().hydrateGraphs({
+      'graph-1': graph('graph-1', 'First'),
+      'graph-2': graph('graph-2', 'Second'),
+    });
+
+    useGraphDataStore.getState().clearGraph('graph-1');
+
+    const state = useGraphDataStore.getState();
+    expect(state.graphNodes['graph-1']).toBeUndefined();
+    expect(state.graphNodes['graph-2']).toEqual(['local-node']);
+    expect(state.getGraphNode('graph-2', 'local-node')?.title).toBe('Second');
+    expect(state.getGraphPinConnections('graph-2', 'local-out')).toEqual(['local-out->local-in']);
   });
 });

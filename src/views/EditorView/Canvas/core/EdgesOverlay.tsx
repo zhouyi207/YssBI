@@ -1,9 +1,11 @@
 import React, { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
   graphId: string;
@@ -11,13 +13,37 @@ interface EdgesOverlayProps {
   dimmed?: boolean;
 }
 
-interface EdgeData {
+const EMPTY_IDS: string[] = [];
+
+export interface EdgeData {
   id: string;
   fromPinId: string;
   toPinId: string;
   sourceNodeId: string;
   pinType: string;
   pinColor?: string;
+}
+
+export function buildEdgeData(
+  graphNodeIds: string[],
+  connections: ConnectionData[],
+  getPin: (pinId: string) => PinData | undefined,
+): EdgeData[] {
+  const result: EdgeData[] = [];
+  const nodeIdSet = new Set(graphNodeIds);
+  for (const conn of connections) {
+    const fromPin = getPin(conn.from);
+    if (!fromPin || !nodeIdSet.has(fromPin.nodeId)) continue;
+    result.push({
+      id: conn.id,
+      fromPinId: conn.from,
+      toPinId: conn.to,
+      sourceNodeId: fromPin.nodeId,
+      pinType: fromPin.type ?? "any",
+      pinColor: fromPin.ui?.color,
+    });
+  }
+  return result;
 }
 
 export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorldPos, dimmed }) => {
@@ -28,27 +54,23 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
   const nodeStates = graphState?.nodeStates;
   const isRunning = status === "running";
 
-  const connections = useGraphDataStore((s) => s.connections);
-  const pins = useGraphDataStore((s) => s.pins);
-  const graphNodeIds = useGraphDataStore((s) => s.graphNodes[graphId]);
+  const graphNodeIds = useGraphDataStore(
+    useShallow((s) => s.graphNodes[graphId] ?? EMPTY_IDS),
+  );
+  const connections = useGraphDataStore(
+    useShallow((s) => s.getGraphConnections(graphId)),
+  );
+  const sourcePins = useGraphDataStore(
+    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.from))),
+  );
 
   const edges = useMemo<EdgeData[]>(() => {
-    const result: EdgeData[] = [];
-    const nodeIdSet = new Set(graphNodeIds ?? []);
-    for (const conn of Object.values(connections)) {
-      const fromPin = pins[conn.from];
-      if (!fromPin || !nodeIdSet.has(fromPin.nodeId)) continue;
-      result.push({
-        id: conn.id,
-        fromPinId: conn.from,
-        toPinId: conn.to,
-        sourceNodeId: fromPin.nodeId,
-        pinType: fromPin.type ?? "any",
-        pinColor: fromPin.ui?.color,
-      });
+    const pinsById = new Map<string, PinData>();
+    for (const pin of sourcePins) {
+      if (pin) pinsById.set(pin.id, pin);
     }
-    return result;
-  }, [connections, pins, graphNodeIds]);
+    return buildEdgeData(graphNodeIds, connections, (pinId) => pinsById.get(pinId));
+  }, [connections, graphNodeIds, sourcePins]);
 
   return (
     <svg

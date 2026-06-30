@@ -36,14 +36,14 @@ export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, DeleteNodesCont
     const savedConnections: Array<{ fromPin: string; toPin: string }> = [];
 
     for (const nodeId of args.nodeIds) {
-      const node = store.nodes[nodeId];
+      const node = store.getGraphNode(graphId, nodeId);
       if (!node) continue;
 
-      const pinIds = store.nodePins[nodeId] ?? [];
+      const pinIds = store.getGraphNodePins(graphId, nodeId);
       const pins: Array<{ pinId: string; name: string; direction: string; userValue?: unknown }> = [];
 
       for (const pinId of pinIds) {
-        const pin = store.pins[pinId];
+        const pin = store.getGraphPin(graphId, pinId);
         if (pin) {
           pins.push({
             pinId: pin.id,
@@ -53,10 +53,10 @@ export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, DeleteNodesCont
           });
 
           // Capture connections for this pin
-          const connIds = store.pinConnections[pinId] ?? [];
+          const connIds = store.getGraphPinConnections(graphId, pinId);
           for (const connId of connIds) {
             if (savedConnectionSet.has(connId)) continue;
-            const conn = store.connections[connId];
+            const conn = store.graphEntities[graphId]?.connections[connId] ?? store.connections[connId];
             if (conn) {
               savedConnectionSet.add(connId);
               savedConnections.push({

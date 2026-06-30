@@ -1,6 +1,7 @@
 // src/features/core/sync/types.ts
 
 import type { ProjectData, Graph, Variable, VariableScope, Node } from '@/shared/types/domain';
+import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
 import type { DataTypeBackendFormat } from '@/shared/types/dto/dataType';
 import type { NodeInstanceDTO, PinInstanceDTO } from '@/shared/types/dto';
 import type { BackendProjectResourceMeta, ResourceKind } from '@/features/core/resource';
@@ -38,7 +39,10 @@ export interface GraphCreatedPayload {
 
 export interface GraphUpdatedPayload {
     id: string;
-    data: Partial<Graph>;
+    data: Partial<Graph> & {
+        functionInputs?: FunctionSignaturePin[];
+        functionOutputs?: FunctionSignaturePin[];
+    };
 }
 
 export interface GraphDeletedPayload {

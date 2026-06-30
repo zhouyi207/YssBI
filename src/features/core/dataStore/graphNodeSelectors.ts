@@ -2,6 +2,10 @@ import type { NodeData, RuntimeNodeInput } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
 import { resolveNodeViewMeta } from './serialization';
 
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value != null;
+}
+
 /** Find an internal node in a graph by nodeType (store-native, no links rebuild). */
 export function findInternalNodeInGraph(
   graphId: string,
@@ -10,7 +14,7 @@ export function findInternalNodeInGraph(
   const state = useGraphDataStore.getState();
   const nodeIds = state.graphNodes[graphId] ?? [];
   for (const nodeId of nodeIds) {
-    const node = state.nodes[nodeId];
+    const node = state.getGraphNode(graphId, nodeId);
     if (node?.nodeType === nodeType && node.isInternal) {
       return node;
     }
@@ -24,7 +28,7 @@ export function buildRuntimeNodesFromStore(graphId: string): RuntimeNodeInput[] 
   const nodeIds = state.graphNodes[graphId] ?? [];
   return nodeIds
     .map((nodeId) => {
-      const node = state.nodes[nodeId];
+      const node = state.getGraphNode(graphId, nodeId);
       if (!node) return null;
       const meta = resolveNodeViewMeta(node);
       return {
@@ -47,5 +51,5 @@ export function buildRuntimeNodesFromStore(graphId: string): RuntimeNodeInput[] 
         dataframeId: node.dataframeId,
       } satisfies RuntimeNodeInput;
     })
-    .filter((node): node is RuntimeNodeInput => node != null);
+    .filter(isPresent);
 }

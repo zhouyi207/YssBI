@@ -50,11 +50,12 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   useResourceStore.getState().patchResource({ id: ref.id, kind: ref.kind }, { name });
 }
 
-export async function createGraphResource(kind: GraphResourceKind, folderPath = ''): Promise<string> {
+export async function createGraphResource(kind: GraphResourceKind, folderPath = '', name?: string): Promise<string> {
   const targetFolder = folderPath.trim() || undefined;
+  const graphName = name?.trim() || (kind === 'event' ? DEFAULT_EVENT_NAME : DEFAULT_FUNCTION_NAME);
   const id = kind === 'event'
-    ? await GraphService.createEvent(DEFAULT_EVENT_NAME, targetFolder)
-    : await GraphService.createFunction(DEFAULT_FUNCTION_NAME, targetFolder);
+    ? await GraphService.createEvent(graphName, targetFolder)
+    : await GraphService.createFunction(graphName, targetFolder);
   await refreshResourceIndex();
   return id;
 }
@@ -85,10 +86,10 @@ export async function deleteGraphFolderResource(kind: GraphResourceKind, folderP
 
 export async function deleteResource(ref: ResourceRef): Promise<void> {
   if (ref.kind === 'event' || ref.kind === 'function') {
+    await closeEditorTab(ref.id, undefined, true);
     await GraphService.removeGraph(ref.id);
     useGraphDataStore.getState().clearGraph(ref.id);
     useResourceStore.getState().removeResource(ref);
-    await closeEditorTab(ref.id, undefined, true);
     await refreshResourceIndex();
     return;
   }

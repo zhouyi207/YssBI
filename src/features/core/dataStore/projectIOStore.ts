@@ -10,6 +10,7 @@ import type { DatabaseRecord } from './databaseStore';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
+import { syncFunctionSignatureMeta } from './graphDocumentMeta';
 import { useEditStateStore } from './editStateStore';
 import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
@@ -239,18 +240,20 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
         if (!meta || !meta.exists) return null;
 
         const nodeIds = dataStore.graphNodes[graphId] ?? [];
-        const nodes = nodeIds.map((nodeId) => dataStore.nodes[nodeId]).filter(Boolean);
+        const nodes = nodeIds.map((nodeId) => dataStore.getGraphNode(graphId, nodeId)).filter(Boolean);
         const pins = nodeIds.flatMap((nodeId) =>
-          (dataStore.nodePins[nodeId] ?? []).map((pinId) => dataStore.pins[pinId]).filter(Boolean)
+          dataStore.getGraphNodePins(graphId, nodeId)
+            .map((pinId) => dataStore.getGraphPin(graphId, pinId))
+            .filter(Boolean)
         );
         const connectionIds = new Set<string>();
         for (const pin of pins) {
-          for (const connectionId of dataStore.pinConnections[pin.id] ?? []) {
+          for (const connectionId of dataStore.getGraphPinConnections(graphId, pin.id)) {
             connectionIds.add(connectionId);
           }
         }
         const connections = Array.from(connectionIds)
-          .map((connectionId) => dataStore.connections[connectionId])
+          .map((connectionId) => dataStore.graphEntities[graphId]?.connections[connectionId] ?? dataStore.connections[connectionId])
           .filter(Boolean)
           .map((connection) => ({ fromPin: connection.from, toPin: connection.to }));
 
@@ -440,6 +443,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           hasConflictDocument: false,
         });
         markResourceLoaded({ id: graphId, kind: frontendGraph.type });
+        syncFunctionSignatureMeta({
+          ...frontendGraph,
+          folderPath: existingResource?.folderPath,
+        });
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
         ensureGraphViewport(graphId, frontendGraph.canvas);
         return true;
