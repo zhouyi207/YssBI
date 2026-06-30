@@ -538,6 +538,9 @@ package.json
 - [x] **Variables 侧栏 Local 上下文化**：Local 仅展示 tabbar 当前激活 Event/Function tab 的局部变量，不再按 graph 分组展示其他图/函数变量；移除 `localVariablesByGraph`、嵌套 graph 分组、`AddVariableTargetGraph` / `targetGraph` 与 `variablesLocal_${graphId}` 等逻辑；无激活 graph tab 时 Local 显示「无活动图」并禁用新建。
 - [x] **Variables 侧栏顺序与默认展开**：Variables tab 顺序调整为 Local 在上、Global 在下；`sidebarStore` 分组顺序与默认展开状态同步为 Local 默认展开、Global 默认折叠。
 - [x] **Sidebar Data 图标回归修复**：清理变量 promote/demote UI 时误删 `VscEye` import，恢复 Data 侧栏「在数据视图中查看」按钮渲染。
+- [x] **Sidebar / Detail i18n 收口**：Sidebar 顶栏标题统一走 `activityBar.*`；折叠区块标题与空状态补全 `sidebar.sections.*`、`sidebar.noEvents` / `sidebar.noFunctions` 等翻译（Charts 仍用 `chartsSidebar.*`）。
+- [x] **Workbench 顶栏高度统一**：新增 `workbenchPanelHeaderClass`，Sidebar head / TabBar / Detail head 统一为 `var(--titlebar-height)` + `border-b`；Detail 移除 header 下方多余 `Separator`，避免比 Sidebar / TabBar 高出 1px。
+- [x] **Sidebar / Detail 顶栏字体统一**：新增 `workbenchPanelHeaderTitleClass`（`text-xs font-semibold uppercase tracking-wide`）；Sidebar head 与 Detail head 共用，`detailSectionTitleClass` 复用同一 class。
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 
 ## v1.0 待办

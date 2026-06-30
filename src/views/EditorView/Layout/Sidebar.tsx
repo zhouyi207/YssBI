@@ -64,6 +64,7 @@ import {
   sidebarItemRowClass,
   sidebarRowActionClass,
 } from "./sidebarUi";
+import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
 
 interface GraphTreeNode {
   name: string;
@@ -597,16 +598,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
-        <div className="px-3 border-b border-border bg-[var(--workbench-bg)]/50 flex justify-between items-center shrink-0" style={{ height: 'var(--titlebar-height)' }}>
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+        <div className={workbenchPanelHeaderClass}>
+          <span className={workbenchPanelHeaderTitleClass}>
             {currentTab === "graphs"
-              ? "Graphs"
+              ? t("activityBar.graphs")
               : currentTab === "variables"
-                ? "Variables"
+                ? t("activityBar.variables")
                 : currentTab === "data"
-                  ? "Data"
+                  ? t("activityBar.data")
                   : currentTab === "commands"
-                    ? "Commands"
+                    ? t("activityBar.commands")
                     : currentTab === "charts"
                       ? t("activityBar.charts")
                       : ""}
@@ -617,7 +618,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           {currentTab === "graphs" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
               <SidebarCollapsibleSection variant="stacked"
-                label="Event"
+                label={t("sidebar.sections.event")}
                 expanded={isSectionExpanded("graphsEvent")}
                 onToggle={() => toggleSection("graphsEvent")}
                 onAdd={createRootEvent}
@@ -631,13 +632,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 >
                   {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
                   {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No events</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noEvents")}</div>
                   )}
                 </div>
               </SidebarCollapsibleSection>
 
               <SidebarCollapsibleSection variant="stacked"
-                label="Function"
+                label={t("sidebar.sections.function")}
                 expanded={isSectionExpanded("graphsFunction")}
                 onToggle={() => toggleSection("graphsFunction")}
                 onAdd={createRootFunction}
@@ -651,7 +652,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 >
                   {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
                   {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">No functions</div>
+                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noFunctions")}</div>
                   )}
                 </div>
               </SidebarCollapsibleSection>
@@ -661,7 +662,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           {currentTab === "variables" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
               <SidebarCollapsibleSection variant="stacked"
-                label="Local"
+                label={t("sidebar.sections.local")}
                 expanded={isSectionExpanded("variablesLocal")}
                 onToggle={() => toggleSection("variablesLocal")}
                 onAdd={activeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int32", false) : undefined}
@@ -682,7 +683,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               </SidebarCollapsibleSection>
 
               <SidebarCollapsibleSection variant="stacked"
-                label="Global"
+                label={t("sidebar.sections.global")}
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
                 onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int32", true)}
@@ -704,7 +705,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           {currentTab === "data" && (
             <div className="flex flex-col flex-1 min-h-0">
               <SidebarCollapsibleSection variant="stacked"
-                label="Data"
+                label={t("sidebar.sections.data")}
                 expanded={isSectionExpanded("dataData")}
                 onToggle={() => toggleSection("dataData")}
                 onAdd={triggerImportData}

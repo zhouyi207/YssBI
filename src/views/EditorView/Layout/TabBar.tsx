@@ -153,7 +153,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     <div
       ref={setDropRef}
       className={editorTabBarShellClass}
-      style={{ height: "var(--titlebar-height)" }}
     >
       <div className="relative flex-1 flex items-start h-full min-w-0">
         {isDragging ? (

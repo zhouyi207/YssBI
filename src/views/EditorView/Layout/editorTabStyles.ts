@@ -2,7 +2,7 @@ import { cva } from "class-variance-authority";
 
 /** Editor TabBar shell — aligned with shadcn line TabsList container tokens. */
 export const editorTabBarShellClass =
-  "flex w-full shrink-0 select-none items-center overflow-hidden border-b border-border bg-background";
+  "box-border flex h-[var(--titlebar-height)] min-h-[var(--titlebar-height)] max-h-[var(--titlebar-height)] w-full shrink-0 select-none items-center overflow-hidden border-b border-border bg-background";
 
 /** Editor TabBar group actions strip (split / close). */
 export const editorTabBarActionsClass =

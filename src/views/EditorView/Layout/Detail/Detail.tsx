@@ -4,7 +4,6 @@ import { useEditorGroup } from '@/features/application/editor';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { useGraphMetaStore } from '@/features/core/dataStore';
-import { Separator } from '@/components/ui/separator';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
@@ -17,6 +16,7 @@ import { LogDetailPanel } from './panels/LogDetailPanel';
 import { NodeDetailPanel } from './panels/NodeDetailPanel';
 import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
 import { detailSectionTitleClass } from './shared/detailStyles';
+import { workbenchPanelHeaderClass } from '../workbenchPanelHeaderStyles';
 
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
   const { t } = useTranslation();
@@ -123,15 +123,11 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
         />
       ) : (
         <div className="flex h-full min-h-0 flex-col bg-background/40">
-          <div
-            className="flex shrink-0 items-center justify-between bg-background/80 px-3 backdrop-blur-sm"
-            style={{ height: 'var(--titlebar-height)' }}
-          >
+          <div className={workbenchPanelHeaderClass}>
             <span className={detailSectionTitleClass}>
               {t('detail.title')}
             </span>
           </div>
-          <Separator />
           <DetailEmptyState />
         </div>
       )}

@@ -388,9 +388,18 @@ export const enUS = {
     demoteToLocal: "Demote to local",
     viewInDataViewer: "View in Data Viewer",
     noData: "No data",
+    noEvents: "No events",
+    noFunctions: "No functions",
     dataLoading: "Loading data…",
     dataLoadFailed: "Failed to load data",
     noActiveGraph: "No active graph",
+    sections: {
+      event: "Event",
+      function: "Function",
+      local: "Local",
+      global: "Global",
+      data: "Data",
+    },
     commands: {
       MoveNodes: "Move Nodes",
       SetPinValue: "Set Pin Value",

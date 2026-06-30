@@ -388,9 +388,18 @@ export const zhCN = {
     demoteToLocal: "降级为局部变量",
     viewInDataViewer: "在数据视图中查看",
     noData: "无数据",
+    noEvents: "无事件",
+    noFunctions: "无函数",
     dataLoading: "正在加载数据…",
     dataLoadFailed: "数据加载失败",
     noActiveGraph: "无活动图",
+    sections: {
+      event: "事件",
+      function: "函数",
+      local: "局部",
+      global: "全局",
+      data: "数据",
+    },
     commands: {
       MoveNodes: "移动节点",
       SetPinValue: "设置引脚值",

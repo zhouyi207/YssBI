@@ -1,5 +1,7 @@
 /** Shared Tailwind classes for Detail panel sections (shadcn tokens). */
 
+import { workbenchPanelHeaderTitleClass } from '../../workbenchPanelHeaderStyles';
+
 export const detailTableClass = 'text-sm text-foreground';
 
 export const detailLabelCellClass = 'text-xs font-medium text-muted-foreground';
@@ -20,8 +22,7 @@ export const detailMonoTextClass = 'font-mono text-xs leading-relaxed text-muted
 
 export const detailAccentMonoTextClass = 'font-mono text-xs leading-relaxed text-[var(--accent-color)]/85';
 
-export const detailSectionTitleClass =
-  'text-xs font-semibold uppercase tracking-wide text-muted-foreground';
+export const detailSectionTitleClass = workbenchPanelHeaderTitleClass;
 
 export const detailSubsectionTitleClass =
   'text-xs font-semibold uppercase tracking-wide text-muted-foreground';
