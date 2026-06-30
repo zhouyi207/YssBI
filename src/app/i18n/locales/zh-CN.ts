@@ -39,6 +39,7 @@ export const zhCN = {
       renameFolder: "重命名文件夹",
       deleteFolder: "删除文件夹",
       newVariable: "新建变量",
+      newWorksheet: "新建工作表",
       importData: "导入数据",
       revealInExplorer: "在资源管理器中打开",
       revealInExplorerFailed: "无法在资源管理器中打开：{{error}}",
@@ -49,6 +50,7 @@ export const zhCN = {
       renameGraphTitle: "重命名",
       renameFolderTitle: "重命名文件夹",
       renameVariableTitle: "重命名变量",
+      renameWorksheetTitle: "重命名工作表",
       renameDataTitle: "重命名数据集",
       renameSubmit: "重命名",
     },
@@ -342,6 +344,12 @@ export const zhCN = {
     reusableRoutine: "可复用流程",
     openFile: "打开文件",
     showAllCommands: "显示所有命令",
+    nodePalette: {
+      searchPlaceholder: "搜索节点…",
+      collapseAll: "折叠所有内容",
+      expandAll: "展开所有内容",
+      noMatches: "未找到匹配项",
+    },
   },
   tabBar: {
     splitDownAlt: "向下拆分编辑器（Alt）",

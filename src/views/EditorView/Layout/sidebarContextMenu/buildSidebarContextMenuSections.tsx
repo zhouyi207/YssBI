@@ -115,12 +115,33 @@ export function buildSidebarContextMenuSections(
     ];
   }
 
+  if (target.type === "worksheetSection") {
+    return [
+      {
+        items: [
+          {
+            id: "new-worksheet",
+            label: t("contextMenu.sidebar.newWorksheet"),
+            icon: <VscAdd size={12} />,
+            onClick: () => void actions.addWorksheet(),
+          },
+        ],
+      },
+    ];
+  }
+
   if (target.type === "worksheet") {
     return [
       {
         items: [
           { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openWorksheet(target.id, target.name) },
           { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "worksheet", resourceId: target.id }) },
+          { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameWorksheet(target.id, target.name) },
+        ],
+      },
+      {
+        items: [
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteWorksheet(target.id) },
         ],
       },
     ];

@@ -1,10 +1,11 @@
 import { useId } from "react";
-import { VscAdd, VscChevronDown } from "react-icons/vsc";
+import { VscAdd } from "react-icons/vsc";
 import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { DROP_TYPES } from "@/features/core/dnd";
 import type { GraphResourceType } from "../sidebarContextMenu/sidebarContextMenuTypes";
+import { SidebarChevron } from "./SidebarChevron";
 import {
   sidebarCollapsibleHeaderClass,
   sidebarItemIndent,
@@ -18,6 +19,7 @@ export interface GraphFolderDropTarget {
 
 type SidebarCollapsibleSectionProps = {
   variant?: "stacked" | "nested";
+  collapsible?: boolean;
   label: string;
   expanded: boolean;
   onToggle: () => void;
@@ -34,6 +36,7 @@ type SidebarCollapsibleSectionProps = {
 
 export function SidebarCollapsibleSection({
   variant = "nested",
+  collapsible = true,
   label,
   expanded,
   onToggle,
@@ -49,7 +52,7 @@ export function SidebarCollapsibleSection({
 }: SidebarCollapsibleSectionProps) {
   const fallbackDropId = useId();
   const headerContextMenu = onHeaderContextMenu ?? onContextMenu;
-  const chevronSize = variant === "stacked" ? 12 : 11;
+  const isExpanded = collapsible ? expanded : true;
 
   const { setNodeRef, isOver } = useDroppable({
     id: dropTarget
@@ -66,11 +69,13 @@ export function SidebarCollapsibleSection({
       role="button"
       tabIndex={0}
       onClick={(e) => {
+        if (!collapsible) return;
         if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
         e.stopPropagation();
         onToggle();
       }}
       onKeyDown={(e) => {
+        if (!collapsible) return;
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
         onToggle();
@@ -79,12 +84,7 @@ export function SidebarCollapsibleSection({
       className={sidebarCollapsibleHeaderClass(isActive)}
       style={sidebarItemIndent(indentDepth)}
     >
-      <span
-        className="shrink-0 text-muted-foreground transition-transform duration-150 ease-out"
-        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-      >
-        <VscChevronDown size={chevronSize} />
-      </span>
+      {collapsible ? <SidebarChevron expanded={isExpanded} /> : null}
       {leading ? <span className="flex shrink-0 items-center justify-center">{leading}</span> : null}
       <span className={sidebarSectionLabelClass()}>{label}</span>
       {onAdd ? (
@@ -108,7 +108,7 @@ export function SidebarCollapsibleSection({
   const body = (
     <div
       className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-      style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+      style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
     >
       <div className="min-h-0">{children}</div>
     </div>
@@ -118,15 +118,15 @@ export function SidebarCollapsibleSection({
     return (
       <div
         ref={setNodeRef}
-        className={`flex min-h-0 shrink-0 flex-col ${expanded ? "flex-1" : "flex-none"} ${
+        className={`flex min-h-0 shrink-0 flex-col ${isExpanded ? "flex-1" : "flex-none"} ${
           isOver ? "bg-[var(--sidebar-hover)]" : ""
         }`}
-        style={expanded ? { minHeight: 0 } : undefined}
+        style={isExpanded ? { minHeight: 0 } : undefined}
       >
         {header}
         <div
           className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-          style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+          style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
         >
           <OverlayScrollbar className="min-h-0 flex-1">
             <div className="min-h-full" onContextMenu={onContentContextMenu}>

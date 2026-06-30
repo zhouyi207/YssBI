@@ -2,9 +2,7 @@ import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import {
-  VscChevronRight,
   VscDatabase,
-  VscEye,
   VscSymbolEvent,
   VscSymbolMethod,
   VscSymbolVariable,
@@ -19,6 +17,7 @@ import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
 import { ensureDetailVisible } from "@/features/application/editor/ensureDetailVisible";
+import { deleteWorksheetWithConfirm } from "@/features/application/editor/closeEditorTab";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { Button } from "@/components/ui/button";
@@ -39,6 +38,7 @@ import {
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { ProjectService } from "@/services/project/projectService";
+import { WorksheetService } from "@/services/worksheet/worksheetService";
 import { useResourceStore } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
@@ -59,10 +59,12 @@ import {
 } from "./sidebarContextMenu";
 import {
   SidebarCollapsibleSection,
+  SidebarEmptyPlaceholder,
   SidebarListItem,
+  SidebarRowActionButton,
   sidebarItemIndent,
+  sidebarItemLabelClass,
   sidebarItemRowClass,
-  sidebarRowActionClass,
 } from "./sidebarUi";
 import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
 
@@ -277,6 +279,22 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     await deleteResource({ id, kind: "database" });
   }, []);
 
+  const deleteWorksheetItem = useCallback(async (id: string) => {
+    await deleteWorksheetWithConfirm(id);
+  }, []);
+
+  const renameWorksheetItem = useCallback((id: string, name: string) => {
+    openInputDialog(t("contextMenu.dialog.renameWorksheetTitle"), name, async (nextName) => {
+      const store = useWorksheetStore.getState();
+      if (!store.documents[id]) {
+        const doc = await WorksheetService.loadWorksheet(id);
+        store.upsertDocument(doc);
+      }
+      store.updateDocument(id, { name: nextName });
+      await store.saveDocument(id);
+    }, t("contextMenu.dialog.renameSubmit"));
+  }, [openInputDialog, t]);
+
   const revealInExplorer = useCallback(async (request: Parameters<typeof ProjectService.revealProjectResource>[0]) => {
     try {
       await ProjectService.revealProjectResource(request);
@@ -307,6 +325,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     deleteDatabaseItem,
     importData: triggerImportData,
     openWorksheet,
+    renameWorksheet: renameWorksheetItem,
+    deleteWorksheet: deleteWorksheetItem,
+    addWorksheet,
     revealInExplorer,
   }, t);
 
@@ -370,23 +391,14 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         trailing={
           <>
             {(type === "event" || type === "function") && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openGraph(id, name, type);
-                    }}
-                    className={sidebarRowActionClass(isSelected)}
-                  >
-                    <VscChevronRight size={11} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
-              </Tooltip>
+              <SidebarRowActionButton
+                isSelected={isSelected}
+                tooltip={t("sidebar.open")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openGraph(id, name, type);
+                }}
+              />
             )}
             {type === "variable" && !readOnly && (
               <span
@@ -498,11 +510,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           e.stopPropagation();
           openDataViewWindow(id);
         }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          openContextMenu(e, { type: "database", id, name });
-        }}
+        onContextMenu={(e) => openContextMenu(e, { type: "database", id, name })}
         trailing={
           <>
             {isLoading && (
@@ -521,23 +529,14 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 <TooltipContent side="top">{String(loadError)}</TooltipContent>
               </Tooltip>
             )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDataViewWindow(id);
-                  }}
-                  className={sidebarRowActionClass(isSelected)}
-                >
-                  <VscEye size={11} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">{t("sidebar.viewInDataViewer")}</TooltipContent>
-            </Tooltip>
+            <SidebarRowActionButton
+              isSelected={isSelected}
+              tooltip={t("sidebar.open")}
+              onClick={(e) => {
+                e.stopPropagation();
+                openDataViewWindow(id);
+              }}
+            />
           </>
         }
       />
@@ -562,29 +561,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           e.stopPropagation();
           void openWorksheet(id, name);
         }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          openContextMenu(e, { type: "worksheet", id, name });
-        }}
+        onContextMenu={(e) => openContextMenu(e, { type: "worksheet", id, name })}
         trailing={
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void openWorksheet(id, name);
-                }}
-                className={sidebarRowActionClass(isSelected)}
-              >
-                <VscChevronRight size={11} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">{t("sidebar.open")}</TooltipContent>
-          </Tooltip>
+          <SidebarRowActionButton
+            isSelected={isSelected}
+            tooltip={t("sidebar.open")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void openWorksheet(id, name);
+            }}
+          />
         }
       />
     );
@@ -626,15 +612,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
               >
-                <div
-                  className="flex min-h-full flex-col"
-                  onContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
-                >
-                  {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
-                  {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noEvents")}</div>
-                  )}
-                </div>
+                {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
+                {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
+                  <SidebarEmptyPlaceholder>{t("sidebar.noEvents")}</SidebarEmptyPlaceholder>
+                )}
               </SidebarCollapsibleSection>
 
               <SidebarCollapsibleSection variant="stacked"
@@ -646,15 +627,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
               >
-                <div
-                  className="flex min-h-full flex-col"
-                  onContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
-                >
-                  {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
-                  {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noFunctions")}</div>
-                  )}
-                </div>
+                {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
+                {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
+                  <SidebarEmptyPlaceholder>{t("sidebar.noFunctions")}</SidebarEmptyPlaceholder>
+                )}
               </SidebarCollapsibleSection>
             </div>
           )}
@@ -675,10 +651,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   )
                 )}
                 {!activeGraphType && (
-                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">{t("sidebar.noActiveGraph")}</div>
+                  <SidebarEmptyPlaceholder>{t("sidebar.noActiveGraph")}</SidebarEmptyPlaceholder>
                 )}
                 {activeGraphType && Object.keys(localVariables).length === 0 && (
-                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
+                  <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
 
@@ -696,7 +672,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     )
                   )}
                 {Object.keys(variablesGlobal).length === 0 && (
-                  <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
+                  <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
             </div>
@@ -717,7 +693,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     return renderDataItem(id, name, data);
                   })}
                   {Object.keys(dataframes || {}).length === 0 && (
-                    <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("sidebar.noData")}</div>
+                    <SidebarEmptyPlaceholder>{t("sidebar.noData")}</SidebarEmptyPlaceholder>
                   )}
               </SidebarCollapsibleSection>
             </div>
@@ -732,10 +708,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 expanded={isSectionExpanded("chartsWorksheets")}
                 onToggle={() => toggleSection("chartsWorksheets")}
                 onAdd={() => void addWorksheet()}
+                onHeaderContextMenu={(e) => openContextMenu(e, { type: "worksheetSection" })}
+                onContentContextMenu={(e) => openContextMenu(e, { type: "worksheetSection" })}
               >
                 {worksheets.map((ws) => renderWorksheetItem(ws.id, ws.name))}
                 {worksheets.length === 0 && (
-                  <div className="text-[12px] text-muted-foreground/70 pl-4 py-1.5">{t("chartsSidebar.noWorksheets")}</div>
+                  <SidebarEmptyPlaceholder>{t("chartsSidebar.noWorksheets")}</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
             </div>
@@ -817,7 +795,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   if (!activeTabId) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="text-[12px] text-muted-foreground/60 pl-4 py-3">{t("sidebar.noActiveGraph")}</div>
+        <SidebarEmptyPlaceholder className="py-3">{t("sidebar.noActiveGraph")}</SidebarEmptyPlaceholder>
       </div>
     );
   }
@@ -827,6 +805,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <SidebarCollapsibleSection variant="stacked"
+        collapsible={false}
         label={`${t("common.undo")} (${undoStack.length})`}
         expanded={true}
         onToggle={() => {}}
@@ -838,17 +817,18 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
             style={sidebarItemIndent(0)}
           >
             <VscDiscard size={11} className="shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-normal tracking-tight">
+            <span className={sidebarItemLabelClass()}>
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatTime(entry.timestamp)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
-          <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
+          <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
         )}
       </SidebarCollapsibleSection>
 
       <SidebarCollapsibleSection variant="stacked"
+        collapsible={false}
         label={`${t("common.redo")} (${redoStack.length})`}
         expanded={true}
         onToggle={() => {}}
@@ -859,14 +839,14 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
             className={cn(sidebarItemRowClass(false), "pr-2")}
             style={sidebarItemIndent(0)}
           >
-            <VscRedo size={11} className="shrink-0 text-muted-foreground/60" />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-normal tracking-tight">
+            <VscRedo size={11} className="shrink-0 text-muted-foreground" />
+            <span className={sidebarItemLabelClass()}>
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatTime(entry.timestamp)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
-          <div className="text-[12px] text-muted-foreground/60 pl-4 py-1.5">—</div>
+          <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
         )}
       </SidebarCollapsibleSection>
     </div>

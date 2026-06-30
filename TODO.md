@@ -541,7 +541,9 @@ package.json
 - [x] **Sidebar / Detail i18n 收口**：Sidebar 顶栏标题统一走 `activityBar.*`；折叠区块标题与空状态补全 `sidebar.sections.*`、`sidebar.noEvents` / `sidebar.noFunctions` 等翻译（Charts 仍用 `chartsSidebar.*`）。
 - [x] **Workbench 顶栏高度统一**：新增 `workbenchPanelHeaderClass`，Sidebar head / TabBar / Detail head 统一为 `var(--titlebar-height)` + `border-b`；Detail 移除 header 下方多余 `Separator`，避免比 Sidebar / TabBar 高出 1px。
 - [x] **Sidebar / Detail 顶栏字体统一**：新增 `workbenchPanelHeaderTitleClass`（`text-xs font-semibold uppercase tracking-wide`）；Sidebar head 与 Detail head 共用，`detailSectionTitleClass` 复用同一 class。
-- [ ] 复制粘贴撤回逻辑的快捷键效果有问题
+- [x] **Charts 工作表右键删除**：`buildSidebarContextMenuSections` 工作表项新增删除；`Sidebar.tsx` 接入 `deleteWorksheetWithConfirm`（确认后删文件、更新列表、关闭已开 tab）。
+- [x] **Explorer Sidebar 折叠与右键菜单统一**：抽 `sidebarUi/SidebarChevron`、`SidebarRowActionButton`、`SidebarEmptyPlaceholder`；`SidebarCollapsibleSection` 统一折叠箭头（12px 旋转）并新增 `collapsible={false}`（Commands Undo/Redo）；空状态 token 统一为 `text-muted-foreground/70`；数据集行内打开图标与菜单对齐为 `VscChevronRight`；工作表区块空白右键「新建工作表」+ 工作表项「重命名」；移除 Graphs 区块冗余第三层 `onContextMenu`；删除未使用的重复目录 `Layout/sidebar/`。
+- [x] **NodePalette 搜索栏与折叠/展开**：搜索框与左侧间距修正（`gap` + 容器 `px`）；搜索区与折叠按钮合并为圆角输入组（边框 + 轻阴影 + 竖线分隔 + focus ring）；纯图标按钮在「全部折叠 / 全部展开」间切换（`VscFold` / `VscExpandAll`，无 Tooltip）；`canvas.nodePalette.*` i18n（placeholder / collapseAll / expandAll / noMatches）。
 
 ## v1.0 待办
 
@@ -555,6 +557,8 @@ package.json
 - [ ] 运行完毕后，节点的 backend source 什么时候删除的问题：是断开连接之后就删除还是？？？？破坏了连接之后就删除？？？
 - [ ] view 节点出现的窗口样式调整，目前 data series 无法滑动，同时样式也很丑
 - [ ] 去掉 event, function, variable 等等文件夹的逻辑，感觉没有必要？
+- [ ] 函数图应该如何设计？？？
+- [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 
 
 # TODOLIST

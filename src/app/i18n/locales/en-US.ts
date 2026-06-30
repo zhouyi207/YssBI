@@ -39,6 +39,7 @@ export const enUS = {
       renameFolder: "Rename Folder",
       deleteFolder: "Delete Folder",
       newVariable: "New Variable",
+      newWorksheet: "New Worksheet",
       importData: "Import Data",
       revealInExplorer: "Reveal in File Explorer",
       revealInExplorerFailed: "Could not reveal in file explorer: {{error}}",
@@ -49,6 +50,7 @@ export const enUS = {
       renameGraphTitle: "Rename",
       renameFolderTitle: "Rename Folder",
       renameVariableTitle: "Rename Variable",
+      renameWorksheetTitle: "Rename Worksheet",
       renameDataTitle: "Rename Dataset",
       renameSubmit: "Rename",
     },
@@ -342,6 +344,12 @@ export const enUS = {
     reusableRoutine: "Reusable routine",
     openFile: "Open file",
     showAllCommands: "Show all commands",
+    nodePalette: {
+      searchPlaceholder: "Search nodes...",
+      collapseAll: "Collapse All",
+      expandAll: "Expand All",
+      noMatches: "No matches found",
+    },
   },
   tabBar: {
     splitDownAlt: "Split Editor Down (Alt)",

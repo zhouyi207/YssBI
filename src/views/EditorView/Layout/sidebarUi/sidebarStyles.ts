@@ -38,11 +38,3 @@ export function sidebarRowActionClass(isSelected = false) {
     isSelected ? "text-sidebar-foreground" : "text-muted-foreground",
   );
 }
-
-export function sidebarChevronClass(expanded: boolean, size: 11 | 12 = 11) {
-  return {
-    className: "shrink-0 text-muted-foreground transition-transform duration-150 ease-out",
-    size,
-    expanded,
-  } as const;
-}

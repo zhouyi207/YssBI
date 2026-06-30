@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { Pin, Node, Variable, Graph } from "@/shared/types/domain";
 import { isNodeCompatibleWithPin, pinAcceptsType, buildPinDataType } from "@/shared/utils/pinCompatibility";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
-import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty } from "react-icons/vsc";
+import { VscChevronRight, VscChevronDown, VscSearch, VscSymbolMethod, VscSymbolVariable, VscCircuitBoard, VscSymbolProperty, VscFold, VscExpandAll } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 /** PaletteItem overrides 扩展类型 */
 export interface PaletteItemOverrides extends Partial<Node> {
@@ -122,6 +124,7 @@ export function NodePalette({
   Variables?: Record<string, Variable>;
   functions?: Record<string, Graph>;
 }) {
+  const { t } = useTranslation();
   const [queryRaw, setQueryRaw] = useState("");
   const query = useDebouncedValue(queryRaw, 150);
   const definitions = useNodeRegistryStore((s) => s.definitionsArray);
@@ -245,6 +248,27 @@ export function NodePalette({
     });
   }, []);
 
+  const activeAllPaths = useMemo(
+    () => (query && filteredTree ? filteredTree.allPaths : root.allPaths),
+    [query, filteredTree, root.allPaths],
+  );
+
+  const isAnyCategoryExpanded = useMemo(
+    () => [...activeAllPaths].some((path) => expandedPaths.has(path)),
+    [activeAllPaths, expandedPaths],
+  );
+
+  const toggleExpandAll = useCallback(() => {
+    setExpandedPaths((prev) => {
+      const anyExpanded = [...activeAllPaths].some((path) => prev.has(path));
+      return anyExpanded ? new Set<string>() : new Set(activeAllPaths);
+    });
+  }, [activeAllPaths]);
+
+  const expandCollapseLabel = isAnyCategoryExpanded
+    ? t("canvas.nodePalette.collapseAll")
+    : t("canvas.nodePalette.expandAll");
+
   const activeChildren = query && filteredTree ? filteredTree.sortedChildren : root.sortedChildren;
 
   const flatRows = useMemo(() => {
@@ -270,19 +294,43 @@ export function NodePalette({
       style={{ left: x, top: y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center border-b border-border bg-muted/20 px-3 py-2">
-        <VscSearch className="mr-2 text-muted-foreground" size={14} />
-        <Input
-          ref={inputRef}
-          value={queryRaw}
-          onChange={(e) => setQueryRaw(e.target.value)}
-          placeholder="Search nodes..."
-          className="h-7 border-0 bg-transparent px-0 text-xs shadow-none"
-        />
+      <div className="border-b border-border bg-muted/15 px-3 py-2.5">
+        <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/90 px-2 py-1 shadow-xs transition-[border-color,box-shadow] focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/15">
+          <VscSearch className="ml-0.5 shrink-0 text-muted-foreground/75" size={13} aria-hidden />
+          <Input
+            ref={inputRef}
+            value={queryRaw}
+            onChange={(e) => setQueryRaw(e.target.value)}
+            placeholder={t("canvas.nodePalette.searchPlaceholder")}
+            className="h-6 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-xs shadow-none focus-visible:ring-0"
+          />
+          <span className="mx-0.5 h-4 w-px shrink-0 bg-border/80" aria-hidden />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            disabled={activeAllPaths.size === 0}
+            onClick={toggleExpandAll}
+            aria-label={expandCollapseLabel}
+            className={cn(
+              "size-6 shrink-0 rounded-md text-muted-foreground transition-colors",
+              "hover:bg-muted/80 hover:text-foreground",
+              "disabled:opacity-35",
+            )}
+          >
+            {isAnyCategoryExpanded ? (
+              <VscFold size={13} aria-hidden />
+            ) : (
+              <VscExpandAll size={13} aria-hidden />
+            )}
+          </Button>
+        </div>
       </div>
 
       {noResults ? (
-        <div className="px-4 py-8 text-center text-xs italic text-muted-foreground">No matches found</div>
+        <div className="px-4 py-8 text-center text-xs italic text-muted-foreground">
+          {t("canvas.nodePalette.noMatches")}
+        </div>
       ) : (
         <OverlayScrollbar ref={scrollRef} direction="vertical" className="max-h-96 py-1">
           <div

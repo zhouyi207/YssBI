@@ -12,6 +12,7 @@ export type SidebarContextMenuTarget =
   | { type: "variableSection"; isGlobal: boolean }
   | { type: "database"; id: string; name: string }
   | { type: "dataSection" }
+  | { type: "worksheetSection" }
   | { type: "worksheet"; id: string; name: string };
 
 export type SidebarContextMenuState = PositionedContextMenuState<SidebarContextMenuTarget>;
@@ -40,6 +41,9 @@ export interface SidebarContextMenuActions {
   deleteDatabaseItem: (id: string) => unknown | Promise<unknown>;
   importData: () => void;
   openWorksheet: (id: string, name: string) => unknown | Promise<unknown>;
+  renameWorksheet: (id: string, name: string) => void;
+  deleteWorksheet: (id: string) => unknown | Promise<unknown>;
+  addWorksheet: () => unknown | Promise<unknown>;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }
 
