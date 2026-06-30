@@ -4,7 +4,7 @@ import { syncFunctionSignatureMeta } from './graphDocumentMeta';
 
 describe('graphDocumentMeta', () => {
   beforeEach(() => {
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [], graphFolders: [] });
+    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
   });
 
   it('ignores event graphs when syncing function signature metadata', () => {

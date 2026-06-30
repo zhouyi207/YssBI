@@ -30,30 +30,17 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
   upsertDocument: (document) =>
     set((state) => {
       markResourceLoaded({ id: document.id, kind: 'worksheet' });
+      const indexEntry: WorksheetIndexEntry = {
+        id: document.id,
+        name: document.name,
+        databaseId: document.databaseId,
+        chartType: document.chartType,
+      };
       return {
         documents: { ...state.documents, [document.id]: document },
         index: state.index.some((e) => e.id === document.id)
-          ? state.index.map((e) =>
-              e.id === document.id
-                ? {
-                    id: document.id,
-                    name: document.name,
-                    databaseId: document.databaseId,
-                    chartType: document.chartType,
-                    folderPath: document.folderPath ?? '',
-                  }
-                : e,
-            )
-          : [
-              ...state.index,
-              {
-                id: document.id,
-                name: document.name,
-                databaseId: document.databaseId,
-                chartType: document.chartType,
-                folderPath: document.folderPath ?? '',
-              },
-            ],
+          ? state.index.map((e) => (e.id === document.id ? indexEntry : e))
+          : [...state.index, indexEntry],
       };
     }),
 
@@ -112,6 +99,5 @@ export function worksheetIndexFromDocuments(
     name: doc.name,
     databaseId: doc.databaseId,
     chartType: doc.chartType,
-    folderPath: doc.folderPath ?? '',
   }));
 }

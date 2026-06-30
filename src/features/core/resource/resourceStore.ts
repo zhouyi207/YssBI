@@ -1,15 +1,12 @@
 import { create } from 'zustand';
-import type { GraphFolderMeta } from './resourceSnapshotReconcile';
 import type { ProjectResourceMeta, ResourceKey, ResourceRef } from './resourceTypes';
 import { resourceKey } from './resourceTypes';
 
 interface ResourceStore {
   resources: Record<ResourceKey, ProjectResourceMeta>;
-  graphFolders: GraphFolderMeta[];
   graphOrder: string[];
   setSnapshot(snapshot: {
     resources: ProjectResourceMeta[];
-    graphFolders?: GraphFolderMeta[];
     graphOrder?: string[];
   }): void;
   setResources(resources: ProjectResourceMeta[]): void;
@@ -21,15 +18,13 @@ interface ResourceStore {
 
 export const useResourceStore = create<ResourceStore>((set) => ({
   resources: {},
-  graphFolders: [],
   graphOrder: [],
 
-  setSnapshot: ({ resources, graphFolders, graphOrder }) =>
+  setSnapshot: ({ resources, graphOrder }) =>
     set({
       resources: Object.fromEntries(
         resources.map((resource) => [resourceKey(resource), resource]),
       ) as Record<ResourceKey, ProjectResourceMeta>,
-      graphFolders: graphFolders ?? [],
       graphOrder: graphOrder ?? resources
         .filter((resource) => resource.kind === 'event' || resource.kind === 'function')
         .map((resource) => resource.id),
@@ -80,5 +75,5 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       };
     }),
 
-  clear: () => set({ resources: {}, graphFolders: [], graphOrder: [] }),
+  clear: () => set({ resources: {}, graphOrder: [] }),
 }));

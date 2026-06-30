@@ -7,7 +7,6 @@ export const DRAG_TYPES = {
 
 export const DROP_TYPES = {
   CANVAS: "canvas",
-  GRAPH_FOLDER: "graph-folder",
   TABBAR: "tabbar",
   LAYOUT_REGION: "layout-region",
 } as const;
@@ -16,18 +15,11 @@ export type GraphResourceDragData = {
   id: string;
   name: string;
   type: "event" | "function";
-  folderPath?: string;
 };
 
 export type CanvasDropData = {
   dropType: typeof DROP_TYPES.CANVAS;
   groupId: string;
-};
-
-export type GraphFolderDropData = {
-  dropType: typeof DROP_TYPES.GRAPH_FOLDER;
-  graphType: "event" | "function";
-  folderPath: string;
 };
 
 export type TabbarDropData = {
@@ -44,7 +36,6 @@ export type LayoutRegionDropData = {
 
 export type KnownDropData =
   | CanvasDropData
-  | GraphFolderDropData
   | TabbarDropData
   | LayoutRegionDropData;
 
@@ -56,10 +47,6 @@ export function getCanvasDropZoneId(groupId: string) {
 
 export function isCanvasDrop(data: unknown): data is CanvasDropData {
   return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.CANVAS;
-}
-
-export function isGraphFolderDrop(data: unknown): data is GraphFolderDropData {
-  return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.GRAPH_FOLDER;
 }
 
 export function isTabbarDrop(data: unknown): data is TabbarDropData {

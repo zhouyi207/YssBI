@@ -8,10 +8,10 @@ export function buildSidebarDragData(
   id: string,
   name: string,
   type: "variable" | "function" | "event" | "data",
-  extra?: { dataType?: DataType | string; folderPath?: string }
+  extra?: { dataType?: DataType | string },
 ) {
   const sidebarResource = type === "event" || type === "function"
-    ? { id, name, type, folderPath: extra?.folderPath ?? "" }
+    ? { id, name, type }
     : undefined;
 
   if (type === "variable") {

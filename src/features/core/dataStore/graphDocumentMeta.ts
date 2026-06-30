@@ -4,7 +4,6 @@ import { useGraphMetaStore } from './graphMetaStore';
 type FunctionSignatureMetaInput = Pick<Graph, 'id' | 'name' | 'type'> & {
   functionInputs?: FunctionSignaturePin[];
   functionOutputs?: FunctionSignaturePin[];
-  folderPath?: string;
 };
 
 export function syncFunctionSignatureMeta(graph: FunctionSignatureMetaInput): void {
@@ -26,7 +25,6 @@ export function syncFunctionSignatureMeta(graph: FunctionSignatureMetaInput): vo
     id: graph.id,
     name: graph.name,
     type: graph.type,
-    folderPath: graph.folderPath,
     ...signaturePatch,
   });
 }

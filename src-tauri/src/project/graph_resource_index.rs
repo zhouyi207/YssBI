@@ -138,24 +138,10 @@ fn collect_kind_files(
     if !graph_dir.exists() {
         return Ok(());
     }
-    collect_recursive(root, graph_dir.as_path(), extension, kind, files)
-}
-
-fn collect_recursive(
-    root: &Path,
-    dir: &Path,
-    extension: &str,
-    kind: GraphDocumentKind,
-    files: &mut Vec<(String, GraphDocumentKind)>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(dir)? {
+    for entry in std::fs::read_dir(&graph_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
-            collect_recursive(root, path.as_path(), extension, kind, files)?;
-            continue;
-        }
-        if is_graph_file(path.as_path(), extension) {
+        if path.is_file() && is_graph_file(path.as_path(), extension) {
             files.push((relative_slash_path(root, path.as_path())?, kind));
         }
     }

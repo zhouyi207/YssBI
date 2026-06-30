@@ -16,9 +16,9 @@ export class GraphService {
      * @param graphName - Event 的名称
      * @returns 后端生成的 Graph ID
      */
-    static async createEvent(graphName: string, folderPath?: string): Promise<string> {
+    static async createEvent(graphName: string): Promise<string> {
         try {
-            const id = await invoke<string>("create_event", { graphName, folderPath: folderPath ?? null });
+            const id = await invoke<string>("create_event", { graphName });
             logger.graph.info(`Event '${graphName}' created with ID: ${id}`, 'GraphService');
             await this.unloadProjectGraph(id);
             return id;
@@ -33,9 +33,9 @@ export class GraphService {
      * @param graphName - Function 的名称
      * @returns 后端生成的 Graph ID
      */
-    static async createFunction(graphName: string, folderPath?: string): Promise<string> {
+    static async createFunction(graphName: string): Promise<string> {
         try {
-            const id = await invoke<string>("create_function", { graphName, folderPath: folderPath ?? null });
+            const id = await invoke<string>("create_function", { graphName });
             logger.graph.info(`Function '${graphName}' created with ID: ${id}`, 'GraphService');
             await this.unloadProjectGraph(id);
             return id;
@@ -107,22 +107,6 @@ export class GraphService {
 
     static async saveProjectGraph(graphId: string): Promise<void> {
         await invoke("save_project_graph", { graphId });
-    }
-
-    static async createGraphFolder(kind: "event" | "function", folderPath: string): Promise<string> {
-        return await invoke<string>("create_graph_folder", { kind, folderPath });
-    }
-
-    static async renameGraphFolder(kind: "event" | "function", folderPath: string, newName: string): Promise<string> {
-        return await invoke<string>("rename_graph_folder", { kind, folderPath, newName });
-    }
-
-    static async deleteGraphFolder(kind: "event" | "function", folderPath: string): Promise<void> {
-        await invoke("delete_graph_folder", { kind, folderPath });
-    }
-
-    static async moveGraphToFolder(graphId: string, folderPath: string): Promise<string> {
-        return await invoke<string>("move_graph_to_folder", { graphId, folderPath });
     }
 
     static async duplicateGraph(graphId: string): Promise<Graph> {

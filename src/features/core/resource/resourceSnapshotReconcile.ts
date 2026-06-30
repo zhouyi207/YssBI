@@ -2,15 +2,8 @@ import { useDocumentStateStore, type DocumentState } from './documentStateStore'
 import type { ProjectResourceMeta, ResourceKey, ResourceRef } from './resourceTypes';
 import { resourceKey } from './resourceTypes';
 
-export interface GraphFolderMeta {
-  name: string;
-  type: 'event' | 'function';
-  folderPath: string;
-}
-
 export interface ResourceSnapshot {
   resources: ProjectResourceMeta[];
-  graphFolders: GraphFolderMeta[];
   graphOrder: string[];
 }
 
@@ -34,7 +27,7 @@ function resourceRefFromKey(key: ResourceKey): ResourceRef | null {
 }
 
 function snapshotMetaFingerprint(resource: ProjectResourceMeta): string {
-  return `${resource.name}\0${resource.folderPath ?? ''}\0${resource.uri}`;
+  return `${resource.name}\0${resource.uri}`;
 }
 
 export interface SnapshotReconcileResult {

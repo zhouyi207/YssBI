@@ -5,7 +5,7 @@ import { FunctionCreatedHandler, FunctionUpdatedHandler } from './GraphEventHand
 
 describe('Graph event handlers', () => {
   beforeEach(() => {
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [], graphFolders: [] });
+    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
     useResourceStore.getState().clear();
   });
 

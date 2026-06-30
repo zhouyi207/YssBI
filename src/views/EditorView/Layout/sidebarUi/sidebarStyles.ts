@@ -16,7 +16,7 @@ export function sidebarItemRowClass(isSelected = false) {
   );
 }
 
-/** Collapsible section header row (folders, Event/Data section titles, etc.). */
+/** Collapsible section header row (Event/Data section titles, etc.). */
 export function sidebarCollapsibleHeaderClass(isActive = false) {
   return cn(
     sidebarItemRowClass(isActive),

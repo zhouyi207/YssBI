@@ -11,7 +11,6 @@ export interface WorksheetDocument {
   databaseId: string;
   chartType: WorksheetChartType;
   encodings: WorksheetEncodings;
-  folderPath?: string;
 }
 
 export interface WorksheetIndexEntry {
@@ -19,7 +18,6 @@ export interface WorksheetIndexEntry {
   name: string;
   databaseId: string;
   chartType: WorksheetChartType;
-  folderPath: string;
 }
 
 export interface PlotColumnPairPayload {

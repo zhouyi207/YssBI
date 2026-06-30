@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { VscAdd, VscChevronRight, VscCopy, VscEdit, VscFolderOpened, VscNewFolder, VscTrash } from "react-icons/vsc";
+import { VscAdd, VscChevronRight, VscCopy, VscEdit, VscFolderOpened, VscTrash } from "react-icons/vsc";
 import { DEFAULT_VARIABLE_NAME } from "@/shared/constants/defaultResourceNames";
 import type { ContextMenuSection } from "@/shared/ui/contextMenu";
 import type { SidebarContextMenuActions, SidebarContextMenuState } from "./sidebarContextMenuTypes";
@@ -30,29 +30,16 @@ export function buildSidebarContextMenuSections(
     ];
   }
 
-  if (target.type === "folder") {
-    return [
-      {
-        items: [
-          { id: "new-graph", label: target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunction"), icon: <VscAdd size={12} />, onClick: () => void actions.createGraphInFolder(target.graphType, target.folderPath) },
-          { id: "new-folder", label: t("contextMenu.sidebar.newFolder"), icon: <VscNewFolder size={12} />, onClick: () => actions.createFolderInFolder(target.graphType, target.folderPath) },
-          { id: "rename-folder", label: t("contextMenu.sidebar.renameFolder"), icon: <VscEdit size={12} />, onClick: () => actions.renameFolderItem(target.graphType, target.folderPath, target.name) },
-        ],
-      },
-      {
-        items: [
-          { id: "delete-folder", label: t("contextMenu.sidebar.deleteFolder"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteFolderItem(target.graphType, target.folderPath) },
-        ],
-      },
-    ];
-  }
-
   if (target.type === "section") {
     return [
       {
         items: [
-          { id: "new-graph", label: target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunction"), icon: <VscAdd size={12} />, onClick: () => void actions.createGraphInFolder(target.graphType, target.folderPath ?? "") },
-          { id: "new-folder", label: t("contextMenu.sidebar.newFolder"), icon: <VscNewFolder size={12} />, onClick: () => actions.createFolderInFolder(target.graphType, target.folderPath ?? "") },
+          {
+            id: "new-graph",
+            label: target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunction"),
+            icon: <VscAdd size={12} />,
+            onClick: () => void actions.createGraph(target.graphType),
+          },
         ],
       },
     ];

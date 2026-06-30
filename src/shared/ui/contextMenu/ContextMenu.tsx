@@ -32,10 +32,10 @@ interface ContextMenuProps {
 
 /** Project density: tight menu shell (see .cursor/rules/context-menu-density.mdc). */
 const menuShellClass =
-  "fixed z-[200] min-w-[190px] overflow-hidden rounded-sm border border-border bg-popover/95 py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 backdrop-blur-md dark:shadow-black/45";
+  "fixed z-[200] w-max max-w-[min(13.5rem,calc(100vw-1rem))] overflow-hidden rounded-sm border border-border bg-popover/95 py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 backdrop-blur-md dark:shadow-black/45";
 
 const menuItemClass =
-  "h-7 w-full justify-start gap-2 rounded-none px-2.5 text-[12px] font-normal hover:bg-[var(--interactive-hover)] hover:text-foreground";
+  "h-7 w-full justify-start gap-1.5 rounded-none px-2 text-[12px] font-normal hover:bg-[var(--interactive-hover)] hover:text-foreground";
 
 const menuItemDangerClass =
   "text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200";
@@ -106,7 +106,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
                 {item.icon ?? null}
               </span>
-              <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+              <span className="truncate text-left">{item.label}</span>
               {item.shortcut && (
                 <span className="ml-6 shrink-0 text-[10px] tracking-wide text-muted-foreground">
                   {item.shortcut}

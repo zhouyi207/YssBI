@@ -61,13 +61,6 @@ export interface ProjectGraphIndexRow {
     id: string;
     name: string;
     type: "event" | "function";
-    folderPath: string;
-}
-
-export interface ProjectFolderIndexRow {
-    name: string;
-    type: "event" | "function";
-    folderPath: string;
 }
 
 export interface ProjectWorksheetIndexRow {
@@ -75,7 +68,6 @@ export interface ProjectWorksheetIndexRow {
   name: string;
   databaseId: string;
   chartType: string;
-  folderPath: string;
 }
 
 export interface ProjectVariableIndexRow {
@@ -89,7 +81,6 @@ export interface ProjectVariableIndexRow {
   ownerGraphId?: string | null;
   ownerGraphName?: string | null;
   ownerGraphKind?: 'event' | 'function' | null;
-  ownerFolderPath?: string | null;
 }
 
 export interface ProjectIndexRow {
@@ -97,7 +88,6 @@ export interface ProjectIndexRow {
   appVersion: string;
   exportTime: string;
   graphs: ProjectGraphIndexRow[];
-  folders: ProjectFolderIndexRow[];
   worksheets?: ProjectWorksheetIndexRow[];
   variables?: ProjectVariableIndexRow[];
 }

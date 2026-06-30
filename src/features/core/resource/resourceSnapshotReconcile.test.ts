@@ -11,14 +11,12 @@ function graphResource(
   id: string,
   kind: 'event' | 'function',
   name: string,
-  folderPath?: string,
 ): ProjectResourceMeta {
   return {
     id,
     kind,
     name,
     uri: `yssbi://graph/${kind}/${id}`,
-    folderPath,
     exists: true,
     loaded: false,
     hasDirtyDocument: false,
@@ -96,13 +94,12 @@ describe('resource selectors', () => {
         graphResource('e1', 'event', 'Event A'),
         graphResource('f1', 'function', 'Function A'),
       ],
-      graphFolders: [{ name: 'Folder', type: 'event', folderPath: 'Folder' }],
       graphOrder: ['e1', 'f1'],
     });
 
     const resources = useResourceStore.getState().resources;
     expect(selectGraphResourcesByKind(resources, 'event')).toEqual({
-      e1: { id: 'e1', name: 'Event A', folderPath: undefined },
+      e1: { id: 'e1', name: 'Event A' },
     });
     expect(selectFirstGraphResource(resources, ['e1', 'f1'])?.id).toBe('e1');
   });

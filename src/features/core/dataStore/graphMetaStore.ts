@@ -7,50 +7,26 @@ export interface GraphMeta {
   name: string;
   type: 'event' | 'function';
   entryNodeId?: NodeId;
-  folderPath?: string;
   functionInputs?: FunctionSignaturePin[];
   functionOutputs?: FunctionSignaturePin[];
 }
 
-export interface GraphFolderMeta {
-  name: string;
-  type: 'event' | 'function';
-  folderPath: string;
-}
-
 interface GraphMetaStore {
-  // 图元信息表
   graphs: Record<GraphId, GraphMeta>;
-  // 图顺序（用于 UI tab / 列表）
   graphOrder: GraphId[];
-  graphFolders: GraphFolderMeta[];
 
-  // ==========================
-  // CRUD
-  // ==========================
   addGraph(meta: GraphMeta): void;
   updateGraph(id: GraphId, patch: Partial<GraphMeta>): void;
   deleteGraph(id: GraphId): void;
 
-  // ==========================
-  // Project / 全清
-  // ==========================
   setGraphs(graphs: Record<GraphId, GraphMeta>, order?: GraphId[]): void;
-  setGraphFolders(folders: GraphFolderMeta[]): void;
   clear(): void;
 }
 
 export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
-  // ==========================
-  // State
-  // ==========================
   graphs: {},
   graphOrder: [],
-  graphFolders: [],
 
-  // ==========================
-  // CRUD
-  // ==========================
   addGraph: (meta) => set((state) => {
     if (state.graphs[meta.id]) {
       logger.data.warn(`addGraph: Graph "${meta.id}" already exists`, 'GraphMetaStore');
@@ -90,21 +66,13 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
     };
   }),
 
-  // ==========================
-  // Project / 全清
-  // ==========================
   setGraphs: (graphs, order) => set({
     graphs: graphs ?? {},
     graphOrder: order ?? Object.keys(graphs ?? {}),
   }),
 
-  setGraphFolders: (folders) => set({
-    graphFolders: folders ?? [],
-  }),
-
   clear: () => set({
     graphs: {},
     graphOrder: [],
-    graphFolders: [],
   }),
 }));

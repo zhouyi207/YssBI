@@ -27,7 +27,6 @@ describe('Resource event handlers', () => {
         kind: 'event',
         name: 'Renamed Event',
         uri: 'yssbi://graph/event/event-1',
-        folderPath: 'external',
         exists: true,
         loaded: false,
         hasDirtyDocument: false,
@@ -40,7 +39,6 @@ describe('Resource event handlers', () => {
       id: 'event-1',
       name: 'Renamed Event',
       kind: 'event',
-      folderPath: 'external',
     });
   });
 

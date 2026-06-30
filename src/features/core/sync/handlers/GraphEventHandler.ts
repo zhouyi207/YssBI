@@ -145,7 +145,6 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
             type: 'function',
             functionInputs: payload.data.functionInputs,
             functionOutputs: payload.data.functionOutputs,
-            folderPath: meta?.folderPath,
           });
         }
         if (payload.data.nodes && meta) {

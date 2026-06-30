@@ -545,6 +545,13 @@ package.json
 - [x] **Explorer Sidebar 折叠与右键菜单统一**：抽 `sidebarUi/SidebarChevron`、`SidebarRowActionButton`、`SidebarEmptyPlaceholder`；`SidebarCollapsibleSection` 统一折叠箭头（12px 旋转）并新增 `collapsible={false}`（Commands Undo/Redo）；空状态 token 统一为 `text-muted-foreground/70`；数据集行内打开图标与菜单对齐为 `VscChevronRight`；工作表区块空白右键「新建工作表」+ 工作表项「重命名」；移除 Graphs 区块冗余第三层 `onContextMenu`；删除未使用的重复目录 `Layout/sidebar/`。
 - [x] **NodePalette 搜索栏与折叠/展开**：搜索框与左侧间距修正（`gap` + 容器 `px`）；搜索区与折叠按钮合并为圆角输入组（边框 + 轻阴影 + 竖线分隔 + focus ring）；纯图标按钮在「全部折叠 / 全部展开」间切换（`VscFold` / `VscExpandAll`，无 Tooltip）；`canvas.nodePalette.*` i18n（placeholder / collapseAll / expandAll / noMatches）。
 
+## 2026.07.03
+
+- [x] **共享右键菜单宽度收口**：`shared/ui/contextMenu/ContextMenu.tsx` 去掉 `min-w-[190px]`，改为 `w-max` 按内容自适应；`max-w-[13.5rem]` 限制最长项（如「在资源管理器中打开」）；菜单项 `px-2` / `gap-1.5` 略收紧。Sidebar、节点/Pin、DataView、ProjectPicker、画布变量菜单等共用组件一并生效。
+- [x] **删除未使用的 shadcn ContextMenu**：移除 `components/ui/context-menu.tsx`（Radix 封装无任何引用）；应用内右键菜单统一使用 `shared/ui/contextMenu`（portal + 光标定位），避免与 Radix 受控 ContextMenu 定位能力冲突。
+- [x] **去掉 Event/Function 文件夹逻辑并扁平化 Sidebar**：Event / Function 改为与 Data 相同的扁平列表（保留折叠区块）；删除 `renderGraphTree`、folder 右键菜单、`GraphFolderDropTarget` 与 DnD `GRAPH_FOLDER`；前端移除 `graphFolders` / graph `folderPath` 与 4 个 folder resource action；后端注销 `create/rename/delete_graph_folder`、`move_graph_to_folder`，`create_event` / `create_function` 去掉 `folder_path`；`events/`、`functions/` 仅一级扫描，保存固定根目录；打开项目时 `flatten_graph_layout` hoist 嵌套 graph 并 reconcile manifest。
+- [x] **去掉 Worksheet 文件夹字段并统一磁盘布局**：删除 `WorksheetDocument` / 索引 / 前端 `folderPath`；`worksheets/` 仅一级扫描，保存固定根目录；`flatten_worksheet_layout` 与 graph 对称（`read_project_index` 顶层 flatten；load/save/delete/create 各 IO 入口 flatten 一次；`read_worksheet_index_entries` 纯扫描）；补充 `flatten_worksheet_layout_hoists_nested_files` 等后端测试；更新 `dnd-dropzone-contracts.mdc` 移除 graph-folder 约定。
+
 ## v1.0 待办
 
 - [ ] 点击更新会自动更新
@@ -556,7 +563,6 @@ package.json
 - [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 - [ ] 运行完毕后，节点的 backend source 什么时候删除的问题：是断开连接之后就删除还是？？？？破坏了连接之后就删除？？？
 - [ ] view 节点出现的窗口样式调整，目前 data series 无法滑动，同时样式也很丑
-- [ ] 去掉 event, function, variable 等等文件夹的逻辑，感觉没有必要？
 - [ ] 函数图应该如何设计？？？
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 

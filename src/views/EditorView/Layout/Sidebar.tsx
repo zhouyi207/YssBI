@@ -8,7 +8,6 @@ import {
   VscSymbolVariable,
   VscDiscard,
   VscRedo,
-  VscFolder,
   VscGraphLine,
 } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
@@ -32,23 +31,18 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_FOLDER_NAME,
   DEFAULT_VARIABLE_NAME,
 } from "@/shared/constants/defaultResourceNames";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { ProjectService } from "@/services/project/projectService";
 import { WorksheetService } from "@/services/worksheet/worksheetService";
-import { useResourceStore } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import {
-  createGraphFolderResource,
   createGraphResource,
-  deleteGraphFolderResource,
   deleteResource,
   duplicateGraphResource,
-  renameGraphFolderResource,
   renameResource,
 } from "@/features/application/resource/resourceActions";
 import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
@@ -67,51 +61,6 @@ import {
   sidebarItemRowClass,
 } from "./sidebarUi";
 import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
-
-interface GraphTreeNode {
-  name: string;
-  path: string;
-  folders: Map<string, GraphTreeNode>;
-  graphs: Array<[string, { name: string; folderPath?: string }]>;
-}
-
-function createGraphTreeNode(name = "", path = ""): GraphTreeNode {
-  return { name, path, folders: new Map(), graphs: [] };
-}
-
-function joinFolderPath(parent: string, name: string): string {
-  const cleanName = name.trim();
-  if (!cleanName) return parent;
-  return parent ? `${parent}/${cleanName}` : cleanName;
-}
-
-function ensureFolder(root: GraphTreeNode, folderPath: string): GraphTreeNode {
-  const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
-  let node = root;
-  let current = "";
-  for (const part of parts) {
-    current = joinFolderPath(current, part);
-    if (!node.folders.has(part)) {
-      node.folders.set(part, createGraphTreeNode(part, current));
-    }
-    node = node.folders.get(part)!;
-  }
-  return node;
-}
-
-function buildGraphTree(
-  graphs: Record<string, { name: string; folderPath?: string }>,
-  folders: Array<{ name: string; folderPath: string }>
-): GraphTreeNode {
-  const root = createGraphTreeNode();
-  for (const folder of folders) {
-    ensureFolder(root, folder.folderPath);
-  }
-  for (const [id, graph] of Object.entries(graphs)) {
-    ensureFolder(root, graph.folderPath ?? "").graphs.push([id, graph]);
-  }
-  return root;
-}
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
@@ -144,7 +93,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   );
 
   const listRef = useRef<HTMLDivElement>(null);
-  const graphFolders = useResourceStore((s) => s.graphFolders);
   const {
     contextMenu,
     closeContextMenu,
@@ -216,10 +164,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     };
   }, [eventsCount, functionsCount, variablesCount, dataframesCount]);
 
-  const createGraphInFolder = useCallback(async (type: GraphResourceType, folderPath = "") => {
-    await createGraphResource(type, folderPath);
-  }, []);
-
   const createRootEvent = useCallback(() => {
     void createGraphResource("event");
   }, []);
@@ -227,13 +171,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const createRootFunction = useCallback(() => {
     void createGraphResource("function");
   }, []);
-
-  const createFolderInFolder = useCallback((type: GraphResourceType, parentFolderPath = "") => {
-    const title = t("contextMenu.dialog.newFolderTitle");
-    openInputDialog(title, DEFAULT_FOLDER_NAME, async (name) => {
-      await createGraphFolderResource(type, joinFolderPath(parentFolderPath, name));
-    }, t("contextMenu.dialog.createSubmit"));
-  }, [openInputDialog, t]);
 
   const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
     openInputDialog(t("contextMenu.dialog.renameGraphTitle"), name, async (nextName) => {
@@ -247,16 +184,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const duplicateGraphItem = useCallback(async (id: string) => {
     await duplicateGraphResource(id);
-  }, []);
-
-  const renameFolderItem = useCallback((type: GraphResourceType, folderPath: string, name: string) => {
-    openInputDialog(t("contextMenu.dialog.renameFolderTitle"), name, async (nextName) => {
-      await renameGraphFolderResource(type, folderPath, nextName);
-    }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, t]);
-
-  const deleteFolderItem = useCallback(async (type: GraphResourceType, folderPath: string) => {
-    await deleteGraphFolderResource(type, folderPath);
   }, []);
 
   const renameVariableItem = useCallback((id: string, name: string) => {
@@ -310,13 +237,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
-    createGraphInFolder,
-    createFolderInFolder,
+    createGraph: createGraphResource,
     renameGraphItem,
     deleteGraphItem,
     duplicateGraphItem,
-    renameFolderItem,
-    deleteFolderItem,
     addVariable,
     renameVariableItem,
     deleteVariable: deleteVariableItem,
@@ -342,14 +266,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     id: string,
     name: string,
     type: "variable" | "function" | "event" | "data",
-    extra?: { dataType?: unknown; isGlobal?: boolean; folderPath?: string },
+    extra?: { dataType?: unknown; isGlobal?: boolean },
     readOnly?: boolean,
-    nested?: boolean | number,
     onContextMenu?: (e: React.MouseEvent) => void
   ) => {
     const isSelected = selectedItemId === id && selectedItemType === type;
-    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string; folderPath?: string } | undefined);
-    const indentDepth = typeof nested === "number" ? nested : nested ? 1 : 0;
+    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string } | undefined);
 
     const iconColor =
       type === "event"
@@ -374,7 +296,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         id={id}
         dragData={dragData}
         isSelected={isSelected}
-        indentDepth={indentDepth}
         icon={icon}
         label={name}
         onClick={(e) => {
@@ -431,61 +352,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           </>
         }
       />
-    );
-  };
-
-  const renderGraphTree = (
-    type: GraphResourceType,
-    graphs: Record<string, { name: string; folderPath?: string }>,
-    depth = 0,
-    node = buildGraphTree(
-      graphs,
-      graphFolders.filter((folder) => folder.type === type)
-    )
-  ): React.ReactNode => {
-    const folderEntries = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const graphEntries = [...node.graphs].sort((a, b) => a[1].name.localeCompare(b[1].name));
-    return (
-      <>
-        {folderEntries.map((folder) => (
-          <SidebarCollapsibleSection
-            key={`${type}-folder-${folder.path}`}
-            variant="nested"
-            label={folder.name}
-            expanded={isSectionExpanded(`graphs_${type}_folder_${folder.path}`)}
-            onToggle={() => toggleSection(`graphs_${type}_folder_${folder.path}`)}
-            onAdd={() => void createGraphInFolder(type, folder.path)}
-            indentDepth={depth}
-            dropTarget={{ graphType: type, folderPath: folder.path }}
-            onContextMenu={(e) => openContextMenu(e, {
-              type: "folder",
-              graphType: type,
-              folderPath: folder.path,
-              name: folder.name,
-            })}
-            leading={<VscFolder size={12} className="text-muted-foreground" />}
-          >
-            {renderGraphTree(type, {}, depth + 1, folder)}
-          </SidebarCollapsibleSection>
-        ))}
-        {graphEntries.map(([id, data]) =>
-          renderItem(
-            id,
-            data.name,
-            type,
-            { folderPath: data.folderPath },
-            false,
-            depth,
-            (e) => openContextMenu(e, {
-              type: "graph",
-              id,
-              name: data.name,
-              graphType: type,
-              folderPath: data.folderPath,
-            })
-          )
-        )}
-      </>
     );
   };
 
@@ -603,32 +469,38 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden p-0">
           {currentTab === "graphs" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("sidebar.sections.event")}
                 expanded={isSectionExpanded("graphsEvent")}
                 onToggle={() => toggleSection("graphsEvent")}
                 onAdd={createRootEvent}
-                dropTarget={{ graphType: "event", folderPath: "" }}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
               >
-                {renderGraphTree("event", events as Record<string, { name: string; folderPath?: string }>)}
-                {Object.keys(events).length === 0 && !graphFolders.some((folder) => folder.type === "event") && (
+                {Object.entries(events as Record<string, { name: string }>).map(([id, data]) =>
+                  renderItem(id, data.name, "event", undefined, false, (e) =>
+                    openContextMenu(e, { type: "graph", id, name: data.name, graphType: "event" })
+                  )
+                )}
+                {Object.keys(events).length === 0 && (
                   <SidebarEmptyPlaceholder>{t("sidebar.noEvents")}</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
 
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("sidebar.sections.function")}
                 expanded={isSectionExpanded("graphsFunction")}
                 onToggle={() => toggleSection("graphsFunction")}
                 onAdd={createRootFunction}
-                dropTarget={{ graphType: "function", folderPath: "" }}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
               >
-                {renderGraphTree("function", functions as Record<string, { name: string; folderPath?: string }>)}
-                {Object.keys(functions).length === 0 && !graphFolders.some((folder) => folder.type === "function") && (
+                {Object.entries(functions as Record<string, { name: string }>).map(([id, data]) =>
+                  renderItem(id, data.name, "function", undefined, false, (e) =>
+                    openContextMenu(e, { type: "graph", id, name: data.name, graphType: "function" })
+                  )
+                )}
+                {Object.keys(functions).length === 0 && (
                   <SidebarEmptyPlaceholder>{t("sidebar.noFunctions")}</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
@@ -637,7 +509,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
           {currentTab === "variables" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("sidebar.sections.local")}
                 expanded={isSectionExpanded("variablesLocal")}
                 onToggle={() => toggleSection("variablesLocal")}
@@ -646,7 +518,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
                 {Object.entries(localVariables).map(([id, data]: [string, { name: string }]) =>
-                  renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, false, (e) =>
+                  renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, (e) =>
                     openVariableContextMenu(e, id, data.name)
                   )
                 )}
@@ -658,7 +530,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 )}
               </SidebarCollapsibleSection>
 
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("sidebar.sections.global")}
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
@@ -667,7 +539,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
                   {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, false, (e) =>
+                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, (e) =>
                       openVariableContextMenu(e, id, data.name)
                     )
                   )}
@@ -680,7 +552,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
           {currentTab === "data" && (
             <div className="flex flex-col flex-1 min-h-0">
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("sidebar.sections.data")}
                 expanded={isSectionExpanded("dataData")}
                 onToggle={() => toggleSection("dataData")}
@@ -703,7 +575,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
           {currentTab === "charts" && (
             <div ref={listRef} className="flex flex-col flex-1 min-h-0">
-              <SidebarCollapsibleSection variant="stacked"
+              <SidebarCollapsibleSection
                 label={t("chartsSidebar.worksheets")}
                 expanded={isSectionExpanded("chartsWorksheets")}
                 onToggle={() => toggleSection("chartsWorksheets")}
@@ -804,7 +676,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <SidebarCollapsibleSection variant="stacked"
+      <SidebarCollapsibleSection
         collapsible={false}
         label={`${t("common.undo")} (${undoStack.length})`}
         expanded={true}
@@ -827,7 +699,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         )}
       </SidebarCollapsibleSection>
 
-      <SidebarCollapsibleSection variant="stacked"
+      <SidebarCollapsibleSection
         collapsible={false}
         label={`${t("common.redo")} (${redoStack.length})`}
         expanded={true}

@@ -19,7 +19,6 @@ export interface ProjectResourceMeta {
   kind: ResourceKind;
   name: string;
   uri: string;
-  folderPath?: string;
   parentId?: string;
   scope?: { type: 'global' | 'event' | 'function'; graphId?: string };
   exists: boolean;
@@ -34,7 +33,6 @@ export interface BackendProjectResourceMeta {
   kind: ResourceKind;
   name: string;
   uri: string;
-  folderPath?: string | null;
   exists: boolean;
   loaded: boolean;
   hasDirtyDocument: boolean;
@@ -68,8 +66,5 @@ export function resourceRefFromLayoutTab(tab: LayoutTab): ResourceRef | null {
 }
 
 export function normalizeBackendResourceMeta(meta: BackendProjectResourceMeta): ProjectResourceMeta {
-  return {
-    ...meta,
-    folderPath: meta.folderPath ?? undefined,
-  };
+  return { ...meta };
 }

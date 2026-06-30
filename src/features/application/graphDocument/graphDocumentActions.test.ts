@@ -6,7 +6,7 @@ import { updateFunctionSignature } from './graphDocumentActions';
 describe('graphDocumentActions', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [], graphFolders: [] });
+    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
     useGraphDataStore.setState({
       nodes: {},
       pins: {},

@@ -6,11 +6,6 @@ use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
 use tauri::{AppHandle, State};
 
-// #[tauri::command]
-// pub fn execute_graph(_graph_id: String) -> Result<Value, String> {
-//     Ok(Value::Null)
-// }
-
 fn existing_graph_names(
     state: &State<ProjectState>,
     graph_kind: GraphKind,
@@ -48,7 +43,6 @@ pub fn create_event(
     app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
-    folder_path: Option<String>,
 ) -> Result<String, String> {
     let graph = state.add_graph_with_existing_names(
         graph_name,
@@ -57,10 +51,6 @@ pub fn create_event(
     );
     let graph_id = graph.id.to_string();
     state.persist_current_project()?;
-    if let (Some(project_path), Some(folder_path)) = (state.get_path(), folder_path) {
-        crate::project::move_project_graph_to_folder(&project_path, &graph.id, &folder_path)
-            .map_err(|e| e.to_string())?;
-    }
     emit_project_event(
         &app,
         Event::Event(EventEvent::EventCreated {
@@ -76,7 +66,6 @@ pub fn create_function(
     app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
-    folder_path: Option<String>,
 ) -> Result<String, String> {
     let graph = state.add_graph_with_existing_names(
         graph_name,
@@ -85,10 +74,6 @@ pub fn create_function(
     );
     let graph_id = graph.id.to_string();
     state.persist_current_project()?;
-    if let (Some(project_path), Some(folder_path)) = (state.get_path(), folder_path) {
-        crate::project::move_project_graph_to_folder(&project_path, &graph.id, &folder_path)
-            .map_err(|e| e.to_string())?;
-    }
     emit_project_event(
         &app,
         Event::Function(EventFunction::FunctionCreated {
@@ -168,64 +153,6 @@ pub fn unload_project_graph(state: State<ProjectState>, graph_id: GraphId) -> Re
 #[tauri::command]
 pub fn save_project_graph(state: State<ProjectState>, graph_id: GraphId) -> Result<(), String> {
     state.persist_loaded_graph(&graph_id)
-}
-
-#[tauri::command]
-pub fn create_graph_folder(
-    state: State<ProjectState>,
-    kind: GraphDocumentKind,
-    folder_path: String,
-) -> Result<String, String> {
-    let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-    crate::project::create_project_graph_folder(&project_path, kind, &folder_path)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn rename_graph_folder(
-    state: State<ProjectState>,
-    kind: GraphDocumentKind,
-    folder_path: String,
-    new_name: String,
-) -> Result<String, String> {
-    let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-    crate::project::rename_project_graph_folder(&project_path, kind, &folder_path, &new_name)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn delete_graph_folder(
-    state: State<ProjectState>,
-    kind: GraphDocumentKind,
-    folder_path: String,
-) -> Result<(), String> {
-    let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-    let folder_prefix = if folder_path.is_empty() {
-        String::new()
-    } else {
-        format!("{}/", folder_path.replace('\\', "/"))
-    };
-    let index = read_project_index(&project_path).map_err(|e| e.to_string())?;
-    for graph in index.graphs {
-        let in_folder =
-            graph.folder_path == folder_path || graph.folder_path.starts_with(&folder_prefix);
-        if graph.graph_type == kind && in_folder {
-            state.remove_graph(&graph.id);
-        }
-    }
-    crate::project::delete_project_graph_folder(&project_path, kind, &folder_path)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn move_graph_to_folder(
-    state: State<ProjectState>,
-    graph_id: GraphId,
-    folder_path: String,
-) -> Result<String, String> {
-    let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-    crate::project::move_project_graph_to_folder(&project_path, &graph_id, &folder_path)
-        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

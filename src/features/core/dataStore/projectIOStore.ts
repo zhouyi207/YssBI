@@ -23,7 +23,6 @@ import { markResourceLoaded, resourceKey, useDocumentStateStore, useResourceStor
 import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
-  type GraphFolderMeta,
 } from '@/features/core/resource/resourceSnapshotReconcile';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
@@ -97,8 +96,8 @@ function normalizeVariables(
 }
 
 function buildResourceIndex(params: {
-  graphs: Array<{ id: string; name: string; type: 'event' | 'function'; folderPath?: string }>;
-  worksheets: Array<{ id: string; name: string; folderPath?: string }>;
+  graphs: Array<{ id: string; name: string; type: 'event' | 'function' }>;
+  worksheets: Array<{ id: string; name: string; databaseId: string; chartType: import('@/shared/types/domain/worksheet').WorksheetChartType }>;
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
 }): ProjectResourceMeta[] {
@@ -109,7 +108,6 @@ function buildResourceIndex(params: {
       kind: graph.type,
       name: graph.name,
       uri: `yssbi://graph/${graph.type}/${graph.id}`,
-      folderPath: graph.folderPath,
       exists: true,
       loaded: Boolean(useGraphDataStore.getState().graphNodes[graph.id]),
       hasDirtyDocument: false,
@@ -123,7 +121,6 @@ function buildResourceIndex(params: {
       kind: 'worksheet',
       name: worksheet.name,
       uri: `yssbi://worksheet/${worksheet.id}`,
-      folderPath: worksheet.folderPath,
       exists: true,
       loaded: Boolean(useWorksheetStore.getState().documents[worksheet.id]),
       hasDirtyDocument: false,
@@ -147,16 +144,6 @@ function buildResourceIndex(params: {
     });
   }
   return resources;
-}
-
-function normalizeGraphFolders(
-  folders: Array<{ name: string; type: 'event' | 'function'; folderPath: string }> | undefined,
-): GraphFolderMeta[] {
-  return (folders ?? []).map((folder) => ({
-    name: folder.name,
-    type: folder.type,
-    folderPath: folder.folderPath,
-  }));
 }
 
 let refreshResourceIndexInFlight: Promise<boolean> | null = null;
@@ -191,14 +178,12 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     useVariableStore.getState().setVariables(variableCatalog);
 
     const graphOrder = index.graphs.map((graph) => graph.id);
-    const graphFolders = normalizeGraphFolders(index.folders);
 
     const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
       id: ws.id,
       name: ws.name,
       databaseId: ws.databaseId,
       chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
-      folderPath: ws.folderPath ?? '',
     }));
     useWorksheetStore.getState().setIndex(worksheetIndex);
 
@@ -215,7 +200,6 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
 
     useResourceStore.getState().setSnapshot({
       resources,
-      graphFolders,
       graphOrder,
     });
     return true;
@@ -338,7 +322,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
             name: ws.name,
             databaseId: ws.databaseId,
             chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
-            folderPath: ws.folderPath ?? '',
           }));
         useWorksheetStore.getState().setIndex(
           worksheetIndex,
@@ -351,7 +334,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
             variables: normalizedVariables,
             databases: normalizedDatabases,
           }),
-          graphFolders: normalizeGraphFolders(index.folders),
           graphOrder,
         });
 
@@ -396,7 +378,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         variables: normalizedVariables,
         databases: normalizedDatabases,
       }),
-      graphFolders: [],
       graphOrder: Object.keys(project.graphs),
     });
     syncGraphViewportsFromRecords(project.graphs);
@@ -435,7 +416,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           kind: frontendGraph.type,
           name: frontendGraph.name,
           uri: `yssbi://graph/${frontendGraph.type}/${graphId}`,
-          folderPath: existingResource?.folderPath,
           exists: true,
           loaded: true,
           hasDirtyDocument: false,
@@ -445,7 +425,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
         markResourceLoaded({ id: graphId, kind: frontendGraph.type });
         syncFunctionSignatureMeta({
           ...frontendGraph,
-          folderPath: existingResource?.folderPath,
         });
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
         ensureGraphViewport(graphId, frontendGraph.canvas);

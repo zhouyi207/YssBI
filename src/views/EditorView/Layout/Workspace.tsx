@@ -11,7 +11,6 @@ import { useEditorStore } from "@/features/core/editor";
 import {
   DRAG_TYPES,
   isCanvasDrop,
-  isGraphFolderDrop,
   isLayoutRegionDrop,
   isTabbarDrop,
   type GraphResourceDragData,
@@ -105,7 +104,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const { over, active } = event;
     const activeData = active.data.current as any;
 
-    // Sidebar drags are handled by canvas/folder drop zones, so hide layout docking preview.
+    // Sidebar drags are handled by canvas drop zones, so hide layout docking preview.
     if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE || activeData?.sidebarResource) {
       setDropState(s => ({ ...s, visible: false }));
       return;
@@ -178,21 +177,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const sidebarResource = activeData?.sidebarResource as
       | GraphResourceDragData
       | undefined;
-
-    if (sidebarResource && isGraphFolderDrop(overData)) {
-      finishSidebarDrag();
-
-      const targetType = overData.graphType as "event" | "function" | undefined;
-      const targetFolderPath = typeof overData.folderPath === "string" ? overData.folderPath : "";
-      const currentFolderPath = sidebarResource.folderPath ?? "";
-
-      if (targetType === sidebarResource.type && targetFolderPath !== currentFolderPath) {
-        void GraphService.moveGraphToFolder(sidebarResource.id, targetFolderPath)
-          .then(() => useProjectIOStore.getState().loadProject())
-          .catch((error) => toast.error(formatErrorMessage(error)));
-      }
-      return;
-    }
 
     if (sidebarResource && isCanvasDrop(overData)) {
       finishSidebarDrag();

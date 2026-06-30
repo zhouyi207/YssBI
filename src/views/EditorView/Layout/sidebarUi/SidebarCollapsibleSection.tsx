@@ -1,10 +1,6 @@
-import { useId } from "react";
 import { VscAdd } from "react-icons/vsc";
-import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
-import { DROP_TYPES } from "@/features/core/dnd";
-import type { GraphResourceType } from "../sidebarContextMenu/sidebarContextMenuTypes";
 import { SidebarChevron } from "./SidebarChevron";
 import {
   sidebarCollapsibleHeaderClass,
@@ -12,13 +8,7 @@ import {
   sidebarSectionLabelClass,
 } from "./sidebarStyles";
 
-export interface GraphFolderDropTarget {
-  graphType: GraphResourceType;
-  folderPath: string;
-}
-
 type SidebarCollapsibleSectionProps = {
-  variant?: "stacked" | "nested";
   collapsible?: boolean;
   label: string;
   expanded: boolean;
@@ -27,7 +17,6 @@ type SidebarCollapsibleSectionProps = {
   indentDepth?: number;
   isActive?: boolean;
   leading?: React.ReactNode;
-  dropTarget?: GraphFolderDropTarget;
   onHeaderContextMenu?: (e: React.MouseEvent) => void;
   onContentContextMenu?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -35,7 +24,6 @@ type SidebarCollapsibleSectionProps = {
 };
 
 export function SidebarCollapsibleSection({
-  variant = "nested",
   collapsible = true,
   label,
   expanded,
@@ -44,25 +32,13 @@ export function SidebarCollapsibleSection({
   indentDepth = 0,
   isActive = false,
   leading,
-  dropTarget,
   onHeaderContextMenu,
   onContentContextMenu,
   onContextMenu,
   children,
 }: SidebarCollapsibleSectionProps) {
-  const fallbackDropId = useId();
   const headerContextMenu = onHeaderContextMenu ?? onContextMenu;
   const isExpanded = collapsible ? expanded : true;
-
-  const { setNodeRef, isOver } = useDroppable({
-    id: dropTarget
-      ? `graph-folder-drop-${dropTarget.graphType}-${dropTarget.folderPath || "root"}`
-      : `graph-folder-drop-disabled-${fallbackDropId}`,
-    data: dropTarget
-      ? { dropType: DROP_TYPES.GRAPH_FOLDER, graphType: dropTarget.graphType, folderPath: dropTarget.folderPath }
-      : undefined,
-    disabled: !dropTarget,
-  });
 
   const header = (
     <div
@@ -105,43 +81,22 @@ export function SidebarCollapsibleSection({
     </div>
   );
 
-  const body = (
-    <div
-      className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-      style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
-    >
-      <div className="min-h-0">{children}</div>
-    </div>
-  );
-
-  if (variant === "stacked") {
-    return (
-      <div
-        ref={setNodeRef}
-        className={`flex min-h-0 shrink-0 flex-col ${isExpanded ? "flex-1" : "flex-none"} ${
-          isOver ? "bg-[var(--sidebar-hover)]" : ""
-        }`}
-        style={isExpanded ? { minHeight: 0 } : undefined}
-      >
-        {header}
-        <div
-          className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-          style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
-        >
-          <OverlayScrollbar className="min-h-0 flex-1">
-            <div className="min-h-full" onContextMenu={onContentContextMenu}>
-              {children}
-            </div>
-          </OverlayScrollbar>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div ref={setNodeRef} className={isOver ? "bg-[var(--sidebar-hover)]" : undefined}>
+    <div
+      className={`flex min-h-0 shrink-0 flex-col ${isExpanded ? "flex-1" : "flex-none"}`}
+      style={isExpanded ? { minHeight: 0 } : undefined}
+    >
       {header}
-      {body}
+      <div
+        className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
+        style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+      >
+        <OverlayScrollbar className="min-h-0 flex-1">
+          <div className="min-h-full" onContextMenu={onContentContextMenu}>
+            {children}
+          </div>
+        </OverlayScrollbar>
+      </div>
     </div>
   );
 }

@@ -17,15 +17,15 @@ function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-function getGraphMetaFromResourceStore(graphId: string): { id: string; name: string; type: 'event' | 'function'; folderPath?: string } | null {
+function getGraphMetaFromResourceStore(graphId: string): { id: string; name: string; type: 'event' | 'function' } | null {
   const resources = useResourceStore.getState().resources;
   const eventMeta = resources[resourceKey({ id: graphId, kind: 'event' })];
   if (eventMeta?.exists) {
-    return { id: graphId, name: eventMeta.name, type: 'event', folderPath: eventMeta.folderPath };
+    return { id: graphId, name: eventMeta.name, type: 'event' };
   }
   const functionMeta = resources[resourceKey({ id: graphId, kind: 'function' })];
   if (functionMeta?.exists) {
-    return { id: graphId, name: functionMeta.name, type: 'function', folderPath: functionMeta.folderPath };
+    return { id: graphId, name: functionMeta.name, type: 'function' };
   }
   return null;
 }
@@ -86,11 +86,11 @@ export function useGraphData(activeTabId: string | null) {
     if (!activeTabId) return null;
     const eventMeta = s.resources[resourceKey({ id: activeTabId, kind: 'event' })];
     if (eventMeta?.exists) {
-      return { id: activeTabId, name: eventMeta.name, type: 'event' as const, folderPath: eventMeta.folderPath };
+      return { id: activeTabId, name: eventMeta.name, type: 'event' as const };
     }
     const functionMeta = s.resources[resourceKey({ id: activeTabId, kind: 'function' })];
     if (functionMeta?.exists) {
-      return { id: activeTabId, name: functionMeta.name, type: 'function' as const, folderPath: functionMeta.folderPath };
+      return { id: activeTabId, name: functionMeta.name, type: 'function' as const };
     }
     return null;
   });

@@ -7,7 +7,6 @@ pub struct ProjectResourceMetaEvent {
     pub kind: String,
     pub name: String,
     pub uri: String,
-    pub folder_path: Option<String>,
     pub exists: bool,
     pub loaded: bool,
     pub has_dirty_document: bool,

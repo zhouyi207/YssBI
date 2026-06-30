@@ -1,4 +1,4 @@
-export { SidebarCollapsibleSection, type GraphFolderDropTarget } from "./SidebarCollapsibleSection";
+export { SidebarCollapsibleSection } from "./SidebarCollapsibleSection";
 export { SidebarChevron, SIDEBAR_CHEVRON_SIZE } from "./SidebarChevron";
 export { SidebarDraggableItem } from "./SidebarDraggableItem";
 export { SidebarEmptyPlaceholder } from "./SidebarEmptyPlaceholder";

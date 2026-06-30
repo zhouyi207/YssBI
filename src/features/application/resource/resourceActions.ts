@@ -50,37 +50,17 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   useResourceStore.getState().patchResource({ id: ref.id, kind: ref.kind }, { name });
 }
 
-export async function createGraphResource(kind: GraphResourceKind, folderPath = '', name?: string): Promise<string> {
-  const targetFolder = folderPath.trim() || undefined;
+export async function createGraphResource(kind: GraphResourceKind, name?: string): Promise<string> {
   const graphName = name?.trim() || (kind === 'event' ? DEFAULT_EVENT_NAME : DEFAULT_FUNCTION_NAME);
   const id = kind === 'event'
-    ? await GraphService.createEvent(graphName, targetFolder)
-    : await GraphService.createFunction(graphName, targetFolder);
+    ? await GraphService.createEvent(graphName)
+    : await GraphService.createFunction(graphName);
   await refreshResourceIndex();
   return id;
 }
 
 export async function duplicateGraphResource(graphId: string): Promise<void> {
   await GraphService.duplicateGraph(graphId);
-  await refreshResourceIndex();
-}
-
-export async function createGraphFolderResource(kind: GraphResourceKind, folderPath: string): Promise<void> {
-  await GraphService.createGraphFolder(kind, folderPath);
-  await refreshResourceIndex();
-}
-
-export async function renameGraphFolderResource(
-  kind: GraphResourceKind,
-  folderPath: string,
-  nextName: string,
-): Promise<void> {
-  await GraphService.renameGraphFolder(kind, folderPath, nextName);
-  await refreshResourceIndex();
-}
-
-export async function deleteGraphFolderResource(kind: GraphResourceKind, folderPath: string): Promise<void> {
-  await GraphService.deleteGraphFolder(kind, folderPath);
   await refreshResourceIndex();
 }
 

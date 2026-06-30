@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     GraphResourceIndex, GraphResourceManifestEntry, PROJECT_METADATA_FILE, ProjectData,
-    ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir, read_worksheet_index_entries,
+    ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir, flatten_worksheet_layout,
+    read_worksheet_index_entries,
     reconcile_graph_resources,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
@@ -63,16 +64,6 @@ pub struct ProjectGraphIndexEntry {
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
-    pub folder_path: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectFolderIndexEntry {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub graph_type: GraphDocumentKind,
-    pub folder_path: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -89,7 +80,6 @@ pub struct ProjectVariableIndexEntry {
     pub owner_graph_name: Option<String>,
     #[serde(rename = "ownerGraphKind", skip_serializing_if = "Option::is_none")]
     pub owner_graph_kind: Option<GraphDocumentKind>,
-    pub owner_folder_path: Option<String>,
 }
 
 impl From<VariableInstance> for ProjectVariableIndexEntry {
@@ -105,7 +95,6 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
             owner_graph_id: None,
             owner_graph_name: None,
             owner_graph_kind: None,
-            owner_folder_path: None,
         }
     }
 }
@@ -117,7 +106,6 @@ pub struct ProjectIndex {
     pub app_version: String,
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
-    pub folders: Vec<ProjectFolderIndexEntry>,
     #[serde(default)]
     pub worksheets: Vec<ProjectWorksheetIndexEntry>,
     #[serde(default)]
@@ -278,6 +266,8 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
 
 pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
     let root = project_root_from_path(path);
+    flatten_graph_layout(root.as_path())?;
+    flatten_worksheet_layout(root.as_path())?;
     let mut manifest = read_project_manifest_from_root(root.as_path())?;
     let (graph_resources, changed) = reconcile_graph_resources(root.as_path(), &mut manifest)?;
     if changed {
@@ -298,17 +288,6 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         GraphDocumentKind::Function,
         &graph_resources,
     )?);
-    let mut folders = Vec::new();
-    folders.extend(read_folder_index_entries(
-        root.as_path(),
-        EVENTS_DIR,
-        GraphDocumentKind::Event,
-    )?);
-    folders.extend(read_folder_index_entries(
-        root.as_path(),
-        FUNCTIONS_DIR,
-        GraphDocumentKind::Function,
-    )?);
     let worksheets = read_worksheet_index_entries(root.as_path())?;
     let variables = read_variable_index_entries(root.as_path())?;
 
@@ -317,7 +296,6 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         app_version: manifest.app_version,
         export_time: manifest.export_time,
         graphs,
-        folders,
         worksheets,
         variables,
     })
@@ -358,115 +336,6 @@ pub fn remove_project_graph_from_file(
         return Ok(Some(resource.kind));
     }
     Ok(None)
-}
-
-pub fn create_project_graph_folder(
-    path: &str,
-    kind: GraphDocumentKind,
-    folder_path: &str,
-) -> Result<String, ProjectError> {
-    let root = project_root_from_path(path);
-    let graph_dir = root.join(graph_dir_for_kind(kind));
-    let normalized = normalize_folder_path(folder_path);
-    if normalized.as_os_str().is_empty() {
-        return Err(ProjectError::InvalidProjectFormat(
-            "folder path cannot be empty".into(),
-        ));
-    }
-    std::fs::create_dir_all(graph_dir.join(&normalized))?;
-    Ok(path_to_slash_string(normalized.as_path()))
-}
-
-pub fn rename_project_graph_folder(
-    path: &str,
-    kind: GraphDocumentKind,
-    folder_path: &str,
-    new_name: &str,
-) -> Result<String, ProjectError> {
-    let root = project_root_from_path(path);
-    let graph_dir = root.join(graph_dir_for_kind(kind));
-    let old_relative = normalize_folder_path(folder_path);
-    let old_path = graph_dir.join(&old_relative);
-    if old_relative.as_os_str().is_empty() || !old_path.is_dir() {
-        return Err(ProjectError::FileNotFound(old_path));
-    }
-
-    let parent = old_relative
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(Path::to_path_buf)
-        .unwrap_or_default();
-    let new_relative = parent.join(sanitize_file_stem(new_name));
-    let new_path = graph_dir.join(&new_relative);
-    if new_path.exists() {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "folder '{}' already exists",
-            new_relative.to_string_lossy()
-        )));
-    }
-    std::fs::rename(old_path, &new_path)?;
-    Ok(path_to_slash_string(new_relative.as_path()))
-}
-
-pub fn delete_project_graph_folder(
-    path: &str,
-    kind: GraphDocumentKind,
-    folder_path: &str,
-) -> Result<(), ProjectError> {
-    let root = project_root_from_path(path);
-    let graph_dir = root.join(graph_dir_for_kind(kind));
-    let relative = normalize_folder_path(folder_path);
-    let target = graph_dir.join(&relative);
-    if relative.as_os_str().is_empty() || !target.exists() {
-        return Ok(());
-    }
-    if target.is_dir() {
-        std::fs::remove_dir_all(target)?;
-    }
-    Ok(())
-}
-
-pub fn move_project_graph_to_folder(
-    path: &str,
-    graph_id: &GraphId,
-    folder_path: &str,
-) -> Result<String, ProjectError> {
-    let root = project_root_from_path(path);
-    let (current_path, kind, document) = find_graph_document_path(root.as_path(), graph_id)?
-        .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_id))
-        })?;
-    let graph_dir = root.join(graph_dir_for_kind(kind));
-    let target_folder = normalize_folder_path(folder_path);
-    let target_dir = graph_dir.join(&target_folder);
-    std::fs::create_dir_all(&target_dir)?;
-    let file_name = unique_graph_file_name(
-        target_dir.as_path(),
-        &document.graph.name,
-        graph_extension_for_kind(kind),
-        None,
-    );
-    let target_path = target_dir.join(file_name);
-    if current_path != target_path {
-        std::fs::rename(current_path, &target_path)?;
-    }
-    let relative_path = target_path
-        .strip_prefix(root.as_path())
-        .map(path_to_slash_string)
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    upsert_graph_resource_manifest_entry(
-        root.as_path(),
-        GraphResourceManifestEntry {
-            id: *graph_id,
-            path: relative_path,
-            kind,
-        },
-    )?;
-    Ok(folder_path_from_graph_file(
-        root.as_path(),
-        graph_dir_for_kind(kind),
-        target_path.as_path(),
-    ))
 }
 
 pub fn duplicate_project_graph_file(
@@ -525,6 +394,7 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
 }
 
 fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
+    flatten_graph_layout(root)?;
     let mut manifest = read_project_manifest_from_root(root)?;
     let (index, changed) = reconcile_graph_resources(root, &mut manifest)?;
     if changed {
@@ -768,7 +638,6 @@ fn read_graph_index_entries(
             id: resource.id,
             name,
             graph_type: expected_kind,
-            folder_path: folder_path_from_graph_file(root, dir, path.as_path()),
         });
     }
     Ok(entries)
@@ -824,7 +693,6 @@ fn read_graph_local_variable_index_entries(
             Err(_) => continue,
         };
         let graph_name = graph_name_from_file_path(path.as_path()).unwrap_or(document.graph.name);
-        let folder_path = folder_path_from_graph_file(root, dir, path.as_path());
         let owner_graph_id = document.graph.id.to_string();
         for variable in document.local_variables.into_values() {
             entries.push(ProjectVariableIndexEntry {
@@ -838,7 +706,6 @@ fn read_graph_local_variable_index_entries(
                 owner_graph_id: Some(owner_graph_id.clone()),
                 owner_graph_name: Some(graph_name.clone()),
                 owner_graph_kind: Some(expected_kind),
-                owner_folder_path: Some(folder_path.clone()),
             });
         }
     }
@@ -864,21 +731,6 @@ fn read_variable_index_entries(
     Ok(entries)
 }
 
-fn read_folder_index_entries(
-    root: &Path,
-    dir: &str,
-    kind: GraphDocumentKind,
-) -> Result<Vec<ProjectFolderIndexEntry>, ProjectError> {
-    let graph_dir = root.join(dir);
-    if !graph_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut folders = Vec::new();
-    collect_graph_folders(graph_dir.as_path(), graph_dir.as_path(), kind, &mut folders)?;
-    folders.sort_by(|a, b| a.folder_path.cmp(&b.folder_path));
-    Ok(folders)
-}
-
 fn list_graph_files(root: &Path, dir: &str, extension: &str) -> Result<Vec<PathBuf>, ProjectError> {
     let graph_dir = root.join(dir);
     if !graph_dir.exists() {
@@ -886,26 +738,10 @@ fn list_graph_files(root: &Path, dir: &str, extension: &str) -> Result<Vec<PathB
     }
 
     let mut paths = Vec::new();
-    collect_graph_files(graph_dir.as_path(), extension, &mut paths)?;
-    paths.sort_by_key(|path| {
-        path.file_name()
-            .map(|name| name.to_string_lossy().to_lowercase())
-            .unwrap_or_default()
-    });
-    Ok(paths)
-}
-
-fn collect_graph_files(
-    dir: &Path,
-    extension: &str,
-    paths: &mut Vec<PathBuf>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(dir)? {
+    for entry in std::fs::read_dir(&graph_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
-            collect_graph_files(path.as_path(), extension, paths)?;
-        } else if path.is_file()
+        if path.is_file()
             && path
                 .extension()
                 .and_then(|value| value.to_str())
@@ -915,38 +751,12 @@ fn collect_graph_files(
             paths.push(path);
         }
     }
-    Ok(())
-}
-
-fn collect_graph_folders(
-    root_dir: &Path,
-    dir: &Path,
-    kind: GraphDocumentKind,
-    folders: &mut Vec<ProjectFolderIndexEntry>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let folder_path = path
-            .strip_prefix(root_dir)
-            .map(path_to_slash_string)
-            .unwrap_or_default();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
+    paths.sort_by_key(|path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
             .unwrap_or_default()
-            .to_string();
-        folders.push(ProjectFolderIndexEntry {
-            name,
-            graph_type: kind,
-            folder_path,
-        });
-        collect_graph_folders(root_dir, path.as_path(), kind, folders)?;
-    }
-    Ok(())
+    });
+    Ok(paths)
 }
 
 fn graph_relative_path_for_save(
@@ -956,11 +766,9 @@ fn graph_relative_path_for_save(
     graph_name: &str,
     graph_id: &GraphId,
 ) -> Result<String, ProjectError> {
+    let target_dir = root.join(dir);
+    std::fs::create_dir_all(&target_dir)?;
     let existing_path = find_graph_file_path(root, dir, extension, graph_id)?;
-    let target_dir = existing_path
-        .as_ref()
-        .and_then(|path| path.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| root.join(dir));
     let file_name = unique_graph_file_name(
         target_dir.as_path(),
         graph_name,
@@ -1074,27 +882,138 @@ fn graph_extension_for_kind(kind: GraphDocumentKind) -> &'static str {
     }
 }
 
-fn normalize_folder_path(folder_path: &str) -> PathBuf {
-    folder_path
-        .replace('\\', "/")
-        .split('/')
-        .filter_map(|segment| {
-            let sanitized = sanitize_file_stem(segment);
-            if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
-                None
-            } else {
-                Some(sanitized)
-            }
-        })
-        .collect()
+/// Hoists nested graph files under `events/` and `functions/` to each kind's root directory.
+pub fn flatten_graph_layout(root: &Path) -> Result<bool, ProjectError> {
+    let mut changed = false;
+    changed |= flatten_kind_graph_layout(root, EVENTS_DIR, EVENT_EXTENSION)?;
+    changed |= flatten_kind_graph_layout(root, FUNCTIONS_DIR, FUNCTION_EXTENSION)?;
+    if changed {
+        remove_empty_graph_subdirs(&root.join(EVENTS_DIR))?;
+        remove_empty_graph_subdirs(&root.join(FUNCTIONS_DIR))?;
+        let mut manifest = read_project_manifest_from_root(root)?;
+        let (_, manifest_changed) = reconcile_graph_resources(root, &mut manifest)?;
+        if manifest_changed {
+            write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
+        }
+    }
+    Ok(changed)
 }
 
-fn folder_path_from_graph_file(root: &Path, dir: &str, path: &Path) -> String {
+fn flatten_kind_graph_layout(
+    root: &Path,
+    dir: &str,
+    extension: &str,
+) -> Result<bool, ProjectError> {
     let graph_dir = root.join(dir);
-    path.parent()
-        .and_then(|parent| parent.strip_prefix(graph_dir).ok())
-        .map(path_to_slash_string)
-        .unwrap_or_default()
+    if !graph_dir.is_dir() {
+        return Ok(false);
+    }
+
+    let mut nested_paths = Vec::new();
+    collect_nested_graph_files(&graph_dir, extension, &mut nested_paths)?;
+    if nested_paths.is_empty() {
+        return Ok(false);
+    }
+
+    let mut manifest = read_project_manifest_from_root(root).ok();
+    let mut changed = false;
+    for nested_path in nested_paths {
+        let graph_name = read_graph_file_header(nested_path.as_path())
+            .ok()
+            .map(|header| header.graph.name)
+            .or_else(|| graph_name_from_file_path(nested_path.as_path()))
+            .unwrap_or_else(|| "Untitled".to_string());
+        let file_name = unique_graph_file_name(graph_dir.as_path(), &graph_name, extension, None);
+        let target_path = graph_dir.join(&file_name);
+        if nested_path == target_path {
+            continue;
+        }
+
+        if let Some(manifest) = manifest.as_mut() {
+            let nested_relative = nested_path
+                .strip_prefix(root)
+                .map(path_to_slash_string)
+                .unwrap_or_default();
+            let new_relative = target_path
+                .strip_prefix(root)
+                .map(path_to_slash_string)
+                .unwrap_or_default();
+            for entry in manifest.graphs.iter_mut() {
+                if super::normalize_resource_path(&entry.path)
+                    == super::normalize_resource_path(&nested_relative)
+                {
+                    entry.path = new_relative.clone();
+                }
+            }
+        }
+
+        std::fs::rename(&nested_path, &target_path)?;
+        changed = true;
+    }
+
+    if changed {
+        if let Some(manifest) = manifest {
+            write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
+        }
+    }
+
+    Ok(changed)
+}
+
+fn collect_nested_graph_files(
+    graph_dir: &Path,
+    extension: &str,
+    nested_paths: &mut Vec<PathBuf>,
+) -> Result<(), ProjectError> {
+    for entry in std::fs::read_dir(graph_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_all_graph_files(path.as_path(), extension, nested_paths)?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_all_graph_files(
+    dir: &Path,
+    extension: &str,
+    paths: &mut Vec<PathBuf>,
+) -> Result<(), ProjectError> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_all_graph_files(path.as_path(), extension, paths)?;
+        } else if path.is_file()
+            && path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case(extension))
+                .unwrap_or(false)
+        {
+            paths.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn remove_empty_graph_subdirs(dir: &Path) -> Result<(), ProjectError> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let entries: Vec<_> = std::fs::read_dir(dir)?.collect();
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            remove_empty_graph_subdirs(&path)?;
+            if std::fs::read_dir(&path)?.next().is_none() {
+                std::fs::remove_dir(path)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn path_to_slash_string(path: &Path) -> String {
@@ -1435,71 +1354,64 @@ mod tests {
     }
 
     #[test]
-    fn scans_and_manages_graph_folders_recursively() {
+    fn flatten_graph_layout_hoists_nested_graph_files() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let _event = state.add_event("Nested Event");
         save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
 
-        create_project_graph_folder(
-            root.to_string_lossy().as_ref(),
-            GraphDocumentKind::Event,
-            "Folder A/Sub",
-        )
-        .unwrap();
-        let event_resource_id = graph_index_id(root.as_path(), "Nested Event");
-        move_project_graph_to_folder(
-            root.to_string_lossy().as_ref(),
-            &event_resource_id,
-            "Folder A/Sub",
-        )
-        .unwrap();
+        let nested_dir = root.join(EVENTS_DIR).join("Sub");
+        std::fs::create_dir_all(&nested_dir).unwrap();
+        let flat_file = root
+            .join(EVENTS_DIR)
+            .join(format!("Nested Event.{}", EVENT_EXTENSION));
+        let nested_file = nested_dir.join(format!("Nested Event.{}", EVENT_EXTENSION));
+        std::fs::rename(&flat_file, &nested_file).unwrap();
+
+        let mut manifest: ProjectManifest =
+            read_json(root.join(PROJECT_METADATA_FILE).as_path()).unwrap();
+        for entry in manifest.graphs.iter_mut() {
+            if entry.path.starts_with(&format!("{EVENTS_DIR}/")) {
+                entry.path = format!("{EVENTS_DIR}/Sub/Nested Event.{EVENT_EXTENSION}");
+            }
+        }
+        write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest).unwrap();
+
+        flatten_graph_layout(root.as_path()).unwrap();
+
+        assert!(
+            root.join(EVENTS_DIR)
+                .join(format!("Nested Event.{}", EVENT_EXTENSION))
+                .is_file()
+        );
+        assert!(!nested_file.exists());
+        assert!(!nested_dir.exists());
 
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(
-            index
-                .folders
-                .iter()
-                .any(|folder| folder.folder_path == "Folder A")
-        );
-        assert!(
-            index
-                .folders
-                .iter()
-                .any(|folder| folder.folder_path == "Folder A/Sub")
-        );
-        let nested = index
-            .graphs
-            .iter()
-            .find(|graph| graph.name == "Nested Event")
-            .unwrap();
-        assert_eq!(nested.folder_path, "Folder A/Sub");
+        assert_eq!(index.graphs.len(), 1);
+        assert_eq!(index.graphs[0].name, "Nested Event");
 
-        let renamed = rename_project_graph_folder(
-            root.to_string_lossy().as_ref(),
-            GraphDocumentKind::Event,
-            "Folder A/Sub",
-            "Renamed",
-        )
-        .unwrap();
-        assert_eq!(renamed, "Folder A/Renamed");
-        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(
-            index
-                .graphs
-                .iter()
-                .any(|graph| graph.folder_path == "Folder A/Renamed")
-        );
+        let _ = std::fs::remove_dir_all(root);
+    }
 
-        delete_project_graph_folder(
-            root.to_string_lossy().as_ref(),
-            GraphDocumentKind::Event,
-            "Folder A",
-        )
-        .unwrap();
-        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(index.graphs.is_empty());
-        assert!(index.folders.is_empty());
+    #[test]
+    fn create_event_saves_graph_at_kind_root() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        let _event = state.add_event("Root Event");
+        save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
+
+        let graph_path = root
+            .join(EVENTS_DIR)
+            .join(format!("Root Event.{}", EVENT_EXTENSION));
+        assert!(graph_path.is_file());
+        assert_eq!(
+            graph_path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str()),
+            Some(EVENTS_DIR)
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

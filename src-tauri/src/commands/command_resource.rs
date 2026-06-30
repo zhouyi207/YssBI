@@ -1,6 +1,6 @@
 use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
 use crate::graph::{GraphId, GraphKind};
-use crate::project::{GraphDocumentKind, ProjectState, read_project_index};
+use crate::project::ProjectState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -11,7 +11,6 @@ pub struct ProjectResourceMetaDTO {
     pub kind: String,
     pub name: String,
     pub uri: String,
-    pub folder_path: Option<String>,
     pub exists: bool,
     pub loaded: bool,
     pub has_dirty_document: bool,
@@ -26,7 +25,6 @@ impl From<&ProjectResourceMetaDTO> for ProjectResourceMetaEvent {
             kind: value.kind.clone(),
             name: value.name.clone(),
             uri: value.uri.clone(),
-            folder_path: value.folder_path.clone(),
             exists: value.exists,
             loaded: value.loaded,
             has_dirty_document: value.has_dirty_document,
@@ -51,23 +49,6 @@ fn graph_uri(kind: &GraphKind, graph_id: &GraphId) -> String {
     )
 }
 
-fn graph_folder_path(
-    state: &ProjectState,
-    graph_id: &GraphId,
-    kind: &GraphKind,
-) -> Result<Option<String>, String> {
-    let Some(project_path) = state.get_path() else {
-        return Ok(None);
-    };
-    let expected_kind = GraphDocumentKind::from(kind);
-    let index = read_project_index(&project_path).map_err(|e| e.to_string())?;
-    Ok(index
-        .graphs
-        .into_iter()
-        .find(|entry| entry.id == *graph_id && entry.graph_type == expected_kind)
-        .map(|entry| entry.folder_path))
-}
-
 fn graph_resource_meta(
     state: &ProjectState,
     graph_id: &GraphId,
@@ -79,7 +60,6 @@ fn graph_resource_meta(
         kind: graph_kind_to_resource_kind(&kind).to_string(),
         name,
         uri: graph_uri(&kind, graph_id),
-        folder_path: graph_folder_path(state, graph_id, &kind)?,
         exists: true,
         loaded: state.get_graph(graph_id).is_some(),
         has_dirty_document: false,
