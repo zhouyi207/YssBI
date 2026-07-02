@@ -10,11 +10,7 @@ pub enum DataType {
     // 基础类型
     Boolean,
 
-    // 为数据库展示预留的类型
-    Int32,
-    Float32,
-
-    // 系统核心类型
+    // 数值规范类型（运行时只保留 Int64/Float64；Int32/Float32/UInt* 等仅存在于 DB/DataView 保真层）
     Int64,
     Float64,
     String,
@@ -75,6 +71,17 @@ impl DataType {
             1 => flat.into_iter().next().unwrap(),
             _ => DataType::OneOf(flat),
         }
+    }
+
+    /// "任意数值" 的规范表示：`OneOf([Int64, Float64])`。
+    /// 用于需要接受整数或浮点的 pin，取代此前散落的四类型 OneOf。
+    pub fn number() -> DataType {
+        DataType::OneOf(vec![DataType::Int64, DataType::Float64])
+    }
+
+    /// "任意数值的 DataSeries"：`DataSeries<OneOf([Int64, Float64])>`。
+    pub fn number_series() -> DataType {
+        DataType::DataSeries(Box::new(DataType::number()))
     }
 }
 
@@ -138,9 +145,7 @@ impl fmt::Display for DataType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DataType::Boolean => write!(f, "Boolean"),
-            DataType::Int32 => write!(f, "Int32"),
             DataType::Int64 => write!(f, "Int64"),
-            DataType::Float32 => write!(f, "Float32"),
             DataType::Float64 => write!(f, "Float64"),
             DataType::String => write!(f, "String"),
             DataType::Date => write!(f, "Date"),
@@ -179,10 +184,11 @@ impl FromStr for DataType {
 
         match trimmed {
             "Boolean" => Ok(DataType::Boolean),
-            "Int32" => Ok(DataType::Int32),
-            "Int64" => Ok(DataType::Int64),
-            "Float32" => Ok(DataType::Float32),
-            "Float64" => Ok(DataType::Float64),
+            // 保真层类型字符串收敛到运行时规范类型
+            "Int8" | "Int16" | "Int32" | "Int64" | "UInt8" | "UInt16" | "UInt32" | "UInt64" => {
+                Ok(DataType::Int64)
+            }
+            "Float32" | "Float64" => Ok(DataType::Float64),
             "String" => Ok(DataType::String),
             "Date" => Ok(DataType::Date),
             "Categorical" => Ok(DataType::Categorical),
@@ -245,9 +251,7 @@ impl DataType {
     pub fn default_value(&self) -> DataValue {
         match self {
             DataType::Boolean => DataValue::Boolean(false),
-            DataType::Int32 => DataValue::Int32(0),
             DataType::Int64 => DataValue::Int64(0),
-            DataType::Float32 => DataValue::Float32(num_traits::Zero::zero()),
             DataType::Float64 => DataValue::Float64(num_traits::Zero::zero()),
             DataType::String => DataValue::String(String::new()),
             DataType::Date => DataValue::String(String::new()), // 默认空日期，用字符串表示
@@ -265,9 +269,7 @@ impl DataType {
     pub fn is_primitive(&self) -> bool {
         match self {
             DataType::Boolean
-            | DataType::Int32
             | DataType::Int64
-            | DataType::Float32
             | DataType::Float64
             | DataType::String
             | DataType::Date
@@ -280,7 +282,7 @@ impl DataType {
     /// 是否为数值类型
     pub fn is_numeric(&self) -> bool {
         match self {
-            DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64 => true,
+            DataType::Int64 | DataType::Float64 => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_numeric()),
             _ => false,
         }
@@ -290,9 +292,7 @@ impl DataType {
     pub fn is_comparable(&self) -> bool {
         match self {
             DataType::Boolean
-            | DataType::Int32
             | DataType::Int64
-            | DataType::Float32
             | DataType::Float64
             | DataType::String
             | DataType::Date
@@ -342,9 +342,7 @@ impl DataType {
             (
                 _,
                 DataType::Boolean
-                | DataType::Int32
                 | DataType::Int64
-                | DataType::Float32
                 | DataType::Float64
                 | DataType::Date
                 | DataType::Categorical,

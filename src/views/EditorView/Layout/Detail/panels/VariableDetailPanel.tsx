@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
-import { dataTypeKind, dataTypeFromKey, isPrimitiveType, VARIABLE_SELECTABLE_DATA_TYPE_KINDS } from '@/shared/types/domain/dataType';
+import { dataTypeKind, dataTypeFromKey, isPrimitiveType, VARIABLE_SELECTABLE_DATA_TYPE_KINDS, DATA_SERIES_ELEMENT_TYPE_KINDS } from '@/shared/types/domain/dataType';
 import { dataValueToRaw, dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
@@ -37,9 +37,27 @@ export function VariableDetailPanel({
           <Select
             value={dataTypeKind(variable.dataType)}
             options={VARIABLE_SELECTABLE_DATA_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
-            onChange={(val) => onUpdate({ dataType: dataTypeFromKey(val) })}
+            onChange={(val) =>
+              onUpdate({
+                dataType:
+                  val === 'DataSeries'
+                    ? { kind: 'DataSeries', inner: { kind: 'Float64' } }
+                    : dataTypeFromKey(val),
+              })
+            }
           />
         </DetailFieldRow>
+        {variable.dataType.kind === 'DataSeries' && (
+          <DetailFieldRow label={t('detail.fields.elementType')}>
+            <Select
+              value={dataTypeKind(variable.dataType.inner)}
+              options={DATA_SERIES_ELEMENT_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
+              onChange={(val) =>
+                onUpdate({ dataType: { kind: 'DataSeries', inner: dataTypeFromKey(val) } })
+              }
+            />
+          </DetailFieldRow>
+        )}
         {variable.dataType.kind !== 'Array' && isPrimitiveType(variable.dataType) && (
           <DetailFieldRow label={t('detail.fields.value')}>
             {variable.dataType.kind === 'Boolean' ? (

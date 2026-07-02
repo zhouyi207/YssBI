@@ -39,12 +39,8 @@ function dataTypeToPinType(dt: DataType): string {
   switch (dt.kind) {
     case 'Boolean':
       return 'bool';
-    case 'Int32':
-      return 'Int32';
     case 'Int64':
       return 'Int64';
-    case 'Float32':
-      return 'Float32';
     case 'Float64':
       return 'Float64';
     case 'String':

@@ -65,8 +65,6 @@ pub fn register(registry: &NodeRegistry) {
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
                     DataType::Float64,
                     DataType::Int64,
-                    DataType::Int32,
-                    DataType::Float32,
                     DataType::Date,
                 ])))),
             )),
@@ -76,8 +74,6 @@ pub fn register(registry: &NodeRegistry) {
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
                     DataType::Float64,
                     DataType::Int64,
-                    DataType::Int32,
-                    DataType::Float32,
                     DataType::Date,
                 ])))),
             )),

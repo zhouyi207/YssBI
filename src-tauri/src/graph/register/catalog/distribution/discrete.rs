@@ -17,9 +17,7 @@ fn float_input(
     let v = ctx.get_input_by_role(&PinRole::Data(role))?;
     match v {
         DataValue::Float64(f) => Ok(f),
-        DataValue::Float32(f) => Ok(f as f64),
         DataValue::Int64(i) => Ok(i as f64),
-        DataValue::Int32(i) => Ok(i as f64),
         _ => Err(format!("Expected numeric, got {:?}", v.value_type())),
     }
 }
@@ -31,9 +29,7 @@ fn int_input(
     let v = ctx.get_input_by_role(&PinRole::Data(role))?;
     match v {
         DataValue::Int64(i) => Ok(i),
-        DataValue::Int32(i) => Ok(i as i64),
         DataValue::Float64(f) => Ok(f as i64),
-        DataValue::Float32(f) => Ok(f as i64),
         _ => Err(format!("Expected integer, got {:?}", v.value_type())),
     }
 }

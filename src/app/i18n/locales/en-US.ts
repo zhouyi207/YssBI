@@ -543,6 +543,7 @@ export const enUS = {
     fields: {
       name: "Name",
       type: "Type",
+      elementType: "Element Type",
       category: "Category",
       graph: "Graph",
       value: "Value",

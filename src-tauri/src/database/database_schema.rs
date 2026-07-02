@@ -45,12 +45,20 @@ pub fn dataframe_to_schema(df: &DataFrame) -> DataSchema {
 
 /// 将 Polars 列类型映射为 DataType（供节点执行器等使用）
 pub fn polars_dtype_to_data_type(dtype: &polars::prelude::DataType) -> DataType {
+    use polars::prelude::DataType as PDataType;
     match dtype {
-        polars::prelude::DataType::Boolean => DataType::Boolean,
-        polars::prelude::DataType::Int32 => DataType::Int32,
-        polars::prelude::DataType::Int64 => DataType::Int64,
-        polars::prelude::DataType::Float32 => DataType::Float32,
-        polars::prelude::DataType::Float64 => DataType::Float64,
+        PDataType::Boolean => DataType::Boolean,
+        // 所有整数宽度收敛到 Int64（运行时规范类型）
+        PDataType::Int8
+        | PDataType::Int16
+        | PDataType::Int32
+        | PDataType::Int64
+        | PDataType::UInt8
+        | PDataType::UInt16
+        | PDataType::UInt32
+        | PDataType::UInt64 => DataType::Int64,
+        // 所有浮点宽度收敛到 Float64
+        PDataType::Float32 | PDataType::Float64 => DataType::Float64,
         polars::prelude::DataType::String => DataType::String,
         polars::prelude::DataType::Date => DataType::Date,
         polars::prelude::DataType::Datetime(_, _) => DataType::Date,
@@ -76,10 +84,10 @@ pub fn polars_type_string_to_data_type(s: &str) -> DataType {
     }
     match t {
         "Boolean" => DataType::Boolean,
-        "Int32" => DataType::Int32,
-        "Int64" => DataType::Int64,
-        "Float32" => DataType::Float32,
-        "Float64" => DataType::Float64,
+        "Int8" | "Int16" | "Int32" | "Int64" | "UInt8" | "UInt16" | "UInt32" | "UInt64" => {
+            DataType::Int64
+        }
+        "Float32" | "Float64" => DataType::Float64,
         "String" | "Utf8" => DataType::String,
         "Date" => DataType::Date,
         _ if t.starts_with("Datetime(") || t.starts_with("DateTime(") => DataType::Date,

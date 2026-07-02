@@ -82,7 +82,6 @@ pub fn register(registry: &NodeRegistry) {
             let lag_input = ctx.get_input_by_role(&PinRole::Data(DataRole::Inputs(1)))?;
             let user_lags: usize = match lag_input {
                 DataValue::Int64(v) if v > 0 => v as usize,
-                DataValue::Int32(v) if v > 0 => v as usize,
                 DataValue::Float64(v) if v > 0.0 => v as usize,
                 _ => DEFAULT_MAX_LAG,
             };

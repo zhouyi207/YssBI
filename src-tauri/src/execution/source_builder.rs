@@ -462,9 +462,7 @@ fn is_scalar_data_value(value: &DataValue) -> bool {
     matches!(
         value,
         DataValue::Boolean(_)
-            | DataValue::Int32(_)
             | DataValue::Int64(_)
-            | DataValue::Float32(_)
             | DataValue::Float64(_)
             | DataValue::String(_)
     )
@@ -525,11 +523,7 @@ fn data_value_to_json(v: &DataValue) -> serde_json::Value {
     match v {
         DataValue::Null => serde_json::Value::Null,
         DataValue::Boolean(b) => serde_json::Value::Bool(*b),
-        DataValue::Int32(i) => json!(i),
         DataValue::Int64(i) => json!(i),
-        DataValue::Float32(f) => serde_json::Number::from_f64(*f as f64)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
         DataValue::Float64(f) => serde_json::Number::from_f64(*f)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),

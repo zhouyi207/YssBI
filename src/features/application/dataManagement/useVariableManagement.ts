@@ -33,7 +33,7 @@ export function useVariableManagement() {
 
   const addVariable = useCallback(async (
     name?: string,
-    type: string = 'Int32',
+    type: string = 'Int64',
     isGlobal: boolean = false,
   ) => {
     const created = await createVariableAction({

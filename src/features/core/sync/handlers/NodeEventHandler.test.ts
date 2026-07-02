@@ -74,13 +74,13 @@ describe('Node event handlers', () => {
       pinTypes: [
         {
           pinId: 'local-out',
-          pinType: 'Int32',
+          pinType: 'Int64',
         },
       ],
     });
 
     const store = useGraphDataStore.getState();
-    expect(store.getGraphPin('graph-1', 'local-out')?.type).toBe('Int32');
+    expect(store.getGraphPin('graph-1', 'local-out')?.type).toBe('Int64');
     expect(store.getGraphPin('graph-2', 'local-out')?.type).toBe('Float64');
   });
 });

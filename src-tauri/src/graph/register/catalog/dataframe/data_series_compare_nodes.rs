@@ -40,19 +40,6 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
             r.map_err(|e| format!("Compare {}: {}", op, e))
                 .and_then(to_series)
         }
-        DataValue::Int32(v) => {
-            let r = match op {
-                "gt" => series.gt(*v),
-                "lt" => series.lt(*v),
-                "gte" => series.gt_eq(*v),
-                "lte" => series.lt_eq(*v),
-                "eq" => series.equal(*v),
-                "neq" => series.not_equal(*v),
-                _ => return Err(format!("Compare: unknown op {}", op)),
-            };
-            r.map_err(|e| format!("Compare {}: {}", op, e))
-                .and_then(to_series)
-        }
         DataValue::Boolean(v) => {
             if op != "eq" && op != "neq" {
                 return Err(format!(
@@ -81,19 +68,6 @@ fn compare_series_scalar(series: &Series, scalar: &DataValue, op: &str) -> Resul
                 series.equal(&scalar_series)
             } else {
                 series.not_equal(&scalar_series)
-            };
-            r.map_err(|e| format!("Compare {}: {}", op, e))
-                .and_then(to_series)
-        }
-        DataValue::Float32(v) => {
-            let r = match op {
-                "gt" => series.gt(*v),
-                "lt" => series.lt(*v),
-                "gte" => series.gt_eq(*v),
-                "lte" => series.lt_eq(*v),
-                "eq" => series.equal(*v),
-                "neq" => series.not_equal(*v),
-                _ => return Err(format!("Compare: unknown op {}", op)),
             };
             r.map_err(|e| format!("Compare {}: {}", op, e))
                 .and_then(to_series)

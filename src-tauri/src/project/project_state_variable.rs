@@ -231,8 +231,8 @@ mod tests {
     fn add_int_variable(state: &ProjectState) -> VariableInstance {
         state.add_variable(
             "x",
-            DataType::Int32,
-            DataValue::Int32(42),
+            DataType::Int64,
+            DataValue::Int64(42),
             "",
             VariableScope::Global,
             vec![],

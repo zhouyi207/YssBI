@@ -105,9 +105,7 @@ fn run_probit_regression(
             let got = match other {
                 DataValue::Null => "Null (unconnected or upstream not executed)",
                 DataValue::Boolean(_) => "Boolean",
-                DataValue::Int32(_) => "Int32",
                 DataValue::Int64(_) => "Int64",
-                DataValue::Float32(_) => "Float32",
                 DataValue::Float64(_) => "Float64",
                 _ => "other",
             };

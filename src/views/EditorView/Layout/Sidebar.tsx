@@ -513,7 +513,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label={t("sidebar.sections.local")}
                 expanded={isSectionExpanded("variablesLocal")}
                 onToggle={() => toggleSection("variablesLocal")}
-                onAdd={activeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int32", false) : undefined}
+                onAdd={activeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int64", false) : undefined}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
@@ -534,7 +534,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label={t("sidebar.sections.global")}
                 expanded={isSectionExpanded("variablesGlobal")}
                 onToggle={() => toggleSection("variablesGlobal")}
-                onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int32", true)}
+                onAdd={() => addVariable(DEFAULT_VARIABLE_NAME, "Int64", true)}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >

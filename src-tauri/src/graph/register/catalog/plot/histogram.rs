@@ -48,8 +48,6 @@ pub fn register(registry: &NodeRegistry) {
                     vec![
                         DataType::Float64,
                         DataType::Int64,
-                        DataType::Int32,
-                        DataType::Float32,
                     ],
                 )))),
             )),

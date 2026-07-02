@@ -115,10 +115,10 @@ fn test_complex_node_graph() {
         .expect("Add pin B not found");
 
     graph
-        .set_pin_user_value_by_pin_id(add_pin_a.id, DataValue::Int32(10))
+        .set_pin_user_value_by_pin_id(add_pin_a.id, DataValue::Int64(10))
         .expect("Failed to set add pin A");
     graph
-        .set_pin_user_value_by_pin_id(add_pin_b.id, DataValue::Int32(10))
+        .set_pin_user_value_by_pin_id(add_pin_b.id, DataValue::Int64(10))
         .expect("Failed to set add pin B");
     println!("Set add node: 10 + 10");
 
@@ -130,7 +130,7 @@ fn test_complex_node_graph() {
         .expect("Equal pin B not found");
 
     graph
-        .set_pin_user_value_by_pin_id(equal_pin_b.id, DataValue::Int32(20))
+        .set_pin_user_value_by_pin_id(equal_pin_b.id, DataValue::Int64(20))
         .expect("Failed to set equal pin B");
     println!("Set equal node: ? == 20");
 

@@ -68,7 +68,7 @@ export function buildSidebarContextMenuSections(
             id: "new-variable",
             label: t("contextMenu.sidebar.newVariable"),
             icon: <VscAdd size={12} />,
-            onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int32", target.isGlobal),
+            onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", target.isGlobal),
           },
         ],
       },

@@ -543,6 +543,7 @@ export const zhCN = {
     fields: {
       name: "名称",
       type: "类型",
+      elementType: "元素类型",
       category: "分类",
       graph: "图",
       value: "值",

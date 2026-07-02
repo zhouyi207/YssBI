@@ -1453,8 +1453,8 @@ mod tests {
         );
         state.add_variable(
             "Event Local",
-            DataType::Int32,
-            DataValue::Int32(1),
+            DataType::Int64,
+            DataValue::Int64(1),
             "",
             VariableScope::Event {
                 event_id: event.id.to_string(),
@@ -1511,8 +1511,8 @@ mod tests {
         let event = state.add_event("Copied Event");
         let _local = state.add_variable(
             "Copied Local",
-            DataType::Int32,
-            DataValue::Int32(7),
+            DataType::Int64,
+            DataValue::Int64(7),
             "",
             VariableScope::Event {
                 event_id: event.id.to_string(),
@@ -1590,8 +1590,8 @@ mod tests {
         let event = state.add_event("Duplicate Command Event");
         let local = state.add_variable(
             "Command Local",
-            DataType::Int32,
-            DataValue::Int32(7),
+            DataType::Int64,
+            DataValue::Int64(7),
             "",
             VariableScope::Event {
                 event_id: event.id.to_string(),
@@ -1645,8 +1645,8 @@ mod tests {
         let event = state.add_event("Duplicate Id Event");
         let local = state.add_variable(
             "Dup Id Local",
-            DataType::Int32,
-            DataValue::Int32(1),
+            DataType::Int64,
+            DataValue::Int64(1),
             "",
             VariableScope::Event {
                 event_id: event.id.to_string(),

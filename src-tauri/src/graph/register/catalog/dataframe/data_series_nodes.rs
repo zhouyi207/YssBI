@@ -15,10 +15,8 @@ fn int_input(
     let v = ctx.get_input_by_role(&PinRole::Data(role))?;
     match v {
         DataValue::Int64(i) => Ok(i),
-        DataValue::Int32(i) => Ok(i as i64),
         DataValue::Float64(f) => Ok(f as i64),
-        DataValue::Float32(f) => Ok(f as i64),
-        _ => Err("Int Range: Start must be an integer (Int64/Int32)".to_string()),
+        _ => Err("Int Range: Start must be an integer (Int64)".to_string()),
     }
 }
 

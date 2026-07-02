@@ -51,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn test_int32_constant() {
+    fn test_int64_constant() {
         let registry = create_test_registry();
         let graph = Arc::new(GraphInstance::new(
             "Test Graph",
@@ -60,8 +60,8 @@ mod tests {
         ));
 
         let const_node = graph
-            .create_node("Value:Constants:Int32")
-            .expect("Failed to create int32 constant node");
+            .create_node("Value:Constants:Int64")
+            .expect("Failed to create int64 constant node");
 
         let pins = graph.get_pin_instances_by_node_id(const_node);
         let result_pin = pins
@@ -70,14 +70,14 @@ mod tests {
             .expect("Result pin not found");
 
         graph
-            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::Int32(42))
+            .set_pin_user_value_by_pin_id(result_pin.id, DataValue::Int64(42))
             .expect("Failed to set value");
 
         let value = graph
             .get_pin_user_value_by_pin_id(result_pin.id)
             .expect("Failed to get value");
 
-        assert_eq!(value, DataValue::Int32(42));
+        assert_eq!(value, DataValue::Int64(42));
     }
 
     #[test]
@@ -171,9 +171,9 @@ mod tests {
             .find(|p| p.definition.role == PinRole::Data(DataRole::Output))
             .expect("Output pin not found");
 
-        // 设置输入值（Int32）
+        // 设置输入值（Int64）
         graph
-            .set_pin_user_value_by_pin_id(input_pin.id, DataValue::Int32(42))
+            .set_pin_user_value_by_pin_id(input_pin.id, DataValue::Int64(42))
             .expect("Failed to set input value");
 
         // 执行转换（需要设置输出类型）

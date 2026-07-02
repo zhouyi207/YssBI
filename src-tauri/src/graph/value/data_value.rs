@@ -155,11 +155,9 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
 /// 运行时数据值
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DataValue {
-    // 基础类型
+    // 基础类型（运行时数值只保留 Int64/Float64）
     Boolean(bool),
-    Int32(i32),
     Int64(i64),
-    Float32(f32),
     Float64(f64),
     String(String),
 
@@ -188,9 +186,7 @@ impl DataValue {
     pub fn value_type(&self) -> Option<DataType> {
         match self {
             DataValue::Boolean(_) => Some(DataType::Boolean),
-            DataValue::Int32(_) => Some(DataType::Int32),
             DataValue::Int64(_) => Some(DataType::Int64),
-            DataValue::Float32(_) => Some(DataType::Float32),
             DataValue::Float64(_) => Some(DataType::Float64),
             DataValue::String(_) => Some(DataType::String),
             DataValue::Array(arr) => {
@@ -214,9 +210,7 @@ impl DataValue {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             DataValue::Boolean(b) => Some(*b),
-            DataValue::Int32(n) => Some(*n != 0),
             DataValue::Int64(n) => Some(*n != 0),
-            DataValue::Float32(n) => Some(!n.is_zero()),
             DataValue::Float64(n) => Some(!n.is_zero()),
             DataValue::String(s) => Some(!s.is_empty()),
             DataValue::Null => Some(false),
@@ -226,9 +220,7 @@ impl DataValue {
 
     pub fn as_i32(&self) -> Option<i32> {
         match self {
-            DataValue::Int32(i) => Some(*i),
             DataValue::Int64(i) => Some(*i as i32),
-            DataValue::Float32(f) => Some(*f as i32),
             DataValue::Float64(f) => Some(*f as i32),
             DataValue::Boolean(b) => Some(if *b { i32::one() } else { i32::zero() }),
             _ => None,
@@ -238,16 +230,15 @@ impl DataValue {
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             DataValue::Int64(i) => Some(*i),
-            DataValue::Int32(i) => Some(*i as i64),
+            DataValue::Float64(f) => Some(*f as i64),
+            DataValue::Boolean(b) => Some(if *b { i64::one() } else { i64::zero() }),
             _ => None,
         }
     }
 
     pub fn as_f32(&self) -> Option<f32> {
         match self {
-            DataValue::Float32(f) => Some(*f),
             DataValue::Float64(f) => Some(*f as f32),
-            DataValue::Int32(i) => Some(*i as f32),
             DataValue::Int64(i) => Some(*i as f32),
             DataValue::Boolean(b) => Some(if *b { f32::one() } else { f32::zero() }),
             _ => None,
@@ -257,9 +248,8 @@ impl DataValue {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             DataValue::Float64(f) => Some(*f),
-            DataValue::Float32(f) => Some(*f as f64),
             DataValue::Int64(i) => Some(*i as f64),
-            DataValue::Int32(i) => Some(*i as f64),
+            DataValue::Boolean(b) => Some(if *b { f64::one() } else { f64::zero() }),
             _ => None,
         }
     }
@@ -301,17 +291,9 @@ impl DataValue {
                 .as_bool()
                 .map(DataValue::Boolean)
                 .unwrap_or_else(|| self.clone()),
-            DataType::Int32 => self
-                .as_i32()
-                .map(DataValue::Int32)
-                .unwrap_or_else(|| self.clone()),
             DataType::Int64 => self
                 .as_i64()
                 .map(DataValue::Int64)
-                .unwrap_or_else(|| self.clone()),
-            DataType::Float32 => self
-                .as_f32()
-                .map(DataValue::Float32)
                 .unwrap_or_else(|| self.clone()),
             DataType::Float64 => self
                 .as_f64()
@@ -321,9 +303,7 @@ impl DataValue {
                 let s = match self {
                     DataValue::String(s) => return DataValue::String(s.clone()),
                     DataValue::Boolean(b) => b.to_string(),
-                    DataValue::Int32(n) => n.to_string(),
                     DataValue::Int64(n) => n.to_string(),
-                    DataValue::Float32(n) => n.to_string(),
                     DataValue::Float64(n) => n.to_string(),
                     DataValue::Null => "null".to_string(),
                     DataValue::DataFrame(id) => format!("DataFrame({})", id),
@@ -378,9 +358,7 @@ impl Add for DataValue {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             // 仅同类型运算，类型转换需使用 convert 节点
-            (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a + b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a + b)),
-            (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a + b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a + b)),
             (DataValue::String(a), DataValue::String(b)) => {
                 Ok(DataValue::String(format!("{}{}", a, b)))
@@ -402,9 +380,7 @@ impl Sub for DataValue {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             // 仅同类型运算，类型转换需使用 convert 节点
-            (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a - b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a - b)),
-            (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a - b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a - b)),
 
             (a, b) => Err(format!(
@@ -423,9 +399,7 @@ impl Mul for DataValue {
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             // 仅同类型运算，类型转换需使用 convert 节点
-            (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a * b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a * b)),
-            (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a * b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a * b)),
 
             (a, b) => Err(format!(
@@ -443,9 +417,7 @@ impl Div for DataValue {
 
     fn div(self, rhs: Self) -> Self::Output {
         let is_zero = match &rhs {
-            DataValue::Int32(v) => v.is_zero(),
             DataValue::Int64(v) => v.is_zero(),
-            DataValue::Float32(v) => v.is_zero(),
             DataValue::Float64(v) => v.is_zero(),
             _ => false,
         };
@@ -456,9 +428,7 @@ impl Div for DataValue {
 
         match (self, rhs) {
             // 仅同类型运算，类型转换需使用 convert 节点
-            (DataValue::Int32(a), DataValue::Int32(b)) => Ok(DataValue::Int32(a / b)),
             (DataValue::Int64(a), DataValue::Int64(b)) => Ok(DataValue::Int64(a / b)),
-            (DataValue::Float32(a), DataValue::Float32(b)) => Ok(DataValue::Float32(a / b)),
             (DataValue::Float64(a), DataValue::Float64(b)) => Ok(DataValue::Float64(a / b)),
 
             (a, b) => Err(format!(

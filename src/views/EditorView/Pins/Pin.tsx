@@ -17,13 +17,13 @@ import { presentationRouteForDescriptor } from "@/features/core/dataView";
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
   if (v == null) return v;
-  if (typeof v === "object" && !Array.isArray(v) && ("String" in v || "Boolean" in v || "Int32" in v || "Int64" in v || "Float32" in v || "Float64" in v || "Null" in v)) {
-    return dataValueToRaw(dataValueFromBackend(v));
+  if (typeof v === "object" && !Array.isArray(v) && ("String" in v || "Boolean" in v || "Int64" in v || "Float64" in v || "Null" in v)) {
+    return dataValueToRaw(dataValueFromBackend(v as Parameters<typeof dataValueFromBackend>[0]));
   }
   return v;
 }
 
-const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int32", "Int64", "Float32", "Float64", "string"]);
+const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int64", "Float64", "string"]);
 
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 

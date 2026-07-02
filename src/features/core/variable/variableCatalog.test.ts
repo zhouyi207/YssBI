@@ -11,8 +11,8 @@ describe('variableCatalog', () => {
       {
         id: 'global-1',
         name: 'Counter',
-        dataType: { kind: 'Int32' },
-        dataValue: { kind: 'Int32', value: 0 },
+        dataType: { kind: 'Int64' },
+        dataValue: { kind: 'Int64', value: 0 },
         description: '',
         scope: { type: 'global' },
         tags: [],
@@ -33,8 +33,8 @@ describe('variableCatalog', () => {
     expect(variableFromIndexRow({
       id: 'global-1',
       name: 'Counter',
-      dataType: { kind: 'Int32' },
-      dataValue: { kind: 'Int32', value: 0 },
+      dataType: { kind: 'Int64' },
+      dataValue: { kind: 'Int64', value: 0 },
       description: '',
       scope: { type: 'global' },
       tags: [],

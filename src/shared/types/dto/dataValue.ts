@@ -21,9 +21,7 @@ export type DataSeriesValueBackend =
 /** 后端 DataValue 序列化格式（Rust serde 外部标签枚举） */
 export type DataValueBackend =
   | { Boolean: boolean }
-  | { Int32: number }
   | { Int64: number }
-  | { Float32: number }
   | { Float64: number }
   | { String: string }
   | { Array: DataValueBackend[] }
@@ -43,9 +41,7 @@ export function dataValueFromBackend(
   if ('kind' in v && v.kind === 'Null') return { kind: 'Null' };
 
   if ('Boolean' in v) return { kind: 'Boolean', value: v.Boolean };
-  if ('Int32' in v) return { kind: 'Int32', value: v.Int32 };
   if ('Int64' in v) return { kind: 'Int64', value: v.Int64 };
-  if ('Float32' in v) return { kind: 'Float32', value: v.Float32 };
   if ('Float64' in v) return { kind: 'Float64', value: v.Float64 };
   if ('String' in v) return { kind: 'String', value: v.String };
   if ('Array' in v)
@@ -82,15 +78,15 @@ export function dataValueToBackend(
   switch (dv.kind) {
     case 'Boolean':
       return { Boolean: dv.value };
-    case 'Int32':
-      return { Int32: dv.value };
     case 'Int64':
       return { Int64: dv.value };
-    case 'Float32':
-      return { Float32: dv.value };
     case 'Float64':
       return { Float64: dv.value };
     case 'String':
+      return { String: dv.value };
+    // 后端 DataValue 无 Date/Categorical 变体，统一以 String 承载
+    case 'Date':
+    case 'Categorical':
       return { String: dv.value };
     case 'Array':
       return { Array: dv.value.map(dataValueToBackend) };

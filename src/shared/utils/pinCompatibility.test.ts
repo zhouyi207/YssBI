@@ -6,7 +6,7 @@ import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins } fro
 
 const FLOAT64: DataType = { kind: 'Float64' };
 const STRING: DataType = { kind: 'String' };
-const INT32: DataType = { kind: 'Int32' };
+const INT64: DataType = { kind: 'Int64' };
 const SERIES_FLOAT64: DataType = { kind: 'DataSeries', inner: { kind: 'Float64' } };
 const MODEL: DataType = { kind: 'Struct', inner: 'Model' };
 const OLS_MODEL: DataType = { kind: 'Struct', inner: 'OLSModel' };
@@ -92,7 +92,7 @@ describe('pinAcceptsType - OneOf pin converges to compatible members only', () =
 
   it('rejects types outside the OneOf set', () => {
     expect(pinAcceptsType(draggedOneOfInput, STRING)).toBe(false);
-    expect(pinAcceptsType(draggedOneOfInput, INT32)).toBe(false);
+    expect(pinAcceptsType(draggedOneOfInput, INT64)).toBe(false);
   });
 });
 

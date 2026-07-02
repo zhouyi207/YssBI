@@ -4,14 +4,12 @@ use crate::graph::value::DataType;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
 
-/// 将 DataType 映射为前端 pin type 字符串（保留精度：Int32/Int64/Float32/Float64）
+/// 将 DataType 映射为前端 pin type 字符串（运行时数值仅 Int64/Float64）
 /// 容器类型（Array, DataSeries）会递归到内部类型
 pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
     match dt {
         DataType::Boolean => "bool",
-        DataType::Int32 => "Int32",
         DataType::Int64 => "Int64",
-        DataType::Float32 => "Float32",
         DataType::Float64 => "Float64",
         DataType::String => "string",
         DataType::Date => "date",

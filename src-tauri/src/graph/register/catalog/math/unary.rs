@@ -12,18 +12,7 @@ use polars::prelude::IntoSeries;
 use std::sync::Arc;
 
 fn numeric_input_type() -> DataType {
-    DataType::one_of(vec![
-        DataType::Float64,
-        DataType::Float32,
-        DataType::Int64,
-        DataType::Int32,
-        DataType::DataSeries(Box::new(DataType::one_of(vec![
-            DataType::Float64,
-            DataType::Float32,
-            DataType::Int64,
-            DataType::Int32,
-        ]))),
-    ])
+    DataType::one_of(vec![DataType::number(), DataType::number_series()])
 }
 
 fn numeric_output_type() -> DataType {
@@ -34,13 +23,7 @@ fn numeric_output_type() -> DataType {
 }
 
 fn scalar_to_f64(v: &DataValue) -> Option<f64> {
-    match v {
-        DataValue::Float64(x) => Some(*x),
-        DataValue::Float32(x) => Some(*x as f64),
-        DataValue::Int64(x) => Some(*x as f64),
-        DataValue::Int32(x) => Some(*x as f64),
-        _ => None,
-    }
+    v.as_f64()
 }
 
 fn register_unary_fn(

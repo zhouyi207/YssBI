@@ -9,9 +9,7 @@
  */
 export type DataType =
   | { kind: 'Boolean' }
-  | { kind: 'Int32' }
   | { kind: 'Int64' }
-  | { kind: 'Float32' }
   | { kind: 'Float64' }
   | { kind: 'String' }
   | { kind: 'Date' }
@@ -24,12 +22,14 @@ export type DataType =
   | { kind: 'Struct'; inner: string }
   | { kind: 'OneOf'; inner: DataType[] };
 
-/** 变量详情面板可选的数据类型（不含 Any） */
+/**
+ * 变量详情面板「标量类型」可选集（收敛后：仅运行时规范标量）。
+ * Int32/Float32/UInt* 属 DB/DataView 保真层，不作为变量标量类型；
+ * Categorical/Date/time/datetime 属列级概念，只作为 DataSeries 元素类型出现。
+ */
 export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
   'Boolean',
-  'Int32',
   'Int64',
-  'Float32',
   'Float64',
   'String',
   'Array',
@@ -39,6 +39,18 @@ export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
 ] as const;
 
 export type VariableSelectableDataTypeKind = (typeof VARIABLE_SELECTABLE_DATA_TYPE_KINDS)[number];
+
+/** DataSeries 变量的元素类型可选集（列级类型）。 */
+export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
+  'Boolean',
+  'Int64',
+  'Float64',
+  'String',
+  'Date',
+  'Categorical',
+] as const;
+
+export type DataSeriesElementTypeKind = (typeof DATA_SERIES_ELEMENT_TYPE_KINDS)[number];
 
 export function isVariableDataTypeAllowed(dataType: DataType): boolean {
   return dataType.kind !== 'Any';
@@ -123,9 +135,16 @@ export function dataTypeFromDisplayString(s: string): DataType | null {
 
   switch (trimmed) {
     case 'Boolean': return { kind: 'Boolean' };
-    case 'Int32': return { kind: 'Int32' };
-    case 'Int64': return { kind: 'Int64' };
-    case 'Float32': return { kind: 'Float32' };
+    // 保真层宽度收敛到运行时规范类型
+    case 'Int8':
+    case 'Int16':
+    case 'Int32':
+    case 'Int64':
+    case 'UInt8':
+    case 'UInt16':
+    case 'UInt32':
+    case 'UInt64': return { kind: 'Int64' };
+    case 'Float32':
     case 'Float64': return { kind: 'Float64' };
     case 'String': return { kind: 'String' };
     case 'Date': return { kind: 'Date' };
@@ -177,7 +196,7 @@ export function isPrimitiveType(dataType: DataType): boolean {
   if (dataType.kind === 'OneOf') {
     return dataType.inner.length > 0 && dataType.inner.every(isPrimitiveType);
   }
-  return ['Boolean', 'Int32', 'Int64', 'Float32', 'Float64', 'String', 'Date', 'Categorical'].includes(
+  return ['Boolean', 'Int64', 'Float64', 'String', 'Date', 'Categorical'].includes(
     dataType.kind
   );
 }
@@ -195,10 +214,8 @@ export function getDefaultValue(dataType: DataType): unknown {
   switch (dataType.kind) {
     case 'Boolean':
       return false;
-    case 'Int32':
     case 'Int64':
       return 0;
-    case 'Float32':
     case 'Float64':
       return 0.0;
     case 'String':
@@ -223,14 +240,18 @@ export function dataTypeFromPinType(pinType: string): DataType {
     case 'boolean':
       return { kind: 'Boolean' };
     case 'int':
+    case 'int8':
+    case 'int16':
     case 'int32':
-      return { kind: 'Int32' };
     case 'int64':
+    case 'uint8':
+    case 'uint16':
+    case 'uint32':
+    case 'uint64':
       return { kind: 'Int64' };
+    case 'number':
     case 'float':
     case 'float32':
-      return { kind: 'Float32' };
-    case 'number':
     case 'float64':
       return { kind: 'Float64' };
     case 'string':

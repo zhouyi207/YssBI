@@ -457,16 +457,16 @@ mod tests {
         let event = state.add_event("Runtime Event");
         let global = state.add_variable(
             "global",
-            DataType::Int32,
-            DataValue::Int32(1),
+            DataType::Int64,
+            DataValue::Int64(1),
             "",
             VariableScope::Global,
             vec![],
         );
         let local = state.add_variable(
             "local",
-            DataType::Int32,
-            DataValue::Int32(2),
+            DataType::Int64,
+            DataValue::Int64(2),
             "",
             VariableScope::Event {
                 event_id: event.id.to_string(),
@@ -482,11 +482,11 @@ mod tests {
 
         assert_eq!(
             runtime.get_variable_value(&global.id.to_string()).unwrap(),
-            DataValue::Int32(1)
+            DataValue::Int64(1)
         );
         assert_eq!(
             runtime.get_variable_value(&local.id.to_string()).unwrap(),
-            DataValue::Int32(2)
+            DataValue::Int64(2)
         );
     }
 
@@ -497,8 +497,8 @@ mod tests {
         let event_b = state.add_event("Graph B");
         let local = state.add_variable(
             "foreign local",
-            DataType::Int32,
-            DataValue::Int32(9),
+            DataType::Int64,
+            DataValue::Int64(9),
             "",
             VariableScope::Event {
                 event_id: event_a.id.to_string(),

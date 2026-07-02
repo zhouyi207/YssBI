@@ -91,7 +91,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     onValueChange,
   });
 
-  const isNumeric = pinType === "Int32" || pinType === "Int64" || pinType === "Float32" || pinType === "Float64";
+  const isNumeric = pinType === "Int64" || pinType === "Float64";
 
   const [inputText, setInputText] = useState(() =>
     isNumeric ? String(value ?? 0) : ""
@@ -130,7 +130,6 @@ export const PinInput: React.FC<PinInputProps> = ({
   }
 
   switch (pinType) {
-    case "Int32":
     case "Int64":
       return (
         <Input
@@ -170,7 +169,6 @@ export const PinInput: React.FC<PinInputProps> = ({
         />
       );
 
-    case "Float32":
     case "Float64":
       return (
         <Input

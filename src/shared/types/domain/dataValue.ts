@@ -17,9 +17,7 @@ export type DataSeriesValuePayload = {
  */
 export type DataValue =
   | { kind: 'Boolean'; value: boolean }
-  | { kind: 'Int32'; value: number }
   | { kind: 'Int64'; value: number }
-  | { kind: 'Float32'; value: number }
   | { kind: 'Float64'; value: number }
   | { kind: 'String'; value: string }
   | { kind: 'Date'; value: string }
@@ -34,9 +32,7 @@ export type DataValue =
 export function dataValueToRaw(dv: DataValue): unknown {
   switch (dv.kind) {
     case 'Boolean':
-    case 'Int32':
     case 'Int64':
-    case 'Float32':
     case 'Float64':
     case 'String':
     case 'Date':
@@ -68,12 +64,8 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
   switch (k) {
     case 'Boolean':
       return { kind: 'Boolean', value: Boolean(raw) };
-    case 'Int32':
-      return { kind: 'Int32', value: Number(raw) | 0 };
     case 'Int64':
       return { kind: 'Int64', value: Math.floor(Number(raw)) };
-    case 'Float32':
-      return { kind: 'Float32', value: Number(raw) };
     case 'Float64':
       return { kind: 'Float64', value: Number(raw) };
     case 'String':

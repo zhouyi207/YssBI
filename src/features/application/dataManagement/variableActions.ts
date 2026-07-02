@@ -47,7 +47,7 @@ export async function createVariableAction(params: {
 }): Promise<string | null> {
   try {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
-    const dataType = dataTypeFromKey(params.type ?? 'Int32');
+    const dataType = dataTypeFromKey(params.type ?? 'Int64');
     if (!isVariableDataTypeAllowed(dataType)) {
       uiStore.showToast('变量类型不能为 Any', 'error');
       return null;

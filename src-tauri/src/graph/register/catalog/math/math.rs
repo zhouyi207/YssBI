@@ -12,20 +12,9 @@ use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::Series;
 use std::sync::Arc;
 
-/// 可参与数学运算的输入类型：标量 + DataSeries<数值类型>
+/// 可参与数学运算的输入类型：标量数值 + DataSeries<数值类型>
 fn operable_input_type() -> DataType {
-    DataType::one_of(vec![
-        DataType::Float64,
-        DataType::Float32,
-        DataType::Int64,
-        DataType::Int32,
-        DataType::DataSeries(Box::new(DataType::one_of(vec![
-            DataType::Float64,
-            DataType::Float32,
-            DataType::Int64,
-            DataType::Int32,
-        ]))),
-    ])
+    DataType::one_of(vec![DataType::number(), DataType::number_series()])
 }
 
 /// 运算结果类型：标量或 DataSeries<Float64>
@@ -37,13 +26,7 @@ fn operable_output_type() -> DataType {
 }
 
 fn scalar_to_f64(v: &DataValue) -> Option<f64> {
-    match v {
-        DataValue::Float64(x) => Some(*x),
-        DataValue::Float32(x) => Some(*x as f64),
-        DataValue::Int64(x) => Some(*x as f64),
-        DataValue::Int32(x) => Some(*x as f64),
-        _ => None,
-    }
+    v.as_f64()
 }
 
 fn has_any_series(operands: &[DataValue]) -> bool {

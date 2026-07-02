@@ -8,10 +8,8 @@ import { logger } from '@/utils/appLogger';
  */
 export function getDefaultValue(pinType: string): unknown {
   switch (pinType) {
-    case "Int32":
     case "Int64":
       return 0;
-    case "Float32":
     case "Float64":
       return 0;
     case "bool":
