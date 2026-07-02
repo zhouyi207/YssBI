@@ -6,7 +6,7 @@ export function presentationRouteForDescriptor(descriptor: SourceDescriptor): st
     case 'plot':
       return '/plot';
     case 'dataframe':
-    case 'series':
+    case 'dataseries':
     case 'scalar':
     case 'null':
     case 'json':

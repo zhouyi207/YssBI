@@ -175,7 +175,7 @@ fn build_panel_did_data(
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Y must be a DataSeries".to_string()),
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -206,7 +206,7 @@ fn build_panel_did_data(
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Treat must be a DataSeries".to_string()),
     };
-    let treat_series = ctx.get_series(&treat_id)?;
+    let treat_series = ctx.get_data_series(&treat_id)?;
     let treat_name = {
         let raw = treat_series.name().to_string();
         if raw.is_empty() {
@@ -221,7 +221,7 @@ fn build_panel_did_data(
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("DID: Post must be a DataSeries".to_string()),
     };
-    let post_series = ctx.get_series(&post_id)?;
+    let post_series = ctx.get_data_series(&post_id)?;
     let post_name = {
         let raw = post_series.name().to_string();
         if raw.is_empty() {
@@ -258,7 +258,7 @@ fn build_panel_did_data(
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("DID: X {} is not a DataSeries", i)),
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let name = {
             let raw = series.name().to_string();
             if raw.is_empty() {
@@ -296,11 +296,11 @@ fn build_panel_did_data(
     df_cols.push(Column::from(Series::new("__post__".into(), post_f)));
 
     df_cols.push(Column::from(
-        ctx.get_series(&entity_id_str)?
+        ctx.get_data_series(&entity_id_str)?
             .with_name("__entity__".into()),
     ));
     df_cols.push(Column::from(
-        ctx.get_series(&time_id_str)?.with_name("__time__".into()),
+        ctx.get_data_series(&time_id_str)?.with_name("__time__".into()),
     ));
 
     let df = DataFrame::new(n_raw, df_cols)

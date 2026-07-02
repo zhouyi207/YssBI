@@ -217,7 +217,7 @@ mod tests {
         .with_dynamic(true)
     }
 
-    fn series_input(name: &str) -> PinDefinition {
+    fn data_series_input(name: &str) -> PinDefinition {
         PinDefinition::data_input(
             name,
             DataRole::Input,
@@ -268,7 +268,7 @@ mod tests {
     /// 连接动态 pin 到一个外部消费者 pin，返回消费者 pin id。
     fn connect_to_consumer(ds: &mut GraphDataState, from_pin: PinId) -> PinId {
         let other_node = NodeId::new();
-        let consumer = PinInstance::from_definition(&series_input("In"), other_node, 0);
+        let consumer = PinInstance::from_definition(&data_series_input("In"), other_node, 0);
         let consumer_id = consumer.id;
         ds.connections.register_pin(consumer_id, other_node);
         ds.pins.insert(consumer_id, consumer);

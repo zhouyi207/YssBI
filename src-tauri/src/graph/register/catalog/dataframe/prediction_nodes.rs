@@ -110,7 +110,7 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                     }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let f64_ca = series.f64().map_err(|e| {
                     format!("Predict: Exog '{}' cannot cast to Float64: {}", name, e)
                 })?;
@@ -144,7 +144,7 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
                     }
                     _ => return Err(format!("Predict: Exog '{}' is not a DataSeries", name)),
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
                     .map_err(|e| {
@@ -220,7 +220,7 @@ fn run_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<ExecutionEffec
         .collect();
 
     let result_series = Series::from_iter(predicted.into_iter()).with_name("predicted".into());
-    let result_id = ctx.put_series(result_series)?;
+    let result_id = ctx.put_data_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
         DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -333,7 +333,7 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                         ));
                     }
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let f64_ca = series.f64().map_err(|e| {
                     format!(
                         "Logit Predict: Exog '{}' cannot cast to Float64: {}",
@@ -375,7 +375,7 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
                         ));
                     }
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
                     .map_err(|e| {
@@ -455,7 +455,7 @@ fn run_logit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executio
         .collect();
 
     let result_series = Series::from_iter(predicted.into_iter()).with_name("probability".into());
-    let result_id = ctx.put_series(result_series)?;
+    let result_id = ctx.put_data_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
         DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -559,7 +559,7 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                         ));
                     }
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let f64_ca = series.f64().map_err(|e| {
                     format!(
                         "Probit Predict: Exog '{}' cannot cast to Float64: {}",
@@ -601,7 +601,7 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
                         ));
                     }
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let str_series = series
                     .cast(&polars::prelude::DataType::String)
                     .map_err(|e| {
@@ -683,7 +683,7 @@ fn run_probit_predict(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Executi
         .collect();
 
     let result_series = Series::from_iter(predicted.into_iter()).with_name("probability".into());
-    let result_id = ctx.put_series(result_series)?;
+    let result_id = ctx.put_data_series(result_series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Custom("predicted".to_string())),
         DataValue::DataSeries(DataSeriesValue::with_element_type(

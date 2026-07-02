@@ -1,6 +1,6 @@
 //! 执行期数据缓存
 //!
-//! 在图执行过程中，节点可能产生中间 DataFrame / Series 结果。
+//! 在图执行过程中，节点可能产生中间 DataFrame / DataSeries 结果。
 //! `ExecutionDataStore` 以 copy-on-write 语义存储这些中间产物，
 //! 避免修改原始数据，同时允许下游节点通过 ID 引用中间结果。
 
@@ -19,7 +19,7 @@ use uuid::Uuid;
 /// - 执行结束后丢弃
 pub struct ExecutionDataStore {
     dataframes: HashMap<String, Arc<DataFrame>>,
-    series: HashMap<String, Series>,
+    data_series: HashMap<String, Series>,
     /// 通用不透明句柄存储（Struct 类型值的实际对象）
     handles: HashMap<String, Arc<dyn Any + Send + Sync>>,
 }
@@ -28,7 +28,7 @@ impl ExecutionDataStore {
     pub fn new() -> Self {
         Self {
             dataframes: HashMap::new(),
-            series: HashMap::new(),
+            data_series: HashMap::new(),
             handles: HashMap::new(),
         }
     }
@@ -50,21 +50,21 @@ impl ExecutionDataStore {
         self.dataframes.insert(id, df);
     }
 
-    /// 按 ID 获取缓存的 Series
-    pub fn get_series(&self, id: &str) -> Option<&Series> {
-        self.series.get(id)
+    /// 按 ID 获取缓存的 DataSeries（Polars Series 列）
+    pub fn get_data_series(&self, id: &str) -> Option<&Series> {
+        self.data_series.get(id)
     }
 
-    /// 存入中间 Series，返回生成的 UUID 引用 ID
-    pub fn put_series(&mut self, s: Series) -> String {
-        let id = format!("series_{}", Uuid::new_v4());
-        self.series.insert(id.clone(), s);
+    /// 存入中间 DataSeries，返回生成的 UUID 引用 ID
+    pub fn put_data_series(&mut self, s: Series) -> String {
+        let id = format!("data_series_{}", Uuid::new_v4());
+        self.data_series.insert(id.clone(), s);
         id
     }
 
-    /// 以指定 ID 存入 Series
-    pub fn put_series_with_id(&mut self, id: String, s: Series) {
-        self.series.insert(id, s);
+    /// 以指定 ID 存入 DataSeries
+    pub fn put_data_series_with_id(&mut self, id: String, s: Series) {
+        self.data_series.insert(id, s);
     }
 
     // ========================================================================
@@ -103,7 +103,7 @@ impl ExecutionDataStore {
     /// 清除所有缓存
     pub fn clear(&mut self) {
         self.dataframes.clear();
-        self.series.clear();
+        self.data_series.clear();
         self.handles.clear();
     }
 }

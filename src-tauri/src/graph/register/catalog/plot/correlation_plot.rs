@@ -84,7 +84,7 @@ pub fn register(registry: &NodeRegistry) {
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::repeatable(
                 PinDefinition::data_input("", DataRole::Inputs(0), numeric_dataseries_type()),
-                "Series",
+                "DataSeries",
                 2,
                 None,
             ),
@@ -108,7 +108,7 @@ pub fn register(registry: &NodeRegistry) {
             let mut col_vecs: Vec<Vec<Option<f64>>> = Vec::with_capacity(series_values.len());
 
             for (idx, id) in series_values.iter().enumerate() {
-                let series = ctx.get_series(id)?;
+                let series = ctx.get_data_series(id)?;
                 let label = series.name().to_string();
                 labels.push(if label.is_empty() {
                     format!("Series {}", idx + 1)

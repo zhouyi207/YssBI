@@ -176,7 +176,7 @@ pub(crate) fn series_to_group_indices(
     ctx: &mut dyn NodeExecutionContextTrait,
     series_id: &str,
 ) -> Result<Vec<usize>, String> {
-    let series = ctx.get_series(series_id)?;
+    let series = ctx.get_data_series(series_id)?;
     let n = series.len();
     let mut indices = Vec::with_capacity(n);
     let mut value_to_idx: HashMap<String, usize> = HashMap::new();
@@ -294,7 +294,7 @@ fn build_panel_data(
         DataValue::DataSeries(v) => v.id.clone(),
         _ => return Err("Panel: Y must be a DataSeries".to_string()),
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -341,7 +341,7 @@ fn build_panel_data(
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("Panel: X {} is not a DataSeries", i)),
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let name = {
             let raw = series.name().to_string();
             if raw.is_empty() {
@@ -375,7 +375,7 @@ fn build_panel_data(
         exog_meta.push((name, is_cat, dsv));
     }
 
-    let entity_series = ctx.get_series(&entity_id_str)?;
+    let entity_series = ctx.get_data_series(&entity_id_str)?;
     let entity_series_name = {
         let raw = entity_series.name().to_string();
         if raw.is_empty() {
@@ -384,7 +384,7 @@ fn build_panel_data(
             raw
         }
     };
-    let time_series = ctx.get_series(&time_id_str)?;
+    let time_series = ctx.get_data_series(&time_id_str)?;
     let time_series_name = {
         let raw = time_series.name().to_string();
         if raw.is_empty() {

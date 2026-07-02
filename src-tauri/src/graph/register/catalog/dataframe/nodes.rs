@@ -92,9 +92,9 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
 
             let column_names = ctx.list_database_columns(&df_id)?;
             for col_name in column_names {
-                let series = ctx.load_database_series(&df_id, &col_name)?;
+                let series = ctx.load_database_data_series(&df_id, &col_name)?;
                 let element_type = polars_dtype_to_data_type(series.dtype());
-                let series_id = ctx.put_series(series)?;
+                let series_id = ctx.put_data_series(series)?;
                 let role = PinRole::Data(DataRole::Custom(col_name));
                 let value = DataValue::DataSeries(DataSeriesValue::with_element_type(series_id, element_type));
                 if let Err(_) = ctx.emit_output_by_role(&role, value) {}
@@ -171,7 +171,7 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
                 .into_iter()
                 .filter_map(|v| {
                     if let DataValue::DataSeries(dsv) = v {
-                        ctx.get_series(&dsv.id).ok()
+                        ctx.get_data_series(&dsv.id).ok()
                     } else {
                         None
                     }
@@ -271,7 +271,7 @@ fn register_filter_dataframe(registry: &NodeRegistry) {
             };
 
             let df = ctx.get_dataframe(&df_id)?;
-            let mask_series = ctx.get_series(&cond_id)?;
+            let mask_series = ctx.get_data_series(&cond_id)?;
             let mask = mask_series
                 .bool()
                 .map_err(|e| format!("Filter DataFrame: Condition must be Boolean DataSeries: {}", e))?;

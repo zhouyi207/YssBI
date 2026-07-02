@@ -96,8 +96,8 @@ pub fn register(registry: &NodeRegistry) {
                 _ => return Err("Line: Y input must be a numeric DataSeries".to_string()),
             };
 
-            let x_series = ctx.get_series(&x_id)?;
-            let y_series = ctx.get_series(&y_id)?;
+            let x_series = ctx.get_data_series(&x_id)?;
+            let y_series = ctx.get_data_series(&y_id)?;
 
             let x_cast = series_to_plot_f64(&x_series)
                 .map_err(|e| format!("Line: X {}", e))?;

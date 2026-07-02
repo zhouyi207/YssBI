@@ -19,7 +19,7 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
     .with_localized_description("为 Categorical DataSeries 标注哑变量编码元数据，供 OLS 回归使用", "Annotate a Categorical DataSeries with dummy variable encoding metadata for OLS regression")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
@@ -47,7 +47,7 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
             ]),
         ),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),

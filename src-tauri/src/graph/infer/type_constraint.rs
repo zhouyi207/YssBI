@@ -48,7 +48,7 @@ impl TypeConstraint {
             TypeConstraint::OneOf(types) => {
                 types.contains(vt)
                     || vt
-                        .series_inner()
+                        .data_series_inner()
                         .map_or(false, |inner| types.contains(inner))
             }
             TypeConstraint::And(constraints) => constraints.iter().all(|c| c.satisfies(vt)),

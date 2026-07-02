@@ -552,12 +552,16 @@ package.json
 - [x] **去掉 Event/Function 文件夹逻辑并扁平化 Sidebar**：Event / Function 改为与 Data 相同的扁平列表（保留折叠区块）；删除 `renderGraphTree`、folder 右键菜单、`GraphFolderDropTarget` 与 DnD `GRAPH_FOLDER`；前端移除 `graphFolders` / graph `folderPath` 与 4 个 folder resource action；后端注销 `create/rename/delete_graph_folder`、`move_graph_to_folder`，`create_event` / `create_function` 去掉 `folder_path`；`events/`、`functions/` 仅一级扫描，保存固定根目录；打开项目时 `flatten_graph_layout` hoist 嵌套 graph 并 reconcile manifest。
 - [x] **去掉 Worksheet 文件夹字段并统一磁盘布局**：删除 `WorksheetDocument` / 索引 / 前端 `folderPath`；`worksheets/` 仅一级扫描，保存固定根目录；`flatten_worksheet_layout` 与 graph 对称（`read_project_index` 顶层 flatten；load/save/delete/create 各 IO 入口 flatten 一次；`read_worksheet_index_entries` 纯扫描）；补充 `flatten_worksheet_layout_hoists_nested_files` 等后端测试；更新 `dnd-dropzone-contracts.mdc` 移除 graph-folder 约定。
 - [x] **View 节点 source 统一走 source_id**：新增 `ensure_view_source_for_input`（upstream 复用 `runtime_*` pin source，否则 `insert_window_source`）；抽取 `build_source_from_resolved` / `ResolvedSourceValue`，与 `register_output_source` 共用；`view_nodes.rs` 简化为解析 source → `open_existing_source_window`，不再按 `DataValue` 重复分支构建。
-- [x] **View renderer 收敛为 5 类**：`null` / `scalar` / `dataframe` / `series` / `json`；删除 `struct_ols` / `struct_generic` 与 `OlsStructSourceView`；Struct（含 OLSResult）在 View 内统一 JSON 展示，计量 Summary 仍走 `/info` → InfoWindow。
-- [x] **Series 与 DataFrame 同构 tabular**：后端 `series_page` 与 descriptor 统一返回 `columns`（`#` + 列名）+ `rows`；前端 `SeriesSourceView` 与 `DataFrameSourceView` 共用 `TabularSourceView` + `ReadOnlyDataGrid`。
+- [x] **View renderer 收敛为 5 类**：`null` / `scalar` / `dataframe` / `dataseries` / `json`；删除 `struct_ols` / `struct_generic` 与 `OlsStructSourceView`；Struct（含 OLSResult）在 View 内统一 JSON 展示，计量 Summary 仍走 `/info` → InfoWindow。
+- [x] **DataSeries 与 DataFrame 同构 tabular**：后端 `data_series_page` 与 descriptor 统一返回 `columns`（`#` + 列名）+ `rows`；前端 `DataSeriesSourceView` 与 `DataFrameSourceView` 共用 `TabularSourceView` + `ReadOnlyDataGrid`。
 - [x] **Array / Object / Struct → json renderer**：`build_json_source_from_data_value` 将 Array、Object 从 scalar 拆出；`build_struct_source` 序列化 handle 为 JSON；前端 `JsonSourceView` + `JsonTreeView`（可折叠树，默认展开 2 层）。
 - [x] **View 子窗口 layout 与滚动链**：`DataViewShell` 新增 `layout: window | embedded`；`DataViewWindow` source 模式 `flex min-h-0 flex-1`；tabular `ReadOnlyDataGrid` 支持 `fillHeight` 占满剩余高度；JSON / scalar 长内容 window 模式包 `OverlayScrollbar`；`UnifiedDataView` 透传 `layout`（子窗口 `window`，Canvas Runtime Results `embedded`）。
 - [x] **Database 查看器 vs Runtime View 窗口命名拆分**：`/dataview` + `dataView` kind 专用于 DuckDB 表编辑；View 节点 / pin 预览走 `/view` + `runtimeView` kind；后端 `window_type` 为 `runtime_view`；新增 `RuntimeViewWindow`；`openPresentationWindow` + `presentationRouteForDescriptor` 统一打开逻辑；Pin inspect / View 节点执行不再混用 DataView 壳层。
-- [ ] **View：大 Array 分页 tabular**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 Series 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
+- [x] **Runtime View 窗口标题与 View 节点对齐**：`register_output_source` 改走 `default_view_title`（`View: DataFrame` / `View: OLS Model` 等），不再用 `Output`；无 descriptor 时 fallback 为 **View** / **查看**，与 **数据查看器** 区分。
+- [x] **变量类型禁止 Any**：Detail 类型下拉移除 Any；前后端 `create_variable` / `update_variable` 与 `variableActions` 校验拒绝 `DataType::Any`（无旧 Any 变量兼容层）。
+- [x] **Series 数据结构重命名为 DataSeries（对齐 pandas / pin `dataseries`）**：`SourceKind` / `SourceRenderer` / View IPC 为 `dataseries`；`get_data_series` / `put_data_series` / `data_series_page`；`data_series_nodes.rs` / `data_series_compare_nodes.rs`；节点分类与 Pin 名 `DataSeries`；前端 `DataSeriesSourceView`；运行时 ID 前缀 `data_series_*`（Polars `Series` 类型名不变）。
+- [x] **变量类型新增 DataSeries**：`VARIABLE_SELECTABLE_DATA_TYPE_KINDS` 增加 `DataSeries`（与 `DataFrame` 并列，引用型、Detail 无手填值）；前后端 `DataValue` DTO 补充 `DataSeries` 往返，默认 `Null`，实际值由 Set Variable / 图执行写入。
+- [ ] **View：大 Array 分页 tabular**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `DataViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedDataView` renderer。
 - [ ] **View：runtime source 生命周期**：明确 `ResultSourceStore` 中 pin/window source 何时 `remove`（断开连线、图结束、手动关闭窗口等）；避免内存泄漏与 stale source_id 复用。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
@@ -575,7 +579,8 @@ package.json
 - [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、embedded UX、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 函数图应该如何设计？？？
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
-
+- [ ] 值类型处理
+- [ ] int32，int64，float32，float64 在运算中的处理？？
 
 # TODOLIST
 

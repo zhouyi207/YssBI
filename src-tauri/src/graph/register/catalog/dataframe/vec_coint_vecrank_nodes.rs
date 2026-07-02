@@ -115,7 +115,7 @@ fn run_vecrank(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VecRankResult,
             DataValue::DataSeries(s) => s.clone(),
             _ => return Err("VECRANK: each variable must be a DataSeries".to_string()),
         };
-        let s = ctx.get_series(&dsv.id)?;
+        let s = ctx.get_data_series(&dsv.id)?;
         let name = s.name().to_string();
         if name.is_empty() {
             var_names.push(format!("y{}", series_list.len()));

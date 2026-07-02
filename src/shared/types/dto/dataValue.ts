@@ -5,6 +5,18 @@
  */
 
 import type { DataValue } from '../domain/dataValue';
+import type { DataTypeBackendFormat } from './dataType';
+import { dataTypeFromBackend, dataTypeToBackend } from './dataType';
+
+/** 后端 DataSeries 值（id 或带元数据的 struct） */
+export type DataSeriesValueBackend =
+  | string
+  | {
+      id: string;
+      elementType?: DataTypeBackendFormat;
+      dummyInfo?: unknown;
+      timeSeriesState?: unknown;
+    };
 
 /** 后端 DataValue 序列化格式（Rust serde 外部标签枚举） */
 export type DataValueBackend =
@@ -17,6 +29,7 @@ export type DataValueBackend =
   | { Array: DataValueBackend[] }
   | { Object: Record<string, unknown> }
   | { DataFrame: string }
+  | { DataSeries: DataSeriesValueBackend }
   | { Null: null };
 
 /** 从后端格式解析为 DataValue */
@@ -42,6 +55,21 @@ export function dataValueFromBackend(
     };
   if ('Object' in v) return { kind: 'Object', value: v.Object ?? {} };
   if ('DataFrame' in v) return { kind: 'DataFrame', value: v.DataFrame };
+  if ('DataSeries' in v) {
+    const payload = v.DataSeries;
+    if (typeof payload === 'string') {
+      return { kind: 'DataSeries', value: payload };
+    }
+    return {
+      kind: 'DataSeries',
+      value: {
+        id: payload.id,
+        ...(payload.elementType
+          ? { elementType: dataTypeFromBackend(payload.elementType) }
+          : {}),
+      },
+    };
+  }
   if ('Null' in v) return { kind: 'Null' };
 
   return { kind: 'Null' };
@@ -70,6 +98,16 @@ export function dataValueToBackend(
       return { Object: dv.value };
     case 'DataFrame':
       return { DataFrame: dv.value };
+    case 'DataSeries': {
+      if (typeof dv.value === 'string') {
+        return { DataSeries: dv.value };
+      }
+      const payload: DataSeriesValueBackend = { id: dv.value.id };
+      if (dv.value.elementType) {
+        payload.elementType = dataTypeToBackend(dv.value.elementType);
+      }
+      return { DataSeries: payload };
+    }
     case 'Null':
       return { Null: null };
   }

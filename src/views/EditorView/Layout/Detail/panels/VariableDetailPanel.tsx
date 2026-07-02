@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
-import { dataTypeKind, dataTypeFromKey, isPrimitiveType } from '@/shared/types/domain/dataType';
+import { dataTypeKind, dataTypeFromKey, isPrimitiveType, VARIABLE_SELECTABLE_DATA_TYPE_KINDS } from '@/shared/types/domain/dataType';
 import { dataValueToRaw, dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
@@ -36,19 +36,8 @@ export function VariableDetailPanel({
         <DetailFieldRow label={t('detail.fields.type')}>
           <Select
             value={dataTypeKind(variable.dataType)}
-            options={[
-              { label: 'Boolean', value: 'Boolean' },
-              { label: 'Int32', value: 'Int32' },
-              { label: 'Int64', value: 'Int64' },
-              { label: 'Float32', value: 'Float32' },
-              { label: 'Float64', value: 'Float64' },
-              { label: 'String', value: 'String' },
-              { label: 'Object', value: 'Object' },
-              { label: 'Any', value: 'Any' },
-              { label: 'DataFrame', value: 'DataFrame' },
-              { label: 'Array', value: 'Array' },
-            ]}
-            onChange={(val) => onUpdate({ dataType: dataTypeFromKey(val as string) })}
+            options={VARIABLE_SELECTABLE_DATA_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
+            onChange={(val) => onUpdate({ dataType: dataTypeFromKey(val) })}
           />
         </DetailFieldRow>
         {variable.dataType.kind !== 'Array' && isPrimitiveType(variable.dataType) && (

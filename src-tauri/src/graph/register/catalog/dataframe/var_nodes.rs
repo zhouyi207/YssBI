@@ -148,7 +148,7 @@ fn run_var(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSummaryResult, 
             crate::graph::value::DataValue::DataSeries(s) => s.clone(),
             _ => return Err("VAR: each variable must be a DataSeries".to_string()),
         };
-        let s = ctx.get_series(&dsv.id)?;
+        let s = ctx.get_data_series(&dsv.id)?;
         let name = s.name().to_string();
         if name.is_empty() {
             var_names.push(format!("y{}", y_cols.len()));
@@ -480,7 +480,7 @@ fn run_varsoc(ctx: &mut dyn NodeExecutionContextTrait) -> Result<VARSocResult, S
             crate::graph::value::DataValue::DataSeries(s) => s.clone(),
             _ => return Err("VAR varsoc: each variable must be a DataSeries".to_string()),
         };
-        let s = ctx.get_series(&dsv.id)?;
+        let s = ctx.get_data_series(&dsv.id)?;
         let name = s.name().to_string();
         if name.is_empty() {
             var_names.push(format!("y{}", series_list.len()));

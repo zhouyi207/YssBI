@@ -16,8 +16,8 @@ mod panel_nodes;
 mod prais_nodes;
 mod prediction_nodes;
 mod probit_nodes;
-mod series_compare_nodes;
-mod series_nodes;
+mod data_series_compare_nodes;
+mod data_series_nodes;
 mod transform_nodes;
 mod ts_align_nodes;
 mod var_nodes;
@@ -44,8 +44,8 @@ pub use probit_nodes::{ProbitConfigure, ProbitModel};
 
 pub fn register(registry: &NodeRegistry) {
     nodes::register(registry);
-    series_nodes::register(registry);
-    series_compare_nodes::register(registry);
+    data_series_nodes::register(registry);
+    data_series_compare_nodes::register(registry);
     transform_nodes::register(registry);
     df_adf_nodes::register(registry);
     ols_nodes::register(registry);

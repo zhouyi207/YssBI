@@ -63,7 +63,7 @@ pub fn extract_iv_data(
             return Err(format!("IV: Y must be a DataSeries (got {}).", got));
         }
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -150,7 +150,7 @@ pub fn extract_iv_data(
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("IV: X:exogs {} is not a DataSeries", i)),
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let series_name = if series.name().is_empty() {
             format!("exog_{}", i + 1)
         } else {
@@ -201,14 +201,14 @@ pub fn extract_iv_data(
     let time_series =
         match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
             Ok(DataValue::DataSeries(v)) => {
-                let ts = ctx.get_series(&v.id)?;
+                let ts = ctx.get_data_series(&v.id)?;
                 if ts.len() != n_raw {
                     return Err(format!("IV: Time has {} obs, expected {}", ts.len(), n_raw));
                 }
                 Some(ts)
             }
             _ => config.time_series_id.as_ref().and_then(|id| {
-                let ts = ctx.get_series(id).ok()?;
+                let ts = ctx.get_data_series(id).ok()?;
                 if ts.len() != n_raw {
                     return None;
                 }
@@ -244,7 +244,7 @@ pub fn extract_iv_data(
             DataValue::DataSeries(v) => v.clone(),
             _ => continue,
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let series_name = if series.name().is_empty() {
             format!("exog_{}", i + 1)
         } else {

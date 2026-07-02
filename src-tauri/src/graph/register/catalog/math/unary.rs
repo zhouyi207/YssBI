@@ -70,14 +70,14 @@ fn register_unary_fn(
             let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
             let result = match &input {
                 DataValue::DataSeries(dsv) => {
-                    let series = ctx.get_series(&dsv.id)?;
+                    let series = ctx.get_data_series(&dsv.id)?;
                     let cast = series
                         .cast(&polars::prelude::DataType::Float64)
                         .map_err(|e| format!("{}: cannot cast to Float64: {}", name_owned, e))?;
                     let ca = cast.f64().map_err(|e| format!("{}: {}", name_owned, e))?;
                     let result_series: polars::prelude::Float64Chunked =
                         ca.into_iter().map(|opt| opt.map(f)).collect();
-                    let id = ctx.put_series(result_series.into_series())?;
+                    let id = ctx.put_data_series(result_series.into_series())?;
                     DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
                 }
                 _ => {

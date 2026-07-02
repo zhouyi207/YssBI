@@ -25,9 +25,9 @@ fn int_input(
 pub fn register(registry: &NodeRegistry) {
     register_get_dataseries(registry);
     register_int_range(registry);
-    register_series_length(registry);
-    register_series_sum(registry);
-    register_series_mean(registry);
+    register_data_series_length(registry);
+    register_data_series_sum(registry);
+    register_data_series_mean(registry);
 }
 
 fn register_get_dataseries(registry: &NodeRegistry) {
@@ -49,7 +49,7 @@ fn register_get_dataseries(registry: &NodeRegistry) {
                 PinDataTypeDefinition::concrete(DataType::String),
             )),
             PinSlot::fixed(PinDefinition::data_output(
-                "Series",
+                "DataSeries",
                 DataRole::Output,
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
             )),
@@ -66,9 +66,9 @@ fn register_get_dataseries(registry: &NodeRegistry) {
                 DataValue::DataFrame(id) => id.clone(),
                 _ => return Err("Get DataSeries: input is not a DataFrame reference".to_string()),
             };
-            let series = ctx.load_database_series(&df_id, &column_name)?;
+            let series = ctx.load_database_data_series(&df_id, &column_name)?;
             let element_type = polars_dtype_to_data_type(series.dtype());
-            let series_id = ctx.put_series(series)?;
+            let series_id = ctx.put_data_series(series)?;
             let mut ds_value = DataSeriesValue::with_element_type(series_id, element_type.clone());
             if matches!(element_type, DataType::Int64 | DataType::Date) {
                 ds_value = ds_value.with_time_series_state(TimeSeriesState::Unaligned);
@@ -82,7 +82,7 @@ fn register_get_dataseries(registry: &NodeRegistry) {
 
 fn register_int_range(registry: &NodeRegistry) {
     let definition =
-        NodeDefinition::new("Int Range", vec!["Data".to_string(), "Series".to_string()])
+        NodeDefinition::new("Int Range", vec!["Data".to_string(), "DataSeries".to_string()])
             .with_ui_style("value")
             .with_localized_description(
                 "生成 Int64 序列：start, start+1, …, start+length-1",
@@ -105,7 +105,7 @@ fn register_int_range(registry: &NodeRegistry) {
                     PinDataTypeDefinition::concrete(DataType::String),
                 )),
                 PinSlot::fixed(PinDefinition::data_output(
-                    "Series",
+                    "DataSeries",
                     DataRole::Output,
                     PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
                         DataType::Int64,
@@ -124,7 +124,7 @@ fn register_int_range(registry: &NodeRegistry) {
                 };
                 let values: Vec<i64> = (0..length).map(|i| start + i as i64).collect();
                 let s = Series::from_iter(values.into_iter()).with_name(col_name.as_str().into());
-                let id = ctx.put_series(s)?;
+                let id = ctx.put_data_series(s)?;
                 ctx.emit_output_by_role(
                     &PinRole::Data(DataRole::Output),
                     DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Int64)),
@@ -134,10 +134,10 @@ fn register_int_range(registry: &NodeRegistry) {
     registry.register(definition);
 }
 
-fn register_series_length(registry: &NodeRegistry) {
+fn register_data_series_length(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
-        "Series Length",
-        vec!["Data".to_string(), "Series".to_string()],
+        "DataSeries Length",
+        vec!["Data".to_string(), "DataSeries".to_string()],
     )
     .with_ui_style("dataframe")
     .with_localized_description(
@@ -146,7 +146,7 @@ fn register_series_length(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
         )),
@@ -160,9 +160,9 @@ fn register_series_length(registry: &NodeRegistry) {
         let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
         let series_id = match &series_value {
             DataValue::DataSeries(v) => v.id.clone(),
-            _ => return Err("Series Length: input is not a DataSeries".to_string()),
+            _ => return Err("DataSeries Length: input is not a DataSeries".to_string()),
         };
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
         let len = series.len() as i64;
         ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), DataValue::Int64(len))?;
         Ok(())
@@ -170,9 +170,9 @@ fn register_series_length(registry: &NodeRegistry) {
     registry.register(definition);
 }
 
-fn register_series_sum(registry: &NodeRegistry) {
+fn register_data_series_sum(registry: &NodeRegistry) {
     let definition =
-        NodeDefinition::new("Series Sum", vec!["Data".to_string(), "Series".to_string()])
+        NodeDefinition::new("DataSeries Sum", vec!["Data".to_string(), "DataSeries".to_string()])
             .with_ui_style("dataframe")
             .with_localized_description(
                 "计算数值 DataSeries 之和",
@@ -180,7 +180,7 @@ fn register_series_sum(registry: &NodeRegistry) {
             )
             .with_pin_slots(vec![
                 PinSlot::fixed(PinDefinition::data_input(
-                    "Series",
+                    "DataSeries",
                     DataRole::Input,
                     PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
                 )),
@@ -194,16 +194,16 @@ fn register_series_sum(registry: &NodeRegistry) {
                 let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
                 let series_id = match &series_value {
                     DataValue::DataSeries(v) => v.id.clone(),
-                    _ => return Err("Series Sum: input is not a DataSeries".to_string()),
+                    _ => return Err("DataSeries Sum: input is not a DataSeries".to_string()),
                 };
-                let series = ctx.get_series(&series_id)?;
+                let series = ctx.get_data_series(&series_id)?;
                 let sum = series
                     .sum_reduce()
-                    .map_err(|e| format!("Series Sum: {}", e))?;
+                    .map_err(|e| format!("DataSeries Sum: {}", e))?;
                 let result = sum
                     .value()
                     .try_extract::<f64>()
-                    .map_err(|e| format!("Series Sum: cannot extract as f64: {}", e))?;
+                    .map_err(|e| format!("DataSeries Sum: cannot extract as f64: {}", e))?;
                 ctx.emit_output_by_role(
                     &PinRole::Data(DataRole::Output),
                     DataValue::Float64(result),
@@ -213,10 +213,10 @@ fn register_series_sum(registry: &NodeRegistry) {
     registry.register(definition);
 }
 
-fn register_series_mean(registry: &NodeRegistry) {
+fn register_data_series_mean(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
-        "Series Mean",
-        vec!["Data".to_string(), "Series".to_string()],
+        "DataSeries Mean",
+        vec!["Data".to_string(), "DataSeries".to_string()],
     )
     .with_ui_style("dataframe")
     .with_localized_description(
@@ -225,7 +225,7 @@ fn register_series_mean(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
         )),
@@ -239,10 +239,10 @@ fn register_series_mean(registry: &NodeRegistry) {
         let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
         let series_id = match &series_value {
             DataValue::DataSeries(v) => v.id.clone(),
-            _ => return Err("Series Mean: input is not a DataSeries".to_string()),
+            _ => return Err("DataSeries Mean: input is not a DataSeries".to_string()),
         };
-        let series = ctx.get_series(&series_id)?;
-        let mean = series.mean().ok_or("Series Mean: cannot compute mean")?;
+        let series = ctx.get_data_series(&series_id)?;
+        let mean = series.mean().ok_or("DataSeries Mean: cannot compute mean")?;
         ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), DataValue::Float64(mean))?;
         Ok(())
     }));

@@ -250,7 +250,7 @@ impl GraphRuntime {
     // ========================================================================
 
     /// 获取 DataFrame：先查执行缓存，再查 ProjectStore 原始数据。
-    /// 需要整表的节点（Filter 等）仍走此路径；按列分析应优先 `load_database_series`。
+    /// 需要整表的节点（Filter 等）仍走此路径；按列分析应优先 `load_database_data_series`。
     pub fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String> {
         // 1. 先从执行缓存查找
         if let Some(df) = self.data_store.get_dataframe(id) {
@@ -282,7 +282,7 @@ impl GraphRuntime {
         Err(format!("DataFrame '{}' not found", id))
     }
 
-    fn series_cache_key(db_id: &str, column: &str) -> String {
+    fn data_series_cache_key(db_id: &str, column: &str) -> String {
         format!("{db_id}::{column}")
     }
 
@@ -311,9 +311,9 @@ impl GraphRuntime {
     }
 
     /// 按列加载 Series：DuckDB 列裁剪 → Polars；结果缓存在 `data_store`。
-    pub fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
-        let cache_key = Self::series_cache_key(db_id, column);
-        if let Some(series) = self.data_store.get_series(&cache_key) {
+    pub fn load_database_data_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+        let cache_key = Self::data_series_cache_key(db_id, column);
+        if let Some(series) = self.data_store.get_data_series(&cache_key) {
             return Ok(series.clone());
         }
 
@@ -324,7 +324,7 @@ impl GraphRuntime {
                 .clone()
                 .take_materialized_series();
             self.data_store
-                .put_series_with_id(cache_key, series.clone());
+                .put_data_series_with_id(cache_key, series.clone());
             return Ok(series);
         }
 
@@ -335,7 +335,7 @@ impl GraphRuntime {
                 .map_err(|e| format!("Failed to load column '{column}' from '{db_id}': {e}"))?;
             drop(store);
             self.data_store
-                .put_series_with_id(cache_key, series.clone());
+                .put_data_series_with_id(cache_key, series.clone());
             return Ok(series);
         }
         drop(store);
@@ -347,7 +347,7 @@ impl GraphRuntime {
             .clone()
             .take_materialized_series();
         self.data_store
-            .put_series_with_id(cache_key, series.clone());
+            .put_data_series_with_id(cache_key, series.clone());
         Ok(series)
     }
 
@@ -357,16 +357,16 @@ impl GraphRuntime {
     }
 
     /// 获取 Series：从执行缓存查找
-    pub fn get_series(&self, id: &str) -> Result<Series, String> {
+    pub fn get_data_series(&self, id: &str) -> Result<Series, String> {
         self.data_store
-            .get_series(id)
+            .get_data_series(id)
             .cloned()
-            .ok_or_else(|| format!("Series '{}' not found", id))
+            .ok_or_else(|| format!("DataSeries '{}' not found", id))
     }
 
     /// 存入中间 Series，返回引用 ID
-    pub fn put_series(&mut self, s: Series) -> String {
-        self.data_store.put_series(s)
+    pub fn put_data_series(&mut self, s: Series) -> String {
+        self.data_store.put_data_series(s)
     }
 
     /// 存入不透明对象，返回句柄 ID

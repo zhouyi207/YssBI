@@ -120,7 +120,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             return Err(format!("IV:2SLS: Y must be a DataSeries (got {}).", got));
         }
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -220,7 +220,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("IV:2SLS: X:exogs {} is not a DataSeries", i)),
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
             if raw.is_empty() {
@@ -285,7 +285,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
     let time_series =
         match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string()))) {
             Ok(DataValue::DataSeries(v)) => {
-                let ts = ctx.get_series(&v.id)?;
+                let ts = ctx.get_data_series(&v.id)?;
                 if ts.len() != n_raw {
                     return Err(format!(
                         "IV:2SLS: Time has {} obs, expected {}",
@@ -297,7 +297,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             }
             _ => {
                 if let Some(ref id) = config.time_series_id {
-                    let ts = ctx.get_series(id)?;
+                    let ts = ctx.get_data_series(id)?;
                     if ts.len() != n_raw {
                         return Err(format!(
                             "IV:2SLS: Time from config has {} obs, expected {}",
@@ -341,7 +341,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             DataValue::DataSeries(v) => v.clone(),
             _ => continue,
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
             if raw.is_empty() {

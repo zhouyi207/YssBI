@@ -10,23 +10,23 @@ use yss_sci::api::database::dtype_from_string;
 
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);
-    register_series_string_to_categorical(registry);
-    register_series_string_to_float64(registry);
-    register_series_string_to_int64(registry);
-    register_series_int64_to_string(registry);
-    register_series_float64_to_string(registry);
-    register_series_int64_to_float64(registry);
-    register_series_float64_to_int64(registry);
-    register_series_int64_to_bool(registry);
-    register_series_float64_to_bool(registry);
-    register_series_categorical_to_string(registry);
-    register_series_int64_to_categorical(registry);
-    register_series_categorical_to_int64(registry);
-    register_series_float64_to_categorical(registry);
-    register_series_categorical_to_float64(registry);
+    register_data_series_string_to_categorical(registry);
+    register_data_series_string_to_float64(registry);
+    register_data_series_string_to_int64(registry);
+    register_data_series_int64_to_string(registry);
+    register_data_series_float64_to_string(registry);
+    register_data_series_int64_to_float64(registry);
+    register_data_series_float64_to_int64(registry);
+    register_data_series_int64_to_bool(registry);
+    register_data_series_float64_to_bool(registry);
+    register_data_series_categorical_to_string(registry);
+    register_data_series_int64_to_categorical(registry);
+    register_data_series_categorical_to_int64(registry);
+    register_data_series_float64_to_categorical(registry);
+    register_data_series_categorical_to_float64(registry);
 }
 
-fn series_input_id(
+fn data_series_input_id(
     ctx: &mut dyn crate::execution::NodeExecutionContextTrait,
 ) -> Result<String, String> {
     let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
@@ -36,12 +36,12 @@ fn series_input_id(
     }
 }
 
-fn emit_series_output(
+fn emit_data_series_output(
     ctx: &mut dyn crate::execution::NodeExecutionContextTrait,
     series: Series,
     element_type: DataType,
 ) -> Result<(), String> {
-    let result_id = ctx.put_series(series)?;
+    let result_id = ctx.put_data_series(series)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Output),
         DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, element_type)),
@@ -253,7 +253,7 @@ fn parse_boolean(s: &str) -> Option<bool> {
     }
 }
 
-fn register_series_string_to_categorical(registry: &NodeRegistry) {
+fn register_data_series_string_to_categorical(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "String to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -265,32 +265,32 @@ fn register_series_string_to_categorical(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id =
-            series_input_id(ctx).map_err(|e| format!("String to Categorical: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+            data_series_input_id(ctx).map_err(|e| format!("String to Categorical: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let target_dtype = dtype_from_string("categorical");
         let casted = series
             .cast(&target_dtype)
             .map_err(|e| format!("String to Categorical: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Categorical)
+        emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("String to Categorical: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_string_to_float64(registry: &NodeRegistry) {
+fn register_data_series_string_to_float64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "String to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -302,33 +302,33 @@ fn register_series_string_to_float64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("String to Float64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("String to Float64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted =
             series
                 .cast(&PDataType::Float64)
                 .map_err(|e: polars::error::PolarsError| {
                     format!("String to Float64: cast failed: {}", e)
                 })?;
-        emit_series_output(ctx, casted, DataType::Float64)
+        emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("String to Float64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_string_to_int64(registry: &NodeRegistry) {
+fn register_data_series_string_to_int64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "String to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -340,32 +340,32 @@ fn register_series_string_to_int64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("String to Int64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("String to Int64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted = series
             .cast(&PDataType::Int64)
             .map_err(|e: polars::error::PolarsError| {
                 format!("String to Int64: cast failed: {}", e)
             })?;
-        emit_series_output(ctx, casted, DataType::Int64)
+        emit_data_series_output(ctx, casted, DataType::Int64)
             .map_err(|e| format!("String to Int64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_int64_to_string(registry: &NodeRegistry) {
+fn register_data_series_int64_to_string(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Int64 to String",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -377,32 +377,32 @@ fn register_series_int64_to_string(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to String: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Int64 to String: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted = series
             .cast(&PDataType::String)
             .map_err(|e: polars::error::PolarsError| {
                 format!("Int64 to String: cast failed: {}", e)
             })?;
-        emit_series_output(ctx, casted, DataType::String)
+        emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Int64 to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_float64_to_string(registry: &NodeRegistry) {
+fn register_data_series_float64_to_string(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Float64 to String",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -414,32 +414,32 @@ fn register_series_float64_to_string(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Float64 to String: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Float64 to String: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted = series
             .cast(&PDataType::String)
             .map_err(|e: polars::error::PolarsError| {
                 format!("Float64 to String: cast failed: {}", e)
             })?;
-        emit_series_output(ctx, casted, DataType::String)
+        emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Float64 to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_int64_to_float64(registry: &NodeRegistry) {
+fn register_data_series_int64_to_float64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Int64 to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -451,33 +451,33 @@ fn register_series_int64_to_float64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to Float64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Int64 to Float64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted =
             series
                 .cast(&PDataType::Float64)
                 .map_err(|e: polars::error::PolarsError| {
                     format!("Int64 to Float64: cast failed: {}", e)
                 })?;
-        emit_series_output(ctx, casted, DataType::Float64)
+        emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("Int64 to Float64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_float64_to_int64(registry: &NodeRegistry) {
+fn register_data_series_float64_to_int64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Float64 to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -489,29 +489,29 @@ fn register_series_float64_to_int64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Float64 to Int64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Float64 to Int64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted = series
             .cast(&PDataType::Int64)
             .map_err(|e: polars::error::PolarsError| format!("Float64 to Int64: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Int64).map_err(|e| format!("Float64 to Int64: {}", e))?;
+        emit_data_series_output(ctx, casted, DataType::Int64).map_err(|e| format!("Float64 to Int64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_int64_to_bool(registry: &NodeRegistry) {
+fn register_data_series_int64_to_bool(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Int64 to Boolean",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -523,33 +523,33 @@ fn register_series_int64_to_bool(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Boolean))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to Boolean: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Int64 to Boolean: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted =
             series
                 .cast(&PDataType::Boolean)
                 .map_err(|e: polars::error::PolarsError| {
                     format!("Int64 to Boolean: cast failed: {}", e)
                 })?;
-        emit_series_output(ctx, casted, DataType::Boolean)
+        emit_data_series_output(ctx, casted, DataType::Boolean)
             .map_err(|e| format!("Int64 to Boolean: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_float64_to_bool(registry: &NodeRegistry) {
+fn register_data_series_float64_to_bool(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Float64 to Boolean",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -561,29 +561,29 @@ fn register_series_float64_to_bool(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Boolean))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Float64 to Boolean: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Float64 to Boolean: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let casted = series
             .cast(&PDataType::Boolean)
             .map_err(|e: polars::error::PolarsError| format!("Float64 to Boolean: cast failed: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Boolean).map_err(|e| format!("Float64 to Boolean: {}", e))?;
+        emit_data_series_output(ctx, casted, DataType::Boolean).map_err(|e| format!("Float64 to Boolean: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_categorical_to_string(registry: &NodeRegistry) {
+fn register_data_series_categorical_to_string(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Categorical to String",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -595,34 +595,34 @@ fn register_series_categorical_to_string(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::String))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id =
-            series_input_id(ctx).map_err(|e| format!("Categorical to String: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+            data_series_input_id(ctx).map_err(|e| format!("Categorical to String: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         ensure_categorical_or_enum(&series, "Categorical to String")?;
         let casted = series
             .cast(&PDataType::String)
             .map_err(|e: polars::error::PolarsError| {
                 format!("Categorical to String: cast failed: {}", e)
             })?;
-        emit_series_output(ctx, casted, DataType::String)
+        emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Categorical to String: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_int64_to_categorical(registry: &NodeRegistry) {
+fn register_data_series_int64_to_categorical(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Int64 to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -634,19 +634,19 @@ fn register_series_int64_to_categorical(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Int64 to Categorical: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Int64 to Categorical: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let as_str = series
             .cast(&PDataType::String)
             .map_err(|e: polars::error::PolarsError| {
@@ -656,14 +656,14 @@ fn register_series_int64_to_categorical(registry: &NodeRegistry) {
         let casted = as_str
             .cast(&cat_dtype)
             .map_err(|e| format!("Int64 to Categorical: to categorical: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Categorical)
+        emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("Int64 to Categorical: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_categorical_to_int64(registry: &NodeRegistry) {
+fn register_data_series_categorical_to_int64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Categorical to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -675,19 +675,19 @@ fn register_series_categorical_to_int64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
-        let series_id = series_input_id(ctx).map_err(|e| format!("Categorical to Int64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+        let series_id = data_series_input_id(ctx).map_err(|e| format!("Categorical to Int64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         ensure_categorical_or_enum(&series, "Categorical to Int64")?;
         let as_str = series
             .cast(&PDataType::String)
@@ -699,14 +699,14 @@ fn register_series_categorical_to_int64(registry: &NodeRegistry) {
             .map_err(|e: polars::error::PolarsError| {
                 format!("Categorical to Int64: to int64: {}", e)
             })?;
-        emit_series_output(ctx, casted, DataType::Int64)
+        emit_data_series_output(ctx, casted, DataType::Int64)
             .map_err(|e| format!("Categorical to Int64: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_float64_to_categorical(registry: &NodeRegistry) {
+fn register_data_series_float64_to_categorical(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Float64 to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -718,20 +718,20 @@ fn register_series_float64_to_categorical(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id =
-            series_input_id(ctx).map_err(|e| format!("Float64 to Categorical: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+            data_series_input_id(ctx).map_err(|e| format!("Float64 to Categorical: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         let as_str = series
             .cast(&PDataType::String)
             .map_err(|e: polars::error::PolarsError| {
@@ -741,14 +741,14 @@ fn register_series_float64_to_categorical(registry: &NodeRegistry) {
         let casted = as_str
             .cast(&cat_dtype)
             .map_err(|e| format!("Float64 to Categorical: to categorical: {}", e))?;
-        emit_series_output(ctx, casted, DataType::Categorical)
+        emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("Float64 to Categorical: {}", e))?;
         Ok(())
     }));
     registry.register(definition);
 }
 
-fn register_series_categorical_to_float64(registry: &NodeRegistry) {
+fn register_data_series_categorical_to_float64(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
         "Categorical to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
@@ -760,20 +760,20 @@ fn register_series_categorical_to_float64(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Categorical))),
         )),
         PinSlot::fixed(PinDefinition::data_output(
-            "Series",
+            "DataSeries",
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
     ])
     .with_data_evaluator(Arc::new(|ctx| {
         let series_id =
-            series_input_id(ctx).map_err(|e| format!("Categorical to Float64: {}", e))?;
-        let series = ctx.get_series(&series_id)?;
+            data_series_input_id(ctx).map_err(|e| format!("Categorical to Float64: {}", e))?;
+        let series = ctx.get_data_series(&series_id)?;
         ensure_categorical_or_enum(&series, "Categorical to Float64")?;
         let as_str = series
             .cast(&PDataType::String)
@@ -786,7 +786,7 @@ fn register_series_categorical_to_float64(registry: &NodeRegistry) {
                 .map_err(|e: polars::error::PolarsError| {
                     format!("Categorical to Float64: to float64: {}", e)
                 })?;
-        emit_series_output(ctx, casted, DataType::Float64)
+        emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("Categorical to Float64: {}", e))?;
         Ok(())
     }));

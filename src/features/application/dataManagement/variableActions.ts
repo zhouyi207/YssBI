@@ -1,6 +1,6 @@
 import type { Variable, VariableScope } from '@/shared/types/domain';
 import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
-import { dataTypeFromKey, getDefaultValue } from '@/shared/types/domain/dataType';
+import { dataTypeFromKey, getDefaultValue, isVariableDataTypeAllowed } from '@/shared/types/domain/dataType';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useResourceStore } from '@/features/core/resource';
@@ -48,6 +48,10 @@ export async function createVariableAction(params: {
   try {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
     const dataType = dataTypeFromKey(params.type ?? 'Int32');
+    if (!isVariableDataTypeAllowed(dataType)) {
+      uiStore.showToast('变量类型不能为 Any', 'error');
+      return null;
+    }
     const variable: Omit<Variable, 'id'> = {
       name: baseName,
       dataType,
@@ -75,6 +79,11 @@ export async function updateVariableAction(
 ): Promise<Variable | null> {
   const previous = useVariableStore.getState().variables[id];
   if (!previous) return null;
+
+  if (data.dataType && !isVariableDataTypeAllowed(data.dataType)) {
+    uiStore.showToast('变量类型不能为 Any', 'error');
+    return null;
+  }
 
   try {
     const next = await VariableService.updateVariable(id, data);

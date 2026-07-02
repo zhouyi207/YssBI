@@ -120,7 +120,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             return Err(format!("Prais: Y must be a DataSeries (got {}).", got));
         }
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -164,7 +164,7 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("Prais: X {} is not DataSeries", i)),
         };
-        let s = ctx.get_series(&dsv.id)?;
+        let s = ctx.get_data_series(&dsv.id)?;
         let name = {
             let r = s.name().to_string();
             if r.is_empty() {
@@ -619,7 +619,7 @@ fn register_prais(registry: &NodeRegistry) {
             let fitted_s =
                 Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
                     .with_name("fitted".into());
-            let fitted_id = ctx.put_series(fitted_s)?;
+            let fitted_id = ctx.put_data_series(fitted_s)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("prais_fitted".to_string())),
                 DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -629,7 +629,7 @@ fn register_prais(registry: &NodeRegistry) {
             )?;
             let res_s = Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
                 .with_name("residuals".into());
-            let res_id = ctx.put_series(res_s)?;
+            let res_id = ctx.put_data_series(res_s)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("prais_residuals".to_string())),
                 DataValue::DataSeries(DataSeriesValue::with_element_type(

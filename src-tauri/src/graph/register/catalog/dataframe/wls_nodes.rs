@@ -120,7 +120,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             ));
         }
     };
-    let endog_series = ctx.get_series(&endog_id)?;
+    let endog_series = ctx.get_data_series(&endog_id)?;
     let endog_name = {
         let raw = endog_series.name().to_string();
         if raw.is_empty() { "y".to_string() } else { raw }
@@ -145,7 +145,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             ));
         }
     };
-    let weights_series = ctx.get_series(&weights_id)?;
+    let weights_series = ctx.get_data_series(&weights_id)?;
     let weights_f64_series = weights_series
         .cast(&polars::prelude::DataType::Float64)
         .map_err(|e| format!("WLS: cannot cast Weights to Float64: {}", e))?;
@@ -186,7 +186,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         .get_input_by_role(&PinRole::Data(DataRole::Custom("time".to_string())))
     {
         Ok(DataValue::DataSeries(v)) => {
-            let ts = ctx.get_series(&v.id)?;
+            let ts = ctx.get_data_series(&v.id)?;
             if ts.len() != endog_f64_series.len() {
                 return Err(format!(
                     "WLS: Time has {} observations, expected {} (must match Y length)",
@@ -198,7 +198,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         }
         _ => {
             if let Some(ref id) = config.time_series_id {
-                let ts = ctx.get_series(id)?;
+                let ts = ctx.get_data_series(id)?;
                 if ts.len() != endog_f64_series.len() {
                     return Err(format!(
                         "WLS: Time from config has {} observations, expected {} (must match Y length)",
@@ -228,7 +228,7 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             DataValue::DataSeries(v) => v.clone(),
             _ => return Err(format!("WLS: X input {} is not a DataSeries", i)),
         };
-        let series = ctx.get_series(&dsv.id)?;
+        let series = ctx.get_data_series(&dsv.id)?;
         let series_name = {
             let raw = series.name().to_string();
             if raw.is_empty() {
@@ -894,7 +894,7 @@ fn register_wls(registry: &NodeRegistry) {
             let fitted_series =
                 Series::from_iter(fit.ols_result.diagnostic_info.fitted_values.into_iter())
                     .with_name("fitted".into());
-            let fitted_id = ctx.put_series(fitted_series)?;
+            let fitted_id = ctx.put_data_series(fitted_series)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("ols_fitted".to_string())),
                 DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -906,7 +906,7 @@ fn register_wls(registry: &NodeRegistry) {
             let residuals_series =
                 Series::from_iter(fit.ols_result.diagnostic_info.residuals.into_iter())
                     .with_name("residuals".into());
-            let residuals_id = ctx.put_series(residuals_series)?;
+            let residuals_id = ctx.put_data_series(residuals_series)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("ols_residuals".to_string())),
                 DataValue::DataSeries(DataSeriesValue::with_element_type(

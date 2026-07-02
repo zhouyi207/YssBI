@@ -7,6 +7,11 @@
 import type { DataType } from './dataType';
 import { getDefaultValue } from './dataType';
 
+export type DataSeriesValuePayload = {
+  id: string;
+  elementType?: import('./dataType').DataType;
+};
+
 /**
  * 数据值（可辨识联合，与 DataType 对应）
  */
@@ -22,6 +27,7 @@ export type DataValue =
   | { kind: 'Array'; value: DataValue[] }
   | { kind: 'Object'; value: Record<string, unknown> }
   | { kind: 'DataFrame'; value: string }
+  | { kind: 'DataSeries'; value: DataSeriesValuePayload | string }
   | { kind: 'Null' };
 
 /** 从 DataValue 提取原始值（用于 UI 显示/编辑） */
@@ -37,6 +43,8 @@ export function dataValueToRaw(dv: DataValue): unknown {
     case 'Categorical':
     case 'DataFrame':
       return dv.value;
+    case 'DataSeries':
+      return typeof dv.value === 'string' ? dv.value : dv.value.id;
     case 'Array':
       return dv.value.map(dataValueToRaw);
     case 'Object':
@@ -91,7 +99,8 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
       };
     case 'DataFrame':
       return { kind: 'DataFrame', value: String(raw ?? '') };
-    case 'Any':
+    case 'DataSeries':
+      return { kind: 'Null' };
     default:
       return { kind: 'Null' };
   }

@@ -15,7 +15,7 @@ pub fn register(registry: &NodeRegistry) {
 
 fn register_standardize_series(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
-        "Standardize Series",
+        "Standardize DataSeries",
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
@@ -25,7 +25,7 @@ fn register_standardize_series(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
@@ -44,14 +44,14 @@ fn register_standardize_series(registry: &NodeRegistry) {
         let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
         let series_id = match &series_value {
             DataValue::DataSeries(v) => v.id.clone(),
-            _ => return Err("Standardize Series: input is not a DataSeries".to_string()),
+            _ => return Err("Standardize DataSeries: input is not a DataSeries".to_string()),
         };
 
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
 
         let f64_ca = series
             .f64()
-            .map_err(|e| format!("Standardize Series: cannot cast to Float64: {}", e))?;
+            .map_err(|e| format!("Standardize DataSeries: cannot cast to Float64: {}", e))?;
         let values: Vec<f64> = f64_ca.into_no_null_iter().collect();
         let arr = Array1::from(values);
 
@@ -59,7 +59,7 @@ fn register_standardize_series(registry: &NodeRegistry) {
         let standardized = transform.fit_transform(&arr);
 
         let result_series = polars::prelude::Series::from_iter(standardized.iter().copied());
-        let result_id = ctx.put_series(result_series)?;
+        let result_id = ctx.put_data_series(result_series)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -81,7 +81,7 @@ fn register_standardize_series(registry: &NodeRegistry) {
 
 fn register_inverse_standardize_series(registry: &NodeRegistry) {
     let definition = NodeDefinition::new(
-        "Inverse Standardize Series",
+        "Inverse Standardize DataSeries",
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
@@ -91,7 +91,7 @@ fn register_inverse_standardize_series(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
@@ -125,7 +125,7 @@ fn register_inverse_standardize_series(registry: &NodeRegistry) {
             .downcast_ref::<StandardizeTransform1D>()
             .ok_or("Inverse Standardize: handle is not a StandardizeTransform1D")?;
 
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
         let f64_ca = series
             .f64()
             .map_err(|e| format!("Inverse Standardize: cannot cast to Float64: {}", e))?;
@@ -135,7 +135,7 @@ fn register_inverse_standardize_series(registry: &NodeRegistry) {
         let result = transform.inverse_transform(&arr);
 
         let result_series = polars::prelude::Series::from_iter(result.iter().copied());
-        let result_id = ctx.put_series(result_series)?;
+        let result_id = ctx.put_data_series(result_series)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(

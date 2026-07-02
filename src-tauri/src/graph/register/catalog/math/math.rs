@@ -60,7 +60,7 @@ fn value_to_f64_series(
 ) -> Result<Series, String> {
     match v {
         DataValue::DataSeries(dsv) => {
-            let s = ctx.get_series(&dsv.id)?;
+            let s = ctx.get_data_series(&dsv.id)?;
             let cast = s
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("Math: cannot cast series to Float64: {}", e))?;
@@ -76,13 +76,13 @@ fn value_to_f64_series(
 }
 
 /// 获取首个 DataSeries 的长度，用于构造标量 Series
-fn get_series_len(
+fn get_data_series_len(
     operands: &[DataValue],
     ctx: &dyn crate::execution::NodeExecutionContextTrait,
 ) -> Option<usize> {
     for v in operands {
         if let DataValue::DataSeries(dsv) = v {
-            if let Ok(s) = ctx.get_series(&dsv.id) {
+            if let Ok(s) = ctx.get_data_series(&dsv.id) {
                 return Some(s.len());
             }
         }
@@ -126,7 +126,7 @@ fn register_add(registry: &NodeRegistry) {
             .with_data_evaluator(Arc::new(|ctx| {
                 let operands = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Operands(0)))?;
                 let result = if has_any_series(&operands) {
-                    let len = get_series_len(&operands, ctx);
+                    let len = get_data_series_len(&operands, ctx);
                     let mut acc: Option<Series> = None;
                     for v in operands {
                         let s = value_to_f64_series(&v, len, ctx)?;
@@ -139,7 +139,7 @@ fn register_add(registry: &NodeRegistry) {
                         });
                     }
                     let series = acc.ok_or("Add: no operands".to_string())?;
-                    let id = ctx.put_series(series)?;
+                    let id = ctx.put_data_series(series)?;
                     DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
                 } else {
                     operands
@@ -191,11 +191,11 @@ fn register_subtract(registry: &NodeRegistry) {
         let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
         let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
         let result = if has_any_series(&[a.clone(), b.clone()]) {
-            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let len = get_data_series_len(&[a.clone(), b.clone()], ctx);
             let sa = value_to_f64_series(&a, len, ctx)?;
             let sb = value_to_f64_series(&b, len, ctx)?;
             let out = (&sa - &sb).map_err(|e| format!("Subtract: {}", e))?;
-            let id = ctx.put_series(out)?;
+            let id = ctx.put_data_series(out)?;
             DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
         } else {
             (a - b)?
@@ -244,11 +244,11 @@ fn register_multiply(registry: &NodeRegistry) {
         let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
         let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
         let result = if has_any_series(&[a.clone(), b.clone()]) {
-            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let len = get_data_series_len(&[a.clone(), b.clone()], ctx);
             let sa = value_to_f64_series(&a, len, ctx)?;
             let sb = value_to_f64_series(&b, len, ctx)?;
             let out = (&sa * &sb).map_err(|e| format!("Multiply: {}", e))?;
-            let id = ctx.put_series(out)?;
+            let id = ctx.put_data_series(out)?;
             DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
         } else {
             (a * b)?
@@ -297,11 +297,11 @@ fn register_divide(registry: &NodeRegistry) {
         let a = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(0)))?;
         let b = ctx.get_input_by_role(&PinRole::Data(DataRole::Operands(1)))?;
         let result = if has_any_series(&[a.clone(), b.clone()]) {
-            let len = get_series_len(&[a.clone(), b.clone()], ctx);
+            let len = get_data_series_len(&[a.clone(), b.clone()], ctx);
             let sa = value_to_f64_series(&a, len, ctx)?;
             let sb = value_to_f64_series(&b, len, ctx)?;
             let out = (&sa / &sb).map_err(|e| format!("Divide: {}", e))?;
-            let id = ctx.put_series(out)?;
+            let id = ctx.put_data_series(out)?;
             DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
         } else {
             (a / b)?

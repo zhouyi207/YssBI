@@ -22,9 +22,9 @@ describe('resolveDataViewRenderer', () => {
   it('selects series renderer from metadata only', () => {
     expect(
       resolveDataViewRenderer(
-        descriptor({ kind: 'series', renderer: 'series', title: 'S', length: 500 }),
+        descriptor({ kind: 'dataseries', renderer: 'dataseries', title: 'S', length: 500 }),
       ),
-    ).toBe('series');
+    ).toBe('dataseries');
   });
 
   it('selects scalar, null, and json renderers', () => {

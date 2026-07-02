@@ -44,7 +44,7 @@ fn emit_float_series(
     name: &str,
 ) -> Result<(), String> {
     let s = Series::from_iter(values.into_iter()).with_name(name.into());
-    let id = ctx.put_series(s)?;
+    let id = ctx.put_data_series(s)?;
     ctx.emit_output_by_role(
         &PinRole::Data(DataRole::Output),
         DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64)),

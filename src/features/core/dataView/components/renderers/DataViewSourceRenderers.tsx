@@ -85,7 +85,7 @@ export function DataFrameSourceView({
   );
 }
 
-export function SeriesSourceView({
+export function DataSeriesSourceView({
   payload,
   layout = 'embedded',
 }: {

@@ -24,6 +24,26 @@ export type DataType =
   | { kind: 'Struct'; inner: string }
   | { kind: 'OneOf'; inner: DataType[] };
 
+/** 变量详情面板可选的数据类型（不含 Any） */
+export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
+  'Boolean',
+  'Int32',
+  'Int64',
+  'Float32',
+  'Float64',
+  'String',
+  'Array',
+  'Object',
+  'DataFrame',
+  'DataSeries',
+] as const;
+
+export type VariableSelectableDataTypeKind = (typeof VARIABLE_SELECTABLE_DATA_TYPE_KINDS)[number];
+
+export function isVariableDataTypeAllowed(dataType: DataType): boolean {
+  return dataType.kind !== 'Any';
+}
+
 /** 获取 DataType 的 kind 字符串 */
 export function dataTypeKind(dt: DataType): string {
   return dt.kind;

@@ -71,16 +71,16 @@ pub trait NodeExecutionContextTrait {
     fn list_database_columns(&mut self, db_id: &str) -> Result<Vec<String>, String>;
 
     /// 按列加载 Series（DuckDB 列裁剪；结果缓存在执行 store）
-    fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String>;
+    fn load_database_data_series(&mut self, db_id: &str, column: &str) -> Result<Series, String>;
 
     /// 存入中间 DataFrame，返回引用 ID
     fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String>;
 
     /// 按 ID 获取 Series
-    fn get_series(&self, id: &str) -> Result<Series, String>;
+    fn get_data_series(&self, id: &str) -> Result<Series, String>;
 
     /// 存入中间 Series，返回引用 ID
-    fn put_series(&mut self, s: Series) -> Result<String, String>;
+    fn put_data_series(&mut self, s: Series) -> Result<String, String>;
 
     /// 读取变量值
     fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String>;

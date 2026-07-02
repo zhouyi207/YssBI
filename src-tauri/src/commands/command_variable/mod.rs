@@ -5,6 +5,13 @@ use crate::schema::VariableInstanceDTO;
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 
+fn ensure_variable_data_type(data_type: &DataType) -> Result<(), String> {
+    if matches!(data_type, DataType::Any) {
+        return Err("Variable data type cannot be Any".to_string());
+    }
+    Ok(())
+}
+
 /// 创建变量（统一接口，支持全局和局部变量）
 #[tauri::command]
 pub fn create_variable(
@@ -17,6 +24,7 @@ pub fn create_variable(
     scope: VariableScope,
     tags: Vec<String>,
 ) -> Result<String, String> {
+    ensure_variable_data_type(&data_type)?;
     let variable = state.add_variable(name, data_type, data_value, description, scope, tags);
     let variable_id = variable.id.to_string();
     if matches!(variable.scope, VariableScope::Global) {
@@ -58,6 +66,9 @@ pub fn update_variable(
     description: Option<String>,
     tags: Option<Vec<String>>,
 ) -> Result<VariableInstanceDTO, String> {
+    if let Some(ref dt) = data_type {
+        ensure_variable_data_type(dt)?;
+    }
     let type_changed = data_type.is_some();
     let name_changed = name.is_some();
 

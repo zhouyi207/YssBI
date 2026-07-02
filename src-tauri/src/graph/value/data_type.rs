@@ -320,7 +320,7 @@ impl DataType {
     }
 
     /// DataSeries 的元素类型，非 DataSeries 返回 None
-    pub fn series_inner(&self) -> Option<&DataType> {
+    pub fn data_series_inner(&self) -> Option<&DataType> {
         match self {
             DataType::DataSeries(inner) => Some(inner),
             _ => None,

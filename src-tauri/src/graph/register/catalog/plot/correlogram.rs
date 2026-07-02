@@ -59,7 +59,7 @@ pub fn register(registry: &NodeRegistry) {
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
-                "Series",
+                "DataSeries",
                 DataRole::Inputs(0),
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
                     DataType::Float64,
@@ -87,7 +87,7 @@ pub fn register(registry: &NodeRegistry) {
                 _ => DEFAULT_MAX_LAG,
             };
 
-            let series = ctx.get_series(&series_id)?;
+            let series = ctx.get_data_series(&series_id)?;
             let cast = series
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("Correlogram: cannot cast to Float64: {}", e))?;

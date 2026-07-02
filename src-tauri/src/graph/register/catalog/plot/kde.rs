@@ -86,7 +86,7 @@ pub fn register(registry: &NodeRegistry) {
                 _ => return Err("KDE: input must be a numeric DataSeries".to_string()),
             };
 
-            let series = ctx.get_series(&id)?;
+            let series = ctx.get_data_series(&id)?;
             let cast = series
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("KDE: cannot cast to Float64: {}", e))?;

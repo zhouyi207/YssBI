@@ -11,7 +11,7 @@ pub type SourceId = String;
 pub enum ResultSource {
     Json(serde_json::Value),
     DataFrame(Arc<DataFrame>),
-    Series(Series),
+    DataSeries(Series),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,7 +19,8 @@ pub enum ResultSource {
 pub enum SourceKind {
     Json,
     Dataframe,
-    Series,
+    #[serde(rename = "dataseries")]
+    DataSeries,
     Scalar,
     Null,
     Struct,
@@ -29,7 +30,8 @@ pub enum SourceKind {
 #[serde(rename_all = "snake_case")]
 pub enum SourceRenderer {
     Dataframe,
-    Series,
+    #[serde(rename = "dataseries")]
+    DataSeries,
     Scalar,
     Null,
     Json,
@@ -223,7 +225,7 @@ impl ResultSourceStore {
 
         match source {
             Some(ResultSource::Json(value)) => Ok(Some(json_to_source_value(&descriptor, value))),
-            Some(ResultSource::DataFrame(_) | ResultSource::Series(_)) => Err(format!(
+            Some(ResultSource::DataFrame(_) | ResultSource::DataSeries(_)) => Err(format!(
                 "Result source '{}' is paged, not a JSON value",
                 source_id
             )),
@@ -246,7 +248,7 @@ impl ResultSourceStore {
 
         match source {
             ResultSource::DataFrame(df) => dataframe_page(&df, offset, limit),
-            ResultSource::Series(series) => series_page(&series, offset, limit),
+            ResultSource::DataSeries(data_series) => data_series_page(&data_series, offset, limit),
             ResultSource::Json(_) => Err(format!(
                 "Result source '{}' is JSON, not a tabular source",
                 source_id
@@ -345,16 +347,16 @@ fn dataframe_page(df: &DataFrame, offset: usize, limit: usize) -> Result<SourceP
     })
 }
 
-fn series_page(series: &Series, offset: usize, limit: usize) -> Result<SourcePage, String> {
-    let total_count = series.len();
+fn data_series_page(data_series: &Series, offset: usize, limit: usize) -> Result<SourcePage, String> {
+    let total_count = data_series.len();
     let start = offset.min(total_count);
     let end = (offset.saturating_add(limit)).min(total_count);
-    let columns = crate::execution::series_table_columns(series);
+    let columns = crate::execution::data_series_table_columns(data_series);
     let rows: Vec<Vec<serde_json::Value>> = (start..end)
         .map(|i| {
             vec![
                 serde_json::json!(i),
-                series
+                data_series
                     .get(i)
                     .map(anyvalue_to_json)
                     .unwrap_or(serde_json::Value::Null),
@@ -362,7 +364,7 @@ fn series_page(series: &Series, offset: usize, limit: usize) -> Result<SourcePag
         })
         .collect();
     Ok(SourcePage {
-        kind: SourceKind::Series,
+        kind: SourceKind::DataSeries,
         offset: start,
         limit,
         total_count,
@@ -481,16 +483,16 @@ mod tests {
     }
 
     #[test]
-    fn series_page_slices_values() {
-        let series = Series::new("s".into(), &[10i64, 20, 30, 40]);
+    fn data_series_page_slices_values() {
+        let data_series = Series::new("s".into(), &[10i64, 20, 30, 40]);
         let store = ResultSourceStore::new();
         store.insert_window_source(ResultSourceRecord {
-            descriptor: descriptor("k", SourceKind::Series, SourceRenderer::Series),
-            source: ResultSource::Series(series),
+            descriptor: descriptor("k", SourceKind::DataSeries, SourceRenderer::DataSeries),
+            source: ResultSource::DataSeries(data_series),
         });
 
         let page = store.get_page("k", 2, 10).unwrap();
-        assert_eq!(page.kind, SourceKind::Series);
+        assert_eq!(page.kind, SourceKind::DataSeries);
         assert_eq!(page.offset, 2);
         assert_eq!(page.total_count, 4);
         assert_eq!(page.rows.as_ref().unwrap().len(), 2);

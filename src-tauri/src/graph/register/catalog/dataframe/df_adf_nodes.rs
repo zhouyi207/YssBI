@@ -171,7 +171,7 @@ fn run_df_adf(ctx: &mut dyn NodeExecutionContextTrait) -> Result<DFADFSummaryRes
         _ => return Err("DF & ADF: Y must be a Float64 DataSeries".to_string()),
     };
 
-    let series = ctx.get_series(&dsv.id)?;
+    let series = ctx.get_data_series(&dsv.id)?;
     let var_name = series.name().to_string();
     let var_name = if var_name.is_empty() {
         "y".to_string()
@@ -333,7 +333,7 @@ fn run_df_adf_summary(
         _ => return Err("DF & ADF Summary: Y must be a Float64 DataSeries".to_string()),
     };
 
-    let series = ctx.get_series(&dsv.id)?;
+    let series = ctx.get_data_series(&dsv.id)?;
     let var_name = series.name().to_string();
     let var_name = if var_name.is_empty() {
         "y".to_string()

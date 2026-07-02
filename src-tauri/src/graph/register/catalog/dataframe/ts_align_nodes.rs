@@ -173,12 +173,12 @@ fn register_ts_diff(registry: &NodeRegistry) {
                 Ok(DataValue::Int64(_)) => return Err("TS Diff: Lag 必须为非负整数".to_string()),
                 _ => 1,
             };
-            let series = ctx.get_series(&series_id)?;
+            let series = ctx.get_data_series(&series_id)?;
 
             let time_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_series".to_string())));
             let result = match time_value {
                 Ok(DataValue::DataSeries(v)) if !v.id.is_empty() => {
-                    let time_series = ctx.get_series(&v.id)?;
+                    let time_series = ctx.get_data_series(&v.id)?;
                     let interval = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string()))) {
                         Ok(DataValue::Int64(i)) if i > 0 => i,
                         Ok(DataValue::Int64(_)) => return Err("TS Diff: Interval 必须为正整数".to_string()),
@@ -189,7 +189,7 @@ fn register_ts_diff(registry: &NodeRegistry) {
                 _ => diff::ts_diff(&series, lag),
             };
             let result = result.map_err(|e| format!("TS Diff: {}", e))?;
-            let result_id = ctx.put_series(result)?;
+            let result_id = ctx.put_data_series(result)?;
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Output),
                 DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
@@ -211,7 +211,7 @@ fn register_ts_pct_change(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
@@ -238,10 +238,10 @@ fn register_ts_pct_change(registry: &NodeRegistry) {
             Ok(DataValue::Int64(_)) => return Err("TS Pct Change: Lag 必须为非负整数".to_string()),
             _ => 1,
         };
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
         let result =
             pct_change::ts_pct_change(&series, lag).map_err(|e| format!("TS Pct Change: {}", e))?;
-        let result_id = ctx.put_series(result)?;
+        let result_id = ctx.put_data_series(result)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -266,7 +266,7 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
         )),
@@ -296,10 +296,10 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
                 }
                 _ => return Err("TS Rolling Mean: 请提供 Window（正整数）".to_string()),
             };
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
         let result = rolling::rolling_mean(&series, window)
             .map_err(|e| format!("TS Rolling Mean: {}", e))?;
-        let result_id = ctx.put_series(result)?;
+        let result_id = ctx.put_data_series(result)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -370,8 +370,8 @@ fn register_ts_lag(registry: &NodeRegistry) {
                 Ok(DataValue::Int64(_)) => return Err("TS Lag: Lag 必须为非负整数".to_string()),
                 _ => 1,
             };
-            let time_series = ctx.get_series(&time_id)?;
-            let value_series = ctx.get_series(&value_id)?;
+            let time_series = ctx.get_data_series(&time_id)?;
+            let value_series = ctx.get_data_series(&value_id)?;
             let is_aligned = matches!(time_value, DataValue::DataSeries(v) if v.time_series_state.as_ref() == Some(&TimeSeriesState::Aligned));
             let (full_times, lagged_values) = if is_aligned && time_series.len() == value_series.len() {
                 let aligned_vec: Vec<Option<f64>> = value_series.f64().map_err(|e| format!("TS Lag: {}", e))?.into_iter().map(|v| v).collect();
@@ -398,8 +398,8 @@ fn register_ts_lag(registry: &NodeRegistry) {
                     .with_name(format!("{}_lag{}", value_series.name(), lag).into());
                 (full_times, lagged_s)
             };
-            let time_out_id = ctx.put_series(full_times.clone())?;
-            let lagged_id = ctx.put_series(lagged_values)?;
+            let time_out_id = ctx.put_data_series(full_times.clone())?;
+            let lagged_id = ctx.put_data_series(lagged_values)?;
             let time_element_type = polars_dtype_to_data_type(full_times.dtype());
             ctx.emit_output_by_role(
                 &PinRole::Data(DataRole::Custom("time_out".to_string())),

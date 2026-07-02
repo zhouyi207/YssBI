@@ -141,7 +141,7 @@ fn register_compare_node(
         name.clone(),
         vec![
             "Data".to_string(),
-            "Series".to_string(),
+            "DataSeries".to_string(),
             "Comparison".to_string(),
         ],
     )
@@ -149,7 +149,7 @@ fn register_compare_node(
     .with_localized_description(desc_zh, desc_en)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
-            "Series",
+            "DataSeries",
             DataRole::Input,
             PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
         )),
@@ -178,11 +178,11 @@ fn register_compare_node(
         let series_id = match &series_value {
             DataValue::DataSeries(v) => v.id.clone(),
             DataValue::Null => {
-                return Err(format!("{}: Series input is not connected", name));
+                return Err(format!("{}: DataSeries input is not connected", name));
             }
             other => {
                 return Err(format!(
-                    "{}: Series input must be a DataSeries (got {:?})",
+                    "{}: DataSeries input must be a DataSeries (got {:?})",
                     name,
                     other.value_type().unwrap_or(DataType::Any)
                 ));
@@ -192,11 +192,11 @@ fn register_compare_node(
         let value_input =
             ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
 
-        let series = ctx.get_series(&series_id)?;
+        let series = ctx.get_data_series(&series_id)?;
 
         let result_series = match &value_input {
             DataValue::DataSeries(v) => {
-                let other = ctx.get_series(&v.id)?;
+                let other = ctx.get_data_series(&v.id)?;
                 compare_series_series(&series, &other, &op)?
             }
             DataValue::Null => {
@@ -208,7 +208,7 @@ fn register_compare_node(
             scalar => compare_series_scalar(&series, scalar, &op)?,
         };
 
-        let result_id = ctx.put_series(result_series)?;
+        let result_id = ctx.put_data_series(result_series)?;
         ctx.emit_output_by_role(
             &PinRole::Data(DataRole::Output),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
@@ -224,42 +224,42 @@ fn register_compare_node(
 pub fn register(registry: &NodeRegistry) {
     register_compare_node(
         registry,
-        "Series Greater Than (>)",
+        "DataSeries Greater Than (>)",
         "gt",
         "逐元素大于：Series > Value（标量或 DataSeries）",
         "Element-wise greater than: Series > Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
-        "Series Less Than (<)",
+        "DataSeries Less Than (<)",
         "lt",
         "逐元素小于：Series < Value（标量或 DataSeries）",
         "Element-wise less than: Series < Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
-        "Series Greater Equal (>=)",
+        "DataSeries Greater Equal (>=)",
         "gte",
         "逐元素大于等于：Series >= Value（标量或 DataSeries）",
         "Element-wise greater or equal: Series >= Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
-        "Series Less Equal (<=)",
+        "DataSeries Less Equal (<=)",
         "lte",
         "逐元素小于等于：Series <= Value（标量或 DataSeries）",
         "Element-wise less or equal: Series <= Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
-        "Series Equal (==)",
+        "DataSeries Equal (==)",
         "eq",
         "逐元素相等：Series == Value（标量或 DataSeries）",
         "Element-wise equality: Series == Value (scalar or DataSeries)",
     );
     register_compare_node(
         registry,
-        "Series Not Equal (!=)",
+        "DataSeries Not Equal (!=)",
         "neq",
         "逐元素不等：Series != Value（标量或 DataSeries）",
         "Element-wise not equal: Series != Value (scalar or DataSeries)",

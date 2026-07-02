@@ -90,7 +90,7 @@ impl NodeExecutionContext {
                 crate::execution::ResolvedSourceValue::DataFrame(self.get_dataframe(id)?)
             }
             DataValue::DataSeries(v) => {
-                crate::execution::ResolvedSourceValue::Series(self.get_series(&v.id)?)
+                crate::execution::ResolvedSourceValue::DataSeries(self.get_data_series(&v.id)?)
             }
             DataValue::Struct {
                 type_key,
@@ -292,9 +292,9 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         graph.list_database_columns(db_id)
     }
 
-    fn load_database_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+    fn load_database_data_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
         let mut graph = self.graph.lock().unwrap();
-        graph.load_database_series(db_id, column)
+        graph.load_database_data_series(db_id, column)
     }
 
     fn put_dataframe(&mut self, df: DataFrame) -> Result<String, String> {
@@ -302,14 +302,14 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         Ok(graph.put_dataframe(df))
     }
 
-    fn get_series(&self, id: &str) -> Result<Series, String> {
+    fn get_data_series(&self, id: &str) -> Result<Series, String> {
         let graph = self.graph.lock().unwrap();
-        graph.get_series(id)
+        graph.get_data_series(id)
     }
 
-    fn put_series(&mut self, s: Series) -> Result<String, String> {
+    fn put_data_series(&mut self, s: Series) -> Result<String, String> {
         let mut graph = self.graph.lock().unwrap();
-        Ok(graph.put_series(s))
+        Ok(graph.put_data_series(s))
     }
 
     fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {

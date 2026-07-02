@@ -30,8 +30,8 @@ pub fn build_dataframe_source(
     }
 }
 
-pub fn series_table_columns(series: &Series) -> Vec<String> {
-    let name = series.name();
+pub fn data_series_table_columns(data_series: &Series) -> Vec<String> {
+    let name = data_series.name();
     let value_col = if name.is_empty() {
         "value".to_string()
     } else {
@@ -40,27 +40,27 @@ pub fn series_table_columns(series: &Series) -> Vec<String> {
     vec!["#".to_string(), value_col]
 }
 
-pub fn build_series_source(
+pub fn build_data_series_source(
     source_id: SourceId,
     title: impl Into<String>,
-    series: Series,
+    data_series: Series,
     execution_time_ms: Option<u64>,
 ) -> ResultSourceRecord {
-    let name = series.name().to_string();
-    let dtype = format!("{:?}", series.dtype());
-    let length = series.len();
-    let columns = series_table_columns(&series);
+    let name = data_series.name().to_string();
+    let dtype = format!("{:?}", data_series.dtype());
+    let length = data_series.len();
+    let columns = data_series_table_columns(&data_series);
     ResultSourceRecord {
         descriptor: base_descriptor(
             source_id,
-            SourceKind::Series,
-            SourceRenderer::Series,
+            SourceKind::DataSeries,
+            SourceRenderer::DataSeries,
             title,
             execution_time_ms,
         )
-        .with_series(name, dtype, length)
+        .with_data_series(name, dtype, length)
         .with_columns(columns, length),
-        source: ResultSource::Series(series),
+        source: ResultSource::DataSeries(data_series),
     }
 }
 
@@ -133,7 +133,7 @@ pub fn build_struct_source(
 pub enum ResolvedSourceValue {
     Null,
     DataFrame(Arc<DataFrame>),
-    Series(Series),
+    DataSeries(Series),
     Struct {
         type_key: String,
         handle_id: String,
@@ -171,16 +171,16 @@ pub fn build_source_from_resolved(
             df,
             execution_time_ms,
         )),
-        ResolvedSourceValue::Series(series) => {
+        ResolvedSourceValue::DataSeries(data_series) => {
             let resolved_title = if title.is_empty() {
-                default_view_title(value, Some(&series))
+                default_view_title(value, Some(&data_series))
             } else {
                 title
             };
-            Ok(build_series_source(
+            Ok(build_data_series_source(
                 source_id,
                 resolved_title,
-                series,
+                data_series,
                 execution_time_ms,
             ))
         }
@@ -223,13 +223,13 @@ pub fn build_source_from_data_value(
     value: &DataValue,
     execution_time_ms: Option<u64>,
     get_dataframe: &mut dyn FnMut(&str) -> Result<Arc<DataFrame>, String>,
-    get_series: &dyn Fn(&str) -> Result<Series, String>,
+    get_data_series: &dyn Fn(&str) -> Result<Series, String>,
     get_handle: &dyn Fn(&str) -> Option<Arc<dyn Any + Send + Sync>>,
 ) -> Result<ResultSourceRecord, String> {
     let resolved = match value {
         DataValue::Null => ResolvedSourceValue::Null,
         DataValue::DataFrame(id) => ResolvedSourceValue::DataFrame(get_dataframe(id)?),
-        DataValue::DataSeries(v) => ResolvedSourceValue::Series(get_series(&v.id)?),
+        DataValue::DataSeries(v) => ResolvedSourceValue::DataSeries(get_data_series(&v.id)?),
         DataValue::Struct {
             type_key,
             handle_id,
@@ -250,7 +250,7 @@ pub fn default_view_title(value: &DataValue, series: Option<&Series>) -> String 
         DataValue::DataSeries(_) => {
             let name = series.map(|s| s.name().to_string()).unwrap_or_default();
             if name.is_empty() {
-                "View: Series".to_string()
+                "View: DataSeries".to_string()
             } else {
                 format!("View: {}", name)
             }
@@ -472,7 +472,7 @@ fn is_scalar_data_value(value: &DataValue) -> bool {
 
 trait DescriptorExt {
     fn with_columns(self, columns: Vec<String>, total_rows: usize) -> Self;
-    fn with_series(self, name: String, dtype: String, length: usize) -> Self;
+    fn with_data_series(self, name: String, dtype: String, length: usize) -> Self;
     fn with_value_type(self, value_type: String) -> Self;
     fn with_message(self, message: String) -> Self;
     fn with_struct_meta(self, type_key: &str, handle_id: &str) -> Self;
@@ -486,7 +486,7 @@ impl DescriptorExt for SourceDescriptor {
         self
     }
 
-    fn with_series(mut self, name: String, dtype: String, length: usize) -> Self {
+    fn with_data_series(mut self, name: String, dtype: String, length: usize) -> Self {
         self.name = Some(name);
         self.dtype = Some(dtype);
         self.length = Some(length);

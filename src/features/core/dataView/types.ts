@@ -1,11 +1,11 @@
 /** Metadata-only source contract. Actual values live in backend sources. */
-export type SourceKind = 'json' | 'dataframe' | 'series' | 'scalar' | 'null' | 'struct';
+export type SourceKind = 'json' | 'dataframe' | 'dataseries' | 'scalar' | 'null' | 'struct';
 
 export type DataViewStructKind = 'ols_result' | 'unknown';
 
 export type DataViewRendererKind =
   | 'dataframe'
-  | 'series'
+  | 'dataseries'
   | 'scalar'
   | 'null'
   | 'json'
@@ -50,7 +50,7 @@ export interface SourceValue {
 }
 
 export interface SourcePage {
-  kind: 'dataframe' | 'series';
+  kind: 'dataframe' | 'dataseries';
   offset: number;
   limit: number;
   totalCount: number;

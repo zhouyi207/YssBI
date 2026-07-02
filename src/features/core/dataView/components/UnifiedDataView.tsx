@@ -6,7 +6,7 @@ import {
   JsonSourceView,
   NullSourceView,
   ScalarSourceView,
-  SeriesSourceView,
+  DataSeriesSourceView,
 } from './renderers/DataViewSourceRenderers';
 
 export interface UnifiedDataViewProps {
@@ -21,8 +21,8 @@ export function UnifiedDataView({ payload, layout = 'embedded' }: UnifiedDataVie
   switch (kind) {
     case 'dataframe':
       return <DataFrameSourceView {...viewProps} />;
-    case 'series':
-      return <SeriesSourceView {...viewProps} />;
+    case 'dataseries':
+      return <DataSeriesSourceView {...viewProps} />;
     case 'scalar':
       return <ScalarSourceView {...viewProps} />;
     case 'null':
