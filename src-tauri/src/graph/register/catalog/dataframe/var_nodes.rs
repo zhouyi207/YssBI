@@ -22,15 +22,9 @@ use yss_sci::api::time_series::{
 
 // ======================== 辅助 ========================
 
-fn var_numeric_dtypes() -> &'static [DataType] {
-    &[
-        DataType::Float32,
-        DataType::Float64,
-        DataType::Int32,
-        DataType::Int64,
-        DataType::UInt32,
-        DataType::UInt64,
-    ]
+/// 是否为可参与数值估计的列类型：所有整数 / 浮点宽度 + Decimal（统一 cast 到 Float64）。
+fn is_var_numeric(dtype: &DataType) -> bool {
+    dtype.is_primitive_numeric() || dtype.is_decimal()
 }
 
 #[inline]
@@ -50,12 +44,11 @@ fn exog_dataframe_to_array2_full_nan(
             expected_rows
         ));
     }
-    let numeric_dtypes = var_numeric_dtypes();
     let mut columns: Vec<Vec<f64>> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     let nrows = expected_rows;
     for col in df.columns() {
-        if !numeric_dtypes.contains(&col.dtype()) {
+        if !is_var_numeric(col.dtype()) {
             continue;
         }
         let s = col

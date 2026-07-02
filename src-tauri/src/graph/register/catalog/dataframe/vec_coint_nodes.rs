@@ -93,18 +93,12 @@ fn sindicators_dataframe_to_array2(
             nrows, expected_rows
         ));
     }
-    let numeric_dtypes = [
-        PolarsDataType::Float32,
-        PolarsDataType::Float64,
-        PolarsDataType::Int32,
-        PolarsDataType::Int64,
-        PolarsDataType::UInt32,
-        PolarsDataType::UInt64,
-    ];
     let mut columns: Vec<Vec<f64>> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     for col in df.columns() {
-        if !numeric_dtypes.contains(&col.dtype()) {
+        // 所有整数 / 浮点宽度 + Decimal 都参与（统一 cast 到 Float64）
+        let dtype = col.dtype();
+        if !(dtype.is_primitive_numeric() || dtype.is_decimal()) {
             continue;
         }
         let s = col.cast(&PolarsDataType::Float64).map_err(|e| {
