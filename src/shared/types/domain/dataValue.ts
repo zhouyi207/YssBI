@@ -21,6 +21,8 @@ export type DataValue =
   | { kind: 'Float64'; value: number }
   | { kind: 'String'; value: string }
   | { kind: 'Date'; value: string }
+  | { kind: 'Datetime'; value: string }
+  | { kind: 'Time'; value: string }
   | { kind: 'Categorical'; value: string }
   | { kind: 'Array'; value: DataValue[] }
   | { kind: 'Object'; value: Record<string, unknown> }
@@ -36,6 +38,8 @@ export function dataValueToRaw(dv: DataValue): unknown {
     case 'Float64':
     case 'String':
     case 'Date':
+    case 'Datetime':
+    case 'Time':
     case 'Categorical':
     case 'DataFrame':
       return dv.value;
@@ -72,6 +76,10 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
       return { kind: 'String', value: String(raw) };
     case 'Date':
       return { kind: 'Date', value: raw != null ? String(raw) : '' };
+    case 'Datetime':
+      return { kind: 'Datetime', value: raw != null ? String(raw) : '' };
+    case 'Time':
+      return { kind: 'Time', value: raw != null ? String(raw) : '' };
     case 'Categorical':
       return { kind: 'Categorical', value: raw != null ? String(raw) : '' };
     case 'Array':

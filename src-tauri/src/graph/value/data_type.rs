@@ -15,8 +15,14 @@ pub enum DataType {
     Float64,
     String,
 
-    /// 日期类型（Polars Date / Datetime 统一映射）
+    /// 日期类型（Polars Date，无时刻）
     Date,
+
+    /// 日期时间类型（Polars Datetime，带时刻，时间序列索引常用）
+    Datetime,
+
+    /// 时刻类型（Polars Time，无日期）
+    Time,
 
     /// 分类类型（Polars Categorical / Enum）
     Categorical,
@@ -149,6 +155,8 @@ impl fmt::Display for DataType {
             DataType::Float64 => write!(f, "Float64"),
             DataType::String => write!(f, "String"),
             DataType::Date => write!(f, "Date"),
+            DataType::Datetime => write!(f, "Datetime"),
+            DataType::Time => write!(f, "Time"),
             DataType::Categorical => write!(f, "Categorical"),
             DataType::Array(inner) => write!(f, "Array<{}>", inner),
             DataType::Object => write!(f, "Object"),
@@ -191,6 +199,8 @@ impl FromStr for DataType {
             "Float32" | "Float64" => Ok(DataType::Float64),
             "String" => Ok(DataType::String),
             "Date" => Ok(DataType::Date),
+            "Datetime" | "DateTime" => Ok(DataType::Datetime),
+            "Time" => Ok(DataType::Time),
             "Categorical" => Ok(DataType::Categorical),
             "Object" => Ok(DataType::Object),
             "DataFrame" => Ok(DataType::DataFrame),
@@ -254,8 +264,9 @@ impl DataType {
             DataType::Int64 => DataValue::Int64(0),
             DataType::Float64 => DataValue::Float64(num_traits::Zero::zero()),
             DataType::String => DataValue::String(String::new()),
-            DataType::Date => DataValue::String(String::new()), // 默认空日期，用字符串表示
-            DataType::Categorical => DataValue::String(String::new()), // 分类默认空字符串
+            // 时间/分类标量默认以空字符串表示（运行时值经 String 承载）
+            DataType::Date | DataType::Datetime | DataType::Time => DataValue::String(String::new()),
+            DataType::Categorical => DataValue::String(String::new()),
             DataType::Array(_) => DataValue::Array(Vec::new()),
             DataType::Object => DataValue::Object(std::collections::HashMap::new()),
             DataType::OneOf(types) => types.first().map_or(DataValue::Null, |t| t.default_value()),
@@ -273,6 +284,8 @@ impl DataType {
             | DataType::Float64
             | DataType::String
             | DataType::Date
+            | DataType::Datetime
+            | DataType::Time
             | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_primitive()),
             _ => false,
@@ -296,6 +309,8 @@ impl DataType {
             | DataType::Float64
             | DataType::String
             | DataType::Date
+            | DataType::Datetime
+            | DataType::Time
             | DataType::Categorical => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_comparable()),
             _ => false,
@@ -345,6 +360,8 @@ impl DataType {
                 | DataType::Int64
                 | DataType::Float64
                 | DataType::Date
+                | DataType::Datetime
+                | DataType::Time
                 | DataType::Categorical,
             ) => from.is_primitive(),
             _ => false,

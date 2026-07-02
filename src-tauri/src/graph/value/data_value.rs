@@ -299,7 +299,11 @@ impl DataValue {
                 .as_f64()
                 .map(DataValue::Float64)
                 .unwrap_or_else(|| self.clone()),
-            DataType::Date | DataType::String | DataType::Categorical => {
+            DataType::Date
+            | DataType::Datetime
+            | DataType::Time
+            | DataType::String
+            | DataType::Categorical => {
                 let s = match self {
                     DataValue::String(s) => return DataValue::String(s.clone()),
                     DataValue::Boolean(b) => b.to_string(),

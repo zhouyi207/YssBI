@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   DataEditor,
   GridCellKind,
-  GridColumnIcon,
   type EditableGridCell,
   type GridCell,
   type GridColumn,
@@ -45,15 +44,6 @@ interface DataTableProps {
   onContextMenu: (position: { x: number; y: number }, target: ContextMenuTarget) => void;
 }
 
-function dtypeToIcon(dtype: string): GridColumnIcon {
-  const normalized = dtype.toLowerCase();
-  if (normalized.includes('int') || normalized.includes('float') || normalized.includes('double') || normalized.includes('number')) {
-    return GridColumnIcon.HeaderNumber;
-  }
-  if (normalized.includes('bool')) return GridColumnIcon.HeaderBoolean;
-  return GridColumnIcon.HeaderString;
-}
-
 function cellToValue(cell: EditableGridCell): unknown {
   switch (cell.kind) {
     case GridCellKind.Number:
@@ -89,7 +79,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     const realColumns = columns.map((col) => ({
       id: col.name,
       title: col.name,
-      icon: dtypeToIcon(col.type),
       hasMenu: true,
       width: columnWidths[col.name] ?? Math.max(120, Math.min(280, col.name.length * 8 + 96)),
     }));
@@ -211,7 +200,50 @@ export const DataTable: React.FC<DataTableProps> = ({
         getCellContent={getCellContent}
         getCellsForSelection
         rowHeight={DATA_VIEW_ROW_HEIGHT}
-        headerHeight={36}
+        headerHeight={44}
+        drawHeader={(args) => {
+          const { ctx, rect, column, columnIndex, theme, isHovered, menuBounds } = args;
+          if (columnIndex < 0 || columnIndex >= columns.length) return false;
+          const col = columns[columnIndex];
+          const padX = theme.cellHorizontalPadding ?? 8;
+          const availWidth = rect.width - padX * 2;
+          if (availWidth <= 0) return true;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y, rect.width, rect.height);
+          ctx.clip();
+
+          const x = rect.x + padX;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left';
+
+          // 列名（主行）
+          ctx.fillStyle = theme.textHeader;
+          ctx.font = `600 13px ${theme.fontFamily}`;
+          ctx.fillText(col.name, x, rect.y + rect.height / 2 - 7, availWidth);
+
+          // 类型（次行，弱化）
+          ctx.fillStyle = theme.textLight ?? theme.textMedium ?? theme.textHeader;
+          ctx.font = `11px ${theme.fontFamily}`;
+          ctx.fillText(col.type, x, rect.y + rect.height / 2 + 8, availWidth);
+
+          // 悬浮时绘制列菜单下拉指示（点击区域由 hasMenu/menuBounds 提供）
+          if (column.hasMenu && isHovered && menuBounds) {
+            const cx = menuBounds.x + menuBounds.width / 2;
+            const cy = menuBounds.y + menuBounds.height / 2;
+            ctx.strokeStyle = theme.textLight ?? theme.textMedium ?? theme.textHeader;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(cx - 4, cy - 2);
+            ctx.lineTo(cx, cy + 2);
+            ctx.lineTo(cx + 4, cy - 2);
+            ctx.stroke();
+          }
+
+          ctx.restore();
+          return true;
+        }}
         rowMarkers={rowMarkers}
         /** 与 Glide 文档一致：auto=鼠标下 Ctrl/Cmd 点行号追加、Shift 扩选连续区间；勿用 multi（等同始终按住 Ctrl） */
         rowSelectionMode="auto"

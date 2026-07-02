@@ -57,14 +57,13 @@ pub fn polars_dtype_to_data_type(dtype: &polars::prelude::DataType) -> DataType 
         | PDataType::UInt16
         | PDataType::UInt32
         | PDataType::UInt64 => DataType::Int64,
-        // 所有浮点宽度收敛到 Float64
-        PDataType::Float32 | PDataType::Float64 => DataType::Float64,
-        polars::prelude::DataType::String => DataType::String,
-        polars::prelude::DataType::Date => DataType::Date,
-        polars::prelude::DataType::Datetime(_, _) => DataType::Date,
-        polars::prelude::DataType::Time => DataType::Date,
-        polars::prelude::DataType::Categorical(_, _) => DataType::Categorical,
-        polars::prelude::DataType::Enum(_, _) => DataType::Categorical,
+        // 所有浮点宽度 + Decimal 收敛到 Float64
+        PDataType::Float32 | PDataType::Float64 | PDataType::Decimal(_, _) => DataType::Float64,
+        PDataType::String => DataType::String,
+        PDataType::Date => DataType::Date,
+        PDataType::Datetime(_, _) => DataType::Datetime,
+        PDataType::Time => DataType::Time,
+        PDataType::Categorical(_, _) | PDataType::Enum(_, _) => DataType::Categorical,
         _ => DataType::Any,
     }
 }
@@ -90,8 +89,10 @@ pub fn polars_type_string_to_data_type(s: &str) -> DataType {
         "Float32" | "Float64" => DataType::Float64,
         "String" | "Utf8" => DataType::String,
         "Date" => DataType::Date,
-        _ if t.starts_with("Datetime(") || t.starts_with("DateTime(") => DataType::Date,
-        _ if t.starts_with("Time") => DataType::Date,
+        "Time" => DataType::Time,
+        _ if t.starts_with("Datetime(") || t.starts_with("DateTime(") => DataType::Datetime,
+        _ if t.starts_with("Time") => DataType::Time,
+        _ if t.starts_with("Decimal(") => DataType::Float64,
         _ if t.starts_with("Categorical(") || t.starts_with("Enum(") => DataType::Categorical,
         _ => DataType::Any,
     }

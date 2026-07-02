@@ -47,6 +47,10 @@ function dataTypeToPinType(dt: DataType): string {
       return 'string';
     case 'Date':
       return 'date';
+    case 'Datetime':
+      return 'datetime';
+    case 'Time':
+      return 'time';
     case 'Categorical':
       return 'categorical';
     case 'Object':

@@ -13,6 +13,8 @@ export type DataType =
   | { kind: 'Float64' }
   | { kind: 'String' }
   | { kind: 'Date' }
+  | { kind: 'Datetime' }
+  | { kind: 'Time' }
   | { kind: 'Categorical' }
   | { kind: 'Object' }
   | { kind: 'Any' }
@@ -47,6 +49,8 @@ export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
   'Float64',
   'String',
   'Date',
+  'Datetime',
+  'Time',
   'Categorical',
 ] as const;
 
@@ -148,6 +152,9 @@ export function dataTypeFromDisplayString(s: string): DataType | null {
     case 'Float64': return { kind: 'Float64' };
     case 'String': return { kind: 'String' };
     case 'Date': return { kind: 'Date' };
+    case 'Time': return { kind: 'Time' };
+    case 'Datetime':
+    case 'DateTime': return { kind: 'Datetime' };
     case 'Categorical': return { kind: 'Categorical' };
     case 'Object': return { kind: 'Object' };
     case 'DataFrame': return { kind: 'DataFrame' };
@@ -169,6 +176,12 @@ export function dataTypeFromDisplayString(s: string): DataType | null {
   if (structMatch) {
     return { kind: 'Struct', inner: structMatch[1] };
   }
+
+  // 保真层带参数的原始类型字符串收敛（对齐 Rust polars_type_string_to_data_type）
+  if (/^(Datetime|DateTime)\(/.test(trimmed)) return { kind: 'Datetime' };
+  if (/^Time/.test(trimmed)) return { kind: 'Time' };
+  if (/^Decimal\(/.test(trimmed)) return { kind: 'Float64' };
+  if (/^(Categorical|Enum)\(/.test(trimmed)) return { kind: 'Categorical' };
 
   return null;
 }
@@ -196,7 +209,7 @@ export function isPrimitiveType(dataType: DataType): boolean {
   if (dataType.kind === 'OneOf') {
     return dataType.inner.length > 0 && dataType.inner.every(isPrimitiveType);
   }
-  return ['Boolean', 'Int64', 'Float64', 'String', 'Date', 'Categorical'].includes(
+  return ['Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time', 'Categorical'].includes(
     dataType.kind
   );
 }
@@ -221,6 +234,8 @@ export function getDefaultValue(dataType: DataType): unknown {
     case 'String':
       return '';
     case 'Date':
+    case 'Datetime':
+    case 'Time':
     case 'Categorical':
       return '';
     case 'Array':
@@ -258,6 +273,10 @@ export function dataTypeFromPinType(pinType: string): DataType {
       return { kind: 'String' };
     case 'date':
       return { kind: 'Date' };
+    case 'datetime':
+      return { kind: 'Datetime' };
+    case 'time':
+      return { kind: 'Time' };
     case 'categorical':
     case 'category':
       return { kind: 'Categorical' };

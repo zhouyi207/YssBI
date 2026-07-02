@@ -84,8 +84,10 @@ export function dataValueToBackend(
       return { Float64: dv.value };
     case 'String':
       return { String: dv.value };
-    // 后端 DataValue 无 Date/Categorical 变体，统一以 String 承载
+    // 后端 DataValue 无 Date/Datetime/Time/Categorical 变体，统一以 String 承载
     case 'Date':
+    case 'Datetime':
+    case 'Time':
     case 'Categorical':
       return { String: dv.value };
     case 'Array':

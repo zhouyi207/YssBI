@@ -185,7 +185,7 @@ package.json
 - [ ] did 平行趋势检验 安慰剂检验 并没有完成检验
 - [x] 创建 float64 -> int64, int64 -> categorical，目前已经有了 categorical
 - [ ] 在按下按钮涉及到大量计算的时候，页面会卡死，我认为应该在后端开启一个线程计算还是怎么样，至少在点击其他东西的情况下，禁止某些功能可以查阅其他信息
-- [ ] 类型收敛，使用 Int64 和 float64 代替所有的 number
+- [x] 类型收敛，使用 Int64 和 float64 代替所有的 number（详见 `## 2026.07.03`）
 
 ## 2026.04.28
 
@@ -565,6 +565,9 @@ package.json
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `DataViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedDataView` renderer。
 - [ ] **View：runtime source 生命周期**：明确 `ResultSourceStore` 中 pin/window source 何时 `remove`（断开连线、图结束、手动关闭窗口等）；避免内存泄漏与 stale source_id 复用。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
+- [x] **类型收敛：运行时数值仅 Int64/Float64**（对应 `## 2026.03.20` 的「类型收敛，使用 Int64 和 float64 代替所有的 number」）：后端 `DataType` / `DataValue` 移除 `Int32` / `Float32`，`FromStr` 与 `polars_dtype_to_data_type` / `polars_type_string_to_data_type` 将所有整数宽度（Int8~UInt64）收敛到 `Int64`、所有浮点（Float32/Float64）收敛到 `Float64`；删除 `convert_to_int32/float32`、`register_int32/float32_constant` 等；`math` / `distribution` / `dataframe` 系列节点改用 `DataType::number()` / `number_series()`；前端 `DataType` / `DataValue` 联合类型、DTO、Pin input、变量创建默认类型同步收敛；`VARIABLE_SELECTABLE_DATA_TYPE_KINDS` 只留 `Boolean/Int64/Float64/String` + 容器类型，新增 `DATA_SERIES_ELEMENT_TYPE_KINDS` 供 DataSeries 元素类型选择。
+- [x] **DataView 表头显示列类型**：`DataTable.tsx` 自定义 `drawHeader`，表头两行展示「列名（加粗）+ 类型（弱化）」，`headerHeight` 44；移除冗余 `dtypeToIcon`。
+- [x] **时间类型语义修复：新增 DataType::Datetime / Time（方案 A）**：修复此前 DuckDB / Polars `TIMESTAMP` 与 `TIME` 在图运行时被统一压成 `DataType::Date` 的语义丢失（对时间序列计量至关重要）。后端 `DataType` 新增 `Datetime` / `Time` 独立变体并补全 `Display` / `FromStr` / `default_value` / `is_primitive` / `is_comparable` / `can_convert` 与 `DataValue::coerce_to`；`database_schema.rs` 映射修正为 `Datetime(_,_) → Datetime`、`Time → Time`、`Decimal(_,_) → Float64`（保真层原始串 `Datetime(...)` / `Time...` / `Decimal(...)` 同步）；`pin.rs` 补 `datetime` / `time` pin type。前端 `DataType` / `DataValue` 联合类型、`dataTypeFromDisplayString`（含带参原始串归一）、`isPrimitiveType` / `getDefaultValue` / `dataTypeFromPinType`、DTO（`Datetime` / `Time` → 后端 `String`）、`optimisticNodeDraft` 穷尽 switch、`DATA_SERIES_ELEMENT_TYPE_KINDS`、pin 颜色（`time` 复用 `datetime` 色）全部补齐；标量层暂仍以 `String` 承载时间值，真实 Polars 时间类型由 `DataSeries<Datetime>` / `DataSeries<Time>` 携带。`cargo check --tests` / `cargo test --lib value::` 通过，改动文件 `tsc` 无新增错误。
 
 ## v1.0 待办
 

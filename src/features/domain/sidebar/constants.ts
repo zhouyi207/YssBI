@@ -32,6 +32,7 @@ export const PIN_COLORS: Record<string, string> = {
   string: "var(--string-color)",
   date: "var(--date-color)",
   datetime: "var(--datetime-color)",
+  time: "var(--datetime-color)",
   object: "var(--object-color)",
   array: "var(--array-color)",
   struct: "#0055FF",
