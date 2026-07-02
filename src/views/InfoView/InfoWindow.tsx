@@ -28,7 +28,7 @@ function isDataView(data: unknown): data is SourceDescriptor {
   return (
     typeof d === 'object' &&
     d != null &&
-    ['dataframe', 'series', 'scalar', 'null', 'struct_ols', 'struct_generic'].includes(d.renderer)
+    ['dataframe', 'series', 'scalar', 'null', 'json'].includes(d.renderer)
   );
 }
 

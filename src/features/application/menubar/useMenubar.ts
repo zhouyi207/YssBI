@@ -115,7 +115,7 @@ export function useMenubar() {
         kind: "dataView",
         label,
         url: "index.html#/dataview",
-        title: "Data Viewer",
+        title: i18n.t("dataView.title"),
       });
     } catch (error) {
       logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');

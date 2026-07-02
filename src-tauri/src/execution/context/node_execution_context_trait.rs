@@ -111,6 +111,9 @@ pub trait NodeExecutionContextTrait {
     /// 打开已经注册过的 source，避免为 View 节点重复复制上游数据。
     fn open_existing_source_window(&mut self, window_type: String, source_id: String);
 
+    /// 解析 View 输入对应的 source id：优先复用上游 pin source，否则从 DataValue 注册 window source。
+    fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String>;
+
     /// 读取输入 pin 上游 output pin 已注册的 source id。
     fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String>;
 

@@ -10,6 +10,7 @@ import { UIHost } from "./ui/UIHost";
 
 const PlotWindow = React.lazy(() => import("@/views/PlotView/PlotWindow").then(m => ({ default: m.PlotWindow })));
 const DataViewWindow = React.lazy(() => import("@/views/DataView/DataViewWindow").then(m => ({ default: m.DataViewWindow })));
+const RuntimeViewWindow = React.lazy(() => import("@/views/RuntimeView/RuntimeViewWindow").then(m => ({ default: m.RuntimeViewWindow })));
 const LogWindow = React.lazy(() => import("@/views/LogView/LogWindow").then(m => ({ default: m.LogWindow })));
 const InfoWindow = React.lazy(() => import("@/views/InfoView/InfoWindow").then(m => ({ default: m.InfoWindow })));
 const EditorWindow = React.lazy(() => import("@/views/EditorView/EditorWindow").then(m => ({ default: m.EditorWindow })));
@@ -24,6 +25,7 @@ function AppRouter() {
         <Route path="/editor" element={<EditorWindow />} />
         <Route path="/plot" element={<PlotWindow />} />
         <Route path="/dataview" element={<DataViewWindow />} />
+        <Route path="/view" element={<RuntimeViewWindow />} />
         <Route path="/logs" element={<LogWindow />} />
         <Route path="/info" element={<InfoWindow />} />
         <Route path="*" element={<ProjectPickerScreen />} />

@@ -1,34 +1,35 @@
 import type { SourceDescriptor } from '../types';
+import type { DataViewLayout } from './components/DataViewShell';
 import { resolveDataViewRenderer } from '../resolveRenderer';
 import {
   DataFrameSourceView,
-  GenericStructSourceView,
+  JsonSourceView,
   NullSourceView,
-  OlsStructSourceView,
   ScalarSourceView,
   SeriesSourceView,
 } from './renderers/DataViewSourceRenderers';
 
 export interface UnifiedDataViewProps {
   payload: SourceDescriptor;
+  layout?: DataViewLayout;
 }
 
-export function UnifiedDataView({ payload }: UnifiedDataViewProps) {
+export function UnifiedDataView({ payload, layout = 'embedded' }: UnifiedDataViewProps) {
   const kind = resolveDataViewRenderer(payload);
+  const viewProps = { payload, layout };
 
   switch (kind) {
     case 'dataframe':
-      return <DataFrameSourceView payload={payload} />;
+      return <DataFrameSourceView {...viewProps} />;
     case 'series':
-      return <SeriesSourceView payload={payload} />;
+      return <SeriesSourceView {...viewProps} />;
     case 'scalar':
-      return <ScalarSourceView payload={payload} />;
+      return <ScalarSourceView {...viewProps} />;
     case 'null':
-      return <NullSourceView payload={payload} />;
-    case 'struct_ols':
-      return <OlsStructSourceView payload={payload} />;
-    case 'struct_generic':
+      return <NullSourceView {...viewProps} />;
+    case 'json':
+      return <JsonSourceView {...viewProps} />;
     default:
-      return <GenericStructSourceView payload={payload} />;
+      return <JsonSourceView {...viewProps} />;
   }
 }

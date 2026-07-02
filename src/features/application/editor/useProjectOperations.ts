@@ -10,7 +10,7 @@ import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
-import { createPersistedWindow } from '@/features/application/window';
+import { openPresentationWindowSafe } from '@/features/application/window';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
@@ -128,22 +128,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     sourceId: string,
     presentation: { route: string; windowTitle: string; plotType?: string },
   ) => {
-    try {
-      const route = presentation.route || '/info';
-      const labelKind = route.replace(/^\//, '') || 'source';
-      const label = `${labelKind}-${Math.random().toString(36).substring(2, 10)}`;
-      const params = new URLSearchParams({ sourceId });
-      if (presentation.plotType) params.set('plotType', presentation.plotType);
-      const url = `index.html#${route}?${params.toString()}`;
-      await createPersistedWindow({
-        kind: route === '/plot' ? 'plot' : 'info',
-        label,
-        url,
-        title: presentation.windowTitle,
-      });
-    } catch (e) {
-      logger.exec.error(`Failed to open window: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await openPresentationWindowSafe(sourceId, presentation, 'ProjectOperations');
   }, []);
 
   const executeGraph = useCallback(async (targetGraphId?: string) => {

@@ -8,8 +8,7 @@ export type DataViewRendererKind =
   | 'series'
   | 'scalar'
   | 'null'
-  | 'struct_ols'
-  | 'struct_generic'
+  | 'json'
   | 'plot'
   | 'info';
 
@@ -33,7 +32,7 @@ export interface SourceDescriptor {
 
 export interface SourcePresentation {
   sourceId: string;
-  route: '/dataview' | '/info' | '/plot' | string;
+  route: '/view' | '/info' | '/plot' | string;
   windowTitle: string;
   plotType?: string;
 }

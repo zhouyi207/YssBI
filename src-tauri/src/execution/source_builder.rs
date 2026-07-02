@@ -1,3 +1,4 @@
+use crate::execution::serialize_struct_handle;
 use crate::execution::{
     ResultSource, ResultSourceRecord, SourceDescriptor, SourceId, SourceKind, SourcePresentation,
     SourceRenderer,
@@ -29,6 +30,16 @@ pub fn build_dataframe_source(
     }
 }
 
+pub fn series_table_columns(series: &Series) -> Vec<String> {
+    let name = series.name();
+    let value_col = if name.is_empty() {
+        "value".to_string()
+    } else {
+        name.to_string()
+    };
+    vec!["#".to_string(), value_col]
+}
+
 pub fn build_series_source(
     source_id: SourceId,
     title: impl Into<String>,
@@ -38,6 +49,7 @@ pub fn build_series_source(
     let name = series.name().to_string();
     let dtype = format!("{:?}", series.dtype());
     let length = series.len();
+    let columns = series_table_columns(&series);
     ResultSourceRecord {
         descriptor: base_descriptor(
             source_id,
@@ -46,7 +58,8 @@ pub fn build_series_source(
             title,
             execution_time_ms,
         )
-        .with_series(name, dtype, length),
+        .with_series(name, dtype, length)
+        .with_columns(columns, length),
         source: ResultSource::Series(series),
     }
 }
@@ -69,7 +82,10 @@ pub fn build_json_source_from_data_value(
             .with_message("No data".to_string()),
             source: ResultSource::Json(json!({"message": "No data"})),
         },
-        scalar => {
+        DataValue::Array(_) | DataValue::Object(_) => {
+            build_json_tree_source(source_id, title, value, execution_time_ms)
+        }
+        scalar if is_scalar_data_value(scalar) => {
             let value_type = format!("{:?}", scalar.value_type().unwrap_or(DataType::Any));
             ResultSourceRecord {
                 descriptor: base_descriptor(
@@ -86,6 +102,7 @@ pub fn build_json_source_from_data_value(
                 })),
             }
         }
+        other => build_json_tree_source(source_id, title, other, execution_time_ms),
     }
 }
 
@@ -96,59 +113,151 @@ pub fn build_struct_source(
     handle: Option<Arc<dyn Any + Send + Sync>>,
     execution_time_ms: Option<u64>,
 ) -> Result<ResultSourceRecord, String> {
-    if type_key == "OLSResult" {
-        let handle = handle.ok_or_else(|| format!("Handle '{}' not found", handle_id))?;
-        let ols = handle
-            .downcast::<OLSResult>()
-            .map_err(|_| format!("Handle '{}' is not OLSResult", handle_id))?;
-        let structured = serde_json::to_value(ols.as_ref())
-            .map_err(|e| format!("Failed to serialize OLSResult: {}", e))?;
-        return Ok(ResultSourceRecord {
-            descriptor: base_descriptor(
-                source_id,
-                SourceKind::Struct,
-                SourceRenderer::StructOls,
-                ols.title.clone(),
-                execution_time_ms,
-            )
-            .with_struct(
-                type_key.to_string(),
-                handle_id.to_string(),
-                "ols_result".to_string(),
-            ),
-            source: ResultSource::Json(json!({
-                "structured": structured,
-                "typeKey": type_key,
-                "handleId": handle_id,
-                "structKind": "ols_result",
-            })),
-        });
-    }
-
-    Ok(ResultSourceRecord {
-        descriptor: base_descriptor(
-            source_id,
-            SourceKind::Struct,
-            SourceRenderer::StructGeneric,
-            format!("View: {}", type_key),
-            execution_time_ms,
-        )
-        .with_message(format!(
-            "Struct type '{}' has no dedicated viewer yet.",
-            type_key
-        ))
-        .with_struct(
-            type_key.to_string(),
-            handle_id.to_string(),
-            "unknown".to_string(),
-        ),
-        source: ResultSource::Json(json!({
+    let title = struct_source_title(type_key, handle.as_ref());
+    let value = serialize_struct_value(type_key, handle_id, handle.as_ref())?;
+    Ok(build_json_payload_tree_source(
+        source_id,
+        title,
+        &json!({
+            "value": value,
+            "valueType": type_key,
             "typeKey": type_key,
             "handleId": handle_id,
-            "structKind": "unknown",
-            "message": format!("Struct type '{}' has no dedicated viewer yet.", type_key),
-        })),
-    })
+        }),
+        execution_time_ms,
+    )
+    .with_struct_meta(type_key, handle_id))
+}
+
+/// Resolved runtime payload used to build a result source without graph callbacks.
+pub enum ResolvedSourceValue {
+    Null,
+    DataFrame(Arc<DataFrame>),
+    Series(Series),
+    Struct {
+        type_key: String,
+        handle_id: String,
+        handle: Option<Arc<dyn Any + Send + Sync>>,
+    },
+    Value(DataValue),
+}
+
+pub fn build_source_from_resolved(
+    source_id: SourceId,
+    title: impl Into<String>,
+    value: &DataValue,
+    resolved: ResolvedSourceValue,
+    execution_time_ms: Option<u64>,
+) -> Result<ResultSourceRecord, String> {
+    let title = title.into();
+    match resolved {
+        ResolvedSourceValue::Null => Ok(build_json_source_from_data_value(
+            source_id,
+            if title.is_empty() {
+                default_view_title(value, None)
+            } else {
+                title
+            },
+            value,
+            execution_time_ms,
+        )),
+        ResolvedSourceValue::DataFrame(df) => Ok(build_dataframe_source(
+            source_id,
+            if title.is_empty() {
+                default_view_title(value, None)
+            } else {
+                title
+            },
+            df,
+            execution_time_ms,
+        )),
+        ResolvedSourceValue::Series(series) => {
+            let resolved_title = if title.is_empty() {
+                default_view_title(value, Some(&series))
+            } else {
+                title
+            };
+            Ok(build_series_source(
+                source_id,
+                resolved_title,
+                series,
+                execution_time_ms,
+            ))
+        }
+        ResolvedSourceValue::Struct {
+            type_key,
+            handle_id,
+            handle,
+        } => build_struct_source(source_id, &type_key, &handle_id, handle, execution_time_ms).map(
+            |record| {
+                if title.is_empty() {
+                    record
+                } else {
+                    ResultSourceRecord {
+                        descriptor: SourceDescriptor {
+                            title,
+                            ..record.descriptor
+                        },
+                        source: record.source,
+                    }
+                }
+            },
+        ),
+        ResolvedSourceValue::Value(other) => Ok(build_json_source_from_data_value(
+            source_id,
+            if title.is_empty() {
+                default_view_title(&other, None)
+            } else {
+                title
+            },
+            &other,
+            execution_time_ms,
+        )),
+    }
+}
+
+/// Build a result source record from a runtime `DataValue`, resolving handles through callbacks.
+pub fn build_source_from_data_value(
+    source_id: SourceId,
+    title: impl Into<String>,
+    value: &DataValue,
+    execution_time_ms: Option<u64>,
+    get_dataframe: &mut dyn FnMut(&str) -> Result<Arc<DataFrame>, String>,
+    get_series: &dyn Fn(&str) -> Result<Series, String>,
+    get_handle: &dyn Fn(&str) -> Option<Arc<dyn Any + Send + Sync>>,
+) -> Result<ResultSourceRecord, String> {
+    let resolved = match value {
+        DataValue::Null => ResolvedSourceValue::Null,
+        DataValue::DataFrame(id) => ResolvedSourceValue::DataFrame(get_dataframe(id)?),
+        DataValue::DataSeries(v) => ResolvedSourceValue::Series(get_series(&v.id)?),
+        DataValue::Struct {
+            type_key,
+            handle_id,
+        } => ResolvedSourceValue::Struct {
+            type_key: type_key.clone(),
+            handle_id: handle_id.clone(),
+            handle: get_handle(handle_id),
+        },
+        other => ResolvedSourceValue::Value(other.clone()),
+    };
+    build_source_from_resolved(source_id, title, value, resolved, execution_time_ms)
+}
+
+pub fn default_view_title(value: &DataValue, series: Option<&Series>) -> String {
+    match value {
+        DataValue::Null => "View: (null)".to_string(),
+        DataValue::DataFrame(_) => "View: DataFrame".to_string(),
+        DataValue::DataSeries(_) => {
+            let name = series.map(|s| s.name().to_string()).unwrap_or_default();
+            if name.is_empty() {
+                "View: Series".to_string()
+            } else {
+                format!("View: {}", name)
+            }
+        }
+        DataValue::Struct { type_key, .. } => format!("View: {}", type_key),
+        _ => "View".to_string(),
+    }
 }
 
 pub fn build_window_source_record(
@@ -222,8 +331,8 @@ pub fn build_presentation(
     let is_plot = matches!(descriptor.renderer, SourceRenderer::Plot);
     let route = if is_plot {
         "/plot"
-    } else if window_type == "data_view" {
-        "/dataview"
+    } else if window_type == "runtime_view" {
+        "/view"
     } else {
         "/info"
     };
@@ -261,18 +370,119 @@ fn base_descriptor(
     }
 }
 
+fn build_json_tree_source(
+    source_id: SourceId,
+    title: impl Into<String>,
+    value: &DataValue,
+    execution_time_ms: Option<u64>,
+) -> ResultSourceRecord {
+    let value_type = format!("{:?}", value.value_type().unwrap_or(DataType::Any));
+    ResultSourceRecord {
+        descriptor: base_descriptor(
+            source_id,
+            SourceKind::Json,
+            SourceRenderer::Json,
+            title,
+            execution_time_ms,
+        )
+        .with_value_type(value_type.clone()),
+        source: ResultSource::Json(json!({
+            "value": data_value_to_json(value),
+            "valueType": value_type,
+        })),
+    }
+}
+
+fn build_json_payload_tree_source(
+    source_id: SourceId,
+    title: impl Into<String>,
+    payload: &serde_json::Value,
+    execution_time_ms: Option<u64>,
+) -> ResultSourceRecord {
+    let value_type = payload
+        .get("valueType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Json")
+        .to_string();
+    ResultSourceRecord {
+        descriptor: base_descriptor(
+            source_id,
+            SourceKind::Json,
+            SourceRenderer::Json,
+            title,
+            execution_time_ms,
+        )
+        .with_value_type(value_type),
+        source: ResultSource::Json(payload.clone()),
+    }
+}
+
+fn struct_source_title(type_key: &str, handle: Option<&Arc<dyn Any + Send + Sync>>) -> String {
+    if let Some(handle) = handle {
+        if type_key == "OLSResult" {
+            if let Ok(ols) = handle.clone().downcast::<OLSResult>() {
+                return ols.title.clone();
+            }
+        }
+    }
+    match type_key {
+        "OLSModel" => "View: OLS Model".to_string(),
+        "LogitModel" => "View: Logit Model".to_string(),
+        "ProbitModel" => "View: Probit Model".to_string(),
+        "PraisModel" => "View: Prais Model".to_string(),
+        _ => format!("View: {}", type_key),
+    }
+}
+
+fn serialize_struct_value(
+    type_key: &str,
+    handle_id: &str,
+    handle: Option<&Arc<dyn Any + Send + Sync>>,
+) -> Result<serde_json::Value, String> {
+    let Some(handle) = handle else {
+        return Ok(json!({
+            "typeKey": type_key,
+            "handleId": handle_id,
+            "message": format!("Handle '{}' not found", handle_id),
+        }));
+    };
+
+    if let Some(value) = serialize_struct_handle(type_key, handle) {
+        return Ok(value);
+    }
+
+    Ok(json!({
+        "typeKey": type_key,
+        "handleId": handle_id,
+        "message": format!("Struct type '{}' has no JSON serializer yet.", type_key),
+    }))
+}
+
+fn is_scalar_data_value(value: &DataValue) -> bool {
+    matches!(
+        value,
+        DataValue::Boolean(_)
+            | DataValue::Int32(_)
+            | DataValue::Int64(_)
+            | DataValue::Float32(_)
+            | DataValue::Float64(_)
+            | DataValue::String(_)
+    )
+}
+
 trait DescriptorExt {
     fn with_columns(self, columns: Vec<String>, total_rows: usize) -> Self;
     fn with_series(self, name: String, dtype: String, length: usize) -> Self;
     fn with_value_type(self, value_type: String) -> Self;
     fn with_message(self, message: String) -> Self;
-    fn with_struct(self, type_key: String, handle_id: String, struct_kind: String) -> Self;
+    fn with_struct_meta(self, type_key: &str, handle_id: &str) -> Self;
 }
 
 impl DescriptorExt for SourceDescriptor {
     fn with_columns(mut self, columns: Vec<String>, total_rows: usize) -> Self {
         self.columns = Some(columns);
         self.total_rows = Some(total_rows);
+        self.length = Some(total_rows);
         self
     }
 
@@ -293,10 +503,20 @@ impl DescriptorExt for SourceDescriptor {
         self
     }
 
-    fn with_struct(mut self, type_key: String, handle_id: String, struct_kind: String) -> Self {
-        self.type_key = Some(type_key);
-        self.handle_id = Some(handle_id);
-        self.struct_kind = Some(struct_kind);
+    fn with_struct_meta(mut self, type_key: &str, handle_id: &str) -> Self {
+        self.type_key = Some(type_key.to_string());
+        self.handle_id = Some(handle_id.to_string());
+        self
+    }
+}
+
+trait ResultSourceRecordExt {
+    fn with_struct_meta(self, type_key: &str, handle_id: &str) -> Self;
+}
+
+impl ResultSourceRecordExt for ResultSourceRecord {
+    fn with_struct_meta(mut self, type_key: &str, handle_id: &str) -> Self {
+        self.descriptor = self.descriptor.with_struct_meta(type_key, handle_id);
         self
     }
 }
@@ -328,7 +548,7 @@ fn data_value_to_json(v: &DataValue) -> serde_json::Value {
 
 fn default_window_title(window_type: &str) -> &str {
     match window_type {
-        "data_view" => "Data View",
+        "runtime_view" => "Runtime View",
         "scatter" => "Scatter Plot",
         "line" => "Line Plot",
         "ecdf" => "ECDF Plot",
@@ -357,6 +577,43 @@ mod tests {
         assert_eq!(record.descriptor.kind, SourceKind::Scalar);
         assert_eq!(record.descriptor.renderer, SourceRenderer::Scalar);
         assert_eq!(record.descriptor.execution_time_ms, Some(12));
+    }
+
+    #[test]
+    fn array_data_value_builds_json_renderer() {
+        let record = build_json_source_from_data_value(
+            "source".to_string(),
+            "Array",
+            &DataValue::Array(vec![DataValue::Int64(1), DataValue::Int64(2)]),
+            None,
+        );
+
+        assert_eq!(record.descriptor.kind, SourceKind::Json);
+        assert_eq!(record.descriptor.renderer, SourceRenderer::Json);
+    }
+
+    #[test]
+    fn runtime_view_window_uses_view_route() {
+        let descriptor = SourceDescriptor {
+            source_id: "s".to_string(),
+            kind: SourceKind::Json,
+            renderer: SourceRenderer::Json,
+            title: "View: OLS Model".to_string(),
+            message: None,
+            execution_time_ms: None,
+            columns: None,
+            total_rows: None,
+            name: None,
+            dtype: None,
+            length: None,
+            value_type: None,
+            type_key: None,
+            handle_id: None,
+            struct_kind: None,
+        };
+        let presentation = build_presentation("s".to_string(), "runtime_view", &descriptor);
+        assert_eq!(presentation.route, "/view");
+        assert_eq!(presentation.window_title, "View: OLS Model");
     }
 
     #[test]

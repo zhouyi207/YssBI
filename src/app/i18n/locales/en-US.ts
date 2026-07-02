@@ -431,6 +431,13 @@ export const enUS = {
     deleteColumn: "Delete Column \"{{name}}\"",
     failedOpenWindow: "Unable to open Data Viewer window",
   },
+  runtimeView: {
+    title: "Runtime View",
+    loading: "Loading…",
+    missingSourceId: "Missing source id in URL",
+    noSource: "No data source found",
+    failedOpenWindow: "Unable to open Runtime View window",
+  },
   plot: {
     title: "Plot",
     failedInitialize: "Failed to initialize window",

@@ -22,6 +22,7 @@ use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 pub enum WindowKind {
     Main,
     DataView,
+    RuntimeView,
     Logs,
     Plot,
     Info,
@@ -31,6 +32,7 @@ impl WindowKind {
     pub const ALL: &'static [WindowKind] = &[
         WindowKind::Main,
         WindowKind::DataView,
+        WindowKind::RuntimeView,
         WindowKind::Logs,
         WindowKind::Plot,
         WindowKind::Info,
@@ -41,6 +43,7 @@ impl WindowKind {
         match self {
             WindowKind::Main => "main",
             WindowKind::DataView => "dataView",
+            WindowKind::RuntimeView => "runtimeView",
             WindowKind::Logs => "logs",
             WindowKind::Plot => "plot",
             WindowKind::Info => "info",
@@ -69,7 +72,7 @@ impl WindowState {
                 y: None,
                 is_maximized: false,
             },
-            WindowKind::DataView | WindowKind::Logs => WindowState {
+            WindowKind::DataView | WindowKind::Logs | WindowKind::RuntimeView => WindowState {
                 width: 1000,
                 height: 600,
                 x: None,
@@ -96,6 +99,8 @@ struct PersistedWindowStates {
     #[serde(default)]
     data_view: Option<WindowState>,
     #[serde(default)]
+    runtime_view: Option<WindowState>,
+    #[serde(default)]
     logs: Option<WindowState>,
     #[serde(default)]
     plot: Option<WindowState>,
@@ -108,6 +113,7 @@ impl PersistedWindowStates {
         match kind {
             WindowKind::Main => self.main.as_ref(),
             WindowKind::DataView => self.data_view.as_ref(),
+            WindowKind::RuntimeView => self.runtime_view.as_ref(),
             WindowKind::Logs => self.logs.as_ref(),
             WindowKind::Plot => self.plot.as_ref(),
             WindowKind::Info => self.info.as_ref(),
@@ -118,6 +124,7 @@ impl PersistedWindowStates {
         match kind {
             WindowKind::Main => self.main = Some(value),
             WindowKind::DataView => self.data_view = Some(value),
+            WindowKind::RuntimeView => self.runtime_view = Some(value),
             WindowKind::Logs => self.logs = Some(value),
             WindowKind::Plot => self.plot = Some(value),
             WindowKind::Info => self.info = Some(value),

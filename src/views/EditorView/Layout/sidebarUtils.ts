@@ -16,7 +16,7 @@ export async function openDataViewWindow(databaseId?: string): Promise<void> {
       kind: "dataView",
       label,
       url,
-      title: "Data Viewer",
+      title: i18n.t("dataView.title"),
     });
   } catch (error) {
     logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, "Sidebar");

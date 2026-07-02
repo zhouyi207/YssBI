@@ -30,10 +30,17 @@ mod xt_align_nodes;
 use crate::graph::register::NodeRegistry;
 
 pub use info_nodes::OLSResult;
+pub use logit_nodes::{LogitConfigure, LogitModel};
+pub use ols_nodes::{
+    OLSClusterConfig, OLSConfigure, OLSFixedScaleConfig, OLSHACConfig, OLSModel, OLSNeweyConfig,
+    VCEHC0, VCEHC1, VCEHC2, VCEHC3, VCENonRobust,
+};
 pub use panel_did_engine::{
     ComputeDidFakeGroupRequest, DidFakeGroupEnginePayload, DidPlaceboFakeGroupBlock,
     compute_fake_group_ri,
 };
+pub use prais_nodes::{PraisConfigure, PraisModel};
+pub use probit_nodes::{ProbitConfigure, ProbitModel};
 
 pub fn register(registry: &NodeRegistry) {
     nodes::register(registry);

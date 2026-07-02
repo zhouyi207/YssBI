@@ -171,7 +171,7 @@ export const zhCN = {
     paste: "粘贴",
     manageVariables: "管理变量",
     importData: "导入数据",
-    dataViewer: "数据视图",
+    dataViewer: "数据查看器",
     newWorksheet: "新建工作表",
     schemaViewer: "Schema 查看器",
     newWindow: "新窗口",
@@ -414,7 +414,7 @@ export const zhCN = {
     },
   },
   dataView: {
-    title: "数据视图",
+    title: "数据查看器",
     noDataFrame: "无 DataFrame",
     loadingProjectData: "正在加载项目数据...",
     noDataFrameSelected: "未选择 DataFrame",
@@ -429,7 +429,14 @@ export const zhCN = {
     renameColumn: "重命名列",
     addColumn: "添加列",
     deleteColumn: "删除列 \"{{name}}\"",
-    failedOpenWindow: "无法打开数据视图窗口",
+    failedOpenWindow: "无法打开数据查看器窗口",
+  },
+  runtimeView: {
+    title: "运行查看",
+    loading: "加载中…",
+    missingSourceId: "URL 中缺少 sourceId",
+    noSource: "未找到数据源",
+    failedOpenWindow: "无法打开运行查看窗口",
   },
   plot: {
     title: "图表",

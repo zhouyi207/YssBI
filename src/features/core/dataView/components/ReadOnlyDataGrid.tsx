@@ -30,6 +30,7 @@ interface ReadOnlyDataGridProps {
   pageStartIndex?: number;
   loading?: boolean;
   height?: number | string;
+  fillHeight?: boolean;
 }
 
 function dtypeToIcon(dtype?: string): GridColumnIcon {
@@ -58,6 +59,7 @@ export function ReadOnlyDataGrid({
   pageStartIndex = 0,
   loading = false,
   height = 480,
+  fillHeight = false,
 }: ReadOnlyDataGridProps) {
   const appTheme = useSettingsStore((s) => s.theme);
   const dataGridTheme = useMemo(() => buildDataGridThemeOverlay(appTheme), [appTheme]);
@@ -138,8 +140,11 @@ export function ReadOnlyDataGrid({
 
   return (
     <div
-      className="relative overflow-hidden rounded-lg border border-border bg-card"
-      style={{ height }}
+      className={[
+        'relative overflow-hidden rounded-lg border border-border bg-card',
+        fillHeight ? 'h-full min-h-[240px]' : '',
+      ].join(' ')}
+      style={fillHeight ? undefined : { height }}
     >
       <DataEditor
         className="h-full w-full"

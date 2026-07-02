@@ -1,8 +1,5 @@
 use super::NodeExecutionContextTrait;
-use crate::execution::{
-    ExecutionEvent, ResultSourceRecord, ResultSourceStore, build_dataframe_source,
-    build_json_source_from_data_value, build_series_source, build_struct_source,
-};
+use crate::execution::{ExecutionEvent, ResultSourceRecord, ResultSourceStore};
 use crate::graph::GraphId;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
@@ -61,33 +58,8 @@ impl NodeExecutionContext {
         value: &DataValue,
     ) -> Result<(), String> {
         let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_id, pin_id);
-        let record = match value {
-            DataValue::DataFrame(id) => {
-                let df = {
-                    let mut graph = self.graph.lock().unwrap();
-                    graph.get_dataframe(id)?
-                };
-                build_dataframe_source(source_id.clone(), "Output: DataFrame", df, None)
-            }
-            DataValue::DataSeries(v) => {
-                let series = {
-                    let graph = self.graph.lock().unwrap();
-                    graph.get_series(&v.id)?
-                };
-                build_series_source(source_id.clone(), "Output: Series", series, None)
-            }
-            DataValue::Struct {
-                type_key,
-                handle_id,
-            } => {
-                let handle = {
-                    let graph = self.graph.lock().unwrap();
-                    graph.get_handle(handle_id)
-                };
-                build_struct_source(source_id.clone(), type_key, handle_id, handle, None)?
-            }
-            other => build_json_source_from_data_value(source_id.clone(), "Output", other, None),
-        };
+        let record =
+            self.build_source_record_for_value(source_id.clone(), "", value, None)?;
 
         let descriptor = self.result_source_store.insert_runtime_pin_source(
             graph_id.to_string(),
@@ -103,6 +75,41 @@ impl NodeExecutionContext {
             descriptor,
         });
         Ok(())
+    }
+
+    fn build_source_record_for_value(
+        &mut self,
+        source_id: String,
+        title: impl Into<String>,
+        value: &DataValue,
+        execution_time_ms: Option<u64>,
+    ) -> Result<ResultSourceRecord, String> {
+        let resolved = match value {
+            DataValue::Null => crate::execution::ResolvedSourceValue::Null,
+            DataValue::DataFrame(id) => {
+                crate::execution::ResolvedSourceValue::DataFrame(self.get_dataframe(id)?)
+            }
+            DataValue::DataSeries(v) => {
+                crate::execution::ResolvedSourceValue::Series(self.get_series(&v.id)?)
+            }
+            DataValue::Struct {
+                type_key,
+                handle_id,
+            } => crate::execution::ResolvedSourceValue::Struct {
+                type_key: type_key.clone(),
+                handle_id: handle_id.clone(),
+                handle: self.get_handle(handle_id).ok(),
+            },
+            other => crate::execution::ResolvedSourceValue::Value(other.clone()),
+        };
+
+        crate::execution::build_source_from_resolved(
+            source_id,
+            title.into(),
+            value,
+            resolved,
+            execution_time_ms,
+        )
     }
 }
 
@@ -360,6 +367,18 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             source_record: None,
             existing_source_id: Some(source_id),
         });
+    }
+
+    fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String> {
+        if let Some(source_id) = self.get_input_source_id_by_role(role) {
+            return Ok(source_id);
+        }
+
+        let value = self.get_input_by_role(role)?;
+        let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
+        let record = self.build_source_record_for_value(source_id.clone(), "", &value, None)?;
+        self.result_source_store.insert_window_source(record);
+        Ok(source_id)
     }
 
     fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String> {

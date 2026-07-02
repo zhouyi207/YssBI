@@ -5,7 +5,7 @@ import type { SourceDescriptor } from './types';
 function descriptor(partial: Partial<SourceDescriptor> & Pick<SourceDescriptor, 'renderer' | 'title'>): SourceDescriptor {
   return {
     sourceId: 'source-1',
-    kind: 'struct',
+    kind: 'json',
     ...partial,
   };
 }
@@ -27,29 +27,9 @@ describe('resolveDataViewRenderer', () => {
     ).toBe('series');
   });
 
-  it('selects scalar and null renderers', () => {
+  it('selects scalar, null, and json renderers', () => {
     expect(resolveDataViewRenderer(descriptor({ kind: 'scalar', renderer: 'scalar', title: 'X' }))).toBe('scalar');
     expect(resolveDataViewRenderer(descriptor({ kind: 'null', renderer: 'null', title: 'Empty' }))).toBe('null');
-  });
-
-  it('selects OLS struct renderer from metadata struct kind', () => {
-    expect(
-      resolveDataViewRenderer(
-        descriptor({
-          kind: 'struct',
-          renderer: 'struct_ols',
-          title: 'OLS',
-          structKind: 'ols_result',
-        }),
-      ),
-    ).toBe('struct_ols');
-  });
-
-  it('falls back to generic struct renderer', () => {
-    expect(
-      resolveDataViewRenderer(
-        descriptor({ kind: 'struct', renderer: 'struct_generic', title: 'Unknown', typeKey: 'Foo' }),
-      ),
-    ).toBe('struct_generic');
+    expect(resolveDataViewRenderer(descriptor({ kind: 'json', renderer: 'json', title: 'Object' }))).toBe('json');
   });
 });

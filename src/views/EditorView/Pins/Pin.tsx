@@ -11,7 +11,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { useExecutionStore } from "@/features/core/execution";
-import { createPersistedWindow } from "@/features/application/window";
+import { openPresentationWindow } from "@/features/application/window";
+import { presentationRouteForDescriptor } from "@/features/core/dataView";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -115,12 +116,9 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const handleInspectResult = useCallback(() => {
     if (!pinResult) return;
-    const params = new URLSearchParams({ sourceId: pinResult.sourceId });
-    void createPersistedWindow({
-      kind: "dataView",
-      label: `source-${Math.random().toString(36).substring(2, 10)}`,
-      url: `index.html#/dataview?${params.toString()}`,
-      title: pinResult.descriptor.title,
+    void openPresentationWindow(pinResult.sourceId, {
+      route: presentationRouteForDescriptor(pinResult.descriptor),
+      windowTitle: pinResult.descriptor.title,
     });
   }, [pinResult]);
 

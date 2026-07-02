@@ -256,7 +256,9 @@ export default function CanvasOverlays({
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                           <OverlayScrollbar>
                             <div className="p-2">
-                              {selectedResult ? <UnifiedDataView payload={selectedResult.descriptor} /> : null}
+                              {selectedResult ? (
+                                <UnifiedDataView payload={selectedResult.descriptor} layout="embedded" />
+                              ) : null}
                             </div>
                           </OverlayScrollbar>
                         </div>

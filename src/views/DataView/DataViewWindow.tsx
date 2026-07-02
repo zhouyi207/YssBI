@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { VscPreview } from 'react-icons/vsc';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { usePersistedWindow } from '@/features/application/window';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { useDataLoader, useEditActions, useSelection, useDataViewKeyboard, getGridSelectionPrimaryCellText } from '@/features/application/dataView';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
@@ -12,9 +11,6 @@ import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
-import { SourceService, UnifiedDataView, type SourceDescriptor } from '@/features/core/dataView';
-import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
-import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 
 function getDatabaseIdFromUrl(): string | null {
   const searchValue = new URLSearchParams(window.location.search).get('database');
@@ -25,20 +21,7 @@ function getDatabaseIdFromUrl(): string | null {
   return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1)).get('database');
 }
 
-function getSourceIdFromUrl(): string | null {
-  const searchValue = new URLSearchParams(window.location.search).get('sourceId');
-  if (searchValue) return searchValue;
-
-  const hashQueryIndex = window.location.hash.indexOf('?');
-  if (hashQueryIndex < 0) return null;
-  return new URLSearchParams(window.location.hash.slice(hashQueryIndex + 1)).get('sourceId');
-}
-
 export const DataViewWindow: React.FC = () => {
-  const sourceId = useMemo(() => getSourceIdFromUrl(), []);
-  const [sourceDescriptor, setSourceDescriptor] = useState<SourceDescriptor | null>(null);
-  const [sourceError, setSourceError] = useState<string | null>(null);
-  const isSourceWindowMaximized = useWindowMaximized('SourceDataViewWindow');
   const dataframes = useDatabaseStore(s => s.databases);
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
@@ -48,27 +31,6 @@ export const DataViewWindow: React.FC = () => {
   usePersistedWindow('dataView');
 
   useProjectSync();
-
-  useEffect(() => {
-    if (!sourceId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const descriptor = await SourceService.getDescriptor(sourceId);
-        if (cancelled) return;
-        if (!descriptor) {
-          setSourceError('No data source found');
-          return;
-        }
-        setSourceDescriptor(descriptor);
-        await getCurrentWindow().setTitle(descriptor.title).catch(() => {});
-        await getCurrentWindow().show().catch(() => {});
-      } catch (e) {
-        if (!cancelled) setSourceError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [sourceId]);
 
   // Derived state
   const selectedDf = selectedDfId ? dataframes[selectedDfId] : null;
@@ -208,39 +170,6 @@ export const DataViewWindow: React.FC = () => {
     ),
     [sel.selection, columns.length, dataLoader.loadedRows],
   );
-
-  if (sourceId) {
-    return (
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-[var(--workbench-fg)] font-sans">
-        <WindowTitleBar childWindow>
-          <div className="flex min-w-0 flex-1 items-center gap-2 px-3" data-tauri-drag-region>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
-              <VscPreview size={14} />
-            </span>
-            <span className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-foreground">
-              {sourceDescriptor?.title ?? 'Data View'}
-            </span>
-          </div>
-          <WindowTitleBarActions>
-            <WindowChromeControls isMaximized={isSourceWindowMaximized} />
-          </WindowTitleBarActions>
-        </WindowTitleBar>
-        <div className="min-h-0 flex-1">
-          {sourceError ? (
-            <div className="flex h-full flex-1 items-center justify-center text-sm text-destructive">
-              {sourceError}
-            </div>
-          ) : sourceDescriptor ? (
-            <UnifiedDataView payload={sourceDescriptor} />
-          ) : (
-            <div className="flex h-full flex-1 items-center justify-center text-sm text-muted-foreground">
-              Loading…
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-[var(--workbench-fg)] font-sans">

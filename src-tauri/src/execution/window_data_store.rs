@@ -32,8 +32,7 @@ pub enum SourceRenderer {
     Series,
     Scalar,
     Null,
-    StructOls,
-    StructGeneric,
+    Json,
     Plot,
     Info,
 }
@@ -305,7 +304,12 @@ fn json_to_source_value(descriptor: &SourceDescriptor, json: serde_json::Value) 
             .map(str::to_string)
             .or_else(|| descriptor.message.clone()),
         value: json.get("value").cloned().or_else(|| {
-            if descriptor.kind == SourceKind::Json || descriptor.renderer == SourceRenderer::Plot {
+            if descriptor.kind == SourceKind::Json
+                || matches!(
+                    descriptor.renderer,
+                    SourceRenderer::Json | SourceRenderer::Plot
+                )
+            {
                 Some(json.clone())
             } else {
                 None
@@ -345,12 +349,16 @@ fn series_page(series: &Series, offset: usize, limit: usize) -> Result<SourcePag
     let total_count = series.len();
     let start = offset.min(total_count);
     let end = (offset.saturating_add(limit)).min(total_count);
-    let values: Vec<serde_json::Value> = (start..end)
+    let columns = crate::execution::series_table_columns(series);
+    let rows: Vec<Vec<serde_json::Value>> = (start..end)
         .map(|i| {
-            series
-                .get(i)
-                .map(anyvalue_to_json)
-                .unwrap_or(serde_json::Value::Null)
+            vec![
+                serde_json::json!(i),
+                series
+                    .get(i)
+                    .map(anyvalue_to_json)
+                    .unwrap_or(serde_json::Value::Null),
+            ]
         })
         .collect();
     Ok(SourcePage {
@@ -358,9 +366,9 @@ fn series_page(series: &Series, offset: usize, limit: usize) -> Result<SourcePag
         offset: start,
         limit,
         total_count,
-        columns: None,
-        rows: None,
-        values: Some(values),
+        columns: Some(columns),
+        rows: Some(rows),
+        values: None,
     })
 }
 
@@ -485,6 +493,11 @@ mod tests {
         assert_eq!(page.kind, SourceKind::Series);
         assert_eq!(page.offset, 2);
         assert_eq!(page.total_count, 4);
-        assert_eq!(page.values.as_ref().unwrap().len(), 2);
+        assert_eq!(page.rows.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            page.columns.as_ref().unwrap(),
+            &vec!["#".to_string(), "s".to_string()]
+        );
+        assert_eq!(page.rows.as_ref().unwrap()[0][0], serde_json::json!(2));
     }
 }
