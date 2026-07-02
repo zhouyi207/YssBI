@@ -54,6 +54,25 @@ export function dataValueToRaw(dv: DataValue): unknown {
   }
 }
 
+/** 从 JSON 原始值推断 DataValue（用于 Array<Any> 等无法静态确定元素类型的场景） */
+export function inferDataValueFromJson(raw: unknown): DataValue {
+  if (raw === null || raw === undefined) return { kind: 'Null' };
+  if (typeof raw === 'boolean') return { kind: 'Boolean', value: raw };
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw)
+      ? { kind: 'Int64', value: raw }
+      : { kind: 'Float64', value: raw };
+  }
+  if (typeof raw === 'string') return { kind: 'String', value: raw };
+  if (Array.isArray(raw)) {
+    return { kind: 'Array', value: raw.map(inferDataValueFromJson) };
+  }
+  if (typeof raw === 'object') {
+    return { kind: 'Object', value: raw as Record<string, unknown> };
+  }
+  return { kind: 'Null' };
+}
+
 /** 从原始值 + DataType 创建 DataValue */
 export function dataValueFromRaw(raw: unknown, dataType: DataType): DataValue {
   const def = getDefaultValue(dataType);
@@ -86,7 +105,11 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
       return {
         kind: 'Array',
         value: Array.isArray(raw)
-          ? raw.map((x) => dataValueFromRaw(x, dataType.inner ?? { kind: 'Any' }))
+          ? raw.map((x) =>
+              dataType.inner?.kind === 'Any' || !dataType.inner
+                ? inferDataValueFromJson(x)
+                : dataValueFromRaw(x, dataType.inner),
+            )
           : [],
       };
     case 'Object':
@@ -100,7 +123,26 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
     case 'DataFrame':
       return { kind: 'DataFrame', value: String(raw ?? '') };
     case 'DataSeries':
+      if (typeof raw === 'string') {
+        return raw.trim() ? { kind: 'DataSeries', value: raw } : { kind: 'Null' };
+      }
+      if (raw && typeof raw === 'object' && 'id' in raw) {
+        const payload = raw as { id?: unknown; elementType?: unknown };
+        const id = typeof payload.id === 'string' ? payload.id : '';
+        if (!id.trim()) return { kind: 'Null' };
+        return {
+          kind: 'DataSeries',
+          value: {
+            id,
+            ...(payload.elementType
+              ? { elementType: payload.elementType as import('./dataType').DataType }
+              : {}),
+          },
+        };
+      }
       return { kind: 'Null' };
+    case 'Any':
+      return inferDataValueFromJson(raw);
     default:
       return { kind: 'Null' };
   }

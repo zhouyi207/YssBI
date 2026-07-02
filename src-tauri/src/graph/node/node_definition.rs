@@ -37,7 +37,7 @@ pub type SchemaProvider = Arc<dyn Fn(&str) -> Option<DataSchema> + Send + Sync>;
 /// 包含节点计算 output schema 所需的信息：
 /// - instance_params: 节点实例参数（如 Get DataFrame 的 dataframe_id）
 /// - input_schemas: 上游 input 的 schema（DataFrame 用 resolved_schema，DataSeries 用单列合成 schema）
-/// - schema_provider: 用于按 dataframe_id 查询 schema（如 Get DataFrame）
+/// - schema_provider: 用于按 tabular id 查询 schema（数据集 id 或 `var:{variable_id}`）
 #[derive(Clone, Default)]
 pub struct OutputSchemaContext {
     pub instance_params: super::NodeInstanceParams,

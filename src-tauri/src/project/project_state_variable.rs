@@ -5,6 +5,7 @@ use crate::graph::GraphId;
 use crate::graph::pin::PinKind;
 use crate::graph::value::{DataType, DataValue};
 use crate::schema::{data_type_to_container, data_type_to_pin_type};
+use crate::tabular::{normalize_variable_tabular, remove_variable_cache, sync_variable_cache};
 use crate::variable::VariableId;
 use crate::variable::{VariableInstance, VariableScope};
 
@@ -15,6 +16,28 @@ pub struct VariableReferenceSync {
 }
 
 impl ProjectState {
+    fn finalize_variable(&self, variable_id: &VariableId) -> Result<VariableInstance, String> {
+        let mut data = self.project_data.write().unwrap();
+        let mut store = self.project_store.write().unwrap();
+        let var = data
+            .variables
+            .get_mut(variable_id)
+            .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
+        normalize_variable_tabular(var)?;
+        sync_variable_cache(&mut store, var)?;
+        Ok(var.clone())
+    }
+
+    pub fn sync_all_variable_tabular(&self) {
+        let ids: Vec<VariableId> = {
+            let data = self.project_data.read().unwrap();
+            data.variables.keys().copied().collect()
+        };
+        for id in ids {
+            let _ = self.finalize_variable(&id);
+        }
+    }
+
     pub fn add_variable(
         &self,
         name: &str,
@@ -34,30 +57,40 @@ impl ProjectState {
             unique_name::unique_name(name, existing)
         };
 
+        let id = VariableId::new();
         let variable_instance = VariableInstance {
-            id: VariableId::new(),
+            id,
             name: unique_var_name,
-            data_type: data_type,
-            data_value: data_value,
+            data_type,
+            data_value,
+            tabular: None,
             description: description.to_string(),
-            scope: scope,
-            tags: tags,
+            scope,
+            tags,
         };
 
         self.project_data
             .write()
             .unwrap()
             .variables
-            .insert(variable_instance.id, variable_instance.clone());
-        variable_instance
+            .insert(variable_instance.id, variable_instance);
+
+        self.finalize_variable(&id)
+            .unwrap_or_else(|_| self.get_variable(&id).expect("variable inserted"))
     }
 
     pub fn remove_variable(&self, variable_id: &VariableId) -> Option<VariableInstance> {
-        self.project_data
+        let removed = self
+            .project_data
             .write()
             .unwrap()
             .variables
-            .remove(&variable_id)
+            .remove(variable_id);
+        if removed.is_some() {
+            remove_variable_cache(&mut self.project_store.write().unwrap(), variable_id);
+            self.recompile_graphs_for_variable(variable_id);
+        }
+        removed
     }
 
     pub fn get_variable(&self, variable_id: &VariableId) -> Option<VariableInstance> {
@@ -100,7 +133,10 @@ impl ProjectState {
         if let Some(t) = tags {
             var.tags = t;
         }
-        Some(var.clone())
+        drop(data);
+        let updated = self.finalize_variable(variable_id).ok()?;
+        self.recompile_graphs_for_variable(variable_id);
+        Some(updated)
     }
 
     pub fn sync_variable_references(
@@ -214,12 +250,15 @@ impl ProjectState {
                     name: entry.name,
                     data_type: entry.data_type,
                     data_value: entry.data_value,
+                    tabular: None,
                     description: entry.description,
                     scope: entry.scope,
                     tags: entry.tags,
                 },
             );
         }
+        drop(data);
+        self.sync_all_variable_tabular();
         Ok(())
     }
 }
@@ -257,6 +296,55 @@ mod tests {
 
         assert_eq!(updated.data_type, DataType::Boolean);
         assert_eq!(updated.data_value, DataValue::Boolean(false));
+    }
+
+    #[test]
+    fn update_variable_resets_to_default_array_when_type_changes() {
+        let state = ProjectState::new();
+        let variable = add_int_variable(&state);
+
+        let updated = state
+            .update_variable(
+                &variable.id,
+                None,
+                Some(DataType::Array(Box::new(DataType::Any))),
+                None,
+                None,
+                None,
+            )
+            .expect("updated variable");
+
+        assert_eq!(
+            updated.data_value,
+            DataValue::Array(vec![
+                DataValue::Int64(1),
+                DataValue::Int64(2),
+                DataValue::Int64(3),
+            ])
+        );
+    }
+
+    #[test]
+    fn update_variable_resets_to_default_object_when_type_changes() {
+        let state = ProjectState::new();
+        let variable = add_int_variable(&state);
+
+        let updated = state
+            .update_variable(
+                &variable.id,
+                None,
+                Some(DataType::Object),
+                None,
+                None,
+                None,
+            )
+            .expect("updated variable");
+
+        let DataValue::Object(map) = updated.data_value else {
+            panic!("expected object value");
+        };
+        assert_eq!(map.get("key_0"), Some(&DataValue::Int64(1)));
+        assert_eq!(map.get("key_1"), Some(&DataValue::Int64(2)));
     }
 
     #[test]

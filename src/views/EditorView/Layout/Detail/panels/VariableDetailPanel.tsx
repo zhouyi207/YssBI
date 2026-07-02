@@ -1,13 +1,18 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { Select } from '@/shared/ui';
-import { dataTypeKind, dataTypeFromKey, isPrimitiveType, VARIABLE_SELECTABLE_DATA_TYPE_KINDS, DATA_SERIES_ELEMENT_TYPE_KINDS } from '@/shared/types/domain/dataType';
+import { dataTypeKind, dataTypeFromKey, isPrimitiveType, isComplexType, VARIABLE_SELECTABLE_DATA_TYPE_KINDS } from '@/shared/types/domain/dataType';
 import { dataValueToRaw, dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailCommitInput, DetailForm, DetailNameField } from '../shared/DetailForm';
+import { DetailText } from '../shared/DetailText';
 import { detailInlineInputClass } from '../shared/detailStyles';
+import { VariableValueEditorModal } from '../variableValue/VariableValueEditorModal';
+import { formatVariableValueSummary } from '../variableValue/variableValueUtils';
 
 interface VariableDetailPanelProps {
   variable: {
@@ -24,6 +29,13 @@ export function VariableDetailPanel({
   onUpdate,
 }: VariableDetailPanelProps) {
   const { t } = useTranslation();
+  const [valueEditorOpen, setValueEditorOpen] = useState(false);
+
+  const valueSummary = formatVariableValueSummary(
+    variable.dataType,
+    variable.dataValue,
+    t('detail.variableValue.empty'),
+  );
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: variable.name })}>
@@ -37,27 +49,9 @@ export function VariableDetailPanel({
           <Select
             value={dataTypeKind(variable.dataType)}
             options={VARIABLE_SELECTABLE_DATA_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
-            onChange={(val) =>
-              onUpdate({
-                dataType:
-                  val === 'DataSeries'
-                    ? { kind: 'DataSeries', inner: { kind: 'Float64' } }
-                    : dataTypeFromKey(val),
-              })
-            }
+            onChange={(val) => onUpdate({ dataType: dataTypeFromKey(val) })}
           />
         </DetailFieldRow>
-        {variable.dataType.kind === 'DataSeries' && (
-          <DetailFieldRow label={t('detail.fields.elementType')}>
-            <Select
-              value={dataTypeKind(variable.dataType.inner)}
-              options={DATA_SERIES_ELEMENT_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
-              onChange={(val) =>
-                onUpdate({ dataType: { kind: 'DataSeries', inner: dataTypeFromKey(val) } })
-              }
-            />
-          </DetailFieldRow>
-        )}
         {variable.dataType.kind !== 'Array' && isPrimitiveType(variable.dataType) && (
           <DetailFieldRow label={t('detail.fields.value')}>
             {variable.dataType.kind === 'Boolean' ? (
@@ -89,7 +83,35 @@ export function VariableDetailPanel({
             )}
           </DetailFieldRow>
         )}
+        {isComplexType(variable.dataType) && (
+          <DetailFieldRow label={t('detail.fields.value')}>
+            <div className="flex min-w-0 items-center gap-2">
+              <DetailText
+                tone="muted"
+                className="min-h-8 min-w-0 flex-1 truncate rounded-md border border-transparent px-3 py-1 font-mono text-xs"
+              >
+                {valueSummary}
+              </DetailText>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setValueEditorOpen(true)}
+              >
+                {t('detail.variableValue.edit')}
+              </Button>
+            </div>
+          </DetailFieldRow>
+        )}
       </DetailForm>
+
+      <VariableValueEditorModal
+        open={valueEditorOpen}
+        onClose={() => setValueEditorOpen(false)}
+        dataType={variable.dataType}
+        dataValue={variable.dataValue}
+        onSave={(dataValue) => onUpdate({ dataValue })}
+      />
     </DetailPanelShell>
   );
 }

@@ -1,11 +1,13 @@
 use crate::database::DatabaseInstance;
 use crate::graph::register::NodeRegistry;
 use crate::graph::register::catalog::register_builtin_nodes;
+use crate::tabular::VariableTabularCache;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct ProjectStore {
     pub databases: HashMap<String, DatabaseInstance>,
+    pub variable_tabular: HashMap<String, VariableTabularCache>,
     pub node_register: Arc<NodeRegistry>,
 }
 
@@ -16,6 +18,7 @@ impl Default for ProjectStore {
 
         Self {
             databases: HashMap::new(),
+            variable_tabular: HashMap::new(),
             node_register,
         }
     }

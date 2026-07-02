@@ -439,6 +439,43 @@ impl GraphInstance {
         self.schema_provider = Some(provider);
     }
 
+    /// 全图重编译：schema 传播 + 动态 pin 解析 + 类型推断。
+    pub fn compile_graph(&self) {
+        self.propagate_schemas();
+        let _ = self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Interactive);
+        let _ = self
+            .infer_types()
+            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e));
+    }
+
+    /// 从种子节点局部重编译（变量变更、局部拓扑变更）。
+    pub fn compile_graph_from_seeds(&self, seeds: &[NodeId]) {
+        if seeds.is_empty() {
+            self.compile_graph();
+            return;
+        }
+        self.propagate_schemas_from(seeds);
+        let _ = self
+            .infer_types()
+            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e));
+
+        let mut to_resolve: Vec<NodeId> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for &nid in seeds {
+            if seen.insert(nid) {
+                to_resolve.push(nid);
+            }
+            for d in self.get_downstream_resolve_nodes(nid) {
+                if seen.insert(d) {
+                    to_resolve.push(d);
+                }
+            }
+        }
+        for node_id in to_resolve {
+            let _ = self.resolve_dynamic_pins(node_id);
+        }
+    }
+
     /// 获取节点注册表的引用
     pub fn registry(&self) -> &Arc<NodeRegistry> {
         &self.registry
@@ -1298,6 +1335,7 @@ impl GraphInstance {
                     {
                         true
                     }
+                    _ if has_output_resolver => true,
                     _ => false,
                 };
                 if assign {

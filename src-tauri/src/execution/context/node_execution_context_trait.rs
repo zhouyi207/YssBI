@@ -83,7 +83,7 @@ pub trait NodeExecutionContextTrait {
     fn put_data_series(&mut self, s: Series) -> Result<String, String>;
 
     /// 读取变量值
-    fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String>;
+    fn get_variable_value(&mut self, variable_id: &str) -> Result<DataValue, String>;
 
     /// 写入变量值
     fn set_variable_value(&mut self, variable_id: &str, value: DataValue) -> Result<(), String>;

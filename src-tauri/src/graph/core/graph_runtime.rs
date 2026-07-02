@@ -1,9 +1,10 @@
 use crate::execution::ExecutionDataStore;
 use crate::graph::NodeDefinition;
 use crate::graph::node::NodeInstanceParams;
-use crate::graph::{DataType, DataValue, GraphInstance, PinInstance, PinRole};
-use crate::graph::{NodeId, NodeRuntimeState, PinId, PinRuntimeState};
+use crate::graph::value::{DataType, DataValue};
+use crate::graph::{GraphInstance, NodeId, NodeRuntimeState, PinId, PinInstance, PinRole, PinRuntimeState};
 use crate::project::{ProjectData, ProjectStore};
+use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableScope};
 use polars::prelude::{DataFrame, Series};
 use std::collections::HashMap;
@@ -249,15 +250,25 @@ impl GraphRuntime {
     // 执行期数据缓存操作
     // ========================================================================
 
-    /// 获取 DataFrame：先查执行缓存，再查 ProjectStore 原始数据。
+    /// 获取 DataFrame：先查执行缓存，再查变量 tabular 缓存与 ProjectStore 原始数据。
     /// 需要整表的节点（Filter 等）仍走此路径；按列分析应优先 `load_database_data_series`。
     pub fn get_dataframe(&mut self, id: &str) -> Result<Arc<DataFrame>, String> {
-        // 1. 先从执行缓存查找
         if let Some(df) = self.data_store.get_dataframe(id) {
             return Ok(df);
         }
 
-        // 2. 再从 ProjectStore 原始数据库加载
+        if is_variable_handle(id) {
+            let store = self.project_store.read().map_err(|e| e.to_string())?;
+            if let Some(entry) = store.variable_tabular.get(id) {
+                let arc_df = entry.dataframe.clone();
+                drop(store);
+                self.data_store
+                    .put_dataframe_with_id(id.to_string(), arc_df.clone());
+                return Ok(arc_df);
+            }
+            return Err(format!("Variable tabular '{id}' not found"));
+        }
+
         let mut store = self.project_store.write().map_err(|e| e.to_string())?;
         if let Some(db_instance) = store.databases.get_mut(id) {
             if let crate::database::DatabaseState::DuckDb { row_count, .. } = &db_instance.state {
@@ -271,22 +282,22 @@ impl GraphRuntime {
             }
             let df = db_instance
                 .ensure_loaded()
-                .map_err(|e| format!("Failed to load database '{}': {}", id, e))?;
+                .map_err(|e| format!("Failed to load database '{id}': {e}"))?;
             let arc_df = Arc::new(df.clone());
-            // 缓存到执行存储中，后续访问不再触发 IO
+            drop(store);
             self.data_store
                 .put_dataframe_with_id(id.to_string(), arc_df.clone());
             return Ok(arc_df);
         }
 
-        Err(format!("DataFrame '{}' not found", id))
+        Err(format!("DataFrame '{id}' not found"))
     }
 
     fn data_series_cache_key(db_id: &str, column: &str) -> String {
         format!("{db_id}::{column}")
     }
 
-    /// 列出数据库列名；执行期中间 DataFrame 走 schema，不整表加载。
+    /// 列出 tabular 列名；执行期中间 DataFrame 走 schema，不整表加载。
     pub fn list_database_columns(&mut self, db_id: &str) -> Result<Vec<String>, String> {
         if let Some(df) = self.data_store.get_dataframe(db_id) {
             return Ok(df
@@ -294,6 +305,14 @@ impl GraphRuntime {
                 .iter_names()
                 .map(|name| name.to_string())
                 .collect());
+        }
+
+        if is_variable_handle(db_id) {
+            let store = self.project_store.read().map_err(|e| e.to_string())?;
+            if let Some(entry) = store.variable_tabular.get(db_id) {
+                return Ok(entry.schema.columns.iter().map(|c| c.name.clone()).collect());
+            }
+            return Err(format!("Variable tabular '{db_id}' not found"));
         }
 
         let mut store = self.project_store.write().map_err(|e| e.to_string())?;
@@ -326,6 +345,23 @@ impl GraphRuntime {
             self.data_store
                 .put_data_series_with_id(cache_key, series.clone());
             return Ok(series);
+        }
+
+        if is_variable_handle(db_id) {
+            let store = self.project_store.read().map_err(|e| e.to_string())?;
+            if let Some(entry) = store.variable_tabular.get(db_id) {
+                let series = entry
+                    .dataframe
+                    .column(column)
+                    .map_err(|e| format!("Column '{column}' not found in variable tabular: {e}"))?
+                    .clone()
+                    .take_materialized_series();
+                drop(store);
+                self.data_store
+                    .put_data_series_with_id(cache_key, series.clone());
+                return Ok(series);
+            }
+            return Err(format!("Variable tabular '{db_id}' not found"));
         }
 
         let mut store = self.project_store.write().map_err(|e| e.to_string())?;
@@ -388,8 +424,9 @@ impl GraphRuntime {
     // 变量操作
     // ========================================================================
 
-    /// 读取变量值（仅当前图可见的全局变量与本图局部变量）
-    pub fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {
+    /// 读取变量值（仅当前图可见的全局变量与本图局部变量）。
+    /// DataFrame / DataSeries 变量返回稳定 handle `var:{id}`，数据由 TabularCatalog 解析。
+    pub fn get_variable_value(&mut self, variable_id: &str) -> Result<DataValue, String> {
         let var_id = Self::parse_variable_id(variable_id)?;
         let data = self.project_data.read().map_err(|e| e.to_string())?;
         let var = data
@@ -402,6 +439,7 @@ impl GraphRuntime {
                 variable_id, self.graph_instance.id
             ));
         }
+
         Ok(var.data_value.clone())
     }
 
@@ -474,7 +512,7 @@ mod tests {
             vec![],
         );
         let graph = state.get_graph(&event.id).unwrap();
-        let runtime = GraphRuntime::new(
+        let mut runtime = GraphRuntime::new(
             Arc::new(graph.clone()),
             Arc::new(RwLock::new(state.get_data())),
             Arc::new(RwLock::new(ProjectStore::default())),
@@ -488,6 +526,38 @@ mod tests {
             runtime.get_variable_value(&local.id.to_string()).unwrap(),
             DataValue::Int64(2)
         );
+    }
+
+    #[test]
+    fn get_variable_value_materializes_dataframe_literal_json() {
+        let state = ProjectState::new();
+        let event = state.add_event("Literal Event");
+        let var = state.add_variable(
+            "df_var",
+            DataType::DataFrame,
+            DataValue::DataFrame(r#"{"a":[1,2]}"#.to_string()),
+            "",
+            VariableScope::Event {
+                event_id: event.id.to_string(),
+            },
+            vec![],
+        );
+        let graph = state.get_graph(&event.id).unwrap();
+        let mut runtime = GraphRuntime::new(
+            Arc::new(graph.clone()),
+            Arc::new(RwLock::new(state.get_data())),
+            Arc::clone(&state.project_store),
+        );
+
+        let resolved = runtime.get_variable_value(&var.id.to_string()).unwrap();
+        match resolved {
+            DataValue::DataFrame(id) => {
+                assert!(id.starts_with("var:"));
+                let df = runtime.get_dataframe(&id).unwrap();
+                assert_eq!(df.height(), 2);
+            }
+            other => panic!("expected DataFrame ref, got {other:?}"),
+        }
     }
 
     #[test]
@@ -506,7 +576,7 @@ mod tests {
             vec![],
         );
         let graph_b = state.get_graph(&event_b.id).unwrap();
-        let runtime = GraphRuntime::new(
+        let mut runtime = GraphRuntime::new(
             Arc::new(graph_b.clone()),
             Arc::new(RwLock::new(state.get_data())),
             Arc::new(RwLock::new(ProjectStore::default())),

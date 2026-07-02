@@ -3,7 +3,9 @@
 use crate::application::database::bind_duckdb_instance;
 use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
-use crate::graph::{DataType, GraphId, GraphInstance, GraphKind, PinChangeSet, PinId};
+use crate::graph::value::DataType;
+use crate::graph::{GraphId, GraphInstance, GraphKind, PinChangeSet, PinId};
+use crate::tabular::is_variable_handle;
 use crate::log::log_sys;
 use crate::project::{
     GraphDocument, ProjectData, ProjectStore, load_project_graph_from_file,
@@ -101,6 +103,7 @@ impl ProjectState {
             store.databases.insert(id.clone(), instance);
         }
         *self.project_store.write().unwrap() = store;
+        self.sync_all_variable_tabular();
 
         // Now re-insert every detached graph through the unified entry so they
         // get their runtime bindings consistently.
@@ -109,14 +112,60 @@ impl ProjectState {
         }
     }
 
-    /// 构建 SchemaProvider 闭包（捕获 project_store 的引用）
+    /// 统一 tabular schema 查询：`var:{id}` 走变量缓存，其它 id 走数据集。
     pub fn build_schema_provider(&self) -> SchemaProvider {
         let store = Arc::clone(&self.project_store);
-        Arc::new(move |dataframe_id: &str| {
+        Arc::new(move |tabular_id: &str| {
+            if is_variable_handle(tabular_id) {
+                let store = store.read().ok()?;
+                return store
+                    .variable_tabular
+                    .get(tabular_id)
+                    .map(|entry| entry.schema.clone());
+            }
             let mut store = store.write().ok()?;
-            let db = store.databases.get_mut(dataframe_id)?;
+            let db = store.databases.get_mut(tabular_id)?;
             db.data_schema().ok()
         })
+    }
+
+    /// 变量变更后，重编译引用该变量的图（schema 传播 + schema 派生 pin 物化）。
+    pub fn recompile_graphs_for_variable(&self, variable_id: &VariableId) {
+        let var_id_str = variable_id.to_string();
+        let schema_provider = self.build_schema_provider();
+        let seed_nodes: Vec<(GraphId, Vec<crate::graph::NodeId>)> = {
+            let data = self.project_data.read().unwrap();
+            data.graphs
+                .iter()
+                .filter_map(|(graph_id, graph)| {
+                    let seeds: Vec<_> = graph
+                        .data_state
+                        .read()
+                        .unwrap()
+                        .nodes
+                        .values()
+                        .filter(|node| {
+                            node.instance_params.variable_id() == Some(var_id_str.as_str())
+                        })
+                        .map(|node| node.id)
+                        .collect();
+                    if seeds.is_empty() {
+                        None
+                    } else {
+                        Some((*graph_id, seeds))
+                    }
+                })
+                .collect()
+        };
+
+        let mut data = self.project_data.write().unwrap();
+        for (graph_id, seeds) in seed_nodes {
+            let Some(graph) = data.graphs.get_mut(&graph_id) else {
+                continue;
+            };
+            graph.set_schema_provider(schema_provider.clone());
+            graph.compile_graph_from_seeds(&seeds);
+        }
     }
 
     /// Bind the project's runtime context onto a graph: registry, schema

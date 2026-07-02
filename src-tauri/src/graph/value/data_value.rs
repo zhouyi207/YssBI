@@ -190,11 +190,11 @@ impl DataValue {
             DataValue::Float64(_) => Some(DataType::Float64),
             DataValue::String(_) => Some(DataType::String),
             DataValue::Array(arr) => {
-                if let Some(first) = arr.first() {
-                    Some(DataType::Array(Box::new(first.value_type().unwrap())))
-                } else {
-                    Some(DataType::Array(Box::new(DataType::Any)))
-                }
+                let inner = arr
+                    .iter()
+                    .find_map(|v| v.value_type())
+                    .unwrap_or(DataType::Any);
+                Some(DataType::Array(Box::new(inner)))
             }
             DataValue::Object(_) => Some(DataType::Object),
             DataValue::Null => None,

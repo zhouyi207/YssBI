@@ -37,7 +37,7 @@ pub fn data_series_table_columns(data_series: &Series) -> Vec<String> {
     } else {
         name.to_string()
     };
-    vec!["#".to_string(), value_col]
+    vec![value_col]
 }
 
 pub fn build_data_series_source(

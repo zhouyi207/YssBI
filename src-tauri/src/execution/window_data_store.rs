@@ -354,13 +354,10 @@ fn data_series_page(data_series: &Series, offset: usize, limit: usize) -> Result
     let columns = crate::execution::data_series_table_columns(data_series);
     let rows: Vec<Vec<serde_json::Value>> = (start..end)
         .map(|i| {
-            vec![
-                serde_json::json!(i),
-                data_series
-                    .get(i)
-                    .map(anyvalue_to_json)
-                    .unwrap_or(serde_json::Value::Null),
-            ]
+            vec![data_series
+                .get(i)
+                .map(anyvalue_to_json)
+                .unwrap_or(serde_json::Value::Null)]
         })
         .collect();
     Ok(SourcePage {
@@ -496,10 +493,7 @@ mod tests {
         assert_eq!(page.offset, 2);
         assert_eq!(page.total_count, 4);
         assert_eq!(page.rows.as_ref().unwrap().len(), 2);
-        assert_eq!(
-            page.columns.as_ref().unwrap(),
-            &vec!["#".to_string(), "s".to_string()]
-        );
-        assert_eq!(page.rows.as_ref().unwrap()[0][0], serde_json::json!(2));
+        assert_eq!(page.columns.as_ref().unwrap(), &vec!["s".to_string()]);
+        assert_eq!(page.rows.as_ref().unwrap()[0][0], serde_json::json!(30));
     }
 }

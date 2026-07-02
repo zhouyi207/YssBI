@@ -42,6 +42,12 @@ export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
 
 export type VariableSelectableDataTypeKind = (typeof VARIABLE_SELECTABLE_DATA_TYPE_KINDS)[number];
 
+/** 变量 Array 默认初始值（新建 / 类型切换） */
+export const DEFAULT_ARRAY_VALUE: readonly number[] = [1, 2, 3];
+
+/** 变量 Object 默认初始值（新建 / 类型切换） */
+export const DEFAULT_OBJECT_VALUE: Readonly<Record<string, number>> = { key_0: 1, key_1: 2 };
+
 /** DataSeries 变量的元素类型可选集（列级类型）。 */
 export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
   'Boolean',
@@ -239,9 +245,9 @@ export function getDefaultValue(dataType: DataType): unknown {
     case 'Categorical':
       return '';
     case 'Array':
-      return [];
+      return [...DEFAULT_ARRAY_VALUE];
     case 'Object':
-      return {};
+      return { ...DEFAULT_OBJECT_VALUE };
     default:
       return undefined;
   }

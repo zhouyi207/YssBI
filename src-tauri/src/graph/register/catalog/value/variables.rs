@@ -1,15 +1,22 @@
 use crate::execution::ExecutionEffect;
-use crate::graph::node::NodeDefinition;
+use crate::graph::node::{NodeDefinition, OutputSchemaContext};
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
+use crate::tabular::variable_handle_str;
 use std::sync::Arc;
 
 pub fn register(registry: &NodeRegistry) {
     register_get_variable(registry);
     register_set_variable(registry);
+}
+
+fn get_variable_dataframe_schema(ctx: &OutputSchemaContext) -> Option<crate::graph::node::DataSchema> {
+    let variable_id = ctx.instance_params.variable_id()?;
+    let provider = ctx.schema_provider.as_ref()?;
+    provider(&variable_handle_str(variable_id))
 }
 
 fn register_get_variable(registry: &NodeRegistry) {
@@ -21,6 +28,7 @@ fn register_get_variable(registry: &NodeRegistry) {
             DataRole::Output,
             PinDataTypeDefinition::concrete(DataType::Any),
         ))])
+        .with_output_schema_resolver(Arc::new(get_variable_dataframe_schema))
         .with_data_evaluator(Arc::new(|ctx| {
             let params = ctx.get_instance_params();
             let variable_id = params

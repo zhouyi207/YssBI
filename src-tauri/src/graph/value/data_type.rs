@@ -256,6 +256,21 @@ fn split_top_level(s: &str, sep: char) -> Vec<&str> {
     parts
 }
 
+fn default_array_value() -> DataValue {
+    DataValue::Array(vec![
+        DataValue::Int64(1),
+        DataValue::Int64(2),
+        DataValue::Int64(3),
+    ])
+}
+
+fn default_object_value() -> DataValue {
+    let mut map = std::collections::HashMap::new();
+    map.insert("key_0".to_string(), DataValue::Int64(1));
+    map.insert("key_1".to_string(), DataValue::Int64(2));
+    DataValue::Object(map)
+}
+
 impl DataType {
     /// 返回该类型的默认值（用于 Pin 占位、变量初始化等）
     pub fn default_value(&self) -> DataValue {
@@ -267,8 +282,8 @@ impl DataType {
             // 时间/分类标量默认以空字符串表示（运行时值经 String 承载）
             DataType::Date | DataType::Datetime | DataType::Time => DataValue::String(String::new()),
             DataType::Categorical => DataValue::String(String::new()),
-            DataType::Array(_) => DataValue::Array(Vec::new()),
-            DataType::Object => DataValue::Object(std::collections::HashMap::new()),
+            DataType::Array(_) => default_array_value(),
+            DataType::Object => default_object_value(),
             DataType::OneOf(types) => types.first().map_or(DataValue::Null, |t| t.default_value()),
             DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => {
                 DataValue::Null

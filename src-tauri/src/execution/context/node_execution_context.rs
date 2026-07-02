@@ -312,8 +312,8 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         Ok(graph.put_data_series(s))
     }
 
-    fn get_variable_value(&self, variable_id: &str) -> Result<DataValue, String> {
-        let graph = self.graph.lock().unwrap();
+    fn get_variable_value(&mut self, variable_id: &str) -> Result<DataValue, String> {
+        let mut graph = self.graph.lock().unwrap();
         graph.get_variable_value(variable_id)
     }
 
