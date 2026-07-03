@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { VscPreview } from 'react-icons/vsc';
 import { SourceService, UnifiedDataView, type SourceDescriptor } from '@/features/core/dataView';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { usePersistedWindow, useReleaseResultSourceOnUnmount, useWindowMaximized } from '@/features/application/window';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 
@@ -19,6 +19,7 @@ function getSourceIdFromUrl(): string | null {
 export const RuntimeViewWindow: React.FC = () => {
   const { t } = useTranslation();
   const sourceId = useMemo(() => getSourceIdFromUrl(), []);
+  useReleaseResultSourceOnUnmount(sourceId);
   const [sourceDescriptor, setSourceDescriptor] = useState<SourceDescriptor | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const isMaximized = useWindowMaximized('RuntimeViewWindow');

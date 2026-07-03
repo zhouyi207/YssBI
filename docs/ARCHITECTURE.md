@@ -700,9 +700,9 @@ CSV、Parquet、Excel 和部分 SQL 连接信息以路径/连接字符串形式�
 - 项目资源目录。
 - 缺失数据源重定位 UI。
 
-### 15.4 WindowDataStore 生命周期
+### 15.4 ResultSourceStore 生命周期
 
-执行器将结果 payload 放入 `WindowDataStore`，前端窗口按 key 拉取。当前设计适合跨窗口传输大 payload，但如果窗口未拉取或异常关闭，key 可能残留。长期运行场景可考虑 TTL、一次性读取后删除、或按窗口生命周期清理。
+执行器与 DataView 将可检视 payload 写入 `ResultSourceStore`（`execution/window_data_store.rs`）。两类 owner：**RuntimePin**（画布 pin 上次 run 结果）与 **Window**（弹窗独占）。拓扑破坏时按 pin 失效；Run 结束保留；窗口 unmount 时仅释放 `SourceOwner::Window`。详见 [`runtime-source-lifecycle.md`](./runtime-source-lifecycle.md)。
 
 ### 15.5 `sci` API 收敛仍未完成
 

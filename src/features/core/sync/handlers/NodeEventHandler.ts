@@ -2,8 +2,9 @@
 // 按 README 范式：Handler 直接更新 Store，callbacks 仅用于可选 UI 扩展
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, EventCallbacks } from '../types';
+import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, RuntimeSourcesInvalidatedPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import { isPending } from '../utils/echoSuppressor';
@@ -198,5 +199,19 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
             payload.graphId,
         );
         markGraphTabDirty(payload.graphId);
+    }
+}
+
+export class RuntimeSourcesInvalidatedHandler extends BaseEventHandler<RuntimeSourcesInvalidatedPayload> {
+    eventType = 'RuntimeSourcesInvalidated';
+
+    handle(payload: RuntimeSourcesInvalidatedPayload, _callbacks?: EventCallbacks): void {
+        this.log(
+            'Runtime sources invalidated:',
+            payload.pinIds.length,
+            'pins in graph:',
+            payload.graphId,
+        );
+        useExecutionStore.getState().clearPinResults(payload.graphId, payload.pinIds);
     }
 }

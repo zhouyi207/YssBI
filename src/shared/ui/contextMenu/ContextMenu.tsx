@@ -15,6 +15,8 @@ export interface ContextMenuItem {
   label: string;
   icon?: React.ReactNode;
   disabled?: boolean;
+  /** Shown as native tooltip when the item is disabled */
+  title?: string;
   danger?: boolean;
   shortcut?: string;
   onClick?: () => void;
@@ -89,6 +91,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               variant="ghost"
               role="menuitem"
               disabled={item.disabled}
+              title={item.disabled ? item.title : undefined}
               className={cn(
                 menuItemClass,
                 item.danger && menuItemDangerClass,

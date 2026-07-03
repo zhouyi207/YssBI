@@ -12,6 +12,7 @@ export interface ResolvedPinSpec {
   slotKind?: 'fixed' | 'repeatable' | 'derivedFromInput';
   slotNote?: { kind: 'repeatableRange'; min: number; max: number | null } | { kind: 'derivedFromInput' };
   connected: boolean;
+  connectionIds: string[];
 }
 
 function pinKindFromType(type: string): 'Data' | 'Exec' {
@@ -101,6 +102,7 @@ function resolvePin(
     slotKind: meta.slotKind,
     slotNote: meta.slotNote,
     connected: pin.connected,
+    connectionIds: pin.connectionIds ?? [],
   };
 }
 
@@ -137,6 +139,7 @@ export function listDefinitionOnlyPins(
         optional: def.optional ?? false,
         slotKind: 'fixed',
         connected: false,
+        connectionIds: [],
       });
     }
     if (slot.slotKind === 'repeatable') {
@@ -151,6 +154,7 @@ export function listDefinitionOnlyPins(
         slotKind: 'repeatable',
         slotNote: slotNote(slot),
         connected: false,
+        connectionIds: [],
       });
     }
   }

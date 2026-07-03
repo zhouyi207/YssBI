@@ -29,6 +29,7 @@ interface ExecutionStore extends ExecutionState {
   setRecording: (graphId: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphId?: string) => void;
   markGraphDirty: (graphId: string) => void;
+  clearPinResults: (graphId: string, pinIds: string[]) => void;
   resetGraphVisuals: (graphId: string) => void;
   applyEvent: (graphId: string, event: ExecutionEvent) => void;
 }
@@ -137,11 +138,21 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         errorConnections: new Set(),
         recording: [],
         nodeDurations: new Map(),
-        pinResults: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,
     };
+  }),
+
+  clearPinResults: (graphId, pinIds) => set((state) => {
+    if (pinIds.length === 0) return state;
+    const g = state.graphs[graphId];
+    if (!g || g.pinResults.size === 0) return state;
+    const next = new Map(g.pinResults);
+    for (const pinId of pinIds) {
+      next.delete(pinId);
+    }
+    return updateGraph(state, graphId, { pinResults: next });
   }),
 
   resetGraphVisuals: (graphId) => set((state) => {
@@ -155,7 +166,6 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         completedConnections: new Set(),
         errorConnections: new Set(),
         nodeDurations: new Map(),
-        pinResults: new Map(),
       }),
       isPlaying: stop ? false : state.isPlaying,
       playbackGraphId: stop ? null : state.playbackGraphId,

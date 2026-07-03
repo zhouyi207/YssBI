@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { SourceService, type SourceDescriptor } from '@/features/core/dataView';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { usePersistedWindow, useReleaseResultSourceOnUnmount, useWindowMaximized } from '@/features/application/window';
 import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';
 import { VARSocComponent } from './VARSocComponent';
@@ -119,6 +119,8 @@ function getSourceIdFromHash(): string | null {
 
 export const InfoWindow: React.FC = () => {
   const { t } = useTranslation();
+  const sourceId = useMemo(() => getSourceIdFromHash(), []);
+  useReleaseResultSourceOnUnmount(sourceId);
   const [isReady, setIsReady] = useState(false);
   const isMaximized = useWindowMaximized('InfoWindow');
   const [olsData, setOlsData] = useState<unknown>(null);
@@ -132,7 +134,6 @@ export const InfoWindow: React.FC = () => {
     const initializeWindow = async () => {
       try {
         const currentWindow = getCurrentWindow();
-        const sourceId = getSourceIdFromHash();
 
         if (!sourceId) {
           setError(t('info.missingDataKey'));
@@ -180,7 +181,7 @@ export const InfoWindow: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [sourceId, t]);
 
   const handleMinimize = async () => {
     try {

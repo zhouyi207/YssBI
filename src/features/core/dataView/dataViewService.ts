@@ -25,4 +25,8 @@ export class SourceService {
   static async getValue(sourceId: string): Promise<SourceValue | null> {
     return invoke<SourceValue | null>('get_result_source_value', { sourceId });
   }
+
+  static async releaseResultSource(sourceId: string): Promise<void> {
+    await invoke('release_result_source', { sourceId });
+  }
 }

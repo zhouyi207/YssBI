@@ -520,3 +520,4 @@ Command 返回 `Result`，Event 通过 EventEmitter 推送至前端。
 
 - [DTO_TYPE_MAPPING.md](./DTO_TYPE_MAPPING.md) - 前后端类型映射
 - [ARCHITECTURE_ISSUES.md](./ARCHITECTURE_ISSUES.md) - 架构问题与优化路线
+- [runtime-source-lifecycle.md](./runtime-source-lifecycle.md) - RuntimePin / Window 结果 source 生命周期与前后端投影规则

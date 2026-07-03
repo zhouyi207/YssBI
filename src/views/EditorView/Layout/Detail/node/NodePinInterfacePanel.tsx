@@ -5,30 +5,30 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { NodePinSpecRow } from './NodePinSpecRow';
 import { detailEmptyHintClass } from '../shared/detailStyles';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
-import type { PinResultState } from '@/shared/types/ui';
+import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
 
 interface NodePinInterfacePanelProps {
+  graphId: string;
   inputs: ResolvedPinSpec[];
   outputs: ResolvedPinSpec[];
   pinResults?: Map<string, PinResultState>;
-  selectedResultPinId?: string | null;
-  onInspectResult?: (pinId: string) => void;
+  executionStatus?: ExecutionStatus;
 }
 
 type PinTab = 'inputs' | 'outputs';
 
 function PinList({
+  graphId,
   emptyLabel,
   pins,
   pinResults,
-  selectedResultPinId,
-  onInspectResult,
+  executionStatus,
 }: {
+  graphId: string;
   emptyLabel: string;
   pins: ResolvedPinSpec[];
   pinResults?: Map<string, PinResultState>;
-  selectedResultPinId?: string | null;
-  onInspectResult?: (pinId: string) => void;
+  executionStatus?: ExecutionStatus;
 }) {
   return (
     <div className="space-y-1">
@@ -36,10 +36,10 @@ function PinList({
         pins.map((pin) => (
           <NodePinSpecRow
             key={pin.id}
+            graphId={graphId}
             pin={pin}
-            result={pinResults?.get(pin.id)}
-            selected={selectedResultPinId === pin.id}
-            onInspect={onInspectResult}
+            pinResults={pinResults}
+            executionStatus={executionStatus}
           />
         ))
       ) : (
@@ -50,11 +50,11 @@ function PinList({
 }
 
 export function NodePinInterfacePanel({
+  graphId,
   inputs,
   outputs,
   pinResults,
-  selectedResultPinId,
-  onInspectResult,
+  executionStatus,
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PinTab>(() =>
@@ -87,15 +87,21 @@ export function NodePinInterfacePanel({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="inputs" className="mt-2">
-            <PinList emptyLabel={t('detail.nodeDoc.noInputs')} pins={inputs} />
+            <PinList
+              graphId={graphId}
+              emptyLabel={t('detail.nodeDoc.noInputs')}
+              pins={inputs}
+              pinResults={pinResults}
+              executionStatus={executionStatus}
+            />
           </TabsContent>
           <TabsContent value="outputs" className="mt-2">
             <PinList
+              graphId={graphId}
               emptyLabel={t('detail.nodeDoc.noOutputs')}
               pins={outputs}
               pinResults={pinResults}
-              selectedResultPinId={selectedResultPinId}
-              onInspectResult={onInspectResult}
+              executionStatus={executionStatus}
             />
           </TabsContent>
         </Tabs>

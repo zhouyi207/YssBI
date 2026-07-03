@@ -160,6 +160,11 @@ export interface PinTypesInferredPayload {
     pinTypes: Array<{ pinId: string; pinType: string; containerType?: string; typeDisplay?: string; dataType?: DataTypeBackendFormat }>;
 }
 
+export interface RuntimeSourcesInvalidatedPayload {
+    graphId: string;
+    pinIds: string[];
+}
+
 // ==================== Connection 事件 Payload ====================
 
 export interface ConnectionCreatedPayload {

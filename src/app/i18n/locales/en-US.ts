@@ -63,9 +63,15 @@ export const enUS = {
     pin: {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
+      view: "View",
+      viewDisabledNoRun: "Run the graph first to generate viewable results",
+      viewDisabledNoUpstream: "No upstream result available",
       promoteToVar: "Promote to Variable",
       removePin: "Remove Pin",
     },
+  },
+  toast: {
+    viewOpenFailed: "Could not open view window: {{error}}",
   },
   projectPicker: {
     title: "Project Management",
@@ -645,6 +651,7 @@ export const enUS = {
       unnamed: "(unnamed)",
       repeatableRange: "repeatable {{min}}–{{max}}",
       derivedFromInput: "derived from input schema",
+      view: "View",
     },
   },
 };

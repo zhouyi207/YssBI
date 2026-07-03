@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
@@ -10,9 +11,16 @@ import { useRepeatablePinRemovable } from "@/features/core/pin";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
-import { useExecutionStore } from "@/features/core/execution";
-import { openPresentationWindow } from "@/features/application/window";
-import { presentationRouteForDescriptor } from "@/features/core/dataView";
+import { useGraphDataStore } from "@/features/core/dataStore";
+import {
+  buildPinViewParams,
+  openPinView,
+  pinViewDisabledTitle,
+  resolvePinViewDisabledReason,
+  resolvePinViewTargetFromCache,
+  shouldShowPinViewMenuItem,
+  useExecutionStore,
+} from "@/features/core/execution";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -88,6 +96,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     forceShowInput,
   } = props;
 
+  const { t } = useTranslation();
   const { theme: appTheme } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const baseColor = ui?.color ?? getPinTypeColor(type ?? "any", appTheme);
@@ -102,9 +111,41 @@ export const Pin: React.FC<PinProps> = (props) => {
   const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, subgraphId);
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
-  const pinResult = useExecutionStore((s) =>
-    subgraphId && direction === "output" ? s.graphs[subgraphId]?.pinResults.get(id) : undefined,
+
+  const connectionIds = useGraphDataStore((s) =>
+    subgraphId ? s.getGraphPinConnections(subgraphId, id) : s.pinConnections[id],
   );
+  const pinResults = useExecutionStore((s) =>
+    subgraphId ? s.graphs[subgraphId]?.pinResults : undefined,
+  );
+  const executionStatus = useExecutionStore((s) =>
+    subgraphId ? s.graphs[subgraphId]?.status : undefined,
+  );
+
+  const viewParams = useMemo(
+    () =>
+      subgraphId
+        ? buildPinViewParams({
+            graphId: subgraphId,
+            pinId: id,
+            direction,
+            pinType: type,
+            connectionIds,
+            pinResults,
+            executionStatus,
+          })
+        : null,
+    [subgraphId, id, direction, type, connectionIds, pinResults, executionStatus],
+  );
+
+  const showViewMenu = viewParams ? shouldShowPinViewMenuItem(viewParams) : false;
+  const viewTarget = viewParams ? resolvePinViewTargetFromCache(viewParams) : null;
+  const viewDisabledReason = viewParams ? resolvePinViewDisabledReason(viewParams) : null;
+  const viewEnabled =
+    showViewMenu &&
+    (Boolean(viewTarget) ||
+      (executionStatus === 'completed' &&
+        (direction === 'output' || (direction === 'input' && (connectionIds?.length ?? 0) > 0))));
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -114,15 +155,12 @@ export const Pin: React.FC<PinProps> = (props) => {
     void menuActions?.removeRepeatablePin(nodeId, id);
   }, [onRemovePin, menuActions, nodeId, id]);
 
-  const handleInspectResult = useCallback(() => {
-    if (!pinResult) return;
-    void openPresentationWindow(pinResult.sourceId, {
-      route: presentationRouteForDescriptor(pinResult.descriptor),
-      windowTitle: pinResult.descriptor.title,
-    });
-  }, [pinResult]);
+  const handleView = useCallback(() => {
+    if (!viewParams) return;
+    void openPinView(viewParams, t);
+  }, [viewParams, t]);
 
-  const hasLinks = linkCount > 0;
+  const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
   const canReset =
     direction === "input" &&
     PRIMITIVE_PIN_TYPES.has(type) &&
@@ -382,7 +420,10 @@ export const Pin: React.FC<PinProps> = (props) => {
           canReset={canReset}
           onBreakLinks={menuActions ? () => void menuActions.disconnectPin(id) : undefined}
           onResetValue={menuActions ? () => void menuActions.resetPinValue(nodeId, id) : undefined}
-          onInspectResult={pinResult ? handleInspectResult : undefined}
+          showView={showViewMenu}
+          viewEnabled={viewEnabled}
+          viewDisabledTitle={pinViewDisabledTitle(viewDisabledReason, t)}
+          onView={handleView}
           onRemove={handleRemovePin}
           onClose={() => setContextMenu(null)}
         />

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { SourceService } from '@/features/core/dataView';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { usePersistedWindow, useReleaseResultSourceOnUnmount, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
@@ -63,6 +63,8 @@ function getPlotTypeFromHash(): string {
  */
 export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
+  const sourceId = useMemo(() => getSourceIdFromHash(), []);
+  useReleaseResultSourceOnUnmount(sourceId);
   const [isReady, setIsReady] = useState(false);
   const isMaximized = useWindowMaximized('PlotWindow');
   const [scatterEcdfData, setScatterEcdfData] = useState<ScatterEcdfData | null>(null);
@@ -82,7 +84,6 @@ export const PlotWindow: React.FC = () => {
       try {
         logger.sys.debug('Initializing plot window...', 'PlotWindow');
         const currentWindow = getCurrentWindow();
-        const sourceId = getSourceIdFromHash();
         setPlotType(getPlotTypeFromHash());
 
         if (sourceId) {
@@ -165,7 +166,7 @@ export const PlotWindow: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [sourceId]);
 
   const handleMinimize = async () => {
     try {

@@ -52,7 +52,7 @@ export function isValidEventType(type: string): boolean {
         // Resource
         'ResourceChanged', 'ResourceDeleted', 'ProjectIndexInvalidated',
         // Node
-        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred',
+        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred', 'RuntimeSourcesInvalidated',
         // Connection
         'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted', 'ConnectionsBatchCreated',
     ];

@@ -55,6 +55,12 @@ pub enum EventNode {
         graph_id: GraphId,
         pin_types: Vec<InferredPinType>,
     },
+    /// Runtime pin result sources invalidated after topology destruction.
+    #[serde(rename_all = "camelCase")]
+    RuntimeSourcesInvalidated {
+        graph_id: GraphId,
+        pin_ids: Vec<PinId>,
+    },
 }
 
 /// 单个 pin 的推断结果

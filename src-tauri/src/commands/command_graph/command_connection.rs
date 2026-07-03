@@ -1,5 +1,6 @@
 use crate::event::event_node::InferredPinType;
 use crate::event::{Event, EventConnection, EventNode, emit_project_event};
+use crate::execution::ResultSourceStore;
 use crate::graph::{DataType, GraphId, NodeId, PinChangeSet, PinId};
 use crate::log::log_app;
 use crate::project::{GraphDocumentKind, ProjectState, read_project_index};
@@ -9,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
+
+use super::runtime_source::emit_runtime_source_invalidation;
 
 /// 将 PinChangeSet 转为事件并发送
 pub fn emit_pin_change_events(
@@ -127,6 +130,7 @@ pub struct DisconnectPinResult {
 pub fn connect_pins(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     subgraph_id: String,
     pin_a: String,
     pin_b: String,
@@ -171,8 +175,9 @@ pub fn connect_pins(
         }),
     );
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
     emit_inferred_types(&app, graph_id, inferred);
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
 
     let (ad_from, ad_to) = auto_disconnected_list
         .first()
@@ -201,6 +206,7 @@ pub fn connect_pins(
 pub fn disconnect_pin(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     subgraph_id: String,
     pin_id: String,
 ) -> Result<DisconnectPinResult, String> {
@@ -239,8 +245,9 @@ pub fn disconnect_pin(
         );
     }
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
     emit_inferred_types(&app, graph_id, inferred);
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
     Ok(DisconnectPinResult {
         removed_connections: removed,
         undo_patch,
@@ -256,6 +263,7 @@ pub fn disconnect_pin(
 pub fn delete_connection(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     subgraph_id: String,
     connection_id: String,
 ) -> Result<(), String> {
@@ -300,8 +308,9 @@ pub fn delete_connection(
         }),
     );
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
     emit_inferred_types(&app, graph_id, inferred);
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
     Ok(())
 }
 
@@ -354,6 +363,7 @@ pub fn get_connections(
 pub fn delete_connections_for_pin(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     subgraph_id: String,
     pin_id: String,
 ) -> Result<Vec<String>, String> {
@@ -389,8 +399,9 @@ pub fn delete_connections_for_pin(
         );
     }
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
     emit_inferred_types(&app, graph_id, inferred);
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
 
     Ok(removed_ids)
 }
@@ -402,6 +413,7 @@ pub fn delete_connections_for_pin(
 pub fn delete_connections_for_node(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     subgraph_id: String,
     node_id: String,
 ) -> Result<Vec<String>, String> {
@@ -426,6 +438,7 @@ pub fn delete_connections_for_node(
     let mut removed_ids = Vec::new();
 
     let mut all_inferred = Vec::new();
+    let mut all_change_sets = Vec::new();
     for pin in &pin_instances {
         let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin.id);
         for (from, to) in &removed_connections {
@@ -433,6 +446,7 @@ pub fn delete_connections_for_node(
         }
         all_removed_connections.extend(removed_connections);
         all_inferred.extend(inferred);
+        all_change_sets.extend(change_sets.clone());
         emit_pin_change_events(&app, graph_id, &graph, change_sets);
     }
 
@@ -447,6 +461,7 @@ pub fn delete_connections_for_node(
     }
 
     emit_inferred_types(&app, graph_id, all_inferred);
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &all_change_sets, &[]);
 
     Ok(removed_ids)
 }

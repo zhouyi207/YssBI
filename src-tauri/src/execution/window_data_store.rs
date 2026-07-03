@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use yss_sci::api::database::anyvalue_to_json;
 
+use crate::graph::PinId;
+
 pub type SourceId = String;
 
 /// Typed source data retained in the backend for lazy frontend reads.
@@ -279,6 +281,41 @@ impl ResultSourceStore {
             .retain(|(owner_graph_id, _), _| owner_graph_id != graph_id);
     }
 
+    /// Remove runtime pin sources for the given pins on a graph. Returns pin ids actually removed.
+    pub fn invalidate_runtime_pins(&self, graph_id: &str, pin_ids: &[PinId]) -> Vec<PinId> {
+        if pin_ids.is_empty() {
+            return Vec::new();
+        }
+        let mut registry = self.registry.write().unwrap();
+        let mut invalidated = Vec::new();
+        for pin_id in pin_ids {
+            let key = (graph_id.to_string(), pin_id.to_string());
+            let Some(source_id) = registry.runtime_index.remove(&key) else {
+                continue;
+            };
+            registry.descriptors.remove(&source_id);
+            registry.sources.remove(&source_id);
+            registry.owners.remove(&source_id);
+            invalidated.push(*pin_id);
+        }
+        invalidated
+    }
+
+    /// Release a window-owned source. No-op when owner is RuntimePin or source is missing.
+    pub fn release_window_source(&self, source_id: &str) -> Result<bool, String> {
+        let mut registry = self.registry.write().unwrap();
+        match registry.owners.get(source_id) {
+            Some(SourceOwner::Window) => {
+                registry.descriptors.remove(source_id);
+                registry.sources.remove(source_id);
+                registry.owners.remove(source_id);
+                registry.runtime_index.retain(|_, v| v != source_id);
+                Ok(true)
+            }
+            Some(SourceOwner::RuntimePin { .. }) | None => Ok(false),
+        }
+    }
+
     pub fn clear_all(&self) {
         let mut registry = self.registry.write().unwrap();
         registry.descriptors.clear();
@@ -495,5 +532,63 @@ mod tests {
         assert_eq!(page.rows.as_ref().unwrap().len(), 2);
         assert_eq!(page.columns.as_ref().unwrap(), &vec!["s".to_string()]);
         assert_eq!(page.rows.as_ref().unwrap()[0][0], serde_json::json!(30));
+    }
+
+    #[test]
+    fn invalidate_runtime_pins_only_removes_target_pins() {
+        use uuid::Uuid;
+        let pin_a = PinId::from(Uuid::new_v4());
+        let pin_b = PinId::from(Uuid::new_v4());
+        let store = ResultSourceStore::new();
+        store.insert_runtime_pin_source(
+            "graph".to_string(),
+            pin_a.to_string(),
+            "run".to_string(),
+            ResultSourceRecord {
+                descriptor: descriptor("runtime-a", SourceKind::Scalar, SourceRenderer::Scalar),
+                source: ResultSource::Json(serde_json::json!({"value": 1})),
+            },
+        );
+        store.insert_runtime_pin_source(
+            "graph".to_string(),
+            pin_b.to_string(),
+            "run".to_string(),
+            ResultSourceRecord {
+                descriptor: descriptor("runtime-b", SourceKind::Scalar, SourceRenderer::Scalar),
+                source: ResultSource::Json(serde_json::json!({"value": 2})),
+            },
+        );
+
+        let removed = store.invalidate_runtime_pins("graph", &[pin_a]);
+        assert_eq!(removed, vec![pin_a]);
+        assert!(store.get_pin_descriptor("graph", &pin_a.to_string()).is_none());
+        assert!(store.get_pin_descriptor("graph", &pin_b.to_string()).is_some());
+    }
+
+    #[test]
+    fn release_window_source_noop_for_runtime_pin_owner() {
+        let store = ResultSourceStore::new();
+        store.insert_runtime_pin_source(
+            "graph".to_string(),
+            "pin".to_string(),
+            "run".to_string(),
+            ResultSourceRecord {
+                descriptor: descriptor("runtime", SourceKind::Scalar, SourceRenderer::Scalar),
+                source: ResultSource::Json(serde_json::json!({"value": 1})),
+            },
+        );
+        assert!(!store.release_window_source("runtime").unwrap());
+        assert!(store.get_descriptor("runtime").is_some());
+    }
+
+    #[test]
+    fn release_window_source_removes_window_owner() {
+        let store = ResultSourceStore::new();
+        store.insert_window_source(ResultSourceRecord {
+            descriptor: descriptor("window-1", SourceKind::Scalar, SourceRenderer::Scalar),
+            source: ResultSource::Json(serde_json::json!({"value": 42})),
+        });
+        assert!(store.release_window_source("window-1").unwrap());
+        assert!(store.get_descriptor("window-1").is_none());
     }
 }

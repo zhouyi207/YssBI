@@ -63,9 +63,15 @@ export const zhCN = {
     pin: {
       breakLinks: "断开连接",
       resetValue: "恢复默认值",
+      view: "查看",
+      viewDisabledNoRun: "请先运行图以生成可查看结果",
+      viewDisabledNoUpstream: "无可用上游结果",
       promoteToVar: "提升为变量",
       removePin: "移除 Pin",
     },
+  },
+  toast: {
+    viewOpenFailed: "无法打开查看窗口：{{error}}",
   },
   projectPicker: {
     title: "项目管理",
@@ -645,6 +651,7 @@ export const zhCN = {
       unnamed: "（未命名）",
       repeatableRange: "可重复 {{min}}–{{max}}",
       derivedFromInput: "由输入 schema 派生",
+      view: "查看",
     },
   },
 };

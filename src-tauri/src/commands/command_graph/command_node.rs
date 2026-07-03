@@ -1,5 +1,7 @@
 use super::command_connection::{emit_inferred_types, emit_pin_change_events};
+use super::runtime_source::emit_runtime_source_invalidation;
 use crate::event::{Event, EventConnection, EventNode, emit_project_event};
+use crate::execution::ResultSourceStore;
 use crate::graph::{
     DataType, DataValue, GraphId, NodeId, NodeInstanceParams, PinChangeSet, PinDirection, PinId,
 };
@@ -195,6 +197,7 @@ pub fn batch_create_nodes(
 pub fn delete_node(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     graph_id: GraphId,
     node_id: NodeId,
 ) -> Result<(), String> {
@@ -204,6 +207,12 @@ pub fn delete_node(
         .get(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
 
+    let deleted_pin_ids: Vec<PinId> = graph
+        .get_pin_instances_by_node_id(node_id)
+        .into_iter()
+        .map(|pin| pin.id)
+        .collect();
+
     graph.remove_node_raw(node_id)?;
     let _ = graph.infer_types();
 
@@ -211,6 +220,8 @@ pub fn delete_node(
         &app,
         Event::Node(EventNode::NodeDeleted { graph_id, node_id }),
     );
+
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &[], &deleted_pin_ids);
 
     // Do not resolve_dynamic_pins on neighbors: keeps dynamic pin IDs stable for undo.
     drop(bounding);
@@ -223,6 +234,7 @@ pub fn delete_node(
 pub fn batch_delete_nodes(
     app: AppHandle,
     state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
     graph_id: GraphId,
     node_ids: Vec<NodeId>,
 ) -> Result<GraphUndoPatch, String> {
@@ -240,6 +252,16 @@ pub fn batch_delete_nodes(
 
     let snapshot = graph.capture_subgraph_for_delete(&node_ids);
 
+    let mut deleted_pin_ids = Vec::new();
+    for &nid in &node_ids {
+        deleted_pin_ids.extend(
+            graph
+                .get_pin_instances_by_node_id(nid)
+                .into_iter()
+                .map(|pin| pin.id),
+        );
+    }
+
     for &nid in &node_ids {
         graph.remove_node_raw(nid)?;
     }
@@ -250,6 +272,8 @@ pub fn batch_delete_nodes(
         &app,
         Event::Node(EventNode::NodesBatchDeleted { graph_id, node_ids }),
     );
+
+    emit_runtime_source_invalidation(&app, &source_store, graph_id, &[], &deleted_pin_ids);
 
     // Do not resolve_dynamic_pins on neighbors: keeps dynamic pin IDs stable for undo.
     drop(bounding);

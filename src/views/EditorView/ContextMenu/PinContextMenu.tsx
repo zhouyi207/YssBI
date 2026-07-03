@@ -10,7 +10,10 @@ export interface PinContextMenuProps {
   canReset?: boolean;
   onBreakLinks?: () => void;
   onResetValue?: () => void;
-  onInspectResult?: () => void;
+  showView?: boolean;
+  viewEnabled?: boolean;
+  viewDisabledTitle?: string;
+  onView?: () => void;
   onRemove?: () => void;
   onClose: () => void;
 }
@@ -22,7 +25,10 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   canReset,
   onBreakLinks,
   onResetValue,
-  onInspectResult,
+  showView = false,
+  viewEnabled = false,
+  viewDisabledTitle,
+  onView,
   onRemove,
   onClose,
 }) => {
@@ -30,15 +36,32 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
 
   const sections = useMemo((): ContextMenuSection[] => {
     const p = (key: string) => t(`contextMenu.pin.${key}`);
+    const primaryItems = [
+      { id: "breakLinks", label: p("breakLinks"), icon: <VscLink size={12} />, disabled: !hasLinks, onClick: onBreakLinks },
+      { id: "resetValue", label: p("resetValue"), icon: <VscRefresh size={12} />, disabled: !canReset, onClick: onResetValue },
+    ];
+
+    if (showView) {
+      primaryItems.push({
+        id: "view",
+        label: p("view"),
+        icon: <VscEye size={12} />,
+        disabled: !viewEnabled,
+        title: viewEnabled ? undefined : viewDisabledTitle,
+        onClick: onView,
+      });
+    }
+
+    primaryItems.push({
+      id: "promoteToVar",
+      label: p("promoteToVar"),
+      icon: <VscSymbolVariable size={12} />,
+      disabled: true,
+      onClick: undefined,
+    });
+
     return [
-      {
-        items: [
-          { id: "breakLinks", label: p("breakLinks"), icon: <VscLink size={12} />, disabled: !hasLinks, onClick: onBreakLinks },
-          { id: "resetValue", label: p("resetValue"), icon: <VscRefresh size={12} />, disabled: !canReset, onClick: onResetValue },
-          { id: "inspectResult", label: "Inspect result", icon: <VscEye size={12} />, disabled: !onInspectResult, onClick: onInspectResult },
-          { id: "promoteToVar", label: p("promoteToVar"), icon: <VscSymbolVariable size={12} />, disabled: true },
-        ],
-      },
+      { items: primaryItems },
       {
         items: [
           {
@@ -52,7 +75,19 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         ],
       },
     ];
-  }, [t, removable, hasLinks, canReset, onBreakLinks, onResetValue, onInspectResult, onRemove]);
+  }, [
+    t,
+    removable,
+    hasLinks,
+    canReset,
+    onBreakLinks,
+    onResetValue,
+    showView,
+    viewEnabled,
+    viewDisabledTitle,
+    onView,
+    onRemove,
+  ]);
 
   return (
     <ContextMenu

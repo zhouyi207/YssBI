@@ -631,6 +631,16 @@ pub fn get_result_source_page(
     state.get_page(&source_id, offset, limit)
 }
 
+/// Release a window-owned result source when its view window unmounts.
+#[tauri::command]
+pub fn release_result_source(
+    state: State<'_, crate::execution::ResultSourceStore>,
+    source_id: String,
+) -> Result<(), String> {
+    state.release_window_source(&source_id)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn load_project_graph(
     state: State<ProjectState>,

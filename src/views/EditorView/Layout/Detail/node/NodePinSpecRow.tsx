@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
@@ -5,16 +6,54 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { detailPinRowClass } from '../shared/detailStyles';
 import { DetailBadge, DetailText } from '../shared/DetailText';
 import type { PinResultState } from '@/shared/types/ui';
+import {
+  buildPinViewParams,
+  openPinView,
+  pinViewDisabledTitle,
+  resolvePinViewDisabledReason,
+  resolvePinViewTargetFromCache,
+  shouldShowPinViewMenuItem,
+} from '@/features/core/execution';
+import type { ExecutionStatus } from '@/shared/types/ui';
 
 interface NodePinSpecRowProps {
+  graphId: string;
   pin: ResolvedPinSpec;
-  result?: PinResultState;
-  selected?: boolean;
-  onInspect?: (pinId: string) => void;
+  pinResults?: Map<string, PinResultState>;
+  executionStatus?: ExecutionStatus;
 }
 
-export function NodePinSpecRow({ pin, result, selected, onInspect }: NodePinSpecRowProps) {
+export function NodePinSpecRow({
+  graphId,
+  pin,
+  pinResults,
+  executionStatus,
+}: NodePinSpecRowProps) {
   const { t } = useTranslation();
+
+  const viewParams = useMemo(
+    () =>
+      buildPinViewParams({
+        graphId,
+        pinId: pin.id,
+        direction: pin.direction,
+        pinType: pin.kind === 'Exec' ? 'exec' : pin.type,
+        connectionIds: pin.connectionIds,
+        pinResults,
+        executionStatus,
+      }),
+    [graphId, pin, pinResults, executionStatus],
+  );
+
+  const showView = shouldShowPinViewMenuItem(viewParams);
+  const viewTarget = resolvePinViewTargetFromCache(viewParams);
+  const viewDisabledReason = resolvePinViewDisabledReason(viewParams);
+  const viewEnabled =
+    showView &&
+    (Boolean(viewTarget) ||
+      (executionStatus === 'completed' &&
+        (pin.direction === 'output' || (pin.direction === 'input' && pin.connectionIds.length > 0))));
+  const viewDisabledLabel = pinViewDisabledTitle(viewDisabledReason, t);
 
   const slotNoteText =
     pin.slotNote?.kind === 'repeatableRange'
@@ -54,6 +93,28 @@ export function NodePinSpecRow({ pin, result, selected, onInspect }: NodePinSpec
     );
   };
 
+  const viewButton = showView ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-5 px-1.5 text-[10px]"
+            disabled={!viewEnabled}
+            onClick={() => void openPinView(viewParams, t)}
+          >
+            {t('detail.nodeDoc.view')}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      {!viewEnabled && viewDisabledLabel ? (
+        <TooltipContent side="top">{viewDisabledLabel}</TooltipContent>
+      ) : null}
+    </Tooltip>
+  ) : null;
+
   return (
     <div
       className={`border-l-2 border-blue-400/70 px-2 py-1.5 ${detailPinRowClass}`}
@@ -71,7 +132,7 @@ export function NodePinSpecRow({ pin, result, selected, onInspect }: NodePinSpec
             {typeLabel}
           </TooltipContent>
         </Tooltip>
-        {(pin.connected || badges.length > 0 || result) && (
+        {(pin.connected || badges.length > 0 || showView) && (
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-1">
             {pin.connected && (
               <span
@@ -80,17 +141,7 @@ export function NodePinSpecRow({ pin, result, selected, onInspect }: NodePinSpec
               />
             )}
             {badges.map(renderBadge)}
-            {result ? (
-              <Button
-                type="button"
-                size="sm"
-                variant={selected ? 'secondary' : 'ghost'}
-                className="h-5 px-1.5 text-[10px]"
-                onClick={() => onInspect?.(pin.id)}
-              >
-                Inspect
-              </Button>
-            ) : null}
+            {viewButton}
           </div>
         )}
       </div>
