@@ -6,6 +6,7 @@ import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from
 import { useMenubar } from "@/features/application/menubar";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
 import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
@@ -132,9 +133,9 @@ export function Menubar() {
   const currentPath = useProjectIOStore((s) => s.currentPath);
   const saveableEditorTabId = useLayoutStore((s) => {
     const editorGroupId = s.activeEditorGroupId || "default_editor";
-    const tabId = s.nodes[editorGroupId]?.data?.activeTabId;
-    if (!tabId || tabId === "settings") return null;
-    const tab = s.nodes[editorGroupId]?.data?.tabs?.find((t) => t.id === tabId);
+    const active = getActiveLayoutTab(editorGroupId, s.nodes);
+    const tab = active?.tab;
+    if (!active?.activeTabId || active.activeTabId === "settings") return null;
     if (
       tab &&
       tab.type !== "event" &&
@@ -143,7 +144,7 @@ export function Menubar() {
     ) {
       return null;
     }
-    return tabId;
+    return active.activeTabId;
   });
   const canSaveProject = Boolean(currentPath && saveableEditorTabId);
   const canSaveProjectAs = Boolean(currentPath);

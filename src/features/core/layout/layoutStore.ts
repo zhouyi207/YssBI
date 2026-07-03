@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
+import { getActiveLayoutTab } from './layoutTabQueries';
 import { logger } from '@/utils/appLogger';
 
 // Helper to generate IDs
@@ -233,7 +234,7 @@ export const useLayoutStore = create<LayoutState>()(
             const requiredDirection = direction;
 
             // 只复制当前激活的标签页
-            const activeTab = targetNode.data?.tabs?.find(t => t.id === targetNode.data?.activeTabId);
+            const activeTab = getActiveLayoutTab(targetId, state.nodes)?.tab;
             const newTabs = activeTab ? [{ ...activeTab }] : [];
 
             const newNodeId = generateId();

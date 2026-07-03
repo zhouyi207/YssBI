@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
 import { selectFirstGraphResource, useResourceStore } from '@/features/core/resource';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import { ProjectService } from '@/services/project/projectService';
@@ -60,15 +61,20 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
     syncActiveToCollection();
     try {
       const layoutStore = useLayoutStore.getState();
-      const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
-      const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
-      const activeTabId = editorNode?.data?.activeTabId;
+      const editorGroupId = resolveEditorGroupId(undefined, layoutStore);
+      if (!editorGroupId) {
+        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
+        return;
+      }
+
+      const active = getActiveLayoutTab(editorGroupId, layoutStore.nodes);
+      const activeTabId = active?.activeTabId;
       if (!activeTabId) {
         uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
         return;
       }
 
-      const activeTab = editorNode?.data?.tabs?.find((tab) => tab.id === activeTabId);
+      const activeTab = active?.tab;
       if (activeTab?.type === 'worksheet') {
         await useWorksheetStore.getState().saveDocument(activeTabId);
         uiStore.showToast(t('worksheet.saved'), 'success', 2000);

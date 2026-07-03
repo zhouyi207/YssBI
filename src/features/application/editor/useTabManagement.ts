@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
@@ -95,8 +96,8 @@ export function useTabManagement() {
   }, []);
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
-    const node = useLayoutStore.getState().nodes[sourceGroupId];
-    const activeTab = node?.data?.tabs?.find((t) => t.id === node?.data?.activeTabId);
+    const nodes = useLayoutStore.getState().nodes;
+    const activeTab = getActiveLayoutTab(sourceGroupId, nodes)?.tab;
     useLayoutStore.getState().splitNode(sourceGroupId, 'row', activeTab?.component || 'GraphEditor');
   }, []);
 

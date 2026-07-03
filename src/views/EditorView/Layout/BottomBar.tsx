@@ -15,6 +15,7 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 import { LoadStatus } from "@/shared/types/ui";
@@ -103,9 +104,9 @@ export function BottomBar() {
   const editor = useLayoutStore(
     useShallow((state) => {
       const groupId = state.activeEditorGroupId ?? state.activeGroupId ?? "default_editor";
-      const node = state.nodes[groupId];
-      const activeTabId = node?.data?.activeTabId ?? null;
-      const activeTab = node?.data?.tabs?.find((tab) => tab.id === activeTabId) ?? null;
+      const active = getActiveLayoutTab(groupId, state.nodes);
+      const activeTabId = active?.activeTabId ?? null;
+      const activeTab = active?.tab ?? null;
       const selectedNodeIds = node?.data?.params?.selectedNodeIds;
 
       return {

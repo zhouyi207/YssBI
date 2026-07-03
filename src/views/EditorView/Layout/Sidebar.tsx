@@ -48,7 +48,8 @@ import {
   duplicateGraphResource,
   renameResource,
 } from "@/features/application/resource/resourceActions";
-import { openDatabaseEditorWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
+import { openDatabaseEditorWindow } from "@/features/application/window";
+import { safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 import {
   buildSidebarContextMenuSections,
   useSidebarContextMenu,

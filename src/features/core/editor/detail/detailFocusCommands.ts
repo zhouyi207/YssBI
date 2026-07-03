@@ -1,4 +1,8 @@
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import {
+  getActiveLayoutTab,
+  resolveEditorGroupId,
+} from '@/features/core/layout/layoutTabQueries';
 import { useEditorStore } from '../stores/useEditorStore';
 import type { DetailFocus } from './types';
 
@@ -8,21 +12,18 @@ export function focusDetail(focus: DetailFocus): void {
 
 export function focusDetailOnActiveGraph(groupId?: string | null): void {
   const layout = useLayoutStore.getState();
-  const gid = groupId ?? layout.activeEditorGroupId;
+  const gid = resolveEditorGroupId(groupId, layout);
   if (!gid) return;
 
-  const activeTabId = layout.nodes[gid]?.data?.activeTabId;
-  if (!activeTabId) return;
-
-  const tab = layout.nodes[gid]?.data?.tabs?.find((item) => item.id === activeTabId);
-  if (tab?.type === 'event' || tab?.type === 'function') {
-    focusDetail({ kind: tab.type, id: activeTabId });
+  const active = getActiveLayoutTab(gid, layout.nodes);
+  if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+    focusDetail({ kind: active.tab.type, id: active.activeTabId });
   }
 }
 
 export function focusDetailOnNode(nodeId: string, groupId?: string | null): void {
   const layout = useLayoutStore.getState();
-  const gid = groupId ?? layout.activeEditorGroupId;
+  const gid = resolveEditorGroupId(groupId, layout);
   if (!gid) return;
 
   const graphId = layout.nodes[gid]?.data?.activeTabId;

@@ -1,15 +1,18 @@
+import {
+  getActiveLayoutTab,
+  resolveEditorGroupId,
+} from '@/features/core/layout/layoutTabQueries';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '../stores/useEditorStore';
 
 function readActiveGraphTab(): { id: string; type: 'event' | 'function' } | null {
   const layout = useLayoutStore.getState();
-  const editorNode = layout.activeEditorGroupId ? layout.nodes[layout.activeEditorGroupId] : null;
-  const activeTabId = editorNode?.data?.activeTabId;
-  if (!activeTabId) return null;
+  const groupId = resolveEditorGroupId(undefined, layout);
+  if (!groupId) return null;
 
-  const tab = editorNode?.data?.tabs?.find((item) => item.id === activeTabId);
-  if (tab?.type === 'event' || tab?.type === 'function') {
-    return { id: activeTabId, type: tab.type };
+  const active = getActiveLayoutTab(groupId, layout.nodes);
+  if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+    return { id: active.activeTabId, type: active.tab.type };
   }
   return null;
 }

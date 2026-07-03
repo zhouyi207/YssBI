@@ -1,28 +1,17 @@
-import type { LayoutTab } from '@/shared/types';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 
-function findTab(tabId: string): { nodeId: string; tab: LayoutTab } | null {
-  for (const node of Object.values(useLayoutStore.getState().nodes)) {
-    const tab = node.data?.tabs?.find((item) => item.id === tabId);
-    if (tab) return { nodeId: node.id, tab };
-  }
-  return null;
-}
-
 export async function closeWorksheetTab(
   worksheetId: string,
   nodeId?: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
-  const layoutStore = useLayoutStore.getState();
-  const located = nodeId
-    ? { nodeId, tab: layoutStore.nodes[nodeId]?.data?.tabs?.find((tab) => tab.id === worksheetId) }
-    : findTab(worksheetId);
+  const located = locateLayoutTab(worksheetId, nodeId);
   if (!located?.tab) return false;
 
   if (located.tab.isDirty && !skipDirtyPrompt) {
@@ -47,7 +36,7 @@ export async function closeWorksheetTab(
     }
   }
 
-  layoutStore.removeTab(located.nodeId, worksheetId);
+  useLayoutStore.getState().removeTab(located.nodeId, worksheetId);
   clearDetailFocusForClosedTab(worksheetId, 'worksheet');
   return true;
 }
@@ -57,12 +46,7 @@ export async function closeEditorTab(
   nodeId?: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
-  const located = nodeId
-    ? {
-        nodeId,
-        tab: useLayoutStore.getState().nodes[nodeId]?.data?.tabs?.find((t) => t.id === tabId),
-      }
-    : findTab(tabId);
+  const located = locateLayoutTab(tabId, nodeId);
 
   const tabType = located?.tab?.type;
   if (tabType === 'worksheet') {

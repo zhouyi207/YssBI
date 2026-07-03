@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -91,8 +92,8 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
   const handleSplit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const node = useLayoutStore.getState().nodes[layoutNodeId];
-    const activeTab = node.data?.tabs?.find(t => t.id === node.data?.activeTabId);
+    const nodes = useLayoutStore.getState().nodes;
+    const activeTab = getActiveLayoutTab(layoutNodeId, nodes)?.tab;
     
     // 优先使用事件中的 altKey 状态，实现零延迟响应
     const currentAlt = e.altKey || isAltPressed;

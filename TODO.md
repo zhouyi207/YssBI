@@ -594,6 +594,7 @@ package.json
 - [x] **窗口与模块命名整理**：`/database` + `databaseEditor`（DuckDB 编辑器 `DatabaseEditorWindow`）；`/inspect` + `sourceInspector`（`SourceInspectorWindow`）；`features/core/resultSource`（`UnifiedSourceView` / `SourceViewShell`）；`features/application/databaseEditor`；Info 内嵌 `SourcePreviewPanel`；WindowKind / i18n / `window_state.json` 键同步更新。
 - [x] **执行可视化 cleanup**：移除 store 死字段（`currentNodeId` / `errorConnections` / `nodeDurations`）、`isExecuting` 死 UI 路径；`clearedVisualPatch()` 合并 reset 逻辑；`resolveTabId` 提取至 `canvasInteractionUtils.ts`；移除 `data-edge-from/to` 等遗留属性。
 - [x] **C 节技术债清理完成**：删除 `useEditorInit`、`connections.ts`、`SettingsService`、`update_subgraph_io` stub、`syncFromBackend`（node registry）、`default_type_system_snapshot`；`useShemaStore`→`useSchemaStore`；`PinRuntimeState::from_instance` 保留 pin id；`window_data_store`→`result_source_store`；`ColumnInfo` 合并为 `ColumnInfoDTO`；移除 `executedNodes` 双写；`GroupContext`/`services` barrel 收口；`useGraphManagement` 统一 `uiStore.showToast`。
+- [x] **B 节 Layout tab / 窗口 helper 收口**：`layoutTabQueries.ts`（`getLayoutTabById` / `locateLayoutTab` / `getActiveLayoutTab` / `getActiveLayoutTabAmongGroups` / `resolveEditorGroupId`）+ barrel `features/core/layout/index.ts`；close-tab / detail / menubar split / BottomBar / TabBar / layoutStore 迁移；`openDatabaseEditorWindow` / `openLogsWindow` + `windowLabels.ts`；Sidebar / menubar / LogPanel 去重。
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 
@@ -637,9 +638,9 @@ package.json
 
 #### B. 重复逻辑合并（中等工作量）
 
-- [ ] **Layout tab 查找 helper**：重复 `findTab`（`closeGraphTab.ts`、`closeEditorTab.ts`）；重复 active tab 扫描（layoutStore、TabBar、BottomBar、detailFocusCommands 等）。提取 `getLayoutTabById` / `getActiveLayoutTab(groupId)` 至 `features/core/layout/`
+- [x] **Layout tab 查找 helper**：重复 `findTab`（`closeGraphTab.ts`、`closeEditorTab.ts`）；重复 active tab 扫描（layoutStore、TabBar、BottomBar、detailFocusCommands 等）。提取 `getLayoutTabById` / `getActiveLayoutTab(groupId)` 至 `features/core/layout/`
 - [ ] **Viewport 持久化单入口**：`useCanvasInteraction.ts` 与 `useCanvasViewport.ts` 均调用 `ProjectService.updateCanvas`。提取 `persistGraphViewport(graphId)` 至 `features/core/viewport/`
-- [ ] **窗口打开 helper 收口**：Database（`sidebarUtils.ts` vs `useMenubar.ts`）；Logs（menubar vs `LogPanelContent.tsx`）。新增 `features/application/window/openDatabaseEditor.ts`、`openLogsWindow.ts` 等 typed helpers
+- [x] **窗口打开 helper 收口**：Database（`sidebarUtils.ts` vs `useMenubar.ts`）；Logs（menubar vs `LogPanelContent.tsx`）。新增 `features/application/window/openDatabaseEditor.ts`、`openLogsWindow.ts` 等 typed helpers
 - [ ] **Canvas drop 逻辑合并**：`useCanvasDrop.ts` 与 `useCanvasOverlayHandlers.ts` 重复 VariableDropMenu / spawn 逻辑
 - [ ] **Graph 资源 CRUD 单入口**：`Sidebar.tsx` 直接调 `resourceActions`，`useGraphManagement.ts` 包装同一 API；Sidebar 应走统一入口
 - [ ] **后端 schema enrichment 去重**：`command_project.rs` L36–137 与 `application/database.rs` 重复 `database_display_name` / column DTO 映射

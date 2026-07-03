@@ -1,10 +1,11 @@
 import { useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
-import { createPersistedWindow } from "@/features/application/window";
+import { createPersistedWindow, openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { i18n } from "@/app/i18n";
 import { logger } from '@/utils/appLogger';
@@ -94,48 +95,26 @@ export function useMenubar() {
 
   const handleSplitRight = useCallback(() => {
     if (activeEditorGroupId) {
-      const node = useLayoutStore.getState().nodes[activeEditorGroupId];
-      const activeTab = node?.data?.tabs?.find((t) => t.id === node.data?.activeTabId);
+      const nodes = useLayoutStore.getState().nodes;
+      const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
       splitNode(activeEditorGroupId, "row", activeTab?.component || "GraphEditor");
     }
   }, [activeEditorGroupId, splitNode]);
 
   const handleSplitDown = useCallback(() => {
     if (activeEditorGroupId) {
-      const node = useLayoutStore.getState().nodes[activeEditorGroupId];
-      const activeTab = node?.data?.tabs?.find((t) => t.id === node.data?.activeTabId);
+      const nodes = useLayoutStore.getState().nodes;
+      const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
       splitNode(activeEditorGroupId, "col", activeTab?.component || "GraphEditor");
     }
   }, [activeEditorGroupId, splitNode]);
 
-  const handleDatabaseEditor = useCallback(async () => {
-    try {
-      const label = `dataview-${Math.random().toString(36).substring(7)}`;
-      await createPersistedWindow({
-        kind: "databaseEditor",
-        label,
-        url: "index.html#/database",
-        title: i18n.t("databaseEditor.title"),
-      });
-    } catch (error) {
-      logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
-      uiStore.showToast(i18n.t("databaseEditor.failedOpenWindow"), "error");
-    }
+  const handleDatabaseEditor = useCallback(() => {
+    void openDatabaseEditorWindow();
   }, []);
 
-  const handleOpenLogs = useCallback(async () => {
-    try {
-      const label = `logs-${Math.random().toString(36).substring(7)}`;
-      await createPersistedWindow({
-        kind: "logs",
-        label,
-        url: "index.html#/logs",
-        title: "Logs",
-      });
-    } catch (error) {
-      logger.app.error(`Failed to open logs window: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
-      uiStore.showToast("无法打开日志窗口", "error");
-    }
+  const handleOpenLogs = useCallback(() => {
+    void openLogsWindow();
   }, []);
 
   const toggleDetail = useCallback(() => {
