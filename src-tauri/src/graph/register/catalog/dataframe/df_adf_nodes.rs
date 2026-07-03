@@ -2,7 +2,7 @@
 //!
 //! 对应 Stata dfuller y, lags(p) regress noconstant drift trend
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -115,7 +115,7 @@ pub fn register(registry: &NodeRegistry) {
             DataValue::new_struct("DFADFSummaryResult", result_handle_id),
         )?;
 
-        ctx.open_window("df_adf_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::DfAdfSummary, json_data);
         ctx.log("DF & ADF: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));
@@ -157,7 +157,7 @@ pub fn register(registry: &NodeRegistry) {
             DataValue::new_struct("DFADFSummaryListResult", result_handle_id),
         )?;
 
-        ctx.open_window("df_adf_summary_list".to_string(), json_data);
+        ctx.publish_report(ReportKind::DfAdfSummaryList, json_data);
         ctx.log("DF & ADF Summary: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

@@ -1,6 +1,6 @@
 //! Correlation Plot 节点：接收多个数值 DataSeries，计算相关系数矩阵和 p 值，打开 Plot 窗口绘制热力图
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, PlotChart};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -160,7 +160,7 @@ pub fn register(registry: &NodeRegistry) {
 
             let json = serde_json::to_string(&plot_data)
                 .map_err(|e| format!("Correlation Plot: serialize failed: {}", e))?;
-            ctx.open_window("correlation".to_string(), json);
+            ctx.publish_plot(PlotChart::Correlation, json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));

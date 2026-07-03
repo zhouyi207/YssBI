@@ -3,6 +3,32 @@ export type SourceKind = 'json' | 'dataframe' | 'dataseries' | 'scalar' | 'null'
 
 export type DataViewStructKind = 'ols_result' | 'unknown';
 
+export type PlotChart =
+  | 'scatter'
+  | 'line'
+  | 'plot'
+  | 'ecdf'
+  | 'kde'
+  | 'histogram'
+  | 'correlation'
+  | 'correlogram';
+
+export type ReportKind =
+  | 'olsSummary'
+  | 'varSummary'
+  | 'varSoc'
+  | 'panelSummary'
+  | 'panelDid'
+  | 'dfAdfSummary'
+  | 'dfAdfSummaryList'
+  | 'vecSummary'
+  | 'vecRankSummary';
+
+export type Presentation =
+  | { kind: 'inspector' }
+  | { kind: 'plot'; chart: PlotChart }
+  | { kind: 'report'; report: ReportKind };
+
 export type DataViewRendererKind =
   | 'dataframe'
   | 'dataseries'
@@ -15,7 +41,7 @@ export type DataViewRendererKind =
 export interface SourceDescriptor {
   sourceId: string;
   kind: SourceKind;
-  renderer: DataViewRendererKind;
+  presentation: Presentation;
   title: string;
   message?: string;
   executionTimeMs?: number;
@@ -28,13 +54,6 @@ export interface SourceDescriptor {
   typeKey?: string;
   handleId?: string;
   structKind?: DataViewStructKind;
-}
-
-export interface SourcePresentation {
-  sourceId: string;
-  route: '/view' | '/info' | '/plot' | string;
-  windowTitle: string;
-  plotType?: string;
 }
 
 export interface SourceValue {

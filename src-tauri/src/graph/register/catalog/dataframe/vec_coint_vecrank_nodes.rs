@@ -1,6 +1,6 @@
 //! VECRANK — Johansen 协整秩检验（Stata vecrank）
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -196,7 +196,7 @@ pub fn register(registry: &NodeRegistry) {
             DataValue::new_struct("VecRankResult", result_handle_id),
         )?;
 
-        ctx.open_window("vec_rank_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::VecRankSummary, json_data);
         ctx.log("VECRANK: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

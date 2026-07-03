@@ -7,7 +7,7 @@ use super::panel_did_auxiliary::{
 };
 use super::panel_did_engine::{DidFakeGroupEnginePayload, ExogLabelEntry};
 use super::panel_nodes::{PanelConfigure, panel_result_to_ols_result, series_to_group_indices};
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -596,7 +596,7 @@ pub fn register(registry: &NodeRegistry) {
                     };
                     let json = serde_json::to_string(&err_result)
                         .map_err(|se| format!("DID: serialize: {}", se))?;
-                    ctx.open_window("panel_did".to_string(), json);
+                    ctx.publish_report(ReportKind::PanelDid, json);
                     return Err(e);
                 }
             };
@@ -699,7 +699,7 @@ pub fn register(registry: &NodeRegistry) {
                 };
                 let json = serde_json::to_string(&err_result)
                     .map_err(|se| format!("DID: serialize: {}", se))?;
-                ctx.open_window("panel_did".to_string(), json);
+                ctx.publish_report(ReportKind::PanelDid, json);
                 return Err(e);
             }
         };
@@ -859,7 +859,7 @@ pub fn register(registry: &NodeRegistry) {
 
         let json_data =
             serde_json::to_string(&result).map_err(|e| format!("DID: serialize: {}", e))?;
-        ctx.open_window("panel_did".to_string(), json_data);
+        ctx.publish_report(ReportKind::PanelDid, json_data);
         ctx.log("Panel DID (TWFE): completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

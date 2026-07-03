@@ -1,4 +1,4 @@
-use crate::execution::{SourceDescriptor, SourcePresentation};
+use crate::execution::{Presentation, SourceDescriptor};
 use serde::Serialize;
 
 /// 执行事件（通过 Tauri Channel 流式发送到前端）
@@ -44,7 +44,8 @@ pub enum ExecutionEvent {
     #[serde(rename_all = "camelCase")]
     OpenSourceWindow {
         source_id: String,
-        presentation: SourcePresentation,
+        presentation: Presentation,
+        window_title: String,
     },
 
     /// 数据输出 pin 已注册为可检查 source。

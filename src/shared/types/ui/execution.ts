@@ -4,7 +4,7 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { SourceDescriptor, SourcePresentation } from '@/features/core/dataView';
+import type { Presentation, SourceDescriptor } from '@/features/core/dataView';
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
@@ -15,7 +15,10 @@ export type ExecutionEvent =
   | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
   | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
-  | { event: 'openSourceWindow'; data: { sourceId: string; presentation: SourcePresentation } }
+  | {
+      event: 'openSourceWindow';
+      data: { sourceId: string; presentation: Presentation; windowTitle: string };
+    }
   | {
       event: 'pinResultReady';
       data: {

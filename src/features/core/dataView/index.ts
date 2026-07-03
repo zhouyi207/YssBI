@@ -2,15 +2,21 @@ export type {
   DataViewPageState,
   DataViewRendererKind,
   DataViewStructKind,
+  PlotChart,
+  Presentation,
+  ReportKind,
   SourceDescriptor,
   SourceKind,
   SourcePage,
-  SourcePresentation,
   SourceValue,
 } from './types';
 
 export { SourceService } from './dataViewService';
-export { presentationRouteForDescriptor } from './presentationRoute';
+export {
+  plotTypeFromPresentation,
+  presentationRoute,
+  presentationRouteForDescriptor,
+} from './presentation';
 export { resolveDataViewRenderer } from './resolveRenderer';
 export { useDataViewSourceValue } from './useDataViewSourceValue';
 export { usePagedDataViewRows } from './usePagedDataViewRows';

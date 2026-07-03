@@ -16,7 +16,7 @@ function result(pinId: string): PinResultState {
     descriptor: {
       sourceId: `src-${pinId}`,
       kind: 'scalar',
-      renderer: 'scalar',
+      presentation: { kind: 'inspector' },
       title: 'Result',
     },
   };

@@ -2,7 +2,7 @@
 //!
 //! 对应 Stata vec x y z, lags(#) rank(#) trend(none|constant|trend) sindicators(varlist)
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -466,7 +466,7 @@ pub fn register(registry: &NodeRegistry) {
             DataValue::new_struct("VECSummaryResult", result_handle_id),
         )?;
 
-        ctx.open_window("vec_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::VecSummary, json_data);
         ctx.log("VEC: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

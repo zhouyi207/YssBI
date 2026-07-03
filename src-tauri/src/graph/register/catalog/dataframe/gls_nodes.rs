@@ -1,6 +1,6 @@
 //! GLS (Generalized Least Squares) 回归节点
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -1014,7 +1014,7 @@ fn register_gls_summary(registry: &NodeRegistry) {
             DataValue::new_struct("OLSResult", result_handle_id),
         )?;
 
-        ctx.open_window("ols_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::OlsSummary, json_data);
 
         ctx.log("GLS Summary: regression completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

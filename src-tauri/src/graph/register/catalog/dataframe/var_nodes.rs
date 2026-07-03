@@ -6,7 +6,7 @@ use super::var_types::{
     VARCoefDisplay, VAREquationDisplay, VARGrangerDisplay, VARLmarDisplay, VARStableDisplay,
     VARSummaryResult, VARWleDisplay,
 };
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -561,7 +561,7 @@ fn register_varsoc(registry: &NodeRegistry) {
             DataValue::new_struct("VARSocResult", result_handle_id),
         )?;
 
-        ctx.open_window("var_soc".to_string(), json_data);
+        ctx.publish_report(ReportKind::VarSoc, json_data);
 
         ctx.log("VAR varsoc: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
@@ -610,7 +610,7 @@ fn register_var_summary(registry: &NodeRegistry) {
             DataValue::new_struct("VARSummaryResult", result_handle_id),
         )?;
 
-        ctx.open_window("var_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::VarSummary, json_data);
 
         ctx.log("VAR Summary: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

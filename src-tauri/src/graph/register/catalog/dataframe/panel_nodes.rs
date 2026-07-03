@@ -1,6 +1,6 @@
 //! Panel Summary node — runs FE, FD, RE and displays all results
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -2279,7 +2279,7 @@ pub fn register(registry: &NodeRegistry) {
         let json_data = serde_json::to_string(&summary)
             .map_err(|e| format!("Panel Summary: serialize: {}", e))?;
 
-        ctx.open_window("panel_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::PanelSummary, json_data);
         ctx.log("Panel Summary: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

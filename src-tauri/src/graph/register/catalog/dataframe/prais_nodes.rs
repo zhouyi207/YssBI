@@ -2,7 +2,7 @@
 //!
 //! Stata: prais y x1 x2 [, corc]
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
@@ -674,7 +674,7 @@ fn register_prais_summary(registry: &NodeRegistry) {
             &PinRole::Data(DataRole::Result),
             DataValue::new_struct("OLSResult", result_id),
         )?;
-        ctx.open_window("ols_summary".to_string(), json_data);
+        ctx.publish_report(ReportKind::OlsSummary, json_data);
         ctx.log("Prais Summary: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

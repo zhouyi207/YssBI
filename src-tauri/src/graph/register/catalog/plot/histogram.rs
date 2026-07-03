@@ -1,6 +1,6 @@
 //! Histogram 节点：接收一个数值 DataSeries，计算直方图分箱，打开 Plot 窗口绘制直方图
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, PlotChart};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -132,7 +132,7 @@ pub fn register(registry: &NodeRegistry) {
 
             let json = serde_json::to_string(&plot_data)
                 .map_err(|e| format!("Histogram: serialize failed: {}", e))?;
-            ctx.open_window("histogram".to_string(), json);
+            ctx.publish_plot(PlotChart::Histogram, json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));

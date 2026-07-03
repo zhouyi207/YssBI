@@ -1,7 +1,7 @@
 use crate::execution::serialize_struct_handle;
 use crate::execution::{
-    ResultSource, ResultSourceRecord, SourceDescriptor, SourceId, SourceKind, SourcePresentation,
-    SourceRenderer,
+    PlotChart, Presentation, ReportKind, ResultSource, ResultSourceRecord, SourceDescriptor,
+    SourceId, SourceKind,
 };
 use crate::graph::register::catalog::dataframe::OLSResult;
 use crate::graph::value::{DataType, DataValue};
@@ -21,7 +21,7 @@ pub fn build_dataframe_source(
         descriptor: base_descriptor(
             source_id,
             SourceKind::Dataframe,
-            SourceRenderer::Dataframe,
+            Presentation::Inspector,
             title,
             execution_time_ms,
         )
@@ -54,7 +54,7 @@ pub fn build_data_series_source(
         descriptor: base_descriptor(
             source_id,
             SourceKind::DataSeries,
-            SourceRenderer::DataSeries,
+            Presentation::Inspector,
             title,
             execution_time_ms,
         )
@@ -75,7 +75,7 @@ pub fn build_json_source_from_data_value(
             descriptor: base_descriptor(
                 source_id,
                 SourceKind::Null,
-                SourceRenderer::Null,
+                Presentation::Inspector,
                 title,
                 execution_time_ms,
             )
@@ -91,7 +91,7 @@ pub fn build_json_source_from_data_value(
                 descriptor: base_descriptor(
                     source_id,
                     SourceKind::Scalar,
-                    SourceRenderer::Scalar,
+                    Presentation::Inspector,
                     title,
                     execution_time_ms,
                 )
@@ -127,6 +127,60 @@ pub fn build_struct_source(
         execution_time_ms,
     )
     .with_struct_meta(type_key, handle_id))
+}
+
+pub fn build_plot_source(
+    source_id: SourceId,
+    chart: PlotChart,
+    payload_json: &str,
+    execution_time_ms: Option<u64>,
+) -> Result<ResultSourceRecord, String> {
+    build_json_presentation_source(
+        source_id,
+        Presentation::Plot { chart },
+        payload_json,
+        execution_time_ms,
+    )
+}
+
+pub fn build_report_source(
+    source_id: SourceId,
+    report: ReportKind,
+    payload_json: &str,
+    execution_time_ms: Option<u64>,
+) -> Result<ResultSourceRecord, String> {
+    build_json_presentation_source(
+        source_id,
+        Presentation::Report { report },
+        payload_json,
+        execution_time_ms,
+    )
+}
+
+pub fn build_json_presentation_source(
+    source_id: SourceId,
+    presentation: Presentation,
+    payload_json: &str,
+    execution_time_ms: Option<u64>,
+) -> Result<ResultSourceRecord, String> {
+    let mut payload = serde_json::from_str::<serde_json::Value>(payload_json)
+        .map_err(|e| format!("Invalid window payload JSON: {}", e))?;
+    if let Some(ms) = execution_time_ms {
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("executionTimeMs".to_string(), json!(ms));
+        }
+    }
+
+    let title = payload
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or(presentation.default_title())
+        .to_string();
+
+    Ok(ResultSourceRecord {
+        descriptor: json_descriptor(source_id, presentation, &payload, title, execution_time_ms),
+        source: ResultSource::Json(payload),
+    })
 }
 
 /// Resolved runtime payload used to build a result source without graph callbacks.
@@ -216,7 +270,6 @@ pub fn build_source_from_resolved(
     }
 }
 
-/// Build a result source record from a runtime `DataValue`, resolving handles through callbacks.
 pub fn build_source_from_data_value(
     source_id: SourceId,
     title: impl Into<String>,
@@ -260,57 +313,26 @@ pub fn default_view_title(value: &DataValue, series: Option<&Series>) -> String 
     }
 }
 
-pub fn build_window_source_record(
+fn json_descriptor(
     source_id: SourceId,
-    window_type: &str,
-    payload_json: &str,
-    execution_time_ms: Option<u64>,
-) -> Result<(ResultSourceRecord, SourcePresentation), String> {
-    let mut payload = serde_json::from_str::<serde_json::Value>(payload_json)
-        .map_err(|e| format!("Invalid window payload JSON: {}", e))?;
-    if let Some(ms) = execution_time_ms {
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert("executionTimeMs".to_string(), json!(ms));
-        }
-    }
-
-    let title = payload
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or_else(|| default_window_title(window_type))
-        .to_string();
-
-    let descriptor = descriptor_from_payload(source_id.clone(), window_type, &payload, &title);
-    let presentation = build_presentation(source_id.clone(), window_type, &descriptor);
-    let record = ResultSourceRecord {
-        descriptor,
-        source: ResultSource::Json(payload),
-    };
-    Ok((record, presentation))
-}
-
-fn descriptor_from_payload(
-    source_id: SourceId,
-    window_type: &str,
+    presentation: Presentation,
     payload: &serde_json::Value,
-    title: &str,
+    title: String,
+    execution_time_ms: Option<u64>,
 ) -> SourceDescriptor {
-    let renderer = match window_type {
-        "scatter" | "line" | "plot" | "ecdf" | "kde" | "histogram" | "correlation"
-        | "correlogram" => SourceRenderer::Plot,
-        _ => SourceRenderer::Info,
-    };
-
     SourceDescriptor {
         source_id,
         kind: SourceKind::Json,
-        renderer,
-        title: title.to_string(),
+        presentation,
+        title,
         message: payload
             .get("message")
             .and_then(|v| v.as_str())
             .map(str::to_string),
-        execution_time_ms: payload.get("executionTimeMs").and_then(|v| v.as_u64()),
+        execution_time_ms: payload
+            .get("executionTimeMs")
+            .and_then(|v| v.as_u64())
+            .or(execution_time_ms),
         columns: None,
         total_rows: None,
         name: None,
@@ -323,38 +345,17 @@ fn descriptor_from_payload(
     }
 }
 
-pub fn build_presentation(
-    source_id: SourceId,
-    window_type: &str,
-    descriptor: &SourceDescriptor,
-) -> SourcePresentation {
-    let is_plot = matches!(descriptor.renderer, SourceRenderer::Plot);
-    let route = if is_plot {
-        "/plot"
-    } else if window_type == "runtime_view" {
-        "/view"
-    } else {
-        "/info"
-    };
-    SourcePresentation {
-        source_id,
-        route: route.to_string(),
-        window_title: descriptor.title.clone(),
-        plot_type: is_plot.then(|| window_type.to_string()),
-    }
-}
-
 fn base_descriptor(
     source_id: SourceId,
     kind: SourceKind,
-    renderer: SourceRenderer,
+    presentation: Presentation,
     title: impl Into<String>,
     execution_time_ms: Option<u64>,
 ) -> SourceDescriptor {
     SourceDescriptor {
         source_id,
         kind,
-        renderer,
+        presentation,
         title: title.into(),
         message: None,
         execution_time_ms,
@@ -381,7 +382,7 @@ fn build_json_tree_source(
         descriptor: base_descriptor(
             source_id,
             SourceKind::Json,
-            SourceRenderer::Json,
+            Presentation::Inspector,
             title,
             execution_time_ms,
         )
@@ -408,7 +409,7 @@ fn build_json_payload_tree_source(
         descriptor: base_descriptor(
             source_id,
             SourceKind::Json,
-            SourceRenderer::Json,
+            Presentation::Inspector,
             title,
             execution_time_ms,
         )
@@ -540,24 +541,9 @@ fn data_value_to_json(v: &DataValue) -> serde_json::Value {
     }
 }
 
-fn default_window_title(window_type: &str) -> &str {
-    match window_type {
-        "runtime_view" => "Runtime View",
-        "scatter" => "Scatter Plot",
-        "line" => "Line Plot",
-        "ecdf" => "ECDF Plot",
-        "kde" => "KDE Plot",
-        "histogram" => "Histogram",
-        "correlation" => "Correlation Plot",
-        "correlogram" => "Correlogram",
-        _ => "Results",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::SourceRenderer;
 
     #[test]
     fn scalar_data_value_builds_typed_descriptor() {
@@ -569,12 +555,12 @@ mod tests {
         );
 
         assert_eq!(record.descriptor.kind, SourceKind::Scalar);
-        assert_eq!(record.descriptor.renderer, SourceRenderer::Scalar);
+        assert_eq!(record.descriptor.presentation, Presentation::Inspector);
         assert_eq!(record.descriptor.execution_time_ms, Some(12));
     }
 
     #[test]
-    fn array_data_value_builds_json_renderer() {
+    fn array_data_value_builds_json_inspector() {
         let record = build_json_source_from_data_value(
             "source".to_string(),
             "Array",
@@ -583,15 +569,15 @@ mod tests {
         );
 
         assert_eq!(record.descriptor.kind, SourceKind::Json);
-        assert_eq!(record.descriptor.renderer, SourceRenderer::Json);
+        assert_eq!(record.descriptor.presentation, Presentation::Inspector);
     }
 
     #[test]
-    fn runtime_view_window_uses_view_route() {
+    fn inspector_presentation_uses_view_route() {
         let descriptor = SourceDescriptor {
             source_id: "s".to_string(),
             kind: SourceKind::Json,
-            renderer: SourceRenderer::Json,
+            presentation: Presentation::Inspector,
             title: "View: OLS Model".to_string(),
             message: None,
             execution_time_ms: None,
@@ -605,23 +591,29 @@ mod tests {
             handle_id: None,
             struct_kind: None,
         };
-        let presentation = build_presentation("s".to_string(), "runtime_view", &descriptor);
-        assert_eq!(presentation.route, "/view");
-        assert_eq!(presentation.window_title, "View: OLS Model");
+        assert_eq!(descriptor.presentation.route(), "/view");
     }
 
     #[test]
-    fn plot_payload_builds_presentation_separate_from_descriptor() {
-        let (record, presentation) = build_window_source_record(
+    fn plot_payload_builds_plot_presentation() {
+        let record = build_plot_source(
             "plot-1".to_string(),
-            "scatter",
+            PlotChart::Scatter,
             r#"{"title":"Scatter","points":[[1,2]]}"#,
             None,
         )
         .unwrap();
 
-        assert_eq!(record.descriptor.renderer, SourceRenderer::Plot);
-        assert_eq!(presentation.route, "/plot");
-        assert_eq!(presentation.plot_type.as_deref(), Some("scatter"));
+        assert_eq!(
+            record.descriptor.presentation,
+            Presentation::Plot {
+                chart: PlotChart::Scatter
+            }
+        );
+        assert_eq!(record.descriptor.presentation.route(), "/plot");
+        assert_eq!(
+            record.descriptor.presentation.plot_chart().map(PlotChart::as_str),
+            Some("scatter")
+        );
     }
 }

@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import type { TFunction } from 'i18next';
 import { otherEndpointFromConnectionId } from '@/features/core/dataStore/pinLinks';
-import { SourceService, presentationRouteForDescriptor } from '@/features/core/dataView';
+import { SourceService, plotTypeFromPresentation, presentationRoute } from '@/features/core/dataView';
 import { openPresentationWindow } from '@/features/application/window';
 import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
 
@@ -153,8 +153,9 @@ export async function openPinView(
     }
 
     await openPresentationWindow(target.pinResult.sourceId, {
-      route: presentationRouteForDescriptor(target.pinResult.descriptor),
+      route: presentationRoute(target.pinResult.descriptor.presentation),
       windowTitle: target.pinResult.descriptor.title || t('contextMenu.pin.view'),
+      plotType: plotTypeFromPresentation(target.pinResult.descriptor.presentation),
     });
     return true;
   } catch (error) {

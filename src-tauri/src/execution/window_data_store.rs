@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use yss_sci::api::database::anyvalue_to_json;
 
+use crate::execution::Presentation;
 use crate::graph::PinId;
 
 pub type SourceId = String;
@@ -28,26 +29,13 @@ pub enum SourceKind {
     Struct,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SourceRenderer {
-    Dataframe,
-    #[serde(rename = "dataseries")]
-    DataSeries,
-    Scalar,
-    Null,
-    Json,
-    Plot,
-    Info,
-}
-
-/// Data-only descriptor. Window routing and layout live in `SourcePresentation`.
+/// Inspectable result metadata. Presentation defines how the frontend opens/renders it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceDescriptor {
     pub source_id: SourceId,
     pub kind: SourceKind,
-    pub renderer: SourceRenderer,
+    pub presentation: Presentation,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -71,16 +59,6 @@ pub struct SourceDescriptor {
     pub handle_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub struct_kind: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SourcePresentation {
-    pub source_id: SourceId,
-    pub route: String,
-    pub window_title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plot_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -345,8 +323,8 @@ fn json_to_source_value(descriptor: &SourceDescriptor, json: serde_json::Value) 
         value: json.get("value").cloned().or_else(|| {
             if descriptor.kind == SourceKind::Json
                 || matches!(
-                    descriptor.renderer,
-                    SourceRenderer::Json | SourceRenderer::Plot
+                    descriptor.presentation,
+                    Presentation::Inspector | Presentation::Plot { .. }
                 )
             {
                 Some(json.clone())
@@ -428,11 +406,11 @@ mod tests {
     use super::*;
     use polars::prelude::{NamedFrom, Series, df};
 
-    fn descriptor(source_id: &str, kind: SourceKind, renderer: SourceRenderer) -> SourceDescriptor {
+    fn descriptor(source_id: &str, kind: SourceKind) -> SourceDescriptor {
         SourceDescriptor {
             source_id: source_id.to_string(),
             kind,
-            renderer,
+            presentation: Presentation::Inspector,
             title: "Result".to_string(),
             message: None,
             execution_time_ms: None,
@@ -452,14 +430,14 @@ mod tests {
     fn descriptors_are_typed_objects() {
         let store = ResultSourceStore::new();
         store.insert_window_source(ResultSourceRecord {
-            descriptor: descriptor("source-1", SourceKind::Scalar, SourceRenderer::Scalar),
+            descriptor: descriptor("source-1", SourceKind::Scalar),
             source: ResultSource::Json(serde_json::json!({"value": 42, "valueType": "Int64"})),
         });
 
         let descriptor = store.get_descriptor("source-1").unwrap();
         assert_eq!(descriptor.source_id, "source-1");
         assert_eq!(descriptor.kind, SourceKind::Scalar);
-        assert_eq!(descriptor.renderer, SourceRenderer::Scalar);
+        assert_eq!(descriptor.presentation, Presentation::Inspector);
     }
 
     #[test]
@@ -470,7 +448,7 @@ mod tests {
             "pin".to_string(),
             "run-a".to_string(),
             ResultSourceRecord {
-                descriptor: descriptor("runtime-a", SourceKind::Scalar, SourceRenderer::Scalar),
+                descriptor: descriptor("runtime-a", SourceKind::Scalar),
                 source: ResultSource::Json(serde_json::json!({"value": 1})),
             },
         );
@@ -479,7 +457,7 @@ mod tests {
             "pin".to_string(),
             "run-b".to_string(),
             ResultSourceRecord {
-                descriptor: descriptor("runtime-b", SourceKind::Scalar, SourceRenderer::Scalar),
+                descriptor: descriptor("runtime-b", SourceKind::Scalar),
                 source: ResultSource::Json(serde_json::json!({"value": 2})),
             },
         );
@@ -504,7 +482,7 @@ mod tests {
         .unwrap();
         let store = ResultSourceStore::new();
         store.insert_window_source(ResultSourceRecord {
-            descriptor: descriptor("k", SourceKind::Dataframe, SourceRenderer::Dataframe),
+            descriptor: descriptor("k", SourceKind::Dataframe),
             source: ResultSource::DataFrame(Arc::new(df)),
         });
 
@@ -521,7 +499,7 @@ mod tests {
         let data_series = Series::new("s".into(), &[10i64, 20, 30, 40]);
         let store = ResultSourceStore::new();
         store.insert_window_source(ResultSourceRecord {
-            descriptor: descriptor("k", SourceKind::DataSeries, SourceRenderer::DataSeries),
+            descriptor: descriptor("k", SourceKind::DataSeries),
             source: ResultSource::DataSeries(data_series),
         });
 
@@ -545,7 +523,7 @@ mod tests {
             pin_a.to_string(),
             "run".to_string(),
             ResultSourceRecord {
-                descriptor: descriptor("runtime-a", SourceKind::Scalar, SourceRenderer::Scalar),
+                descriptor: descriptor("runtime-a", SourceKind::Scalar),
                 source: ResultSource::Json(serde_json::json!({"value": 1})),
             },
         );
@@ -554,7 +532,7 @@ mod tests {
             pin_b.to_string(),
             "run".to_string(),
             ResultSourceRecord {
-                descriptor: descriptor("runtime-b", SourceKind::Scalar, SourceRenderer::Scalar),
+                descriptor: descriptor("runtime-b", SourceKind::Scalar),
                 source: ResultSource::Json(serde_json::json!({"value": 2})),
             },
         );
@@ -573,7 +551,7 @@ mod tests {
             "pin".to_string(),
             "run".to_string(),
             ResultSourceRecord {
-                descriptor: descriptor("runtime", SourceKind::Scalar, SourceRenderer::Scalar),
+                descriptor: descriptor("runtime", SourceKind::Scalar),
                 source: ResultSource::Json(serde_json::json!({"value": 1})),
             },
         );
@@ -585,7 +563,7 @@ mod tests {
     fn release_window_source_removes_window_owner() {
         let store = ResultSourceStore::new();
         store.insert_window_source(ResultSourceRecord {
-            descriptor: descriptor("window-1", SourceKind::Scalar, SourceRenderer::Scalar),
+            descriptor: descriptor("window-1", SourceKind::Scalar),
             source: ResultSource::Json(serde_json::json!({"value": 42})),
         });
         assert!(store.release_window_source("window-1").unwrap());

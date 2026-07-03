@@ -9,7 +9,7 @@ use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
 use super::execution_stack::ExecutionStack;
 use crate::execution::{
-    NodeExecutionContext, ResultSourceStore, build_presentation, build_window_source_record,
+    NodeExecutionContext, ResultSourceStore, SourceAction, build_json_presentation_source,
 };
 use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
@@ -185,53 +185,52 @@ impl<E: EventEmitter> Executor<E> {
 
         let node_duration_ms = node_start.elapsed().as_millis() as u64;
 
-        for action in ctx.window_actions {
-            if let Some(source_id) = action.existing_source_id {
-                if let Some(descriptor) = self.result_source_store.get_descriptor(&source_id) {
-                    let presentation =
-                        build_presentation(source_id.clone(), &action.window_type, &descriptor);
-                    self.emit(ExecutionEvent::OpenSourceWindow {
-                        source_id,
-                        presentation,
-                    });
-                } else {
-                    self.log(format!("Existing source '{}' was not found", source_id));
+        for action in ctx.source_actions {
+            match action {
+                SourceAction::OpenExisting(source_id) => {
+                    if let Some(descriptor) = self.result_source_store.get_descriptor(&source_id) {
+                        self.emit(ExecutionEvent::OpenSourceWindow {
+                            source_id,
+                            presentation: descriptor.presentation.clone(),
+                            window_title: descriptor.title.clone(),
+                        });
+                    } else {
+                        self.log(format!("Existing source '{}' was not found", source_id));
+                    }
                 }
-                continue;
-            }
-
-            if let Some(record) = action.source_record {
-                let source_id = record.descriptor.source_id.clone();
-                let presentation =
-                    build_presentation(source_id.clone(), &action.window_type, &record.descriptor);
-                self.result_source_store.insert_window_source(record);
-                self.emit(ExecutionEvent::OpenSourceWindow {
-                    source_id,
-                    presentation,
-                });
-                continue;
-            }
-
-            let Some(data) = action.data else {
-                self.log("Window action had no source or payload".to_string());
-                continue;
-            };
-            let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
-            match build_window_source_record(
-                source_id.clone(),
-                &action.window_type,
-                &data,
-                Some(node_duration_ms),
-            ) {
-                Ok((record, presentation)) => {
+                SourceAction::PublishRecord(record) => {
+                    let source_id = record.descriptor.source_id.clone();
+                    let presentation = record.descriptor.presentation.clone();
+                    let window_title = record.descriptor.title.clone();
                     self.result_source_store.insert_window_source(record);
                     self.emit(ExecutionEvent::OpenSourceWindow {
                         source_id,
                         presentation,
+                        window_title,
                     });
                 }
-                Err(err) => {
-                    self.log(format!("Failed to store result source: {}", err));
+                SourceAction::PublishJson { presentation, data } => {
+                    let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
+                    match build_json_presentation_source(
+                        source_id.clone(),
+                        presentation,
+                        &data,
+                        Some(node_duration_ms),
+                    ) {
+                        Ok(record) => {
+                            let presentation = record.descriptor.presentation.clone();
+                            let window_title = record.descriptor.title.clone();
+                            self.result_source_store.insert_window_source(record);
+                            self.emit(ExecutionEvent::OpenSourceWindow {
+                                source_id,
+                                presentation,
+                                window_title,
+                            });
+                        }
+                        Err(err) => {
+                            self.log(format!("Failed to store result source: {}", err));
+                        }
+                    }
                 }
             }
         }

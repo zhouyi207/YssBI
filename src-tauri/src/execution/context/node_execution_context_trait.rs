@@ -1,4 +1,4 @@
-use crate::execution::ResultSourceRecord;
+use crate::execution::{PlotChart, Presentation, ReportKind, ResultSourceRecord};
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::{ExecRole, PinRole};
@@ -99,17 +99,23 @@ pub trait NodeExecutionContextTrait {
     fn get_handle(&self, id: &str) -> Result<Arc<dyn Any + Send + Sync>, String>;
 
     // ====================================================================
-    // 窗口操作
+    // Result source publish / open
     // ====================================================================
 
-    /// 请求前端打开一个展示窗口
-    fn open_window(&mut self, window_type: String, data: String);
+    /// Publish JSON payload with explicit presentation (plot / report).
+    fn publish_json(&mut self, presentation: Presentation, data: String);
 
-    /// 打开已构造好的后端 source 窗口。
-    fn open_result_source_window(&mut self, window_type: String, record: ResultSourceRecord);
+    /// Publish plot JSON and open plot window.
+    fn publish_plot(&mut self, chart: PlotChart, data: String);
 
-    /// 打开已经注册过的 source，避免为 View 节点重复复制上游数据。
-    fn open_existing_source_window(&mut self, window_type: String, source_id: String);
+    /// Publish report JSON and open info window.
+    fn publish_report(&mut self, report: ReportKind, data: String);
+
+    /// Publish a fully-built source record.
+    fn publish_record(&mut self, record: ResultSourceRecord);
+
+    /// Open an already-registered source using its descriptor presentation.
+    fn open_registered_source(&mut self, source_id: String);
 
     /// 解析 View 输入对应的 source id：优先复用上游 pin source，否则从 DataValue 注册 window source。
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String>;

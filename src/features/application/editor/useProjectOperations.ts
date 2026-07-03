@@ -11,6 +11,8 @@ import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { openPresentationWindowSafe } from '@/features/application/window';
+import { plotTypeFromPresentation, presentationRoute } from '@/features/core/dataView';
+import type { Presentation } from '@/features/core/dataView';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
@@ -126,9 +128,17 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
   const handleOpenSourceWindow = useCallback(async (
     sourceId: string,
-    presentation: { route: string; windowTitle: string; plotType?: string },
+    event: { presentation: Presentation; windowTitle: string },
   ) => {
-    await openPresentationWindowSafe(sourceId, presentation, 'ProjectOperations');
+    await openPresentationWindowSafe(
+      sourceId,
+      {
+        route: presentationRoute(event.presentation),
+        windowTitle: event.windowTitle,
+        plotType: plotTypeFromPresentation(event.presentation),
+      },
+      'ProjectOperations',
+    );
   }, []);
 
   const executeGraph = useCallback(async (targetGraphId?: string) => {
@@ -162,7 +172,10 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
         if (event.event === 'openSourceWindow') {
-          handleOpenSourceWindow(event.data.sourceId, event.data.presentation);
+          handleOpenSourceWindow(event.data.sourceId, {
+            presentation: event.data.presentation,
+            windowTitle: event.data.windowTitle,
+          });
           return;
         }
         applyEvent(graphId, event);

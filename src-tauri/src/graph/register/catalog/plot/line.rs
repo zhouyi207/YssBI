@@ -1,6 +1,6 @@
 //! Line 节点：接收两个 DataSeries（X、Y），X 可为数值或日期，Y 为数值，打开 Plot 窗口绘制折线图
 
-use crate::execution::ExecutionEffect;
+use crate::execution::{ExecutionEffect, PlotChart};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -139,7 +139,7 @@ pub fn register(registry: &NodeRegistry) {
             };
 
             let json = serde_json::to_string(&plot_data).map_err(|e| format!("Line: serialize failed: {}", e))?;
-            ctx.open_window("line".to_string(), json);
+            ctx.publish_plot(PlotChart::Line, json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));

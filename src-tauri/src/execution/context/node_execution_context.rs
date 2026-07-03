@@ -1,5 +1,5 @@
 use super::NodeExecutionContextTrait;
-use crate::execution::{ExecutionEvent, ResultSourceRecord, ResultSourceStore};
+use crate::execution::{ExecutionEvent, PlotChart, Presentation, ReportKind, ResultSourceRecord, ResultSourceStore};
 use crate::graph::GraphId;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
@@ -10,12 +10,14 @@ use polars::prelude::{DataFrame, Series};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-/// 窗口打开请求
-pub struct WindowAction {
-    pub window_type: String,
-    pub data: Option<String>,
-    pub source_record: Option<ResultSourceRecord>,
-    pub existing_source_id: Option<String>,
+/// Result source publish / open request collected during node execution.
+pub enum SourceAction {
+    PublishJson {
+        presentation: Presentation,
+        data: String,
+    },
+    PublishRecord(ResultSourceRecord),
+    OpenExisting(String),
 }
 
 /// 具体的执行上下文实现
@@ -23,7 +25,7 @@ pub struct NodeExecutionContext {
     pub node_id: NodeId,
     pub graph: Arc<Mutex<GraphRuntime>>,
     pub logs: Vec<String>,
-    pub window_actions: Vec<WindowAction>,
+    pub source_actions: Vec<SourceAction>,
     pub pin_result_events: Vec<ExecutionEvent>,
     result_source_store: ResultSourceStore,
     run_id: String,
@@ -44,7 +46,7 @@ impl NodeExecutionContext {
             node_id,
             graph,
             logs: Vec::new(),
-            window_actions: Vec::new(),
+            source_actions: Vec::new(),
             pin_result_events: Vec::new(),
             result_source_store,
             run_id,
@@ -342,31 +344,24 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     // 日志
     // ====================================================================
 
-    fn open_window(&mut self, window_type: String, data: String) {
-        self.window_actions.push(WindowAction {
-            window_type,
-            data: Some(data),
-            source_record: None,
-            existing_source_id: None,
-        });
+    fn publish_json(&mut self, presentation: Presentation, data: String) {
+        self.source_actions.push(SourceAction::PublishJson { presentation, data });
     }
 
-    fn open_result_source_window(&mut self, window_type: String, record: ResultSourceRecord) {
-        self.window_actions.push(WindowAction {
-            window_type,
-            data: None,
-            source_record: Some(record),
-            existing_source_id: None,
-        });
+    fn publish_plot(&mut self, chart: PlotChart, data: String) {
+        self.publish_json(Presentation::Plot { chart }, data);
     }
 
-    fn open_existing_source_window(&mut self, window_type: String, source_id: String) {
-        self.window_actions.push(WindowAction {
-            window_type,
-            data: None,
-            source_record: None,
-            existing_source_id: Some(source_id),
-        });
+    fn publish_report(&mut self, report: ReportKind, data: String) {
+        self.publish_json(Presentation::Report { report }, data);
+    }
+
+    fn publish_record(&mut self, record: ResultSourceRecord) {
+        self.source_actions.push(SourceAction::PublishRecord(record));
+    }
+
+    fn open_registered_source(&mut self, source_id: String) {
+        self.source_actions.push(SourceAction::OpenExisting(source_id));
     }
 
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String> {
