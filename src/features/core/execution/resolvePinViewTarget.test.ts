@@ -5,7 +5,7 @@ import {
   resolvePinViewTargetFromCache,
   resolveUpstreamPinIds,
   shouldShowPinViewMenuItem,
-} from './resolvePinViewTarget';
+} from './pinViewTarget';
 
 function result(pinId: string): PinResultState {
   return {

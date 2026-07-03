@@ -1,17 +1,14 @@
-import { invoke } from '@tauri-apps/api/core';
 import { useGraphDataStore, useProjectIOStore, useDatabaseStore } from '@/features/core/dataStore';
 import {
   graphResourceRef,
   normalizeBackendResourceMeta,
   updateOpenResourceLabels,
   useResourceStore,
-  type BackendProjectResourceMeta,
   type ResourceRef,
 } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
-import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
-import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import { closeEditorTab } from '@/features/application/editor/closeEditorTab';import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
 
 export type GraphResourceKind = 'event' | 'function';
@@ -25,10 +22,7 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   if (!name) return;
 
   if (ref.kind === 'event' || ref.kind === 'function') {
-    const backendMeta = await invoke<BackendProjectResourceMeta>('rename_graph_resource', {
-      graphId: ref.id,
-      newName: name,
-    });
+    const backendMeta = await GraphService.renameGraphResource(ref.id, name);
     const meta = normalizeBackendResourceMeta(backendMeta);
     useResourceStore.getState().upsertResource(meta);
     updateOpenResourceLabels(graphResourceRef(ref.id, meta.kind === 'function' ? 'function' : 'event'), meta.name);

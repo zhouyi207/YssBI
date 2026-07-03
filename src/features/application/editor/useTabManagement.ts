@@ -1,10 +1,9 @@
 import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
-import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
+import { openGraphInEditor } from './openGraphInEditor';
+import { getGraphById } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { useEditorStore } from '@/features/core/editor';
-import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
 import { closeEditorTab } from './closeEditorTab';
 import { ensureGraphViewport } from '@/features/core/viewport';
@@ -56,32 +55,8 @@ export function useTabManagement() {
     type: "event" | "function",
     initialData?: Graph
   ) => {
-    logger.graph.trace(`openGraph called: id=${id}, name=${name}, type=${type}`, 'TabManagement');
-    if (!initialData) {
-      const loaded = await useProjectIOStore.getState().loadGraph(id);
-      if (!loaded) return;
-    }
-    
-    const layoutStore = useLayoutStore.getState();
-    const targetGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
-    
-    logger.graph.trace(`openGraph target group: ${targetGroupId}`, 'TabManagement');
-
-    layoutStore.addTab(targetGroupId, {
-      id,
-      title: name,
-      component: 'GraphEditor',
-      type
-    });
-
-    logger.graph.trace('Tab added, setting active group', 'TabManagement');
-    layoutStore.setActiveGroup(targetGroupId);
-    
-    logger.graph.trace('Calling handleSetActiveTabId', 'TabManagement');
-    handleSetActiveTabId(id, type, initialData, targetGroupId);
-    useEditorStore.getState().setDetailFocus({ kind: type, id });
-    syncVariablesGraphScopeFromActiveTab();
-  }, [handleSetActiveTabId]);
+    await openGraphInEditor(id, name, type, undefined, initialData);
+  }, []);
 
   const openSettingsTab = useCallback(() => {
     const layoutStore = useLayoutStore.getState();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { getViewport } from "@/features/core/viewport";
 import { useGestureStore } from "@/features/core/gesture";
 import { useVariableStore, useGraphDataStore } from "@/features/core/dataStore";
@@ -93,7 +93,7 @@ export function useCanvasDrop({
     (nodeId: string, pinId: string) => {
       if (!graphId) return Promise.resolve();
       return executeCommand(graphId, 'RemoveRepeatablePin', { nodeId, pinId }).catch((err) => {
-        toast.error(err instanceof Error ? err.message : String(err));
+        uiStore.showToast(err instanceof Error ? err.message : String(err), "error");
         throw err;
       });
     },

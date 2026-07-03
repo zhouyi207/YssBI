@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 import { useProjectIOStore } from "@/features/core/dataStore";
 import {
   applyCleanupProgressEvent,
@@ -17,6 +16,7 @@ import {
 } from "@/services/project/projectService";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
+import { uiStore } from "@/features/core/ui/UIStore";
 
 export interface ManagedProject {
   id: string;
@@ -66,7 +66,7 @@ export function useProjectPicker() {
     try {
       setProjects(await listManagedProjects());
     } catch (error) {
-      toast.error(formatErrorMessage(error));
+      uiStore.showToast(formatErrorMessage(error), "error");
     }
   }, []);
 
@@ -104,7 +104,7 @@ export function useProjectPicker() {
 
   const handlePickerTaskCancelled = useCallback(async (messageKey: "scanCancelled" | "cleanupCancelled") => {
     setProjects(await listManagedProjects());
-    toast.info(t(`projectPicker.${messageKey}`));
+    uiStore.showToast(t(`projectPicker.${messageKey}`), "info");
   }, [t]);
 
   const scanProjectsFromFolder = useCallback(async () => {
@@ -146,17 +146,19 @@ export function useProjectPicker() {
       setProjects(await listManagedProjects());
 
       if (result.discovered === 0) {
-        toast.info(t("projectPicker.scanNoneFound"));
+        uiStore.showToast(t("projectPicker.scanNoneFound"), "info");
       } else if (result.newlyRegistered > 0) {
-        toast.success(
+        uiStore.showToast(
           t("projectPicker.scanSuccess", {
             added: result.newlyRegistered,
             found: result.discovered,
           }),
+          "success",
         );
       } else {
-        toast.info(
+        uiStore.showToast(
           t("projectPicker.scanAlreadyRegistered", { found: result.discovered }),
+          "info",
         );
       }
     } catch (error) {
@@ -164,7 +166,7 @@ export function useProjectPicker() {
         await handlePickerTaskCancelled("scanCancelled");
         return;
       }
-      toast.error(formatErrorMessage(error));
+      uiStore.showToast(formatErrorMessage(error), "error");
     } finally {
       setBusy("idle");
     }
@@ -203,16 +205,16 @@ export function useProjectPicker() {
       setProjects(await listManagedProjects());
 
       if (result.removed === 0) {
-        toast.info(t("projectPicker.cleanupNone"));
+        uiStore.showToast(t("projectPicker.cleanupNone"), "info");
       } else {
-        toast.success(t("projectPicker.cleanupSuccess", { count: result.removed }));
+        uiStore.showToast(t("projectPicker.cleanupSuccess", { count: result.removed }), "success");
       }
     } catch (error) {
       if (isPickerTaskCancelledError(error)) {
         await handlePickerTaskCancelled("cleanupCancelled");
         return;
       }
-      toast.error(formatErrorMessage(error));
+      uiStore.showToast(formatErrorMessage(error), "error");
     } finally {
       setBusy("idle");
     }
@@ -235,7 +237,7 @@ export function useProjectPicker() {
             rowToManagedProject(row),
             ...previous.filter((project) => project.id !== row.id),
           ]);
-          toast.success(t("projectPicker.createSuccess", { name: row.name }));
+          uiStore.showToast(t("projectPicker.createSuccess", { name: row.name }), "success");
         },
       );
     } finally {
@@ -273,7 +275,7 @@ export function useProjectPicker() {
         },
       );
     } catch (error) {
-      toast.error(formatErrorMessage(error));
+      uiStore.showToast(formatErrorMessage(error), "error");
     } finally {
       setBusy("idle");
     }
@@ -290,9 +292,9 @@ export function useProjectPicker() {
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
       ]);
-      toast.success(t("projectPicker.importSuccess", { name: row.name }));
+      uiStore.showToast(t("projectPicker.importSuccess", { name: row.name }), "success");
     } catch (error) {
-      toast.error(formatErrorMessage(error));
+      uiStore.showToast(formatErrorMessage(error), "error");
     } finally {
       setBusy("idle");
     }
@@ -309,7 +311,7 @@ export function useProjectPicker() {
         await ProjectService.removeRegisteredProject(id);
         setProjects((previous) => previous.filter((project) => project.id !== id));
       } catch (error) {
-        toast.error(formatErrorMessage(error));
+        uiStore.showToast(formatErrorMessage(error), "error");
       }
     })();
   }, []);
@@ -319,10 +321,11 @@ export function useProjectPicker() {
       try {
         await ProjectService.deleteRegisteredProjectFiles(id);
         setProjects((previous) => previous.filter((project) => project.id !== id));
-        toast.success(t("projectPicker.deleteProjectConfirm.success"));
+        uiStore.showToast(t("projectPicker.deleteProjectConfirm.success"), "success");
       } catch (error) {
-        toast.error(
+        uiStore.showToast(
           `${t("projectPicker.deleteProjectConfirm.failed")}: ${formatErrorMessage(error)}`,
+          "error",
         );
         throw error;
       }
@@ -339,7 +342,7 @@ export function useProjectPicker() {
           ),
         );
       } catch (error) {
-        toast.error(formatErrorMessage(error));
+        uiStore.showToast(formatErrorMessage(error), "error");
       }
     })();
   }, []);

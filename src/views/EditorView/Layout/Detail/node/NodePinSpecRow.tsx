@@ -8,12 +8,12 @@ import { DetailBadge, DetailText } from '../shared/DetailText';
 import type { PinResultState } from '@/shared/types/ui';
 import {
   buildPinViewParams,
-  openPinView,
   pinViewDisabledTitle,
   resolvePinViewDisabledReason,
   resolvePinViewTargetFromCache,
   shouldShowPinViewMenuItem,
 } from '@/features/core/execution';
+import { openPinView } from '@/features/application/execution/pinViewActions';
 import type { ExecutionStatus } from '@/shared/types/ui';
 
 interface NodePinSpecRowProps {

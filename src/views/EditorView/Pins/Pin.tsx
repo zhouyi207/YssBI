@@ -14,13 +14,13 @@ import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import {
   buildPinViewParams,
-  openPinView,
   pinViewDisabledTitle,
   resolvePinViewDisabledReason,
   resolvePinViewTargetFromCache,
   shouldShowPinViewMenuItem,
   useExecutionStore,
 } from "@/features/core/execution";
+import { openPinView } from "@/features/application/execution/pinViewActions";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {

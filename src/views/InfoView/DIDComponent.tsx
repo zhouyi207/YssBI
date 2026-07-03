@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PanelDidService } from '@/services/stats';
+import { PanelDidService } from '@/features/application/stats/statsActions';
 import {
   SectionHeader,
   PanelFESummaryGrid,

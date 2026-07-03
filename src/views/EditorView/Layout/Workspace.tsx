@@ -1,20 +1,10 @@
 import { forwardRef, useState, useEffect, useRef } from "react";
-import { toast } from "sonner";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { openGraphInEditor } from "@/features/application/editor/openGraphInEditor";
+import { uiStore } from "@/features/core/ui/UIStore";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
-import { useModifierKeyStore } from "@/features/core/keyboard";
-import { useProjectIOStore } from "@/features/core/dataStore";
-import {
-  DRAG_TYPES,
-  isCanvasDrop,
-  isLayoutRegionDrop,
-  isTabbarDrop,
-  type GraphResourceDragData,
-} from "@/features/core/dnd";
-import { GraphService } from "@/services/graph/graphService";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DropIndicator } from "../Renderer/DropIndicator";
 import { SidebarDragOverlay } from "./SidebarDragOverlay";
@@ -48,23 +38,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       pointerMoveCleanupRef.current = null;
     };
   }, []);
-
-  const openSidebarGraphInEditor = async (
-    resource: { id: string; name: string; type: "event" | "function" },
-    targetGroupId: string
-  ) => {
-    const loaded = await useProjectIOStore.getState().loadGraph(resource.id);
-    if (!loaded) return;
-
-    const layoutStore = useLayoutStore.getState();
-    layoutStore.addTab(targetGroupId, {
-      id: resource.id,
-      title: resource.name,
-      component: "GraphEditor",
-      type: resource.type,
-    });
-    layoutStore.setActiveGroup(targetGroupId);
-  };
 
   const finishSidebarDrag = () => {
     pointerMoveCleanupRef.current?.();
@@ -180,8 +153,8 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       finishSidebarDrag();
 
       const targetGroupId = overData.groupId || useLayoutStore.getState().activeEditorGroupId || "default_editor";
-      void openSidebarGraphInEditor(sidebarResource, targetGroupId)
-        .catch((error) => toast.error(error instanceof Error ? error.message : String(error)));
+      void openGraphInEditor(sidebarResource.id, sidebarResource.name, sidebarResource.type, targetGroupId)
+        .catch((error) => uiStore.showToast(formatErrorMessage(error), "error"));
       return;
     }
 

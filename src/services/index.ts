@@ -10,3 +10,4 @@ export { ConnectionService } from "./graph/connection/connectionService";
 export { PinService } from "./graph/pin/pinService";
 export { GraphService } from "./graph/graphService";
 export { VariableService } from "./variable/variableService";
+export { SourceService } from './resultSource/resultSourceService';

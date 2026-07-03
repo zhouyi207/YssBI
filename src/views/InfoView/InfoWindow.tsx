@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { SourceService, type SourceDescriptor } from '@/features/core/resultSource';
+import { SourceService } from '@/services/resultSource/resultSourceService';
+import { type SourceDescriptor } from '@/features/core/resultSource';
 import { usePersistedWindow, useReleaseResultSourceOnUnmount, useWindowMaximized } from '@/features/application/window';
 import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';

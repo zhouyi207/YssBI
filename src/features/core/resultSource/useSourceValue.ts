@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { SourceService } from './sourceService';
+import { SourceService } from '@/services/resultSource/resultSourceService';
 import type { SourceValue } from './types';
 
 export function useSourceValue(sourceId: string | null) {

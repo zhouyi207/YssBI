@@ -10,7 +10,7 @@ import {
 } from './InfoStatsTable';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildParamNames } from './utils';
-import { parseAtValues } from '@/services/stats/parseAtService';
+import { parseAtValues } from '@/features/application/stats/statsActions';
 import type { OLSResultData } from './types';
 
 /** Standard normal PDF φ(x) */

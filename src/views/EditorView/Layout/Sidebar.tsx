@@ -36,11 +36,11 @@ import { cn } from "@/lib/utils";
 import {
   DEFAULT_VARIABLE_NAME,
 } from "@/shared/constants/defaultResourceNames";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ContextMenu } from "@/shared/ui/contextMenu";
-import { ProjectService } from "@/services/project/projectService";
-import { WorksheetService } from "@/services/worksheet/worksheetService";
-import { uiStore } from "@/features/core/ui/UIStore";
+import {
+  renameWorksheetResource,
+  revealProjectResourceInExplorer,
+} from "@/features/application/sidebar/sidebarResourceActions";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import {
   createGraphResource,
@@ -224,28 +224,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const renameWorksheetItem = useCallback((id: string, name: string) => {
     openInputDialog(t("contextMenu.dialog.renameWorksheetTitle"), name, async (nextName) => {
-      const store = useWorksheetStore.getState();
-      if (!store.documents[id]) {
-        const doc = await WorksheetService.loadWorksheet(id);
-        store.upsertDocument(doc);
-      }
-      store.updateDocument(id, { name: nextName });
-      await store.saveDocument(id);
+      await renameWorksheetResource(id, nextName);
     }, t("contextMenu.dialog.renameSubmit"));
   }, [openInputDialog, t]);
 
-  const revealInExplorer = useCallback(async (request: Parameters<typeof ProjectService.revealProjectResource>[0]) => {
-    try {
-      await ProjectService.revealProjectResource(request);
-    } catch (error) {
-      uiStore.showToast(
-        t("contextMenu.sidebar.revealInExplorerFailed", {
-          error: formatErrorMessage(error, "Unknown error"),
-        }),
-        "error",
-      );
-    }
-  }, [t]);
+  const revealInExplorer = useCallback(async (request: Parameters<typeof revealProjectResourceInExplorer>[0]) => {
+    await revealProjectResourceInExplorer(request);
+  }, []);
 
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,

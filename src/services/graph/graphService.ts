@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
 import type { FunctionSignaturePatch } from "@/shared/types";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
+import type { BackendProjectResourceMeta } from "@/features/core/resource";
 import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
 
@@ -113,5 +114,12 @@ export class GraphService {
         const graph = await invoke<GraphInstanceDTO>("duplicate_graph", { graphId });
         await this.unloadProjectGraph(graph.id);
         return toFrontendGraph(graph);
+    }
+
+    static async renameGraphResource(
+        graphId: string,
+        newName: string,
+    ): Promise<BackendProjectResourceMeta> {
+        return invoke('rename_graph_resource', { graphId, newName });
     }
 }

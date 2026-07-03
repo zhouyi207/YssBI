@@ -11,7 +11,6 @@ export type {
   SourceValue,
 } from './types';
 
-export { SourceService } from './sourceService';
 export {
   plotTypeFromPresentation,
   presentationRoute,

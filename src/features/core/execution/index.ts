@@ -15,11 +15,10 @@ export {
 } from './executionLiveFeed';
 export {
   buildPinViewParams,
-  openPinView,
   pinViewDisabledTitle,
   resolvePinViewDisabledReason,
   resolvePinViewTargetFromCache,
   shouldShowPinViewMenuItem,
   type PinViewDisabledReason,
   type ResolvePinViewTargetParams,
-} from './resolvePinViewTarget';
+} from './pinViewTarget';

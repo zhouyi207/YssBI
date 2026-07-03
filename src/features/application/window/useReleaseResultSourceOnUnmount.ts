@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { SourceService } from '@/features/core/resultSource';
+import { SourceService } from '@/services/resultSource/resultSourceService';
 import { logger } from '@/utils/appLogger';
 
 /** Release window-owned result source when a presentation window unmounts. */

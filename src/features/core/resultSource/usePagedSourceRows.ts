@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SourceService } from './sourceService';
+import { SourceService } from '@/services/resultSource/resultSourceService';
 import type { SourcePageState } from './types';
 
 const DEFAULT_PAGE_SIZE = 200;
