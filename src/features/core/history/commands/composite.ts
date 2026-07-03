@@ -1,16 +1,14 @@
 import { NodeService } from '@/services';
 import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
+import type { GraphUndoPatch } from '@/services/graph/node/graphUndoPatch';
 import type { CommandHandler } from '../types';
-
-// ==================== Composite (Batch Create with Connections) ====================
 
 export interface BatchCreateArgs {
   snapshot: ClipboardSnapshot;
 }
 
 export interface BatchCreateContext {
-  createdNodeIds: string[];
-  snapshot: ClipboardSnapshot;
+  undoPatch: GraphUndoPatch;
 }
 
 function snapshotToServiceEntries(snapshot: ClipboardSnapshot) {
@@ -32,23 +30,18 @@ export const batchCreateCommand: CommandHandler<BatchCreateArgs, BatchCreateCont
     );
 
     return {
-      createdNodeIds: result.nodeIds,
-      snapshot: args.snapshot,
+      undoPatch: result.undoPatch,
     };
   },
 
   async undo(graphId, context) {
-    if (context.createdNodeIds.length > 0) {
-      await NodeService.batchDeleteNodes(graphId, context.createdNodeIds);
+    const nodeIds = context.undoPatch.nodes.map((n) => n.id);
+    if (nodeIds.length > 0) {
+      await NodeService.batchDeleteNodes(graphId, nodeIds);
     }
   },
 
   async redo(graphId, context) {
-    const result = await NodeService.batchCreateWithConnections(
-      graphId,
-      snapshotToServiceEntries(context.snapshot),
-      context.snapshot.internalConnections,
-    );
-    context.createdNodeIds = result.nodeIds;
+    await NodeService.applyGraphPatch(graphId, context.undoPatch);
   },
 };

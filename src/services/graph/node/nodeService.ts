@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logger } from '@/utils/appLogger';
+import type { GraphUndoPatch } from './graphUndoPatch';
+
+export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from './graphUndoPatch';
 
 export interface CreateNodeResult {
     nodeId: string;
@@ -19,12 +22,6 @@ export class NodeService {
 
     /**
      * 创建单个节点（后端生成和验证）
-     * @param subgraphId 子图ID
-     * @param nodeType 节点类型
-     * @param x 节点 X 坐标（可选）
-     * @param y 节点 Y 坐标（可选）
-     * @param params 实例参数（variableId、subGraphId 等）
-     * @returns 创建后的节点 ID
      */
     static async createNode(
         subgraphId: string, 
@@ -79,28 +76,26 @@ export class NodeService {
     }
 
     /**
-     * Restore previously deleted nodes/pins/connections (for DeleteNodes undo)
+     * 批量删除节点（单次 IPC）；返回删除前捕获的 undo patch。
      */
-    static async restoreNodes(
+    static async batchDeleteNodes(
         graphId: string,
-        nodes: Array<{
-            nodeId: string;
-            nodeType: string;
-            x: number;
-            y: number;
-            params?: Record<string, unknown> | null;
-            pins: Array<{ pinId: string; name: string; direction: string; userValue?: unknown }>;
-        }>,
-        connections: Array<{ fromPin: string; toPin: string }>,
+        nodeIds: string[],
+    ): Promise<GraphUndoPatch> {
+        if (nodeIds.length === 0) {
+            return { nodes: [], neighborNodes: [], connections: [] };
+        }
+        return await invoke<GraphUndoPatch>("batch_delete_nodes", { graphId, nodeIds });
+    }
+
+    /**
+     * Apply a previously captured undo patch (DeleteNodes undo / DisconnectPin undo / Composite redo).
+     */
+    static async applyGraphPatch(
+        graphId: string,
+        patch: GraphUndoPatch,
     ): Promise<void> {
-        await invoke("restore_nodes", {
-            graphId,
-            nodes: nodes.map(n => ({
-                ...n,
-                params: n.params ? NodeService.buildTaggedParams(n.params as any) : null,
-            })),
-            connections,
-        });
+        await invoke("apply_graph_patch", { graphId, patch });
     }
 
     /**
@@ -139,17 +134,7 @@ export class NodeService {
     }
 
     /**
-     * 批量删除节点（单次 IPC 调用，后端一次性删除并发出 NodesBatchDeleted 事件）
-     */
-    static async batchDeleteNodes(graphId: string, nodeIds: string[]): Promise<void> {
-        if (nodeIds.length === 0) return;
-        await invoke("batch_delete_nodes", { graphId, nodeIds });
-    }
-
-    /**
      * 批量更新节点位置（拖拽结束时调用，CQRS 模式）
-     * @param graphId 子图 ID
-     * @param updates 节点位置更新列表
      */
     static async updateNodePositions(
         graphId: string,
@@ -161,7 +146,6 @@ export class NodeService {
 
     /**
      * Batch-create nodes with pin remapping and connection restoration.
-     * Used by paste, template import, and similar bulk-creation scenarios.
      */
     static async batchCreateWithConnections(
         graphId: string,
@@ -182,9 +166,15 @@ export class NodeService {
             }>;
         }>,
         connections: Array<{ fromPin: string; toPin: string }>,
-    ): Promise<{ nodeIds: string[]; pinMapping: Record<string, string> }> {
-        if (entries.length === 0) return { nodeIds: [], pinMapping: {} };
-        return await invoke<{ nodeIds: string[]; pinMapping: Record<string, string> }>("batch_create_with_connections", {
+    ): Promise<{
+        nodeIds: string[];
+        pinMapping: Record<string, string>;
+        undoPatch: GraphUndoPatch;
+    }> {
+        if (entries.length === 0) {
+            return { nodeIds: [], pinMapping: {}, undoPatch: { nodes: [], neighborNodes: [], connections: [] } };
+        }
+        return await invoke("batch_create_with_connections", {
             graphId,
             entries: entries.map(e => ({
                 nodeType: e.nodeType,
@@ -216,5 +206,4 @@ export class NodeService {
         }
         return { paramsKind: 'none' };
     }
-
 }

@@ -3,7 +3,7 @@ use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::graph::{DataType, GraphId, NodeId, PinChangeSet, PinId};
 use crate::log::log_app;
 use crate::project::{GraphDocumentKind, ProjectState, read_project_index};
-use crate::schema::PinInstanceDTO;
+use crate::schema::{GraphUndoPatch, PinInstanceDTO};
 use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -109,6 +109,14 @@ pub struct RemovedConnection {
     pub to_pin: String,
 }
 
+/// DisconnectPin 命令返回值（含 undo 闭包快照）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisconnectPinResult {
+    pub removed_connections: Vec<RemovedConnection>,
+    pub undo_patch: GraphUndoPatch,
+}
+
 // ==================== 核心连接命令 ====================
 
 /// 连接两个 Pin（无序，后端自动验证方向和兼容性）
@@ -188,14 +196,14 @@ pub fn connect_pins(
 
 /// 断开指定 Pin 的所有连接（前端 Alt+Click 调用 disconnect_pin）
 ///
-/// 返回被断开的连接列表，供前端 Command 系统使用。
+/// 返回被断开的连接列表及 undo 闭包快照，供前端 Command 系统使用。
 #[tauri::command]
 pub fn disconnect_pin(
     app: AppHandle,
     state: State<ProjectState>,
     subgraph_id: String,
     pin_id: String,
-) -> Result<Vec<RemovedConnection>, String> {
+) -> Result<DisconnectPinResult, String> {
     let graph_id = GraphId::from(
         Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
     );
@@ -211,9 +219,9 @@ pub fn disconnect_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
+    let (removed_connections, undo_patch, change_sets, inferred) = graph.disconnect_pin(pin);
 
-    let result: Vec<RemovedConnection> = removed_connections
+    let removed = removed_connections
         .iter()
         .map(|(f, t)| RemovedConnection {
             from_pin: f.to_string(),
@@ -233,7 +241,10 @@ pub fn disconnect_pin(
 
     emit_pin_change_events(&app, graph_id, &graph, change_sets);
     emit_inferred_types(&app, graph_id, inferred);
-    Ok(result)
+    Ok(DisconnectPinResult {
+        removed_connections: removed,
+        undo_patch,
+    })
 }
 
 // ==================== 其他连接命令 ====================
@@ -361,7 +372,7 @@ pub fn delete_connections_for_pin(
         .get_graph(&graph_id)
         .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
 
-    let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin);
+    let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin);
 
     let removed_ids: Vec<String> = removed_connections
         .iter()
@@ -416,7 +427,7 @@ pub fn delete_connections_for_node(
 
     let mut all_inferred = Vec::new();
     for pin in &pin_instances {
-        let (removed_connections, change_sets, inferred) = graph.disconnect_pin(pin.id);
+        let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin.id);
         for (from, to) in &removed_connections {
             removed_ids.push(format!("{}->{}", from, to));
         }

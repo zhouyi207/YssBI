@@ -17,6 +17,7 @@ import type {
   HistoryEntry,
 } from './types';
 import { MAX_HISTORY, MERGE_WINDOW_MS } from '@/app/appConfig/default';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
 let entryCounter = 0;
@@ -106,28 +107,29 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
 
     const entry = hist.undoStack[hist.undoStack.length - 1];
 
-    set((state) => {
-      const h = state.histories[graphId]!;
-      return {
-        histories: {
-          ...state.histories,
-          [graphId]: {
-            undoStack: h.undoStack.slice(0, -1),
-            redoStack: [entry, ...h.redoStack].slice(0, MAX_HISTORY),
-          },
-        },
-      };
-    });
-
     try {
       const handler = getCommandHandler(entry.commandType);
       await handler.undo(graphId, entry.context);
       notifyStructuralChange(entry.commandType, graphId);
+      set((state) => {
+        const h = state.histories[graphId]!;
+        return {
+          histories: {
+            ...state.histories,
+            [graphId]: {
+              undoStack: h.undoStack.slice(0, -1),
+              redoStack: [entry, ...h.redoStack].slice(0, MAX_HISTORY),
+            },
+          },
+        };
+      });
+      return true;
     } catch (e) {
-      logger.graph.error(`Undo failed for ${entry.commandType}: ${e instanceof Error ? e.message : String(e)}`, 'HistoryStore');
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.graph.error(`Undo failed for ${entry.commandType}: ${msg}`, 'HistoryStore');
+      uiStore.showToast(`撤销失败：${msg}`, 'error', 3000);
+      return false;
     }
-
-    return true;
   },
 
   redo: async (graphId) => {
@@ -136,28 +138,29 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
 
     const entry = hist.redoStack[0];
 
-    set((state) => {
-      const h = state.histories[graphId]!;
-      return {
-        histories: {
-          ...state.histories,
-          [graphId]: {
-            undoStack: [...h.undoStack, entry].slice(-MAX_HISTORY),
-            redoStack: h.redoStack.slice(1),
-          },
-        },
-      };
-    });
-
     try {
       const handler = getCommandHandler(entry.commandType);
       await handler.redo(graphId, entry.context);
       notifyStructuralChange(entry.commandType, graphId);
+      set((state) => {
+        const h = state.histories[graphId]!;
+        return {
+          histories: {
+            ...state.histories,
+            [graphId]: {
+              undoStack: [...h.undoStack, entry].slice(-MAX_HISTORY),
+              redoStack: h.redoStack.slice(1),
+            },
+          },
+        };
+      });
+      return true;
     } catch (e) {
-      logger.graph.error(`Redo failed for ${entry.commandType}: ${e instanceof Error ? e.message : String(e)}`, 'HistoryStore');
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.graph.error(`Redo failed for ${entry.commandType}: ${msg}`, 'HistoryStore');
+      uiStore.showToast(`重做失败：${msg}`, 'error', 3000);
+      return false;
     }
-
-    return true;
   },
 
   canUndo: (graphId) => {

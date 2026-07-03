@@ -153,8 +153,8 @@ pub fn run() {
             batch_create_nodes,
             delete_node,
             batch_delete_nodes,
+            apply_graph_patch,
             update_node_positions,
-            restore_nodes,
             batch_create_with_connections,
             // ==================== Connection ====================
             connect_pins,

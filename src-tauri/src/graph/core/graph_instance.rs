@@ -406,7 +406,7 @@ impl GraphInstance {
         self.registry = registry;
     }
 
-    fn sync_static_pin_definitions(
+    pub(crate) fn sync_static_pin_definitions(
         data_state: &mut crate::graph::GraphDataState,
         registry: &NodeRegistry,
     ) {
@@ -772,6 +772,9 @@ impl GraphInstance {
                 }
             }
 
+            for pin in &pins {
+                data_state.connections.disconnect_all(pin.id);
+            }
             data_state.connections.remove_node(node_id);
 
             data_state.remove_pins(pins.into_iter().map(|pin| pin.id).collect());
@@ -987,6 +990,15 @@ impl GraphInstance {
         &self,
         seed_nodes: &[NodeId],
     ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
+        self.finish_graph_effects_with_mode(seed_nodes, PinResolveMode::Interactive)
+    }
+
+    /// 指定动态 pin 解析模式的后缀（merge undo 使用 Materialize，避免误删已恢复 pin）。
+    pub fn finish_graph_effects_with_mode(
+        &self,
+        seed_nodes: &[NodeId],
+        mode: PinResolveMode,
+    ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
         self.propagate_schemas_from(seed_nodes);
         let inferred = self
             .infer_types()
@@ -1008,7 +1020,7 @@ impl GraphInstance {
 
         let mut change_sets = Vec::new();
         for node_id in to_resolve {
-            if let Ok(Some(cs)) = self.resolve_dynamic_pins(node_id) {
+            if let Ok(Some(cs)) = self.resolve_dynamic_pins_with_mode(node_id, mode) {
                 change_sets.push(cs);
             }
         }
@@ -1095,19 +1107,20 @@ impl GraphInstance {
 
     /// 断开指定 Pin 的所有连接（输入和输出）
     ///
-    /// 返回 (被删除的连接对列表, 动态 pin 变更集, 推断出的 pin 类型)
+    /// 返回被删除的连接对、disconnect undo patch、动态 pin 变更集、推断类型。
     pub fn disconnect_pin(
         &self,
         pin_id: PinId,
     ) -> (
         Vec<(PinId, PinId)>,
+        crate::schema::GraphUndoPatch,
         Vec<PinChangeSet>,
         Vec<(PinId, DataType)>,
     ) {
         let mut removed_connections = Vec::new();
         let mut seed_nodes: Vec<NodeId> = Vec::new();
         {
-            let data_state = self.data_state.write().unwrap();
+            let data_state = self.data_state.read().unwrap();
             if let Some(p) = data_state.pins.get(&pin_id) {
                 seed_nodes.push(p.node_id);
             }
@@ -1123,11 +1136,17 @@ impl GraphInstance {
                     seed_nodes.push(p.node_id);
                 }
             }
+        }
+
+        let undo_patch = self.capture_disconnect_undo_patch(&seed_nodes);
+
+        {
+            let data_state = self.data_state.write().unwrap();
             data_state.connections.disconnect_all(pin_id);
         }
 
         let (change_sets, inferred) = self.finish_graph_effects(&seed_nodes);
-        (removed_connections, change_sets, inferred)
+        (removed_connections, undo_patch, change_sets, inferred)
     }
 
     pub fn all_connections(&self) -> Vec<Connection> {

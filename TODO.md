@@ -561,6 +561,7 @@ package.json
 - [x] **变量类型禁止 Any**：Detail 类型下拉移除 Any；前后端 `create_variable` / `update_variable` 与 `variableActions` 校验拒绝 `DataType::Any`（无旧 Any 变量兼容层）。
 - [x] **Series 数据结构重命名为 DataSeries（对齐 pandas / pin `dataseries`）**：`SourceKind` / `SourceRenderer` / View IPC 为 `dataseries`；`get_data_series` / `put_data_series` / `data_series_page`；`data_series_nodes.rs` / `data_series_compare_nodes.rs`；节点分类与 Pin 名 `DataSeries`；前端 `DataSeriesSourceView`；运行时 ID 前缀 `data_series_*`（Polars `Series` 类型名不变）。
 - [x] **变量类型新增 DataSeries**：`VARIABLE_SELECTABLE_DATA_TYPE_KINDS` 增加 `DataSeries`（与 `DataFrame` 并列，引用型、Detail 无手填值）；前后端 `DataValue` DTO 补充 `DataSeries` 往返，默认 `Null`，实际值由 Set Variable / 图执行写入。
+- [x] 处理完毕 ~~int32，int64，float32，float64 在运算中的处理？？~~
 - [x] **类型收敛：运行时数值仅 Int64/Float64**（对应 `## 2026.03.20` 的「类型收敛，使用 Int64 和 float64 代替所有的 number」）：后端 `DataType` / `DataValue` 移除 `Int32` / `Float32`，`FromStr` 与 `polars_dtype_to_data_type` / `polars_type_string_to_data_type` 将所有整数宽度（Int8~UInt64）收敛到 `Int64`、所有浮点（Float32/Float64）收敛到 `Float64`；删除 `convert_to_int32/float32`、`register_int32/float32_constant` 等；`math` / `distribution` / `dataframe` 系列节点改用 `DataType::number()` / `number_series()`；前端 `DataType` / `DataValue` 联合类型、DTO、Pin input、变量创建默认类型同步收敛；`VARIABLE_SELECTABLE_DATA_TYPE_KINDS` 只留 `Boolean/Int64/Float64/String` + 容器类型，新增 `DATA_SERIES_ELEMENT_TYPE_KINDS` 供 DataSeries 元素类型选择。
 - [x] **DataView 表头显示列类型**：`DataTable.tsx` 自定义 `drawHeader`，表头两行展示「列名（加粗）+ 类型（弱化）」，`headerHeight` 44；移除冗余 `dtypeToIcon`。
 - [x] **时间类型语义修复：新增 DataType::Datetime / Time（方案 A）**：修复此前 DuckDB / Polars `TIMESTAMP` 与 `TIME` 在图运行时被统一压成 `DataType::Date` 的语义丢失（对时间序列计量至关重要）。后端 `DataType` 新增 `Datetime` / `Time` 独立变体并补全 `Display` / `FromStr` / `default_value` / `is_primitive` / `is_comparable` / `can_convert` 与 `DataValue::coerce_to`；`database_schema.rs` 映射修正为 `Datetime(_,_) → Datetime`、`Time → Time`、`Decimal(_,_) → Float64`（保真层原始串 `Datetime(...)` / `Time...` / `Decimal(...)` 同步）；`pin.rs` 补 `datetime` / `time` pin type。前端 `DataType` / `DataValue` 联合类型、`dataTypeFromDisplayString`（含带参原始串归一）、`isPrimitiveType` / `getDefaultValue` / `dataTypeFromPinType`、DTO（`Datetime` / `Time` → 后端 `String`）、`optimisticNodeDraft` 穷尽 switch、`DATA_SERIES_ELEMENT_TYPE_KINDS`、pin 颜色（`time` 复用 `datetime` 色）全部补齐；标量层暂仍以 `String` 承载时间值，真实 Polars 时间类型由 `DataSeries<Datetime>` / `DataSeries<Time>` 携带。`cargo check --tests` / `cargo test --lib value::` 通过，改动文件 `tsc` 无新增错误。
@@ -576,6 +577,7 @@ package.json
 
 ## 2026.07.04
 
+- [x] **DeleteNodes / DisconnectPin / 粘贴结构性 undo**：事务化 undo；统一 `GraphUndoPatch` + `apply_graph_patch`；delete 不 resolve 邻居；capture 含闭包连线 + **`neighborNodes` 邻居 pin 冻结**；apply 先 patch 邻居 + Materialize 收尾；`remove_node_raw` 正确 disconnect。
 - [ ] **View：大 Array 分页 tabular**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `DataViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedDataView` renderer。
 - [ ] **View：runtime source 生命周期**：明确 `ResultSourceStore` 中 pin/window source 何时 `remove`（断开连线、图结束、手动关闭窗口等）；避免内存泄漏与 stale source_id 复用。
@@ -589,13 +591,11 @@ package.json
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
-- [ ] 删除连接很多线的节点后，按 ctrl + z 恢复却恢复不过来了（是舍弃这个功能还是...）
 - [ ] 运行完毕后，节点的 backend source 什么时候删除的问题：是断开连接之后就删除还是？？？？破坏了连接之后就删除？？？
 - [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、embedded UX、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 函数图应该如何设计？？？
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
-- [ ] int32，int64，float32，float64 在运算中的处理？？
 
 # TODOLIST
 

@@ -1,6 +1,6 @@
-import { ConnectionService } from '@/services';
+import { ConnectionService, NodeService } from '@/services';
+import type { GraphUndoPatch } from '@/services/graph/node/graphUndoPatch';
 import type { CommandHandler } from '../types';
-import { logger } from '@/utils/appLogger';
 
 export interface DisconnectPinArgs {
   pinId: string;
@@ -8,28 +8,23 @@ export interface DisconnectPinArgs {
 
 export interface DisconnectPinContext {
   pinId: string;
-  /** All connections that were removed */
   removedConnections: Array<{ fromPin: string; toPin: string }>;
+  undoPatch: GraphUndoPatch;
 }
 
 export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, DisconnectPinContext> = {
   async execute(graphId, args) {
-    const removed = await ConnectionService.disconnectPin(graphId, args.pinId);
+    const result = await ConnectionService.disconnectPin(graphId, args.pinId);
 
     return {
       pinId: args.pinId,
-      removedConnections: removed,
+      removedConnections: result.removedConnections,
+      undoPatch: result.undoPatch,
     };
   },
 
   async undo(graphId, context) {
-    for (const conn of context.removedConnections) {
-      try {
-        await ConnectionService.connectPins(graphId, conn.fromPin, conn.toPin);
-      } catch (e) {
-        logger.graph.warn(`Failed to reconnect: fromPin=${conn.fromPin}, toPin=${conn.toPin} - ${e instanceof Error ? e.message : String(e)}`, 'DisconnectPin');
-      }
-    }
+    await NodeService.applyGraphPatch(graphId, context.undoPatch);
   },
 
   async redo(graphId, context) {

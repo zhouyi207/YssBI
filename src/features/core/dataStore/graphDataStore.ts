@@ -898,7 +898,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
           if (!bucket.pins[pin.id]) {
             bucket.pins[pin.id] = toStoredPin(pin);
             bucket.nodePins[nodeId] = [...(bucket.nodePins[nodeId] ?? []), pin.id];
-            bucket.pinConnections[pin.id] = [];
+            if (!bucket.pinConnections[pin.id]) {
+              bucket.pinConnections[pin.id] = [];
+            }
           }
         }
         return commitGraphBucket(state, graphId, bucket);
@@ -951,7 +953,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         if (!nextPins[pin.id]) {
           nextPins[pin.id] = toStoredPin(pin);
           nextNodePins[nodeId] = [...(nextNodePins[nodeId] ?? []), pin.id];
-          nextPinConnections[pin.id] = [];
+          if (!nextPinConnections[pin.id]) {
+            nextPinConnections[pin.id] = [];
+          }
         }
       }
 

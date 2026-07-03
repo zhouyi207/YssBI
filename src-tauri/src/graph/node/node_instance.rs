@@ -239,7 +239,7 @@ impl NodeInstance {
     }
 
     /// Create an instance with a predetermined node ID but auto-generated pin IDs.
-    /// Used by restore_nodes to handle dynamic-pin nodes where saved pin count
+    /// Used when restoring nodes with saved pin snapshots (dynamic / repeatable pins).
     /// may differ from the base definition.
     pub fn from_definition_with_node_id(
         definition: Arc<NodeDefinition>,
