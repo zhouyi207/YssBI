@@ -1,12 +1,4 @@
-import type { LayoutTab } from '@/shared/types/layout/layout';
 import type { LogMessage } from '@/shared/types/ui';
-
-export type SidebarDetailFocusType = 'variable' | 'data';
-
-export interface SidebarDetailFocus {
-  id: string;
-  type: SidebarDetailFocusType;
-}
 
 export type DetailTarget =
   | { kind: 'node'; id: string; graphId: string }
@@ -17,10 +9,10 @@ export type DetailTarget =
   | { kind: 'function'; id: string }
   | { kind: 'worksheet'; id: string };
 
+/** Explicit user selection for the Detail panel — no derived priority chain. */
+export type DetailFocus = DetailTarget;
+
 export interface DetailTargetInput {
-  activeTabId: string | null;
-  tabs: LayoutTab[];
-  selectedNodeIds: string[];
-  sidebarDetailFocus: SidebarDetailFocus | null;
+  detailFocus: DetailFocus | null;
   selectedLog: LogMessage | null;
 }

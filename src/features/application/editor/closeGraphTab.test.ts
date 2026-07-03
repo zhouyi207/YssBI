@@ -37,13 +37,15 @@ describe('closeGraphTab', () => {
       activeEditorGroupId: 'editor',
     });
     useGraphDataStore.getState().hydrateGraphs({});
-    useEditorStore.getState().clearSidebarDetailFocus();
+    useEditorStore.getState().clearDetailFocus();
     vi.spyOn(GraphService, 'unloadProjectGraph').mockResolvedValue();
   });
 
   it('loads and selects the remaining active graph after closing a tab', async () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
+
+    useEditorStore.getState().setDetailFocus({ kind: 'variable', id: 'var-1' });
 
     const closed = await closeGraphTab('g1', 'editor', true);
 
@@ -54,12 +56,17 @@ describe('closeGraphTab', () => {
     expect(loadGraph).toHaveBeenCalledWith('g2');
 
     const detailTarget = resolveDetailTarget({
-      activeTabId: editor.data?.activeTabId ?? null,
-      tabs: editor.data?.tabs ?? [],
-      selectedNodeIds: editor.data?.params?.selectedNodeIds ?? [],
-      sidebarDetailFocus: useEditorStore.getState().sidebarDetailFocus,
+      detailFocus: useEditorStore.getState().detailFocus,
       selectedLog: null,
     });
-    expect(detailTarget).toEqual({ kind: 'event', id: 'g2' });
+    expect(detailTarget).toEqual({ kind: 'variable', id: 'var-1' });
+  });
+
+  it('moves detail focus to the remaining active graph when the closed tab was focused', async () => {
+    useEditorStore.getState().setDetailFocus({ kind: 'event', id: 'g1' });
+
+    await closeGraphTab('g1', 'editor', true);
+
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g2' });
   });
 });

@@ -2,6 +2,8 @@ import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useEditorStore } from '@/features/core/editor';
+import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
 import { closeEditorTab } from './closeEditorTab';
 import { ensureGraphViewport } from '@/features/core/viewport';
@@ -76,6 +78,8 @@ export function useTabManagement() {
     
     logger.graph.trace('Calling handleSetActiveTabId', 'TabManagement');
     handleSetActiveTabId(id, type, initialData, targetGroupId);
+    useEditorStore.getState().setDetailFocus({ kind: type, id });
+    syncVariablesGraphScopeFromActiveTab();
   }, [handleSetActiveTabId]);
 
   const openSettingsTab = useCallback(() => {

@@ -11,7 +11,6 @@ export interface NodeProps {
   node: NodeModel;
   scale: number;
   selected?: boolean;
-  dragDelta?: { x: number; y: number };
   activePinId?: string | null;
   activePin?: PinModel | null;
   subgraphId?: string;
@@ -39,7 +38,7 @@ export interface NodeProps {
  * - 提高可测试性和可维护性
  */
 export const Node = React.memo<NodeProps>((props) => {
-  const { node, onPointerDown, selected, dragDelta, activePin } = props;
+  const { node, onPointerDown, selected, activePin } = props;
 
   if (!node) return null;
 
@@ -56,7 +55,6 @@ export const Node = React.memo<NodeProps>((props) => {
       graphId={props.subgraphId}
       groupId={props.groupId}
       selected={selected}
-      dragDelta={dragDelta}
       onPointerDown={onPointerDown}
       dimmed={nodeDimmed}
     >
@@ -68,15 +66,11 @@ export const Node = React.memo<NodeProps>((props) => {
     </NodeContainer>
   );
 }, (prev, next) => {
-  const dragDeltaSame =
-    (prev.dragDelta?.x === next.dragDelta?.x && prev.dragDelta?.y === next.dragDelta?.y) ||
-    (!prev.dragDelta && !next.dragDelta);
   return (
     prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
     prev.activePin === next.activePin &&
     prev.node === next.node &&
-    prev.scale === next.scale &&
-    dragDeltaSame
+    prev.scale === next.scale
   );
 });

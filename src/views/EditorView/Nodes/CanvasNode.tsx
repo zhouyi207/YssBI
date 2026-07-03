@@ -10,7 +10,6 @@ export interface CanvasNodeProps {
   groupId?: string;
   scale: number;
   selected?: boolean;
-  dragDelta?: { x: number; y: number };
   activePin?: PinModel | null;
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
   onAddInput?: (id: string) => void;
@@ -35,7 +34,6 @@ export const CanvasNode = React.memo(function CanvasNode(props: CanvasNodeProps)
     groupId,
     scale,
     selected,
-    dragDelta,
     activePin,
     onPointerDown,
     onAddInput,
@@ -62,7 +60,6 @@ export const CanvasNode = React.memo(function CanvasNode(props: CanvasNodeProps)
       node={node as unknown as NodeModel}
       scale={scale}
       selected={selected}
-      dragDelta={dragDelta}
       activePinId={activePin?.id}
       activePin={activePin}
       subgraphId={graphId}

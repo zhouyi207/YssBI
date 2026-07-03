@@ -1,10 +1,11 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
 import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
@@ -20,6 +21,7 @@ export interface EdgeData {
   fromPinId: string;
   toPinId: string;
   sourceNodeId: string;
+  targetNodeId?: string;
   pinType: string;
   pinColor?: string;
 }
@@ -34,11 +36,13 @@ export function buildEdgeData(
   for (const conn of connections) {
     const fromPin = getPin(conn.from);
     if (!fromPin || !nodeIdSet.has(fromPin.nodeId)) continue;
+    const toPin = getPin(conn.to);
     result.push({
       id: conn.id,
       fromPinId: conn.from,
       toPinId: conn.to,
       sourceNodeId: fromPin.nodeId,
+      targetNodeId: toPin?.nodeId,
       pinType: fromPin.type ?? "any",
       pinColor: fromPin.ui?.color,
     });
@@ -63,17 +67,24 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
   const sourcePins = useGraphDataStore(
     useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.from))),
   );
+  const targetPins = useGraphDataStore(
+    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.to))),
+  );
 
   const edges = useMemo<EdgeData[]>(() => {
     const pinsById = new Map<string, PinData>();
-    for (const pin of sourcePins) {
+    for (const pin of [...sourcePins, ...targetPins]) {
       if (pin) pinsById.set(pin.id, pin);
     }
     return buildEdgeData(graphNodeIds, connections, (pinId) => pinsById.get(pinId));
-  }, [connections, graphNodeIds, sourcePins]);
+  }, [connections, graphNodeIds, sourcePins, targetPins]);
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  useEdgeDragPreview(svgRef, edges, getPinWorldPos);
 
   return (
     <svg
+      ref={svgRef}
       className="absolute pointer-events-none"
       style={{ overflow: "visible", left: 0, top: 0, width: 1, height: 1, zIndex: 0 }}
     >
@@ -97,6 +108,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
         return (
           <Edge
             key={edge.id}
+            edgeId={edge.id}
             x1={start.x}
             y1={start.y}
             x2={end.x}

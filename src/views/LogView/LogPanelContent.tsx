@@ -13,6 +13,7 @@ import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorStore } from '@/features/core/editor';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
@@ -281,6 +282,11 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const handleSelectLog = useCallback((index: number) => {
     const log = filteredLogs[index] ?? null;
     setSelectedLog(log);
+    if (log) {
+      useEditorStore.getState().setDetailFocus({ kind: 'log' });
+    } else {
+      useEditorStore.getState().clearDetailFocus();
+    }
   }, [filteredLogs, setSelectedLog]);
 
   const selectedIndex = selectedLog

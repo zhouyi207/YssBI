@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { getGraphById } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
+import { applyCanvasDetailFocus } from "@/features/core/editor/detail/detailFocusCommands";
 import { executeCommand } from "@/features/core/history";
 import { Node } from '@/shared/types/ui';
 import { GraphPosition, Pin } from "@/shared/types/domain";
@@ -110,7 +111,9 @@ export function useCanvasInteraction({
             return;
         }
         if (e.button === 0) {
-            if (!e.shiftKey) { setSelectedNodeIds([], groupId); }
+            if (!e.shiftKey) {
+                setSelectedNodeIds([], groupId);
+            }
             selectionPreviewIdsRef.current = [];
             useGestureStore.getState().setGesture({ type: "select", startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, groupId });
         }
@@ -283,27 +286,37 @@ export function useCanvasInteraction({
                 if (hasSelectionChanged(current, newSelectedIds)) {
                     setSelectedNodeIds(newSelectedIds, gid);
                 }
+                const hadBoxMovement = getGestureScreenMovement(g, canvasRef.current?.scale ?? 1);
+                if (!hadBoxMovement && newSelectedIds.length === 0) {
+                    applyCanvasDetailFocus({ type: 'blank-click', groupId: gid });
+                } else if (hadBoxMovement) {
+                    applyCanvasDetailFocus({ type: 'box-select', groupId: gid, selectedIds: newSelectedIds });
+                }
             } else if (g.type === "connect") {
                 const target = (e.target as HTMLElement).closest("[data-pin-id]");
                 if (target) connectPins(g.startPin.id, target.getAttribute("data-pin-id")!);
                 else { setPendingConnection(g.startPin); setContextMenu({ x: e.clientX, y: e.clientY, visible: true }); }
-            } else if (g.type === "drag" && g.moved) {
-                const delta = g.dragDelta || { x: 0, y: 0 };
-                if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) {
-                    const dragIds = g.dragNodeIds || [];
-                    const gid = g.groupId || activeGroupIdRef.current;
-                    const lNode = useLayoutStore.getState().nodes[gid];
-                    const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
-                    if (tid && dragIds.length > 0) {
-                        executeCommand(
-                            tid,
-                            'MoveNodes',
-                            { nodeIds: dragIds, delta },
-                            { mergeKey: `move-${[...dragIds].sort().join(',')}` },
-                        ).catch((e) =>
-                            logger.graph.warn(`MoveNodes command failed: ${e instanceof Error ? e.message : String(e)}`, 'CanvasInteraction')
-                        );
+            } else if (g.type === "drag") {
+                const gid = g.groupId || activeGroupIdRef.current;
+                if (g.moved) {
+                    const delta = g.dragDelta || { x: 0, y: 0 };
+                    if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) {
+                        const dragIds = g.dragNodeIds || [];
+                        const lNode = useLayoutStore.getState().nodes[gid];
+                        const tid = lNode?.data?.activeTabId ?? activeTabIdRef.current;
+                        if (tid && dragIds.length > 0) {
+                            executeCommand(
+                                tid,
+                                'MoveNodes',
+                                { nodeIds: dragIds, delta },
+                                { mergeKey: `move-${[...dragIds].sort().join(',')}` },
+                            ).catch((e) =>
+                                logger.graph.warn(`MoveNodes command failed: ${e instanceof Error ? e.message : String(e)}`, 'CanvasInteraction')
+                            );
+                        }
                     }
+                } else {
+                    applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId });
                 }
             }
 
@@ -324,7 +337,7 @@ export function useCanvasInteraction({
         };
     }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, setSelectedNodeIds, persistViewport]);
 
-    return {
+    return useMemo(() => ({
         contextMenu,
         setContextMenu,
         pendingConnection,
@@ -333,5 +346,14 @@ export function useCanvasInteraction({
         onCanvasPointerDown,
         onNodePointerDown,
         onPinPointerDown
-    };
+    }), [
+        contextMenu,
+        setContextMenu,
+        pendingConnection,
+        setPendingConnection,
+        connectPins,
+        onCanvasPointerDown,
+        onNodePointerDown,
+        onPinPointerDown,
+    ]);
 }

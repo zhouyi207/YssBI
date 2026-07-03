@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react
 import { useShallow } from "zustand/react/shallow";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphDataStore } from "@/features/core/dataStore";
+import { getDragPreview } from "@/features/core/canvas/dragPreview";
 import { DEFAULT_VIEWPORT, NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from "@/app/appConfig/default";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { ProjectService } from "@/services/project/projectService";
@@ -36,8 +37,6 @@ export function useCanvasViewport(
   scale: number,
   gestureType: string | null,
   setCanvas: (updater: { scale?: number; x?: number; y?: number } | ((prev: any) => any), targetGraphId?: string) => void,
-  dragDelta?: { x: number; y: number } | null,
-  dragNodeIds?: Set<string>
 ) {
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
@@ -322,14 +321,15 @@ export function useCanvasViewport(
       const position = nodePositionMap[nodeId];
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
-      const ddx = dragDelta && dragNodeIds?.has(nodeId) ? dragDelta.x : 0;
-      const ddy = dragDelta && dragNodeIds?.has(nodeId) ? dragDelta.y : 0;
+      const preview = getDragPreview();
+      const ddx = preview.active && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.x : 0;
+      const ddy = preview.active && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.y : 0;
       return {
         x: position.x + offset.x + ddx,
         y: position.y + offset.y + ddy,
       };
     },
-    [pinNodeIdMap, nodePositionMap, pinOffsets, dragDelta, dragNodeIds]
+    [pinNodeIdMap, nodePositionMap, pinOffsets]
   );
 
   const getCanvasLocalPoint = useCallback(

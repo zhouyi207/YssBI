@@ -1,4 +1,5 @@
 import React from "react";
+import { computeEdgePath } from "@/features/core/canvas/edgePath";
 
 export type EdgeKind = "exec" | "data";
 
@@ -36,6 +37,7 @@ const ACTIVE_EDGE_STYLE: Record<
 };
 
 interface EdgeProps {
+  edgeId?: string;
   x1: number;
   y1: number;
   x2: number;
@@ -85,6 +87,7 @@ export function drawEdge(
 }
 
 export const Edge = React.memo<EdgeProps>(({
+  edgeId,
   x1,
   y1,
   x2,
@@ -98,25 +101,14 @@ export const Edge = React.memo<EdgeProps>(({
   isRunning = false,
   dimmed = false,
 }) => {
-  const dx = Math.abs(x1 - x2);
-  const curvature = Math.max(dx * 0.5, 40);
-
-  const dir = startIsInput ? -1 : 1;
-  
-  const c1x = x1 + curvature * dir;
-  const c1y = y1;
-  const c2x = x2 - curvature * dir;
-  const c2y = y2;
-  
-  const pathData = `M ${x1},${y1} C ${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
-
+  const pathData = computeEdgePath(x1, y1, x2, y2, startIsInput);
   const active = ACTIVE_EDGE_STYLE[edgeKind];
   const strokeColor = isError ? "#ef4444" : isCompleted ? active.stroke : color;
   const strokeW = (isError || isCompleted) ? thickness + 1 : thickness;
   const animate = isRunning && (isCompleted || isError);
 
   return (
-    <g style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}>
+    <g data-edge-id={edgeId} style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}>
       <path
         d={pathData}
         fill="none"

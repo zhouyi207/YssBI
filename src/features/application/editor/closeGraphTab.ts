@@ -4,6 +4,10 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { useGraphDataStore, useProjectIOStore } from "@/features/core/dataStore";
 import { GraphService } from "@/services/graph/graphService";
 import { releaseGraphCacheIfClosed } from "./releaseGraphCache";
+import { clearDetailFocusForClosedTab } from "@/features/core/editor/detail/clearDetailFocusForClosedTab";
+import { focusDetailOnActiveGraph } from "@/features/core/editor/detail/detailFocusCommands";
+import { syncVariablesGraphScopeAfterClose } from "@/features/core/editor/detail/variablesGraphScope";
+import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { clearResourceDocumentState, markResourceDirty } from "@/features/core/resource";
 
 function findTab(graphId: string): { nodeId: string; tab: LayoutTab } | null {
@@ -77,6 +81,11 @@ export async function closeGraphTab(graphId: string, nodeId?: string, skipDirtyP
   }
 
   useLayoutStore.getState().removeTab(located.nodeId, graphId);
+  clearDetailFocusForClosedTab(graphId, located.tab.type);
+  syncVariablesGraphScopeAfterClose(graphId);
+  if (!useEditorStore.getState().detailFocus) {
+    focusDetailOnActiveGraph(located.nodeId);
+  }
   await restoreActiveGraphAfterClose(located.nodeId);
   if (located.tab.type === "event" || located.tab.type === "function") {
     clearResourceDocumentState({ id: graphId, kind: located.tab.type });

@@ -2,6 +2,8 @@ import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
 import { useDetailTarget } from "@/features/core/editor";
+import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
+import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
 import {
   VscDatabase,
   VscSymbolEvent,
@@ -70,7 +72,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const {
     Variables: allVariables,
-    setSidebarDetailFocus,
+    setDetailFocus,
     addVariable,
     functions,
     events,
@@ -110,8 +112,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const variablesGraphScopeId = useEditorStore((s) => s.variablesGraphScopeId);
+  const variablesScopeId = variablesGraphScopeId ?? activeTabId;
   const activeGraphType: GraphResourceType | undefined = activeTabId
     ? (activeTabId in events ? "event" : activeTabId in functions ? "function" : undefined)
+    : undefined;
+  const variablesScopeGraphType: GraphResourceType | undefined = variablesScopeId
+    ? (variablesScopeId in events ? "event" : variablesScopeId in functions ? "function" : undefined)
     : undefined;
 
   const { variablesGlobal, localVariables } = (() => {
@@ -126,9 +133,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         continue;
       }
       if (
-        activeTabId &&
+        variablesScopeId &&
         scope &&
-        (scope.eventId === activeTabId || scope.functionId === activeTabId)
+        (scope.eventId === variablesScopeId || scope.functionId === variablesScopeId)
       ) {
         local[id] = data;
       }
@@ -303,8 +310,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          if (type === "variable" || type === "data") {
-            setSidebarDetailFocus({ id, type });
+          setDetailFocus({ kind: type, id });
+          if (type === "event" || type === "function") {
+            setVariablesGraphScopeFromResource(id);
           }
         }}
         onDoubleClick={(e) => {
@@ -375,7 +383,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setSidebarDetailFocus({ id, type: "data" });
+          setDetailFocus({ kind: "data", id });
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -425,6 +433,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
+          setDetailFocus({ kind: "worksheet", id });
           void openWorksheet(id, name);
         }}
         onDoubleClick={(e) => {
@@ -517,7 +526,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 label={t("sidebar.sections.local")}
                 expanded={isSectionExpanded("variablesLocal")}
                 onToggle={() => toggleSection("variablesLocal")}
-                onAdd={activeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int64", false) : undefined}
+                onAdd={variablesScopeGraphType ? () => addVariable(DEFAULT_VARIABLE_NAME, "Int64", false) : undefined}
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
@@ -526,10 +535,10 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                     openVariableContextMenu(e, id, data.name)
                   )
                 )}
-                {!activeGraphType && (
+                {!variablesScopeGraphType && (
                   <SidebarEmptyPlaceholder>{t("sidebar.noActiveGraph")}</SidebarEmptyPlaceholder>
                 )}
-                {activeGraphType && Object.keys(localVariables).length === 0 && (
+                {variablesScopeGraphType && Object.keys(localVariables).length === 0 && (
                   <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>

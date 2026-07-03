@@ -11,7 +11,6 @@ interface NodeContainerProps {
   graphId?: string;
   groupId?: string;
   selected?: boolean;
-  dragDelta?: { x: number; y: number };
   dimmed?: boolean;
   onPointerDown?: (nodeId: string, e: React.PointerEvent) => void;
   children: React.ReactNode;
@@ -22,15 +21,12 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   graphId: _graphId,
   groupId,
   selected,
-  dragDelta,
   dimmed,
   onPointerDown,
   children,
 }) => {
-  const dx = dragDelta ? dragDelta.x : 0;
-  const dy = dragDelta ? dragDelta.y : 0;
-  const posX = node.position.x + dx;
-  const posY = node.position.y + dy;
+  const posX = node.position.x;
+  const posY = node.position.y;
   const { isExecuting, isCompleted, hasError } = useNodeExecution(node.id, _graphId);
   const menuActions = useCanvasContextMenuActionsOptional();
 

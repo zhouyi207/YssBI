@@ -77,7 +77,9 @@ export function SidebarCollapsibleSection({
         >
           <VscAdd size={11} />
         </Button>
-      ) : null}
+      ) : (
+        <span className="size-6 shrink-0" aria-hidden />
+      )}
     </div>
   );
 

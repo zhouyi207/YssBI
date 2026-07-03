@@ -2,6 +2,7 @@ import { useRef, Fragment, useMemo } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { Sash } from './Sash';
+import { layoutNodeFlexStyle } from './sashResizeLogic';
 import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '@/shared/types/ui';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
@@ -39,19 +40,17 @@ const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
     // 维护子节点 DOM 引用，供 Sash 调节大小使用
     const childrenRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-    // 使用 useMemo 确保代理 Ref 对象在节点 ID 不变时保持稳定
-    const beforeRefs = useMemo(() => new Map<string, React.RefObject<HTMLDivElement | null>>(), []);
-    const afterRefs = useMemo(() => new Map<string, React.RefObject<HTMLDivElement | null>>(), []);
+    const proxyRefs = useMemo(() => new Map<string, React.RefObject<HTMLDivElement | null>>(), []);
 
-    const getProxyRef = (id: string, map: Map<string, React.RefObject<HTMLDivElement | null>>) => {
-        if (!map.has(id)) {
-            map.set(id, {
+    const getChildRef = (id: string) => {
+        if (!proxyRefs.has(id)) {
+            proxyRefs.set(id, {
                 get current() {
                     return childrenRefs.current.get(id) || null;
-                }
+                },
             } as React.RefObject<HTMLDivElement | null>);
         }
-        return map.get(id)!;
+        return proxyRefs.get(id)!;
     };
 
     return (
@@ -72,9 +71,8 @@ const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
                         {showSash && (
                             <Sash
                                 orientation={orientation}
-                                index={index}
-                                beforeRef={getProxyRef(childId, beforeRefs)}
-                                afterRef={getProxyRef(childrenIds[index + 1], afterRefs)}
+                                beforeRef={getChildRef(childId)}
+                                afterRef={getChildRef(childrenIds[index + 1])}
                                 beforeNodeId={childId}
                                 afterNodeId={childrenIds[index + 1]}
                             />
@@ -92,16 +90,9 @@ const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
  */
 const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDivElement | null) => void }) => {
     const node = useLayoutStore((state) => state.nodes[nodeId]);
+    const style = useMemo(() => layoutNodeFlexStyle(node), [node?.data?.visible, node?.pixelSize, node?.size]);
 
     if (!node) return null;
-
-    if (node.data?.visible === false) {
-        return <div ref={setRef} className="relative" style={{ flex: '0 0 0px' }} />;
-    }
-
-    const style = node.pixelSize !== undefined
-        ? { flex: `0 0 ${node.pixelSize}px` }
-        : { flex: `${node.size ?? 1} 1 0px` };
 
     return (
         <div
@@ -109,7 +100,7 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
             className="relative min-w-0 min-h-0"
             style={style}
         >
-            <LayoutNodeRenderer nodeId={nodeId} />
+            {node.data?.visible !== false && <LayoutNodeRenderer nodeId={nodeId} />}
         </div>
     );
 };

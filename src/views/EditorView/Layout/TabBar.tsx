@@ -18,6 +18,8 @@ import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
 import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
+import { useEditorStore } from "@/features/core/editor";
+import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
 import { resourceKey, resourceRefFromLayoutTab, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
 interface TabBarProps {
@@ -64,6 +66,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   const handleTabClick = (id: string) => {
     setActiveGroup(layoutNodeId);
     const currentData = useLayoutStore.getState().nodes[layoutNodeId].data;
+    const tab = currentData?.tabs?.find((item) => item.id === id);
     updateNode(layoutNodeId, {
         data: {
             ...currentData,
@@ -73,6 +76,12 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
               : { ...currentData?.params, selectedNodeIds: [] },
         }
     });
+    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
+      useEditorStore.getState().setDetailFocus({ kind: tab.type, id });
+    }
+    if (tab?.type === "event" || tab?.type === "function") {
+      syncVariablesGraphScopeFromActiveTab();
+    }
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {

@@ -4,6 +4,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { closeGraphTab } from './closeGraphTab';
+import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 
 function findTab(tabId: string): { nodeId: string; tab: LayoutTab } | null {
   for (const node of Object.values(useLayoutStore.getState().nodes)) {
@@ -47,6 +48,7 @@ export async function closeWorksheetTab(
   }
 
   layoutStore.removeTab(located.nodeId, worksheetId);
+  clearDetailFocusForClosedTab(worksheetId, 'worksheet');
   return true;
 }
 

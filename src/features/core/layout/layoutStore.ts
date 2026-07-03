@@ -61,6 +61,26 @@ export interface LayoutState {
 
 // Initial Layout Structure (VSCode-style: sidebar | center(editor+panel) | detail)
 const INITIAL_ROOT_ID = 'root';
+const FIXED_CHROME_NODE_IDS = ['sidebar', 'detail', 'panel'] as const;
+function snapshotFixedChromeSizes(nodes: LayoutTree): Record<string, number | undefined> {
+    const sizes: Record<string, number | undefined> = {};
+    for (const id of FIXED_CHROME_NODE_IDS) {
+        sizes[id] = nodes[id]?.pixelSize;
+    }
+    return sizes;
+}
+
+function restoreFixedChromeSizes(state: { nodes: LayoutTree }, saved: Record<string, number | undefined>): void {
+    for (const id of FIXED_CHROME_NODE_IDS) {
+        const savedSize = saved[id];
+        if (savedSize === undefined) continue;
+        const node = state.nodes[id];
+        if (node) {
+            node.pixelSize = savedSize;
+        }
+    }
+}
+
 const INITIAL_NODES: LayoutTree = {
     [INITIAL_ROOT_ID]: {
         id: INITIAL_ROOT_ID,
@@ -540,6 +560,7 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         removeTab: (nodeId, tabId) => set((state) => {
+            const savedChromeSizes = snapshotFixedChromeSizes(state.nodes);
             const node = state.nodes[nodeId];
             if (!node || !node.data?.tabs) return;
 
@@ -615,6 +636,8 @@ export const useLayoutStore = create<LayoutState>()(
                     state.activeEditorGroupId = editorGroups[0].id;
                 }
             }
+
+            restoreFixedChromeSizes(state, savedChromeSizes);
         }),
 
         addTab: (nodeId, tab) => set((state) => {

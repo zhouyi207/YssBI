@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useResourceStore } from '@/features/core/resource';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useSidebarStore } from '@/features/core/sidebar';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import {
@@ -19,13 +20,15 @@ export function useVariableManagement() {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const graphTypeFromTab = activeTabId && activeEditorNode?.data?.tabs
-    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === activeTabId)?.type
+  const variablesGraphScopeId = useEditorStore((s) => s.variablesGraphScopeId);
+  const localGraphId = variablesGraphScopeId ?? activeTabId;
+  const graphTypeFromTab = localGraphId && activeEditorNode?.data?.tabs
+    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === localGraphId)?.type
     : undefined;
   const graphTypeFromResource = useResourceStore((s) => {
-    if (!activeTabId) return undefined;
-    if (s.resources[`graph:event:${activeTabId}`]?.exists) return 'event';
-    if (s.resources[`graph:function:${activeTabId}`]?.exists) return 'function';
+    if (!localGraphId) return undefined;
+    if (s.resources[`graph:event:${localGraphId}`]?.exists) return 'event';
+    if (s.resources[`graph:function:${localGraphId}`]?.exists) return 'function';
     return undefined;
   });
   const rawType = graphTypeFromTab || graphTypeFromResource;
@@ -40,7 +43,7 @@ export function useVariableManagement() {
       name,
       type,
       isGlobal,
-      activeGraphId: isGlobal ? null : activeTabId,
+      activeGraphId: isGlobal ? null : localGraphId,
       graphType: isGlobal ? undefined : graphType,
     });
     if (created) {
@@ -52,7 +55,7 @@ export function useVariableManagement() {
         sidebar.setSectionExpanded('variablesLocal', true);
       }
     }
-  }, [activeTabId, graphType, switchSidebarTab]);
+  }, [localGraphId, graphType, switchSidebarTab]);
 
   const updateVariable = useCallback(async (id: string, data: Parameters<typeof updateVariableAction>[1]) => {
     await updateVariableAction(id, data);

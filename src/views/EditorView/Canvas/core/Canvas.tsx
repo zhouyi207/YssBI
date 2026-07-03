@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback } from "react";
+import { useRef, useMemo, useCallback, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -8,27 +8,19 @@ import type { CanvasContextMenuActions } from "@/features/application/editor/Can
 import { useGestureStore } from "@/features/core/gesture";
 import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/dataManagement";
+import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
+import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
 import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
 
-// 粒度化 gesture 选择器：仅在值实际改变时触发 re-render
-const selectDragDelta = (state: { gesture: any }) => {
-  const g = state.gesture;
-  return g?.type === "drag" ? g.dragDelta ?? null : null;
-};
-const selectDragNodeIds = (state: { gesture: any }) => {
-  const g = state.gesture;
-  return g?.type === "drag" ? g.dragNodeIds ?? null : null;
-};
 const selectGestureType = (state: { gesture: any }) => state.gesture?.type ?? null;
 const selectActivePin = (state: { gesture: any }) => {
   const g = state.gesture;
   return g?.type === "connect" ? g.startPin : null;
 };
-const dragDeltaEq = (a: any, b: any) => a?.x === b?.x && a?.y === b?.y;
 
 const EMPTY_NODE_IDS: string[] = [];
 
@@ -60,8 +52,6 @@ export default function Canvas() {
     setSelectedNodeIds,
   } = useEditorGroup();
 
-  const dragDelta = useGestureStore(selectDragDelta, dragDeltaEq);
-  const dragNodeIds = useGestureStore(selectDragNodeIds);
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
 
@@ -72,17 +62,14 @@ export default function Canvas() {
     activeTabId ? (state.viewports[activeTabId]?.scale ?? 1) : 1,
   );
 
+  useEffect(() => bindDragPreviewToGestureStore(), []);
+  useNodeDragPreview(ref, activeTabId);
+
   const selectedNodeIdsSet = useMemo(
     () => new Set(selectedNodeIds),
     [selectedNodeIds]
   );
 
-  const dragNodeIdsSet = useMemo(
-    () => (dragNodeIds ? new Set(dragNodeIds) : new Set<string>()),
-    [dragNodeIds]
-  );
-
-  // 稳定的节点 id 列表（仅在增删/排序时变化），逐节点订阅渲染。
   const graphNodeIds = useGraphDataStore(
     useShallow((s) => (activeTabId ? s.graphNodes[activeTabId] ?? EMPTY_NODE_IDS : EMPTY_NODE_IDS)),
   );
@@ -93,8 +80,6 @@ export default function Canvas() {
     scale,
     gestureType,
     setCanvas,
-    dragDelta,
-    dragNodeIdsSet
   );
 
   const {
@@ -182,7 +167,6 @@ export default function Canvas() {
           {graphNodeIds.map((nodeId: string) => {
             if (!visibleNodeIds.has(nodeId)) return null;
             const isSelected = selectedNodeIdsSet.has(nodeId);
-            const isDragging = dragNodeIdsSet.has(nodeId);
             return (
               <CanvasNode
                 key={nodeId}
@@ -191,7 +175,6 @@ export default function Canvas() {
                 groupId={groupId}
                 scale={scale}
                 selected={isSelected}
-                dragDelta={isDragging ? (dragDelta ?? undefined) : undefined}
                 activePin={activePin}
                 onPointerDown={onNodePointerDown}
                 onAddInput={handleNodeAddInput}

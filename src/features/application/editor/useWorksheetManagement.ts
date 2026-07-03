@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorStore } from '@/features/core/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { ensureDetailVisible } from './ensureDetailVisible';
@@ -76,6 +77,7 @@ export function useOpenWorksheet() {
       },
     });
     layoutStore.setActiveGroup(targetGroupId);
+    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', id });
     ensureDetailVisible();
     switchSidebarTab('charts');
   }, [switchSidebarTab]);
