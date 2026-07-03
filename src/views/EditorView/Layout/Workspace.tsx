@@ -5,6 +5,15 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { useModifierKeyStore } from "@/features/core/keyboard";
+import {
+  DRAG_TYPES,
+  isCanvasDrop,
+  isLayoutRegionDrop,
+  isTabbarDrop,
+  type GraphResourceDragData,
+} from "@/features/core/dnd";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DropIndicator } from "../Renderer/DropIndicator";
 import { SidebarDragOverlay } from "./SidebarDragOverlay";

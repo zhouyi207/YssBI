@@ -107,7 +107,7 @@ export function BottomBar() {
       const active = getActiveLayoutTab(groupId, state.nodes);
       const activeTabId = active?.activeTabId ?? null;
       const activeTab = active?.tab ?? null;
-      const selectedNodeIds = node?.data?.params?.selectedNodeIds;
+      const selectedNodeIds = state.nodes[groupId]?.data?.params?.selectedNodeIds;
 
       return {
         groupId,
