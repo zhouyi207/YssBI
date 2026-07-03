@@ -32,8 +32,28 @@ impl GraphInstance {
     }
 
     /// Capture undo patch before disconnecting pins on dynamic nodes.
-    pub fn capture_disconnect_undo_patch(&self, node_ids: &[NodeId]) -> GraphUndoPatch {
-        let (neighbor_nodes, connections) = self.capture_pin_resolver_closure(node_ids);
+    pub fn capture_disconnect_undo_patch(
+        &self,
+        node_ids: &[NodeId],
+        removed_connections: &[(PinId, PinId)],
+    ) -> GraphUndoPatch {
+        let (neighbor_nodes, mut connections) = self.capture_pin_resolver_closure(node_ids);
+        let mut seen: HashSet<(PinId, PinId)> = connections
+            .iter()
+            .filter_map(|conn| {
+                let from = Uuid::parse_str(&conn.from_pin).ok().map(PinId::from)?;
+                let to = Uuid::parse_str(&conn.to_pin).ok().map(PinId::from)?;
+                Some((from, to))
+            })
+            .collect();
+        for (from_pin, to_pin) in removed_connections {
+            if seen.insert((*from_pin, *to_pin)) {
+                connections.push(ConnectionRebuildDTO {
+                    from_pin: from_pin.to_string(),
+                    to_pin: to_pin.to_string(),
+                });
+            }
+        }
         GraphUndoPatch {
             nodes: Vec::new(),
             neighbor_nodes,
@@ -841,6 +861,43 @@ mod tests {
             .map(|p| p.definition.name.clone())
             .collect();
         assert_eq!(restored_cols, before_cols);
+    }
+
+    #[test]
+    fn disconnect_undo_restores_simple_static_connection() {
+        let graph = test_graph();
+        let n1 = graph.create_node("Value:Constants:Int64").unwrap();
+        let n2 = graph.create_node("Math:Operators:Add (+)").unwrap();
+        let pins1 = graph.get_pin_instances_by_node_id(n1);
+        let pins2 = graph.get_pin_instances_by_node_id(n2);
+        let out = pins1
+            .iter()
+            .find(|p| p.is_output() && p.is_data())
+            .unwrap()
+            .id;
+        let inp = pins2
+            .iter()
+            .find(|p| p.is_input() && p.is_data())
+            .unwrap()
+            .id;
+
+        graph.connect(out, inp).unwrap();
+
+        let (removed, undo_patch, _change_sets, _inferred) = graph.disconnect_pin(inp);
+        assert_eq!(removed.len(), 1);
+        assert_eq!(undo_patch.connections.len(), 1);
+        assert!(undo_patch.neighbor_nodes.is_empty());
+
+        let ds = graph.data_state.read().unwrap();
+        assert!(ds.connections.get_upstream(inp).is_none());
+        drop(ds);
+
+        graph
+            .apply_graph_patch(undo_patch, &HashMap::new(), &HashMap::new())
+            .unwrap();
+
+        let ds = graph.data_state.read().unwrap();
+        assert_eq!(ds.connections.get_upstream(inp), Some(out));
     }
 
     #[test]

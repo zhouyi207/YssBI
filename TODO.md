@@ -580,6 +580,7 @@ package.json
 - [x] **View：runtime source 生命周期**：已实现，见 [`docs/runtime-source-lifecycle.md`](docs/runtime-source-lifecycle.md)（拓扑破坏按 pin 失效、Run 结束保留、窗口 unmount 释放 Window owner）。
 - [x] **运行完毕后 backend source 缓存生命周期**：拓扑破坏（删 pin / 删节点）按 pin 失效；Run 结束保留；`markGraphDirty` 不再清 `pinResults`（Undo 恢复连线后结果保留）；窗口关闭释放 `SourceOwner::Window`。见 [`docs/runtime-source-lifecycle.md`](docs/runtime-source-lifecycle.md)。
 - [x] **DeleteNodes / DisconnectPin / 粘贴结构性 undo**：事务化 undo；统一 `GraphUndoPatch` + `apply_graph_patch`；delete 不 resolve 邻居；capture 含闭包连线 + **`neighborNodes` 邻居 pin 冻结**；apply 先 patch 邻居 + Materialize 收尾；`remove_node_raw` 正确 disconnect。
+- [x] 目前在执行完毕的动画状态下，第一次断开节点无法undo，修复
 - [ ] **View：大 Array 分页 tabular**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `DataViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedDataView` renderer。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
@@ -592,7 +593,6 @@ package.json
 - [ ] **Detail 状态推导式重构**（减少 `activeTabId` 与 `selectedItemId/Type` 双份维护）：Detail 按优先级推导显示目标——① 画布单选节点 → NodeDetail；② 否则若 `activeTab` 为 event/function/worksheet → 由 Tab 推导 Detail；③ 否则用 Sidebar 选中项（variable / data / …）；④ 否则空状态。Tab 型资源以 layout 为唯一事实来源，去掉 `syncDetailFromEditorTab` 等手动对齐；Sidebar / Log / Node 选择仍保留独立 Detail 目标
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] 变量类型切换的时候，这个值中有 dataframe array 这种类型应该怎么处理，还有 object，any 等等类型又应该怎么处理
-
 - [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、embedded UX、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 函数图应该如何设计？？？
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题

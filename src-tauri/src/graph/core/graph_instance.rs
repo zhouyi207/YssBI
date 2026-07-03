@@ -1138,7 +1138,7 @@ impl GraphInstance {
             }
         }
 
-        let undo_patch = self.capture_disconnect_undo_patch(&seed_nodes);
+        let undo_patch = self.capture_disconnect_undo_patch(&seed_nodes, &removed_connections);
 
         {
             let data_state = self.data_state.write().unwrap();
