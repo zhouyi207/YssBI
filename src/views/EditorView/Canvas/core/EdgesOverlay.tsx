@@ -1,7 +1,7 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
-import { useExecutionStore } from "@/features/core/execution";
+import { useExecutionStore, connectionKey, getExecutionVisual, subscribeExecutionVisual } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
@@ -52,10 +52,14 @@ export function buildEdgeData(
 
 export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorldPos, dimmed }) => {
   const { theme } = useTheme();
+  const visual = useSyncExternalStore(subscribeExecutionVisual, getExecutionVisual, getExecutionVisual);
   const graphState = useExecutionStore((s) => s.graphs[graphId]);
-  const status = graphState?.status ?? "idle";
-  const completedConnections = graphState?.completedConnections;
-  const nodeStates = graphState?.nodeStates;
+  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphId === graphId);
+
+  const useVisual = (visual.active && visual.graphId === graphId) || isReplay;
+  const status = useVisual ? visual.status : (graphState?.status ?? "idle");
+  const completedConnections = useVisual ? visual.completedConnections : graphState?.completedConnections;
+  const nodeStates = useVisual ? undefined : graphState?.nodeStates;
   const isRunning = status === "running";
 
   const graphNodeIds = useGraphDataStore(
@@ -99,9 +103,12 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
         const end = getPinWorldPos(edge.toPinId);
         if (!start || !end) return null;
 
-        const isCompleted = completedConnections?.has(edge.id) ?? false;
+        const connKey = connectionKey(edge.fromPinId, edge.toPinId);
+        const isCompleted = completedConnections?.has(connKey) ?? false;
         const sourceState = nodeStates?.get(edge.sourceNodeId);
-        const isError = sourceState?.status === "error";
+        const isError = useVisual
+          ? visual.errorNodeIds.has(edge.sourceNodeId)
+          : sourceState?.status === "error";
         const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
         const edgeKind = edge.pinType === "exec" ? "exec" : "data";
 
@@ -109,6 +116,8 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
           <Edge
             key={edge.id}
             edgeId={edge.id}
+            fromPinId={edge.fromPinId}
+            toPinId={edge.toPinId}
             x1={start.x}
             y1={start.y}
             x2={end.x}

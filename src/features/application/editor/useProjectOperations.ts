@@ -14,6 +14,7 @@ import { openPresentationWindowSafe } from '@/features/application/window';
 import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
 import type { Presentation } from '@/features/core/resultSource';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
+import { enqueueLiveExecutionEvent, flushLiveExecutionEventsNow, resetExecutionVisual } from '@/features/core/execution';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
@@ -168,7 +169,9 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
 
       const recording: RecordedEvent[] = [];
       const pendingWindows: Promise<void>[] = [];
-      const { applyEvent, completeExecution, setRecording, startExecution } = useExecutionStore.getState();
+      const { commitExecutionVisual, completeExecution, setRecording, startExecution, applySideEffectEvent } =
+        useExecutionStore.getState();
+      resetExecutionVisual(graphId);
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
@@ -181,12 +184,14 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
           );
           return;
         }
-        applyEvent(graphId, event);
+        enqueueLiveExecutionEvent(graphId, event, (_gid, e) => applySideEffectEvent(graphId, e));
         recording.push({ event, timestamp: Date.now() });
       }, graphId);
 
       await Promise.all(pendingWindows);
 
+      flushLiveExecutionEventsNow();
+      commitExecutionVisual(graphId);
       setRecording(graphId, recording);
       if (useExecutionStore.getState().graphs[graphId]?.status === 'running') {
         completeExecution(graphId);
@@ -206,7 +211,12 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
         return editorNode?.data?.activeTabId as string | undefined;
       })();
-      if (graphId) useExecutionStore.getState().failExecution(graphId);
+      if (graphId) {
+        flushLiveExecutionEventsNow();
+        const store = useExecutionStore.getState();
+        store.commitExecutionVisual(graphId);
+        store.failExecution(graphId);
+      }
     }
   }, [handleOpenSourceWindow, syncActiveToCollection]);
 

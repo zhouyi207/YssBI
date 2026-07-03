@@ -38,6 +38,8 @@ const ACTIVE_EDGE_STYLE: Record<
 
 interface EdgeProps {
   edgeId?: string;
+  fromPinId?: string;
+  toPinId?: string;
   x1: number;
   y1: number;
   x2: number;
@@ -88,6 +90,8 @@ export function drawEdge(
 
 export const Edge = React.memo<EdgeProps>(({
   edgeId,
+  fromPinId,
+  toPinId,
   x1,
   y1,
   x2,
@@ -108,7 +112,10 @@ export const Edge = React.memo<EdgeProps>(({
   const animate = isRunning && (isCompleted || isError);
 
   return (
-    <g data-edge-id={edgeId} style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}>
+    <g
+      data-edge-id={edgeId}
+      style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}
+    >
       <path
         d={pathData}
         fill="none"

@@ -9,7 +9,6 @@ import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 export interface NodeProps {
   id: string;
   node: NodeModel;
-  scale: number;
   selected?: boolean;
   activePinId?: string | null;
   activePin?: PinModel | null;
@@ -70,7 +69,6 @@ export const Node = React.memo<NodeProps>((props) => {
     prev.selected === next.selected &&
     prev.activePinId === next.activePinId &&
     prev.activePin === next.activePin &&
-    prev.node === next.node &&
-    prev.scale === next.scale
+    prev.node === next.node
   );
 });

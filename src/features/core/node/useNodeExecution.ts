@@ -1,28 +1,31 @@
 import { useExecutionStore } from '@/features/core/execution';
 
+const IDLE = {
+  nodeState: null,
+  isCompleted: false,
+  hasError: false,
+} as const;
+
 /**
- * Node Execution Hook
- *
- * 按 graphId 粒度化选择器：只提取本节点在指定图中的执行状态
+ * Committed execution state from Zustand (after run/replay commit).
+ * During live run / replay, visuals are imperative via executionVisualSession + CSS.
  */
-export function useNodeExecution(nodeId: string, graphId?: string) {
-  const isExecuting = useExecutionStore((state) => {
-    if (!graphId) return false;
-    return state.graphs[graphId]?.nodeStates.get(nodeId)?.status === "executing";
-  });
-  const isCompleted = useExecutionStore((state) => {
-    if (!graphId) return false;
-    return state.graphs[graphId]?.executedNodes.has(nodeId) ?? false;
-  });
+export function useNodeExecution(nodeId: string, graphId?: string, enabled = true) {
   const nodeState = useExecutionStore((state) => {
-    if (!graphId) return null;
+    if (!enabled || !graphId) return null;
     return state.graphs[graphId]?.nodeStates.get(nodeId) ?? null;
   });
-  const hasError = nodeState?.status === "error";
+  const isCompleted = useExecutionStore((state) => {
+    if (!enabled || !graphId) return false;
+    return state.graphs[graphId]?.executedNodes.has(nodeId) ?? false;
+  });
+
+  if (!enabled || !graphId) return IDLE;
+
+  const hasError = nodeState?.status === 'error';
 
   return {
     nodeState,
-    isExecuting,
     isCompleted,
     hasError,
   };

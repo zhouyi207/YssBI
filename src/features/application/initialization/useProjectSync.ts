@@ -63,7 +63,7 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
  * Handlers 已直接更新 Store，callbacks 仅用于可选 UI 扩展（如打开新 Tab）
  */
 export function useProjectSyncWithEditor() {
-  const editor = useEditor();
+  const editor = useEditor({ withCanvasInteraction: false });
   const callbacks = useMemo<EventCallbacks>(
     () => ({
       onEventCreated: editor.handleEventCreated,

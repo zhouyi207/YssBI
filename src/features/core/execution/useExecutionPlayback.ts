@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useExecutionStore } from './useExecutionStore';
-
-const DELAYS: Record<string, number> = {
-  executionStart: 100,
-  nodeStart: 300,
-  nodeComplete: 150,
-  nodeError: 600,
-  connectionActive: 250,
-  executionComplete: 100,
-};
+import { applyExecutionVisualEvent, resetExecutionVisual } from './executionVisualSession';
+import {
+  EXECUTION_REPLAY_DEFAULT_DELAY_MS,
+  EXECUTION_REPLAY_DELAYS_MS,
+} from './executionReplayDelays';
 
 export function useExecutionPlayback(graphId: string) {
   const graphState = useExecutionStore((s) => s.graphs[graphId]);
@@ -30,20 +26,31 @@ export function useExecutionPlayback(graphId: string) {
   }, []);
 
   const scheduleSteps = useCallback((rec: typeof recording) => {
-    const { applyEvent, setPlaying } = useExecutionStore.getState();
+    const { setPlaying, applySideEffectEvent, commitExecutionVisual, startExecution } =
+      useExecutionStore.getState();
 
     const step = () => {
       if (pausedRef.current) return;
       const idx = indexRef.current;
       if (idx >= rec.length) {
         clearTimer();
+        commitExecutionVisual(graphId);
+        useExecutionStore.getState().completeExecution(graphId);
         setPlaying(false);
         return;
       }
       const entry = rec[idx];
-      applyEvent(graphId, entry.event);
+      const event = entry.event;
+      if (event.event === 'pinResultReady') {
+        applySideEffectEvent(graphId, event);
+      } else if (event.event === 'executionStart') {
+        startExecution(graphId);
+        resetExecutionVisual(graphId);
+      } else {
+        applyExecutionVisualEvent(graphId, event);
+      }
       indexRef.current = idx + 1;
-      const delay = DELAYS[entry.event.event] ?? 200;
+      const delay = EXECUTION_REPLAY_DELAYS_MS[event.event] ?? EXECUTION_REPLAY_DEFAULT_DELAY_MS;
       timerRef.current = setTimeout(step, delay);
     };
 
@@ -77,9 +84,8 @@ export function useExecutionPlayback(graphId: string) {
     setIsPaused(false);
 
     const store = useExecutionStore.getState();
-    const rec = store.graphs[graphId]?.recording ?? [];
     store.setPlaying(true, graphId);
-    scheduleSteps(rec);
+    scheduleSteps(store.graphs[graphId]?.recording ?? []);
   }, [graphId, scheduleSteps]);
 
   const stop = useCallback(() => {

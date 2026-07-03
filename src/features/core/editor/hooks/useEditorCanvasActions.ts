@@ -1,8 +1,5 @@
-/**
- * 编辑器画布操作：setCanvas（视口按 graphId 存储）
- */
 import { useCallback, type RefObject } from 'react';
-import { useViewportStore } from '@/features/core/viewport';
+import { commitViewport, setViewportLive } from '@/features/core/viewport';
 import { GraphPosition } from '@/shared/types/domain';
 
 export function useEditorCanvasActions(activeTabIdRef: RefObject<string | null>) {
@@ -12,7 +9,9 @@ export function useEditorCanvasActions(activeTabIdRef: RefObject<string | null>)
       targetGraphId?: string,
     ) => {
       const graphId = targetGraphId ?? activeTabIdRef.current;
-      if (graphId) useViewportStore.getState().setViewport(graphId, updater);
+      if (!graphId) return;
+      setViewportLive(graphId, updater);
+      commitViewport(graphId);
     },
     [activeTabIdRef],
   );

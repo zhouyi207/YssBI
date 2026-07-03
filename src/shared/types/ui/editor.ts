@@ -115,14 +115,6 @@ export type EditorGesture =
         groupId?: string;
     }
     | {
-        type: "select";
-        startX: number;
-        startY: number;
-        currentX: number;
-        currentY: number;
-        groupId?: string;
-    }
-    | {
         type: "connect";
         startPin: Pin;
         startX: number;     // 屏幕坐标

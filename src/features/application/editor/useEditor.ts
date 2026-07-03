@@ -8,7 +8,7 @@ import { useProjectOperations } from './useProjectOperations';
 import { useGraphManagement, useVariableManagement, useDatabaseManagement, useNodeManagement } from '@/features/application/dataManagement';
 
 export function useEditor(options?: { withCanvasInteraction?: boolean }) {
-  const withCanvasInteraction = options?.withCanvasInteraction ?? true;
+  const withCanvasInteraction = options?.withCanvasInteraction ?? false;
   // Get state
   const state = useEditorState();
   
@@ -32,9 +32,7 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     activeGroupIdRef: actions.activeGroupIdRef,
     activeTabIdRef: actions.activeTabIdRef,
     canvasRef: actions.canvasRef,
-    groups: state.groups,
     setSelectedNodeIds: actions.setSelectedNodeIds,
-    setNodes: actions.setNodes,
     enabled: withCanvasInteraction,
   });
 

@@ -42,7 +42,7 @@ export type ExecutionStatus = "idle" | "running" | "completed" | "error";
 
 export interface NodeExecutionState {
   nodeId: string;
-  status: "pending" | "executing" | "completed" | "error";
+  status: "completed" | "error";
   timestamp: number;
   /** 后端计算耗时（毫秒），用于性能分析 */
   durationMs?: number;
@@ -59,15 +59,11 @@ export interface PinResultState {
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
-  currentNodeId: string | null;
   executedNodes: Set<string>;
   nodeStates: Map<string, NodeExecutionState>;
   completedConnections: Set<string>;
-  errorConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
-  /** 节点 ID -> 后端计算耗时(ms)，用于性能分析 */
-  nodeDurations: Map<string, number>;
   /** output pin id -> latest backend source descriptor */
   pinResults: Map<string, PinResultState>;
 }

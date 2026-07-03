@@ -6,10 +6,11 @@ import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/app
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
-import { useViewportStore } from "@/features/core/viewport";
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
+import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
+import { useExecutionVisualBinder } from "@/features/core/execution";
 import { ViewportGrid } from "./ViewportGrid";
 import { TransformContainer } from "./TransformContainer";
 import { EdgesOverlay } from "./EdgesOverlay";
@@ -26,7 +27,6 @@ const EMPTY_NODE_IDS: string[] = [];
 
 export default function Canvas() {
   const {
-    setCanvas,
     setNodes,
     onCanvasPointerDown,
     onNodePointerDown,
@@ -58,12 +58,12 @@ export default function Canvas() {
   const { createNode } = useNodeManagement();
 
   const ref = useRef<HTMLDivElement>(null);
-  const scale = useViewportStore((state) =>
-    activeTabId ? (state.viewports[activeTabId]?.scale ?? 1) : 1,
-  );
+  const selectionBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => bindDragPreviewToGestureStore(), []);
   useNodeDragPreview(ref, activeTabId);
+  useSelectionBoxPreview(selectionBoxRef, ref, groupId);
+  useExecutionVisualBinder(ref, activeTabId ?? undefined);
 
   const selectedNodeIdsSet = useMemo(
     () => new Set(selectedNodeIds),
@@ -77,9 +77,7 @@ export default function Canvas() {
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     ref,
     activeTabId,
-    scale,
     gestureType,
-    setCanvas,
   );
 
   const {
@@ -173,7 +171,6 @@ export default function Canvas() {
                 id={nodeId}
                 graphId={activeTabId || undefined}
                 groupId={groupId}
-                scale={scale}
                 selected={isSelected}
                 activePin={activePin}
                 onPointerDown={onNodePointerDown}
@@ -187,6 +184,8 @@ export default function Canvas() {
           })}
         </TransformContainer>
       </div>
+
+      <div ref={selectionBoxRef} aria-hidden />
 
       <CanvasOverlays
         canvasRef={ref}

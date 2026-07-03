@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { useGestureStore } from '@/features/core/gesture';
-import { subscribeToViewport, useViewportStore } from '@/features/core/viewport';
+import { subscribeToViewport, getViewport } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
@@ -75,7 +75,7 @@ export const ConnectionLine = ({
 
             if (!activeStart || !endWorld) return;
 
-            const viewport = useViewportStore.getState().viewports[graphId] || { x: 0, y: 0, scale: 1 };
+            const viewport = getViewport(graphId);
             const currentTheme = themeRef.current;
 
             ctx.save();

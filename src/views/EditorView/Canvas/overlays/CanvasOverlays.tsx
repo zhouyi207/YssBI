@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import type { LayoutTab } from "@/shared/types";
 import type { Graph } from "@/shared/types/domain";
 import { useEditorGroup } from "@/features/application/editor";
-import { useGestureStore } from "@/features/core/gesture";
 import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
 import { UnifiedSourceView } from "@/features/core/resultSource";
 
@@ -39,35 +38,6 @@ function CanvasToolbarButton({
             </TooltipTrigger>
             <TooltipContent side="bottom">{tooltip}</TooltipContent>
         </Tooltip>
-    );
-}
-
-function SelectionRegion({
-    groupId,
-    canvasRef,
-}: {
-    groupId: string;
-    canvasRef: React.RefObject<HTMLDivElement | null>;
-}) {
-    const gesture = useGestureStore((state) => {
-        const current = state.gesture;
-        return current?.type === "select" ? current : null;
-    });
-
-    if (gesture?.groupId !== groupId || !canvasRef.current) return null;
-
-    const canvasBounds = canvasRef.current.getBoundingClientRect();
-
-    return (
-        <div
-            className="absolute pointer-events-none z-50 border-2 border-dashed border-[var(--accent-color)] bg-[var(--selection-region)]/15"
-            style={{
-                left: Math.min(gesture.startX, gesture.currentX) - canvasBounds.left,
-                top: Math.min(gesture.startY, gesture.currentY) - canvasBounds.top,
-                width: Math.abs(gesture.startX - gesture.currentX),
-                height: Math.abs(gesture.startY - gesture.currentY),
-            }}
-        />
     );
 }
 
@@ -265,9 +235,6 @@ export default function CanvasOverlays({
                     </div>
                 </div>
             )}
-
-            {/* ================= Selection Box ================= */}
-            <SelectionRegion groupId={groupId} canvasRef={canvasRef} />
 
             {/* ================= Node Palette ================= */}
             {activeGroupId === groupId && contextMenu?.visible && createPortal(

@@ -152,6 +152,28 @@ body.layout-sash-dragging canvas {
   z-index: 30 !important;
 }
 
+[data-node-id][data-exec-state="executing"] {
+  border-color: rgb(250 204 21) !important;
+  outline: 2px solid rgb(250 204 21 / 0.45);
+  outline-offset: 0;
+  z-index: 30 !important;
+  box-shadow: 0 0 0 1px rgb(250 204 21 / 0.25);
+}
+
+[data-node-id][data-exec-state="completed"] {
+  border-color: rgb(34 197 94) !important;
+  outline: 1px solid rgb(34 197 94 / 0.35);
+  outline-offset: 0;
+  z-index: 20 !important;
+}
+
+[data-node-id][data-exec-state="error"] {
+  border-color: rgb(239 68 68) !important;
+  outline: 2px solid rgb(239 68 68 / 0.45);
+  outline-offset: 0;
+  z-index: 30 !important;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Inter Variable', system-ui, sans-serif;
