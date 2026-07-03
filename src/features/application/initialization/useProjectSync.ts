@@ -86,7 +86,7 @@ export function useProjectSyncWithEditor() {
 }
 
 /**
- * 无回调的项目同步（用于 DataViewWindow 等非编辑器窗口）
+ * 无回调的项目同步（用于 DatabaseEditorWindow 等非编辑器窗口）
  * Handlers 已直接更新 Store，无需编辑器回调
  */
 export function useProjectSync() {

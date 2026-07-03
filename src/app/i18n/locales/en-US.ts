@@ -177,7 +177,7 @@ export const enUS = {
     paste: "Paste",
     manageVariables: "Manage Variables",
     importData: "Import Data",
-    dataViewer: "Data Viewer",
+    databaseEditor: "Database Editor",
     newWorksheet: "New Worksheet",
     schemaViewer: "Schema Viewer",
     newWindow: "New Window",
@@ -395,7 +395,7 @@ export const enUS = {
     open: "Open",
     promoteToGlobal: "Promote to global",
     demoteToLocal: "Demote to local",
-    viewInDataViewer: "View in Data Viewer",
+    viewInDatabaseEditor: "View in Database Editor",
     noData: "No data",
     noEvents: "No events",
     noFunctions: "No functions",
@@ -419,8 +419,8 @@ export const enUS = {
       Composite: "Composite",
     },
   },
-  dataView: {
-    title: "Data Viewer",
+  databaseEditor: {
+    title: "Database Editor",
     noDataFrame: "No DataFrame",
     loadingProjectData: "Loading project data...",
     noDataFrameSelected: "No DataFrame Selected",
@@ -435,14 +435,14 @@ export const enUS = {
     renameColumn: "Rename Column",
     addColumn: "Add Column",
     deleteColumn: "Delete Column \"{{name}}\"",
-    failedOpenWindow: "Unable to open Data Viewer window",
+    failedOpenWindow: "Unable to open Database Editor window",
   },
-  runtimeView: {
-    title: "Runtime View",
+  sourceInspector: {
+    title: "Source Inspector",
     loading: "Loading…",
     missingSourceId: "Missing source id in URL",
     noSource: "No data source found",
-    failedOpenWindow: "Unable to open Runtime View window",
+    failedOpenWindow: "Unable to open Source Inspector window",
   },
   plot: {
     title: "Plot",

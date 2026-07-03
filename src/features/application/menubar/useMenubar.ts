@@ -108,18 +108,18 @@ export function useMenubar() {
     }
   }, [activeEditorGroupId, splitNode]);
 
-  const handleDataView = useCallback(async () => {
+  const handleDatabaseEditor = useCallback(async () => {
     try {
       const label = `dataview-${Math.random().toString(36).substring(7)}`;
       await createPersistedWindow({
-        kind: "dataView",
+        kind: "databaseEditor",
         label,
-        url: "index.html#/dataview",
-        title: i18n.t("dataView.title"),
+        url: "index.html#/database",
+        title: i18n.t("databaseEditor.title"),
       });
     } catch (error) {
       logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
-      uiStore.showToast(i18n.t("dataView.failedOpenWindow"), "error");
+      uiStore.showToast(i18n.t("databaseEditor.failedOpenWindow"), "error");
     }
   }, []);
 
@@ -172,7 +172,7 @@ export function useMenubar() {
     handleImportData,
     handleSplitRight,
     handleSplitDown,
-    handleDataView,
+    handleDatabaseEditor,
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,

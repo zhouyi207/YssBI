@@ -23,7 +23,7 @@ export async function openPresentationWindow(
     kind: windowKindForRoute(route),
     label,
     url,
-    title: presentation.windowTitle,
+    title: presentation.windowTitle.trim() || 'Source Inspector',
   });
 }
 

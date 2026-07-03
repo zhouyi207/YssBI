@@ -5,8 +5,8 @@ export function windowKindForRoute(route: string): WindowKind {
   switch (route) {
     case '/plot':
       return 'plot';
-    case '/view':
-      return 'runtimeView';
+    case '/inspect':
+      return 'sourceInspector';
     case '/info':
       return 'info';
     default:

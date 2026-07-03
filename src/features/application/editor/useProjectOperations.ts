@@ -11,8 +11,8 @@ import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { openPresentationWindowSafe } from '@/features/application/window';
-import { plotTypeFromPresentation, presentationRoute } from '@/features/core/dataView';
-import type { Presentation } from '@/features/core/dataView';
+import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
+import type { Presentation } from '@/features/core/resultSource';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
@@ -167,20 +167,25 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphId})`);
 
       const recording: RecordedEvent[] = [];
+      const pendingWindows: Promise<void>[] = [];
       const { applyEvent, completeExecution, setRecording, startExecution } = useExecutionStore.getState();
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
         if (event.event === 'openSourceWindow') {
-          handleOpenSourceWindow(event.data.sourceId, {
-            presentation: event.data.presentation,
-            windowTitle: event.data.windowTitle,
-          });
+          pendingWindows.push(
+            handleOpenSourceWindow(event.data.sourceId, {
+              presentation: event.data.presentation,
+              windowTitle: event.data.windowTitle,
+            }),
+          );
           return;
         }
         applyEvent(graphId, event);
         recording.push({ event, timestamp: Date.now() });
       }, graphId);
+
+      await Promise.all(pendingWindows);
 
       setRecording(graphId, recording);
       if (useExecutionStore.getState().graphs[graphId]?.status === 'running') {

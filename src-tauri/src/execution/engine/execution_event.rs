@@ -58,3 +58,23 @@ pub enum ExecutionEvent {
         descriptor: SourceDescriptor,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution::Presentation;
+
+    #[test]
+    fn open_source_window_serializes_for_channel() {
+        let event = ExecutionEvent::OpenSourceWindow {
+            source_id: "window_test".into(),
+            presentation: Presentation::Inspector,
+            window_title: "View: (null)".into(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+        assert_eq!(json["event"], "openSourceWindow");
+        assert_eq!(json["data"]["sourceId"], "window_test");
+        assert_eq!(json["data"]["presentation"]["kind"], "inspector");
+        assert_eq!(json["data"]["windowTitle"], "View: (null)");
+    }
+}

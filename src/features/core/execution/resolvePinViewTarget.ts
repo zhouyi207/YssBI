@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import type { TFunction } from 'i18next';
 import { otherEndpointFromConnectionId } from '@/features/core/dataStore/pinLinks';
-import { SourceService, plotTypeFromPresentation, presentationRoute } from '@/features/core/dataView';
+import { SourceService, plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
 import { openPresentationWindow } from '@/features/application/window';
 import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
 

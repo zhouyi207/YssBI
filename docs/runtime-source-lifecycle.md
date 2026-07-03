@@ -1,13 +1,13 @@
 # Runtime Source 生命周期
 
-本文档定义 `ResultSourceStore` 中 inspectable 结果（DataView / pin 结果 / 弹窗）的创建、保留与失效规则。与 [`DESIGN_RULE.md`](DESIGN_RULE.md) 的 CQRS 原则一致：**backend 为真源，前端 `pinResults` 为投影**。
+本文档定义 `ResultSourceStore` 中 inspectable 结果（Database Editor / pin 结果 / 弹窗）的创建、保留与失效规则。与 [`DESIGN_RULE.md`](DESIGN_RULE.md) 的 CQRS 原则一致：**backend 为真源，前端 `pinResults` 为投影**。
 
 ## 1. 两类 Owner
 
 | Owner | 含义 | 索引 |
 |-------|------|------|
 | `RuntimePin { graphId, pinId, runId }` | 画布 output pin 上次 run 的可检视结果 | `(graphId, pinId) → sourceId` |
-| `Window` | Plot / Info / RuntimeView 等弹窗独占 payload | 仅 `sourceId` |
+| `Window` | Plot / Info / SourceInspector 等弹窗独占 payload | 仅 `sourceId` |
 
 ## 2. RuntimePin 规则
 

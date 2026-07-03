@@ -6,7 +6,7 @@ import type { Graph } from "@/shared/types/domain";
 import { useEditorGroup } from "@/features/application/editor";
 import { useGestureStore } from "@/features/core/gesture";
 import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
-import { UnifiedDataView } from "@/features/core/dataView";
+import { UnifiedSourceView } from "@/features/core/resultSource";
 
 import { useNodeManagement } from "@/features/application/dataManagement";
 import { useCanvasOverlayHandlers } from "@/features/application/editor";
@@ -257,7 +257,7 @@ export default function CanvasOverlays({
                           <OverlayScrollbar>
                             <div className="p-2">
                               {selectedResult ? (
-                                <UnifiedDataView payload={selectedResult.descriptor} layout="embedded" />
+                                <UnifiedSourceView payload={selectedResult.descriptor} layout="embedded" />
                               ) : null}
                             </div>
                           </OverlayScrollbar>

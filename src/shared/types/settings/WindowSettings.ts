@@ -4,12 +4,12 @@
  */
 
 /** 受持久化管理的窗口种类。 */
-export type WindowKind = "main" | "dataView" | "runtimeView" | "logs" | "plot" | "info";
+export type WindowKind = "main" | "databaseEditor" | "sourceInspector" | "logs" | "plot" | "info";
 
 export const WINDOW_KINDS: readonly WindowKind[] = [
     "main",
-    "dataView",
-    "runtimeView",
+    "databaseEditor",
+    "sourceInspector",
     "logs",
     "plot",
     "info",

@@ -122,7 +122,7 @@ export function Menubar() {
     handleImportData,
     handleSplitRight,
     handleSplitDown,
-    handleDataView,
+    handleDatabaseEditor,
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,
@@ -183,7 +183,7 @@ export function Menubar() {
   const dataItems: MenuItem[] = [
     { label: t("menubar.manageVariables") },
     { label: t("menubar.importData"), onClick: handleImportData },
-    { label: t("menubar.dataViewer"), onClick: handleDataView },
+    { label: t("menubar.databaseEditor"), onClick: handleDatabaseEditor },
     { label: t("menubar.newWorksheet"), onClick: () => void addWorksheet() },
     { label: "-" },
     { label: t("menubar.schemaViewer") },

@@ -106,13 +106,15 @@ index.html
 
 当前前端是一个多窗口桌面应用，但所有窗口仍由同一套 React bundle 承载。窗口类型通过 hash route 区分：
 
+- `/editor`：`src/views/EditorView/EditorWindow.tsx`（主编辑器）
+- `/database`：`src/views/DatabaseEditor/DatabaseEditorWindow.tsx`（DuckDB 表编辑）
+- `/inspect`：`src/views/SourceInspector/SourceInspectorWindow.tsx`（执行结果 / Pin 查看）
 - `/plot`：`src/views/PlotView/PlotWindow.tsx`
-- `/dataview`：`src/views/DataView/DataViewWindow.tsx`
+- `/info`：`src/views/InfoView/InfoWindow.tsx`（计量报告）
 - `/logs`：`src/views/LogView/LogWindow.tsx`
-- `/info`：`src/views/InfoView/InfoWindow.tsx`
-- `*`：`src/views/EditorView/EditorWindow.tsx`，即主编辑器窗口
+- `/`、`/projects`：`src/views/ProjectView/ProjectPickerScreen.tsx`
 
-这些 route 组件使用 React lazy import 加载。图形、结果和数据表窗口通常还会从 URL hash 中读取 `dataKey`、窗口类型或参数，再通过后端 `get_window_data` 拉取执行器暂存的数据。
+运行时结果窗口由 `Presentation` 决定路由（`Inspector` → `/inspect`，`Plot` → `/plot`，`Report` → `/info`）。窗口 URL 携带 `sourceId`，前端通过 `SourceService` 读取 `ResultSourceStore` 中的 metadata 与分页数据。
 
 ### 4.3 主编辑器布局
 
@@ -149,7 +151,7 @@ components/ui and shared/ui → reusable UI
 
 实际代码中：
 
-- `views/`：窗口和主要界面，例如 `EditorView`、`DataView`、`PlotView`、`InfoView`、`LogView`。它们主要组合 hooks、store 和 UI。
+- `views/`：窗口和主要界面，例如 `EditorView`、`DatabaseEditor`、`SourceInspector`、`PlotView`、`InfoView`、`LogView`。
 - `features/application/`：应用用例 hooks，例如初始化、编辑器操作、菜单、数据视图编辑、数据管理。
 - `features/core/`：Zustand stores、同步系统、schema store、layout store、editor store、history store、selection/viewport store、UI store 等。
 - `features/domain/`：目前较薄，主要放纯函数、节点命名、sidebar 常量等。
@@ -410,9 +412,7 @@ execute_project command
 
 ### 8.4 结果窗口数据
 
-节点可以通过 `NodeExecutionContext` 产生 window action。执行器将 payload 写入 `WindowDataStore`，生成 `win_<uuid>` key，并通过 `OpenWindow` 事件通知前端。前端打开 `/plot`、`/info`、`/dataview` 等窗口后，再通过 `get_window_data` 按 key 拉取数据。
-
-这避免了把大型图表或模型结果直接塞进 URL，也避免在 Tauri event 中传输过大的 payload。
+节点通过 `NodeExecutionContext` 的 `publish_plot` / `publish_report` / `open_registered_source` 注册结果。执行器写入 `ResultSourceStore`，并通过 `OpenSourceWindow` 事件（携带 `sourceId`、`presentation`、`windowTitle`）通知前端开窗。前端按 `presentation.route()` 打开 `/inspect`、`/plot` 或 `/info`，再通过 `SourceService` 按 `sourceId` 拉取数据。
 
 ## 9. `yss-sci` 计算库架构
 

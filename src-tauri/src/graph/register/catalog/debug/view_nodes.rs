@@ -28,10 +28,8 @@ pub fn register(registry: &NodeRegistry) {
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
         .with_flow_processor(Arc::new(|ctx| {
-            let source_id =
-                ctx.ensure_view_source_for_input(&PinRole::Data(DataRole::Input))?;
-            ctx.open_registered_source(source_id);
-            ctx.log("View: opened runtime view window".to_string());
+            ctx.ensure_view_source_for_input(&PinRole::Data(DataRole::Input))?;
+            ctx.log("View: opened source inspector window".to_string());
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
         }));
     registry.register(definition);

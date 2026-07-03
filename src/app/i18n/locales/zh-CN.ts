@@ -177,7 +177,7 @@ export const zhCN = {
     paste: "粘贴",
     manageVariables: "管理变量",
     importData: "导入数据",
-    dataViewer: "数据查看器",
+    databaseEditor: "数据库编辑器",
     newWorksheet: "新建工作表",
     schemaViewer: "Schema 查看器",
     newWindow: "新窗口",
@@ -395,7 +395,7 @@ export const zhCN = {
     open: "打开",
     promoteToGlobal: "提升为全局变量",
     demoteToLocal: "降级为局部变量",
-    viewInDataViewer: "在数据视图中查看",
+    viewInDatabaseEditor: "在数据库编辑器中查看",
     noData: "无数据",
     noEvents: "无事件",
     noFunctions: "无函数",
@@ -419,8 +419,8 @@ export const zhCN = {
       Composite: "组合操作",
     },
   },
-  dataView: {
-    title: "数据查看器",
+  databaseEditor: {
+    title: "数据库编辑器",
     noDataFrame: "无 DataFrame",
     loadingProjectData: "正在加载项目数据...",
     noDataFrameSelected: "未选择 DataFrame",
@@ -435,14 +435,14 @@ export const zhCN = {
     renameColumn: "重命名列",
     addColumn: "添加列",
     deleteColumn: "删除列 \"{{name}}\"",
-    failedOpenWindow: "无法打开数据查看器窗口",
+    failedOpenWindow: "无法打开数据库编辑器窗口",
   },
-  runtimeView: {
-    title: "运行查看",
+  sourceInspector: {
+    title: "结果查看",
     loading: "加载中…",
     missingSourceId: "URL 中缺少 sourceId",
     noSource: "未找到数据源",
-    failedOpenWindow: "无法打开运行查看窗口",
+    failedOpenWindow: "无法打开结果查看窗口",
   },
   plot: {
     title: "图表",

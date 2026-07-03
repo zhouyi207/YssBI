@@ -6,21 +6,21 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
 import { i18n } from "@/app/i18n";
 
-export async function openDataViewWindow(databaseId?: string): Promise<void> {
+export async function openDatabaseEditorWindow(databaseId?: string): Promise<void> {
   try {
     const label = `dataview-${Math.random().toString(36).substring(7)}`;
     const url = databaseId
-      ? `index.html?database=${encodeURIComponent(databaseId)}#/dataview`
-      : "index.html#/dataview";
+      ? `index.html?database=${encodeURIComponent(databaseId)}#/database`
+      : "index.html#/database";
     await createPersistedWindow({
-      kind: "dataView",
+      kind: "databaseEditor",
       label,
       url,
-      title: i18n.t("dataView.title"),
+      title: i18n.t("databaseEditor.title"),
     });
   } catch (error) {
     logger.app.error(`Failed to open data view: ${error instanceof Error ? error.message : String(error)}`, "Sidebar");
-    uiStore.showToast(i18n.t("dataView.failedOpenWindow"), "error");
+    uiStore.showToast(i18n.t("databaseEditor.failedOpenWindow"), "error");
   }
 }
 

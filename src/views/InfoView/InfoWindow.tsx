@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { SourceService, type SourceDescriptor } from '@/features/core/dataView';
+import { SourceService, type SourceDescriptor } from '@/features/core/resultSource';
 import { usePersistedWindow, useReleaseResultSourceOnUnmount, useWindowMaximized } from '@/features/application/window';
 import { OLSComponent } from './OLSComponent';
 import { VARComponent } from './VARComponent';
@@ -16,14 +16,14 @@ import { DIDComponent } from './DIDComponent';
 import { PraisComponent, type PraisResultData } from './PraisComponent';
 import { TwoSLSComponent } from './2SLSComponent';
 import { LIMLComponent } from './LIMLComponent';
-import { DataViewComponent } from './DataViewComponent';
+import { SourcePreviewPanel } from './SourcePreviewPanel';
 import type { PanelDidResultData, PanelSummaryResult, VecRankResultData } from './shared/types';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 import { logger } from '@/utils/appLogger';
 
-function isDataView(data: unknown): data is SourceDescriptor {
+function isInspectableSourceDescriptor(data: unknown): data is SourceDescriptor {
   const d = data as SourceDescriptor;
   return (
     typeof d === 'object' &&
@@ -148,7 +148,7 @@ export const InfoWindow: React.FC = () => {
         if (metadata) {
           currentWindow.setTitle(metadata.title).catch(() => {});
 
-          if (isDataView(metadata)) {
+          if (isInspectableSourceDescriptor(metadata)) {
             setOlsData(metadata);
           } else {
             const value = await SourceService.getValue(metadata.sourceId);
@@ -250,8 +250,8 @@ export const InfoWindow: React.FC = () => {
             <span className="text-sm">{error}</span>
           </div>
         ) : resultData ? (
-          isDataView(resultData) ? (
-            <DataViewComponent data={resultData as any} />
+          isInspectableSourceDescriptor(resultData) ? (
+            <SourcePreviewPanel data={resultData as any} />
           ) : isDFADFSummaryList(resultData) ? (
             <DFADFSummaryListComponent data={resultData as any} />
           ) : isDFADFSummary(resultData) ? (

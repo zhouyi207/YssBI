@@ -45,7 +45,7 @@ import {
   duplicateGraphResource,
   renameResource,
 } from "@/features/application/resource/resourceActions";
-import { openDataViewWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
+import { openDatabaseEditorWindow, safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
 import {
   buildSidebarContextMenuSections,
   useSidebarContextMenu,
@@ -247,7 +247,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addVariable,
     renameVariableItem,
     deleteVariable: deleteVariableItem,
-    openDatabase: openDataViewWindow,
+    openDatabase: openDatabaseEditorWindow,
     renameDatabaseItem,
     deleteDatabaseItem,
     importData: triggerImportData,
@@ -379,7 +379,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          openDataViewWindow(id);
+          openDatabaseEditorWindow(id);
         }}
         onContextMenu={(e) => openContextMenu(e, { type: "database", id, name })}
         trailing={
@@ -405,7 +405,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
               tooltip={t("sidebar.open")}
               onClick={(e) => {
                 e.stopPropagation();
-                openDataViewWindow(id);
+                openDatabaseEditorWindow(id);
               }}
             />
           </>

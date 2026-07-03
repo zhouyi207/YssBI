@@ -4,7 +4,7 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { Presentation, SourceDescriptor } from '@/features/core/dataView';
+import type { Presentation, SourceDescriptor } from '@/features/core/resultSource';
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 

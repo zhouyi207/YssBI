@@ -96,7 +96,7 @@ pub enum Presentation {
 impl Presentation {
     pub fn route(self) -> &'static str {
         match self {
-            Self::Inspector => "/view",
+            Self::Inspector => "/inspect",
             Self::Plot { .. } => "/plot",
             Self::Report { .. } => "/info",
         }
@@ -111,7 +111,7 @@ impl Presentation {
 
     pub fn default_title(self) -> &'static str {
         match self {
-            Self::Inspector => "View",
+            Self::Inspector => "Source Inspector",
             Self::Plot { chart } => chart.default_title(),
             Self::Report { report } => report.default_title(),
         }

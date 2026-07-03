@@ -366,13 +366,22 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
 
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String> {
         if let Some(source_id) = self.get_input_source_id_by_role(role) {
-            return Ok(source_id);
+            if self.result_source_store.get_descriptor(&source_id).is_some() {
+                self.open_registered_source(source_id.clone());
+                return Ok(source_id);
+            }
         }
 
-        let value = self.get_input_by_role(role)?;
+        let value = match self.get_input_by_role(role) {
+            Ok(value) => value,
+            Err(_) if !self.is_input_connected(role) => DataValue::Null,
+            Err(err) => return Err(err),
+        };
         let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
-        let record = self.build_source_record_for_value(source_id.clone(), "", &value, None)?;
-        self.result_source_store.insert_window_source(record);
+        let title = crate::execution::default_view_title(&value, None);
+        let record =
+            self.build_source_record_for_value(source_id.clone(), title, &value, None)?;
+        self.publish_record(record);
         Ok(source_id)
     }
 

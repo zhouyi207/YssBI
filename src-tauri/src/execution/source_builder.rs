@@ -591,7 +591,7 @@ mod tests {
             handle_id: None,
             struct_kind: None,
         };
-        assert_eq!(descriptor.presentation.route(), "/view");
+        assert_eq!(descriptor.presentation.route(), "/inspect");
     }
 
     #[test]

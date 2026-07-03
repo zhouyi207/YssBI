@@ -21,8 +21,8 @@ use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 #[serde(rename_all = "camelCase")]
 pub enum WindowKind {
     Main,
-    DataView,
-    RuntimeView,
+    DatabaseEditor,
+    SourceInspector,
     Logs,
     Plot,
     Info,
@@ -31,8 +31,8 @@ pub enum WindowKind {
 impl WindowKind {
     pub const ALL: &'static [WindowKind] = &[
         WindowKind::Main,
-        WindowKind::DataView,
-        WindowKind::RuntimeView,
+        WindowKind::DatabaseEditor,
+        WindowKind::SourceInspector,
         WindowKind::Logs,
         WindowKind::Plot,
         WindowKind::Info,
@@ -42,8 +42,8 @@ impl WindowKind {
     pub fn as_str(self) -> &'static str {
         match self {
             WindowKind::Main => "main",
-            WindowKind::DataView => "dataView",
-            WindowKind::RuntimeView => "runtimeView",
+            WindowKind::DatabaseEditor => "databaseEditor",
+            WindowKind::SourceInspector => "sourceInspector",
             WindowKind::Logs => "logs",
             WindowKind::Plot => "plot",
             WindowKind::Info => "info",
@@ -72,7 +72,7 @@ impl WindowState {
                 y: None,
                 is_maximized: false,
             },
-            WindowKind::DataView | WindowKind::Logs | WindowKind::RuntimeView => WindowState {
+            WindowKind::DatabaseEditor | WindowKind::Logs | WindowKind::SourceInspector => WindowState {
                 width: 1000,
                 height: 600,
                 x: None,
@@ -97,9 +97,9 @@ struct PersistedWindowStates {
     #[serde(default)]
     main: Option<WindowState>,
     #[serde(default)]
-    data_view: Option<WindowState>,
+    database_editor: Option<WindowState>,
     #[serde(default)]
-    runtime_view: Option<WindowState>,
+    source_inspector: Option<WindowState>,
     #[serde(default)]
     logs: Option<WindowState>,
     #[serde(default)]
@@ -112,8 +112,8 @@ impl PersistedWindowStates {
     fn get(&self, kind: WindowKind) -> Option<&WindowState> {
         match kind {
             WindowKind::Main => self.main.as_ref(),
-            WindowKind::DataView => self.data_view.as_ref(),
-            WindowKind::RuntimeView => self.runtime_view.as_ref(),
+            WindowKind::DatabaseEditor => self.database_editor.as_ref(),
+            WindowKind::SourceInspector => self.source_inspector.as_ref(),
             WindowKind::Logs => self.logs.as_ref(),
             WindowKind::Plot => self.plot.as_ref(),
             WindowKind::Info => self.info.as_ref(),
@@ -123,8 +123,8 @@ impl PersistedWindowStates {
     fn set(&mut self, kind: WindowKind, value: WindowState) {
         match kind {
             WindowKind::Main => self.main = Some(value),
-            WindowKind::DataView => self.data_view = Some(value),
-            WindowKind::RuntimeView => self.runtime_view = Some(value),
+            WindowKind::DatabaseEditor => self.database_editor = Some(value),
+            WindowKind::SourceInspector => self.source_inspector = Some(value),
             WindowKind::Logs => self.logs = Some(value),
             WindowKind::Plot => self.plot = Some(value),
             WindowKind::Info => self.info = Some(value),
