@@ -14,7 +14,7 @@ use crate::database::{
 use crate::project::{
     ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,
 };
-use crate::schema::DatabaseEngineDTO;
+use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use yss_sci::api::database::{EditHistory, EditState};
 
 #[derive(Debug, Serialize)]
@@ -24,7 +24,7 @@ pub struct LoadDatabaseResult {
     pub name: String,
     pub row_count: usize,
     pub column_count: usize,
-    pub columns: Vec<ColumnInfo>,
+    pub columns: Vec<ColumnInfoDTO>,
 }
 
 #[derive(Debug, Serialize)]
@@ -34,15 +34,7 @@ pub struct DatabaseMetaResult {
     pub name: String,
     pub row_count: usize,
     pub column_count: usize,
-    pub columns: Vec<ColumnInfo>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ColumnInfo {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub dtype: String,
+    pub columns: Vec<ColumnInfoDTO>,
 }
 
 pub fn load_database(
@@ -347,11 +339,11 @@ fn database_name_and_row_count(state: &ProjectState, id: &str) -> Result<(String
     Ok((name, row_count))
 }
 
-fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfo> {
+fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfoDTO> {
     schema
         .iter_names()
         .filter_map(|name| {
-            schema.get(name).map(|dt| ColumnInfo {
+            schema.get(name).map(|dt| ColumnInfoDTO {
                 name: name.to_string(),
                 dtype: polars_dtype_to_raw_string(dt),
             })
@@ -359,10 +351,10 @@ fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfo> {
         .collect()
 }
 
-fn column_info_from_duckdb(columns: &[DuckDbColumnMeta]) -> Vec<ColumnInfo> {
+fn column_info_from_duckdb(columns: &[DuckDbColumnMeta]) -> Vec<ColumnInfoDTO> {
     columns
         .iter()
-        .map(|col| ColumnInfo {
+        .map(|col| ColumnInfoDTO {
             name: col.name.clone(),
             dtype: col.dtype.clone(),
         })

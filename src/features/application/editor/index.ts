@@ -3,7 +3,7 @@ export { useEditorOperations } from './useEditorOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';
 export { useProjectOperations } from './useProjectOperations';
-export { useEditorGroup, GroupContext } from './useEditorGroup';
+export { useEditorGroup } from './useEditorGroup';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';

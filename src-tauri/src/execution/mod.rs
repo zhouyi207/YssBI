@@ -13,7 +13,7 @@ pub mod presentation;
 pub mod runtime_source_invalidation;
 pub mod source_builder;
 pub mod struct_json;
-pub mod window_data_store;
+pub mod result_source_store;
 
 pub use context::*;
 pub use data_store::*;
@@ -22,4 +22,4 @@ pub use presentation::*;
 pub use runtime_source_invalidation::*;
 pub use source_builder::*;
 pub use struct_json::*;
-pub use window_data_store::*;
+pub use result_source_store::*;

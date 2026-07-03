@@ -94,29 +94,6 @@ impl<'g> TypeInferenceSession<'g> {
         Ok(())
     }
 
-    // /// 推断增量（只推断脏的连接/Pin）
-    // /// 使用 worklist 遍历依赖传播类型
-    // pub fn infer_incremental(&mut self, dirty_pins: Vec<PinId>) -> Result<(), String> {
-    //     let mut queue: VecDeque<PinId> = dirty_pins.into();
-
-    //     while let Some(pin) = queue.pop_front() {
-    //         let neighbors = self
-    //             .graph
-    //             .data_state
-    //             .read()
-    //             .unwrap()
-    //             .connections
-    //             .connected_to(pin);
-    //         for &neighbor in neighbors.iter() {
-    //             // 如果 unify 失败就返回
-    //             if self.ctx.infer_connection(pin, neighbor).is_ok() {
-    //                 queue.push_back(neighbor);
-    //             }
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
     /// 提交结果：把临时绑定写回 TypeVarDefinition.bound
     pub fn commit(&mut self) -> Result<(), String> {
         self.ctx.commit()

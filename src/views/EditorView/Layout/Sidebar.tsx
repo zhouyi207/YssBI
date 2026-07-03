@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useEditorGroup, GroupContext } from "@/features/application/editor";
+import { useEditorGroup } from "@/features/application/editor";
+import { GroupContext } from "@/features/core/editor";
 import { useDetailTarget } from "@/features/core/editor";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";

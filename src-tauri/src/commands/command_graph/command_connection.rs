@@ -501,18 +501,6 @@ pub fn update_canvas(
     Ok(())
 }
 
-/// 更新子图的输入输出定义（用于 Function 的参数定义）
-#[tauri::command]
-pub fn update_subgraph_io(
-    _state: State<ProjectState>,
-    _id: String,
-    _data: Value,
-) -> Result<(), String> {
-    // TODO: Function 子图的 IO 定义尚未设计
-    log_app::info!("[command.update_subgraph_io] Not yet implemented");
-    Ok(())
-}
-
 /// 重命名子图
 #[tauri::command]
 pub fn rename_subgraph(state: State<ProjectState>, id: String, name: String) -> Result<(), String> {

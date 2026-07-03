@@ -5,7 +5,6 @@ import { clearExecutionVisual, getExecutionVisual, snapshotToGraphPatch } from '
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
-  executedNodes: new Set(),
   nodeStates: new Map(),
   completedConnections: new Set(),
   recording: [],
@@ -16,11 +15,10 @@ const emptyGraphState = (): GraphExecutionState => ({
 /** Clears committed node/connection visuals while preserving pin results & recording. */
 function clearedVisualPatch(): Pick<
   GraphExecutionState,
-  'status' | 'executedNodes' | 'nodeStates' | 'completedConnections'
+  'status' | 'nodeStates' | 'completedConnections'
 > {
   return {
     status: "idle",
-    executedNodes: new Set(),
     nodeStates: new Map(),
     completedConnections: new Set(),
   };

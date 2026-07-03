@@ -21,21 +21,6 @@ pub struct TypeSystemSnapshot {
     pub struct_types: BTreeMap<String, StructTypeMeta>,
 }
 
-pub fn default_type_system_snapshot() -> TypeSystemSnapshot {
-    let mut struct_types = BTreeMap::new();
-
-    struct_types.insert(
-        "Model".to_string(),
-        StructTypeMeta {
-            key: "Model".to_string(),
-            parents: vec![],
-            category: Some("model".to_string()),
-            display_name: Some("Model".to_string()),
-        },
-    );
-    TypeSystemSnapshot { struct_types }
-}
-
 impl TypeSystemSnapshot {
     pub fn can_accept(&self, target: &DataType, source: &DataType) -> bool {
         if target == source {

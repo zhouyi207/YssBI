@@ -1,6 +1,3 @@
-export { useEditorInit, useRequireEditorInit } from './useEditorInit';
-export type { EditorInitState } from './useEditorInit';
-
 export { useActiveEditorGroup } from './useActiveEditorGroup';
 export { useEditorGraphData } from './useEditorGraphData';
 export { useEditorCollections } from './useEditorCollections';

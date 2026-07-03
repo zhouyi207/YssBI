@@ -6,11 +6,12 @@ import {
   createGraphResource,
   deleteResource,
 } from '@/features/application/resource/resourceActions';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
 /**
  * Graph Management Hook
- * 
+ *
  * 作为编辑器 UI 的 graph 操作门面：
  * - graph resource 创建 / 删除委托给 resourceActions
  * - 创建后自动打开时，通过 ProjectIOStore.loadGraph 拉取正文
@@ -18,7 +19,6 @@ import { logger } from '@/utils/appLogger';
  */
 export function useGraphManagement(
   openGraph: (id: string, name: string, type: any, data?: any) => void,
-  showToast?: (message: string, type: 'success' | 'error' | 'info') => void
 ) {
   const switchSidebarTab = useSidebarTab();
 
@@ -54,22 +54,19 @@ export function useGraphManagement(
       switchSidebarTab('graphs');
     } catch (error) {
       logger.graph.error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      showToast?.(`创建 Event 失败: ${error}`, 'error');
+      uiStore.showToast(`创建 Event 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
       throw error;
     }
-  }, [openCreatedGraph, switchSidebarTab, showToast]);
+  }, [openCreatedGraph, switchSidebarTab]);
 
-  // 处理 Event 创建事件的回调
   const handleEventCreated = useCallback((id: string) => {
     logger.graph.debug(`handleEventCreated: ${id}`, 'GraphManagement');
   }, []);
 
-  // 处理 Event 创建失败事件的回调
   const handleEventCreatedFailed = useCallback((name: string, error: string) => {
     logger.graph.error(`handleEventCreatedFailed: ${name} - ${error}`, 'GraphManagement');
-    
-    showToast?.(`创建 Event 失败: ${error}`, 'error');
-  }, [showToast]);
+    uiStore.showToast(`创建 Event 失败: ${error}`, 'error');
+  }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
     try {
@@ -101,10 +98,10 @@ export function useGraphManagement(
       switchSidebarTab('graphs');
     } catch (error) {
       logger.graph.error(`Failed to create function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      showToast?.(`创建 Function 失败: ${error}`, 'error');
+      uiStore.showToast(`创建 Function 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
       throw error;
     }
-  }, [openCreatedGraph, switchSidebarTab, showToast]);
+  }, [openCreatedGraph, switchSidebarTab]);
 
   const handleFunctionCreated = useCallback((id: string) => {
     logger.graph.debug(`handleFunctionCreated: ${id}`, 'GraphManagement');
@@ -112,9 +109,8 @@ export function useGraphManagement(
 
   const handleFunctionCreatedFailed = useCallback((name: string, error: string) => {
     logger.graph.error(`handleFunctionCreatedFailed: ${name} - ${error}`, 'GraphManagement');
-    
-    showToast?.(`创建 Function 失败: ${error}`, 'error');
-  }, [showToast]);
+    uiStore.showToast(`创建 Function 失败: ${error}`, 'error');
+  }, []);
 
   const deleteFunction = useCallback(async (id: string) => {
     try {
@@ -126,13 +122,10 @@ export function useGraphManagement(
   }, []);
 
   return {
-    // Events
     addEvent,
     deleteEvent,
     handleEventCreated,
     handleEventCreatedFailed,
-
-    // Functions
     addFunction,
     deleteFunction,
     handleFunctionCreated,

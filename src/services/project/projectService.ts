@@ -478,19 +478,6 @@ export class ProjectService {
         await invoke("update_canvas", { subgraphId, canvas });
     }
 
-    static async updateSubgraphIo(
-        subgraphId: string,
-        inputs?: Pin[],
-        outputs?: Pin[]
-    ): Promise<Graph> {
-        const result = await invoke<GraphInstanceDTO>("update_subgraph_io", {
-            subgraphId,
-            inputs: inputs || null,
-            outputs: outputs || null,
-        });
-        return toFrontendGraph(result);
-    }
-
     static async renameSubgraph(subgraphId: string, newName: string): Promise<Graph> {
         const result = await invoke<GraphInstanceDTO>("rename_subgraph", { subgraphId, newName });
         return toFrontendGraph(result);

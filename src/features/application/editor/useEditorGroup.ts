@@ -4,8 +4,6 @@ import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditor } from './useEditor';
 import type { Pin } from '@/shared/types/domain';
 
-export { GroupContext };
-
 /**
  * useEditorGroup Hook
  *

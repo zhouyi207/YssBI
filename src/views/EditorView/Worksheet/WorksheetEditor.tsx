@@ -1,5 +1,5 @@
 import { useContext, useEffect } from 'react';
-import { GroupContext } from '@/features/application/editor';
+import { GroupContext } from '@/features/core/editor';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';

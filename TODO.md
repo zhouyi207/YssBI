@@ -4,6 +4,8 @@
 
 每次更新版本都需要
 
+由于历史代码重构原因，目前项目中存在许多的历史遗留代码，或多余或逻辑重复或实现低效；请检查整体项目，寻找出项目中的重复逻辑和未使用的逻辑，分析必要性，如果有更高效的更干净的架构请添加到 todo 的 v1.0 待办中，如果单纯的逻辑重复或者多余，也请添加到 v1.0 待办中
+
 ```
 同步改三处版本（例如 0.1.1）：
 
@@ -590,10 +592,67 @@ package.json
 - [x] **框选性能（selection session + 命中缓存 + 命令式 marquee）**：`selectionSession.ts` 承载框选 live 态（不再每帧 `setGesture`）；`selectionHitTargets.ts` 在 pointer down 一次性缓存节点 screen bounds + 纯矩形 hit-test（移除每帧 `getGraphById` / 全节点 `getBoundingClientRect`）；`useSelectionBoxPreview` 命令式更新选框 DOM；pointer down 延迟 `setSelectedNodeIds([])` 至 pointer up（避免框选开始即整图重渲染）；`CanvasOverlays` 移除 `SelectionRegion` gesture 订阅；补充 `selectionHitTargets.test.ts`。
 - [x] **ResultSource Presentation 迁移**：后端 `SourceDescriptor.presentation`（`Inspector` / `Plot{chart}` / `Report{report}`）替代 `renderer` + 临时 `window_type` / `SourcePresentation`；节点 API 改为 `publish_plot` / `publish_report` / `open_registered_source`；`OpenSourceWindow` 事件携带 `presentation` + `windowTitle`；View 节点直接 `open_registered_source`；前端 `presentationRoute` / `plotTypeFromPresentation` 统一 Pin「查看」与执行自动开窗。
 - [x] **窗口与模块命名整理**：`/database` + `databaseEditor`（DuckDB 编辑器 `DatabaseEditorWindow`）；`/inspect` + `sourceInspector`（`SourceInspectorWindow`）；`features/core/resultSource`（`UnifiedSourceView` / `SourceViewShell`）；`features/application/databaseEditor`；Info 内嵌 `SourcePreviewPanel`；WindowKind / i18n / `window_state.json` 键同步更新。
+- [x] **执行可视化 cleanup**：移除 store 死字段（`currentNodeId` / `errorConnections` / `nodeDurations`）、`isExecuting` 死 UI 路径；`clearedVisualPatch()` 合并 reset 逻辑；`resolveTabId` 提取至 `canvasInteractionUtils.ts`；移除 `data-edge-from/to` 等遗留属性。
+- [x] **C 节技术债清理完成**：删除 `useEditorInit`、`connections.ts`、`SettingsService`、`update_subgraph_io` stub、`syncFromBackend`（node registry）、`default_type_system_snapshot`；`useShemaStore`→`useSchemaStore`；`PinRuntimeState::from_instance` 保留 pin id；`window_data_store`→`result_source_store`；`ColumnInfo` 合并为 `ColumnInfoDTO`；移除 `executedNodes` 双写；`GroupContext`/`services` barrel 收口；`useGraphManagement` 统一 `uiStore.showToast`。
 - [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 
+## 2026.07.05
+
+#### C. 死代码 / 多余逻辑删除（快速清理）
+
+- [x] **删除未使用 hook `useEditorInit`**：`useEditorInit.ts` 导出但无消费者；init 已由 `appInitialization.hook.ts` 负责
+- [x] **删除 node registry 冗余 sync**：`useNodeRegistryStore.ts` 的 `syncFromBackend` 从未调用；schema store 为唯一 loader
+- [x] **删除未使用 utils**：`shared/utils/editor/connections.ts` 零引用
+- [x] **删除 stub API `update_subgraph_io`**：`command_connection.rs` 注册为 no-op，应从 `lib.rs` invoke handler 移除或实现
+- [x] **删除 dead export `default_type_system_snapshot`**：`graph/value/type_system.rs` 无引用
+- [x] **清理注释死代码**：`type_inference_session.rs` 大段 commented `infer_incremental`
+- [x] **文档/命名 cleanup**：更新过时 `editor/README.md`；重命名 `useShemaStore.ts` → `useSchemaStore.ts`；移除 `useGraphManagement.ts` 未使用的 `showToast` 参数
+- [x] **后端类型/命名澄清**：`PinRuntimeState::from_instance` 可能错误生成新 PinId（`pin_runtime_state.rs`）；`window_data_store.rs` 重命名为 `result_source_store.rs`；`ColumnInfo` vs `ColumnInfoDTO` 合并
+- [x] **executedNodes vs nodeStates 统一（低优）**：commit 后 `executedNodes` Set 与 `nodeStates.status === 'completed'` 双写；可统一为只读 `nodeStates`
+- [x] **Settings 退出时重复 load/save**：删除从未被引用的 `SettingsService`（前端 settings 走 `settingsStore` + localStorage）；后端 `load_settings`/`save_settings` command 暂保留
+- [x] **`GroupContext` / `services` barrel 收口**：`GroupContext` 从 application 与 core 双 barrel 导出；`services/index.ts` 仅 re-export 部分 service（缺 `projectService`、`worksheetService` 等），import 路径混用 deep path 与 barrel
+
 ## v1.0 待办
+
+### 技术债 / 重构（2026.07 审计）
+
+> 建议实施顺序：Phase1 快速清理（C + B1/B3）→ Phase2 边界收口（A2/A3 + B2/B5）→ Phase3 后端核心（A5/A6/A7 + command 拆分/下沉）→ Phase4 结构重构（A1/A4/A8/A9）。共 36 条（2026.07 审计 + 补充）。
+
+#### A. 架构重构（高收益，需设计）
+
+- [ ] **Editor 组合层瘦身**：`useEditor` / `useEditorGroup` 在同一窗口多次挂载（`EditorWindow.tsx`、`useProjectSync.ts`、Canvas 子树）；`useActiveEditorGroup` 在 state/actions/workspace 重复调用；`withCanvasInteraction: false` 仍是 band-aid。目标：引入 `EditorSessionProvider` 或拆分为 `useEditorTabs` / `useEditorCommands` / `useCanvasInteractionProvider`，仅 Canvas 挂载 pointer loop。涉及 `useEditor.ts`、`useEditorGroup.ts`、`useEditorState.ts`
+- [ ] **IPC / 分层边界统一**：`SourceService`（`features/core/resultSource/sourceService.ts`）直接 `invoke` 应迁至 `services/`；`resourceActions.ts` 的 `rename_graph_resource` 绕过 `GraphService`；Views 直连 services（`Sidebar.tsx`、`Workspace.tsx`、InfoView stats blocks）；`resolvePinViewTarget.ts` 在 core 层开窗 + toast，应上移到 application hook
+- [ ] **Toast 单通道**：`uiStore.showToast` → `Toast.tsx` → sonner 与 ~6 处直接 `import { toast } from 'sonner'` 并存（`useProjectPicker.ts`、`resolvePinViewTarget.ts` 等）。统一为 `uiStore.showToast` 或 `shared/ui/toast` 薄封装
+- [ ] **GraphDataStore flat mirror 退役**：`graphEntities[graphId]` 为权威，但 `nodes/pins/connections` flat mirror 仍被 ~15 处 `?? store.connections[cid]` fallback 使用（`graphDataStore.ts`、sync handlers、clipboard）。所有读写强制 graph-scoped API，删除 mirror 与 fallback
+- [ ] **后端 ProjectState 变异 API**：graph commands 直接锁 `project_data`（`command_node.rs` 等），与 `prepare_graph_runtime` / `compile_graph` 规则易漂移。引入 `ProjectState::with_graph_mut` + 统一 `GraphInstance::recompile(scope)` 入口
+- [ ] **后端 graph compile / rename 去重**：三套 compile 路径（`prepare_graph_runtime`、`compile_graph_from_seeds`、command 内手工 `resolve_* + infer_types`）；两个 rename（`rename_graph_resource` vs `rename_subgraph`）。目标：单一 rename + 单一 recompile scope 枚举
+- [ ] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
+- [ ] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
+- [ ] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
+- [ ] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
+- [ ] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
+- [ ] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
+- [ ] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
+
+#### B. 重复逻辑合并（中等工作量）
+
+- [ ] **Layout tab 查找 helper**：重复 `findTab`（`closeGraphTab.ts`、`closeEditorTab.ts`）；重复 active tab 扫描（layoutStore、TabBar、BottomBar、detailFocusCommands 等）。提取 `getLayoutTabById` / `getActiveLayoutTab(groupId)` 至 `features/core/layout/`
+- [ ] **Viewport 持久化单入口**：`useCanvasInteraction.ts` 与 `useCanvasViewport.ts` 均调用 `ProjectService.updateCanvas`。提取 `persistGraphViewport(graphId)` 至 `features/core/viewport/`
+- [ ] **窗口打开 helper 收口**：Database（`sidebarUtils.ts` vs `useMenubar.ts`）；Logs（menubar vs `LogPanelContent.tsx`）。新增 `features/application/window/openDatabaseEditor.ts`、`openLogsWindow.ts` 等 typed helpers
+- [ ] **Canvas drop 逻辑合并**：`useCanvasDrop.ts` 与 `useCanvasOverlayHandlers.ts` 重复 VariableDropMenu / spawn 逻辑
+- [ ] **Graph 资源 CRUD 单入口**：`Sidebar.tsx` 直接调 `resourceActions`，`useGraphManagement.ts` 包装同一 API；Sidebar 应走统一入口
+- [ ] **后端 schema enrichment 去重**：`command_project.rs` L36–137 与 `application/database.rs` 重复 `database_display_name` / column DTO 映射
+- [ ] **后端 graph mutation 事件 helper**：`command_connection.rs` 中 `emit_pin_change_events → emit_inferred_types → emit_runtime_source_invalidation` 重复 ~5 次
+- [ ] **graph 事件 helper 迁出 command 层**：`emit_pin_change_events` 等定义在 `command_connection.rs` 却被 `command_node` / `command_pin` 等跨模块引用；迁至 `project/graph_events.rs` 或 `event/graph_sync.rs`，command 文件只注册 handler
+- [ ] **`load_graph` 跳过重复 `prepare_graph_runtime`**：`project_state.rs` 中图已在内存时仍 `insert_graph(existing)` 重跑 schema 传播与 runtime prepare；已有图且无 invalidation 标志时应直接返回
+- [ ] **connect gesture 统一 tab 解析**：`canvasPointerLoop.ts` connect 路径用 `activeTabIdRef.current`，pan/drag 已用 `resolveTabId`，可能 tab 不一致
+- [ ] **`useNodeManagement` 重复实例化**：`Canvas.tsx` / `CanvasOverlays.tsx` 与 `useEditorGroup` 重复
+- [ ] **variables 双源合并**：`useEditorGraphData.ts` 返回空 `{}`，真实数据在 `Variables`；Canvas 合并 `{ ...variables, ...Variables }`。删除 stub，统一从 collections 读取
+
+
+
+---
 
 - [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库

@@ -29,7 +29,8 @@ describe('executionVisualSession', () => {
     applyExecutionVisualEvent('g1', { event: 'executionComplete', data: { hasError: false } });
     const patch = snapshotToGraphPatch(getExecutionVisual());
     expect(patch.status).toBe('completed');
-    expect(patch.executedNodes.has('n1')).toBe(true);
+    expect(patch.nodeStates.get('n1')?.status).toBe('completed');
+    expect(patch.nodeStates.get('n1')?.durationMs).toBe(12);
 
     clearExecutionVisual();
     expect(getExecutionVisual().active).toBe(false);

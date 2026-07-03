@@ -6,7 +6,7 @@ import { layoutNodeFlexStyle } from './sashResizeLogic';
 import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '@/shared/types/ui';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { GroupContext } from '@/features/application/editor';
+import { GroupContext } from '@/features/core/editor';
 import { TabBar } from '../Layout/TabBar';
 import { DROP_TYPES, DRAG_TYPES } from '@/features/core/dnd';
 

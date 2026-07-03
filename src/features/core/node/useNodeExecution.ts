@@ -15,14 +15,11 @@ export function useNodeExecution(nodeId: string, graphId?: string, enabled = tru
     if (!enabled || !graphId) return null;
     return state.graphs[graphId]?.nodeStates.get(nodeId) ?? null;
   });
-  const isCompleted = useExecutionStore((state) => {
-    if (!enabled || !graphId) return false;
-    return state.graphs[graphId]?.executedNodes.has(nodeId) ?? false;
-  });
 
   if (!enabled || !graphId) return IDLE;
 
   const hasError = nodeState?.status === 'error';
+  const isCompleted = nodeState?.status === 'completed';
 
   return {
     nodeState,

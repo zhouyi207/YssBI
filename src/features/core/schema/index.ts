@@ -1,1 +1,1 @@
-export * from "./useShemaStore";
+export * from "./useSchemaStore";

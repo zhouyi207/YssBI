@@ -59,7 +59,6 @@ export interface PinResultState {
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
-  executedNodes: Set<string>;
   nodeStates: Map<string, NodeExecutionState>;
   completedConnections: Set<string>;
   recording: RecordedEvent[];

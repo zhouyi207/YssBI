@@ -1,5 +1,6 @@
 export * from "./project";
-export * from "./settings";
+export { DatabaseService } from "./database/databaseService";
+export { WorksheetService } from "./worksheet/worksheetService";
 export * from "./schema";
 export * from "./stats";
 export * from "./window";

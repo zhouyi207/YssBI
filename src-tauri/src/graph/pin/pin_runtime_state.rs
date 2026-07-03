@@ -20,7 +20,7 @@ impl PinRuntimeState {
             PinKind::Exec => PinState::Exec(ExecPinState::Idle),
         };
         Self {
-            id: PinId::new(),
+            id: instance.id,
             state,
             current_value: None,
         }
@@ -29,5 +29,26 @@ impl PinRuntimeState {
     pub fn with_current_value(mut self, current_value: Option<DataValue>) -> Self {
         self.current_value = current_value;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::node::NodeId;
+    use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition};
+    use crate::graph::DataType;
+
+    #[test]
+    fn from_instance_preserves_pin_id() {
+        let def = PinDefinition::data_output(
+            "out",
+            DataRole::Result,
+            PinDataTypeDefinition::concrete(DataType::Float64),
+        );
+        let instance = PinInstance::from_definition(&def, NodeId::new(), 0);
+        let expected_id = instance.id;
+        let runtime = PinRuntimeState::from_instance(instance);
+        assert_eq!(runtime.id, expected_id);
     }
 }

@@ -132,7 +132,6 @@ export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent
 
 export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
   status: ExecutionVisualSnapshot['status'];
-  executedNodes: Set<string>;
   nodeStates: Map<string, import('@/shared/types/ui/execution').NodeExecutionState>;
   completedConnections: Set<string>;
 } {
@@ -158,7 +157,6 @@ export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
 
   return {
     status: snap.status === 'idle' ? 'completed' : snap.status,
-    executedNodes: new Set(snap.executedNodeIds),
     nodeStates,
     completedConnections: new Set(snap.completedConnections),
   };

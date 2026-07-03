@@ -1,241 +1,61 @@
-# Editor Feature
+# Editor Application Layer
 
-This feature contains all the editor-related logic that was previously in `CanvasContext` and `CanvasProvider`.
-
-**Note:** As of the final migration, `CanvasProvider` and `CanvasContext` have been completely removed. All components now use hooks directly without requiring a Context Provider.
+Editor UI orchestration lives under `features/application/editor/`. Core editor state and actions live under `features/core/editor/`.
 
 ## Structure
 
 ```
-editor/
-├── stores/
-│   ├── useEditorStore.ts      # Editor UI state (context menu, selection, pending connection)
-│   ├── useClipboardStore.ts   # Clipboard operations state
-│   └── index.ts
-├── hooks/
-│   ├── useEditor.ts                  # Main hook combining all functionality
-│   ├── useEditorOperations.ts       # Clipboard, history, node operations
-│   ├── useTabManagement.ts          # Tab opening, closing, switching
-│   ├── useProjectOperations.ts      # Save, load, execute operations
-│   ├── useGraphManagement.ts     # Events and functions management
-│   ├── useVariableManagement.ts     # Variable CRUD and promotion/demotion
-│   ├── useDatabaseManagement.ts    # DataFrame CRUD
-│   ├── useEditorKeyboard.ts         # Keyboard shortcuts
-│   ├── useEditorGroup.ts            # Context-aware editor hook
-│   └── index.ts
+features/application/editor/
+├── useEditor.ts              # Composes core state + dataManagement hooks
+├── useEditorGroup.ts         # Group-scoped wrapper (GroupContext from core)
+├── useEditorOperations.ts    # Clipboard, history, node ops
+├── useTabManagement.ts       # Tab open/close/switch
+├── useProjectOperations.ts   # Save, load, execute
+├── useCanvasViewport.ts      # Viewport persistence
+├── useCanvasDrop.ts          # Canvas drop handlers
+└── index.ts
+
+features/core/editor/
+├── hooks/                    # useEditorState, useEditorActions, …
+├── context/GroupContext.ts   # Layout group scope for canvas
 └── index.ts
 ```
 
 ## Usage
 
-### Recommended: Use useEditorGroup for Context-Aware Components
-
-For components that need context-aware editor operations (like components within a GroupContext):
+### Canvas / graph editing (with pointer loop)
 
 ```tsx
-import { useEditorGroup, GroupContext } from '@/features/editor';
+import { useEditorGroup } from '@/features/application/editor';
 
-function MyComponent() {
-  const editor = useEditorGroup();
-  
-  // Automatically scopes to the current group context
-  // Provides groupId, tabs, activeTabId, nodes, variables, etc.
-  editor.addEvent();
-  editor.saveGraph();
-  console.log(editor.groupId); // Current group ID
-}
-
-// Use with GroupContext for scoped operations
-function ParentComponent() {
-  return (
-    <GroupContext.Provider value="my-group-id">
-      <MyComponent />
-    </GroupContext.Provider>
-  );
+function CanvasArea() {
+  const editor = useEditorGroup(); // withCanvasInteraction defaults true for editor groups
+  // editor.onCanvasPointerDown, editor.onNodePointerDown, …
 }
 ```
 
-### Use useEditor for Global Operations
-
-For components that work with the globally active editor:
+### Chrome only (Sidebar, Menubar, sync hooks)
 
 ```tsx
-import { useEditor } from '@/features/editor';
+import { useEditor } from '@/features/application/editor';
 
-function MyComponent() {
-  const editor = useEditor();
-  
-  // Access any editor functionality
-  editor.addEvent();
-  editor.saveGraph();
-  editor.copy();
-  // etc.
-}
+const editor = useEditor({ withCanvasInteraction: false });
 ```
 
-### No Provider Needed!
-
-Unlike the old architecture, you don't need to wrap your app in a Provider:
+### Group scope
 
 ```tsx
-// ❌ Old way (removed)
-<CanvasProvider>
-  <MyComponent />
-</CanvasProvider>
+import { GroupContext } from '@/features/core/editor';
 
-// ✅ New way (no provider needed)
-<MyComponent />
+<GroupContext.Provider value={groupId}>
+  <GraphEditor />
+</GroupContext.Provider>
 ```
 
-### Granular Usage
+`useEditorGroup()` reads `GroupContext` and scopes pointer handlers to that layout group.
 
-Import specific hooks for more control:
+## Related modules
 
-```tsx
-import { useEditorOperations, useTabManagement } from '@/features/editor';
-
-function MyComponent() {
-  const { copy, paste, undo, redo } = useEditorOperations();
-  const { openGraph, closeTab } = useTabManagement();
-}
-```
-
-## Migration from CanvasProvider
-
-The old `CanvasProvider` has been refactored into:
-
-1. **Stores** - State management using Zustand
-   - `useEditorStore` - UI state (context menu, selection, etc.)
-   - `useClipboardStore` - Clipboard state
-
-2. **Hooks** - Business logic and operations
-   - `useEditor` - Main hook combining everything
-   - `useEditorOperations` - Clipboard and history operations
-   - `useTabManagement` - Tab operations
-   - `useProjectOperations` - Project-level operations
-   - `useGraphManagement` - Graph CRUD
-   - `useVariableManagement` - Variable operations
-   - `useDatabaseManagement` - DataFrame operations
-   - `useEditorKeyboard` - Keyboard shortcuts
-
-3. **Simplified Provider** - `CanvasProvider.new.tsx`
-   - Uses the new hooks
-   - Much simpler and cleaner
-   - Easy to understand and maintain
-
-## Benefits
-
-1. **Separation of Concerns** - Each hook has a single responsibility
-2. **Reusability** - Hooks can be used independently
-3. **Testability** - Each hook can be tested in isolation
-4. **Type Safety** - Full TypeScript support
-5. **Performance** - Better optimization with granular hooks
-6. **Maintainability** - Easier to understand and modify
-
-## API Reference
-
-### useEditor()
-
-Main hook that combines all editor functionality.
-
-**Returns:**
-- All state and operations from sub-hooks
-- Canvas interaction handlers
-- Project operations
-- Graph management
-- Variable management
-- DataFrame management
-- Clipboard operations
-- History operations
-
-### useEditorOperations()
-
-Handles clipboard operations and history.
-
-**Returns:**
-- `copy()` - Copy selected nodes
-- `cut()` - Cut selected nodes
-- `paste(pos?)` - Paste nodes at position
-- `deleteSelected()` - Delete selected nodes
-- `undo()` - Undo last operation
-- `redo()` - Redo last undone operation
-- `saveHistory()` - Save current state to history
-- `canUndo` - Whether undo is available
-- `canRedo` - Whether redo is available
-
-### useTabManagement()
-
-Handles tab operations.
-
-**Returns:**
-- `setActiveTabId(id, targetGroupId?)` - Set active tab
-- `openGraph(id, name, type, data?)` - Open a subgraph tab
-- `openSettingsTab()` - Open settings tab
-- `closeTab(id, e?)` - Close a tab
-- `splitEditorRight(groupId)` - Split editor to the right
-- `closeGroup(id)` - Close an editor group
-
-### useProjectOperations(openGraph)
-
-Handles project-level operations.
-
-**Parameters:**
-- `openGraph` - Function to open a subgraph
-
-**Returns:**
-- `saveGraph()` - Save current project
-- `saveGraphAs()` - Save project as new file
-- `importGraph(json?)` - Import project from file or JSON
-- `executeGraph()` - Execute current event
-- `executeAllEvents()` - Execute all events
-
-### useGraphManagement(openGraph, closeTab, switchSidebarTab)
-
-Handles events and functions.
-
-**Parameters:**
-- `openGraph` - Function to open a subgraph
-- `closeTab` - Function to close a tab
-- `switchSidebarTab` - Function to switch sidebar tab
-
-**Returns:**
-- `addEvent(name?)` - Create new event
-- `updateEvent(id, data)` - Update event
-- `deleteEvent(id)` - Delete event
-- `addFunction(name?)` - Create new function
-- `updateFunction(id, data)` - Update function
-- `deleteFunction(id)` - Delete function
-
-### useVariableManagement(switchSidebarTab)
-
-Handles variable operations.
-
-**Parameters:**
-- `switchSidebarTab` - Function to switch sidebar tab
-
-**Returns:**
-- `addVariable(name?, type?, isGlobal?)` - Create variable
-- `updateVariable(id, data)` - Update variable
-- `deleteVariable(id)` - Delete variable
-- `promoteVariable(id)` - Promote to global variable
-- `demoteVariable(id)` - Demote to local variable
-
-### useDatabaseManagement()
-
-Handles DataFrame operations.
-
-**Returns:**
-- `triggerImportData()` - 打开导入数据弹窗（CSV 等）
-- `updateDataFrame(id, data)` - Update DataFrame
-- `deleteDataFrame(id)` - Delete DataFrame
-
-### useEditorKeyboard(props)
-
-Handles keyboard shortcuts.
-
-**Parameters:**
-- Object with all operation functions
-
-**Side Effects:**
-- Sets up global keyboard event listeners
-- Cleans up on unmount
+- Graph CRUD UI: `features/application/dataManagement/useGraphManagement.ts`
+- Resource actions: `features/application/resource/resourceActions.ts`
+- Canvas interaction primitives: `features/core/canvas/`
