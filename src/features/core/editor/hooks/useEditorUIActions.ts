@@ -1,12 +1,13 @@
 /**
- * 编辑器 UI 操作：setContextMenu、setSelectedInfo、setPendingConnection
+ * 编辑器 UI 操作：setContextMenu、sidebarDetailFocus、setPendingConnection
  */
 import { useEditorStore } from '../stores';
 
 export function useEditorUIActions() {
   const setContextMenu = useEditorStore((s) => s.setContextMenu);
-  const setSelectedInfo = useEditorStore((s) => s.setSelectedInfo);
+  const setSidebarDetailFocus = useEditorStore((s) => s.setSidebarDetailFocus);
+  const clearSidebarDetailFocus = useEditorStore((s) => s.clearSidebarDetailFocus);
   const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
 
-  return { setContextMenu, setSelectedInfo, setPendingConnection };
+  return { setContextMenu, setSidebarDetailFocus, clearSidebarDetailFocus, setPendingConnection };
 }

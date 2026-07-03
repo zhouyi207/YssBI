@@ -48,7 +48,8 @@ export function useEditor(options?: { withCanvasInteraction?: boolean }) {
     setSelectedNodeIds: actions.setSelectedNodeIds,
     setActiveGroupId: actions.setActiveGroupId,
     setContextMenu: actions.setContextMenu,
-    setSelectedInfo: actions.setSelectedInfo,
+    setSidebarDetailFocus: actions.setSidebarDetailFocus,
+    clearSidebarDetailFocus: actions.clearSidebarDetailFocus,
     setPendingConnection: actions.setPendingConnection,
 
     // Canvas interaction

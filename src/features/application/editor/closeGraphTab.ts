@@ -5,7 +5,6 @@ import { useGraphDataStore, useProjectIOStore } from "@/features/core/dataStore"
 import { GraphService } from "@/services/graph/graphService";
 import { releaseGraphCacheIfClosed } from "./releaseGraphCache";
 import { clearResourceDocumentState, markResourceDirty } from "@/features/core/resource";
-import { syncDetailFromEditorTab } from "./syncDetailFromEditorTab";
 
 function findTab(graphId: string): { nodeId: string; tab: LayoutTab } | null {
   for (const node of Object.values(useLayoutStore.getState().nodes)) {
@@ -41,7 +40,6 @@ function getActiveTabAfterClose(preferredNodeId: string): LayoutTab | undefined 
 
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
   const activeTab = getActiveTabAfterClose(preferredNodeId);
-  syncDetailFromEditorTab(activeTab);
 
   if (!isGraphTab(activeTab)) return;
   if (useGraphDataStore.getState().graphNodes[activeTab.id] !== undefined) return;

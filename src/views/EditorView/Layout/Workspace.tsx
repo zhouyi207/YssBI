@@ -7,7 +7,6 @@ import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { useProjectIOStore } from "@/features/core/dataStore";
-import { useEditorStore } from "@/features/core/editor";
 import {
   DRAG_TYPES,
   isCanvasDrop,
@@ -65,7 +64,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       type: resource.type,
     });
     layoutStore.setActiveGroup(targetGroupId);
-    useEditorStore.getState().setSelectedInfo(resource.id, resource.type);
   };
 
   const finishSidebarDrag = () => {

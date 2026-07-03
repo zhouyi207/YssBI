@@ -18,7 +18,6 @@ import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
 import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
-import { syncDetailFromEditorTab } from "@/features/application/editor/syncDetailFromEditorTab";
 import { resourceKey, resourceRefFromLayoutTab, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
 interface TabBarProps {
@@ -74,8 +73,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
               : { ...currentData?.params, selectedNodeIds: [] },
         }
     });
-    const tab = tabs.find((item) => item.id === id);
-    syncDetailFromEditorTab(tab);
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {

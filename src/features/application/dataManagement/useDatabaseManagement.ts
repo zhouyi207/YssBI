@@ -233,8 +233,8 @@ export function triggerImportData() {
 
 // database
 export function useDatabaseManagement() {
-  const selectedItemId = useEditorStore((s) => s.selectedItemId);
-  const setSelectedInfo = useEditorStore((s) => s.setSelectedInfo);
+  const sidebarDetailFocus = useEditorStore((s) => s.sidebarDetailFocus);
+  const clearSidebarDetailFocus = useEditorStore((s) => s.clearSidebarDetailFocus);
 
   const updateDataFrame = useCallback((id: string, data: any) => {
     useDatabaseStore.getState().updateDatabase(id, data);
@@ -251,13 +251,15 @@ export function useDatabaseManagement() {
         () => DatabaseService.deleteDatabase(id),
       );
       useDatabaseStore.getState().deleteDatabase(id);
-      if (selectedItemId === id) setSelectedInfo(null, null);
+      if (sidebarDetailFocus?.id === id && sidebarDetailFocus.type === 'data') {
+        clearSidebarDetailFocus();
+      }
       uiStore.showToast(i18n.t('dataOperation.deleteSuccess', { name: previous.name }), 'success');
     } catch (e) {
       logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement');
       uiStore.showToast(i18n.t('dataOperation.deleteFailed', { error: String(e) }), 'error');
     }
-  }, [selectedItemId, setSelectedInfo]);
+  }, [sidebarDetailFocus, clearSidebarDetailFocus]);
 
   const renameDataFrame = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();

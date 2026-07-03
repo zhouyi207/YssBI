@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorGroup } from '@/features/application/editor';
+import { useDetailTarget } from '@/features/core/editor';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { useGraphMetaStore } from '@/features/core/dataStore';
@@ -25,38 +26,36 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     events,
     functions,
     dataframes,
-    selectedItemId,
-    selectedItemType,
     updateVariable,
     updateDataFrame,
   } = useEditorGroup();
 
+  const target = useDetailTarget();
   const selectedLog = useLogStore((s) => s.selectedLog);
+
+  const targetId = target && 'id' in target ? target.id : null;
+
   const worksheetDocument = useWorksheetStore((s) =>
-    selectedItemId && selectedItemType === 'worksheet'
-      ? s.documents[selectedItemId] ?? null
-      : null,
+    target?.kind === 'worksheet' && targetId ? s.documents[targetId] ?? null : null,
   );
   const selectedFunctionSignature = useGraphMetaStore((s) =>
-    selectedItemId && selectedItemType === 'function'
-      ? s.graphs[selectedItemId]
-      : undefined,
+    target?.kind === 'function' && targetId ? s.graphs[targetId] : undefined,
   );
 
   useEffect(() => {
-    if (selectedItemType !== 'worksheet' || !selectedItemId) return;
+    if (target?.kind !== 'worksheet' || !targetId) return;
     if (worksheetDocument) return;
-    void WorksheetService.loadWorksheet(selectedItemId)
+    void WorksheetService.loadWorksheet(targetId)
       .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
       .catch(() => undefined);
-  }, [selectedItemId, selectedItemType, worksheetDocument]);
+  }, [target?.kind, targetId, worksheetDocument]);
 
   const selectedData = useMemo(() => {
-    if (!selectedItemId || !selectedItemType) return null;
-    if (selectedItemType === 'variable') return Variables[selectedItemId];
-    if (selectedItemType === 'event') return events[selectedItemId];
-    if (selectedItemType === 'function') {
-      const fn = functions[selectedItemId];
+    if (!target || !targetId) return null;
+    if (target.kind === 'variable') return Variables[targetId];
+    if (target.kind === 'event') return events[targetId];
+    if (target.kind === 'function') {
+      const fn = functions[targetId];
       if (!fn) return null;
       return {
         ...fn,
@@ -64,9 +63,9 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
         outputs: selectedFunctionSignature?.functionOutputs ?? [],
       };
     }
-    if (selectedItemType === 'data') return dataframes[selectedItemId];
+    if (target.kind === 'data') return dataframes[targetId];
     return null;
-  }, [selectedItemId, selectedItemType, Variables, events, functions, dataframes, selectedFunctionSignature]);
+  }, [target, targetId, Variables, events, functions, dataframes, selectedFunctionSignature]);
 
   return (
     <div
@@ -74,51 +73,51 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
       className="right-sidebar-container flex h-full w-full select-none flex-col overflow-hidden bg-[var(--sidebar-bg)]"
       onWheel={(e) => e.stopPropagation()}
     >
-      {selectedItemType === 'log' && selectedLog ? (
+      {target?.kind === 'log' && selectedLog ? (
         <LogDetailPanel log={selectedLog} />
-      ) : selectedItemType === 'node' && selectedItemId ? (
-        <NodeDetailPanel nodeId={selectedItemId} />
-      ) : selectedData && selectedItemType === 'variable' ? (
+      ) : target?.kind === 'node' ? (
+        <NodeDetailPanel nodeId={target.id} />
+      ) : selectedData && target?.kind === 'variable' ? (
         <VariableDetailPanel
           variable={selectedData}
           onUpdate={(patch) => {
             if (typeof patch.name === 'string') {
-              void renameResource({ id: selectedItemId!, kind: 'variable' }, patch.name);
+              void renameResource({ id: targetId!, kind: 'variable' }, patch.name);
               return;
             }
-            updateVariable(selectedItemId!, patch);
+            updateVariable(targetId!, patch);
           }}
         />
-      ) : selectedData && selectedItemType === 'event' ? (
+      ) : selectedData && target?.kind === 'event' ? (
         <EventDetailPanel
           event={selectedData}
           onUpdate={(patch) => {
             if (typeof patch.name === 'string') {
-              void renameResource({ id: selectedItemId!, kind: 'event' }, patch.name);
+              void renameResource({ id: targetId!, kind: 'event' }, patch.name);
             }
           }}
         />
-      ) : selectedData && selectedItemType === 'function' ? (
+      ) : selectedData && target?.kind === 'function' ? (
         <FunctionDetailPanel
           fn={selectedData}
           onRename={(name) => {
-            void renameResource({ id: selectedItemId!, kind: 'function' }, name);
+            void renameResource({ id: targetId!, kind: 'function' }, name);
           }}
           onSignatureChange={(patch) => {
-            void updateFunctionSignature(selectedItemId!, patch);
+            void updateFunctionSignature(targetId!, patch);
           }}
         />
-      ) : selectedItemType === 'worksheet' && worksheetDocument ? (
+      ) : target?.kind === 'worksheet' && worksheetDocument ? (
         <WorksheetDetailPanel document={worksheetDocument} />
-      ) : selectedData && selectedItemType === 'data' ? (
+      ) : selectedData && target?.kind === 'data' ? (
         <DataDetailPanel
           dataframe={selectedData}
           onUpdate={(patch) => {
             if (typeof patch.name === 'string') {
-              void renameResource({ id: selectedItemId!, kind: 'database' }, patch.name);
+              void renameResource({ id: targetId!, kind: 'database' }, patch.name);
               return;
             }
-            updateDataFrame(selectedItemId!, patch);
+            updateDataFrame(targetId!, patch);
           }}
         />
       ) : (

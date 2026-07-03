@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditorGroup, GroupContext } from "@/features/application/editor";
+import { useDetailTarget } from "@/features/core/editor";
 import {
   VscDatabase,
   VscSymbolEvent,
@@ -15,7 +16,6 @@ import { useHistoryStore } from "@/features/core/history";
 import type { HistoryEntry } from "@/features/core/history";
 import { useSidebarStore } from "@/features/core/sidebar";
 import { buildSidebarDragData } from "@/features/application/sidebar";
-import { ensureDetailVisible } from "@/features/application/editor/ensureDetailVisible";
 import { deleteWorksheetWithConfirm } from "@/features/application/editor/closeEditorTab";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import type { DataType } from "@/shared/types/domain/dataType";
@@ -70,9 +70,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const {
     Variables: allVariables,
-    selectedItemId,
-    selectedItemType,
-    setSelectedInfo,
+    setSidebarDetailFocus,
     addVariable,
     functions,
     events,
@@ -82,6 +80,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     addWorksheet,
     openWorksheet,
   } = useEditorGroup();
+
+  const detailTarget = useDetailTarget();
+
+  const isDetailSelected = (id: string, type: string) =>
+    detailTarget != null && "id" in detailTarget && detailTarget.id === id && detailTarget.kind === type;
 
   const worksheets = useWorksheetStore((s) => s.index);
 
@@ -270,7 +273,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     readOnly?: boolean,
     onContextMenu?: (e: React.MouseEvent) => void
   ) => {
-    const isSelected = selectedItemId === id && selectedItemType === type;
+    const isSelected = isDetailSelected(id, type);
     const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string } | undefined);
 
     const iconColor =
@@ -300,7 +303,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setSelectedInfo(id, type);
+          if (type === "variable" || type === "data") {
+            setSidebarDetailFocus({ id, type });
+          }
         }}
         onDoubleClick={(e) => {
           if (type !== "variable" && type !== "data") {
@@ -358,7 +363,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const renderDataItem = (id: string, name: string, data: unknown) => {
     const isLoading = (data as { loading?: unknown }).loading === true;
     const loadError = (data as { loadError?: unknown }).loadError;
-    const isSelected = selectedItemId === id && selectedItemType === "data";
+    const isSelected = isDetailSelected(id, "data");
 
     return (
       <SidebarListItem
@@ -370,7 +375,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setSelectedInfo(id, "data");
+          setSidebarDetailFocus({ id, type: "data" });
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -410,7 +415,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   };
 
   const renderWorksheetItem = (id: string, name: string) => {
-    const isSelected = selectedItemId === id && selectedItemType === "worksheet";
+    const isSelected = isDetailSelected(id, "worksheet");
     return (
       <SidebarListItem
         key={id}
@@ -420,8 +425,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setSelectedInfo(id, "worksheet");
-          ensureDetailVisible();
+          void openWorksheet(id, name);
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();

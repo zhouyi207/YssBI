@@ -1,21 +1,20 @@
 /**
- * 编辑器组目录数据：variables、events、functions、dataframes、selectedItem
+ * 编辑器组目录数据：variables、events、functions、dataframes、detailTarget
  * 直接使用 core hooks，无 application 依赖
  */
 import { useMemo } from 'react';
+import { useDetailTarget } from '../detail';
 import { useEditorCollections } from './useEditorCollections';
-import { useEditorUIState } from './useEditorUIState';
 
 export function useEditorGroupCatalog() {
   const collections = useEditorCollections();
-  const { selectedItemId, selectedItemType } = useEditorUIState();
+  const detailTarget = useDetailTarget();
 
   return useMemo(
     () => ({
       ...collections,
-      selectedItemId,
-      selectedItemType,
+      detailTarget,
     }),
-    [collections, selectedItemId, selectedItemType]
+    [collections, detailTarget],
   );
 }

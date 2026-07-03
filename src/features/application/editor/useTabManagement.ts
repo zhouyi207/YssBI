@@ -2,11 +2,9 @@ import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { useEditorStore } from '@/features/core/editor';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
 import { closeEditorTab } from './closeEditorTab';
 import { ensureGraphViewport } from '@/features/core/viewport';
-import { syncDetailFromEditorTab } from './syncDetailFromEditorTab';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -14,9 +12,7 @@ import { logger } from '@/utils/appLogger';
  * Handles opening, closing, and switching between tabs
  */
 export function useTabManagement() {
-  const setSelectedInfo = useEditorStore((s) => s.setSelectedInfo);
   const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
-  // const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
 
   const setActiveTabId = useCallback((id: string | null, targetGroupId?: string) => {
     const groupId = targetGroupId || activeGroupId;
@@ -31,10 +27,6 @@ export function useTabManagement() {
             : { ...currentData?.params, selectedNodeIds: [] },
         }
       });
-      const tab = id
-        ? useLayoutStore.getState().nodes[groupId]?.data?.tabs?.find((item) => item.id === id)
-        : undefined;
-      syncDetailFromEditorTab(tab);
     }
   }, [activeGroupId]);
 
@@ -50,14 +42,10 @@ export function useTabManagement() {
     if (!newId) return;
 
     const tabSource = initialData || getGraphById(newId);
-    const type = forceType || (tabSource as any)?.type;
-
     ensureGraphViewport(newId, tabSource?.canvas);
     
-    logger.graph.trace(`handleSetActiveTabId final type: ${type}`, 'TabManagement');
-    
-    if (type) setSelectedInfo(newId, type as any);
-  }, [setActiveTabId, setSelectedInfo]);
+    logger.graph.trace(`handleSetActiveTabId final type: ${forceType || (tabSource as { type?: string })?.type}`, 'TabManagement');
+  }, [setActiveTabId]);
 
   const openGraph = useCallback(async (
     id: string,

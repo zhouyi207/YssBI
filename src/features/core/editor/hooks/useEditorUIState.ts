@@ -1,5 +1,5 @@
 /**
- * 编辑器 UI 状态：contextMenu、selectedItemId、pendingConnection
+ * 编辑器 UI 状态：contextMenu、sidebarDetailFocus、pendingConnection
  * 依赖 useEditorStore
  */
 
@@ -8,17 +8,15 @@ import { useEditorStore } from '../stores';
 
 export function useEditorUIState() {
   const contextMenu = useEditorStore((s) => s.contextMenu);
-  const selectedItemId = useEditorStore((s) => s.selectedItemId);
-  const selectedItemType = useEditorStore((s) => s.selectedItemType);
+  const sidebarDetailFocus = useEditorStore((s) => s.sidebarDetailFocus);
   const pendingConnection = useEditorStore((s) => s.pendingConnection);
 
   return useMemo(
     () => ({
       contextMenu,
-      selectedItemId,
-      selectedItemType,
+      sidebarDetailFocus,
       pendingConnection,
     }),
-    [contextMenu, selectedItemId, selectedItemType, pendingConnection]
+    [contextMenu, sidebarDetailFocus, pendingConnection],
   );
 }

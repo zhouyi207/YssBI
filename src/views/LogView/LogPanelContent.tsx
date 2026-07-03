@@ -8,7 +8,6 @@ import { createPersistedWindow } from '@/features/application/window';
 import { useLogStore, applyLogFilter } from '@/features/core/log/logStore';
 import { logBuffer } from '@/features/core/log/logBuffer';
 import { useLiveLogs } from '@/features/core/log/useLiveLogs';
-import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useLogActions } from '@/features/application/log';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
@@ -282,7 +281,6 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
   const handleSelectLog = useCallback((index: number) => {
     const log = filteredLogs[index] ?? null;
     setSelectedLog(log);
-    useEditorStore.getState().setSelectedInfo('log', 'log');
   }, [filteredLogs, setSelectedLog]);
 
   const selectedIndex = selectedLog

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
+import { resolveDetailTarget } from '@/features/core/editor/detail/resolveDetailTarget';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GraphService } from '@/services/graph/graphService';
 import { closeGraphTab } from './closeGraphTab';
@@ -36,7 +37,7 @@ describe('closeGraphTab', () => {
       activeEditorGroupId: 'editor',
     });
     useGraphDataStore.getState().hydrateGraphs({});
-    useEditorStore.getState().setSelectedInfo(null, null);
+    useEditorStore.getState().clearSidebarDetailFocus();
     vi.spyOn(GraphService, 'unloadProjectGraph').mockResolvedValue();
   });
 
@@ -51,7 +52,14 @@ describe('closeGraphTab', () => {
     expect(editor.data?.activeTabId).toBe('g2');
     expect(editor.data?.params?.selectedNodeIds).toEqual([]);
     expect(loadGraph).toHaveBeenCalledWith('g2');
-    expect(useEditorStore.getState().selectedItemId).toBe('g2');
-    expect(useEditorStore.getState().selectedItemType).toBe('event');
+
+    const detailTarget = resolveDetailTarget({
+      activeTabId: editor.data?.activeTabId ?? null,
+      tabs: editor.data?.tabs ?? [],
+      selectedNodeIds: editor.data?.params?.selectedNodeIds ?? [],
+      sidebarDetailFocus: useEditorStore.getState().sidebarDetailFocus,
+      selectedLog: null,
+    });
+    expect(detailTarget).toEqual({ kind: 'event', id: 'g2' });
   });
 });
