@@ -7,8 +7,7 @@ import { useEditorGroup } from "@/features/application/editor";
 import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
 import { UnifiedSourceView } from "@/features/core/resultSource";
 
-import { useNodeManagement } from "@/features/application/dataManagement";
-import { useCanvasOverlayHandlers } from "@/features/application/editor";
+import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContextMenu } from "@/shared/ui/contextMenu";
@@ -44,11 +43,15 @@ function CanvasToolbarButton({
 export default function CanvasOverlays({
     canvasRef,
     variableDropMenu,
-    setVariableDropMenu
+    setVariableDropMenu,
+    onVariableDropGet,
+    onVariableDropSet,
 }: {
     canvasRef: React.RefObject<HTMLDivElement | null>;
-    variableDropMenu: any;
-    setVariableDropMenu: (val: any) => void;
+    variableDropMenu: VariableDropMenu | null;
+    setVariableDropMenu: (val: VariableDropMenu | null) => void;
+    onVariableDropGet: (menu: VariableDropMenu) => void | Promise<void>;
+    onVariableDropSet: (menu: VariableDropMenu) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
     const {
@@ -57,7 +60,6 @@ export default function CanvasOverlays({
         setPendingConnection,
         pendingConnection,
         variables,
-        Variables,
         functions,
         tabs,
         activeTabId,
@@ -65,25 +67,18 @@ export default function CanvasOverlays({
         groupId,
         executeGraph,
         setCanvas,
+        createNode,
     } = useEditorGroup();
-
-    const { createNode } = useNodeManagement();
 
     const {
         handleNodePaletteSelect,
-        handleVariableDropGet,
-        handleVariableDropSet,
     } = useCanvasOverlayHandlers({
         canvasRef,
-        groupId,
         activeTabId,
         functions,
-        variables,
-        Variables,
         pendingConnection,
         setContextMenu,
         setPendingConnection,
-        setVariableDropMenu,
         createNode,
         setCanvas,
     });
@@ -245,7 +240,6 @@ export default function CanvasOverlays({
                         onSelect={onPaletteSelect}
                         filterPin={pendingConnection}
                         variables={variables}
-                        Variables={Variables}
                         functions={functions as unknown as Record<string, Graph>}
                     />
                 </div>,
@@ -262,7 +256,7 @@ export default function CanvasOverlays({
                                 {
                                     id: "get-variable",
                                     label: t("canvas.getVariable", { name: variableDropMenu.variableName }),
-                                    onClick: () => handleVariableDropGet(variableDropMenu),
+                                    onClick: () => void onVariableDropGet(variableDropMenu),
                                 },
                             ],
                         },
@@ -271,7 +265,7 @@ export default function CanvasOverlays({
                                 {
                                     id: "set-variable",
                                     label: t("canvas.setVariable", { name: variableDropMenu.variableName }),
-                                    onClick: () => handleVariableDropSet(variableDropMenu),
+                                    onClick: () => void onVariableDropSet(variableDropMenu),
                                 },
                             ],
                         },

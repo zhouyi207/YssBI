@@ -324,7 +324,9 @@ fn json_to_source_value(descriptor: &SourceDescriptor, json: serde_json::Value) 
             if descriptor.kind == SourceKind::Json
                 || matches!(
                     descriptor.presentation,
-                    Presentation::Inspector | Presentation::Plot { .. }
+                    Presentation::Inspector
+                        | Presentation::Plot { .. }
+                        | Presentation::Report { .. }
                 )
             {
                 Some(json.clone())

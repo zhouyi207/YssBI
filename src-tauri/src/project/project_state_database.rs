@@ -39,6 +39,7 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             data.databases.insert(id, decl);
         }
+        self.invalidate_graph_runtime();
     }
 
     /// 从 project_store 和 project_data 中移除数据库
@@ -65,5 +66,6 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             data.databases.remove(id);
         }
+        self.invalidate_graph_runtime();
     }
 }

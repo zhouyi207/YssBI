@@ -1,5 +1,4 @@
 export { useActiveEditorGroup } from './useActiveEditorGroup';
-export { useEditorGraphData } from './useEditorGraphData';
 export { useEditorCollections } from './useEditorCollections';
 export { useEditorGroups } from './useEditorGroups';
 export { useEditorUIState } from './useEditorUIState';

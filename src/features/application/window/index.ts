@@ -8,5 +8,6 @@ export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openLogsWindow } from "./openLogsWindow";
 export type { OpenLogsWindowOptions } from "./openLogsWindow";
 export { createEphemeralWindowLabel } from "./windowLabels";
-export { useReleaseResultSourceOnUnmount } from "./useReleaseResultSourceOnUnmount";
+export { usePresentationWindowLifecycle } from "./usePresentationWindowLifecycle";
+export { PresentationWindowShell } from "./PresentationWindowShell";
 export { windowKindForRoute } from "./windowRoute";

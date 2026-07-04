@@ -15,6 +15,10 @@ export type PlotChart =
 
 export type ReportKind =
   | 'olsSummary'
+  | 'binarySummary'
+  | 'iv2slsSummary'
+  | 'ivLimlSummary'
+  | 'praisSummary'
   | 'varSummary'
   | 'varSoc'
   | 'panelSummary'

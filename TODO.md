@@ -596,12 +596,8 @@ package.json
 - [x] **C 节技术债清理完成**：删除 `useEditorInit`、`connections.ts`、`SettingsService`、`update_subgraph_io` stub、`syncFromBackend`（node registry）、`default_type_system_snapshot`；`useShemaStore`→`useSchemaStore`；`PinRuntimeState::from_instance` 保留 pin id；`window_data_store`→`result_source_store`；`ColumnInfo` 合并为 `ColumnInfoDTO`；移除 `executedNodes` 双写；`GroupContext`/`services` barrel 收口；`useGraphManagement` 统一 `uiStore.showToast`。
 - [x] **B 节 Layout tab / 窗口 helper 收口**：`layoutTabQueries.ts`（`getLayoutTabById` / `locateLayoutTab` / `getActiveLayoutTab` / `getActiveLayoutTabAmongGroups` / `resolveEditorGroupId`）+ barrel `features/core/layout/index.ts`；close-tab / detail / menubar split / BottomBar / TabBar / layoutStore 迁移；`openDatabaseEditorWindow` / `openLogsWindow` + `windowLabels.ts`；Sidebar / menubar / LogPanel 去重。
 - [x] **IPC 分层 + Toast 单通道**：`SourceService`→`services/resultSource`；`GraphService.renameGraphResource`；`pinViewTarget.ts`（core 纯逻辑）+ `pinViewActions.ts`（开窗/toast）；`openGraphInEditor` / `sidebarResourceActions` / `statsActions`；views 去直连 services 与 sonner。
-- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
-- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 
 ## 2026.07.05
-
-#### C. 死代码 / 多余逻辑删除（快速清理）
 
 - [x] **删除未使用 hook `useEditorInit`**：`useEditorInit.ts` 导出但无消费者；init 已由 `appInitialization.hook.ts` 负责
 - [x] **删除 node registry 冗余 sync**：`useNodeRegistryStore.ts` 的 `syncFromBackend` 从未调用；schema store 为唯一 loader
@@ -614,6 +610,25 @@ package.json
 - [x] **executedNodes vs nodeStates 统一（低优）**：commit 后 `executedNodes` Set 与 `nodeStates.status === 'completed'` 双写；可统一为只读 `nodeStates`
 - [x] **Settings 退出时重复 load/save**：删除从未被引用的 `SettingsService`（前端 settings 走 `settingsStore` + localStorage）；后端 `load_settings`/`save_settings` command 暂保留
 - [x] **`GroupContext` / `services` barrel 收口**：`GroupContext` 从 application 与 core 双 barrel 导出；`services/index.ts` 仅 re-export 部分 service（缺 `projectService`、`worksheetService` 等），import 路径混用 deep path 与 barrel
+- [x] **Layout tab 查找 helper**：重复 `findTab`（`closeGraphTab.ts`、`closeEditorTab.ts`）；重复 active tab 扫描（layoutStore、TabBar、BottomBar、detailFocusCommands 等）。提取 `getLayoutTabById` / `getActiveLayoutTab(groupId)` 至 `features/core/layout/`
+- [x] **Viewport 持久化单入口**：`useCanvasInteraction.ts` 与 `useCanvasViewport.ts` 均调用 `ProjectService.updateCanvas`。提取 `persistGraphViewport(graphId)` 至 `features/core/viewport/`
+- [x] **窗口打开 helper 收口**：Database（`sidebarUtils.ts` vs `useMenubar.ts`）；Logs（menubar vs `LogPanelContent.tsx`）。新增 `features/application/window/openDatabaseEditor.ts`、`openLogsWindow.ts` 等 typed helpers
+- [x] **Canvas drop 逻辑合并**：`useCanvasDrop.ts` 与 `useCanvasOverlayHandlers.ts` 重复 VariableDropMenu / spawn 逻辑
+- [x] **Graph 资源 CRUD 单入口**：`Sidebar.tsx` 直接调 `resourceActions`，`useGraphManagement.ts` 包装同一 API；Sidebar 应走统一入口
+- [x] **后端 schema enrichment 去重**：`command_project.rs` L36–137 与 `application/database.rs` 重复 `database_display_name` / column DTO 映射
+- [x] **后端 graph mutation 事件 helper**：`command_connection.rs` 中 `emit_pin_change_events → emit_inferred_types → emit_runtime_source_invalidation` 重复 ~5 次
+- [x] **graph 事件 helper 迁出 command 层**：`emit_pin_change_events` 等定义在 `command_connection.rs` 并被 `command_node` / `command_pin` 等跨模块引用；迁至 `project/graph_events.rs` 或 `event/graph_sync.rs`，command 文件只注册 handler
+- [x] **`load_graph` 跳过重复 `prepare_graph_runtime`**：`project_state.rs` 中图已在内存时仍 `insert_graph(existing)` 重跑 schema 传播与 runtime prepare；已有图且无 invalidation 标志时应直接返回
+- [x] **connect gesture 统一 tab 解析**：`canvasPointerLoop.ts` connect 路径用 `activeTabIdRef.current`，pan/drag 已用 `resolveTabId`，可能 tab 不一致
+- [x] **`useNodeManagement` 重复实例化**：`Canvas.tsx` / `CanvasOverlays.tsx` 与 `useEditorGroup` 重复
+- [x] **variables 双源合并**：`useEditorGraphData.ts` 返回空 `{}`，真实数据在 `Variables`；Canvas 合并 `{ ...variables, ...Variables }`。删除 stub，统一从 collections 读取
+- [x] **Presentation 子窗口架构统一（修复 OLS Summary 等 Info 窗「此窗口没有可用数据」）**：根因是 `useReleaseResultSourceOnUnmount` 在 React StrictMode remount 时过早 `release_result_source`，且 `InfoWindow` 按 `kind===json` 误判 inspectable、未走 `presentation.report` 加载链。改动：**Phase 1** `usePresentationWindowLifecycle`（Tauri `onCloseRequested` release，删 unmount release）；**Phase 2** `parseSourceIdFromLocation` + `loadPresentationWindow` + `usePresentationWindow`（按 `inspector`/`plot`/`report` 三分支 IPC）；**Phase 3–4** `PresentationWindowShell` + `SourceInspectorWindow`/`PlotWindow`/`InfoWindow` 薄壳化；**Phase 5** `reportViewResolver` + `ReportView`（`ReportKind → Component` 映射，删 InfoWindow heuristic 与 `SourcePreviewPanel`）；**Phase 6** 后端 `ReportKind` 细分 `binarySummary`/`iv2slsSummary`/`ivLimlSummary`/`praisSummary`，对应节点改 publish，`get_value` 对 `Presentation::Report` 返回完整 JSON
+
+## 2026.07.06
+
+- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
+- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
+
 
 ## v1.0 待办
 
@@ -636,23 +651,6 @@ package.json
 - [ ] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
 - [ ] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
 - [ ] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
-
-#### B. 重复逻辑合并（中等工作量）
-
-- [x] **Layout tab 查找 helper**：重复 `findTab`（`closeGraphTab.ts`、`closeEditorTab.ts`）；重复 active tab 扫描（layoutStore、TabBar、BottomBar、detailFocusCommands 等）。提取 `getLayoutTabById` / `getActiveLayoutTab(groupId)` 至 `features/core/layout/`
-- [ ] **Viewport 持久化单入口**：`useCanvasInteraction.ts` 与 `useCanvasViewport.ts` 均调用 `ProjectService.updateCanvas`。提取 `persistGraphViewport(graphId)` 至 `features/core/viewport/`
-- [x] **窗口打开 helper 收口**：Database（`sidebarUtils.ts` vs `useMenubar.ts`）；Logs（menubar vs `LogPanelContent.tsx`）。新增 `features/application/window/openDatabaseEditor.ts`、`openLogsWindow.ts` 等 typed helpers
-- [ ] **Canvas drop 逻辑合并**：`useCanvasDrop.ts` 与 `useCanvasOverlayHandlers.ts` 重复 VariableDropMenu / spawn 逻辑
-- [ ] **Graph 资源 CRUD 单入口**：`Sidebar.tsx` 直接调 `resourceActions`，`useGraphManagement.ts` 包装同一 API；Sidebar 应走统一入口
-- [ ] **后端 schema enrichment 去重**：`command_project.rs` L36–137 与 `application/database.rs` 重复 `database_display_name` / column DTO 映射
-- [ ] **后端 graph mutation 事件 helper**：`command_connection.rs` 中 `emit_pin_change_events → emit_inferred_types → emit_runtime_source_invalidation` 重复 ~5 次
-- [ ] **graph 事件 helper 迁出 command 层**：`emit_pin_change_events` 等定义在 `command_connection.rs` 却被 `command_node` / `command_pin` 等跨模块引用；迁至 `project/graph_events.rs` 或 `event/graph_sync.rs`，command 文件只注册 handler
-- [ ] **`load_graph` 跳过重复 `prepare_graph_runtime`**：`project_state.rs` 中图已在内存时仍 `insert_graph(existing)` 重跑 schema 传播与 runtime prepare；已有图且无 invalidation 标志时应直接返回
-- [ ] **connect gesture 统一 tab 解析**：`canvasPointerLoop.ts` connect 路径用 `activeTabIdRef.current`，pan/drag 已用 `resolveTabId`，可能 tab 不一致
-- [ ] **`useNodeManagement` 重复实例化**：`Canvas.tsx` / `CanvasOverlays.tsx` 与 `useEditorGroup` 重复
-- [ ] **variables 双源合并**：`useEditorGraphData.ts` 返回空 `{}`，真实数据在 `Variables`；Canvas 合并 `{ ...variables, ...Variables }`。删除 stub，统一从 collections 读取
-
-
 
 ---
 

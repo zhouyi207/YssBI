@@ -11,7 +11,6 @@ import {
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { getDragPreview } from '@/features/core/canvas/dragPreview';
 import { NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from '@/app/appConfig/default';
-import { ProjectService } from '@/services/project/projectService';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
@@ -72,10 +71,11 @@ export function useCanvasViewport(
     useShallow((s) => (graphId ? s.getGraphConnections(graphId) : [])),
   );
 
-  const persistViewport = useCallback(() => {
-    if (!graphId) return;
-    ProjectService.updateCanvas(graphId, getViewport(graphId)).catch(() => {});
-  }, [graphId]);
+  useEffect(() => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl || !graphId) return;
+    return attachViewportWheel(canvasEl, graphId);
+  }, [canvasRef, graphId]);
 
   const updateVisibleNodes = useCallback(() => {
     const el = canvasRef.current;
@@ -161,12 +161,6 @@ export function useCanvasViewport(
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
   }, [gestureType, updateVisibleNodes]);
-
-  useEffect(() => {
-    const canvasEl = canvasRef.current;
-    if (!canvasEl || !graphId) return;
-    return attachViewportWheel(canvasEl, graphId, persistViewport);
-  }, [canvasRef, graphId, persistViewport]);
 
   useEffect(() => {
     return () => {

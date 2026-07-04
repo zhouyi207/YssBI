@@ -1,4 +1,4 @@
-use crate::commands::command_graph::command_connection::emit_pin_change_events;
+use crate::project::emit_pin_change_events;
 use crate::graph::pin::PinDataTypeDefinition;
 use crate::graph::value::{DataType, DataValue};
 use crate::graph::{GraphId, NodeId, PinId};
@@ -180,7 +180,7 @@ pub fn add_repeatable_pin(
 
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
-    emit_pin_change_events(&app, graph_id, &graph, all_sets);
+    emit_pin_change_events(&app, graph_id, &graph, &all_sets);
 
     Ok(AddRepeatablePinResult {
         pin_id: pin_id_str,
@@ -238,7 +238,7 @@ pub fn remove_repeatable_pin(
 
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
-    emit_pin_change_events(&app, graph_id, &graph, all_sets);
+    emit_pin_change_events(&app, graph_id, &graph, &all_sets);
 
     Ok(RemoveRepeatablePinResult {
         removed_pin_id: pin_id,

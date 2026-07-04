@@ -1,5 +1,4 @@
-use crate::application::database::name_from_path;
-use crate::database::{DatabaseInstance, DatabaseState};
+use crate::application::database_schema::enrich_database_decl_dto;
 use crate::event::{Event, EventProject, emit_project_event};
 use crate::execution::ExecutionEvent;
 use crate::frontend::FrontendError;
@@ -17,10 +16,9 @@ use crate::project::{
     save_project_to_file, validate_new_project_path as validate_new_project_path_impl,
 };
 use crate::schema::{
-    ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
+    DatabaseDeclDTO, DatabasesVariablesDTO, GraphInstanceDTO,
     GraphsWithValidationDTO, InvalidReferenceDTO, ProjectDataDTO, VariableInstanceDTO,
 };
-use polars::prelude::DataType;
 use tauri::{AppHandle, State, ipc::Channel};
 
 use serde_json::Value;
@@ -31,109 +29,6 @@ use std::collections::HashMap;
 pub struct LoadedProjectGraphDTO {
     pub graph: GraphInstanceDTO,
     pub variables: HashMap<String, VariableInstanceDTO>,
-}
-
-fn dtype_to_string(dt: &DataType) -> String {
-    format!("{:?}", dt)
-}
-
-/// 从 `DatabaseInstance` 抽取出来给前端的 schema 视图。
-enum SchemaInfo {
-    Ready {
-        name: String,
-        columns: Vec<ColumnInfoDTO>,
-        row_count: usize,
-        column_count: usize,
-    },
-    /// 上一次 IO 失败。
-    Failed { name: String, error: String },
-}
-
-fn database_display_name(instance: &DatabaseInstance) -> String {
-    instance
-        .decl
-        .name
-        .clone()
-        .unwrap_or_else(|| match &instance.decl.engine {
-            crate::database::DatabaseEngine::Csv { path, .. } => name_from_path(path),
-            crate::database::DatabaseEngine::Parquet { path, .. } => name_from_path(path),
-            crate::database::DatabaseEngine::Sql { table, .. } => table.clone(),
-            crate::database::DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
-            crate::database::DatabaseEngine::DuckDb { .. } => instance.decl.id.clone(),
-            crate::database::DatabaseEngine::InMemory { name } => name.clone(),
-        })
-}
-
-/// 从 DatabaseInstance 提取 schema 信息（不 mutate，适用于 project_store 读锁下）
-/// 优先使用 decl.name（后端 unique name），否则从 path 推导
-fn extract_database_schema(instance: &DatabaseInstance) -> SchemaInfo {
-    let name = database_display_name(instance);
-
-    match &instance.state {
-        DatabaseState::Loaded { dataframe, .. } => {
-            let schema = dataframe.schema();
-            let columns: Vec<ColumnInfoDTO> = schema
-                .iter_names()
-                .filter_map(|n| {
-                    schema.get(n).map(|dt| ColumnInfoDTO {
-                        name: n.to_string(),
-                        dtype: dtype_to_string(dt),
-                    })
-                })
-                .collect();
-            let row_count = dataframe.height();
-            let column_count = columns.len();
-            SchemaInfo::Ready {
-                name,
-                columns,
-                row_count,
-                column_count,
-            }
-        }
-        DatabaseState::DuckDb {
-            row_count, columns, ..
-        } => {
-            let columns: Vec<ColumnInfoDTO> = columns
-                .iter()
-                .map(|col| ColumnInfoDTO {
-                    name: col.name.clone(),
-                    dtype: col.dtype.clone(),
-                })
-                .collect();
-            let column_count = columns.len();
-            SchemaInfo::Ready {
-                name,
-                columns,
-                row_count: *row_count,
-                column_count,
-            }
-        }
-        DatabaseState::Failed { error } => SchemaInfo::Failed {
-            name,
-            error: error.clone(),
-        },
-    }
-}
-
-/// 把 `SchemaInfo` 写入 `DatabaseDeclDTO`，以便 `get_project_*` 命令复用。
-fn apply_schema_info(dto: &mut DatabaseDeclDTO, info: SchemaInfo) {
-    match info {
-        SchemaInfo::Ready {
-            name,
-            columns,
-            row_count,
-            column_count,
-        } => {
-            dto.name = Some(name);
-            dto.columns = Some(columns);
-            dto.row_count = Some(row_count);
-            dto.column_count = Some(column_count);
-        }
-        SchemaInfo::Failed { name, error } => {
-            dto.name = Some(name);
-            dto.load_error = Some(error);
-        }
-    }
 }
 
 /// 获取当前项目数据（含 database schema，从 project_store 补充）
@@ -155,7 +50,7 @@ pub fn get_project_data(state: State<ProjectState>) -> ProjectDataDTO {
     for (id, decl) in data.databases.iter() {
         let mut db_dto = DatabaseDeclDTO::from(decl);
         if let Some(instance) = store.databases.get(id) {
-            apply_schema_info(&mut db_dto, extract_database_schema(instance));
+            enrich_database_decl_dto(&mut db_dto, instance);
         }
         enriched.insert(id.clone(), db_dto);
     }
@@ -179,7 +74,7 @@ pub fn get_project_databases_variables(state: State<ProjectState>) -> DatabasesV
     for (id, decl) in data.databases.iter() {
         let mut db_dto = DatabaseDeclDTO::from(decl);
         if let Some(instance) = store.databases.get(id) {
-            apply_schema_info(&mut db_dto, extract_database_schema(instance));
+            enrich_database_decl_dto(&mut db_dto, instance);
         }
         databases.insert(id.clone(), db_dto);
     }

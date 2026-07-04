@@ -6,6 +6,7 @@ import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
 import type { Pin } from "@/shared/types/domain/pin";
 import { logger } from '@/utils/appLogger';
+import type { CreateNodeFn } from "./canvasDrop";
 
 export interface PaletteItem {
   nodeType: string;
@@ -16,39 +17,24 @@ export interface PaletteItem {
   };
 }
 
-export interface VariableDropMenu {
-  worldX: number;
-  worldY: number;
-  variableId: string;
-  variableName: string;
-}
-
 export function useCanvasOverlayHandlers({
   canvasRef,
-  groupId,
   activeTabId,
   functions,
-  variables,
-  Variables,
   pendingConnection,
   setContextMenu,
   setPendingConnection,
-  setVariableDropMenu,
   createNode,
   setCanvas,
 }: {
   canvasRef: React.RefObject<HTMLDivElement | null>;
-  groupId: string;
   activeTabId: string | null;
-  functions: Record<string, any>;
-  variables: Record<string, any>;
-  Variables: Record<string, any>;
+  functions: Record<string, unknown>;
   pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: any) => void;
-  setVariableDropMenu: (menu: VariableDropMenu | null) => void;
-  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
-  setCanvas: (updater: any, targetGraphId?: string) => void;
+  setPendingConnection: (pin: unknown) => void;
+  createNode: CreateNodeFn;
+  setCanvas: (updater: unknown, targetGraphId?: string) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
     async (item: PaletteItem, contextMenu: { x: number; y: number }) => {
@@ -87,9 +73,11 @@ export function useCanvasOverlayHandlers({
 
       if (item.nodeType === "Functions:Call Function") {
         const subId = item.overrides?.subGraphId;
-        if (!subId) { setContextMenu(null); setPendingConnection(null); return; }
-        const subData = functions[subId];
-        if (!subData) { setContextMenu(null); setPendingConnection(null); return; }
+        if (!subId || !functions[subId]) {
+          setContextMenu(null);
+          setPendingConnection(null);
+          return;
+        }
       }
 
       const sourcePinForConnect = pendingConnection;
@@ -99,7 +87,6 @@ export function useCanvasOverlayHandlers({
           : undefined;
 
       if (sourcePinForConnect && activeTabId && definition) {
-        // 从 pin 拖拽创建：单步乐观完成「建节点 + 自动连线」，节点与连线同时即时出现。
         try {
           await executeCommand(activeTabId, 'CreateNodeWithConnection', {
             nodeType: item.nodeType,
@@ -120,7 +107,6 @@ export function useCanvasOverlayHandlers({
     },
     [
       canvasRef,
-      groupId,
       activeTabId,
       functions,
       pendingConnection,
@@ -131,41 +117,7 @@ export function useCanvasOverlayHandlers({
     ]
   );
 
-  const handleVariableDropGet = useCallback(
-    async (menu: VariableDropMenu) => {
-      const varId = menu.variableId;
-      if (!(varId in variables) && !(varId in Variables)) {
-        logger.graph.warn('Variable no longer exists', 'CanvasOverlay');
-        setVariableDropMenu(null);
-        return;
-      }
-      await createNode("Variables:Get Variable", { x: menu.worldX, y: menu.worldY }, {
-        variableId: menu.variableId,
-      });
-      setVariableDropMenu(null);
-    },
-    [variables, Variables, createNode, setVariableDropMenu]
-  );
-
-  const handleVariableDropSet = useCallback(
-    async (menu: VariableDropMenu) => {
-      const varId = menu.variableId;
-      if (!(varId in variables) && !(varId in Variables)) {
-        logger.graph.warn('Variable no longer exists', 'CanvasOverlay');
-        setVariableDropMenu(null);
-        return;
-      }
-      await createNode("Variables:Set Variable", { x: menu.worldX, y: menu.worldY }, {
-        variableId: menu.variableId,
-      });
-      setVariableDropMenu(null);
-    },
-    [variables, Variables, createNode, setVariableDropMenu]
-  );
-
   return {
     handleNodePaletteSelect,
-    handleVariableDropGet,
-    handleVariableDropSet,
   };
 }

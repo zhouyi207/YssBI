@@ -1,12 +1,12 @@
-use super::command_connection::{emit_inferred_types, emit_pin_change_events};
-use super::runtime_source::emit_runtime_source_invalidation;
 use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::execution::ResultSourceStore;
 use crate::graph::{
     DataType, DataValue, GraphId, NodeId, NodeInstanceParams, PinChangeSet, PinDirection, PinId,
 };
 use crate::log::log_app;
-use crate::project::ProjectState;
+use crate::project::{
+    emit_inferred_types, emit_pin_change_events, emit_runtime_source_invalidation, ProjectState,
+};
 use crate::schema::{GraphUndoPatch, NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -319,7 +319,7 @@ pub fn apply_graph_patch(
     }
 
     // Pins before connections so the frontend store has pin entries before batchConnect.
-    emit_pin_change_events(&app, graph_id, &graph, result.change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, &result.change_sets);
 
     if !result.established_connections.is_empty() {
         emit_project_event(
@@ -673,7 +673,7 @@ pub fn batch_create_with_connections(
             }),
         );
     }
-    emit_pin_change_events(&app, graph_id, &graph, all_change_sets);
+    emit_pin_change_events(&app, graph_id, &graph, &all_change_sets);
     emit_inferred_types(&app, graph_id, last_inferred);
 
     let undo_patch = graph.capture_subgraph(&created_node_ids);

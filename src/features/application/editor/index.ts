@@ -8,5 +8,6 @@ export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContex
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';
 export { useCanvasDrop } from './useCanvasDrop';
+export type { VariableDropMenu } from './canvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
 export { saveAllDirtyGraphs } from './saveAllDirtyGraphs';

@@ -1,18 +1,16 @@
 /**
  * 编辑器状态（组合 hook）
- * 组合 useActiveEditorGroup、useEditorGraphData、useEditorCollections、useEditorGroups、useEditorUIState
+ * 组合 useActiveEditorGroup、useEditorCollections、useEditorGroups、useEditorUIState
  */
 
 import { useMemo } from 'react';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
-import { useEditorGraphData } from './useEditorGraphData';
 import { useEditorCollections } from './useEditorCollections';
 import { useEditorGroups } from './useEditorGroups';
 import { useEditorUIState } from './useEditorUIState';
 
 export function useEditorState(overrideGroupId?: string | null) {
   const active = useActiveEditorGroup(overrideGroupId);
-  const { variables } = useEditorGraphData();
   const collections = useEditorCollections();
   const groups = useEditorGroups();
   const uiState = useEditorUIState();
@@ -24,12 +22,11 @@ export function useEditorState(overrideGroupId?: string | null) {
       activeTabId: active.activeTabId,
       groupId: active.groupId,
       tabs: active.tabs,
-      variables,
       selectedNodeIds: active.selectedNodeIds,
       ...collections,
       groups,
       ...uiState,
     }),
-    [active, variables, collections, groups, uiState]
+    [active, collections, groups, uiState]
   );
 }

@@ -7,6 +7,7 @@ import {
   scheduleViewportPersist,
   setViewportLive,
 } from './viewportSession';
+import { persistGraphViewport } from './persistGraphViewport';
 
 const ZOOM_CLAMP = { min: 0.1, max: 5 } as const;
 const IGNORE_WHEEL_SELECTORS = ['.menubar-container', '.sidebar-container', '.menu-container'];
@@ -56,7 +57,6 @@ export function applyWheelToViewport(
 export function attachViewportWheel(
   canvasEl: HTMLElement,
   graphId: string,
-  persist: () => void,
 ): () => void {
   const timers: { commit?: number | null; persist?: number | null } = {};
 
@@ -71,7 +71,7 @@ export function attachViewportWheel(
     const next = applyWheelToViewport(getViewport(graphId), e, rect);
     setViewportLive(graphId, next);
     scheduleViewportCommit(graphId, timers);
-    scheduleViewportPersist(graphId, persist, timers);
+    scheduleViewportPersist(graphId, () => persistGraphViewport(graphId), timers);
   };
 
   const cleanup = addGlobalEventListener(window, 'wheel', onWheel, { passive: false, capture: true });

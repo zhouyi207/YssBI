@@ -674,7 +674,7 @@ fn register_prais_summary(registry: &NodeRegistry) {
             &PinRole::Data(DataRole::Result),
             DataValue::new_struct("OLSResult", result_id),
         )?;
-        ctx.publish_report(ReportKind::OlsSummary, json_data);
+        ctx.publish_report(ReportKind::PraisSummary, json_data);
         ctx.log("Prais Summary: completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

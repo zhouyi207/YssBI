@@ -2,12 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { getGraphById, useGraphDataStore } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
-import { getViewport } from '@/features/core/viewport';
+import { persistGraphViewport } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { executeCommand } from "@/features/core/history";
 import { GraphPosition, Pin } from "@/shared/types/domain";
 import { logger } from '@/utils/appLogger';
-import { ProjectService } from "@/services/project/projectService";
 import { canConnectPins } from "@/shared/utils/pinCompatibility";
 
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
@@ -48,13 +47,11 @@ export function useCanvasInteraction({
     setSelectedNodeIdsRef.current = setSelectedNodeIds;
 
     const persistViewport = useCallback((graphId?: string | null) => {
-        const tid = graphId ?? activeTabIdRef.current;
-        if (!tid) return;
-        ProjectService.updateCanvas(tid, getViewport(tid)).catch(() => {});
+        persistGraphViewport(graphId ?? activeTabIdRef.current);
     }, [activeTabIdRef]);
 
-    const connectPins = useCallback(async (a: string, b: string) => {
-        const tid = activeTabIdRef.current;
+    const connectPins = useCallback(async (groupId: string, a: string, b: string) => {
+        const tid = resolveTabId(groupId, activeTabIdRef);
         if (!tid) return;
 
         const graph = getGraphById(tid);
@@ -133,7 +130,8 @@ export function useCanvasInteraction({
         abortSelectionSession(groupId || activeGroupIdRef.current);
 
         if (e.altKey && e.button === 0) {
-            const tid = activeTabIdRef.current;
+            const gid = groupId || activeGroupIdRef.current;
+            const tid = resolveTabId(gid, activeTabIdRef);
             if (!tid) return;
 
             try {
@@ -146,10 +144,10 @@ export function useCanvasInteraction({
 
         if (e.button !== 0) return;
 
-        const tid = activeTabIdRef.current;
+        const gid = groupId || activeGroupIdRef.current;
+        const tid = resolveTabId(gid, activeTabIdRef);
         if (!tid) return;
 
-        const gid = groupId || activeGroupIdRef.current;
         const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
         useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
     }, [activeGroupIdRef, activeTabIdRef]);

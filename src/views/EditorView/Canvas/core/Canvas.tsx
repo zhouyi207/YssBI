@@ -6,7 +6,6 @@ import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/app
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
-import { useNodeManagement } from "@/features/application/dataManagement";
 import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
@@ -27,14 +26,12 @@ const EMPTY_NODE_IDS: string[] = [];
 
 export default function Canvas() {
   const {
-    setNodes,
     onCanvasPointerDown,
     onNodePointerDown,
     onPinPointerDown,
     contextMenu,
     setContextMenu,
     variables,
-    Variables,
     activeTabId,
     pendingConnection,
     setPendingConnection,
@@ -50,12 +47,11 @@ export default function Canvas() {
     disconnectPinById,
     resetPinValue,
     setSelectedNodeIds,
+    createNode,
   } = useEditorGroup();
 
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
-
-  const { createNode } = useNodeManagement();
 
   const ref = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
@@ -86,16 +82,17 @@ export default function Canvas() {
     handleNodeAddInput,
     handleNodeRemovePin,
     handleContextMenu,
+    handleVariableDropGet,
+    handleVariableDropSet,
   } = useCanvasDrop({
     canvasRef: ref,
     groupId,
     graphId: activeTabId,
-    variables: { ...variables, ...Variables },
+    variables,
     functions,
-    setNodes,
     setContextMenu,
     setPendingConnection,
-    createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => createNode(nodeType, position, params),
+    createNode,
   });
 
   const activePin = useMemo(() => {
@@ -191,6 +188,8 @@ export default function Canvas() {
         canvasRef={ref}
         variableDropMenu={variableDropMenu}
         setVariableDropMenu={setVariableDropMenu}
+        onVariableDropGet={handleVariableDropGet}
+        onVariableDropSet={handleVariableDropSet}
       />
     </div>
     </CanvasContextMenuProvider>

@@ -4,8 +4,11 @@ import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import {
   createGraphResource,
-  deleteResource,
-} from '@/features/application/resource/resourceActions';
+  deleteGraph,
+  duplicateGraph,
+  renameGraph,
+  type GraphResourceKind,
+} from '@/features/application/dataManagement/graphActions';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
@@ -13,7 +16,7 @@ import { logger } from '@/utils/appLogger';
  * Graph Management Hook
  *
  * 作为编辑器 UI 的 graph 操作门面：
- * - graph resource 创建 / 删除委托给 resourceActions
+ * - graph resource CRUD 委托给 graphActions
  * - 创建后自动打开时，通过 ProjectIOStore.loadGraph 拉取正文
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
@@ -43,7 +46,7 @@ export function useGraphManagement(
     logger.graph.debug(`Creating event: ${baseName}`, 'GraphManagement');
 
     try {
-      const id = await createGraphResource('event', '', baseName);
+      const id = await createGraphResource('event', baseName);
 
       logger.graph.info(`Event creation request sent, ID: ${id}`, 'GraphManagement');
 
@@ -70,7 +73,7 @@ export function useGraphManagement(
 
   const deleteEvent = useCallback(async (id: string) => {
     try {
-      await deleteResource({ id, kind: 'event' });
+      await deleteGraph(id, 'event');
     } catch (error) {
       logger.graph.error(`Failed to delete event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
@@ -87,7 +90,7 @@ export function useGraphManagement(
     logger.graph.debug(`Creating function: ${baseName}`, 'GraphManagement');
 
     try {
-      const id = await createGraphResource('function', '', baseName);
+      const id = await createGraphResource('function', baseName);
 
       logger.graph.info(`Function creation request sent, ID: ${id}`, 'GraphManagement');
 
@@ -114,12 +117,34 @@ export function useGraphManagement(
 
   const deleteFunction = useCallback(async (id: string) => {
     try {
-      await deleteResource({ id, kind: 'function' });
+      await deleteGraph(id, 'function');
     } catch (error) {
       logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);
+
+  const renameGraphItem = useCallback(async (id: string, name: string, kind: GraphResourceKind) => {
+    try {
+      await renameGraph(id, name, kind);
+    } catch (error) {
+      logger.graph.error(`Failed to rename graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
+      throw error;
+    }
+  }, []);
+
+  const duplicateGraphItem = useCallback(async (id: string) => {
+    try {
+      await duplicateGraph(id);
+    } catch (error) {
+      logger.graph.error(`Failed to duplicate graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
+      throw error;
+    }
+  }, []);
+
+  const createGraph = useCallback((kind: GraphResourceKind) => {
+    return kind === 'event' ? addEvent() : addFunction();
+  }, [addEvent, addFunction]);
 
   return {
     addEvent,
@@ -130,5 +155,8 @@ export function useGraphManagement(
     deleteFunction,
     handleFunctionCreated,
     handleFunctionCreatedFailed,
+    renameGraph: renameGraphItem,
+    duplicateGraph: duplicateGraphItem,
+    createGraph,
   };
 }

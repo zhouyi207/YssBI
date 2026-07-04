@@ -113,7 +113,6 @@ export function NodePalette({
   onSelect,
   filterPin,
   variables = {},
-  Variables = {},
   functions = {},
 }: {
   x: number;
@@ -121,7 +120,6 @@ export function NodePalette({
   onSelect: (item: PaletteItem) => void;
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
-  Variables?: Record<string, Variable>;
   functions?: Record<string, Graph>;
 }) {
   const { t } = useTranslation();
@@ -133,10 +131,6 @@ export function NodePalette({
   const variableKeysStr = useMemo(
     () => Object.keys(variables).sort().join(","),
     [variables]
-  );
-  const globalVariableKeysStr = useMemo(
-    () => Object.keys(Variables).sort().join(","),
-    [Variables]
   );
   const functionKeysStr = useMemo(
     () => Object.keys(functions).sort().join(","),
@@ -155,8 +149,7 @@ export function NodePalette({
       items.push({ nodeType: node.nodeType, title: node.name, category: node.category || [] });
     });
 
-    const allVars = { ...Variables, ...variables };
-    Object.values(allVars).forEach((v) => {
+    Object.values(variables).forEach((v) => {
       if (!v?.name || !v?.id) return;
       const varName = v.name;
       const varId = v.id;
@@ -209,7 +202,7 @@ export function NodePalette({
     });
 
     return items;
-  }, [filterPin, variableKeysStr, globalVariableKeysStr, functionKeysStr, definitions]);
+  }, [filterPin, variableKeysStr, functionKeysStr, definitions]);
 
   const root = useMemo(() => buildTreeFromItems(allItems), [allItems]);
 

@@ -1,39 +1,40 @@
 import { useState, useEffect, useCallback } from "react";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { getViewport } from "@/features/core/viewport";
 import { useGestureStore } from "@/features/core/gesture";
-import { useVariableStore, useGraphDataStore } from "@/features/core/dataStore";
-import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
+import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import {
+  buildVariableDropMenu,
+  clientToWorldInCanvas,
+  isPointInsideCanvas,
+  isVariableAvailable,
+  resolveVariableSpawnType,
+  spawnVariableFromMenu,
+  spawnVariableNode,
+  type CreateNodeFn,
+  type VariableDropMenu,
+  type VariableNodeType,
+} from "./canvasDrop";
 
-export interface VariableDropMenu {
-  x: number;
-  y: number;
-  worldX: number;
-  worldY: number;
-  variableId: string;
-  variableName: string;
-}
+export type { VariableDropMenu } from "./canvasDrop";
 
 interface UseCanvasDropParams {
   canvasRef: React.RefObject<HTMLDivElement | null>;
   groupId: string;
   graphId: string | null;
-  variables: Record<string, any>;
-  functions: Record<string, any>;
-  setNodes: (updater: (prev: any[]) => any[]) => void;
+  variables: Record<string, unknown>;
+  functions: Record<string, unknown>;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: any) => void;
-  createNode: (nodeType: string, position: { x: number; y: number }, params?: Record<string, unknown>) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
+  setPendingConnection: (pin: unknown) => void;
+  createNode: CreateNodeFn;
 }
 
 /**
  * Canvas drop logic: template drop, variable drop menu, add input, click outside, context menu.
- * Extracted from Canvas.tsx - view should only consume this hook.
  */
 export function useCanvasDrop({
   canvasRef,
@@ -41,7 +42,6 @@ export function useCanvasDrop({
   graphId,
   variables,
   functions,
-  setNodes,
   setContextMenu,
   setPendingConnection,
   createNode,
@@ -119,106 +119,79 @@ export function useCanvasDrop({
     [setContextMenu]
   );
 
+  const spawnFromVariableMenu = useCallback(
+    async (menu: VariableDropMenu, nodeType: VariableNodeType) => {
+      await spawnVariableFromMenu(menu, nodeType, variables, createNode);
+      setVariableDropMenu(null);
+    },
+    [variables, createNode],
+  );
+
+  const handleVariableDropGet = useCallback(
+    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, "Variables:Get Variable"),
+    [spawnFromVariableMenu],
+  );
+
+  const handleVariableDropSet = useCallback(
+    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, "Variables:Set Variable"),
+    [spawnFromVariableMenu],
+  );
+
   const handleDropTemplate = useCallback(
-    async (dragState: any, event: MouseEvent | PointerEvent) => {
+    async (dragState: { x: number; y: number; template: Record<string, unknown> }, event: MouseEvent | PointerEvent) => {
       const el = canvasRef.current;
       if (!el) return;
 
-      const rect = el.getBoundingClientRect();
-      const isInside =
-        dragState.x >= rect.left &&
-        dragState.x <= rect.right &&
-        dragState.y >= rect.top &&
-        dragState.y <= rect.bottom;
-      if (!isInside) return;
+      if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
 
-      const screenX = dragState.x - rect.left;
-      const screenY = dragState.y - rect.top;
-      const currentCanvas = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
-      const x = (screenX - currentCanvas.x) / currentCanvas.scale;
-      const y = (screenY - currentCanvas.y) / currentCanvas.scale;
+      const { x, y } = clientToWorldInCanvas(el, graphId, dragState.x, dragState.y);
+      const template = dragState.template;
 
-      // DataFrame 拖放
-      if (dragState.template.category === "Data") {
-        const nodeType = dragState.template.nodeType;
-        const params = {
-          dataframeId: dragState.template.variableId,
-          variableName: dragState.template.variableName,
-        };
-        await createNode(nodeType, { x, y }, params);
-        return;
-      }
-
-      // 变量拖放
-      if (dragState.template.category === "Variable") {
-        const allVariables = useVariableStore.getState().variables;
-        if (
-          !variables[dragState.template.variableId] &&
-          !allVariables[dragState.template.variableId]
-        ) {
-          logger.graph.warn('Variable no longer exists. Aborting drop', 'CanvasDrop');
-          return;
-        }
-
-        const varParams = {
-          variableId: dragState.template.variableId,
-        };
-
-        let spawnType: "Variables:Get Variable" | "Variables:Set Variable" | null = null;
-        if (event.altKey) spawnType = "Variables:Set Variable";
-        else if (event.ctrlKey) spawnType = "Variables:Get Variable";
-
-        if (spawnType) {
-          await createNode(spawnType, { x, y }, varParams);
-          return;
-        }
-
-        const elements = document.elementsFromPoint(dragState.x, dragState.y);
-        const pinEl = elements.find((e) => e.closest("[data-pin-id]"))?.closest("[data-pin-id]");
-        const targetPinId = pinEl?.getAttribute("data-pin-id");
-        if (targetPinId) {
-          await createNode("Variables:Get Variable", { x, y }, varParams);
-          return;
-        }
-
-        // 否则弹出选择菜单
-        setVariableDropMenu({
-          x: dragState.x,
-          y: dragState.y,
-          worldX: x,
-          worldY: y,
-          variableId: dragState.template.variableId,
-          variableName: dragState.template.variableName,
+      if (template.category === "Data") {
+        await createNode(String(template.nodeType), { x, y }, {
+          dataframeId: template.variableId,
+          variableName: template.variableName,
         });
         return;
       }
 
-      // Function 拖放
-      if (dragState.template.nodeType === "Functions:Call Function") {
-        const nodeType = dragState.template.nodeType;
-        const subId = dragState.template.subGraphId;
-        const subData = functions[subId];
-        if (!subData) return;
+      if (template.category === "Variable") {
+        const variableId = String(template.variableId);
+        if (!isVariableAvailable(variableId, variables)) {
+          logger.graph.warn('Variable no longer exists. Aborting drop', 'CanvasDrop');
+          return;
+        }
 
-        await createNode(nodeType, { x, y }, { subGraphId: subId });
+        const spawnType = resolveVariableSpawnType(event, dragState.x, dragState.y);
+        if (spawnType === 'menu') {
+          setVariableDropMenu(buildVariableDropMenu(
+            dragState.x,
+            dragState.y,
+            { x, y },
+            variableId,
+            String(template.variableName),
+          ));
+          return;
+        }
+
+        await spawnVariableNode(spawnType, { x, y }, variableId, createNode);
         return;
       }
 
-      // 普通节点拖放
-      await createNode(dragState.template.nodeType, { x, y });
+      if (template.nodeType === "Functions:Call Function") {
+        const subId = String(template.subGraphId);
+        if (!functions[subId]) return;
+        await createNode("Functions:Call Function", { x, y }, { subGraphId: subId });
+        return;
+      }
+
+      await createNode(String(template.nodeType), { x, y });
     },
-    [
-      canvasRef,
-      graphId,
-      variables,
-      functions,
-      createNode,
-      setVariableDropMenu,
-    ]
+    [canvasRef, graphId, variables, functions, createNode],
   );
 
   useEffect(() => {
-    canvasDropHandlerStore.setHandler(groupId, handleDropTemplate as any);
+    canvasDropHandlerStore.setHandler(groupId, handleDropTemplate as Parameters<typeof canvasDropHandlerStore.setHandler>[1]);
     return () => canvasDropHandlerStore.setHandler(groupId, null);
   }, [groupId, handleDropTemplate]);
 
@@ -228,5 +201,7 @@ export function useCanvasDrop({
     handleNodeAddInput,
     handleNodeRemovePin,
     handleContextMenu,
+    handleVariableDropGet,
+    handleVariableDropSet,
   };
 }

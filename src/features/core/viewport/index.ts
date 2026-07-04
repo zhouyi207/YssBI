@@ -7,6 +7,7 @@ export {
   resetLiveViewports,
 } from './viewportSession';
 export { attachViewportWheel, applyWheelToViewport } from './viewportWheel';
+export { persistGraphViewport } from './persistGraphViewport';
 export {
   applyViewportTransform,
   applyViewportGrid,

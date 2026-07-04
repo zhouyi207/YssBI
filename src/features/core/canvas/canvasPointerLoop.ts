@@ -32,7 +32,7 @@ export type CanvasPointerLoopDeps = {
   activeTabIdRef: RefObject<string | null>;
   canvasRef: RefObject<GraphPosition>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
-  connectPins: (a: string, b: string) => Promise<void>;
+  connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
   persistViewport: (graphId?: string | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
   setPendingConnection: (pin: Pin | null) => void;
@@ -88,7 +88,7 @@ function installPointerLoop(): () => void {
       nextGesture = { ...g, lastX: e.clientX, lastY: e.clientY, moved: true };
     } else if (g.type === 'connect') {
       const gid = g.groupId || deps.activeGroupIdRef.current;
-      const tid = deps.activeTabIdRef.current;
+      const tid = resolveTabId(gid, deps.activeTabIdRef);
       const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
       nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY, worldX, worldY };
       useGestureStore.getState().setGesture(nextGesture);
@@ -189,8 +189,9 @@ function installPointerLoop(): () => void {
         deps.persistViewport(graphId);
       }
     } else if (g.type === 'connect') {
+      const gid = g.groupId || deps.activeGroupIdRef.current;
       const target = (e.target as HTMLElement).closest('[data-pin-id]');
-      if (target) deps.connectPins(g.startPin.id, target.getAttribute('data-pin-id')!);
+      if (target) deps.connectPins(gid, g.startPin.id, target.getAttribute('data-pin-id')!);
       else {
         deps.setPendingConnection(g.startPin);
         deps.setContextMenu({ x: e.clientX, y: e.clientY, visible: true });

@@ -45,6 +45,10 @@ impl PlotChart {
 #[serde(rename_all = "camelCase")]
 pub enum ReportKind {
     OlsSummary,
+    BinarySummary,
+    Iv2slsSummary,
+    IvLimlSummary,
+    PraisSummary,
     VarSummary,
     VarSoc,
     PanelSummary,
@@ -59,6 +63,10 @@ impl ReportKind {
     pub fn default_title(self) -> &'static str {
         match self {
             Self::OlsSummary => "Results",
+            Self::BinarySummary => "Binary Model Results",
+            Self::Iv2slsSummary => "2SLS Results",
+            Self::IvLimlSummary => "LIML Results",
+            Self::PraisSummary => "Prais Results",
             Self::VarSummary => "VAR Summary",
             Self::VarSoc => "VAR SOC",
             Self::PanelSummary => "Panel Summary",
@@ -80,6 +88,10 @@ impl ReportKind {
             "df_adf_summary_list" => Self::DfAdfSummaryList,
             "vec_summary" => Self::VecSummary,
             "vec_rank_summary" => Self::VecRankSummary,
+            "binary_summary" => Self::BinarySummary,
+            "iv_2sls_summary" => Self::Iv2slsSummary,
+            "iv_liml_summary" => Self::IvLimlSummary,
+            "prais_summary" => Self::PraisSummary,
             _ => Self::OlsSummary,
         }
     }

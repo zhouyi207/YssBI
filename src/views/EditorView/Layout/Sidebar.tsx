@@ -43,10 +43,8 @@ import {
 } from "@/features/application/sidebar/sidebarResourceActions";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import {
-  createGraphResource,
-  deleteResource,
-  duplicateGraphResource,
   renameResource,
+  deleteResource,
 } from "@/features/application/resource/resourceActions";
 import { openDatabaseEditorWindow } from "@/features/application/window";
 import { safeDataTypeColor, safeDataTypeDisplay } from "./sidebarUtils";
@@ -73,7 +71,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null;
 
   const {
-    Variables: allVariables,
+    variables,
     setDetailFocus,
     addVariable,
     functions,
@@ -83,6 +81,13 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     openGraph,
     addWorksheet,
     openWorksheet,
+    addEvent,
+    addFunction,
+    deleteEvent,
+    deleteFunction,
+    createGraph,
+    renameGraph,
+    duplicateGraph,
   } = useEditorGroup();
 
   const detailTarget = useDetailTarget();
@@ -127,7 +132,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     const global: Record<string, { name: string; dataType?: unknown }> = {};
     const local: Record<string, { name: string; dataType?: unknown }> = {};
 
-    for (const [id, v] of Object.entries(allVariables)) {
+    for (const [id, v] of Object.entries(variables)) {
       const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
       const data = v as { name: string; dataType?: unknown };
       if (scope?.type === "global") {
@@ -148,7 +153,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
-  const variablesCount = Object.keys(allVariables).length;
+  const variablesCount = Object.keys(variables).length;
   const dataframesCount = Object.keys(dataframes || {}).length;
 
   const prevCounts = useRef({
@@ -177,26 +182,30 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   }, [eventsCount, functionsCount, variablesCount, dataframesCount]);
 
   const createRootEvent = useCallback(() => {
-    void createGraphResource("event");
-  }, []);
+    void addEvent();
+  }, [addEvent]);
 
   const createRootFunction = useCallback(() => {
-    void createGraphResource("function");
-  }, []);
+    void addFunction();
+  }, [addFunction]);
 
   const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
     openInputDialog(t("contextMenu.dialog.renameGraphTitle"), name, async (nextName) => {
-      await renameResource({ id, kind: type }, nextName);
+      await renameGraph(id, nextName, type);
     }, t("contextMenu.dialog.renameSubmit"));
-  }, [openInputDialog, t]);
+  }, [openInputDialog, renameGraph, t]);
 
   const deleteGraphItem = useCallback(async (id: string, type: GraphResourceType) => {
-    await deleteResource({ id, kind: type });
-  }, []);
+    if (type === "event") {
+      await deleteEvent(id);
+      return;
+    }
+    await deleteFunction(id);
+  }, [deleteEvent, deleteFunction]);
 
   const duplicateGraphItem = useCallback(async (id: string) => {
-    await duplicateGraphResource(id);
-  }, []);
+    await duplicateGraph(id);
+  }, [duplicateGraph]);
 
   const renameVariableItem = useCallback((id: string, name: string) => {
     openInputDialog(t("contextMenu.dialog.renameVariableTitle"), name, async (nextName) => {
@@ -234,7 +243,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   const contextMenuSections = buildSidebarContextMenuSections(contextMenu, {
     openGraph,
-    createGraph: createGraphResource,
+    createGraph,
     renameGraphItem,
     deleteGraphItem,
     duplicateGraphItem,

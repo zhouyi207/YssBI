@@ -865,7 +865,7 @@ fn register_iv_2sls_summary(registry: &NodeRegistry) {
             DataValue::new_struct("OLSResult", result_handle_id),
         )?;
 
-        ctx.publish_report(ReportKind::OlsSummary, json_data);
+        ctx.publish_report(ReportKind::Iv2slsSummary, json_data);
 
         ctx.log("IV:2SLS Summary: regression completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

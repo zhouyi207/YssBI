@@ -1,88 +1,13 @@
-use crate::event::event_node::InferredPinType;
-use crate::event::{Event, EventConnection, EventNode, emit_project_event};
+use crate::event::{Event, EventConnection, emit_project_event};
 use crate::execution::ResultSourceStore;
-use crate::graph::{DataType, GraphId, NodeId, PinChangeSet, PinId};
+use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
-use crate::project::{GraphDocumentKind, ProjectState, read_project_index};
-use crate::schema::{GraphUndoPatch, PinInstanceDTO};
-use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
+use crate::project::{emit_graph_pin_mutation_sync, GraphDocumentKind, ProjectState, read_project_index};
+use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
-
-use super::runtime_source::emit_runtime_source_invalidation;
-
-/// 将 PinChangeSet 转为事件并发送
-pub fn emit_pin_change_events(
-    app: &AppHandle,
-    graph_id: GraphId,
-    graph: &crate::graph::GraphInstance,
-    change_sets: Vec<PinChangeSet>,
-) {
-    for cs in change_sets {
-        let added_dtos: Vec<PinInstanceDTO> = cs
-            .added_pins
-            .iter()
-            .map(|pin| {
-                let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
-                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref())
-            })
-            .collect();
-
-        let updated_dtos: Vec<PinInstanceDTO> = cs
-            .updated_pins
-            .iter()
-            .map(|pin| {
-                let resolved_type = graph.get_pin_data_type_by_pin_id(pin.id);
-                PinInstanceDTO::from_pin_with_context(pin, resolved_type.as_ref())
-            })
-            .collect();
-
-        let removed_pin_ids: Vec<PinId> = cs.removed_pin_ids;
-
-        let pin_order = graph
-            .get_node_instance(cs.node_id)
-            .map(|node| node.pin_ids.clone());
-
-        emit_project_event(
-            app,
-            Event::Node(EventNode::NodePinsUpdated {
-                graph_id,
-                node_id: cs.node_id,
-                removed_pin_ids,
-                added_pins: added_dtos,
-                updated_pins: updated_dtos,
-                removed_connections: cs.removed_connections,
-                pin_order,
-            }),
-        );
-    }
-}
-
-/// 将推断出的 pin 类型转为事件并发送
-pub fn emit_inferred_types(app: &AppHandle, graph_id: GraphId, inferred: Vec<(PinId, DataType)>) {
-    if inferred.is_empty() {
-        return;
-    }
-    let pin_types: Vec<InferredPinType> = inferred
-        .into_iter()
-        .map(|(pin_id, dt)| InferredPinType {
-            pin_id,
-            pin_type: data_type_to_pin_type(&dt).to_string(),
-            container_type: data_type_to_container(&dt).map(|s| s.to_string()),
-            type_display: Some(dt.to_string()),
-            data_type: Some(dt.clone()),
-        })
-        .collect();
-    emit_project_event(
-        app,
-        Event::Node(EventNode::PinTypesInferred {
-            graph_id,
-            pin_types,
-        }),
-    );
-}
 
 // ==================== 结果 DTO ====================
 
@@ -175,9 +100,15 @@ pub fn connect_pins(
         }),
     );
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
-    emit_inferred_types(&app, graph_id, inferred);
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
+    emit_graph_pin_mutation_sync(
+        &app,
+        &source_store,
+        graph_id,
+        &graph,
+        &change_sets,
+        inferred,
+        &[],
+    );
 
     let (ad_from, ad_to) = auto_disconnected_list
         .first()
@@ -245,9 +176,15 @@ pub fn disconnect_pin(
         );
     }
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
-    emit_inferred_types(&app, graph_id, inferred);
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
+    emit_graph_pin_mutation_sync(
+        &app,
+        &source_store,
+        graph_id,
+        &graph,
+        &change_sets,
+        inferred,
+        &[],
+    );
     Ok(DisconnectPinResult {
         removed_connections: removed,
         undo_patch,
@@ -308,9 +245,15 @@ pub fn delete_connection(
         }),
     );
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
-    emit_inferred_types(&app, graph_id, inferred);
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
+    emit_graph_pin_mutation_sync(
+        &app,
+        &source_store,
+        graph_id,
+        &graph,
+        &change_sets,
+        inferred,
+        &[],
+    );
     Ok(())
 }
 
@@ -399,9 +342,15 @@ pub fn delete_connections_for_pin(
         );
     }
 
-    emit_pin_change_events(&app, graph_id, &graph, change_sets.clone());
-    emit_inferred_types(&app, graph_id, inferred);
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &change_sets, &[]);
+    emit_graph_pin_mutation_sync(
+        &app,
+        &source_store,
+        graph_id,
+        &graph,
+        &change_sets,
+        inferred,
+        &[],
+    );
 
     Ok(removed_ids)
 }
@@ -446,8 +395,7 @@ pub fn delete_connections_for_node(
         }
         all_removed_connections.extend(removed_connections);
         all_inferred.extend(inferred);
-        all_change_sets.extend(change_sets.clone());
-        emit_pin_change_events(&app, graph_id, &graph, change_sets);
+        all_change_sets.extend(change_sets);
     }
 
     if !all_removed_connections.is_empty() {
@@ -460,8 +408,15 @@ pub fn delete_connections_for_node(
         );
     }
 
-    emit_inferred_types(&app, graph_id, all_inferred);
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &all_change_sets, &[]);
+    emit_graph_pin_mutation_sync(
+        &app,
+        &source_store,
+        graph_id,
+        &graph,
+        &all_change_sets,
+        all_inferred,
+        &[],
+    );
 
     Ok(removed_ids)
 }

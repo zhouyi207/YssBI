@@ -6,6 +6,7 @@ import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { useGraphMetaStore } from '@/features/core/dataStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { renameGraph } from '@/features/application/dataManagement/graphActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
 import { DetailEmptyState } from './DetailEmptyState';
@@ -22,7 +23,7 @@ import { workbenchPanelHeaderClass } from '../workbenchPanelHeaderStyles';
 export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
   const { t } = useTranslation();
   const {
-    Variables,
+    variables,
     events,
     functions,
     dataframes,
@@ -52,7 +53,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
 
   const selectedData = useMemo(() => {
     if (!target || !targetId) return null;
-    if (target.kind === 'variable') return Variables[targetId];
+    if (target.kind === 'variable') return variables[targetId];
     if (target.kind === 'event') return events[targetId];
     if (target.kind === 'function') {
       const fn = functions[targetId];
@@ -65,7 +66,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     }
     if (target.kind === 'data') return dataframes[targetId];
     return null;
-  }, [target, targetId, Variables, events, functions, dataframes, selectedFunctionSignature]);
+  }, [target, targetId, variables, events, functions, dataframes, selectedFunctionSignature]);
 
   return (
     <div
@@ -93,7 +94,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
           event={selectedData}
           onUpdate={(patch) => {
             if (typeof patch.name === 'string') {
-              void renameResource({ id: targetId!, kind: 'event' }, patch.name);
+              void renameGraph(targetId!, patch.name, 'event');
             }
           }}
         />
@@ -101,7 +102,7 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
         <FunctionDetailPanel
           fn={selectedData}
           onRename={(name) => {
-            void renameResource({ id: targetId!, kind: 'function' }, name);
+            void renameGraph(targetId!, name, 'function');
           }}
           onSignatureChange={(patch) => {
             void updateFunctionSignature(targetId!, patch);

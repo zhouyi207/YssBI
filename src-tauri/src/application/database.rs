@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use polars::prelude::*;
-use serde::Serialize;
-use uuid::Uuid;
-
-use crate::database::database_schema::polars_dtype_to_raw_string;
+use crate::application::database_schema::{
+    column_info_from_duckdb, database_display_name, extract_database_schema,
+    DatabaseSchemaSnapshot,
+};
+pub use crate::application::database_schema::name_from_path;
 use crate::database::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseInstance, DatabaseState,
-    DuckDbColumnMeta, drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
+    drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
     ingest_excel_to_duckdb, ingest_parquet_to_duckdb, read_table_meta, sql_reader,
     write_display_name,
 };
@@ -15,6 +15,8 @@ use crate::project::{
     ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,
 };
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
+use serde::Serialize;
+use uuid::Uuid;
 use yss_sci::api::database::{EditHistory, EditState};
 
 #[derive(Debug, Serialize)]
@@ -265,54 +267,24 @@ pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) ->
 pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaResult, String> {
     let store = state.project_store.read().unwrap();
     let db = store.databases.get(id).ok_or("Database not found")?;
-    let name = database_display_name(db);
 
-    if let DatabaseState::DuckDb {
-        row_count, columns, ..
-    } = &db.state
-    {
-        let columns = column_info_from_duckdb(columns);
-        return Ok(DatabaseMetaResult {
+    match extract_database_schema(db) {
+        DatabaseSchemaSnapshot::Ready {
+            name,
+            columns,
+            row_count,
+            column_count,
+        } => Ok(DatabaseMetaResult {
             id: id.to_string(),
             name,
-            row_count: *row_count,
-            column_count: columns.len(),
+            row_count,
+            column_count,
             columns,
-        });
+        }),
+        DatabaseSchemaSnapshot::Failed { name, error } => {
+            Err(format!("Database '{name}' failed to load: {error}"))
+        }
     }
-    drop(store);
-
-    let view = state
-        .access_database(id, crate::database::DatabaseAccess::Preview)
-        .map_err(|e| format!("Failed to access database: {}", e))?;
-
-    let df = &view.dataframe;
-    let columns = column_info_from_schema(df.schema().as_ref());
-    let (name, row_count) = database_name_and_row_count(state, id)?;
-
-    Ok(DatabaseMetaResult {
-        id: id.to_string(),
-        name,
-        row_count,
-        column_count: columns.len(),
-        columns,
-    })
-}
-
-pub fn name_from_path(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unnamed")
-        .to_string()
-}
-
-fn database_display_name(instance: &DatabaseInstance) -> String {
-    instance
-        .decl
-        .name
-        .clone()
-        .unwrap_or_else(|| instance.decl.id.clone())
 }
 
 fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
@@ -323,42 +295,6 @@ fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
         .map(database_display_name)
         .collect();
     unique_name::unique_name(base_name, existing.iter().map(|s| s.as_str()))
-}
-
-fn database_name_and_row_count(state: &ProjectState, id: &str) -> Result<(String, usize), String> {
-    let store = state.project_store.read().unwrap();
-    let db = store.databases.get(id).ok_or("Database not found")?;
-    let name = database_display_name(db);
-
-    let row_count = match &db.state {
-        DatabaseState::Loaded { dataframe, .. } => dataframe.height(),
-        DatabaseState::DuckDb { row_count, .. } => *row_count,
-        DatabaseState::Failed { .. } => 0,
-    };
-
-    Ok((name, row_count))
-}
-
-fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfoDTO> {
-    schema
-        .iter_names()
-        .filter_map(|name| {
-            schema.get(name).map(|dt| ColumnInfoDTO {
-                name: name.to_string(),
-                dtype: polars_dtype_to_raw_string(dt),
-            })
-        })
-        .collect()
-}
-
-fn column_info_from_duckdb(columns: &[DuckDbColumnMeta]) -> Vec<ColumnInfoDTO> {
-    columns
-        .iter()
-        .map(|col| ColumnInfoDTO {
-            name: col.name.clone(),
-            dtype: col.dtype.clone(),
-        })
-        .collect()
 }
 
 pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(), String> {
@@ -403,6 +339,7 @@ pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(),
         }
     }
 
+    state.invalidate_graph_runtime();
     Ok(())
 }
 

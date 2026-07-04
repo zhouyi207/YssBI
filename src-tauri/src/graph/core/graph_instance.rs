@@ -80,6 +80,8 @@ pub struct GraphInstance {
     pub function_inputs: Vec<FunctionSignaturePin>,
     pub function_outputs: Vec<FunctionSignaturePin>,
 
+    pub runtime_prepared_epoch: u64,
+
     // 数据状态 (node, pin, connection)
     pub data_state: Arc<RwLock<GraphDataState>>,
 
@@ -348,6 +350,7 @@ impl GraphInstance {
             data_state: Arc::new(RwLock::new(data_state)),
             registry: Default::default(),
             schema_provider: None,
+            runtime_prepared_epoch: 0,
         }
     }
 }
@@ -379,6 +382,7 @@ impl GraphInstance {
             data_state: Default::default(),
             registry,
             schema_provider: None,
+            runtime_prepared_epoch: 0,
         }
     }
 

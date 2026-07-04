@@ -641,7 +641,7 @@ pub fn register(registry: &NodeRegistry) {
             &PinRole::Data(DataRole::Result),
             crate::graph::value::DataValue::new_struct("OLSResult", result_handle_id),
         )?;
-        ctx.publish_report(ReportKind::OlsSummary, json_data);
+        ctx.publish_report(ReportKind::IvLimlSummary, json_data);
         ctx.log("IV:LIML Summary: regression completed".to_string());
         Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
     }));

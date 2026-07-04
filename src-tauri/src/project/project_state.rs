@@ -24,6 +24,9 @@ pub struct ProjectState {
     pub project_path: Arc<RwLock<Option<String>>>,
     // 在这里可以存储 数据库 数据
     pub project_store: Arc<RwLock<ProjectStore>>,
+    /// Bumped when project-wide graph runtime inputs change (e.g. database catalog).
+    /// Compared against `GraphInstance::runtime_prepared_epoch` to skip redundant prepare.
+    graph_runtime_epoch: Arc<RwLock<u64>>,
 }
 
 impl ProjectState {
@@ -32,6 +35,34 @@ impl ProjectState {
             project_data: Arc::new(RwLock::new(ProjectData::new())),
             project_path: Arc::new(RwLock::new(None)),
             project_store: Arc::new(RwLock::new(ProjectStore::default())),
+            graph_runtime_epoch: Arc::new(RwLock::new(1)),
+        }
+    }
+
+    fn graph_runtime_epoch(&self) -> u64 {
+        *self.graph_runtime_epoch.read().unwrap()
+    }
+
+    fn mark_graph_runtime_prepared(&self, graph: &mut GraphInstance) {
+        graph.runtime_prepared_epoch = self.graph_runtime_epoch();
+    }
+
+    fn graph_runtime_is_current(&self, graph: &GraphInstance) -> bool {
+        graph.runtime_prepared_epoch == self.graph_runtime_epoch()
+    }
+
+    /// Invalidate cached graph runtime preparation (variable/dataframe symbol tables, etc.).
+    pub fn invalidate_graph_runtime(&self) {
+        let mut epoch = self.graph_runtime_epoch.write().unwrap();
+        *epoch = epoch.saturating_add(1).max(1);
+    }
+
+    fn graph_document_from_instance(graph: GraphInstance) -> GraphDocument {
+        GraphDocument {
+            schema_version: crate::project::SCHEMA_VERSION,
+            kind: (&graph.kind).into(),
+            graph,
+            local_variables: HashMap::new(),
         }
     }
 
@@ -259,6 +290,7 @@ impl ProjectState {
     /// deferred to `resolve_graph_dynamic_pins` when the graph tab is opened.
     pub fn insert_graph(&self, mut graph: GraphInstance) -> GraphInstance {
         self.prepare_graph_runtime(&mut graph);
+        self.mark_graph_runtime_prepared(&mut graph);
         let graph_id = graph.id;
         self.project_data
             .write()
@@ -291,13 +323,11 @@ impl ProjectState {
         graph_id: &GraphId,
     ) -> Result<GraphDocument, String> {
         if let Some(existing) = self.get_graph(graph_id) {
+            if self.graph_runtime_is_current(&existing) {
+                return Ok(Self::graph_document_from_instance(existing));
+            }
             let graph = self.insert_graph(existing);
-            return Ok(GraphDocument {
-                schema_version: crate::project::SCHEMA_VERSION,
-                kind: (&graph.kind).into(),
-                graph,
-                local_variables: HashMap::new(),
-            });
+            return Ok(Self::graph_document_from_instance(graph));
         }
         let path = self.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
         let document = load_project_graph_from_file(&path, graph_id).map_err(|e| e.to_string())?;
@@ -331,6 +361,7 @@ impl ProjectState {
         *self.project_data.write().unwrap() = ProjectData::default();
         *self.project_path.write().unwrap() = None;
         *self.project_store.write().unwrap() = ProjectStore::default();
+        *self.graph_runtime_epoch.write().unwrap() = 1;
     }
 
     pub fn persist_current_project(&self) -> Result<(), String> {
@@ -355,5 +386,50 @@ impl ProjectState {
             data.clone()
         };
         save_project_graph_to_file(&snapshot, &path, graph_id).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod runtime_load_tests {
+    use super::*;
+
+    #[test]
+    fn load_graph_skips_prepare_when_runtime_is_current() {
+        let state = ProjectState::new();
+        let inserted = state.add_event("Event A");
+        let graph_id = inserted.id;
+        let epoch_after_insert = inserted.runtime_prepared_epoch;
+
+        let first = state
+            .load_graph_from_current_project(&graph_id)
+            .expect("first load should succeed");
+        assert_eq!(first.graph.runtime_prepared_epoch, epoch_after_insert);
+
+        let second = state
+            .load_graph_from_current_project(&graph_id)
+            .expect("second load should succeed");
+        assert_eq!(second.graph.runtime_prepared_epoch, epoch_after_insert);
+    }
+
+    #[test]
+    fn load_graph_reprepares_after_runtime_invalidation() {
+        let state = ProjectState::new();
+        let inserted = state.add_event("Event B");
+        let graph_id = inserted.id;
+        let epoch_after_insert = inserted.runtime_prepared_epoch;
+
+        state
+            .load_graph_from_current_project(&graph_id)
+            .expect("warm load");
+
+        state.invalidate_graph_runtime();
+        let reloaded = state
+            .load_graph_from_current_project(&graph_id)
+            .expect("reload after invalidation");
+        assert_ne!(reloaded.graph.runtime_prepared_epoch, epoch_after_insert);
+        assert_eq!(
+            reloaded.graph.runtime_prepared_epoch,
+            state.graph_runtime_epoch()
+        );
     }
 }
