@@ -26,6 +26,34 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+/// Post-mutation graph compile scope — single entry for schema propagation,
+/// dynamic pin resolution, and type inference.
+#[derive(Clone, Debug)]
+pub enum GraphRecompileScope {
+    /// `insert_graph` / load path: propagate + infer, no dynamic pin materialization.
+    RuntimePrepare,
+    /// Full graph: propagate + all dynamic pins + infer.
+    Full,
+    /// Variable or localized change: partial propagate + infer + downstream dynamic pins.
+    FromSeeds(Vec<NodeId>),
+    /// Connection topology: partial propagate + infer + dynamic pins (with mode).
+    TopologyEffects {
+        seeds: Vec<NodeId>,
+        mode: PinResolveMode,
+    },
+    /// Type inference only (isolated node create/delete without topology change).
+    InferOnly,
+    /// No post-mutation compile step.
+    None,
+}
+
+/// Side effects collected by [`GraphInstance::recompile`].
+#[derive(Clone, Debug, Default)]
+pub struct GraphRecompileResult {
+    pub change_sets: Vec<PinChangeSet>,
+    pub inferred: Vec<(PinId, DataType)>,
+}
+
 /// 动态 pin 解析模式
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PinResolveMode {
@@ -443,41 +471,90 @@ impl GraphInstance {
         self.schema_provider = Some(provider);
     }
 
-    /// 全图重编译：schema 传播 + 动态 pin 解析 + 类型推断。
-    pub fn compile_graph(&self) {
-        self.propagate_schemas();
-        let _ = self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Interactive);
-        let _ = self
-            .infer_types()
-            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e));
+    /// Unified post-mutation compile entry.
+    pub fn recompile(&self, scope: GraphRecompileScope) -> GraphRecompileResult {
+        match scope {
+            GraphRecompileScope::None => GraphRecompileResult::default(),
+            GraphRecompileScope::RuntimePrepare => {
+                self.propagate_schemas();
+                GraphRecompileResult {
+                    inferred: self.infer_types_with_warn(),
+                    ..Default::default()
+                }
+            }
+            GraphRecompileScope::InferOnly => GraphRecompileResult {
+                inferred: self.infer_types_with_warn(),
+                ..Default::default()
+            },
+            GraphRecompileScope::Full => {
+                self.propagate_schemas();
+                let change_sets =
+                    self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Interactive);
+                GraphRecompileResult {
+                    change_sets,
+                    inferred: self.infer_types_with_warn(),
+                }
+            }
+            GraphRecompileScope::FromSeeds(seeds) => {
+                if seeds.is_empty() {
+                    return self.recompile(GraphRecompileScope::Full);
+                }
+                self.recompile_seeded(&seeds, PinResolveMode::Interactive)
+            }
+            GraphRecompileScope::TopologyEffects { seeds, mode } => {
+                self.recompile_seeded(&seeds, mode)
+            }
+        }
     }
 
-    /// 从种子节点局部重编译（变量变更、局部拓扑变更）。
-    pub fn compile_graph_from_seeds(&self, seeds: &[NodeId]) {
-        if seeds.is_empty() {
-            self.compile_graph();
-            return;
-        }
-        self.propagate_schemas_from(seeds);
-        let _ = self
-            .infer_types()
-            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e));
+    fn infer_types_with_warn(&self) -> Vec<(PinId, DataType)> {
+        self.infer_types()
+            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e))
+            .unwrap_or_default()
+    }
 
-        let mut to_resolve: Vec<NodeId> = Vec::new();
+    fn collect_downstream_resolve_nodes(&self, seeds: &[NodeId]) -> Vec<NodeId> {
+        let mut to_resolve = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for &nid in seeds {
             if seen.insert(nid) {
                 to_resolve.push(nid);
             }
-            for d in self.get_downstream_resolve_nodes(nid) {
-                if seen.insert(d) {
-                    to_resolve.push(d);
+            for downstream in self.get_downstream_resolve_nodes(nid) {
+                if seen.insert(downstream) {
+                    to_resolve.push(downstream);
                 }
             }
         }
-        for node_id in to_resolve {
-            let _ = self.resolve_dynamic_pins(node_id);
+        to_resolve
+    }
+
+    fn recompile_seeded(&self, seeds: &[NodeId], mode: PinResolveMode) -> GraphRecompileResult {
+        if seeds.is_empty() {
+            return GraphRecompileResult::default();
         }
+        self.propagate_schemas_from(seeds);
+        let inferred = self.infer_types_with_warn();
+        let mut change_sets = Vec::new();
+        for node_id in self.collect_downstream_resolve_nodes(seeds) {
+            if let Ok(Some(cs)) = self.resolve_dynamic_pins_with_mode(node_id, mode) {
+                change_sets.push(cs);
+            }
+        }
+        GraphRecompileResult {
+            change_sets,
+            inferred,
+        }
+    }
+
+    /// 全图重编译：schema 传播 + 动态 pin 解析 + 类型推断。
+    pub fn compile_graph(&self) {
+        let _ = self.recompile(GraphRecompileScope::Full);
+    }
+
+    /// 从种子节点局部重编译（变量变更、局部拓扑变更）。
+    pub fn compile_graph_from_seeds(&self, seeds: &[NodeId]) {
+        let _ = self.recompile(GraphRecompileScope::FromSeeds(seeds.to_vec()));
     }
 
     /// 获取节点注册表的引用
@@ -1003,33 +1080,11 @@ impl GraphInstance {
         seed_nodes: &[NodeId],
         mode: PinResolveMode,
     ) -> (Vec<PinChangeSet>, Vec<(PinId, DataType)>) {
-        self.propagate_schemas_from(seed_nodes);
-        let inferred = self
-            .infer_types()
-            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e))
-            .unwrap_or_default();
-
-        let mut to_resolve: Vec<NodeId> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for &nid in seed_nodes {
-            if seen.insert(nid) {
-                to_resolve.push(nid);
-            }
-            for d in self.get_downstream_resolve_nodes(nid) {
-                if seen.insert(d) {
-                    to_resolve.push(d);
-                }
-            }
-        }
-
-        let mut change_sets = Vec::new();
-        for node_id in to_resolve {
-            if let Ok(Some(cs)) = self.resolve_dynamic_pins_with_mode(node_id, mode) {
-                change_sets.push(cs);
-            }
-        }
-
-        (change_sets, inferred)
+        let result = self.recompile(GraphRecompileScope::TopologyEffects {
+            seeds: seed_nodes.to_vec(),
+            mode,
+        });
+        (result.change_sets, result.inferred)
     }
 
     /// 连接两个 pin（无序），后端自动验证方向、类型兼容性等

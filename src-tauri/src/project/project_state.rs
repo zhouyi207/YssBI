@@ -4,7 +4,7 @@ use crate::application::database::bind_duckdb_instance;
 use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
 use crate::graph::value::DataType;
-use crate::graph::{GraphId, GraphInstance, GraphKind, PinChangeSet, PinId};
+use crate::graph::{GraphId, GraphInstance, GraphKind, GraphRecompileScope, PinChangeSet, PinId};
 use crate::tabular::is_variable_handle;
 use crate::log::log_sys;
 use crate::project::{
@@ -163,7 +163,6 @@ impl ProjectState {
     /// 变量变更后，重编译引用该变量的图（schema 传播 + schema 派生 pin 物化）。
     pub fn recompile_graphs_for_variable(&self, variable_id: &VariableId) {
         let var_id_str = variable_id.to_string();
-        let schema_provider = self.build_schema_provider();
         let seed_nodes: Vec<(GraphId, Vec<crate::graph::NodeId>)> = {
             let data = self.project_data.read().unwrap();
             data.graphs
@@ -191,11 +190,23 @@ impl ProjectState {
 
         let mut data = self.project_data.write().unwrap();
         for (graph_id, seeds) in seed_nodes {
+            let graph_kind = match data.graphs.get(&graph_id) {
+                Some(graph) => graph.kind.clone(),
+                None => continue,
+            };
+            let variable_symbols = Self::variable_symbols_from_variables(
+                &data.variables,
+                &graph_id,
+                &graph_kind,
+            );
+            let dataframe_symbols =
+                Self::dataframe_symbols_from_databases(&data.databases);
             let Some(graph) = data.graphs.get_mut(&graph_id) else {
                 continue;
             };
-            graph.set_schema_provider(schema_provider.clone());
-            graph.compile_graph_from_seeds(&seeds);
+            Self::bind_graph_runtime(graph, self);
+            Self::apply_runtime_symbols(graph, &variable_symbols, &dataframe_symbols);
+            graph.recompile(GraphRecompileScope::FromSeeds(seeds));
         }
     }
 
@@ -206,27 +217,16 @@ impl ProjectState {
     /// opened (`resolve_graph_dynamic_pins` command). See DESIGN_RULE §3.7.
     /// Always called by `insert_graph` — do not call from elsewhere.
     fn prepare_graph_runtime(&self, graph: &mut GraphInstance) {
-        let registry = {
-            let store = self.project_store.read().unwrap();
-            Arc::clone(&store.node_register)
-        };
-        graph.set_registry(registry);
-        graph.set_schema_provider(self.build_schema_provider());
-        let variable_symbols = self.variable_symbols_for_graph(&graph.id, &graph.kind);
-        graph.resolve_variable_nodes(&variable_symbols);
-        let dataframe_symbols = self.dataframe_symbols();
-        graph.resolve_dataframe_nodes(&dataframe_symbols);
-        graph.propagate_schemas();
-        let _ = graph.infer_types();
-    }
-
-    pub(crate) fn variable_symbols_for_graph(
-        &self,
-        graph_id: &GraphId,
-        graph_kind: &GraphKind,
-    ) -> HashMap<String, (String, DataType)> {
+        Self::bind_graph_runtime(graph, self);
+        let graph_id = graph.id;
+        let graph_kind = graph.kind.clone();
         let data = self.project_data.read().unwrap();
-        Self::variable_symbols_from_variables(&data.variables, graph_id, graph_kind)
+        let variable_symbols =
+            Self::variable_symbols_from_variables(&data.variables, &graph_id, &graph_kind);
+        let dataframe_symbols = Self::dataframe_symbols_from_databases(&data.databases);
+        drop(data);
+        Self::apply_runtime_symbols(graph, &variable_symbols, &dataframe_symbols);
+        graph.recompile(GraphRecompileScope::RuntimePrepare);
     }
 
     pub(crate) fn variable_symbols_from_variables(
@@ -252,11 +252,6 @@ impl ProjectState {
                 )
             })
             .collect()
-    }
-
-    pub(crate) fn dataframe_symbols(&self) -> HashMap<String, String> {
-        let data = self.project_data.read().unwrap();
-        Self::dataframe_symbols_from_databases(&data.databases)
     }
 
     pub(crate) fn dataframe_symbols_from_databases(

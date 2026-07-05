@@ -53,41 +53,37 @@ pub fn update_pin_user_value(
     let pin_uuid =
         PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
-    let bounding = state.project_data.read().unwrap();
-    let graph = bounding
-        .graphs
-        .get(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+    state.with_graph_mut(&graph_id, |mut ctx| {
+        let pin = ctx
+            .graph_ref()
+            .get_pin_instance_by_pin_id(pin_uuid)
+            .ok_or_else(|| format!("Pin '{}' not found", pin_id))?;
 
-    let pin = graph
-        .get_pin_instance_by_pin_id(pin_uuid)
-        .ok_or_else(|| format!("Pin '{}' not found", pin_id))?;
+        let expected_type = pin.definition.data_type.as_ref().and_then(|dt| match dt {
+            PinDataTypeDefinition::Concrete(t) => Some(t.clone()),
+            _ => None,
+        });
 
-    let expected_type = pin.definition.data_type.as_ref().and_then(|dt| match dt {
-        PinDataTypeDefinition::Concrete(t) => Some(t.clone()),
-        _ => None,
-    });
-
-    if let Some(ref expected) = expected_type {
-        let value_type = value.value_type();
-        if !is_type_compatible(value_type.clone(), expected) {
-            return Err(format!(
-                "Type mismatch: pin expects {:?}, got {:?}",
-                expected, value_type
-            ));
+        if let Some(ref expected) = expected_type {
+            let value_type = value.value_type();
+            if !is_type_compatible(value_type.clone(), expected) {
+                return Err(format!(
+                    "Type mismatch: pin expects {:?}, got {:?}",
+                    expected, value_type
+                ));
+            }
         }
-    }
 
-    log_app::info!(
-        "[command.update_pin_user_value] graph={}, pin={}, value={:?}",
-        subgraph_id,
-        pin_id,
-        value
-    );
+        log_app::info!(
+            "[command.update_pin_user_value] graph={}, pin={}, value={:?}",
+            subgraph_id,
+            pin_id,
+            value
+        );
 
-    graph.set_pin_user_value_by_pin_id(pin_uuid, value)?;
-    drop(bounding);
-    Ok(())
+        ctx.graph().set_pin_user_value_by_pin_id(pin_uuid, value)?;
+        Ok(())
+    })
 }
 
 /// 清除 Pin 的用户输入值（恢复为 None，使用默认值或连接值）
@@ -110,15 +106,10 @@ pub fn clear_pin_user_value(
         pin_id
     );
 
-    let bounding = state.project_data.read().unwrap();
-    let graph = bounding
-        .graphs
-        .get(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
-
-    graph.clear_pin_user_value_by_pin_id(pin)?;
-    drop(bounding);
-    Ok(())
+    state.with_graph_mut(&graph_id, |mut ctx| {
+        ctx.graph().clear_pin_user_value_by_pin_id(pin)?;
+        Ok(())
+    })
 }
 
 // ==================== Repeatable Pin 管理 ====================

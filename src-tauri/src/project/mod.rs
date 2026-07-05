@@ -14,6 +14,7 @@ pub mod project_scan;
 pub mod project_state;
 pub mod project_state_database;
 pub mod project_state_graph;
+pub mod project_state_graph_mut;
 pub mod project_state_variable;
 pub mod project_store;
 pub mod project_watcher;

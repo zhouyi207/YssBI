@@ -1,6 +1,7 @@
 use super::ProjectState;
 use super::unique_name;
 use crate::graph::{FunctionSignaturePin, GraphId, GraphInstance, GraphKind};
+use crate::project::{GraphDocumentKind, read_project_index};
 use crate::variable::VariableScope;
 use std::sync::Arc;
 
@@ -80,24 +81,90 @@ impl ProjectState {
             self.load_graph_from_current_project(function_id)?;
         }
 
-        let mut project_data = self.project_data.write().unwrap();
-        let graph = project_data
+        self.with_graph_mut(function_id, |mut ctx| {
+            if ctx.graph_ref().kind != GraphKind::Function {
+                return Err(format!("Graph '{}' is not a Function", function_id));
+            }
+
+            if let Some(inputs) = inputs {
+                ctx.graph().function_inputs = inputs;
+            }
+            if let Some(outputs) = outputs {
+                ctx.graph().function_outputs = outputs;
+            }
+
+            Ok(ctx.graph_ref().clone())
+        })
+    }
+
+    /// Names already used by other graphs of the same kind (in memory + on disk).
+    pub fn collect_peer_graph_names(
+        &self,
+        graph_id: &GraphId,
+        graph_kind: &GraphKind,
+    ) -> Result<Vec<String>, String> {
+        let mut existing: Vec<String> = self
+            .project_data
+            .read()
+            .unwrap()
             .graphs
-            .get_mut(function_id)
-            .ok_or_else(|| format!("Function graph '{}' not found", function_id))?;
+            .values()
+            .filter(|item| item.kind == *graph_kind && item.id != *graph_id)
+            .map(|item| item.name.clone())
+            .collect();
+        if let Some(path) = self.get_path() {
+            let expected_kind = GraphDocumentKind::from(graph_kind);
+            existing.extend(
+                read_project_index(&path)
+                    .map_err(|e| e.to_string())?
+                    .graphs
+                    .into_iter()
+                    .filter(|item| item.graph_type == expected_kind && item.id != *graph_id)
+                    .map(|item| item.name),
+            );
+        }
+        existing.sort();
+        existing.dedup();
+        Ok(existing)
+    }
 
-        if graph.kind != GraphKind::Function {
-            return Err(format!("Graph '{}' is not a Function", function_id));
+    /// Rename a graph: unique name within kind, persist document, return final name + kind.
+    pub fn rename_graph(
+        &self,
+        graph_id: &GraphId,
+        new_name: &str,
+    ) -> Result<(String, GraphKind), String> {
+        let trimmed = new_name.trim();
+        if trimmed.is_empty() {
+            return Err("Graph name cannot be empty".to_string());
         }
 
-        if let Some(inputs) = inputs {
-            graph.function_inputs = inputs;
-        }
-        if let Some(outputs) = outputs {
-            graph.function_outputs = outputs;
+        if self.get_graph(graph_id).is_none() {
+            self.load_graph_from_current_project(graph_id)?;
         }
 
-        Ok(graph.clone())
+        let graph_kind = self
+            .project_data
+            .read()
+            .unwrap()
+            .graphs
+            .get(graph_id)
+            .map(|graph| graph.kind.clone())
+            .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+
+        let existing = self.collect_peer_graph_names(graph_id, &graph_kind)?;
+        let final_name = unique_name::unique_name(trimmed, existing);
+
+        self.with_graph_mut(graph_id, |mut ctx| {
+            ctx.graph().name = final_name.clone();
+            Ok(())
+        })?;
+
+        if self.get_path().is_some() {
+            self.persist_loaded_graph(graph_id)?;
+        }
+
+        Ok((final_name, graph_kind))
     }
 }
 
@@ -145,5 +212,32 @@ mod tests {
         assert!(result.is_err());
         let event_graph = state.get_graph(&event.id).expect("event should exist");
         assert!(event_graph.function_inputs.is_empty());
+    }
+
+    #[test]
+    fn rename_graph_deduplicates_against_loaded_peer() {
+        let state = ProjectState::new();
+        let first = state.add_event("Event A");
+        let second = state.add_event("Event B");
+
+        let (final_name, _) = state
+            .rename_graph(&second.id, "Event A")
+            .expect("rename should succeed");
+
+        assert_eq!(final_name, "Event A 1");
+        assert_eq!(
+            state
+                .get_graph(&second.id)
+                .expect("graph should exist")
+                .name,
+            "Event A 1"
+        );
+        assert_eq!(
+            state
+                .get_graph(&first.id)
+                .expect("peer should exist")
+                .name,
+            "Event A"
+        );
     }
 }

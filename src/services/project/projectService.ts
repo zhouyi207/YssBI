@@ -478,11 +478,6 @@ export class ProjectService {
         await invoke("update_canvas", { subgraphId, canvas });
     }
 
-    static async renameSubgraph(subgraphId: string, newName: string): Promise<Graph> {
-        const result = await invoke<GraphInstanceDTO>("rename_subgraph", { subgraphId, newName });
-        return toFrontendGraph(result);
-    }
-
     /**
      * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
      * @param graphId 要执行的 graph ID，传 undefined 则执行所有 Event 图

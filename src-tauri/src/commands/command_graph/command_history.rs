@@ -17,13 +17,9 @@ pub fn sync_graph_state(
     graph_id: GraphId,
     snapshot: GraphRebuildSnapshot,
 ) -> Result<(), String> {
-    let bounding = state.project_data.write().unwrap();
-    let graph = bounding
-        .graphs
-        .get(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
-
-    graph.rebuild_from_snapshot(snapshot)?;
-    drop(bounding);
-    Ok(())
+    state.with_graph_mut(&graph_id, |mut ctx| {
+        ctx.graph().rebuild_from_snapshot(snapshot)?;
+        ctx.sync_runtime_symbols();
+        Ok(())
+    })
 }

@@ -174,7 +174,6 @@ pub fn run() {
             sync_graph_state,
             // ==================== 子图管理 ====================
             update_canvas,
-            rename_subgraph,
             // ==================== Database ====================
             load_database,
             list_sqlite_tables,

@@ -1,5 +1,5 @@
 use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
-use crate::graph::{GraphId, GraphKind};
+use crate::graph::GraphId;
 use crate::project::ProjectState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -34,14 +34,14 @@ impl From<&ProjectResourceMetaDTO> for ProjectResourceMetaEvent {
     }
 }
 
-fn graph_kind_to_resource_kind(kind: &GraphKind) -> &'static str {
+fn graph_kind_to_resource_kind(kind: &crate::graph::GraphKind) -> &'static str {
     match kind {
-        GraphKind::Event => "event",
-        GraphKind::Function => "function",
+        crate::graph::GraphKind::Event => "event",
+        crate::graph::GraphKind::Function => "function",
     }
 }
 
-fn graph_uri(kind: &GraphKind, graph_id: &GraphId) -> String {
+fn graph_uri(kind: &crate::graph::GraphKind, graph_id: &GraphId) -> String {
     format!(
         "yssbi://graph/{}/{}",
         graph_kind_to_resource_kind(kind),
@@ -53,7 +53,7 @@ fn graph_resource_meta(
     state: &ProjectState,
     graph_id: &GraphId,
     name: String,
-    kind: GraphKind,
+    kind: crate::graph::GraphKind,
 ) -> Result<ProjectResourceMetaDTO, String> {
     Ok(ProjectResourceMetaDTO {
         id: graph_id.to_string(),
@@ -75,28 +75,7 @@ pub fn rename_graph_resource(
     graph_id: GraphId,
     new_name: String,
 ) -> Result<ProjectResourceMetaDTO, String> {
-    let trimmed = new_name.trim();
-    if trimmed.is_empty() {
-        return Err("Graph name cannot be empty".to_string());
-    }
-
-    if state.get_graph(&graph_id).is_none() {
-        state.load_graph_from_current_project(&graph_id)?;
-    }
-
-    let (kind, final_name) = {
-        let mut project_data = state.project_data.write().unwrap();
-        let graph = project_data
-            .graphs
-            .get_mut(&graph_id)
-            .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
-        graph.name = trimmed.to_string();
-        let kind = graph.kind.clone();
-        let final_name = graph.name.clone();
-        (kind, final_name)
-    };
-
-    state.persist_loaded_graph(&graph_id)?;
+    let (final_name, kind) = state.rename_graph(&graph_id, &new_name)?;
 
     let meta = graph_resource_meta(state.inner(), &graph_id, final_name, kind)?;
     emit_project_event(

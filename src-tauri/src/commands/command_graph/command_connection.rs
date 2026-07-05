@@ -2,7 +2,7 @@ use crate::event::{Event, EventConnection, emit_project_event};
 use crate::execution::ResultSourceStore;
 use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
-use crate::project::{emit_graph_pin_mutation_sync, GraphDocumentKind, ProjectState, read_project_index};
+use crate::project::{emit_graph_pin_mutation_sync, ProjectState};
 use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -436,76 +436,16 @@ pub fn update_canvas(
 
     log_app::debug!("[command.update_canvas] graph={}", subgraph_id);
 
-    let mut data = state.project_data.write().unwrap();
-    let graph = data
-        .graphs
-        .get_mut(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
-
-    if let Some(x) = canvas.get("x").and_then(|v| v.as_f64()) {
-        graph.position.x = x;
-    }
-    if let Some(y) = canvas.get("y").and_then(|v| v.as_f64()) {
-        graph.position.y = y;
-    }
-    if let Some(scale) = canvas.get("scale").and_then(|v| v.as_f64()) {
-        graph.position.scale = scale;
-    }
-    drop(data);
-
-    Ok(())
-}
-
-/// 重命名子图
-#[tauri::command]
-pub fn rename_subgraph(state: State<ProjectState>, id: String, name: String) -> Result<(), String> {
-    let graph_id =
-        GraphId::from(Uuid::parse_str(&id).map_err(|e| format!("Invalid graph_id: {}", e))?);
-
-    log_app::info!("[command.rename_subgraph] graph={}, new_name={}", id, name);
-
-    if state.get_graph(&graph_id).is_none() {
-        state.load_graph_from_current_project(&graph_id)?;
-    }
-
-    let graph_kind = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .get(&graph_id)
-        .map(|graph| graph.kind.clone())
-        .ok_or_else(|| format!("Graph '{}' not found", id))?;
-
-    let mut existing: Vec<String> = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .values()
-        .filter(|item| item.kind == graph_kind && item.id != graph_id)
-        .map(|item| item.name.clone())
-        .collect();
-    if let Some(path) = state.get_path() {
-        let expected_kind = GraphDocumentKind::from(&graph_kind);
-        existing.extend(
-            read_project_index(&path)
-                .map_err(|e| e.to_string())?
-                .graphs
-                .into_iter()
-                .filter(|item| item.graph_type == expected_kind && item.id != graph_id)
-                .map(|item| item.name),
-        );
-    }
-    existing.sort();
-    existing.dedup();
-
-    let mut data = state.project_data.write().unwrap();
-    let graph = data
-        .graphs
-        .get_mut(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", id))?;
-    graph.name = crate::project::unique_name::unique_name(&name, existing);
-    drop(data);
-    Ok(())
+    state.with_graph_mut(&graph_id, |mut ctx| {
+        if let Some(x) = canvas.get("x").and_then(|v| v.as_f64()) {
+            ctx.graph().position.x = x;
+        }
+        if let Some(y) = canvas.get("y").and_then(|v| v.as_f64()) {
+            ctx.graph().position.y = y;
+        }
+        if let Some(scale) = canvas.get("scale").and_then(|v| v.as_f64()) {
+            ctx.graph().position.scale = scale;
+        }
+        Ok(())
+    })
 }
