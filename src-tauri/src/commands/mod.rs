@@ -1,5 +1,6 @@
 pub mod command_acf_pacf;
 pub mod command_dataframe;
+pub mod command_execution;
 pub mod command_graph;
 pub mod command_hypothesis;
 pub mod command_log;
@@ -16,6 +17,7 @@ pub mod command_worksheet;
 
 pub use command_acf_pacf::*;
 pub use command_dataframe::*;
+pub use command_execution::*;
 pub use command_graph::*;
 pub use command_hypothesis::*;
 pub use command_log::*;

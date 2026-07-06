@@ -359,6 +359,19 @@ impl ProjectState {
         *self.graph_runtime_epoch.write().unwrap() = 1;
     }
 
+    /// Reset in-memory project after disk load or save-as. Clears execution caches too.
+    pub fn activate_loaded_snapshot(
+        &self,
+        source_store: &crate::execution::ResultSourceStore,
+        path: String,
+        project_data: ProjectData,
+    ) {
+        self.clear();
+        source_store.clear_all();
+        self.set_path(Some(path));
+        self.set_data(project_data);
+    }
+
     pub fn persist_current_project(&self) -> Result<(), String> {
         let Some(path) = self.get_path() else {
             return Ok(());

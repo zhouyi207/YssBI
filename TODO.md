@@ -646,9 +646,9 @@ package.json
 - [x] **后端 graph compile / rename 去重**：rename 收口至 `ProjectState::rename_graph` + 单一 command `rename_graph_resource`（含 unique name、持久化、`ResourceChanged`）；已删除 `rename_subgraph` 与 `ProjectService.renameSubgraph`；compile 已统一为 `GraphInstance::recompile`
 - [x] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
 - [x] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
-- [ ] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
-- [ ] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
-- [ ] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
+- [x] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
+- [x] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
+- [x] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
 - [ ] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
 - [ ] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
 
