@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
-import { selectFirstGraphResource, useResourceStore } from '@/features/core/resource';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -23,7 +22,7 @@ import { logger } from '@/utils/appLogger';
  * Project Operations Hook
  * Handles flush, load, and execute operations
  */
-export function useProjectOperations(openGraph: (id: string, name: string, type: any, data?: any) => void | Promise<void>) {
+export function useProjectOperations() {
   const { t } = useTranslation();
   const currentPath = useProjectIOStore((s) => s.currentPath);
 
@@ -108,7 +107,7 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         return;
       }
 
-      // 清空当前 tabs，再打开新项目的第一个 graph
+      // 清空当前 tabs，用户从侧栏自行打开资源
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = layoutStore.activeEditorGroupId || 'default_editor';
       const editorNode = layoutStore.nodes[editorGroupId];
@@ -118,20 +117,12 @@ export function useProjectOperations(openGraph: (id: string, name: string, type:
         });
       }
 
-      const first = selectFirstGraphResource(
-        useResourceStore.getState().resources,
-        useResourceStore.getState().graphOrder,
-      );
-      if (first && (first.kind === 'event' || first.kind === 'function')) {
-        void openGraph(first.id, first.name, first.kind);
-      }
-
       uiStore.showToast("项目已加载", "success", 2000);
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast("加载项目失败", "error", 3000);
     }
-  }, [openGraph]);
+  }, []);
 
   const handleOpenSourceWindow = useCallback(async (
     sourceId: string,

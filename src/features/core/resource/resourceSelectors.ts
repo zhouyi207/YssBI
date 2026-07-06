@@ -46,12 +46,3 @@ export function useGraphResourcesByKind(kind: 'event' | 'function'): GraphResour
   const resources = useResourceStore((state) => state.resources);
   return useMemo(() => selectGraphResourcesByKind(resources, kind), [resources, kind]);
 }
-
-export function useFirstGraphResource(): ProjectResourceMeta | null {
-  const resources = useResourceStore((state) => state.resources);
-  const graphOrder = useResourceStore((state) => state.graphOrder);
-  return useMemo(
-    () => selectFirstGraphResource(resources, graphOrder),
-    [resources, graphOrder],
-  );
-}

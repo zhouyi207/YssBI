@@ -9,7 +9,6 @@ import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSyncWithEditor } from "@/features/application/initialization";
 import {
   EditorSessionProvider,
-  useAutoOpenFirstGraph,
   useEditorGroup,
   useEditorKeyboard,
 } from "@/features/application/editor";
@@ -25,7 +24,6 @@ function EditorWindowReady() {
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
 
   useProjectSyncWithEditor();
-  useAutoOpenFirstGraph();
 
   const editor = useEditorGroup();
   const { toggleLogPanel } = useMenubar();

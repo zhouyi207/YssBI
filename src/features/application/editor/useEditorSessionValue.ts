@@ -38,7 +38,7 @@ export function useEditorSessionValue() {
   const tabMgmt = useTabManagement();
   const openWorksheet = useOpenWorksheet();
   const worksheetMgmt = useWorksheetManagement(openWorksheet);
-  const projectOps = useProjectOperations(tabMgmt.openGraph);
+  const projectOps = useProjectOperations();
 
   const graphMgmt = useGraphManagement(tabMgmt.openGraph);
   const variableMgmt = useVariableManagement();
