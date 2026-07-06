@@ -1,77 +1,100 @@
 import { useCallback, useContext, useMemo } from 'react';
+import { useCanvasInteraction } from '@/features/core/canvas';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
-import { useEditor } from './useEditor';
+import { useEditorSession } from './EditorSessionContext';
 import type { Pin } from '@/shared/types/domain';
 
+export type UseEditorGroupOptions = {
+  /** Mount the global canvas pointer loop. Only Canvas should pass true. */
+  withCanvasInteraction?: boolean;
+};
+
 /**
- * useEditorGroup Hook
- *
- * Context-aware editor hook that scopes operations to a specific group.
- * When used within a GroupContext, it automatically scopes to that group.
- * Otherwise, it uses the globally active group.
- *
- * Sidebar/detail 等非 Canvas 组件自动禁用 canvas 交互，避免注册全局 pointer 监听器。
+ * Group-scoped editor API backed by a single EditorSessionProvider instance.
  */
-export function useEditorGroup(options?: { withCanvasInteraction?: boolean }) {
+export function useEditorGroup(options?: UseEditorGroupOptions) {
+  const session = useEditorSession();
   const currentGroupId = useContext(GroupContext);
   const overrideGroupId = currentGroupId || undefined;
-  const withCanvasInteraction =
-    options?.withCanvasInteraction ?? (overrideGroupId !== 'sidebar' && overrideGroupId !== 'detail');
-  const editor = useEditor({ withCanvasInteraction });
+  const withCanvasInteraction = options?.withCanvasInteraction ?? false;
 
   const { groupId, tabs, activeTabId, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
   const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
 
-  // Wrapped handlers that ensure the correct group is active
-  const wrappedOnCanvasPointerDown = useCallback((e: React.PointerEvent) => {
+  const canvasInteraction = useCanvasInteraction({
+    activeGroupIdRef: session.activeGroupIdRef,
+    activeTabIdRef: session.activeTabIdRef,
+    canvasRef: session.canvasRef,
+    setSelectedNodeIds: session.setSelectedNodeIds,
+    enabled: withCanvasInteraction,
+  });
+
+  const ensureActiveGroup = useCallback(() => {
     if (useLayoutStore.getState().activeGroupId !== groupId) {
       setActiveGroup(groupId);
     }
-    editor.onCanvasPointerDown(e, groupId);
-  }, [groupId, editor.onCanvasPointerDown, setActiveGroup]);
+  }, [groupId, setActiveGroup]);
 
-  const wrappedOnNodePointerDown = useCallback((nodeId: string, e: React.PointerEvent) => {
-    if (useLayoutStore.getState().activeGroupId !== groupId) {
-      setActiveGroup(groupId);
-    }
-    editor.onNodePointerDown(nodeId, e, groupId);
-  }, [groupId, editor.onNodePointerDown, setActiveGroup]);
+  const wrappedOnCanvasPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      ensureActiveGroup();
+      canvasInteraction.onCanvasPointerDown(e, groupId);
+    },
+    [ensureActiveGroup, canvasInteraction.onCanvasPointerDown, groupId],
+  );
 
-  const wrappedOnPinPointerDown = useCallback((pin: Pin, e: React.PointerEvent) => {
-    if (useLayoutStore.getState().activeGroupId !== groupId) {
-      setActiveGroup(groupId);
-    }
-    editor.onPinPointerDown(pin, e, groupId);
-  }, [groupId, editor.onPinPointerDown, setActiveGroup]);
+  const wrappedOnNodePointerDown = useCallback(
+    (nodeId: string, e: React.PointerEvent) => {
+      ensureActiveGroup();
+      canvasInteraction.onNodePointerDown(nodeId, e, groupId);
+    },
+    [ensureActiveGroup, canvasInteraction.onNodePointerDown, groupId],
+  );
 
-  const wrappedSetCanvas = useCallback((updater: Parameters<typeof editor.setCanvas>[0]) => {
-    if (useLayoutStore.getState().activeGroupId !== groupId) {
-      setActiveGroup(groupId);
-    }
-    editor.setCanvas(updater);
-  }, [groupId, editor.setCanvas, setActiveGroup]);
+  const wrappedOnPinPointerDown = useCallback(
+    (pin: Pin, e: React.PointerEvent) => {
+      ensureActiveGroup();
+      canvasInteraction.onPinPointerDown(pin, e, groupId);
+    },
+    [ensureActiveGroup, canvasInteraction.onPinPointerDown, groupId],
+  );
 
-  // Return combined object - memoize to prevent unnecessary re-renders
-  return useMemo(() => ({
-    ...editor,
-    groupId,
-    tabs,
-    activeTabId,
-    selectedNodeIds,
-    onCanvasPointerDown: wrappedOnCanvasPointerDown,
-    onNodePointerDown: wrappedOnNodePointerDown,
-    onPinPointerDown: wrappedOnPinPointerDown,
-    setCanvas: wrappedSetCanvas,
-  }), [
-    editor,
-    groupId,
-    tabs,
-    activeTabId,
-    selectedNodeIds,
-    wrappedOnCanvasPointerDown,
-    wrappedOnNodePointerDown,
-    wrappedOnPinPointerDown,
-    wrappedSetCanvas,
-  ]);
+  const wrappedSetCanvas = useCallback(
+    (updater: Parameters<typeof session.setCanvas>[0]) => {
+      ensureActiveGroup();
+      session.setCanvas(updater);
+    },
+    [ensureActiveGroup, session.setCanvas],
+  );
+
+  return useMemo(
+    () => ({
+      ...session,
+      groupId,
+      tabs,
+      activeTabId,
+      selectedNodeIds,
+      onCanvasPointerDown: withCanvasInteraction
+        ? wrappedOnCanvasPointerDown
+        : () => undefined,
+      onNodePointerDown: withCanvasInteraction ? wrappedOnNodePointerDown : () => undefined,
+      onPinPointerDown: withCanvasInteraction ? wrappedOnPinPointerDown : () => undefined,
+      connectPins: withCanvasInteraction ? canvasInteraction.connectPins : async () => {},
+      setCanvas: wrappedSetCanvas,
+    }),
+    [
+      session,
+      groupId,
+      tabs,
+      activeTabId,
+      selectedNodeIds,
+      withCanvasInteraction,
+      wrappedOnCanvasPointerDown,
+      wrappedOnNodePointerDown,
+      wrappedOnPinPointerDown,
+      canvasInteraction.connectPins,
+      wrappedSetCanvas,
+    ],
+  );
 }

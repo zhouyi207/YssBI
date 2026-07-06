@@ -9,6 +9,27 @@ import { useEditorCollections } from './useEditorCollections';
 import { useEditorGroups } from './useEditorGroups';
 import { useEditorUIState } from './useEditorUIState';
 
+type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
+
+function buildEditorState(
+  active: ActiveEditorGroup,
+  collections: ReturnType<typeof useEditorCollections>,
+  groups: ReturnType<typeof useEditorGroups>,
+  uiState: ReturnType<typeof useEditorUIState>,
+) {
+  return {
+    activeGroupId: active.activeGroupId,
+    activeEditorGroupId: active.activeEditorGroupId,
+    activeTabId: active.activeTabId,
+    groupId: active.groupId,
+    tabs: active.tabs,
+    selectedNodeIds: active.selectedNodeIds,
+    ...collections,
+    groups,
+    ...uiState,
+  };
+}
+
 export function useEditorState(overrideGroupId?: string | null) {
   const active = useActiveEditorGroup(overrideGroupId);
   const collections = useEditorCollections();
@@ -16,17 +37,9 @@ export function useEditorState(overrideGroupId?: string | null) {
   const uiState = useEditorUIState();
 
   return useMemo(
-    () => ({
-      activeGroupId: active.activeGroupId,
-      activeEditorGroupId: active.activeEditorGroupId,
-      activeTabId: active.activeTabId,
-      groupId: active.groupId,
-      tabs: active.tabs,
-      selectedNodeIds: active.selectedNodeIds,
-      ...collections,
-      groups,
-      ...uiState,
-    }),
-    [active, collections, groups, uiState]
+    () => buildEditorState(active, collections, groups, uiState),
+    [active, collections, groups, uiState],
   );
 }
+
+export { buildEditorState };

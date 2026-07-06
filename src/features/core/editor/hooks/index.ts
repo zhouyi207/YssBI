@@ -2,7 +2,7 @@ export { useActiveEditorGroup } from './useActiveEditorGroup';
 export { useEditorCollections } from './useEditorCollections';
 export { useEditorGroups } from './useEditorGroups';
 export { useEditorUIState } from './useEditorUIState';
-export { useEditorState } from './useEditorState';
+export { useEditorState, buildEditorState } from './useEditorState';
 
 export { useEditorNodeActions } from './useEditorNodeActions';
 export { useEditorCanvasActions } from './useEditorCanvasActions';

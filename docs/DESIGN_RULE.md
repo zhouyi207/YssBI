@@ -52,7 +52,7 @@ src/
 │   │   └─ variable/    # 变量纯逻辑
 │   │
 │   ├─ application/     # 应用层：用例编排与 Hook 协调
-│   │   ├─ editor/      # 编辑器用例（useEditor、useEditorGroup、keyboard）
+│   │   ├─ editor/      # 编辑器用例（EditorSessionProvider、useEditorSession、useEditorGroup、keyboard）
 │   │   ├─ project/     # 项目用例（save/load/execute、useProjectSync）
 │   │   ├─ menubar/     # 菜单栏用例
 │   │   └─ initialization/ # 应用初始化
@@ -100,7 +100,7 @@ src/
 |------|-----------|------|
 | 视图组件 | `PascalCase.tsx` | `Canvas.tsx`、`NodeContainer.tsx`、`PinInput.tsx` |
 | 视图目录 | `PascalCase/` | `EditorView/`、`Canvas/`、`Nodes/` |
-| Hook | `useXxx.ts`（camelCase） | `useEditor.ts`、`useEditorGraphData.ts` |
+| Hook | `useXxx.ts`（camelCase） | `useEditorSession.ts`、`useEditorGroup.ts` |
 | Store | `xxxStore.ts`（camelCase） | `graphDataStore.ts`、`variableStore.ts` |
 | Service | `xxxService.ts`（camelCase） | `connectionService.ts`、`graphService.ts` |
 | 类型文件 | `camelCase.ts` | `graph.ts`、`node.ts`、`editor.ts` |
@@ -111,7 +111,7 @@ src/
 | 分类 | 命名约定 | 示例 |
 |------|---------|------|
 | React 组件 | `PascalCase` | `Canvas`、`NodeContainer`、`EditorWindow` |
-| 自定义 Hook | `use` + `PascalCase` | `useEditor`、`useCanvasViewport`、`useEditorOperations` |
+| 自定义 Hook | `use` + `PascalCase` | `useEditorSession`、`useEditorGroup`、`useCanvasViewport`、`useEditorOperations` |
 | Zustand Store | `use` + `PascalCase` + `Store` | `useGraphDataStore`、`useEditorStore`、`useVariableStore` |
 | Store 接口 | `PascalCase` + `Store` | `GraphDataStore`、`EditorStore`、`VariableStore` |
 | Service 类 | `PascalCase` + `Service` | `ConnectionService`、`GraphService`、`NodeService` |

@@ -2,13 +2,13 @@ import { useEffect, useRef } from 'react';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useFirstGraphResource } from '@/features/core/resource';
-import { useEditor } from './useEditor';
+import { useEditorSession } from './EditorSessionContext';
 
 /**
  * 项目加载后若编辑器无打开 Tab，自动打开第一个图，避免「保存项目」等操作因无 activeTabId 不可用。
  */
 export function useAutoOpenFirstGraph() {
-  const { openGraph } = useEditor({ withCanvasInteraction: false });
+  const { openGraph } = useEditorSession();
   const currentPath = useProjectIOStore((s) => s.currentPath);
   const firstGraph = useFirstGraphResource();
   const openedForPathRef = useRef<string | null>(null);

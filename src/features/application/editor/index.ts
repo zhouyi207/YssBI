@@ -1,4 +1,5 @@
-export { useEditor } from './useEditor';
+export { EditorSessionProvider, useEditorSession, useEditorSessionOptional } from './EditorSessionContext';
+export type { EditorSession } from './useEditorSessionValue';
 export { useEditorOperations } from './useEditorOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';

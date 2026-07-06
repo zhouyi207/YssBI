@@ -48,7 +48,7 @@ export default function Canvas() {
     resetPinValue,
     setSelectedNodeIds,
     createNode,
-  } = useEditorGroup();
+  } = useEditorGroup({ withCanvasInteraction: true });
 
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);

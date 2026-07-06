@@ -114,7 +114,7 @@ export function Menubar() {
     addEvent,
     addFunction,
     addWorksheet,
-  } = useEditorGroup({ withCanvasInteraction: false });
+  } = useEditorGroup();
 
   const {
     openSettings,

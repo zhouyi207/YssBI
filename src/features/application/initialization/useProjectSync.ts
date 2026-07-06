@@ -4,7 +4,7 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
-import { useEditor } from '@/features/application/editor';
+import { useEditorSession } from '@/features/application/editor';
 import type { EventCallbacks } from '@/features/core/sync/types';
 import { logger } from '@/utils/appLogger';
 
@@ -63,7 +63,7 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
  * Handlers 已直接更新 Store，callbacks 仅用于可选 UI 扩展（如打开新 Tab）
  */
 export function useProjectSyncWithEditor() {
-  const editor = useEditor({ withCanvasInteraction: false });
+  const editor = useEditorSession();
   const callbacks = useMemo<EventCallbacks>(
     () => ({
       onEventCreated: editor.handleEventCreated,

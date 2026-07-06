@@ -4,19 +4,22 @@
  * 并提供 refs 供 canvas interaction 使用
  */
 import { useRef, useEffect } from 'react';
-import { getViewport, subscribeToViewport } from '@/features/core/viewport';import { useActiveEditorGroup } from './useActiveEditorGroup';
+import { getViewport, subscribeToViewport } from '@/features/core/viewport';
+import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorNodeActions } from './useEditorNodeActions';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
 import { useEditorLayoutActions } from './useEditorLayoutActions';
 
-export function useEditorActions(overrideGroupId?: string | null) {
-  const active = useActiveEditorGroup(overrideGroupId);
+type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
+
+export function useEditorActions(active: ActiveEditorGroup) {
   const editorGroupId = active.activeEditorGroupId;
   const activeGroupIdRef = useRef(editorGroupId);
   const activeTabIdRef = useRef(active.activeTabId);
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
+
   const nodeActions = useEditorNodeActions(activeTabIdRef, editorGroupId);
   const canvasActions = useEditorCanvasActions(activeTabIdRef);
   const uiActions = useEditorUIActions();
