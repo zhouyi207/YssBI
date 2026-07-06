@@ -459,7 +459,6 @@ pub async fn execute_project(
     on_event: Channel<ExecutionEvent>,
     graph_id: Option<String>,
 ) -> Result<Value, String> {
-    let project_data = state.get_data();
     let source_store = source_store.inner().clone();
     let project_data_state = state.project_data.clone();
     let project_store = state.project_store.clone();
@@ -475,7 +474,6 @@ pub async fn execute_project(
 
     tauri::async_runtime::spawn_blocking(move || {
         execute_project_data(
-            project_data,
             project_data_state,
             project_store,
             source_store,

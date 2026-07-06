@@ -1,8 +1,11 @@
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  SectionHeader,
+  ReportLayout,
+  ReportLazyBoundary,
+  ReportSection,
+  LazyPanelFormulaBlock,
   ModelSummaryGrid,
   PanelFESummaryGrid,
   PanelBESummaryGrid,
@@ -11,11 +14,10 @@ import {
   PanelMLEIterationBlock,
   CoefficientsBlock,
   HypothesisTestBlock,
+  OmittedVariablesAlert,
 } from './shared';
 import type { PanelSummaryResult, OLSResultData } from './shared/types';
 import type { PanelEffectType as EffectType, PanelMethod as TabKey, PanelModelType as ModelType } from './PanelFormulaBlock';
-
-const PanelFormulaBlock = React.lazy(() => import('./PanelFormulaBlock'));
 
 const MODEL_TYPE_TABS: { key: ModelType; label: string }[] = [
   { key: 'mixed', label: 'Mixed Regression' },
@@ -174,14 +176,14 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
   };
 
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      {/* Title */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+    <ReportLayout
+      title={data.title}
+      badges={
         <span className="text-xs text-muted-foreground">
-          {data.endog_name} &middot; Entity ID + Time ID (cluster by entity)
+          {data.endog_name} · Entity ID + Time ID (cluster by entity)
         </span>
-      </div>
+      }
+    >
 
       {/* Model selector card: 2 rows */}
       {data.selection_tests && data.selection_tests.length > 0 && (
@@ -269,22 +271,11 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
         </div>
       </div>
 
-      {/* Equation */}
-      <SectionHeader
-        title="Equation"
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.745 3A23.933 23.933 0 003 12c0 3.183.62 6.22 1.745 9M19.5 3c.967 2.78 1.5 5.817 1.5 9s-.533 6.22-1.5 9M8.25 8.885l1.444-.89a.75.75 0 011.105.402l2.402 7.206a.75.75 0 001.104.401l1.445-.889" />
-          </svg>
-        }
-      />
-      <Suspense fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}>
-        <PanelFormulaBlock
-          modelType={modelType}
-          effectType={effectType}
-          method={currentMethod}
-        />
-      </Suspense>
+      <ReportSection title="Equation" icon="equation">
+        <ReportLazyBoundary variant="formula">
+          <LazyPanelFormulaBlock modelType={modelType} effectType={effectType} method={currentMethod} />
+        </ReportLazyBoundary>
+      </ReportSection>
 
       {/* Error state */}
       {currentError && (
@@ -314,20 +305,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
       {/* Result content */}
       {currentData && !currentError && (
         <>
-          {/* Model Summary */}
-          <SectionHeader
-            title="Model Summary"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            }
-          />
+          <ReportSection title="Model Summary" icon="modelSummary">
           {(currentMethod === 're_fgls' || currentMethod === 're_mle' || currentMethod === 're_fgls_time' || currentMethod === 're_mle_time' || currentMethod === 're_fgls_twoway' || currentMethod === 're_mle_twoway') &&
           currentData?.diagnostic_info?.panel_fe_info ? (
             <PanelRESummaryGrid
@@ -349,6 +327,7 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
           ) : (
             <ModelSummaryGrid info={currentData.model_basic_info} />
           )}
+          </ReportSection>
 
           {/* Coefficients */}
           <CoefficientsBlock
@@ -360,74 +339,21 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             }
           />
 
-          {/* Omitted variables (collinearity) */}
-          {currentData?.diagnostic_info?.omit_info &&
-            currentData.diagnostic_info.omit_info.omitted.length > 0 && (
-              <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="flex items-start gap-2">
-                  <svg
-                    className="w-5 h-5 text-amber-400 shrink-0 mt-0.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-                    />
-                  </svg>
-                  <div>
-                    <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
-                    <div className="text-sm text-foreground">
-                      The following variables were dropped due to strict multicollinearity
-                      (non-dummy variables removed first):
-                    </div>
-                    <ul className="mt-2 space-y-1 text-sm font-mono">
-                      {currentData.diagnostic_info.omit_info.omitted.map((o, i) => (
-                        <li key={i} className="text-muted-foreground">
-                          {o.variable}
-                          {o.category != null ? (
-                            <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
-                              {o.category}
-                            </span>
-                          ) : null}
-                          <span className="text-muted-foreground text-xs ml-1">({o.reason})</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
+          {currentData.diagnostic_info ? (
+            <OmittedVariablesAlert diag={currentData.diagnostic_info} />
+          ) : null}
 
-          {/* Hypothesis Test */}
           <HypothesisTestBlock data={currentData as OLSResultData} />
 
-          {/* MLE: iteration log (separate module at bottom) */}
           {(currentMethod === 're_mle' || currentMethod === 're_mle_time' || currentMethod === 're_mle_twoway') &&
             (currentData.model_basic_info?.mle_iter_log_lik_const != null ||
               currentData.model_basic_info?.mle_iter_log_lik != null) && (
-              <>
-                <SectionHeader
-                  title="MLE Iteration Log"
-                  icon={
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2V9a2 2 0 00-2-2z"
-                      />
-                    </svg>
-                  }
-                />
+              <ReportSection title="MLE Iteration Log" icon="document">
                 <PanelMLEIterationBlock info={currentData.model_basic_info} />
-              </>
+              </ReportSection>
             )}
         </>
       )}
-    </div>
+    </ReportLayout>
   );
 };

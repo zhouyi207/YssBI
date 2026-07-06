@@ -644,8 +644,8 @@ package.json
 - [ ] **GraphDataStore flat mirror 退役**：`graphEntities[graphId]` 为权威，但 `nodes/pins/connections` flat mirror 仍被 ~15 处 `?? store.connections[cid]` fallback 使用（`graphDataStore.ts`、sync handlers、clipboard）。所有读写强制 graph-scoped API，删除 mirror 与 fallback
 - [x] **后端 ProjectState 变异 API**：graph commands 直接锁 `project_data`（`command_node.rs` 等），与 `prepare_graph_runtime` / `compile_graph` 规则易漂移。引入 `ProjectState::with_graph_mut` + 统一 `GraphInstance::recompile(scope)` 入口（`project_state_graph_mut.rs`；`GraphRecompileScope` 覆盖 RuntimePrepare / Full / FromSeeds / TopologyEffects / InferOnly；graph commands 已全部迁移）
 - [x] **后端 graph compile / rename 去重**：rename 收口至 `ProjectState::rename_graph` + 单一 command `rename_graph_resource`（含 unique name、持久化、`ResourceChanged`）；已删除 `rename_subgraph` 与 `ProjectService.renameSubgraph`；compile 已统一为 `GraphInstance::recompile`
-- [ ] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
-- [ ] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
+- [x] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
+- [x] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
 - [ ] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
 - [ ] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
 - [ ] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
@@ -664,6 +664,8 @@ package.json
 - [ ] 函数图应该如何设计？？？设置不可删除节点，但是可以移动，如 event 中的 event begin，function 中的 inputs 节点 和 outputs 节点？？或许 function 中不应该使用节点形式？？在这里还需要对 event begin 屏蔽，同理 event 需要对 inputs 节点和 outputs 节点屏蔽
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
+- [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。
+
 
 # TODOLIST
 
