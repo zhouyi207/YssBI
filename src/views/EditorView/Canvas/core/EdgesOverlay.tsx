@@ -63,7 +63,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
   const isRunning = status === "running";
 
   const graphNodeIds = useGraphDataStore(
-    useShallow((s) => s.graphNodes[graphId] ?? EMPTY_IDS),
+    useShallow((s) => s.getGraphNodeIds(graphId)),
   );
   const connections = useGraphDataStore(
     useShallow((s) => s.getGraphConnections(graphId)),

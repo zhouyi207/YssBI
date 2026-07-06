@@ -39,7 +39,7 @@ export function getGraphById(graphId: string): GraphData | null {
 
   const dataState = useGraphDataStore.getState();
   const graphMeta = useGraphMetaStore.getState().graphs[graphId];
-  const nodeIds = dataState.graphNodes[graphId] ?? [];
+  const nodeIds = dataState.getGraphNodeIds(graphId);
   const nodes = nodeIds.map((nid) => dataState.getGraphNode(graphId, nid)).filter(isPresent);
   const pins = nodeIds.flatMap((nid) =>
     dataState.getGraphNodePins(graphId, nid).map((pid) => dataState.getGraphPin(graphId, pid)).filter(isPresent),
@@ -49,7 +49,7 @@ export function getGraphById(graphId: string): GraphData | null {
     (p ? dataState.getGraphPinConnections(graphId, p.id) : []).forEach((cid) => connIds.add(cid));
   });
   const connections = Array.from(connIds)
-    .map((cid) => dataState.graphEntities[graphId]?.connections[cid] ?? dataState.connections[cid])
+    .map((cid) => dataState.getGraphConnection(graphId, cid))
     .filter(isPresent)
     .map((conn) => ({ fromPin: conn.from, toPin: conn.to }));
 
@@ -99,18 +99,16 @@ export function useGraphData(activeTabId: string | null) {
   // 其他图变化时 node 引用不变 → 不触发 re-render
   const graphNodes = useGraphDataStore(
     useShallow((s) => {
-      if (!activeTabId) return null;
-      const ids = s.graphNodes[activeTabId];
-      if (!ids) return null;
+      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
+      const ids = s.getGraphNodeIds(activeTabId);
       return ids.map((nid) => s.getGraphNode(activeTabId, nid)).filter(isPresent);
     })
   );
 
   const graphPins = useGraphDataStore(
     useShallow((s) => {
-      if (!activeTabId) return null;
-      const nodeIds = s.graphNodes[activeTabId];
-      if (!nodeIds) return null;
+      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
+      const nodeIds = s.getGraphNodeIds(activeTabId);
       return nodeIds.flatMap((nid) =>
         s.getGraphNodePins(activeTabId, nid).map((pid) => s.getGraphPin(activeTabId, pid)).filter(isPresent)
       );
@@ -119,9 +117,8 @@ export function useGraphData(activeTabId: string | null) {
 
   const graphConnections = useGraphDataStore(
     useShallow((s) => {
-      if (!activeTabId) return null;
-      const nodeIds = s.graphNodes[activeTabId];
-      if (!nodeIds) return null;
+      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
+      const nodeIds = s.getGraphNodeIds(activeTabId);
       const connIds = new Set<string>();
       for (const nid of nodeIds) {
         for (const pid of s.getGraphNodePins(activeTabId, nid)) {
@@ -131,7 +128,7 @@ export function useGraphData(activeTabId: string | null) {
         }
       }
       return Array.from(connIds)
-        .map((cid) => s.graphEntities[activeTabId]?.connections[cid] ?? s.connections[cid])
+        .map((cid) => s.getGraphConnection(activeTabId, cid))
         .filter(isPresent);
     })
   );

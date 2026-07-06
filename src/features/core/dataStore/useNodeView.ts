@@ -14,24 +14,18 @@ import { useGraphDataStore } from './graphDataStore';
 import { derivePinConnectionView } from './pinLinks';
 import { resolveNodeViewMeta } from './serialization';
 
-const EMPTY_IDS: string[] = [];
-
-export function useNodeView(nodeId: string, graphId?: string): UINode | null {
-  const nodeData = useGraphDataStore((s) =>
-    graphId ? s.getGraphNode(graphId, nodeId) : s.nodes[nodeId],
-  );
+export function useNodeView(nodeId: string, graphId: string): UINode | null {
+  const nodeData = useGraphDataStore((s) => s.getGraphNode(graphId, nodeId));
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
-      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
-        .map((pid) => (graphId ? s.getGraphPin(graphId, pid) : s.pins[pid])),
+      s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPin(graphId, pid)),
     ),
   );
 
   const pinConns = useGraphDataStore(
     useShallow((s) =>
-      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
-        .map((pid) => (graphId ? s.getGraphPinConnections(graphId, pid) : s.pinConnections[pid])),
+      s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPinConnections(graphId, pid)),
     ),
   );
 

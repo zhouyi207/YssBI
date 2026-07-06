@@ -123,7 +123,7 @@ export function BottomBar() {
     useShallow((state) => {
       if (!editor.activeTabId) return { nodeCount: 0, connectionCount: 0 };
 
-      const nodeIds = state.graphNodes[editor.activeTabId] ?? [];
+      const nodeIds = state.getGraphNodeIds(editor.activeTabId);
       const connectionIds = new Set<string>();
       for (const nodeId of nodeIds) {
         for (const pinId of state.getGraphNodePins(editor.activeTabId, nodeId)) {

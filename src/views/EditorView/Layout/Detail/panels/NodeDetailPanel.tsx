@@ -34,25 +34,23 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     for (const [gid, bucket] of Object.entries(s.graphEntities)) {
       if (bucket.nodes[nodeId]) return gid;
     }
-    return s.nodes[nodeId]?.graphId;
+    return undefined;
   });
-  const node = useGraphDataStore((s) =>
-    graphId ? s.getGraphNode(graphId, nodeId) : s.nodes[nodeId],
-  );
+  const node = useGraphDataStore((s) => (graphId ? s.getGraphNode(graphId, nodeId) : undefined));
   const pinObjs = useGraphDataStore(
     useShallow((s) => {
-      const pinIds = graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId];
-      if (!pinIds?.length) return EMPTY_PINS;
-      return pinIds.map((pid) => (graphId ? s.getGraphPin(graphId, pid) : s.pins[pid])).filter(isPresent);
+      if (!graphId) return EMPTY_PINS;
+      const pinIds = s.getGraphNodePins(graphId, nodeId);
+      if (!pinIds.length) return EMPTY_PINS;
+      return pinIds.map((pid) => s.getGraphPin(graphId, pid)).filter(isPresent);
     }),
   );
   const pinConns = useGraphDataStore(
     useShallow((s) => {
-      const pinIds = graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId];
-      if (!pinIds?.length) return EMPTY_PIN_CONNECTIONS;
-      return pinIds.map((pid) =>
-        graphId ? s.getGraphPinConnections(graphId, pid) : s.pinConnections[pid] ?? EMPTY_CONNECTIONS,
-      );
+      if (!graphId) return EMPTY_PIN_CONNECTIONS;
+      const pinIds = s.getGraphNodePins(graphId, nodeId);
+      if (!pinIds.length) return EMPTY_PIN_CONNECTIONS;
+      return pinIds.map((pid) => s.getGraphPinConnections(graphId, pid));
     }),
   );
   const nodeType = node?.nodeType;

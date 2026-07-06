@@ -36,10 +36,9 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   const menuActions = useCanvasContextMenuActionsOptional();
 
   const hasLinks = useGraphDataStore((s) => {
-    const pinIds = _graphId ? s.getGraphNodePins(_graphId, node.id) : s.nodePins[node.id] ?? [];
-    return pinIds.some((pid) =>
-      ((_graphId ? s.getGraphPinConnections(_graphId, pid) : s.pinConnections[pid])?.length ?? 0) > 0,
-    );
+    if (!_graphId) return false;
+    const pinIds = s.getGraphNodePins(_graphId, node.id);
+    return pinIds.some((pid) => s.getGraphPinConnections(_graphId, pid).length > 0);
   });
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);

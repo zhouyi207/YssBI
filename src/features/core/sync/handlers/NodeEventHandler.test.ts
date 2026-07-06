@@ -39,15 +39,7 @@ const makeGraph = (id: string, title: string) => ({
 
 describe('Node event handlers', () => {
   beforeEach(() => {
-    useGraphDataStore.setState({
-      nodes: {},
-      pins: {},
-      connections: {},
-      graphEntities: {},
-      graphNodes: {},
-      nodePins: {},
-      pinConnections: {},
-    });
+    useGraphDataStore.setState({ graphEntities: {} });
   });
 
   it('scopes node deletion by graph id when local node ids overlap', () => {

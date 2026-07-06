@@ -45,7 +45,7 @@ export function useCanvasViewport(
 
   const nodePositionMap = useGraphDataStore(
     useShallow((s) => {
-      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const ids = graphId ? s.getGraphNodeIds(graphId) : [];
       const m: Record<string, { x: number; y: number }> = {};
       for (const id of ids) {
         const n = graphId ? s.getGraphNode(graphId, id) : undefined;
@@ -57,7 +57,7 @@ export function useCanvasViewport(
 
   const pinNodeIdMap = useGraphDataStore(
     useShallow((s) => {
-      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const ids = graphId ? s.getGraphNodeIds(graphId) : [];
       const m: Record<string, string> = {};
       for (const nid of ids) {
         if (!graphId) continue;
@@ -91,7 +91,7 @@ export function useCanvasViewport(
     const worldViewBottom = (rect.height - viewport.y) / viewport.scale + padding;
 
     const store = useGraphDataStore.getState();
-    const nodeIds = store.graphNodes[graphId] ?? [];
+    const nodeIds = store.getGraphNodeIds(graphId);
 
     const visible = new Set<string>();
     for (const nid of nodeIds) {

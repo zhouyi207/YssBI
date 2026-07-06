@@ -71,7 +71,7 @@ export function useEditorOperations() {
     if (!tid) return;
 
     const dataStore = useGraphDataStore.getState();
-    const graphNodeIds = dataStore.graphNodes[tid] ?? [];
+    const graphNodeIds = dataStore.getGraphNodeIds(tid);
     const selectedNodeIdList = graphNodeIds.filter((nid) => sIds.has(nid));
     const snapshot = buildClipboardSnapshot(selectedNodeIdList, tid);
     if (snapshot) setClipboard(snapshot);
@@ -79,7 +79,8 @@ export function useEditorOperations() {
 
   const copyNodes = useCallback((nodeIds: string[]) => {
     const tid = activeTabIdRef.current;
-    const snapshot = buildClipboardSnapshot(nodeIds, tid ?? undefined);
+    if (!tid) return;
+    const snapshot = buildClipboardSnapshot(nodeIds, tid);
     if (snapshot) setClipboard(snapshot);
   }, [setClipboard]);
 
@@ -149,7 +150,7 @@ export function useEditorOperations() {
     for (const pinId of pinIds) {
       const connIds = store.getGraphPinConnections(tid, pinId);
       for (const connId of connIds) {
-        const conn = store.graphEntities[tid]?.connections[connId] ?? store.connections[connId];
+        const conn = store.getGraphConnection(tid, connId);
         if (!conn) continue;
         const otherPinId = conn.from === pinId ? conn.to : conn.from;
         const otherPin = store.getGraphPin(tid, otherPinId);

@@ -28,7 +28,7 @@ async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<vo
   );
 
   if (!isGraphTab(activeTab)) return;
-  if (useGraphDataStore.getState().graphNodes[activeTab.id] !== undefined) return;
+  if (useGraphDataStore.getState().hasGraph(activeTab.id)) return;
   await useProjectIOStore.getState().loadGraph(activeTab.id);
 }
 

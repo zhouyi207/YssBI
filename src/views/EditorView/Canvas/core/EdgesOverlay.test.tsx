@@ -40,15 +40,7 @@ const makeGraph = (graphId: string, color: string) => ({
 
 describe('EdgesOverlay', () => {
   beforeEach(() => {
-    useGraphDataStore.setState({
-      nodes: {},
-      pins: {},
-      connections: {},
-      graphEntities: {},
-      graphNodes: {},
-      nodePins: {},
-      pinConnections: {},
-    });
+    useGraphDataStore.setState({ graphEntities: {} });
   });
 
   it('renders edges from the active graph bucket when local pin ids overlap', () => {
@@ -59,7 +51,7 @@ describe('EdgesOverlay', () => {
 
     const store = useGraphDataStore.getState();
     const edges = buildEdgeData(
-      store.graphNodes['graph-1'] ?? [],
+      store.getGraphNodeIds('graph-1'),
       store.getGraphConnections('graph-1'),
       (pinId) => store.getGraphPin('graph-1', pinId),
     );

@@ -9,6 +9,7 @@ export * from './graphRuntimeStore';
 export * from './projectIOStore';
 export * from './projectHelpers';
 export * from './variableStore';
+export * from './graphEntityAccess';
 export * from './graphDataStore';
 export { resolveNodeViewMeta } from './serialization';
 export { useNodeView } from './useNodeView';

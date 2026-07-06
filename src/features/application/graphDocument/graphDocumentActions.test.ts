@@ -7,15 +7,7 @@ describe('graphDocumentActions', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
-    useGraphDataStore.setState({
-      nodes: {},
-      pins: {},
-      connections: {},
-      graphEntities: {},
-      graphNodes: {},
-      nodePins: {},
-      pinConnections: {},
-    });
+    useGraphDataStore.setState({ graphEntities: {} });
   });
 
   it('updates function signature through the narrow service API and stores the returned graph', async () => {
@@ -42,6 +34,6 @@ describe('graphDocumentActions', () => {
         functionOutputs: outputs,
       }),
     );
-    expect(useGraphDataStore.getState().graphNodes['function-1']).toEqual([]);
+    expect(useGraphDataStore.getState().getGraphNodeIds('function-1')).toEqual([]);
   });
 });

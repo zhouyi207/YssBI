@@ -109,7 +109,7 @@ function buildResourceIndex(params: {
       name: graph.name,
       uri: `yssbi://graph/${graph.type}/${graph.id}`,
       exists: true,
-      loaded: Boolean(useGraphDataStore.getState().graphNodes[graph.id]),
+      loaded: useGraphDataStore.getState().hasGraph(graph.id),
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -223,7 +223,7 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
         const meta = eventMeta ?? functionMeta;
         if (!meta || !meta.exists) return null;
 
-        const nodeIds = dataStore.graphNodes[graphId] ?? [];
+        const nodeIds = dataStore.getGraphNodeIds(graphId);
         const nodes = nodeIds.map((nodeId) => dataStore.getGraphNode(graphId, nodeId)).filter(Boolean);
         const pins = nodeIds.flatMap((nodeId) =>
           dataStore.getGraphNodePins(graphId, nodeId)
@@ -237,7 +237,7 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
           }
         }
         const connections = Array.from(connectionIds)
-          .map((connectionId) => dataStore.graphEntities[graphId]?.connections[connectionId] ?? dataStore.connections[connectionId])
+          .map((connectionId) => dataStore.getGraphConnection(graphId, connectionId))
           .filter(Boolean)
           .map((connection) => ({ fromPin: connection.from, toPin: connection.to }));
 
@@ -386,7 +386,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
 
   loadGraph: async (graphId) => {
     const dataStore = useGraphDataStore.getState();
-    if (dataStore.graphNodes[graphId]) return true;
+    if (dataStore.hasGraph(graphId)) return true;
 
     const existing = loadGraphInFlight.get(graphId);
     if (existing) return existing;

@@ -87,7 +87,7 @@ export function useCanvasInteraction({
             const canvasEl = queryCanvasElement(groupId);
             const tabId = resolveTabId(groupId, activeTabIdRef);
             setSelectionHitTargets(
-                canvasEl ? buildSelectionHitTargets(canvasEl, tabId ? useGraphDataStore.getState().graphNodes[tabId] ?? [] : []) : [],
+                canvasEl ? buildSelectionHitTargets(canvasEl, tabId ? useGraphDataStore.getState().getGraphNodeIds(tabId) : []) : [],
             );
             startSelectionSession({
                 groupId,

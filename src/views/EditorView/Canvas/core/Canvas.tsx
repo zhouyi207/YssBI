@@ -67,7 +67,7 @@ export default function Canvas() {
   );
 
   const graphNodeIds = useGraphDataStore(
-    useShallow((s) => (activeTabId ? s.graphNodes[activeTabId] ?? EMPTY_NODE_IDS : EMPTY_NODE_IDS)),
+    useShallow((s) => (activeTabId ? s.getGraphNodeIds(activeTabId) : EMPTY_NODE_IDS)),
   );
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(

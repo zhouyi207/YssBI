@@ -12,7 +12,7 @@ export function findInternalNodeInGraph(
   nodeType: string,
 ): NodeData | undefined {
   const state = useGraphDataStore.getState();
-  const nodeIds = state.graphNodes[graphId] ?? [];
+  const nodeIds = state.getGraphNodeIds(graphId);
   for (const nodeId of nodeIds) {
     const node = state.getGraphNode(graphId, nodeId);
     if (node?.nodeType === nodeType && node.isInternal) {
@@ -25,8 +25,7 @@ export function findInternalNodeInGraph(
 /** Build runtime node inputs for replaceGraphNodes from normalized store state. */
 export function buildRuntimeNodesFromStore(graphId: string): RuntimeNodeInput[] {
   const state = useGraphDataStore.getState();
-  const nodeIds = state.graphNodes[graphId] ?? [];
-  return nodeIds
+  return state.getGraphNodeIds(graphId)
     .map((nodeId) => {
       const node = state.getGraphNode(graphId, nodeId);
       if (!node) return null;

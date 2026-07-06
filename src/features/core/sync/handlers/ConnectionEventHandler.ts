@@ -64,14 +64,14 @@ export class ConnectionsBatchDeletedHandler extends BaseEventHandler<Connections
         const connectionIds = new Set<string>();
         for (const [fromPin, toPin] of payload.removedConnections) {
             for (const cid of store.getGraphPinConnections(payload.graphId, fromPin)) {
-                const conn = store.graphEntities[payload.graphId]?.connections[cid] ?? store.connections[cid];
+                const conn = store.getGraphConnection(payload.graphId, cid);
                 if (conn && (conn.to === toPin || conn.from === toPin)) {
                     connectionIds.add(cid);
                     break;
                 }
             }
             for (const cid of store.getGraphPinConnections(payload.graphId, toPin)) {
-                const conn = store.graphEntities[payload.graphId]?.connections[cid] ?? store.connections[cid];
+                const conn = store.getGraphConnection(payload.graphId, cid);
                 if (conn && (conn.from === fromPin || conn.to === fromPin)) {
                     connectionIds.add(cid);
                     break;

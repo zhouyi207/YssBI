@@ -113,7 +113,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
 
   const connectionIds = useGraphDataStore((s) =>
-    subgraphId ? s.getGraphPinConnections(subgraphId, id) : s.pinConnections[id],
+    subgraphId ? s.getGraphPinConnections(subgraphId, id) : [],
   );
   const pinResults = useExecutionStore((s) =>
     subgraphId ? s.graphs[subgraphId]?.pinResults : undefined,
