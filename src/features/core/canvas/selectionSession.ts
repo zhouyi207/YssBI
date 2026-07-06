@@ -1,4 +1,3 @@
-import type { SelectionHitTarget } from './selectionHitTargets';
 import { clearAllSelectionPreview, queryCanvasElement } from './selectionHitTargets';
 
 export type ActiveSelectionSession = {
@@ -16,8 +15,6 @@ export type SelectionSession = ActiveSelectionSession | { active: false };
 const IDLE: SelectionSession = { active: false };
 
 let session: SelectionSession = IDLE;
-/** Shared across all canvas interaction instances (session is module-global). */
-let hitTargets: SelectionHitTarget[] = [];
 let previewIds: string[] = [];
 const listeners = new Set<() => void>();
 
@@ -27,14 +24,6 @@ function publish(): void {
 
 export function getSelectionSession(): SelectionSession {
   return session;
-}
-
-export function getSelectionHitTargets(): readonly SelectionHitTarget[] {
-  return hitTargets;
-}
-
-export function setSelectionHitTargets(targets: readonly SelectionHitTarget[]): void {
-  hitTargets = [...targets];
 }
 
 export function getSelectionPreviewIds(): readonly string[] {
@@ -79,7 +68,6 @@ export function updateSelectionSession(currentX: number, currentY: number): void
 export function endSelectionSession(): void {
   if (!session.active) return;
   session = IDLE;
-  hitTargets = [];
   previewIds = [];
   publish();
 }

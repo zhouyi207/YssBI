@@ -18,7 +18,7 @@ export interface PaletteItem {
 }
 
 export function useCanvasOverlayHandlers({
-  canvasRef,
+  canvasElementRef,
   activeTabId,
   functions,
   pendingConnection,
@@ -27,7 +27,7 @@ export function useCanvasOverlayHandlers({
   createNode,
   setCanvas,
 }: {
-  canvasRef: React.RefObject<HTMLDivElement | null>;
+  canvasElementRef: React.RefObject<HTMLDivElement | null>;
   activeTabId: string | null;
   functions: Record<string, unknown>;
   pendingConnection: Pin | null;
@@ -38,7 +38,7 @@ export function useCanvasOverlayHandlers({
 }) {
   const handleNodePaletteSelect = useCallback(
     async (item: PaletteItem, contextMenu: { x: number; y: number }) => {
-      if (!contextMenu || !canvasRef.current) return;
+      if (!contextMenu || !canvasElementRef.current) return;
 
       const internalNodeTypes = [
         "event_on_run",
@@ -51,7 +51,7 @@ export function useCanvasOverlayHandlers({
           ? findInternalNodeInGraph(activeTabId, item.nodeType)
           : undefined;
         if (existingNode) {
-          const rect = canvasRef.current.getBoundingClientRect();
+          const rect = canvasElementRef.current.getBoundingClientRect();
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
           const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
@@ -66,7 +66,7 @@ export function useCanvasOverlayHandlers({
         }
       }
 
-      const rect = canvasRef.current.getBoundingClientRect();
+      const rect = canvasElementRef.current.getBoundingClientRect();
       const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
@@ -106,7 +106,7 @@ export function useCanvasOverlayHandlers({
       setPendingConnection(null);
     },
     [
-      canvasRef,
+      canvasElementRef,
       activeTabId,
       functions,
       pendingConnection,

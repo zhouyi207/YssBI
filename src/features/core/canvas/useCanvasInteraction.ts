@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { getGraphById, useGraphDataStore } from "@/features/core/dataStore";
+import { getGraphById } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { persistGraphViewport } from '@/features/core/viewport';
@@ -12,19 +12,14 @@ import { canConnectPins } from "@/shared/utils/pinCompatibility";
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
 import { attachCanvasPointerLoop } from "./canvasPointerLoop";
 import {
-    buildSelectionHitTargets,
-    queryCanvasElement,
-} from "./selectionHitTargets";
-import {
     startSelectionSession,
     abortSelectionSession,
-    setSelectionHitTargets,
 } from "./selectionSession";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
     activeTabIdRef: React.RefObject<string | null>;
-    canvasRef: React.RefObject<GraphPosition>;
+    viewportRef: React.RefObject<GraphPosition>;
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
     enabled?: boolean;
@@ -33,7 +28,7 @@ interface UseCanvasInteractionProps {
 export function useCanvasInteraction({
     activeGroupIdRef,
     activeTabIdRef,
-    canvasRef,
+    viewportRef,
     setSelectedNodeIds,
     enabled = true,
 }: UseCanvasInteractionProps) {
@@ -84,11 +79,6 @@ export function useCanvasInteraction({
         }
         if (e.button === 0 && groupId) {
             abortSelectionSession(groupId);
-            const canvasEl = queryCanvasElement(groupId);
-            const tabId = resolveTabId(groupId, activeTabIdRef);
-            setSelectionHitTargets(
-                canvasEl ? buildSelectionHitTargets(canvasEl, tabId ? useGraphDataStore.getState().getGraphNodeIds(tabId) : []) : [],
-            );
             startSelectionSession({
                 groupId,
                 startX: e.clientX,
@@ -157,14 +147,14 @@ export function useCanvasInteraction({
         return attachCanvasPointerLoop({
             activeGroupIdRef,
             activeTabIdRef,
-            canvasRef,
+            viewportRef,
             setSelectedNodeIds: (updater, targetGroupId) => setSelectedNodeIdsRef.current(updater, targetGroupId),
             connectPins,
             persistViewport,
             setContextMenu,
             setPendingConnection,
         });
-    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
+    }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
 
     return useMemo(() => ({
         contextMenu,

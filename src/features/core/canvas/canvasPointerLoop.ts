@@ -10,6 +10,7 @@ import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { getCanvasWorldPoint, getGestureScreenMovement, resolveTabId } from './canvasInteractionUtils';
 import {
+  collectSelectionHitTargets,
   hitTestSelection,
   queryCanvasElement,
   syncSelectionPreview,
@@ -20,7 +21,6 @@ import {
   updateSelectionSession,
   endSelectionSession,
   abortSelectionSession,
-  getSelectionHitTargets,
   getSelectionPreviewIds,
   setSelectionPreviewIds,
   selectionScreenRect,
@@ -30,7 +30,7 @@ import {
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
   activeTabIdRef: RefObject<string | null>;
-  canvasRef: RefObject<GraphPosition>;
+  viewportRef: RefObject<GraphPosition>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
   persistViewport: (graphId?: string | null) => void;
@@ -59,7 +59,7 @@ function installPointerLoop(): () => void {
       currentX: e.clientX,
       currentY: e.clientY,
     });
-    const newSelectedIds = hitTestSelection(getSelectionHitTargets(), rect);
+    const newSelectedIds = hitTestSelection(collectSelectionHitTargets(canvasEl), rect);
     syncSelectionPreview(canvasEl, getSelectionPreviewIds(), newSelectedIds);
     setSelectionPreviewIds(newSelectedIds);
   };
@@ -94,8 +94,8 @@ function installPointerLoop(): () => void {
       useGestureStore.getState().setGesture(nextGesture);
       nextGesture = null;
     } else if (g.type === 'drag') {
-      const canvas = deps.canvasRef.current || { scale: 1 };
-      const scale = canvas.scale || 1;
+      const viewport = deps.viewportRef.current ?? { scale: 1 };
+      const scale = viewport.scale || 1;
       const dx = (e.clientX - g.lastX) / scale;
       const dy = (e.clientY - g.lastY) / scale;
 
@@ -149,7 +149,9 @@ function installPointerLoop(): () => void {
     const finalSession = { ...session, currentX: e.clientX, currentY: e.clientY };
     const hadMovement = selectionSessionMoved(finalSession, CONTEXT_MENU_MOVE_THRESHOLD_PX);
     const rect = selectionScreenRect(finalSession);
-    const newSelectedIds = hitTestSelection(getSelectionHitTargets(), rect);
+    const newSelectedIds = canvasEl
+      ? hitTestSelection(collectSelectionHitTargets(canvasEl), rect)
+      : [];
 
     if (canvasEl) clearAllSelectionPreview(canvasEl);
     endSelectionSession();
@@ -223,7 +225,7 @@ function installPointerLoop(): () => void {
     }
 
     useGestureStore.getState().endConnection();
-    const hadMovement = getGestureScreenMovement(g, deps.canvasRef.current?.scale ?? 1);
+    const hadMovement = getGestureScreenMovement(g, deps.viewportRef.current?.scale ?? 1);
     useGestureStore.getState().clearGesture(hadMovement);
   };
 

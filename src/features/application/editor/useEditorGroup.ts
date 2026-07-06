@@ -25,7 +25,7 @@ export function useEditorGroup(options?: UseEditorGroupOptions) {
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: session.activeGroupIdRef,
     activeTabIdRef: session.activeTabIdRef,
-    canvasRef: session.canvasRef,
+    viewportRef: session.viewportRef,
     setSelectedNodeIds: session.setSelectedNodeIds,
     enabled: withCanvasInteraction,
   });

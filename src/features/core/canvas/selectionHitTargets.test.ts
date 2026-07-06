@@ -7,7 +7,6 @@ import {
   startSelectionSession,
   endSelectionSession,
   getSelectionSession,
-  getSelectionHitTargets,
   getSelectionPreviewIds,
   abortSelectionSession,
 } from './selectionSession';
@@ -47,7 +46,6 @@ describe('selectionSession', () => {
 
     endSelectionSession();
     expect(getSelectionSession().active).toBe(false);
-    expect(getSelectionHitTargets()).toEqual([]);
     expect(getSelectionPreviewIds()).toEqual([]);
   });
 

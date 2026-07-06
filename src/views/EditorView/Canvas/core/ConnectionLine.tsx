@@ -20,7 +20,7 @@ export const ConnectionLine = ({
     pendingConnection?: Pin | null;
     menuPos?: { x: number; y: number } | null;
 }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const lineCanvasRef = useRef<HTMLCanvasElement>(null);
     const { theme } = useTheme();
 
     // 用 ref 存储高频变化的值，避免 effect 因依赖变化而反复重建订阅
@@ -48,7 +48,7 @@ export const ConnectionLine = ({
             const gestureStartPin = isConnecting ? (gesture as any).startPin : null;
             const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
-            const canvasEl = canvasRef.current;
+            const canvasEl = lineCanvasRef.current;
             if (!canvasEl) return;
             const ctx = canvasEl.getContext("2d");
             if (!ctx) return;
@@ -112,7 +112,7 @@ export const ConnectionLine = ({
 
     // Handle canvas resizing
     useEffect(() => {
-        const canvasEl = canvasRef.current;
+        const canvasEl = lineCanvasRef.current;
         if (!canvasEl) return;
         const parent = canvasEl.parentElement;
         if (!parent) return;
@@ -133,5 +133,5 @@ export const ConnectionLine = ({
         return () => resizeObserver.disconnect();
     }, []);
 
-    return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-50" />;
+    return <canvas ref={lineCanvasRef} className="absolute inset-0 pointer-events-none z-50" />;
 };

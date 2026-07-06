@@ -1,7 +1,7 @@
 /**
  * 编辑器操作（组合 hook）
  * 组合 useEditorNodeActions、useEditorCanvasActions、useEditorUIActions、useEditorLayoutActions
- * 并提供 refs 供 canvas interaction 使用
+ * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 GraphPosition 快照）
  */
 import { useRef, useEffect } from 'react';
 import { getViewport, subscribeToViewport } from '@/features/core/viewport';
@@ -25,21 +25,21 @@ export function useEditorActions(active: ActiveEditorGroup) {
   const uiActions = useEditorUIActions();
   const layoutActions = useEditorLayoutActions();
 
-  const canvasRef = useRef(getViewport(active.activeTabId ?? ''));
+  const viewportRef = useRef(getViewport(active.activeTabId ?? ''));
 
   useEffect(() => {
     const graphId = activeTabIdRef.current;
     if (!graphId) return;
-    canvasRef.current = getViewport(graphId);
+    viewportRef.current = getViewport(graphId);
     return subscribeToViewport(graphId, (viewport) => {
-      canvasRef.current = viewport;
+      viewportRef.current = viewport;
     });
   }, [active.activeTabId]);
 
   return {
     activeGroupIdRef,
     activeTabIdRef,
-    canvasRef,
+    viewportRef,
     ...nodeActions,
     ...canvasActions,
     ...uiActions,

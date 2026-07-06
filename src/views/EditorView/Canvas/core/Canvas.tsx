@@ -53,13 +53,13 @@ export default function Canvas() {
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
 
-  const ref = useRef<HTMLDivElement>(null);
+  const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => bindDragPreviewToGestureStore(), []);
-  useNodeDragPreview(ref, activeTabId);
-  useSelectionBoxPreview(selectionBoxRef, ref, groupId);
-  useExecutionVisualBinder(ref, activeTabId ?? undefined);
+  useNodeDragPreview(canvasElementRef, activeTabId);
+  useSelectionBoxPreview(selectionBoxRef, canvasElementRef, groupId);
+  useExecutionVisualBinder(canvasElementRef, activeTabId ?? undefined);
 
   const selectedNodeIdsSet = useMemo(
     () => new Set(selectedNodeIds),
@@ -71,7 +71,7 @@ export default function Canvas() {
   );
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
-    ref,
+    canvasElementRef,
     activeTabId,
     gestureType,
   );
@@ -85,7 +85,7 @@ export default function Canvas() {
     handleVariableDropGet,
     handleVariableDropSet,
   } = useCanvasDrop({
-    canvasRef: ref,
+    canvasElementRef,
     groupId,
     graphId: activeTabId,
     variables,
@@ -134,7 +134,7 @@ export default function Canvas() {
   return (
     <CanvasContextMenuProvider value={contextMenuActions}>
     <div
-      ref={ref}
+      ref={canvasElementRef}
       data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
@@ -185,7 +185,7 @@ export default function Canvas() {
       <div ref={selectionBoxRef} aria-hidden />
 
       <CanvasOverlays
-        canvasRef={ref}
+        canvasElementRef={canvasElementRef}
         variableDropMenu={variableDropMenu}
         setVariableDropMenu={setVariableDropMenu}
         onVariableDropGet={handleVariableDropGet}

@@ -58,7 +58,7 @@ export function useEditorSessionValue() {
       setPendingConnection: actions.setPendingConnection,
       activeGroupIdRef: actions.activeGroupIdRef,
       activeTabIdRef: actions.activeTabIdRef,
-      canvasRef: actions.canvasRef,
+      viewportRef: actions.viewportRef,
       ...editorOps,
       ...tabMgmt,
       openWorksheet,

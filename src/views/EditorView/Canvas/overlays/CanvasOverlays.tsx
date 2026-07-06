@@ -41,13 +41,13 @@ function CanvasToolbarButton({
 }
 
 export default function CanvasOverlays({
-    canvasRef,
+    canvasElementRef,
     variableDropMenu,
     setVariableDropMenu,
     onVariableDropGet,
     onVariableDropSet,
 }: {
-    canvasRef: React.RefObject<HTMLDivElement | null>;
+    canvasElementRef: React.RefObject<HTMLDivElement | null>;
     variableDropMenu: VariableDropMenu | null;
     setVariableDropMenu: (val: VariableDropMenu | null) => void;
     onVariableDropGet: (menu: VariableDropMenu) => void | Promise<void>;
@@ -73,7 +73,7 @@ export default function CanvasOverlays({
     const {
         handleNodePaletteSelect,
     } = useCanvasOverlayHandlers({
-        canvasRef,
+        canvasElementRef,
         activeTabId,
         functions,
         pendingConnection,

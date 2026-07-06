@@ -1,6 +1,7 @@
 import type { SourceDescriptor } from '../types';
 import type { SourceViewLayout } from './SourceViewShell';
 import { resolveSourceRenderer } from '../resolveRenderer';
+import { ReportSourceView } from './ReportSourceView';
 import {
   DataFrameSourceView,
   JsonSourceView,
@@ -29,6 +30,8 @@ export function UnifiedSourceView({ payload, layout = 'embedded' }: UnifiedSourc
       return <NullSourceView {...viewProps} />;
     case 'json':
       return <JsonSourceView {...viewProps} />;
+    case 'info':
+      return <ReportSourceView {...viewProps} />;
     default:
       return <JsonSourceView {...viewProps} />;
   }

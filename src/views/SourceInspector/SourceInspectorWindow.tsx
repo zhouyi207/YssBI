@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { VscPreview } from 'react-icons/vsc';
 import { usePresentationWindow } from '@/features/application/presentation';
-import { UnifiedSourceView } from '@/features/core/resultSource';
+import { ReportSourceView, UnifiedSourceView } from '@/features/core/resultSource';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
 
 export const SourceInspectorWindow: React.FC = () => {
@@ -32,6 +32,9 @@ export const SourceInspectorWindow: React.FC = () => {
     >
       {state.status === 'ready' && state.payload.mode === 'inspector' ? (
         <UnifiedSourceView payload={state.payload.descriptor} layout="window" />
+      ) : null}
+      {state.status === 'ready' && state.payload.mode === 'report' ? (
+        <ReportSourceView payload={state.descriptor} layout="window" data={state.payload.data} />
       ) : null}
     </PresentationWindowShell>
   );

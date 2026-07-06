@@ -7,14 +7,14 @@ import { getDragPreview, subscribeDragPreview } from './dragPreview';
  * do not re-render every frame.
  */
 export function useNodeDragPreview(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
   graphId: string | null,
 ): void {
   const lastDraggedRef = useRef<Set<string>>(new Set());
   const rafRef = useRef(0);
 
   useEffect(() => {
-    const root = canvasRef.current;
+    const root = canvasElementRef.current;
     if (!root || !graphId) return;
 
     const apply = () => {
@@ -60,5 +60,5 @@ export function useNodeDragPreview(
       unsub();
       cancelAnimationFrame(rafRef.current);
     };
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphId]);
 }

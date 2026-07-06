@@ -35,7 +35,7 @@ function segmentIntersectsRect(
 }
 
 export function useCanvasViewport(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
   graphId: string | null,
   gestureType: string | null,
 ) {
@@ -72,13 +72,13 @@ export function useCanvasViewport(
   );
 
   useEffect(() => {
-    const canvasEl = canvasRef.current;
+    const canvasEl = canvasElementRef.current;
     if (!canvasEl || !graphId) return;
     return attachViewportWheel(canvasEl, graphId);
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphId]);
 
   const updateVisibleNodes = useCallback(() => {
-    const el = canvasRef.current;
+    const el = canvasElementRef.current;
     if (!el || !graphId) return;
 
     const rect = el.getBoundingClientRect();
@@ -139,7 +139,7 @@ export function useCanvasViewport(
     }
 
     setVisibleNodes(visible);
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphId]);
 
   const scheduleCullingUpdate = useCallback(() => {
     if (cullingTimerRef.current !== null) return;
@@ -172,7 +172,7 @@ export function useCanvasViewport(
   const resizeRafRef = useRef(0);
 
   useEffect(() => {
-    const root = canvasRef.current;
+    const root = canvasElementRef.current;
     if (!root) return;
 
     const observer = new ResizeObserver(() => {
@@ -191,10 +191,10 @@ export function useCanvasViewport(
       cancelAnimationFrame(resizeRafRef.current);
       observer.disconnect();
     };
-  }, [canvasRef, visibleNodeIds]);
+  }, [canvasElementRef, visibleNodeIds]);
 
   useLayoutEffect(() => {
-    const root = canvasRef.current;
+    const root = canvasElementRef.current;
     if (!root || !graphId) return;
 
     const scale = getViewport(graphId).scale;
@@ -236,7 +236,7 @@ export function useCanvasViewport(
     });
 
     resolvePinOffsetWaiters(graphId, nextOffsets);
-  }, [canvasRef, visibleNodeIds, nodeResizeVersion, graphId]);
+  }, [canvasElementRef, visibleNodeIds, nodeResizeVersion, graphId]);
 
   const getPinWorldPos = useCallback(
     (pinId: string) => {
@@ -258,7 +258,7 @@ export function useCanvasViewport(
 
   const getCanvasLocalPoint = useCallback(
     (clientX: number, clientY: number) => {
-      const root = canvasRef.current;
+      const root = canvasElementRef.current;
       if (!root || !graphId) return { x: 0, y: 0 };
       const rect = root.getBoundingClientRect();
       const viewport = getViewport(graphId);
@@ -267,7 +267,7 @@ export function useCanvasViewport(
         y: (clientY - rect.top - viewport.y) / viewport.scale,
       };
     },
-    [canvasRef, graphId],
+    [canvasElementRef, graphId],
   );
 
   return {

@@ -23,7 +23,7 @@ import {
 export type { VariableDropMenu } from "./canvasDrop";
 
 interface UseCanvasDropParams {
-  canvasRef: React.RefObject<HTMLDivElement | null>;
+  canvasElementRef: React.RefObject<HTMLDivElement | null>;
   groupId: string;
   graphId: string | null;
   variables: Record<string, unknown>;
@@ -37,7 +37,7 @@ interface UseCanvasDropParams {
  * Canvas drop logic: template drop, variable drop menu, add input, click outside, context menu.
  */
 export function useCanvasDrop({
-  canvasRef,
+  canvasElementRef,
   groupId,
   graphId,
   variables,
@@ -59,7 +59,7 @@ export function useCanvasDrop({
         return;
       }
 
-      const canvasEl = canvasRef.current;
+      const canvasEl = canvasElementRef.current;
       if (canvasEl && !canvasEl.contains(target)) {
         return;
       }
@@ -71,7 +71,7 @@ export function useCanvasDrop({
       }
     };
     return addGlobalEventListener(window, "pointerdown", handleClickOutside, { capture: true });
-  }, [canvasRef, setContextMenu, setPendingConnection, variableDropMenu]);
+  }, [canvasElementRef, setContextMenu, setPendingConnection, variableDropMenu]);
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
@@ -139,7 +139,7 @@ export function useCanvasDrop({
 
   const handleDropTemplate = useCallback(
     async (dragState: { x: number; y: number; template: Record<string, unknown> }, event: MouseEvent | PointerEvent) => {
-      const el = canvasRef.current;
+      const el = canvasElementRef.current;
       if (!el) return;
 
       if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
@@ -187,7 +187,7 @@ export function useCanvasDrop({
 
       await createNode(String(template.nodeType), { x, y });
     },
-    [canvasRef, graphId, variables, functions, createNode],
+    [canvasElementRef, graphId, variables, functions, createNode],
   );
 
   useEffect(() => {

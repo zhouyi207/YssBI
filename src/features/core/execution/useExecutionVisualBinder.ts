@@ -7,11 +7,11 @@ import { syncExecutionVisualDom, clearExecutionVisualDom } from './executionVisu
 
 /** Imperative node execution highlights — no per-event React re-render. */
 export function useExecutionVisualBinder(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
   graphId: string | undefined,
 ): void {
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasElementRef.current;
     if (!canvas || !graphId) return;
 
     const sync = () => {
@@ -25,5 +25,5 @@ export function useExecutionVisualBinder(
 
     sync();
     return subscribeExecutionVisual(sync);
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphId]);
 }

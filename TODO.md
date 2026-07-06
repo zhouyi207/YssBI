@@ -626,18 +626,6 @@ package.json
 
 ## 2026.07.06
 
-- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
-- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
-
-
-## v1.0 待办
-
-### 技术债 / 重构（2026.07 审计）
-
-> 建议实施顺序：Phase1 快速清理（C + B1/B3）→ Phase2 边界收口（A2/A3 + B2/B5）→ Phase3 后端核心（A5/A6/A7 + command 拆分/下沉）→ Phase4 结构重构（A1/A4/A8/A9）。共 36 条（2026.07 审计 + 补充）。
-
-#### A. 架构重构（高收益，需设计）
-
 - [x] **Editor 组合层瘦身**：`useEditor` / `useEditorGroup` 在同一窗口多次挂载（`EditorWindow.tsx`、`useProjectSync.ts`、Canvas 子树）；`useActiveEditorGroup` 在 state/actions/workspace 重复调用；`withCanvasInteraction: false` 仍是 band-aid。目标：引入 `EditorSessionProvider` 或拆分为 `useEditorTabs` / `useEditorCommands` / `useCanvasInteractionProvider`，仅 Canvas 挂载 pointer loop。涉及 `useEditor.ts`、`useEditorGroup.ts`、`useEditorState.ts`
 - [x] **IPC / 分层边界统一**：`SourceService`（`features/core/resultSource/sourceService.ts`）直接 `invoke` 应迁至 `services/`；`resourceActions.ts` 的 `rename_graph_resource` 绕过 `GraphService`；Views 直连 services（`Sidebar.tsx`、`Workspace.tsx`、InfoView stats blocks）；`resolvePinViewTarget.ts` 在 core 层开窗 + toast，应上移到 application hook
 - [x] **Toast 单通道**：`uiStore.showToast` → `Toast.tsx` → sonner 与 ~6 处直接 `import { toast } from 'sonner'` 并存（`useProjectPicker.ts`、`resolvePinViewTarget.ts` 等）。统一为 `uiStore.showToast` 或 `shared/ui/toast` 薄封装
@@ -649,10 +637,24 @@ package.json
 - [x] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
 - [x] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
 - [x] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
-- [ ] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
-- [ ] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
+- [x] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
+- [x] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
+- [x] **Summary 节点 Info / Inspect 双轨 source**：执行 `publish_report` 开 `/info` 报告窗（`window_{uuid}` + `Presentation::Report`）；Result output pin 保持 `emit_output` 注册的 runtime source（`Presentation::Inspector` + Struct JSON），Pin 查看走 `/inspect` + `JsonTreeView`。两套 source 不合并为同一 presentation
+- [x] **`ReportSourceView` 报告渲染收口**：新增 `features/core/resultSource/components/ReportSourceView.tsx`（`ReportView` + 可选预加载 data）；`InfoWindow` 复用；`UnifiedSourceView` 增加 `info` renderer；`SourceInspectorWindow` 对误路由的 report payload 兜底展示
+- [x] **`VarEigenvalueStabilityPanel` import 修复**：`VARStableChart` 从 `VARStableChart.tsx` default import，不再误从 `VarModelTable.tsx` 具名导入
+- [x] **框选预览蓝点**：`useSelectionBoxPreview` mount 时先 `sync()` 再订阅，避免 0×0 marquee div 在 (0,0) 显示 accent 边框
+- [x] **移除 Editor 自动打开首个 graph**：删除 `useAutoOpenFirstGraph` 与 import 后自动 open；用户从侧栏自行打开资源
 
----
+
+## 2026.07.07
+
+- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
+- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
+
+
+
+
+## v1.0 待办
 
 - [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
