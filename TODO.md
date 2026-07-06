@@ -7,11 +7,12 @@
 由于历史代码重构原因，目前项目中存在许多的历史遗留代码，或多余或逻辑重复或实现低效；请检查整体项目，寻找出项目中的重复逻辑和未使用的逻辑，分析必要性，如果有更高效的更干净的架构请添加到 todo 的 v1.0 待办中，如果单纯的逻辑重复或者多余，也请添加到 v1.0 待办中
 
 ```
-同步改三处版本（例如 0.1.1）：
+同步改四处版本（例如 0.1.1）：
 
 src-tauri/Cargo.toml
 src-tauri/tauri.conf.json
 package.json
+src/app/appConfig/appLinks.ts
 
 
 提交并 push，或手动再跑 publish.yml
