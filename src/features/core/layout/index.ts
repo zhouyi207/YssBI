@@ -7,5 +7,7 @@ export {
   getActiveLayoutTab,
   getActiveLayoutTabAmongGroups,
   resolveEditorGroupId,
+  resolveEditorTargetGroupId,
+  isEditorGroupNode,
 } from './layoutTabQueries';
 export type { LocatedLayoutTab, LayoutGroupContext } from './layoutTabQueries';

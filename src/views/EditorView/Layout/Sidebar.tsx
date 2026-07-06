@@ -430,7 +430,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setDetailFocus({ kind: "worksheet", id });
           void openWorksheet(id, name);
         }}
         onDoubleClick={(e) => {

@@ -665,6 +665,11 @@ src/app/appConfig/appLinks.ts
 - [x] 节点短描述层已移除（原 `localized_description` + Detail fallback 几乎不可见，与 Markdown 长文档重复）
 - [x] **ActivityBar 节点目录（Sidebar Nodes）**：ActivityBar **图与变量之间**新增「节点」Tab；Sidebar 按 category 展示全部 **builtin** 节点（`features/domain/nodeCatalog/buildBuiltinCatalogItems`）；**拖动**到画布走现有 `NODE_TEMPLATE` / `useCanvasDrop`；**单击** Detail 展示 `NodeDefinitionDetailPanel`（Pin 规格 + Markdown 文档，无需图中实例）；画布右键 `NodePalette` 保留 pin 过滤 + 变量/函数动态项（`buildContextualCatalogItems`）；共享 UI `NodeCatalogTreeView` + 虚拟列表，消除 `NodePalette` 与侧栏重复逻辑。
 - [x] **节点目录 Sidebar UX**：搜索框置于侧栏**底部**（Popover palette 仍顶部）；分类行对齐 `SidebarCollapsibleSection`（chevron + 普通大小写）；节点行复用侧栏 hover/active token（`nodeCatalogLeafRowClass` / `sidebarItemIndent`），13px 字号与 `--sidebar-hover` 统一。
+- [x] **Charts Worksheet 无法在主编辑器打开（Detail 仍有效）**：根因是从 Charts 侧栏点击时 `activeGroupId` 可能为固定 chrome（`sidebar`），`useOpenWorksheet` 误将 tab 挂到侧栏节点；新增 `resolveEditorTargetGroupId`（跳过 sidebar/detail/panel）+ 统一 `openEditorTab`（含从 chrome 节点 `moveTab` 回收）；`openGraphInEditor` 共用；Sidebar 去掉重复 `setDetailFocus`。
+
+## 2026.07.08
+
+
 
 ## v1.0 待办
 

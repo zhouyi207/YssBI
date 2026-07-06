@@ -1,4 +1,4 @@
-import type { LayoutTab, LayoutTree } from '@/shared/types';
+import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types';
 import { useLayoutStore } from './layoutStore';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
@@ -8,8 +8,41 @@ export interface LayoutGroupContext {
   activeGroupId: string | null;
 }
 
+const DEFAULT_EDITOR_GROUP_ID = 'default_editor';
+
 function readNodes(nodes?: LayoutTree): LayoutTree {
   return nodes ?? useLayoutStore.getState().nodes;
+}
+
+/** Non-fixed component nodes that host editor tabs (not sidebar / detail / panel). */
+export function isEditorGroupNode(node: LayoutNode | undefined): boolean {
+  return node?.type === 'component' && !node.data?.isFixed;
+}
+
+/**
+ * Resolve the editor group that should receive a new or activated tab.
+ * Never returns fixed chrome nodes (sidebar, detail, panel).
+ */
+export function resolveEditorTargetGroupId(
+  explicitGroupId?: string | null,
+  nodes?: LayoutTree,
+  context?: LayoutGroupContext,
+): string {
+  const tree = readNodes(nodes);
+  const ctx = context ?? useLayoutStore.getState();
+
+  const candidates = [
+    explicitGroupId,
+    ctx.activeEditorGroupId,
+    ctx.activeGroupId,
+  ].filter((id): id is string => Boolean(id));
+
+  for (const id of candidates) {
+    if (isEditorGroupNode(tree[id])) return id;
+  }
+
+  const fallback = Object.values(tree).find(isEditorGroupNode);
+  return fallback?.id ?? DEFAULT_EDITOR_GROUP_ID;
 }
 
 export function getLayoutTabById(tabId: string, nodes?: LayoutTree): LocatedLayoutTab | null {

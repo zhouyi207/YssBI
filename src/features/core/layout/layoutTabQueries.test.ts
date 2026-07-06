@@ -6,6 +6,7 @@ import {
   getLayoutTabById,
   locateLayoutTab,
   resolveEditorGroupId,
+  resolveEditorTargetGroupId,
 } from './layoutTabQueries';
 
 const mockNodes: LayoutTree = {
@@ -103,5 +104,23 @@ describe('layoutTabQueries', () => {
     expect(resolveEditorGroupId('explicit', { activeEditorGroupId: 'editorA', activeGroupId: 'editorB' })).toBe(
       'explicit',
     );
+  });
+
+  it('resolveEditorTargetGroupId skips fixed chrome nodes', () => {
+    const tree: LayoutTree = {
+      ...mockNodes,
+      sidebar: {
+        id: 'sidebar',
+        type: 'component',
+        parentId: 'root',
+        data: { component: 'Sidebar', isFixed: true, tabs: [], activeTabId: undefined },
+      },
+    };
+    expect(
+      resolveEditorTargetGroupId(undefined, tree, {
+        activeEditorGroupId: null,
+        activeGroupId: 'sidebar',
+      }),
+    ).toBe('editorA');
   });
 });

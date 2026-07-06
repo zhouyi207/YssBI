@@ -1,13 +1,12 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { ensureDetailVisible } from './ensureDetailVisible';
-import { useSidebarTab } from './useSidebarTab';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { useSidebarTab } from './useSidebarTab';
+import { openEditorTab } from './openEditorTab';
 
 export function useWorksheetManagement(openWorksheet: (id: string, name: string) => Promise<void>) {
   const { t } = useTranslation();
@@ -50,35 +49,25 @@ export function useOpenWorksheet() {
   const switchSidebarTab = useSidebarTab();
 
   return useCallback(async (id: string, name: string) => {
-    const layoutStore = useLayoutStore.getState();
-    const targetGroupId =
-      layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
-
     if (!useWorksheetStore.getState().documents[id]) {
       try {
         const loaded = await WorksheetService.loadWorksheet(id);
         useWorksheetStore.getState().upsertDocument(loaded);
       } catch {
-        // Index-only open: WorksheetEditor will retry load on mount.
+        // Index-only open: WorksheetEditor retries load on mount.
       }
     }
 
-    layoutStore.addTab(targetGroupId, {
-      id,
-      title: name,
-      component: 'WorksheetEditor',
-      type: 'worksheet',
-    });
-
-    layoutStore.updateNode(targetGroupId, {
-      data: {
-        ...layoutStore.nodes[targetGroupId]?.data,
-        activeTabId: id,
+    openEditorTab(
+      {
+        id,
+        title: name,
+        component: 'WorksheetEditor',
+        type: 'worksheet',
       },
-    });
-    layoutStore.setActiveGroup(targetGroupId);
-    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', id });
-    ensureDetailVisible();
+      { focusDetail: { kind: 'worksheet', id } },
+    );
+
     switchSidebarTab('charts');
   }, [switchSidebarTab]);
 }

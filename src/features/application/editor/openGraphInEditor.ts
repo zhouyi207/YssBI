@@ -1,10 +1,9 @@
 import { Graph } from '@/shared/types/domain';
 import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
+import { openEditorTab } from './openEditorTab';
 
 export async function openGraphInEditor(
   id: string,
@@ -20,21 +19,20 @@ export async function openGraphInEditor(
     if (!loaded) return;
   }
 
-  const layoutStore = useLayoutStore.getState();
-  const groupId = targetGroupId ?? layoutStore.activeEditorGroupId ?? layoutStore.activeGroupId ?? 'default_editor';
-
-  layoutStore.addTab(groupId, {
-    id,
-    title: name,
-    component: 'GraphEditor',
-    type,
-  });
-
-  layoutStore.setActiveGroup(groupId);
+  openEditorTab(
+    {
+      id,
+      title: name,
+      component: 'GraphEditor',
+      type,
+    },
+    {
+      targetGroupId,
+      focusDetail: { kind: type, id },
+    },
+  );
 
   const tabSource = initialData || getGraphById(id);
   ensureGraphViewport(id, tabSource?.canvas);
-
-  useEditorStore.getState().setDetailFocus({ kind: type, id });
   syncVariablesGraphScopeFromActiveTab();
 }
