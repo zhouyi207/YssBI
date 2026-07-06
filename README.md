@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
   <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Rust-2024-000000?logo=rust&logoColor=white" alt="Rust" />
-  <img src="https://img.shields.io/badge/version-0.1-blue" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.2-blue" alt="version" />
   <img src="https://img.shields.io/badge/status-开发中-orange" alt="status" />
 </p>
 
