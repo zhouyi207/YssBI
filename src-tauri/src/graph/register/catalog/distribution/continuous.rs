@@ -1,6 +1,7 @@
 //! 连续分布节点：Normal, Uniform, Exp, Gamma, Beta, StudentsT, Cauchy, ChiSquared, LogNormal, Weibull, Laplace, Pareto, Gumbel, InverseGamma, Triangular, FisherSnedecor, Erlang
 
 use crate::graph::node::NodeDefinition;
+use crate::graph::register::catalog::docs;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
@@ -76,15 +77,12 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_normal(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Normal",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Normal(μ, σ) 分布抽样",
-        "Sample from Normal(mean, std) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Mean",
@@ -119,20 +117,19 @@ fn register_normal(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "normal")
-    }));
+    })),
+        "Normal",
+    );
     registry.register(def);
 }
 
 fn register_uniform(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Uniform",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Uniform(low, high) 分布抽样",
-        "Sample from Uniform(low, high) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Low",
@@ -167,20 +164,19 @@ fn register_uniform(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "uniform")
-    }));
+    })),
+        "Uniform",
+    );
     registry.register(def);
 }
 
 fn register_exp(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Exponential",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Exp(rate) 分布抽样",
-        "Sample from Exp(rate) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Rate",
@@ -209,20 +205,19 @@ fn register_exp(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "exp")
-    }));
+    })),
+        "Exponential",
+    );
     registry.register(def);
 }
 
 fn register_gamma(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Gamma",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Gamma(shape, rate) 分布抽样",
-        "Sample from Gamma(shape, rate) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -257,20 +252,19 @@ fn register_gamma(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "gamma")
-    }));
+    })),
+        "Gamma",
+    );
     registry.register(def);
 }
 
 fn register_beta(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Beta",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Beta(α, β) 分布抽样",
-        "Sample from Beta(alpha, beta) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Alpha",
@@ -305,20 +299,19 @@ fn register_beta(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "beta")
-    }));
+    })),
+        "Beta",
+    );
     registry.register(def);
 }
 
 fn register_students_t(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "StudentsT",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Student t(df) 分布抽样",
-        "Sample from Student's t(df) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DF",
@@ -347,20 +340,19 @@ fn register_students_t(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "students_t")
-    }));
+    })),
+        "StudentsT",
+    );
     registry.register(def);
 }
 
 fn register_cauchy(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Cauchy",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Cauchy(location, scale) 分布抽样",
-        "Sample from Cauchy(location, scale) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Location",
@@ -395,20 +387,19 @@ fn register_cauchy(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "cauchy")
-    }));
+    })),
+        "Cauchy",
+    );
     registry.register(def);
 }
 
 fn register_chi_squared(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "ChiSquared",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 ChiSquared(df) 分布抽样",
-        "Sample from ChiSquared(df) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DF",
@@ -437,20 +428,19 @@ fn register_chi_squared(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "chi_squared")
-    }));
+    })),
+        "ChiSquared",
+    );
     registry.register(def);
 }
 
 fn register_log_normal(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "LogNormal",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 LogNormal(μ, σ) 分布抽样",
-        "Sample from LogNormal(mu, sigma) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Mu",
@@ -485,20 +475,19 @@ fn register_log_normal(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "log_normal")
-    }));
+    })),
+        "LogNormal",
+    );
     registry.register(def);
 }
 
 fn register_weibull(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Weibull",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Weibull(shape, scale) 分布抽样",
-        "Sample from Weibull(shape, scale) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -533,20 +522,19 @@ fn register_weibull(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "weibull")
-    }));
+    })),
+        "Weibull",
+    );
     registry.register(def);
 }
 
 fn register_laplace(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Laplace",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Laplace(location, scale) 分布抽样",
-        "Sample from Laplace(location, scale) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Location",
@@ -581,20 +569,19 @@ fn register_laplace(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "laplace")
-    }));
+    })),
+        "Laplace",
+    );
     registry.register(def);
 }
 
 fn register_pareto(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Pareto",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Pareto(shape, scale) 分布抽样",
-        "Sample from Pareto(shape, scale) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -629,20 +616,19 @@ fn register_pareto(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "pareto")
-    }));
+    })),
+        "Pareto",
+    );
     registry.register(def);
 }
 
 fn register_inverse_gamma(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "InverseGamma",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 InverseGamma(shape, scale) 分布抽样",
-        "Sample from InverseGamma(shape, scale) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Shape",
@@ -677,20 +663,19 @@ fn register_inverse_gamma(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "inverse_gamma")
-    }));
+    })),
+        "InverseGamma",
+    );
     registry.register(def);
 }
 
 fn register_triangular(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Triangular",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Triangular(a, b, c) 分布抽样",
-        "Sample from Triangular(a, b, c) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "A",
@@ -731,20 +716,19 @@ fn register_triangular(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "triangular")
-    }));
+    })),
+        "Triangular",
+    );
     registry.register(def);
 }
 
 fn register_fisher_snedecor(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "FisherSnedecor",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 F(d1, d2) 分布抽样",
-        "Sample from F(d1, d2) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "D1",
@@ -779,20 +763,19 @@ fn register_fisher_snedecor(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "fisher_snedecor")
-    }));
+    })),
+        "FisherSnedecor",
+    );
     registry.register(def);
 }
 
 fn register_erlang(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Erlang",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Erlang(k, rate) 分布抽样，k 为形状（整数）",
-        "Sample from Erlang(k, rate) distribution, k is shape (integer)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "K",
@@ -830,6 +813,8 @@ fn register_erlang(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<f64> = (0..n).map(|_| dist.sample(&mut rng)).collect();
         emit_float_series(ctx, values, "erlang")
-    }));
+    })),
+        "Erlang",
+    );
     registry.register(def);
 }

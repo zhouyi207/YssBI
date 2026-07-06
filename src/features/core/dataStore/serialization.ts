@@ -1,4 +1,4 @@
-import { getNodeDefinitionMeta, getLocalizedDescription } from '@/shared/types/domain';
+import { getNodeDefinitionMeta } from '@/shared/types/domain';
 import { useNodeRegistryStore } from '../nodeRegister';
 
 /**
@@ -21,6 +21,6 @@ export function resolveNodeViewMeta(n: {
   const meta = def ? getNodeDefinitionMeta(def) : undefined;
   const uiStyle = n.uiStyle ?? meta?.uiStyle ?? meta?.ui_style ?? 'default';
   const category = n.category ?? def?.category ?? [];
-  const description = n.description ?? (def ? getLocalizedDescription(meta, 'en-US') : undefined);
+  const description = n.description ?? meta?.description;
   return { nodeType, title, category, uiStyle, description };
 }

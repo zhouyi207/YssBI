@@ -1,5 +1,6 @@
 use crate::graph::infer::{TypeConstraint, TypeVarDefinition, TypeVarKey};
 use crate::graph::node::NodeDefinition;
+use crate::graph::register::catalog::docs;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
@@ -77,15 +78,12 @@ fn register_convert(registry: &NodeRegistry) {
         bound: None,
     };
 
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Convert",
         vec!["Value".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "将值从一种类型转换为另一种类型",
-        "Convert value from one type to another",
-    )
     .with_type_vars(vec![input_type_var, output_type_var])
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
@@ -110,8 +108,9 @@ fn register_convert(registry: &NodeRegistry) {
         let converted_value = convert_to_type(input_value, &output_type)?;
         ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), converted_value)?;
         Ok(())
-    }));
-
+    })),
+        "Convert",
+    );
     registry.register(definition);
 }
 
@@ -203,15 +202,12 @@ fn parse_boolean(s: &str) -> Option<bool> {
 }
 
 fn register_data_series_string_to_categorical(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "String to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 String 类型 DataSeries 转为 Categorical",
-        "Convert a DataSeries of String type to Categorical",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -235,20 +231,19 @@ fn register_data_series_string_to_categorical(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("String to Categorical: {}", e))?;
         Ok(())
-    }));
+    })),
+        "String to Categorical",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_string_to_float64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "String to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 String 类型 DataSeries 转为 Float64",
-        "Convert a DataSeries of String type to Float64",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -273,20 +268,19 @@ fn register_data_series_string_to_float64(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("String to Float64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "String to Float64",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_string_to_int64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "String to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 String 类型 DataSeries 转为 Int64",
-        "Convert a DataSeries of String type to Int64",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -310,20 +304,19 @@ fn register_data_series_string_to_int64(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Int64)
             .map_err(|e| format!("String to Int64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "String to Int64",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_int64_to_string(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Int64 to String",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Int64 类型 DataSeries 转为 String",
-        "Convert a DataSeries of Int64 type to String",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -347,20 +340,19 @@ fn register_data_series_int64_to_string(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Int64 to String: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Int64 to String",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_float64_to_string(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Float64 to String",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Float64 类型 DataSeries 转为 String",
-        "Convert a DataSeries of Float64 type to String",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -384,20 +376,19 @@ fn register_data_series_float64_to_string(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Float64 to String: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Float64 to String",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_int64_to_float64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Int64 to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Int64 类型 DataSeries 转为 Float64",
-        "Convert a DataSeries of Int64 type to Float64",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -422,20 +413,19 @@ fn register_data_series_int64_to_float64(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("Int64 to Float64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Int64 to Float64",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_float64_to_int64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Float64 to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Float64 DataSeries 转为 Int64（向零截断；越界/非有限值按 Polars 规则为 null）",
-        "Convert a DataSeries of Float64 type to Int64 (truncates toward zero; out of range / non-finite → null per Polars)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -456,20 +446,19 @@ fn register_data_series_float64_to_int64(registry: &NodeRegistry) {
             .map_err(|e: polars::error::PolarsError| format!("Float64 to Int64: cast failed: {}", e))?;
         emit_data_series_output(ctx, casted, DataType::Int64).map_err(|e| format!("Float64 to Int64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Float64 to Int64",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_int64_to_bool(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Int64 to Boolean",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Int64 DataSeries 转为 Boolean（0 → false，非零 → true；null 保持 null）",
-        "Convert a DataSeries of Int64 to Boolean (0 → false, non-zero → true; null stays null)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -494,20 +483,19 @@ fn register_data_series_int64_to_bool(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Boolean)
             .map_err(|e| format!("Int64 to Boolean: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Int64 to Boolean",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_float64_to_bool(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Float64 to Boolean",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Float64 DataSeries 转为 Boolean（0 → false，非零 → true；null/非有限值按 Polars 规则）",
-        "Convert a DataSeries of Float64 to Boolean (0 → false, non-zero → true; null / non-finite per Polars)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -528,20 +516,19 @@ fn register_data_series_float64_to_bool(registry: &NodeRegistry) {
             .map_err(|e: polars::error::PolarsError| format!("Float64 to Boolean: cast failed: {}", e))?;
         emit_data_series_output(ctx, casted, DataType::Boolean).map_err(|e| format!("Float64 to Boolean: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Float64 to Boolean",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_categorical_to_string(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Categorical to String",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Categorical（或 Enum）DataSeries 转为 String",
-        "Convert a DataSeries of Categorical (or Enum) type to String",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -567,20 +554,19 @@ fn register_data_series_categorical_to_string(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::String)
             .map_err(|e| format!("Categorical to String: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Categorical to String",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_int64_to_categorical(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Int64 to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Int64 转为 Categorical（经 String 编码，类别池与其他 cat 转换一致）",
-        "Convert Int64 to Categorical (via String encoding, same category pool as other cat casts)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -608,20 +594,19 @@ fn register_data_series_int64_to_categorical(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("Int64 to Categorical: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Int64 to Categorical",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_categorical_to_int64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Categorical to Int64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Categorical 转为 Int64（类别标签须可解析为整数；无效 → null）",
-        "Convert Categorical to Int64 (category labels must parse as integers; invalid → null)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -651,20 +636,19 @@ fn register_data_series_categorical_to_int64(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Int64)
             .map_err(|e| format!("Categorical to Int64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Categorical to Int64",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_float64_to_categorical(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Float64 to Categorical",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Float64 转为 Categorical（经 String 表示）",
-        "Convert Float64 to Categorical (via String representation)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -693,20 +677,19 @@ fn register_data_series_float64_to_categorical(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Categorical)
             .map_err(|e| format!("Float64 to Categorical: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Float64 to Categorical",
+    );
     registry.register(definition);
 }
 
 fn register_data_series_categorical_to_float64(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::value::apply_docs(
+        NodeDefinition::new(
         "Categorical to Float64",
         vec!["Data".to_string(), "Conversion".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "将 Categorical 转为 Float64（类别标签须可解析为浮点数；无效 → null）",
-        "Convert Categorical to Float64 (category labels must parse as floats; invalid → null)",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -738,6 +721,8 @@ fn register_data_series_categorical_to_float64(registry: &NodeRegistry) {
         emit_data_series_output(ctx, casted, DataType::Float64)
             .map_err(|e| format!("Categorical to Float64: {}", e))?;
         Ok(())
-    }));
+    })),
+        "Categorical to Float64",
+    );
     registry.register(definition);
 }

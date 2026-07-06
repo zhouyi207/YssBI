@@ -6,6 +6,7 @@ use crate::graph::pin::{
     DataRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::{Column, DataFrame};
 use std::sync::Arc;
@@ -18,37 +19,39 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_get_dataframe(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Get DataFrame", vec!["Data".to_string()])
-        .with_ui_style("dataframe")
-        .with_localized_description("按 ID 获取 DataFrame", "Get a DataFrame by ID")
-        .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
-            "DataFrame",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataFrame),
-        ))])
-        .with_output_schema_resolver(Arc::new(|ctx| {
-            let df_id = ctx.instance_params.dataframe_id()?;
-            let provider = ctx.schema_provider.as_ref()?;
-            provider(df_id)
-        }))
-        .with_data_evaluator(Arc::new(|ctx| {
-            let params = ctx.get_instance_params();
-            let dataframe_id = params
-                .dataframe_id()
-                .ok_or("Get DataFrame: dataframe_id not set")?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataFrame(dataframe_id.to_string()),
-            )?;
-            Ok(())
-        }));
+    let definition = docs::dataframe::apply_docs(
+        NodeDefinition::new("Get DataFrame", vec!["Data".to_string()])
+            .with_ui_style("dataframe")
+            .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
+                "DataFrame",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataFrame),
+            ))])
+            .with_output_schema_resolver(Arc::new(|ctx| {
+                let df_id = ctx.instance_params.dataframe_id()?;
+                let provider = ctx.schema_provider.as_ref()?;
+                provider(df_id)
+            }))
+            .with_data_evaluator(Arc::new(|ctx| {
+                let params = ctx.get_instance_params();
+                let dataframe_id = params
+                    .dataframe_id()
+                    .ok_or("Get DataFrame: dataframe_id not set")?;
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Output),
+                    DataValue::DataFrame(dataframe_id.to_string()),
+                )?;
+                Ok(())
+            })),
+        "Get DataFrame",
+    );
     registry.register(definition);
 }
 
 fn register_decompose_dataframe(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Decompose DataFrame", vec!["Data".to_string()])
+    let definition = docs::dataframe::apply_docs(
+        NodeDefinition::new("Decompose DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description("将 DataFrame 分解为各列 DataSeries", "Decompose a DataFrame into individual columns")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "DataFrame", DataRole::Input, PinDataTypeDefinition::concrete(DataType::DataFrame),
@@ -100,17 +103,16 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
                 if let Err(_) = ctx.emit_output_by_role(&role, value) {}
             }
             Ok(())
-        }));
+        })),
+        "Decompose DataFrame",
+    );
     registry.register(definition);
 }
 
 fn register_combine_dataframe(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
+    let definition = docs::dataframe::apply_docs(
+        NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description(
-            "将多个 DataSeries 合并为 DataFrame（Decompose DataFrame 的逆操作）",
-            "Combine DataSeries into a DataFrame (opposite of Decompose DataFrame)",
-        )
         .with_output_schema_resolver(Arc::new(|ctx| {
             let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
                 .input_schemas
@@ -211,14 +213,16 @@ fn register_combine_dataframe(registry: &NodeRegistry) {
             let id = ctx.put_dataframe(df)?;
             ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), DataValue::DataFrame(id))?;
             Ok(())
-        }));
+        })),
+        "Combine DataFrame",
+    );
     registry.register(definition);
 }
 
 fn register_filter_dataframe(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new("Filter DataFrame", vec!["Data".to_string()])
+    let definition = docs::dataframe::apply_docs(
+        NodeDefinition::new("Filter DataFrame", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description("按布尔 DataSeries 条件过滤行（保留为 true 的行）", "Filter rows by a Boolean DataSeries mask (keep rows where condition is true)")
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "DataFrame",
@@ -291,6 +295,8 @@ fn register_filter_dataframe(registry: &NodeRegistry) {
                 DataValue::DataFrame(out_id),
             )?;
             Ok(())
-        }));
+        })),
+        "Filter DataFrame",
+    );
     registry.register(definition);
 }

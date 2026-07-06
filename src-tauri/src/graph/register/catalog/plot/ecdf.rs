@@ -6,6 +6,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
 use std::sync::Arc;
@@ -26,10 +27,7 @@ struct EcdfPoint {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("ECDF", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_localized_description(
-            "对数值 DataSeries 绘制经验累积分布函数（ECDF）",
-            "Plot empirical cumulative distribution function from a numeric DataSeries",
-        )
+                .with_documentation(docs::plot::ECDF_ZH, docs::plot::ECDF_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(

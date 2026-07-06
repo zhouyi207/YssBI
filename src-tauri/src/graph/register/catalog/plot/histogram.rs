@@ -6,6 +6,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
 use std::sync::Arc;
@@ -35,10 +36,7 @@ fn sturges_bins(n: usize) -> usize {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Histogram", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_localized_description(
-            "对数值 DataSeries 绘制直方图",
-            "Plot histogram from a numeric DataSeries",
-        )
+                .with_documentation(docs::plot::HISTOGRAM_ZH, docs::plot::HISTOGRAM_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(

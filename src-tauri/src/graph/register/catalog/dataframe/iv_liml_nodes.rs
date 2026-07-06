@@ -10,6 +10,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, NamedFrom, Series};
@@ -627,10 +628,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "工具变量 LIML 回归 — 输出结果并打开 Summary 窗口",
-        "Instrumental Variables LIML regression — outputs results and opens the summary window",
-    )
+        .with_documentation(docs::iv::IV_LIML_SUMMARY_ZH, docs::iv::IV_LIML_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_iv_liml_regression(ctx)?;

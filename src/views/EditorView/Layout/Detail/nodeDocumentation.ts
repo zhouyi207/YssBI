@@ -1,10 +1,7 @@
 import type { NodeMetaData } from '@/shared/types/domain/node';
-import {
-  getLocalizedDescription,
-  pickLocalizedText,
-} from '@/shared/types/domain/node';
+import { pickLocalizedText } from '@/shared/types/domain/node';
 
-export { pickLocalizedText, getLocalizedDescription };
+export { pickLocalizedText };
 
 /** @deprecated 使用 pickLocalizedText */
 export const pickNodeDocumentation = pickLocalizedText;
@@ -14,11 +11,7 @@ export function resolveNodeDocumentationContent(
   language: string,
   instanceDescription?: string,
 ): string | undefined {
-  return (
-    pickLocalizedText(meta?.documentation, language) ??
-    getLocalizedDescription(meta, language) ??
-    instanceDescription
-  );
+  return pickLocalizedText(meta?.documentation, language) ?? instanceDescription;
 }
 
 /** @deprecated 使用 resolveNodeDocumentationContent */

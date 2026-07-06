@@ -7,6 +7,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
@@ -506,10 +507,7 @@ fn register_logit_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "Logit 回归配置 — 常数项",
-        "Logit regression configuration — Constant term",
-    )
+        .with_documentation(docs::logit::LOGIT_CONFIGURE_ZH, docs::logit::LOGIT_CONFIGURE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -567,10 +565,7 @@ fn register_logit(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Logit", vec!["Data".to_string(), "Statistics".to_string()])
             .with_ui_style("dataframe")
-            .with_localized_description(
-                "二元 Logit 回归（IRLS）— 输出拟合模型供预测使用",
-                "Binary logistic regression (IRLS) — outputs fitted model for prediction",
-            )
+                        .with_documentation(docs::logit::LOGIT_ZH, docs::logit::LOGIT_EN)
             .with_pin_slots(slots)
             .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
             .with_flow_processor(Arc::new(|ctx| {
@@ -629,10 +624,7 @@ fn register_logit_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "二元 Logit 回归 — 输出结果并打开 Summary 窗口",
-        "Binary logistic regression — outputs results and opens summary window",
-    )
+        .with_documentation(docs::logit::LOGIT_SUMMARY_ZH, docs::logit::LOGIT_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_logit_regression(ctx)?;

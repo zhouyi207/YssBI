@@ -7,6 +7,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame};
@@ -1409,10 +1410,7 @@ fn register_panel_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板回归配置 — 常数项与 VCE（默认按 entity 聚类）",
-        "Panel regression configuration — Constant and VCE (cluster by entity default)",
-    )
+        .with_documentation(docs::panel::PANEL_CONFIGURE_ZH, docs::panel::PANEL_CONFIGURE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1492,10 +1490,7 @@ fn register_panel_vce_cluster(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板 VCE：按 Entity ID 聚类稳健（默认）",
-        "Panel VCE: cluster-robust by Entity ID (default)",
-    )
+        .with_documentation(docs::panel::PANEL_VCE_CLUSTER_ZH, docs::panel::PANEL_VCE_CLUSTER_EN)
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "VCE",
         DataRole::Result,
@@ -1534,10 +1529,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板回归 — 固定效应（Within）、LSDV、一阶差分、随机效应；需 Entity ID 与 Time ID（类似 Stata xtset）；VCE 默认按 entity 聚类",
-        "Panel data regression — FE (Within), LSDV, First Difference, Random Effects. Entity ID and Time ID required (like Stata xtset). VCE: cluster by entity.",
-    )
+        .with_documentation(docs::panel::PANEL_SUMMARY_ZH, docs::panel::PANEL_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let config = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("panel_config".to_string()))) {

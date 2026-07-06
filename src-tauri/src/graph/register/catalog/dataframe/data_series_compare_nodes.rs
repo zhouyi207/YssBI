@@ -5,6 +5,7 @@
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::Series;
 use std::sync::Arc;
@@ -106,12 +107,10 @@ fn register_compare_node(
     registry: &NodeRegistry,
     name: &str,
     op: &str,
-    desc_zh: &str,
-    desc_en: &str,
 ) {
     let name = name.to_string();
     let op = op.to_string();
-    let definition = NodeDefinition::new(
+    let mut definition = NodeDefinition::new(
         name.clone(),
         vec![
             "Data".to_string(),
@@ -119,8 +118,11 @@ fn register_compare_node(
             "Comparison".to_string(),
         ],
     )
-    .with_ui_style("dataframe")
-    .with_localized_description(desc_zh, desc_en)
+    .with_ui_style("dataframe");
+    if let Some((zh, en)) = docs::data_series::compare_documentation(&name) {
+        definition = definition.with_documentation(zh, en);
+    }
+    let definition = definition
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -196,46 +198,10 @@ fn register_compare_node(
 }
 
 pub fn register(registry: &NodeRegistry) {
-    register_compare_node(
-        registry,
-        "DataSeries Greater Than (>)",
-        "gt",
-        "逐元素大于：Series > Value（标量或 DataSeries）",
-        "Element-wise greater than: Series > Value (scalar or DataSeries)",
-    );
-    register_compare_node(
-        registry,
-        "DataSeries Less Than (<)",
-        "lt",
-        "逐元素小于：Series < Value（标量或 DataSeries）",
-        "Element-wise less than: Series < Value (scalar or DataSeries)",
-    );
-    register_compare_node(
-        registry,
-        "DataSeries Greater Equal (>=)",
-        "gte",
-        "逐元素大于等于：Series >= Value（标量或 DataSeries）",
-        "Element-wise greater or equal: Series >= Value (scalar or DataSeries)",
-    );
-    register_compare_node(
-        registry,
-        "DataSeries Less Equal (<=)",
-        "lte",
-        "逐元素小于等于：Series <= Value（标量或 DataSeries）",
-        "Element-wise less or equal: Series <= Value (scalar or DataSeries)",
-    );
-    register_compare_node(
-        registry,
-        "DataSeries Equal (==)",
-        "eq",
-        "逐元素相等：Series == Value（标量或 DataSeries）",
-        "Element-wise equality: Series == Value (scalar or DataSeries)",
-    );
-    register_compare_node(
-        registry,
-        "DataSeries Not Equal (!=)",
-        "neq",
-        "逐元素不等：Series != Value（标量或 DataSeries）",
-        "Element-wise not equal: Series != Value (scalar or DataSeries)",
-    );
+    register_compare_node(registry, "DataSeries Greater Than (>)", "gt");
+    register_compare_node(registry, "DataSeries Less Than (<)", "lt");
+    register_compare_node(registry, "DataSeries Greater Equal (>=)", "gte");
+    register_compare_node(registry, "DataSeries Less Equal (<=)", "lte");
+    register_compare_node(registry, "DataSeries Equal (==)", "eq");
+    register_compare_node(registry, "DataSeries Not Equal (!=)", "neq");
 }

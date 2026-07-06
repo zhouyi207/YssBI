@@ -23,9 +23,6 @@ export interface NodeMetaData {
     /** @deprecated 后端 DTO 格式，优先使用 uiStyle */
     ui_style?: string;
     description?: string;
-    localizedDescription?: LocalizedDescription;
-    /** @deprecated snake_case DTO 字段 */
-    localized_description?: LocalizedDescription;
     documentation?: NodeDocumentation;
     supports_dynamic_pins: boolean;
 }
@@ -34,9 +31,6 @@ export interface NodeDocumentation {
     zh?: string;
     en?: string;
 }
-
-/** 节点短描述（与 NodeDocumentation 同结构） */
-export type LocalizedDescription = NodeDocumentation;
 
 // ─── Pin Definition Types (mirrors backend PinDefinition / PinSlot) ────
 
@@ -108,7 +102,7 @@ export function getNodeDefinitionMeta(def: NodeDefinition | undefined): NodeMeta
 }
 
 export function pickLocalizedText(
-    text: LocalizedDescription | NodeDocumentation | undefined,
+    text: NodeDocumentation | undefined,
     language: string,
 ): string | undefined {
     if (!text) return undefined;
@@ -116,17 +110,6 @@ export function pickLocalizedText(
     const primary = isZh ? text.zh : text.en;
     const fallback = isZh ? text.en : text.zh;
     return primary ?? fallback;
-}
-
-export function getLocalizedDescription(
-    meta: NodeMetaData | undefined,
-    language: string,
-): string | undefined {
-    if (!meta) return undefined;
-    return (
-        pickLocalizedText(meta.localizedDescription ?? meta.localized_description, language) ??
-        meta.description
-    );
 }
 
 export type NodeDefinition = NodeDefinitionDTO;

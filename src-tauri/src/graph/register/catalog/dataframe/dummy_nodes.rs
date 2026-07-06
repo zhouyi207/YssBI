@@ -1,6 +1,7 @@
 //! 哑变量相关节点
 
 use crate::graph::node::NodeDefinition;
+use crate::graph::register::catalog::docs;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue, DummyInfo};
@@ -11,12 +12,12 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_add_dummy_info(registry: &NodeRegistry) {
-    let definition = NodeDefinition::new(
+    let definition = docs::dataframe::apply_docs(
+        NodeDefinition::new(
         "Add Dummy Info",
         vec!["Data".to_string(), "Transform".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("为 Categorical DataSeries 标注哑变量编码元数据，供 OLS 回归使用", "Annotate a Categorical DataSeries with dummy variable encoding metadata for OLS regression")
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -95,6 +96,8 @@ fn register_add_dummy_info(registry: &NodeRegistry) {
             DataValue::DataSeries(output),
         )?;
         Ok(())
-    }));
+    })),
+        "Add Dummy Info",
+    );
     registry.register(definition);
 }

@@ -1,6 +1,7 @@
 //! 离散分布节点：Bernoulli, Binomial, Poisson, Geometric, NegativeBinomial, DiscreteUniform, Hypergeometric
 
 use crate::graph::node::NodeDefinition;
+use crate::graph::register::catalog::docs;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
@@ -67,15 +68,12 @@ pub fn register(registry: &NodeRegistry) {
 }
 
 fn register_bernoulli(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Bernoulli",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Bernoulli(p) 分布抽样，输出 0 或 1",
-        "Sample from Bernoulli(p) distribution, outputs 0 or 1",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "P",
@@ -104,20 +102,19 @@ fn register_bernoulli(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
         emit_int_series(ctx, values, "bernoulli")
-    }));
+    })),
+        "Bernoulli",
+    );
     registry.register(def);
 }
 
 fn register_binomial(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Binomial",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Binomial(n_trials, p) 分布抽样",
-        "Sample from Binomial(n_trials, p) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "N Trials",
@@ -157,20 +154,19 @@ fn register_binomial(registry: &NodeRegistry) {
             .map(|_| dist.sample(&mut rng) as i64)
             .collect();
         emit_int_series(ctx, values, "binomial")
-    }));
+    })),
+        "Binomial",
+    );
     registry.register(def);
 }
 
 fn register_poisson(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Poisson",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Poisson(λ) 分布抽样",
-        "Sample from Poisson(lambda) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Lambda",
@@ -199,20 +195,19 @@ fn register_poisson(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
         emit_int_series(ctx, values, "poisson")
-    }));
+    })),
+        "Poisson",
+    );
     registry.register(def);
 }
 
 fn register_geometric(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Geometric",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Geometric(p) 分布抽样",
-        "Sample from Geometric(p) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "P",
@@ -241,20 +236,19 @@ fn register_geometric(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
         emit_int_series(ctx, values, "geometric")
-    }));
+    })),
+        "Geometric",
+    );
     registry.register(def);
 }
 
 fn register_negative_binomial(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "NegativeBinomial",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 NegativeBinomial(r, p) 分布抽样",
-        "Sample from NegativeBinomial(r, p) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "R",
@@ -289,20 +283,19 @@ fn register_negative_binomial(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
         emit_int_series(ctx, values, "negative_binomial")
-    }));
+    })),
+        "NegativeBinomial",
+    );
     registry.register(def);
 }
 
 fn register_discrete_uniform(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "DiscreteUniform",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 DiscreteUniform(low, high) 分布抽样（含端点）",
-        "Sample from DiscreteUniform(low, high) distribution, inclusive",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "Low",
@@ -337,20 +330,19 @@ fn register_discrete_uniform(registry: &NodeRegistry) {
         let mut rng = StdRng::from_entropy();
         let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
         emit_int_series(ctx, values, "discrete_uniform")
-    }));
+    })),
+        "DiscreteUniform",
+    );
     registry.register(def);
 }
 
 fn register_hypergeometric(registry: &NodeRegistry) {
-    let def = NodeDefinition::new(
+    let def = docs::distribution::apply_docs(
+        NodeDefinition::new(
         "Hypergeometric",
         vec!["Distribution".to_string(), "Random".to_string()],
     )
     .with_ui_style("value")
-    .with_localized_description(
-        "从 Hypergeometric(N, K, n) 分布抽样",
-        "Sample from Hypergeometric(N, K, n) distribution",
-    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "N",
@@ -393,6 +385,8 @@ fn register_hypergeometric(registry: &NodeRegistry) {
             .map(|_| dist.sample(&mut rng) as i64)
             .collect();
         emit_int_series(ctx, values, "hypergeometric")
-    }));
+    })),
+        "Hypergeometric",
+    );
     registry.register(def);
 }

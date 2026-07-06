@@ -7,6 +7,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use ndarray::Array2;
 use polars::prelude::DataType as PolarsDataType;
@@ -179,10 +180,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "Johansen 协整秩检验 — Stata vecrank（trace 与可选 max eigenvalue）",
-        "Johansen cointegration rank tests — Stata vecrank (trace & optional max eigenvalue)",
-    )
+        .with_documentation(docs::vec::VECRANK_ZH, docs::vec::VECRANK_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_vecrank(ctx)?;

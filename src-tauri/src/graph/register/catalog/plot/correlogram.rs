@@ -6,6 +6,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
@@ -52,10 +53,7 @@ fn cumulative_ljung_box(acf_vals: &[f64], n: usize) -> Vec<(f64, f64)> {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Correlogram (ACF & PACF)", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_localized_description(
-            "绘制 ACF 与 PACF 相关图，含 Ljung-Box Q 统计量。悬停柱条可查看滞后阶、Q 统计量与 p 值。",
-            "Plot ACF & PACF correlogram with Ljung-Box Q statistics. Hover bars to see lag value, Q stat and p-value.",
-        )
+                .with_documentation(docs::plot::CORRELOGRAM_ZH, docs::plot::CORRELOGRAM_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(

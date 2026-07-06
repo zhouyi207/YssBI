@@ -340,7 +340,7 @@ package.json
 - [x] 修复 Detail 点击节点报错：`nodeMetadata`（camelCase）与 `node_metadata` 字段不一致；Zustand pins selector 无限循环（`useShallow`）
 - [x] 修复 Detail 左侧 Sash 拖动卡顿：拖动过程 DOM 直改 + rAF 节流，松手再写 layout store；文档 Panel `memo` + 拖动时 `contain`
 - [x] Detail 面板 UI i18n：`detail.*` 键（`en-US` / `zh-CN`）；NodeDetailPanel、Pin 接口、文档区、空状态等按当前语言展示
-- [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → 旧 `description`
+- [x] 节点短描述 i18n（已废弃并移除）：曾用 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 已全部改为仅 `with_documentation()` + `catalog/docs/en|zh/*.md`；Detail 仅展示 Markdown 长文档
 - [x] OLS / OLS Summary Markdown 文档去重：移除与 Pin 接口重复的 Input/Output 表格，保留公式与 Usage
 - [x] Tableau 式 Worksheet 工作区（Phase 1）：ActivityBar **Charts**（位于 Data 与 Commands 之间）；Sidebar 折叠 **Worksheets** 列表（与 Event/Variable 同风格）；Menubar **Data → 新建 Worksheet**
 - [x] Worksheet 配置迁至 **Detail** 面板（数据集 / 图表类型 / X·Y 编码 / 列列表）；打开 Worksheet Tab 自动展开 Detail
@@ -655,9 +655,13 @@ package.json
 - [x] **Canvas：移除全局滚轮平移/缩放**：删除 `viewportWheel.ts` / `attachViewportWheel`（`window` capture + `preventDefault`）；Canvas 不再响应滚轮 pan/zoom，保留中键/右键/Alt+拖拽平移。
 - [x] **滚轮事件收口**：审计全项目无 `window`/`document` 级 wheel 监听；移除 Menubar / Sidebar / Detail 上仅为挡 Canvas wheel 而设的 `onWheel stopPropagation`；TabBar 拖拽时仅在容器 ref 上绑定非 passive wheel listener。
 - [x] **Canvas：Ctrl/Cmd + 滚轮缩放**：新增 `canvasWheelZoom.ts` / `useCanvasWheelZoom`，监听绑定在画布根元素（非全局 `window`）；仅 `ctrlKey`/`metaKey` + wheel 以光标为中心缩放（0.1x~5x）；普通滚轮不平移；视口走 `viewportSession` 提交与 `persistGraphViewport` 持久化。
-- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
-
-
+- [x] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**builtin 139/139 已挂载、278 个 include_str 引用**）
+- [x] **节点长文档（批次 1：OLS 家族 + WLS/GLS/Predict）**：`catalog/docs/en|zh/` 新增 Configure、Fixed Scale/Cluster/HAC/Newey、VCE NonRobust/HC0–HC3、WLS、WLS Summary、GLS Configure、GLS、GLS Summary、Predict；`docs/{ols,wls,gls,prediction}.rs` + 各节点 `with_documentation` 挂载；Detail `NodeDocumentationPanel` 渲染 KaTeX 公式。
+- [x] **节点长文档（批次 2：Logit/Probit/IV/Prais/Panel）**：Logit & Probit（Configure/Summary/Predict）、IV:2SLS Configure & Summary、IV:LIML Summary、Prais 三节点、Panel Configure / VCE Cluster / Panel Summary / Panel DID (TWFE)；`docs/{logit,probit,iv,prais,panel}.rs` + 扩展 `prediction.rs`。
+- [x] **节点长文档（批次 3：VAR/ADF/VEC + DataSeries/Align/Plot）**：VAR Summary & varsoc、DF & ADF & Summary、VEC & VECRANK；Get DataSeries / Int Range / Length / Sum / Mean 与 6 个 Compare；TS Align/Diff/Pct Change/Rolling Mean/Lag、XT Align/Diff；Histogram/KDE/Line/Scatter/ECDF/Correlogram/Correlation Plot；`docs/{var,adf,vec,data_series,align,plot}.rs`。
+- [x] **节点长文档（批次 4：Distribution/Math/Logic/Value/DataFrame/Control/Debug）**：23 分布 + 10 数学 + 5 逻辑 + 22 Value（Convert/常量/变量/Call）+ 7 DataFrame（Get/Decompose/Combine/Filter/Standardize/Dummy）+ Branch/Sequence/Event Begin/Print/View；`catalog/docs/en|zh/*.md` 外部 Markdown + `docs/{distribution,math,logic,value,dataframe,control,event,debug}.rs` 以 `include_str!` 引用 + `apply_docs` 挂载（**不再使用内联 Markdown**）。
+- [x] **节点长文档（批次 5：收尾与质量）**：① 批次 4 迁回 `catalog/docs/en|zh/*.md` ✅；② 批次 4 + 批次 1–3 薄文档扩写（Pin 表、公式、Convert 类型表等）✅；③ `nodeDocumentation.test.ts` 中英回退与 KaTeX 样本断言 ✅；④ **移除节点短描述层**（后端 `localized_description` / `with_localized_description()` / catalog `*_DESC_*`；前端 Detail 仅 `documentation` → 实例 `description`）✅；⑤ 删除 `scripts/audit_node_docs.py`、`.github/workflows/ci.yml` 与 `npm run audit:node-docs`（不做文档 CI 门禁）✅。
+- [x] 节点短描述层已移除（原 `localized_description` + Detail fallback 几乎不可见，与 Markdown 长文档重复）
 
 
 ## v1.0 待办
@@ -670,6 +674,7 @@ package.json
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
 - [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 函数图应该如何设计？？？设置不可删除节点，但是可以移动，如 event 中的 event begin，function 中的 inputs 节点 和 outputs 节点？？或许 function 中不应该使用节点形式？？在这里还需要对 event begin 屏蔽，同理 event 需要对 inputs 节点和 outputs 节点屏蔽
+- [ ] **节点长文档（函数图 / 未来节点）**：Function 图 Inputs/Outputs（及 Event 与 Function 互斥壳层）设计落地后，补充对应 Markdown 文档（见 v1.0「函数图应该如何设计」）。
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
 - [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。

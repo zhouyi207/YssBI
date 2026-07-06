@@ -7,6 +7,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
@@ -874,10 +875,7 @@ fn register_wls(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("WLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description(
-            "加权最小二乘回归 — 输出拟合模型供预测使用",
-            "Weighted Least Squares regression — outputs the fitted model for prediction",
-        )
+                .with_documentation(docs::wls::WLS_ZH, docs::wls::WLS_EN)
         .with_pin_slots(slots)
         .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
@@ -938,10 +936,7 @@ fn register_wls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "加权最小二乘回归 — 输出结果并打开 Summary 窗口",
-        "Weighted Least Squares regression — outputs results and opens the summary window",
-    )
+        .with_documentation(docs::wls::WLS_SUMMARY_ZH, docs::wls::WLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_wls_regression(ctx)?;

@@ -4,6 +4,7 @@ use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue, TimeSeriesState};
 use polars::prelude::Series;
 use std::sync::Arc;
@@ -31,9 +32,9 @@ pub fn register(registry: &NodeRegistry) {
 fn register_get_dataseries(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Get DataSeries", vec!["Data".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description(
-            "按列名从 DataFrame 获取 DataSeries",
-            "Get a DataSeries from a DataFrame by column name",
+                .with_documentation(
+            docs::data_series::GET_DATASERIES_ZH,
+            docs::data_series::GET_DATASERIES_EN,
         )
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
@@ -82,10 +83,7 @@ fn register_int_range(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Int Range", vec!["Data".to_string(), "DataSeries".to_string()])
             .with_ui_style("value")
-            .with_localized_description(
-                "生成 Int64 序列：start, start+1, …, start+length-1",
-                "Generate Int64 DataSeries: start, start+1, ..., start+length-1",
-            )
+                        .with_documentation(docs::data_series::INT_RANGE_ZH, docs::data_series::INT_RANGE_EN)
             .with_pin_slots(vec![
                 PinSlot::fixed(PinDefinition::data_input(
                     "Start",
@@ -138,9 +136,9 @@ fn register_data_series_length(registry: &NodeRegistry) {
         vec!["Data".to_string(), "DataSeries".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "获取 DataSeries 元素个数",
-        "Get the number of elements in a DataSeries",
+        .with_documentation(
+        docs::data_series::DATASERIES_LENGTH_ZH,
+        docs::data_series::DATASERIES_LENGTH_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
@@ -172,9 +170,9 @@ fn register_data_series_sum(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("DataSeries Sum", vec!["Data".to_string(), "DataSeries".to_string()])
             .with_ui_style("dataframe")
-            .with_localized_description(
-                "计算数值 DataSeries 之和",
-                "Calculate the sum of a numeric DataSeries",
+                        .with_documentation(
+                docs::data_series::DATASERIES_SUM_ZH,
+                docs::data_series::DATASERIES_SUM_EN,
             )
             .with_pin_slots(vec![
                 PinSlot::fixed(PinDefinition::data_input(
@@ -217,9 +215,9 @@ fn register_data_series_mean(registry: &NodeRegistry) {
         vec!["Data".to_string(), "DataSeries".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "计算数值 DataSeries 的均值",
-        "Calculate the mean of a numeric DataSeries",
+        .with_documentation(
+        docs::data_series::DATASERIES_MEAN_ZH,
+        docs::data_series::DATASERIES_MEAN_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(

@@ -14,6 +14,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, NamedFrom, Series};
@@ -711,10 +712,7 @@ fn register_iv_2sls_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "IV:2SLS 回归配置 — 与 OLS 相同（Constant、VCE、Time）",
-        "IV:2SLS regression configuration — same as OLS (Constant, VCE, Time)",
-    )
+        .with_documentation(docs::iv::IV_2SLS_CONFIGURE_ZH, docs::iv::IV_2SLS_CONFIGURE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -848,10 +846,7 @@ fn register_iv_2sls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "工具变量两阶段最小二乘回归 — 输出结果并打开 Summary 窗口",
-        "Instrumental Variables Two-Stage Least Squares regression — outputs results and opens the summary window",
-    )
+        .with_documentation(docs::iv::IV_2SLS_SUMMARY_ZH, docs::iv::IV_2SLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_iv_2sls_regression(ctx)?;
