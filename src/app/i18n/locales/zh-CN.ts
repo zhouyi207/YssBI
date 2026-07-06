@@ -328,7 +328,13 @@ export const zhCN = {
     },
   },
   canvas: {
-    debugComingSoon: "调试（即将推出）",
+    pinResultSearch: {
+      open: "搜索 Pin 结果",
+      close: "关闭 Pin 结果搜索",
+      empty: "暂无 Pin 结果，请先运行图",
+      searchPlaceholder: "按节点、Pin 或结果标题筛选…",
+      noMatches: "没有匹配的 Pin 结果",
+    },
     replayDisabledDirty: "图结构已更改，无法回放",
     replayNoRecording: "无录制数据",
     replayExecution: "回放执行",

@@ -41,7 +41,6 @@ export const InfoWindow: FC = () => {
       {state.status === 'ready' && state.payload.mode === 'report' ? (
         <ReportSourceView
           payload={state.descriptor}
-          layout="window"
           data={state.payload.data}
         />
       ) : null}

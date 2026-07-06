@@ -137,23 +137,21 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
       setDropIndicatorIndex(null);
     }
   }, [isDragging]);
-  
-  // 在拖动时禁用滚动
+
+  // 拖动时在 TabBar 容器上拦截滚轮，避免误滚动（组件级 listener，非全局）
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    
-    if (isDragging) {
-      const preventScroll = (e: WheelEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      
-      container.addEventListener('wheel', preventScroll, { passive: false });
-      return () => {
-        container.removeEventListener('wheel', preventScroll);
-      };
-    }
+    if (!container || !isDragging) return;
+
+    const preventScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    container.addEventListener('wheel', preventScroll, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', preventScroll);
+    };
   }, [isDragging]);
 
   return (

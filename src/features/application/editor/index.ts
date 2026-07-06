@@ -8,6 +8,7 @@ export { useEditorGroup } from './useEditorGroup';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';
+export { useCanvasWheelZoom } from './useCanvasWheelZoom';
 export { useCanvasDrop } from './useCanvasDrop';
 export type { VariableDropMenu } from './canvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';

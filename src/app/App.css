@@ -80,6 +80,48 @@
   animation: zoomIn 0.2s ease-out forwards;
 }
 
+@keyframes pinResultSearchExpand {
+  0% { width: 2rem; }
+  70% { width: 19rem; }
+  100% { width: 18rem; }
+}
+
+@keyframes pinResultSearchCollapse {
+  from { width: 18rem; }
+  to { width: 2rem; }
+}
+
+@keyframes pinResultSearchPanelIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pin-result-search-shell {
+  width: 2rem;
+}
+
+.pin-result-search-shell.is-open {
+  width: 18rem;
+}
+
+.pin-result-search-shell.is-expanding {
+  animation: pinResultSearchExpand 0.42s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
+}
+
+.pin-result-search-shell.is-collapsing {
+  animation: pinResultSearchCollapse 0.26s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.pin-result-search-input {
+  transition:
+    opacity 0.22s ease,
+    margin 0.22s ease;
+}
+
+.pin-result-search-panel {
+  animation: pinResultSearchPanelIn 0.28s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
+}
+
 /* OverlayScrollbar：隐藏原生滚动条 */
 .overlay-scrollbar-viewport::-webkit-scrollbar {
   display: none;

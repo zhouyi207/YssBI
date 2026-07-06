@@ -58,6 +58,24 @@ export async function resolvePinViewTarget(
   return null;
 }
 
+export async function openPinResultView(
+  pinResult: PinResultState,
+  t: TFunction,
+): Promise<boolean> {
+  try {
+    await openPresentationWindow(pinResult.sourceId, {
+      route: presentationRoute(pinResult.descriptor.presentation),
+      windowTitle: pinResult.descriptor.title || t('contextMenu.pin.view'),
+      plotType: plotTypeFromPresentation(pinResult.descriptor.presentation),
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    uiStore.showToast(t('toast.viewOpenFailed', { error: message }), 'error');
+    return false;
+  }
+}
+
 export async function openPinView(
   params: ResolvePinViewTargetParams,
   t: TFunction,
@@ -71,12 +89,7 @@ export async function openPinView(
       return false;
     }
 
-    await openPresentationWindow(target.pinResult.sourceId, {
-      route: presentationRoute(target.pinResult.descriptor.presentation),
-      windowTitle: target.pinResult.descriptor.title || t('contextMenu.pin.view'),
-      plotType: plotTypeFromPresentation(target.pinResult.descriptor.presentation),
-    });
-    return true;
+    return openPinResultView(target.pinResult, t);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     uiStore.showToast(t('toast.viewOpenFailed', { error: message }), 'error');

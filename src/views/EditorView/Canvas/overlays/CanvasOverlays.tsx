@@ -5,25 +5,20 @@ import type { LayoutTab } from "@/shared/types";
 import type { Graph } from "@/shared/types/domain";
 import { useEditorGroup } from "@/features/application/editor";
 import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
-import { UnifiedSourceView } from "@/features/core/resultSource";
 
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ContextMenu } from "@/shared/ui/contextMenu";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
+import { PinResultSearch } from "./PinResultSearchPalette";
 import {
-  VscDebugStart,
   VscDebugPause,
   VscDebugStop,
   VscDebugRestart,
   VscPlay,
   VscRunAll,
 } from "react-icons/vsc";
-import type { PinResultState } from "@/shared/types/ui";
-
-const EMPTY_PIN_RESULTS = new Map<string, PinResultState>();
 
 function CanvasToolbarButton({
     tooltip,
@@ -86,11 +81,6 @@ export default function CanvasOverlays({
     const tabId = activeTabId ?? "";
     const { stop, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } = useExecutionPlayback(tabId);
     const graphStatus = useExecutionStore((s) => s.graphs[tabId]?.status ?? "idle");
-    const pinResults = useExecutionStore((s) => s.graphs[tabId]?.pinResults ?? EMPTY_PIN_RESULTS);
-    const pinResultList = useMemo(() => Array.from(pinResults.values()), [pinResults]);
-    const [debugOpen, setDebugOpen] = useState(false);
-    const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
-    const selectedResult = pinResultList.find((result) => result.sourceId === selectedSourceId) ?? pinResultList[0];
 
     const playbackActive = isPlaying || isPaused;
     const isThisGraphRunning = graphStatus === "running";
@@ -104,22 +94,13 @@ export default function CanvasOverlays({
     return (
         <>
             {isEventTab && (
+                <div className="absolute left-3 top-3 z-40">
+                    <PinResultSearch graphId={tabId} />
+                </div>
+            )}
+
+            {isEventTab && (
                 <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
-                    {/* Debug placeholder */}
-                    <CanvasToolbarButton
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={pinResultList.length === 0}
-                        onClick={() => setDebugOpen((open) => !open)}
-                        className={pinResultList.length > 0 ? 'text-blue-400 hover:text-blue-300' : 'text-[var(--text-secondary)] opacity-40'}
-                        tooltip={pinResultList.length > 0 ? "Inspect runtime results" : t("canvas.debugComingSoon")}
-                    >
-                        <VscDebugStart size={14} />
-                    </CanvasToolbarButton>
-
-                    <div className="w-px h-5 bg-[var(--border-color)]" />
-
                     {!playbackActive ? (
                         <CanvasToolbarButton
                             type="button"
@@ -182,52 +163,6 @@ export default function CanvasOverlays({
                     >
                         <VscRunAll size={14} />
                     </CanvasToolbarButton>
-                </div>
-            )}
-
-            {debugOpen && pinResultList.length > 0 && (
-                <div className="absolute right-3 top-14 z-40 flex max-h-[70vh] w-[520px] flex-col overflow-hidden rounded-md border border-[var(--border-color)] bg-[var(--panel-bg)] shadow-xl">
-                    <div className="flex items-center justify-between border-b border-[var(--border-color)] px-3 py-2">
-                        <span className="text-xs font-semibold text-foreground">Runtime Results</span>
-                        <button
-                            type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => setDebugOpen(false)}
-                        >
-                            Close
-                        </button>
-                    </div>
-                    <div className="flex min-h-0 flex-1">
-                        <div className="flex min-h-0 w-40 shrink-0 flex-col border-r border-[var(--border-color)]">
-                          <OverlayScrollbar>
-                            <div className="p-2">
-                            {pinResultList.map((result) => (
-                                <button
-                                    key={result.sourceId}
-                                    type="button"
-                                    className={`block w-full truncate rounded px-2 py-1 text-left text-xs ${
-                                        selectedResult?.sourceId === result.sourceId
-                                            ? 'bg-[var(--accent-color)]/15 text-foreground'
-                                            : 'text-muted-foreground hover:bg-muted'
-                                    }`}
-                                    onClick={() => setSelectedSourceId(result.sourceId)}
-                                >
-                                    {result.descriptor.title}
-                                </button>
-                            ))}
-                            </div>
-                          </OverlayScrollbar>
-                        </div>
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                          <OverlayScrollbar>
-                            <div className="p-2">
-                              {selectedResult ? (
-                                <UnifiedSourceView payload={selectedResult.descriptor} layout="embedded" />
-                              ) : null}
-                            </div>
-                          </OverlayScrollbar>
-                        </div>
-                    </div>
                 </div>
             )}
 

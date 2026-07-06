@@ -648,7 +648,13 @@ package.json
 
 ## 2026.07.07
 
-- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
+- [x] **View：Pin 结果搜索 + Inspector 窗口**：移除 Canvas Runtime Results embedded 浮层；Canvas 左上 Pin 搜索入口，筛选 node/pin 后打开 `SourceInspectorWindow`；统一 `openPinResultView` 出口；删除 `SourceViewLayout=embedded` 死代码；Detail 侧栏保留 pin 行「View」按钮，不做 inline 预览。
+- [x] **View：Pin 搜索 UX 内联展开**：点击搜索图标 spring 展开为 input（同容器宽度动画）；再次点击图标 / Esc / 点击外部收起；input 与下拉列表合并为同一 bordered shell，避免错位；列表单行展示 `节点 · Pin`。
+- [x] **View：Pin 搜索纳入 input pins**：`collectPinResultSearchEntries` 除 output runtime 结果外，枚举图中已连接且可解析上游结果的 input pin；列表 output 优先、input 其后；点击仍走 `openPinResultView` 打开上游 Inspector 数据。
+- [x] **View：Pin 搜索列表滚轮修复**：Pin search 根节点加 `menu-container`，避免 Canvas 全局 wheel 拦截 `OverlayScrollbar` 原生滚动（后随 Canvas wheel 移除一并解决根因）。
+- [x] **Canvas：移除全局滚轮平移/缩放**：删除 `viewportWheel.ts` / `attachViewportWheel`（`window` capture + `preventDefault`）；Canvas 不再响应滚轮 pan/zoom，保留中键/右键/Alt+拖拽平移。
+- [x] **滚轮事件收口**：审计全项目无 `window`/`document` 级 wheel 监听；移除 Menubar / Sidebar / Detail 上仅为挡 Canvas wheel 而设的 `onWheel stopPropagation`；TabBar 拖拽时仅在容器 ref 上绑定非 passive wheel listener。
+- [x] **Canvas：Ctrl/Cmd + 滚轮缩放**：新增 `canvasWheelZoom.ts` / `useCanvasWheelZoom`，监听绑定在画布根元素（非全局 `window`）；仅 `ctrlKey`/`metaKey` + wheel 以光标为中心缩放（0.1x~5x）；普通滚轮不平移；视口走 `viewportSession` 提交与 `persistGraphViewport` 持久化。
 - [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
 
 
@@ -662,11 +668,15 @@ package.json
 - [ ] **变量类型切换时的值迁移 / 智能转换（暂缓）**：当前策略——切换类型且未显式提交新值时，重置为 `DataType::default_value()`；Array / Object / DataFrame / DataSeries 已用 JSON 列式编辑 + `tabular/` 存储（见 ## 2026.07.03 已勾项）。**暂不实现**跨类型自动保留或 coerce（如 Int→String、DataFrame↔Array、Object 字段映射等）；后续可考虑接入 `DataValue::coerce_to`、切换前「将丢失当前值」提示。变量类型不可选 Any。
 - [ ] **View：大 Array 分页 tabular（暂缓，没有合适的前端表现）**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
-- [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、embedded UX、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
+- [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 函数图应该如何设计？？？设置不可删除节点，但是可以移动，如 event 中的 event begin，function 中的 inputs 节点 和 outputs 节点？？或许 function 中不应该使用节点形式？？在这里还需要对 event begin 屏蔽，同理 event 需要对 inputs 节点和 outputs 节点屏蔽
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
 - [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。
+- [ ] 右上角添加一个 clear 图标，点击清空运行缓存？？每次重新运行的时候也清除运行缓存？还是保存缓存？
+
+
+
 
 
 # TODOLIST

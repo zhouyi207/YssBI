@@ -2,7 +2,7 @@ import { useRef, useMemo, useCallback, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
-import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
+import { useEditorGroup, useCanvasViewport, useCanvasWheelZoom, useCanvasDrop } from "@/features/application/editor";
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
@@ -75,6 +75,7 @@ export default function Canvas() {
     activeTabId,
     gestureType,
   );
+  useCanvasWheelZoom(canvasElementRef, activeTabId);
 
   const {
     variableDropMenu,

@@ -456,7 +456,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       ref={ref}
       className="sidebar-container flex h-full w-full overflow-hidden select-none bg-[var(--sidebar-bg)] relative z-30"
       style={{ pointerEvents: "auto" }}
-      onWheel={(e) => e.stopPropagation()}
     >
       <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
         <div className={workbenchPanelHeaderClass}>

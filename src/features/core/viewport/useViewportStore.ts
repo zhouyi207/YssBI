@@ -4,7 +4,7 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { resetLiveViewports } from './viewportSession';
 
 interface ViewportStore {
-  /** Committed viewports (persisted / loaded from project). Live wheel preview stays in viewportSession. */
+  /** Committed viewports (persisted / loaded from project). Live gesture preview stays in viewportSession. */
   viewports: Record<string, GraphPosition>;
   setViewport: (
     graphId: string,

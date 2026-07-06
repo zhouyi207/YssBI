@@ -1,10 +1,9 @@
 /**
- * Viewport culling, wheel zoom, pin offsets, and coordinate helpers for Canvas.
+ * Viewport culling, pin offsets, and coordinate helpers for Canvas.
  */
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  attachViewportWheel,
   getViewport,
   subscribeToViewport,
 } from '@/features/core/viewport';
@@ -70,12 +69,6 @@ export function useCanvasViewport(
   const connectionsRef = useGraphDataStore(
     useShallow((s) => (graphId ? s.getGraphConnections(graphId) : [])),
   );
-
-  useEffect(() => {
-    const canvasEl = canvasElementRef.current;
-    if (!canvasEl || !graphId) return;
-    return attachViewportWheel(canvasEl, graphId);
-  }, [canvasElementRef, graphId]);
 
   const updateVisibleNodes = useCallback(() => {
     const el = canvasElementRef.current;

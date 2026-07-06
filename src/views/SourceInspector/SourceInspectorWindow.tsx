@@ -31,10 +31,10 @@ export const SourceInspectorWindow: React.FC = () => {
       }}
     >
       {state.status === 'ready' && state.payload.mode === 'inspector' ? (
-        <UnifiedSourceView payload={state.payload.descriptor} layout="window" />
+        <UnifiedSourceView payload={state.payload.descriptor} />
       ) : null}
       {state.status === 'ready' && state.payload.mode === 'report' ? (
-        <ReportSourceView payload={state.descriptor} layout="window" data={state.payload.data} />
+        <ReportSourceView payload={state.descriptor} data={state.payload.data} />
       ) : null}
     </PresentationWindowShell>
   );

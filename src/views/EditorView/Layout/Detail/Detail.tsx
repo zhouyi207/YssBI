@@ -72,7 +72,6 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
     <div
       ref={ref}
       className="right-sidebar-container flex h-full w-full select-none flex-col overflow-hidden bg-[var(--sidebar-bg)]"
-      onWheel={(e) => e.stopPropagation()}
     >
       {target?.kind === 'log' && selectedLog ? (
         <LogDetailPanel log={selectedLog} />

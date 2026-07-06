@@ -22,6 +22,5 @@ export { usePagedSourceRows } from './usePagedSourceRows';
 export { UnifiedSourceView } from './components/UnifiedSourceView';
 export { ReportSourceView } from './components/ReportSourceView';
 export { SourceViewShell } from './components/SourceViewShell';
-export type { SourceViewLayout } from './components/SourceViewShell';
 export { JsonTreeView } from './components/JsonTreeView';
 export { ReadOnlyDataGrid } from './components/ReadOnlyDataGrid';

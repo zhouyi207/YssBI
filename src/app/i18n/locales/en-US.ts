@@ -328,7 +328,13 @@ export const enUS = {
     },
   },
   canvas: {
-    debugComingSoon: "Debug (coming soon)",
+    pinResultSearch: {
+      open: "Search pin results",
+      close: "Close pin result search",
+      empty: "No pin results yet — run the graph first",
+      searchPlaceholder: "Filter by node, pin, or result title…",
+      noMatches: "No matching pin results",
+    },
     replayDisabledDirty: "Graph structure changed; replay is unavailable",
     replayNoRecording: "No recording data",
     replayExecution: "Replay execution",

@@ -22,3 +22,13 @@ export {
   type PinViewDisabledReason,
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
+export {
+  buildPinResultSearchEntries,
+  buildPinResultSearchEntry,
+  collectPinResultSearchEntries,
+  filterPinResultSearchEntries,
+  type PinResultSearchDirection,
+  type PinResultSearchEntry,
+  type PinResultSearchLabels,
+  type PinResultSearchPinRef,
+} from './pinResultSearch';

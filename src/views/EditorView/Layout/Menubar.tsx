@@ -226,7 +226,6 @@ export function Menubar() {
     <WindowTitleBar
       elevated
       className="menubar-container"
-      onWheel={(e) => e.stopPropagation()}
     >
       {/* Left: Icon & Brand */}
       <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
