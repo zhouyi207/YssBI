@@ -662,7 +662,8 @@ package.json
 - [x] **节点长文档（批次 4：Distribution/Math/Logic/Value/DataFrame/Control/Debug）**：23 分布 + 10 数学 + 5 逻辑 + 22 Value（Convert/常量/变量/Call）+ 7 DataFrame（Get/Decompose/Combine/Filter/Standardize/Dummy）+ Branch/Sequence/Event Begin/Print/View；`catalog/docs/en|zh/*.md` 外部 Markdown + `docs/{distribution,math,logic,value,dataframe,control,event,debug}.rs` 以 `include_str!` 引用 + `apply_docs` 挂载（**不再使用内联 Markdown**）。
 - [x] **节点长文档（批次 5：收尾与质量）**：① 批次 4 迁回 `catalog/docs/en|zh/*.md` ✅；② 批次 4 + 批次 1–3 薄文档扩写（Pin 表、公式、Convert 类型表等）✅；③ `nodeDocumentation.test.ts` 中英回退与 KaTeX 样本断言 ✅；④ **移除节点短描述层**（后端 `localized_description` / `with_localized_description()` / catalog `*_DESC_*`；前端 Detail 仅 `documentation` → 实例 `description`）✅；⑤ 删除 `scripts/audit_node_docs.py`、`.github/workflows/ci.yml` 与 `npm run audit:node-docs`（不做文档 CI 门禁）✅。
 - [x] 节点短描述层已移除（原 `localized_description` + Detail fallback 几乎不可见，与 Markdown 长文档重复）
-
+- [x] **ActivityBar 节点目录（Sidebar Nodes）**：ActivityBar **图与变量之间**新增「节点」Tab；Sidebar 按 category 展示全部 **builtin** 节点（`features/domain/nodeCatalog/buildBuiltinCatalogItems`）；**拖动**到画布走现有 `NODE_TEMPLATE` / `useCanvasDrop`；**单击** Detail 展示 `NodeDefinitionDetailPanel`（Pin 规格 + Markdown 文档，无需图中实例）；画布右键 `NodePalette` 保留 pin 过滤 + 变量/函数动态项（`buildContextualCatalogItems`）；共享 UI `NodeCatalogTreeView` + 虚拟列表，消除 `NodePalette` 与侧栏重复逻辑。
+- [x] **节点目录 Sidebar UX**：搜索框置于侧栏**底部**（Popover palette 仍顶部）；分类行对齐 `SidebarCollapsibleSection`（chevron + 普通大小写）；节点行复用侧栏 hover/active token（`nodeCatalogLeafRowClass` / `sidebarItemIndent`），13px 字号与 `--sidebar-hover` 统一。
 
 ## v1.0 待办
 

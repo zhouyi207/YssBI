@@ -63,12 +63,13 @@ import {
   sidebarItemRowClass,
 } from "./sidebarUi";
 import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
+import { SidebarNodesPanel } from "./SidebarNodesPanel";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
   useContext(GroupContext);
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null;
+  const currentTab = sidebarNode?.data?.currentTab as "graphs" | "nodes" | "variables" | "data" | "commands" | "charts" | null;
 
   const {
     variables,
@@ -462,7 +463,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           <span className={workbenchPanelHeaderTitleClass}>
             {currentTab === "graphs"
               ? t("activityBar.graphs")
-              : currentTab === "variables"
+              : currentTab === "nodes"
+                ? t("activityBar.nodes")
+                : currentTab === "variables"
                 ? t("activityBar.variables")
                 : currentTab === "data"
                   ? t("activityBar.data")
@@ -512,6 +515,12 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                   <SidebarEmptyPlaceholder>{t("sidebar.noFunctions")}</SidebarEmptyPlaceholder>
                 )}
               </SidebarCollapsibleSection>
+            </div>
+          )}
+
+          {currentTab === "nodes" && (
+            <div ref={listRef} className="flex min-h-0 flex-1 flex-col">
+              <SidebarNodesPanel />
             </div>
           )}
 

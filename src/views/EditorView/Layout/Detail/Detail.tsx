@@ -16,6 +16,7 @@ import { FunctionDetailPanel } from './panels/FunctionDetailPanel';
 import { DataDetailPanel } from './panels/DataDetailPanel';
 import { LogDetailPanel } from './panels/LogDetailPanel';
 import { NodeDetailPanel } from './panels/NodeDetailPanel';
+import { NodeDefinitionDetailPanel } from './panels/NodeDefinitionDetailPanel';
 import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
 import { detailSectionTitleClass } from './shared/detailStyles';
 import { workbenchPanelHeaderClass } from '../workbenchPanelHeaderStyles';
@@ -77,6 +78,8 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
         <LogDetailPanel log={selectedLog} />
       ) : target?.kind === 'node' ? (
         <NodeDetailPanel nodeId={target.id} />
+      ) : target?.kind === 'nodeDefinition' ? (
+        <NodeDefinitionDetailPanel nodeType={target.nodeType} />
       ) : selectedData && target?.kind === 'variable' ? (
         <VariableDetailPanel
           variable={selectedData}

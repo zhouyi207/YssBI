@@ -32,6 +32,10 @@ export function focusDetailOnNode(nodeId: string, groupId?: string | null): void
   focusDetail({ kind: 'node', id: nodeId, graphId });
 }
 
+export function focusDetailOnNodeDefinition(nodeType: string): void {
+  focusDetail({ kind: 'nodeDefinition', nodeType });
+}
+
 export type CanvasDetailGesture =
   | { type: 'blank-click'; groupId: string }
   | { type: 'box-select'; groupId: string; selectedIds: string[] }

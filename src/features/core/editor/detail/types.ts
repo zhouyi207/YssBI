@@ -2,6 +2,7 @@ import type { LogMessage } from '@/shared/types/ui';
 
 export type DetailTarget =
   | { kind: 'node'; id: string; graphId: string }
+  | { kind: 'nodeDefinition'; nodeType: string }
   | { kind: 'variable'; id: string }
   | { kind: 'data'; id: string }
   | { kind: 'log' }

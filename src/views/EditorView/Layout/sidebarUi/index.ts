@@ -11,4 +11,8 @@ export {
   sidebarItemRowClass,
   sidebarRowActionClass,
   sidebarSectionLabelClass,
+  nodeCatalogCategoryRowClass,
+  nodeCatalogLeafRowClass,
+  nodeCatalogLeafLabelClass,
+  nodeCatalogSearchShellClass,
 } from "./sidebarStyles";

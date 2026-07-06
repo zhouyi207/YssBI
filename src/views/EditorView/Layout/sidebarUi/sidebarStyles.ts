@@ -38,3 +38,30 @@ export function sidebarRowActionClass(isSelected = false) {
     isSelected ? "text-sidebar-foreground" : "text-muted-foreground",
   );
 }
+
+/** Node catalog category row (matches collapsible section headers). */
+export function nodeCatalogCategoryRowClass() {
+  return cn(sidebarCollapsibleHeaderClass(false), "cursor-pointer select-none");
+}
+
+/** Node catalog leaf row — slightly brighter label, same hover tokens as sidebar items. */
+export function nodeCatalogLeafRowClass(isSelected = false) {
+  return cn(
+    "group flex w-full items-center gap-2 py-1.5 pr-2 transition-colors duration-150 ease-out",
+    isSelected
+      ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
+      : "text-sidebar-foreground/90 hover:bg-[var(--sidebar-hover)] hover:text-sidebar-foreground",
+  );
+}
+
+export function nodeCatalogLeafLabelClass(isSelected = false) {
+  return cn(
+    "min-w-0 flex-1 truncate text-[13px] font-normal leading-snug",
+    isSelected ? "text-sidebar-foreground" : "text-sidebar-foreground/90 group-hover:text-sidebar-foreground",
+  );
+}
+
+/** Bottom search bar shell in node catalog sidebar. */
+export function nodeCatalogSearchShellClass() {
+  return "shrink-0 border-t border-border/50 bg-[var(--sidebar-bg)] px-2 py-2";
+}

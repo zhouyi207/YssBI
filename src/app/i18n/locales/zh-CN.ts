@@ -365,6 +365,7 @@ export const zhCN = {
   },
   activityBar: {
     graphs: "图",
+    nodes: "节点",
     variables: "变量",
     data: "数据",
     commands: "命令",
@@ -552,6 +553,7 @@ export const zhCN = {
     titleWithName: "详情 : {{name}}",
     titleLog: "详情 : 日志",
     titleNode: "详情 : 节点",
+    titleNodeDefinition: "详情 : 节点类型",
     noSelection: "未选择",
     noSelectionHint: "从侧栏或画布中选择一项",
     nodeNotFound: "图中未找到该节点。",

@@ -3,6 +3,7 @@
  */
 import { useCallback } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import type { SidebarTabId } from '@/features/application/editor/useSidebarTab';
 
 export function useEditorLayoutActions() {
   const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
@@ -11,7 +12,7 @@ export function useEditorLayoutActions() {
     useLayoutStore.getState().setActiveGroup(id);
   }, []);
 
-  const switchSidebarTab = useCallback((tab: 'graphs' | 'variables' | 'data' | 'charts') => {
+  const switchSidebarTab = useCallback((tab: SidebarTabId) => {
     const layoutStore = useLayoutStore.getState();
     const sidebarNode = layoutStore.nodes['sidebar'];
     if (sidebarNode) {

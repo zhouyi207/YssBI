@@ -365,6 +365,7 @@ export const enUS = {
   },
   activityBar: {
     graphs: "Graphs",
+    nodes: "Nodes",
     variables: "Variables",
     data: "Data",
     commands: "Commands",
@@ -552,6 +553,7 @@ export const enUS = {
     titleWithName: "Details : {{name}}",
     titleLog: "Details : Log",
     titleNode: "Details : Node",
+    titleNodeDefinition: "Details : Node Type",
     noSelection: "No selection",
     noSelectionHint: "Select an item from the sidebar or canvas",
     nodeNotFound: "Node not found in graph.",

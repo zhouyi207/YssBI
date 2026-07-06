@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
-export type SidebarTabId = 'graphs' | 'variables' | 'data' | 'commands' | 'charts';
+export type SidebarTabId = 'graphs' | 'nodes' | 'variables' | 'data' | 'commands' | 'charts';
 
 export function useSidebarTab() {
   const switchSidebarTab = useCallback((tab: SidebarTabId) => {

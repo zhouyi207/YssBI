@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
-import { VscDatabase, VscGraphLine, VscTerminal } from "react-icons/vsc";
+import { VscDatabase, VscGraphLine, VscLibrary, VscTerminal } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -29,7 +29,7 @@ export function ActivityBar() {
   const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
   const isSidebarVisible = sidebarNode?.data?.visible !== false;
   const activeTab = isSidebarVisible
-    ? (sidebarNode?.data?.currentTab as "graphs" | "variables" | "data" | "commands" | "charts" | null)
+    ? (sidebarNode?.data?.currentTab as "graphs" | "nodes" | "variables" | "data" | "commands" | "charts" | null)
     : null;
 
   const activityBarRef = useRef<HTMLDivElement>(null);
@@ -38,7 +38,7 @@ export function ActivityBar() {
   const updateNode = useLayoutStore((s) => s.updateNode);
   const previousSizeRef = useRef(260);
 
-  const toggleTab = (tab: "graphs" | "variables" | "data" | "commands" | "charts") => {
+  const toggleTab = (tab: "graphs" | "nodes" | "variables" | "data" | "commands" | "charts") => {
     if (activeTab === tab) {
       if (sidebarNode?.pixelSize) previousSizeRef.current = sidebarNode.pixelSize;
       updateNode("sidebar", {
@@ -84,6 +84,9 @@ export function ActivityBar() {
 
       <ActivityIcon id="graphs" active={activeTab === "graphs"} onClick={() => toggleTab("graphs")} title={t("activityBar.graphs")}>
         <PiGraph size={24} />
+      </ActivityIcon>
+      <ActivityIcon id="nodes" active={activeTab === "nodes"} onClick={() => toggleTab("nodes")} title={t("activityBar.nodes")}>
+        <VscLibrary size={24} />
       </ActivityIcon>
       <ActivityIcon id="variables" active={activeTab === "variables"} onClick={() => toggleTab("variables")} title={t("activityBar.variables")}>
         <HiVariable size={24} />
