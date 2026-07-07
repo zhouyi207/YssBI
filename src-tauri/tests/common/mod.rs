@@ -12,36 +12,55 @@ pub fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitte
     Executor::new(graph, NoopEmitter, ResultSourceStore::new())
 }
 
-/// 记录型事件发送器：按 `NodeStart` 顺序收集 node_id，用于断言执行顺序
+/// 集成测试用事件收集器：可同时记录 `NodeStart` 顺序与 `OpenSourceWindow` 的 source_id。
 #[derive(Clone, Default)]
-pub struct RecordingEmitter {
-    order: Arc<Mutex<Vec<String>>>,
+pub struct CapturingEmitter {
+    node_starts: Arc<Mutex<Vec<String>>>,
+    window_source_ids: Arc<Mutex<Vec<String>>>,
 }
 
-impl RecordingEmitter {
-    pub fn new() -> Self {
-        Self::default()
+impl CapturingEmitter {
+    pub fn node_starts(&self) -> Vec<String> {
+        self.node_starts.lock().unwrap().clone()
     }
 
-    /// 已执行节点的顺序快照（按 NodeStart 触发先后）
+    /// 与历史 `RecordingEmitter::order()` 兼容的别名。
     pub fn order(&self) -> Vec<String> {
-        self.order.lock().unwrap().clone()
+        self.node_starts()
+    }
+
+    pub fn window_source_ids(&self) -> Vec<String> {
+        self.window_source_ids.lock().unwrap().clone()
     }
 }
 
-impl EventEmitter for RecordingEmitter {
+impl EventEmitter for CapturingEmitter {
     fn emit(&self, event: ExecutionEvent) {
-        if let ExecutionEvent::NodeStart { node_id } = event {
-            self.order.lock().unwrap().push(node_id);
+        match event {
+            ExecutionEvent::NodeStart { node_id } => {
+                self.node_starts.lock().unwrap().push(node_id);
+            }
+            ExecutionEvent::OpenSourceWindow { source_id, .. } => {
+                self.window_source_ids.lock().unwrap().push(source_id);
+            }
+            _ => {}
         }
     }
 }
 
-/// 创建带顺序记录的执行器，返回 (executor, emitter) —— emitter 持有共享记录句柄
+/// 创建带事件收集与可共享 ResultSourceStore 的执行器。
+pub fn capturing_executor_for_test(
+    graph: Arc<Mutex<GraphRuntime>>,
+    store: ResultSourceStore,
+) -> (Executor<CapturingEmitter>, CapturingEmitter) {
+    let emitter = CapturingEmitter::default();
+    let executor = Executor::new(graph, emitter.clone(), store);
+    (executor, emitter)
+}
+
+/// 仅断言节点执行顺序时使用（内部 store 不可外读）。
 pub fn recording_executor_for_test(
     graph: Arc<Mutex<GraphRuntime>>,
-) -> (Executor<RecordingEmitter>, RecordingEmitter) {
-    let emitter = RecordingEmitter::new();
-    let executor = Executor::new(graph, emitter.clone(), ResultSourceStore::new());
-    (executor, emitter)
+) -> (Executor<CapturingEmitter>, CapturingEmitter) {
+    capturing_executor_for_test(graph, ResultSourceStore::new())
 }

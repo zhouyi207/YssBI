@@ -1020,3 +1020,385 @@ fn test_sequence_runs_branch_fully_before_next() {
         "Then1 整条子树 (A, A2) 必须先于 Then2 (B, B2) 执行"
     );
 }
+
+/// 回归测试：Sequence.Then1 下游是 For Loop 时，Then2 必须等 For Loop
+/// 完整跑完（body 执行 Count 次 + 循环收尾）后才执行。
+///
+/// 结构：Seq.Then1 -> For(Count=2).In；For.Body -> Body；Seq.Then2 -> After
+/// 期望顺序：[Seq, For, Body, For, Body, For, After]
+#[test]
+fn test_sequence_waits_for_for_loop_before_next() {
+    use yssbi_lib::graph::core::GraphRuntime;
+
+    let registry = create_test_registry();
+    let graph = Arc::new(GraphInstance::new(
+        "Sequence For Loop Order",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
+
+    let seq = graph
+        .create_node("Control Flow:Sequence")
+        .expect("create sequence");
+    let forloop = graph
+        .create_node("Control Flow:For Loop")
+        .expect("create for loop");
+    let body = graph.create_node("Debug:Print").expect("create body");
+    let after = graph.create_node("Debug:Print").expect("create after");
+
+    for (node, msg) in [(body, "BODY"), (after, "AFTER")] {
+        let pins = graph.get_pin_instances_by_node_id(node);
+        let msg_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+            .expect("print message pin");
+        graph
+            .set_pin_user_value_by_pin_id(msg_pin.id, DataValue::String(msg.to_string()))
+            .expect("set print message");
+    }
+
+    // For Loop Count = 2
+    let count_pin = graph
+        .get_pin_instances_by_node_id(forloop)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("for loop count pin")
+        .id;
+    graph
+        .set_pin_user_value_by_pin_id(count_pin, DataValue::Int64(2))
+        .expect("set count");
+
+    let exec_out = |node, role: ExecRole| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(role.clone()))
+            .unwrap_or_else(|| panic!("exec output {:?} not found", role))
+            .id
+    };
+    let exec_in = |node| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect("exec input not found")
+            .id
+    };
+
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(0)), exec_in(forloop))
+        .expect("Then1 -> For.In");
+    graph
+        .connect(exec_out(forloop, ExecRole::ExecLoopBody), exec_in(body))
+        .expect("For.Body -> Body");
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(1)), exec_in(after))
+        .expect("Then2 -> After");
+
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
+    let (mut executor, recorder) = common::recording_executor_for_test(runtime);
+    executor.start(seq).expect("execute sequence");
+
+    let expected = vec![
+        seq.to_string(),
+        forloop.to_string(),
+        body.to_string(),
+        forloop.to_string(),
+        body.to_string(),
+        forloop.to_string(),
+        after.to_string(),
+    ];
+    assert_eq!(
+        recorder.order(),
+        expected,
+        "For Loop 必须整体跑完 (2 次 body + 收尾) 后 Then2(After) 才执行"
+    );
+}
+
+/// 回归测试：Sequence.Then1 下游是 While Loop 时，Then2 必须等 While Loop
+/// 完整跑完后才执行。
+///
+/// 结构：Seq.Then1 -> While(Condition=true, Max=2).In；While.Body -> Body；
+/// Seq.Then2 -> After
+/// 期望顺序：[Seq, While, Body, While, Body, While, After]
+#[test]
+fn test_sequence_waits_for_while_loop_before_next() {
+    use yssbi_lib::graph::core::GraphRuntime;
+
+    let registry = create_test_registry();
+    let graph = Arc::new(GraphInstance::new(
+        "Sequence While Loop Order",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
+
+    let seq = graph
+        .create_node("Control Flow:Sequence")
+        .expect("create sequence");
+    let whileloop = graph
+        .create_node("Control Flow:While Loop")
+        .expect("create while loop");
+    let body = graph.create_node("Debug:Print").expect("create body");
+    let after = graph.create_node("Debug:Print").expect("create after");
+
+    for (node, msg) in [(body, "BODY"), (after, "AFTER")] {
+        let pins = graph.get_pin_instances_by_node_id(node);
+        let msg_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+            .expect("print message pin");
+        graph
+            .set_pin_user_value_by_pin_id(msg_pin.id, DataValue::String(msg.to_string()))
+            .expect("set print message");
+    }
+
+    let while_pins = graph.get_pin_instances_by_node_id(whileloop);
+    let condition_pin = while_pins
+        .iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
+        .expect("while condition pin")
+        .id;
+    let max_pin = while_pins
+        .iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Custom("maxIterations".to_string())))
+        .expect("while maxIterations pin")
+        .id;
+    graph
+        .set_pin_user_value_by_pin_id(condition_pin, DataValue::Boolean(true))
+        .expect("set condition");
+    graph
+        .set_pin_user_value_by_pin_id(max_pin, DataValue::Int64(2))
+        .expect("set max iterations");
+
+    let exec_out = |node, role: ExecRole| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(role.clone()))
+            .unwrap_or_else(|| panic!("exec output {:?} not found", role))
+            .id
+    };
+    let exec_in = |node| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect("exec input not found")
+            .id
+    };
+
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(0)), exec_in(whileloop))
+        .expect("Then1 -> While.In");
+    graph
+        .connect(exec_out(whileloop, ExecRole::ExecLoopBody), exec_in(body))
+        .expect("While.Body -> Body");
+    graph
+        .connect(exec_out(seq, ExecRole::Steps(1)), exec_in(after))
+        .expect("Then2 -> After");
+
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
+    let (mut executor, recorder) = common::recording_executor_for_test(runtime);
+    executor.start(seq).expect("execute sequence");
+
+    let expected = vec![
+        seq.to_string(),
+        whileloop.to_string(),
+        body.to_string(),
+        whileloop.to_string(),
+        body.to_string(),
+        whileloop.to_string(),
+        after.to_string(),
+    ];
+    assert_eq!(
+        recorder.order(),
+        expected,
+        "While Loop 必须整体跑完 (2 次 body + 收尾) 后 Then2(After) 才执行"
+    );
+}
+
+/// View 每次执行应对输入值拍独立 window 快照，不复用可变的 runtime_pin source。
+/// For Loop Count=2 + Body(View) 连 Index 时，两次快照应分别为 0 与 1。
+#[test]
+fn test_view_snapshots_index_per_for_loop_iteration() {
+    use yssbi_lib::execution::ResultSourceStore;
+    use yssbi_lib::graph::core::GraphRuntime;
+
+    let registry = create_test_registry();
+    let graph = Arc::new(GraphInstance::new(
+        "View Snapshot Test",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
+
+    let forloop = graph
+        .create_node("Control Flow:For Loop")
+        .expect("create for loop");
+    let view = graph
+        .create_node("Debug:Data:View")
+        .expect("create view");
+
+    let count_pin = graph
+        .get_pin_instances_by_node_id(forloop)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("count pin")
+        .id;
+    graph
+        .set_pin_user_value_by_pin_id(count_pin, DataValue::Int64(2))
+        .expect("set count");
+
+    let exec_out = |node, role: ExecRole| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(role.clone()))
+            .unwrap_or_else(|| panic!("exec output {:?} not found", role))
+            .id
+    };
+    let exec_in = |node| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect("exec input not found")
+            .id
+    };
+    let index_out = graph
+        .get_pin_instances_by_node_id(forloop)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Custom("index".to_string())))
+        .expect("index pin")
+        .id;
+    let view_data_in = graph
+        .get_pin_instances_by_node_id(view)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+        .expect("view data in")
+        .id;
+
+    graph
+        .connect(exec_out(forloop, ExecRole::ExecLoopBody), exec_in(view))
+        .expect("body -> view");
+    graph
+        .connect(index_out, view_data_in)
+        .expect("index -> view data");
+
+    let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+        graph.clone(),
+    )));
+    let store = ResultSourceStore::new();
+    let (mut executor, emitter) = common::capturing_executor_for_test(runtime, store.clone());
+    executor.start(forloop).expect("execute for loop");
+
+    let window_ids: Vec<_> = emitter
+        .window_source_ids()
+        .into_iter()
+        .filter(|id| id.starts_with("window_"))
+        .collect();
+    assert_eq!(
+        window_ids.len(),
+        2,
+        "每次 View 执行应各发布一个 window 快照"
+    );
+
+    let scalar = |source_id: &str| -> i64 {
+        let snapshot = store
+            .get_value(source_id)
+            .expect("get_value")
+            .expect("snapshot exists");
+        match snapshot.value {
+            Some(serde_json::Value::Number(n)) => n.as_i64().expect("numeric snapshot"),
+            other => panic!("unexpected snapshot value: {:?}", other),
+        }
+    };
+    assert_eq!(scalar(&window_ids[0]), 0, "第 1 次迭代快照应为 Index=0");
+    assert_eq!(scalar(&window_ids[1]), 1, "第 2 次迭代快照应为 Index=1");
+}
+
+/// 回归：同一 GraphRuntime 上连续两次执行时，须清空 `pins_runtime_state`，
+/// 否则上游纯数据节点会被 `pin_has_executed_value` 误判为已求值而跳过。
+#[test]
+fn test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes() {
+    use std::sync::Mutex;
+    use yssbi_lib::graph::core::GraphRuntime;
+
+    let registry = create_test_registry();
+    let graph = Arc::new(GraphInstance::new(
+        "Rerun Clears Pin State",
+        yssbi_lib::graph::GraphKind::Event,
+        registry.clone(),
+    ));
+
+    let do_node = graph
+        .create_node("Control Flow:Do")
+        .expect("create do");
+    let print_node = graph
+        .create_node("Debug:Print")
+        .expect("create print");
+    let const_node = graph
+        .create_node("Value:Constants:String")
+        .expect("create string constant");
+
+    let const_out = graph
+        .get_pin_instances_by_node_id(const_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
+        .expect("const output")
+        .id;
+    graph
+        .set_pin_user_value_by_pin_id(const_out, DataValue::String("hi".to_string()))
+        .expect("set const value");
+
+    let print_msg = graph
+        .get_pin_instances_by_node_id(print_node)
+        .into_iter()
+        .find(|p| p.definition.role == PinRole::Data(DataRole::Inputs(0)))
+        .expect("print message")
+        .id;
+    graph
+        .connect(const_out, print_msg)
+        .expect("const -> print message");
+
+    let exec_out = |node, role: ExecRole| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(role.clone()))
+            .unwrap_or_else(|| panic!("exec output {:?} not found", role))
+            .id
+    };
+    let exec_in = |node| {
+        graph
+            .get_pin_instances_by_node_id(node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Exec(ExecRole::ExecIn))
+            .expect("exec input")
+            .id
+    };
+    graph
+        .connect(exec_out(do_node, ExecRole::ExecOut), exec_in(print_node))
+        .expect("do -> print");
+
+    let runtime = Arc::new(Mutex::new(GraphRuntime::new_standalone(graph.clone())));
+    let (mut executor, recorder) = common::recording_executor_for_test(runtime);
+
+    let const_id = const_node.to_string();
+    executor.start(do_node).expect("run 1");
+    assert_eq!(
+        recorder.order().iter().filter(|id| **id == const_id).count(),
+        1,
+        "首次执行应求值上游 String 常量"
+    );
+
+    executor.start(do_node).expect("run 2");
+    assert_eq!(
+        recorder.order().iter().filter(|id| **id == const_id).count(),
+        2,
+        "第二次执行前应清空 pins_runtime_state，上游数据节点须重新求值"
+    );
+}

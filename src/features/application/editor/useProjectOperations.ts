@@ -1,15 +1,15 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectIOStore, getGraphById } from '@/features/core/dataStore';
+import { useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
-import { ProjectService } from '@/services/project/projectService';
+import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useExecutionStore } from '@/features/core/execution';
+import { useExecutionStore, getExecutionEventGraph, resolveExecutionGraphId } from '@/features/core/execution';
 import { openPresentationWindowSafe } from '@/features/application/window';
 import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
 import type { Presentation } from '@/features/core/resultSource';
@@ -139,35 +139,53 @@ export function useProjectOperations() {
     );
   }, []);
 
+  const finalizeExecutionRun = useCallback((
+    graphId: string,
+    recording: RecordedEvent[],
+    outcome: 'success' | 'cancelled' | 'error',
+  ) => {
+    flushLiveExecutionEventsNow();
+    const store = useExecutionStore.getState();
+    store.commitExecutionVisual(graphId);
+
+    if (outcome === 'success') {
+      store.setRecording(graphId, recording);
+      if (store.graphs[graphId]?.status === 'running') {
+        store.completeExecution(graphId);
+      }
+      return;
+    }
+
+    if (outcome === 'cancelled') {
+      store.interruptExecution(graphId);
+      return;
+    }
+
+    store.failExecution(graphId);
+  }, []);
+
   const executeGraph = useCallback(async (targetGraphId?: string) => {
+    const graphId = resolveExecutionGraphId(targetGraphId);
+    if (!graphId) {
+      uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
+      return;
+    }
+
+    const target = getExecutionEventGraph(graphId);
+    if (!target) {
+      uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
+      return;
+    }
+
+    const { graph: currentGraph } = target;
+
     try {
       syncActiveToCollection();
-
-      const graphId = targetGraphId ?? (() => {
-        const layoutStore = useLayoutStore.getState();
-        const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
-        const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
-        return editorNode?.data?.activeTabId as string | undefined;
-      })();
-
-      if (!graphId) {
-        uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
-        return;
-      }
-
-      const currentGraph = getGraphById(graphId);
-      
-      if (!currentGraph || currentGraph.type !== 'event') {
-        uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
-        return;
-      }
-
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphId})`);
 
       const recording: RecordedEvent[] = [];
       const pendingWindows: Promise<void>[] = [];
-      const { commitExecutionVisual, completeExecution, setRecording, startExecution, applySideEffectEvent } =
-        useExecutionStore.getState();
+      const { startExecution, applySideEffectEvent } = useExecutionStore.getState();
       resetExecutionVisual(graphId);
       startExecution(graphId);
 
@@ -186,41 +204,41 @@ export function useProjectOperations() {
       }, graphId);
 
       await Promise.all(pendingWindows);
-
-      flushLiveExecutionEventsNow();
-      commitExecutionVisual(graphId);
-      setRecording(graphId, recording);
-      if (useExecutionStore.getState().graphs[graphId]?.status === 'running') {
-        completeExecution(graphId);
-      }
+      finalizeExecutionRun(graphId, recording, 'success');
 
       if (res.logs.length > 0) {
         logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
       }
-      
+
       uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
     } catch (e) {
-      logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
-      uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
-      const graphId = targetGraphId ?? (() => {
-        const layoutStore = useLayoutStore.getState();
-        const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
-        const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
-        return editorNode?.data?.activeTabId as string | undefined;
-      })();
-      if (graphId) {
-        flushLiveExecutionEventsNow();
-        const store = useExecutionStore.getState();
-        store.commitExecutionVisual(graphId);
-        store.failExecution(graphId);
+      if (isExecutionCancelledError(e)) {
+        logger.exec.info(`执行已中断: ${currentGraph.name} (${graphId})`);
+        finalizeExecutionRun(graphId, [], 'cancelled');
+        uiStore.showToast(t('canvas.executionCancelled'), "warning", 2500);
+        return;
       }
+
+      logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
+      finalizeExecutionRun(graphId, [], 'error');
+      uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
     }
-  }, [handleOpenSourceWindow, syncActiveToCollection]);
+  }, [handleOpenSourceWindow, syncActiveToCollection, finalizeExecutionRun, t]);
+
+  const cancelGraphExecution = useCallback(async () => {
+    try {
+      await ProjectService.cancelExecution();
+    } catch (e) {
+      logger.exec.error(`中断执行失败: ${formatErrorMessage(e)}`);
+      uiStore.showToast(`中断执行失败: ${formatErrorMessage(e)}`, "error", 3000);
+    }
+  }, []);
 
   return {
     saveGraph,
     saveGraphAs,
     importGraph,
     executeGraph,
+    cancelGraphExecution,
   };
 }

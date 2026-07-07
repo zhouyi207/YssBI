@@ -35,6 +35,22 @@ mod tests {
         Executor::new(graph, NoopEmitter, ResultSourceStore::new())
     }
 
+    /// 辅助函数：检查 ExecutionEffect 是否是 loop
+    fn assert_is_loop(effect: &ExecutionEffect, should_continue: bool) {
+        match effect {
+            ExecutionEffect::Loop {
+                body,
+                completed,
+                should_continue: cont,
+            } => {
+                assert_eq!(body, &ExecRole::ExecLoopBody);
+                assert_eq!(completed, &ExecRole::ExecLoopComplete);
+                assert_eq!(*cont, should_continue);
+            }
+            _ => panic!("Expected Loop, got {:?}", effect),
+        }
+    }
+
     /// 辅助函数：检查 ExecutionEffect 是否是 sequence
     fn assert_is_sequence(effect: &ExecutionEffect, expected_roles: Vec<ExecRole>) {
         match effect {
@@ -527,6 +543,445 @@ mod tests {
 
         println!("\n=== Stack Debug Info ===");
         println!("{}", executor.debug_stack());
+    }
+
+    // ==================== Do 节点测试 ====================
+
+    #[test]
+    fn test_do_node_triggers_out() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let do_node = graph
+            .create_node("Control Flow:Do")
+            .expect("Failed to create Do node");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(do_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), do_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_triggers_output(&effect, ExecRole::ExecOut);
+    }
+
+    // ==================== Merge 节点测试 ====================
+
+    #[test]
+    fn test_merge_node_has_repeatable_inputs() {
+        let registry = create_test_registry();
+        let graph = GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        );
+
+        let merge_node = graph
+            .create_node("Control Flow:Merge")
+            .expect("Failed to create Merge node");
+
+        let pins = graph.get_pin_instances_by_node_id(merge_node);
+        let input_pins: Vec<_> = pins
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.definition.role,
+                    PinRole::Exec(ExecRole::ExecInputs(_))
+                )
+            })
+            .collect();
+
+        assert_eq!(input_pins.len(), 2, "Merge should have 2 default In pins");
+    }
+
+    #[test]
+    fn test_merge_node_triggers_out() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let merge_node = graph
+            .create_node("Control Flow:Merge")
+            .expect("Failed to create Merge node");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(merge_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), merge_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_triggers_output(&effect, ExecRole::ExecOut);
+    }
+
+    // ==================== Sleep 节点测试 ====================
+
+    #[test]
+    fn test_sleep_node_short_duration() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let sleep_node = graph
+            .create_node("Control Flow:Sleep")
+            .expect("Failed to create Sleep node");
+
+        let pins = graph.get_pin_instances_by_node_id(sleep_node);
+        let duration_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Duration pin not found");
+
+        graph
+            .set_pin_user_value_by_pin_id(duration_pin.id, DataValue::Float64(0.05))
+            .expect("Failed to set duration");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(sleep_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let start = std::time::Instant::now();
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), sleep_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        let elapsed = start.elapsed();
+
+        assert_triggers_output(&effect, ExecRole::ExecOut);
+        assert!(
+            elapsed.as_secs_f64() >= 0.04,
+            "Sleep should wait at least 0.04s, got {:?}",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn test_sleep_node_rejects_negative_duration() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let sleep_node = graph
+            .create_node("Control Flow:Sleep")
+            .expect("Failed to create Sleep node");
+
+        let pins = graph.get_pin_instances_by_node_id(sleep_node);
+        let duration_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Duration pin not found");
+
+        graph
+            .set_pin_user_value_by_pin_id(duration_pin.id, DataValue::Float64(-1.0))
+            .expect("Failed to set duration");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(sleep_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), sleep_node);
+        let result = flow_processor(&mut ctx);
+        assert!(result.is_err(), "Negative duration should fail");
+    }
+
+    // ==================== For Loop 节点测试 ====================
+
+    #[test]
+    fn test_for_loop_first_iteration() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let loop_node = graph
+            .create_node("Control Flow:For Loop")
+            .expect("Failed to create For Loop node");
+
+        let pins = graph.get_pin_instances_by_node_id(loop_node);
+        let count_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Count pin not found");
+        graph
+            .set_pin_user_value_by_pin_id(count_pin.id, DataValue::Int64(3))
+            .expect("Failed to set count");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(loop_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), loop_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_is_loop(&effect, true);
+        assert_eq!(runtime.lock().unwrap().get_loop_counter(loop_node), 1);
+
+        let index_pin = pins
+            .iter()
+            .find(|p| {
+                p.definition.role == PinRole::Data(DataRole::Custom("index".to_string()))
+            })
+            .expect("Index pin not found");
+        let index_value = runtime
+            .lock()
+            .unwrap()
+            .get_pin_data_value_by_pin_id(index_pin.id)
+            .expect("Index value missing");
+        assert_eq!(index_value, DataValue::Int64(0));
+    }
+
+    #[test]
+    fn test_for_loop_completes_after_count() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let loop_node = graph
+            .create_node("Control Flow:For Loop")
+            .expect("Failed to create For Loop node");
+
+        let pins = graph.get_pin_instances_by_node_id(loop_node);
+        let count_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Count pin not found");
+        graph
+            .set_pin_user_value_by_pin_id(count_pin.id, DataValue::Int64(2))
+            .expect("Failed to set count");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+        runtime.lock().unwrap().set_loop_counter(loop_node, 2);
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(loop_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), loop_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_is_loop(&effect, false);
+        assert_eq!(runtime.lock().unwrap().get_loop_counter(loop_node), 0);
+    }
+
+    // ==================== Switch 节点测试 ====================
+
+    #[test]
+    fn test_switch_triggers_matching_case() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let switch_node = graph
+            .create_node("Control Flow:Switch")
+            .expect("Failed to create Switch node");
+
+        let pins = graph.get_pin_instances_by_node_id(switch_node);
+        let selector_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Selector pin not found");
+        graph
+            .set_pin_user_value_by_pin_id(selector_pin.id, DataValue::Int64(1))
+            .expect("Failed to set selector");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(switch_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), switch_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_triggers_output(&effect, ExecRole::Cases(1));
+    }
+
+    #[test]
+    fn test_switch_falls_back_to_default() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let switch_node = graph
+            .create_node("Control Flow:Switch")
+            .expect("Failed to create Switch node");
+
+        let pins = graph.get_pin_instances_by_node_id(switch_node);
+        let selector_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Input))
+            .expect("Selector pin not found");
+        graph
+            .set_pin_user_value_by_pin_id(selector_pin.id, DataValue::Int64(99))
+            .expect("Failed to set selector");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(switch_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), switch_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_triggers_output(&effect, ExecRole::ExecFalse);
+    }
+
+    // ==================== While Loop 节点测试 ====================
+
+    #[test]
+    fn test_while_loop_continues_when_condition_true() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let while_node = graph
+            .create_node("Control Flow:While Loop")
+            .expect("Failed to create While Loop node");
+
+        let pins = graph.get_pin_instances_by_node_id(while_node);
+        let condition_pin = pins
+            .iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Condition))
+            .expect("Condition pin not found");
+        graph
+            .set_pin_user_value_by_pin_id(condition_pin.id, DataValue::Boolean(true))
+            .expect("Failed to set condition");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(while_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), while_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_is_loop(&effect, true);
+        assert_eq!(runtime.lock().unwrap().get_loop_counter(while_node), 1);
+    }
+
+    #[test]
+    fn test_while_loop_exits_when_condition_false() {
+        let registry = create_test_registry();
+        let graph = Arc::new(GraphInstance::new(
+            "Test Graph",
+            crate::graph::GraphKind::Event,
+            registry.clone(),
+        ));
+
+        let while_node = graph
+            .create_node("Control Flow:While Loop")
+            .expect("Failed to create While Loop node");
+
+        let runtime = Arc::new(std::sync::Mutex::new(GraphRuntime::new_standalone(
+            graph.clone(),
+        )));
+
+        let definition = runtime
+            .lock()
+            .unwrap()
+            .get_node_definition_by_node_id(while_node);
+        let flow_processor = definition
+            .flow_processor
+            .as_ref()
+            .expect("Flow processor not found");
+
+        let mut ctx = crate::execution::NodeExecutionContext::new(runtime.clone(), while_node);
+        let effect = flow_processor(&mut ctx).expect("Flow processor failed");
+        assert_is_loop(&effect, false);
     }
 
     // ==================== Branch + Sequence 连接测试（手动触发，保留用于单元测试）====================

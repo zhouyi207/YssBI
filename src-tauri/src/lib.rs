@@ -63,6 +63,7 @@ pub fn run() {
         .manage(project::ProjectWatcherState::new())
         .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
+        .manage(project::ExecutionCancelRegistry::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
@@ -121,6 +122,7 @@ pub fn run() {
             flush_project,
             save_project_as,
             execute_project,
+            cancel_execution,
             get_result_source_descriptor,
             get_result_source_value,
             get_result_source_page,

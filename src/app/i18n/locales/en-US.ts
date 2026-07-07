@@ -341,6 +341,8 @@ export const enUS = {
     pauseReplay: "Pause replay",
     resumeReplay: "Resume replay",
     stopReplay: "Stop replay",
+    cancelExecution: "Cancel execution",
+    executionCancelled: "Execution cancelled",
     executing: "Running...",
     executeCurrentEvent: "Run current Event",
     getVariable: "Get {{name}}",

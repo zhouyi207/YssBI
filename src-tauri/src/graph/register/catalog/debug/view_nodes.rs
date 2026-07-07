@@ -1,6 +1,7 @@
 //! View 节点：查看各种类型数据的具体内容
 //!
-//! 通过 ResultSourceStore 注册 source；DataFrame/DataSeries 通过 typed page API 分页拉取。
+//! 每次执行对 Data 输入拍不可变 `window_{uuid}` 快照后开窗（不复用上游 runtime_pin source）。
+//! DataFrame/DataSeries 通过 typed page API 分页拉取。
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;

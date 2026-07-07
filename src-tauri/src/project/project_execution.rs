@@ -40,6 +40,7 @@ pub fn execute_project_data(
     source_store: ResultSourceStore,
     on_event: Channel<ExecutionEvent>,
     target_graph_id: Option<GraphId>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<Value, String> {
     let event_graphs = {
         let data = project_data_state.read().map_err(|e| e.to_string())?;
@@ -72,10 +73,11 @@ pub fn execute_project_data(
             Arc::clone(&project_store),
         );
 
-        let mut executor = Executor::new(
+        let mut executor = Executor::with_cancel(
             Arc::new(Mutex::new(runtime)),
             ChannelEventEmitter(on_event.clone()),
             source_store.clone(),
+            Some(cancel.clone()),
         );
         executor.start(entry_node)?;
 

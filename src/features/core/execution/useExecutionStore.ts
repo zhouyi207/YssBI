@@ -31,6 +31,8 @@ interface ExecutionStore extends ExecutionState {
   startExecution: (graphId: string) => void;
   completeExecution: (graphId: string) => void;
   failExecution: (graphId: string) => void;
+  /** User cancelled a live run; keep partial visuals, return to idle. */
+  interruptExecution: (graphId: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphId: string) => void;
   recordPinResult: (graphId: string, result: PinResultState) => void;
@@ -77,6 +79,10 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   failExecution: (graphId) => set((state) => updateGraph(state, graphId, {
     status: "error",
+  })),
+
+  interruptExecution: (graphId) => set((state) => updateGraph(state, graphId, {
+    status: "idle",
   })),
 
   commitExecutionVisual: (graphId) => {

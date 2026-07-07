@@ -10,14 +10,13 @@ use polars::prelude::{DataFrame, Series};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-/// Result source publish / open request collected during node execution.
+/// Result source publish request collected during node execution.
 pub enum SourceAction {
     PublishJson {
         presentation: Presentation,
         data: String,
     },
     PublishRecord(ResultSourceRecord),
-    OpenExisting(String),
 }
 
 /// 具体的执行上下文实现
@@ -271,6 +270,36 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         steps.into_iter().map(|(_, role)| role).collect()
     }
 
+    fn get_exec_case_outputs(&self) -> Vec<ExecRole> {
+        let graph = self.graph.lock().unwrap();
+        let mut cases: Vec<(usize, ExecRole)> = graph
+            .get_pin_instances_by_node_id(self.node_id)
+            .iter()
+            .filter(|pin| pin.is_output() && pin.is_exec())
+            .filter_map(|pin| match pin.definition.role {
+                PinRole::Exec(ExecRole::Cases(index)) => Some((index, ExecRole::Cases(index))),
+                _ => None,
+            })
+            .collect();
+        cases.sort_by_key(|(index, _)| *index);
+        cases.into_iter().map(|(_, role)| role).collect()
+    }
+
+    fn get_loop_counter(&self) -> i64 {
+        let graph = self.graph.lock().unwrap();
+        graph.get_loop_counter(self.node_id)
+    }
+
+    fn set_loop_counter(&mut self, value: i64) {
+        let mut graph = self.graph.lock().unwrap();
+        graph.set_loop_counter(self.node_id, value);
+    }
+
+    fn reset_loop_counter(&mut self) {
+        let mut graph = self.graph.lock().unwrap();
+        graph.reset_loop_counter(self.node_id);
+    }
+
     // ====================================================================
     // 节点实例参数
     // ====================================================================
@@ -360,18 +389,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         self.source_actions.push(SourceAction::PublishRecord(record));
     }
 
-    fn open_registered_source(&mut self, source_id: String) {
-        self.source_actions.push(SourceAction::OpenExisting(source_id));
-    }
-
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String> {
-        if let Some(source_id) = self.get_input_source_id_by_role(role) {
-            if self.result_source_store.get_descriptor(&source_id).is_some() {
-                self.open_registered_source(source_id.clone());
-                return Ok(source_id);
-            }
-        }
-
         let value = match self.get_input_by_role(role) {
             Ok(value) => value,
             Err(_) if !self.is_input_connected(role) => DataValue::Null,
@@ -383,18 +401,6 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             self.build_source_record_for_value(source_id.clone(), title, &value, None)?;
         self.publish_record(record);
         Ok(source_id)
-    }
-
-    fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String> {
-        let (graph_id, upstream_pin_id) = {
-            let graph = self.graph.lock().ok()?;
-            let input = graph.get_pin_instance_by_pin_role(self.node_id, role)?;
-            let upstream = graph.get_upstream_by_pin_id(input.id)?;
-            (graph.graph_id().to_string(), upstream.to_string())
-        };
-        self.result_source_store
-            .get_pin_descriptor(&graph_id, &upstream_pin_id)
-            .map(|descriptor| descriptor.source_id)
     }
 
     fn log(&mut self, message: String) {

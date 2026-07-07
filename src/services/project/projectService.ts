@@ -44,12 +44,17 @@ export type ProjectCleanupProgressEvent =
     | { kind: "removing"; removed: number; total: number };
 
 export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
+export const EXECUTION_CANCELLED = "EXECUTION_CANCELLED";
 
 /** @deprecated 使用 PICKER_TASK_CANCELLED */
 export const SCAN_CANCELLED = PICKER_TASK_CANCELLED;
 
 export function isPickerTaskCancelledError(error: unknown): boolean {
     return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
+}
+
+export function isExecutionCancelledError(error: unknown): boolean {
+    return formatErrorMessage(error, "") === EXECUTION_CANCELLED;
 }
 
 /** @deprecated 使用 isPickerTaskCancelledError */
@@ -499,6 +504,10 @@ export class ProjectService {
         } finally {
             untrackChannel(channel);
         }
+    }
+
+    static async cancelExecution(): Promise<void> {
+        await invoke("cancel_execution");
     }
 
     static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {

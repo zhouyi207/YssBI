@@ -2,7 +2,7 @@ use crate::execution::ExecutionDataStore;
 use crate::graph::NodeDefinition;
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::value::{DataType, DataValue};
-use crate::graph::{GraphInstance, NodeId, NodeRuntimeState, PinId, PinInstance, PinRole, PinRuntimeState};
+use crate::graph::{GraphInstance, NodeId, PinId, PinInstance, PinRole, PinRuntimeState};
 use crate::project::{ProjectData, ProjectStore};
 use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableScope};
@@ -14,11 +14,11 @@ use uuid::Uuid;
 pub struct GraphRuntime {
     graph_instance: Arc<GraphInstance>,
 
-    // 运行期 pin 状态
+    // 运行期 pin 状态（单次执行内有效，每次 run 前清空）
     pins_runtime_state: HashMap<PinId, PinRuntimeState>,
 
-    // 运行期 node 状态
-    nodes_runtime_state: HashMap<NodeId, NodeRuntimeState>,
+    /// 控制流循环计数（For / While），每次执行 run 前清空
+    loop_counters: HashMap<NodeId, i64>,
 
     // 执行期数据缓存（中间 DataFrame / Series）
     data_store: ExecutionDataStore,
@@ -39,7 +39,7 @@ impl GraphRuntime {
         Self {
             graph_instance,
             pins_runtime_state: HashMap::new(),
-            nodes_runtime_state: HashMap::new(),
+            loop_counters: HashMap::new(),
             data_store: ExecutionDataStore::new(),
             project_data,
             project_store,
@@ -244,6 +244,33 @@ impl GraphRuntime {
             .get_node_instance_by_node_id(node_id)
             .map(|n| n.instance_params.clone())
             .unwrap_or_default()
+    }
+
+    // ========================================================================
+    // 控制流循环计数
+    // ========================================================================
+
+    pub fn get_loop_counter(&self, node_id: NodeId) -> i64 {
+        self.loop_counters.get(&node_id).copied().unwrap_or(0)
+    }
+
+    pub fn set_loop_counter(&mut self, node_id: NodeId, value: i64) {
+        self.loop_counters.insert(node_id, value);
+    }
+
+    pub fn reset_loop_counter(&mut self, node_id: NodeId) {
+        self.loop_counters.remove(&node_id);
+    }
+
+    pub fn clear_loop_counters(&mut self) {
+        self.loop_counters.clear();
+    }
+
+    /// 每次图执行开始前重置运行期状态（与 `ExecutionDataStore` 生命周期对齐）。
+    pub fn reset_execution_state(&mut self) {
+        self.pins_runtime_state.clear();
+        self.loop_counters.clear();
+        self.data_store.clear();
     }
 
     // ========================================================================
@@ -484,6 +511,7 @@ impl GraphRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::pin::DataRole;
     use crate::graph::value::{DataType, DataValue};
     use crate::project::{ProjectState, ProjectStore};
     use crate::variable::VariableScope;
@@ -586,5 +614,35 @@ mod tests {
             .get_variable_value(&local.id.to_string())
             .unwrap_err();
         assert!(err.contains("not visible"));
+    }
+
+    #[test]
+    fn reset_execution_state_clears_pins_and_loop_counters() {
+        let registry = Arc::new(crate::graph::register::NodeRegistry::new());
+        crate::graph::register::catalog::register_builtin_nodes(&registry);
+        let graph = Arc::new(GraphInstance::new(
+            "Reset State",
+            crate::graph::GraphKind::Event,
+            registry,
+        ));
+        let const_node = graph
+            .create_node("Value:Constants:Int64")
+            .expect("create constant");
+        let result_pin = graph
+            .get_pin_instances_by_node_id(const_node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
+            .expect("result pin");
+
+        let mut runtime = GraphRuntime::new_standalone(graph);
+        runtime.set_pin_current_value(result_pin.id, DataValue::Int64(1));
+        runtime.set_loop_counter(const_node, 3);
+        assert!(runtime.pin_has_executed_value(result_pin.id));
+        assert_eq!(runtime.get_loop_counter(const_node), 3);
+
+        runtime.reset_execution_state();
+
+        assert!(!runtime.pin_has_executed_value(result_pin.id));
+        assert_eq!(runtime.get_loop_counter(const_node), 0);
     }
 }

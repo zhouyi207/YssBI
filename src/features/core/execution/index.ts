@@ -1,5 +1,6 @@
 export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
+export { resolveExecutionGraphId, getExecutionEventGraph } from './resolveExecutionGraphId';
 export { useExecutionVisualBinder } from './useExecutionVisualBinder';
 export {
   getExecutionVisual,

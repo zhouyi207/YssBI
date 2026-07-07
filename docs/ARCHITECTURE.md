@@ -415,7 +415,7 @@ execute_project command
 
 ### 8.4 结果窗口数据
 
-节点通过 `NodeExecutionContext` 的 `publish_plot` / `publish_report` / `open_registered_source` 注册结果。执行器写入 `ResultSourceStore`，并通过 `OpenSourceWindow` 事件（携带 `sourceId`、`presentation`、`windowTitle`）通知前端开窗。前端按 `presentation.route()` 打开 `/inspect`、`/plot` 或 `/info`，再通过 `SourceService` 按 `sourceId` 拉取数据。
+节点通过 `NodeExecutionContext` 的 `publish_plot` / `publish_report` / `publish_record` / `ensure_view_source_for_input` 注册结果。View 节点每次执行对输入拍不可变 `window_{uuid}` 快照（不复用上游 `runtime_pin` source）。执行器写入 `ResultSourceStore`，并通过 `OpenSourceWindow` 事件（携带 `sourceId`、`presentation`、`windowTitle`）通知前端开窗。前端按 `presentation.route()` 打开 `/inspect`、`/plot` 或 `/info`，再通过 `SourceService` 按 `sourceId` 拉取数据。
 
 ## 9. `yss-sci` 计算库架构
 

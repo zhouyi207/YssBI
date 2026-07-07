@@ -1,12 +1,19 @@
 //! 执行器（Executor）
 //!
-//! 执行器是唯一负责调度执行顺序的组件
-//! 它解释节点返回的 ExecutionEffect 并管理 continuation 栈
+//! 执行器是唯一负责调度执行顺序的组件。它解释节点返回的 `ExecutionEffect`，
+//! 通过「显式 join 作用域 + 子任务计数」协调 Sequence / Loop 等控制流的汇合：
+//!
+//! - spawn 下游帧时对其 `join_target` 的 `pending_children` **+1**（唯一 +1 处）
+//! - 帧完成时对其 `join_target` 的 `pending_children` **-1**（唯一 -1 处）
+//! - 当某 waiter 的 `pending_children` 归零且处于 `Waiting` → 恢复它
+//!
+//! 透明节点（`TriggerOutput`）把子帧挂到自己收到的 `join_target`（接力棒下传，
+//! 保持同一作用域）；只有 waiter（Sequence / Loop）才新建作用域。
 
 use super::event_emitter::EventEmitter;
-use super::execution_effect::{ExecutionEffect, ResumeToken};
+use super::execution_effect::ExecutionEffect;
 use super::execution_event::ExecutionEvent;
-use super::execution_frame::{ExecutionFrame, FrameId, FrameState};
+use super::execution_frame::{ExecutionFrame, FrameId, FrameState, WaitKind};
 use super::execution_stack::ExecutionStack;
 use crate::execution::{
     NodeExecutionContext, ResultSourceStore, SourceAction, build_json_presentation_source,
@@ -15,7 +22,7 @@ use crate::graph::GraphRuntime;
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinRole};
 use crate::log_exec;
-use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -23,16 +30,12 @@ use std::time::Instant;
 ///
 /// 负责：
 /// - 解释 ExecutionEffect
-/// - 管理执行栈
+/// - 管理执行栈与 join 作用域
 /// - 调度节点执行
-/// - 处理暂停/恢复
 /// - 通过 EventEmitter 流式发送执行事件给前端
 pub struct Executor<E: EventEmitter> {
     /// 执行栈
     stack: ExecutionStack,
-
-    /// 暂停的帧（按 ResumeToken 索引）
-    suspended_frames: HashMap<ResumeToken, FrameId>,
 
     /// Graph 引用
     graph: Arc<Mutex<GraphRuntime>>,
@@ -47,6 +50,9 @@ pub struct Executor<E: EventEmitter> {
     result_source_store: ResultSourceStore,
 
     run_id: String,
+
+    /// Cooperative cancellation flag (set by `cancel_execution` command).
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 impl<E: EventEmitter> Executor<E> {
@@ -56,15 +62,30 @@ impl<E: EventEmitter> Executor<E> {
         emitter: E,
         result_source_store: ResultSourceStore,
     ) -> Self {
+        Self::with_cancel(graph, emitter, result_source_store, None)
+    }
+
+    pub fn with_cancel(
+        graph: Arc<Mutex<GraphRuntime>>,
+        emitter: E,
+        result_source_store: ResultSourceStore,
+        cancel: Option<Arc<AtomicBool>>,
+    ) -> Self {
         Self {
             stack: ExecutionStack::new(),
-            suspended_frames: HashMap::new(),
             graph,
             logs: Vec::new(),
             emitter,
             result_source_store,
             run_id: uuid::Uuid::new_v4().simple().to_string(),
+            cancel,
         }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
     }
 
     /// 发送执行事件
@@ -77,7 +98,7 @@ impl<E: EventEmitter> Executor<E> {
         self.log(format!("Starting execution from node {:?}", entry_node));
 
         // 创建根帧
-        let frame_id = self.stack.push_new(entry_node, None, None);
+        let frame_id = self.stack.push_ready(entry_node, None, None);
         self.log(format!("Created root frame {:?}", frame_id));
 
         // 执行主循环
@@ -87,12 +108,19 @@ impl<E: EventEmitter> Executor<E> {
     /// 主执行循环（错误容错）
     fn run(&mut self) -> Result<(), String> {
         let graph_id = { self.graph.lock().unwrap().graph_id().to_string() };
+        self.graph.lock().unwrap().reset_execution_state();
         self.result_source_store.clear_runtime_graph(&graph_id);
         self.emit(ExecutionEvent::ExecutionStart);
         let mut has_error = false;
 
         while !self.stack.is_empty() {
-            let mut frame = self.stack.pop().ok_or("Stack is empty")?;
+            if self.is_cancelled() {
+                self.log("Execution cancelled by user".to_string());
+                self.emit(ExecutionEvent::ExecutionComplete { has_error: true });
+                return Err(crate::project::execution_cancelled_error());
+            }
+
+            let mut frame = self.stack.pop_ready().ok_or("Stack is empty")?;
             self.log(format!("Executing frame {:?}", frame.id));
             frame.state = FrameState::Running;
 
@@ -126,7 +154,7 @@ impl<E: EventEmitter> Executor<E> {
                         error: err,
                         duration_ms,
                     });
-                    self.handle_frame_completion(frame)?;
+                    self.complete(frame)?;
                 }
             }
         }
@@ -187,17 +215,6 @@ impl<E: EventEmitter> Executor<E> {
 
         for action in ctx.source_actions {
             match action {
-                SourceAction::OpenExisting(source_id) => {
-                    if let Some(descriptor) = self.result_source_store.get_descriptor(&source_id) {
-                        self.emit(ExecutionEvent::OpenSourceWindow {
-                            source_id,
-                            presentation: descriptor.presentation.clone(),
-                            window_title: descriptor.title.clone(),
-                        });
-                    } else {
-                        self.log(format!("Existing source '{}' was not found", source_id));
-                    }
-                }
                 SourceAction::PublishRecord(record) => {
                     let source_id = record.descriptor.source_id.clone();
                     let presentation = record.descriptor.presentation.clone();
@@ -367,45 +384,40 @@ impl<E: EventEmitter> Executor<E> {
         match effect {
             ExecutionEffect::Done => {
                 self.log(format!("Frame {:?} completed", frame.id));
-                self.handle_frame_completion(frame)?;
+                self.complete(frame)?;
             }
 
+            // 透明节点：子帧挂到本帧收到的 join_target（接力棒下传，保持同一作用域），
+            // 随后本帧完成。TriggerSequence 语义相同（多个输出同属父作用域）。
             ExecutionEffect::TriggerOutput(role) => {
                 self.log(format!("Triggering output {:?}", role));
-                // 本帧触发后立即完成，子帧应挂到「最近的 waiting 祖先」（frame.parent_frame），
-                // 而非即将出栈的本帧；否则等待中的 Sequence/Branch 祖先会因看不到本分支
-                // 的后续子树而提前恢复，导致 Then 分支交错执行。
-                self.trigger_output_from_node_and_check(frame.node_id, role, frame.parent_frame)?;
-
-                self.log(format!("Frame {:?} completed (after trigger)", frame.id));
-                self.handle_frame_completion(frame)?;
-            }
-
-            ExecutionEffect::TriggerAndContinue { current, remaining } => {
-                self.log(format!(
-                    "Triggering {:?} with {} remaining",
-                    current,
-                    remaining.len()
-                ));
-                self.trigger_and_continue(frame, current, remaining)?;
+                self.spawn(frame.node_id, role, frame.join_target)?;
+                self.complete(frame)?;
             }
 
             ExecutionEffect::TriggerSequence(roles) => {
                 self.log(format!("Triggering sequence of {} outputs", roles.len()));
-                self.trigger_sequence(frame.clone(), roles)?;
-
-                self.log(format!("Frame {:?} completed (after sequence)", frame.id));
-                self.handle_frame_completion(frame)?;
+                for role in roles.into_iter().rev() {
+                    self.spawn(frame.node_id, role, frame.join_target)?;
+                }
+                self.complete(frame)?;
             }
 
-            ExecutionEffect::Suspend {
-                resume_token,
-                resume_output,
-            } => {
-                self.log(format!("Suspending frame {:?}", frame.id));
-                self.suspend_frame(frame, resume_token, resume_output)?;
+            // Sequence：新建作用域，等待 current 分支整棵子树排空后再触发下一个 Then。
+            ExecutionEffect::TriggerAndContinue { current, remaining } => {
+                self.log(format!(
+                    "Sequence {:?}: firing {:?}, {} remaining",
+                    frame.id,
+                    current,
+                    remaining.len()
+                ));
+                let mut roles = Vec::with_capacity(1 + remaining.len());
+                roles.push(current);
+                roles.extend(remaining);
+                self.begin_wait(frame, WaitKind::Continuation { remaining: roles })?;
             }
 
+            // Loop：新建作用域，等待 body 整棵子树排空后重跑循环节点。
             ExecutionEffect::Loop {
                 body,
                 completed,
@@ -419,121 +431,131 @@ impl<E: EventEmitter> Executor<E> {
         Ok(())
     }
 
-    /// 处理帧完成
-    fn handle_frame_completion(&mut self, frame: ExecutionFrame) -> Result<(), String> {
-        if let Some(parent_id) = frame.parent_frame {
-            self.log(format!("Frame {:?} has parent {:?}", frame.id, parent_id));
+    /// 帧完成：对其 join_target 计数 -1（唯一 -1 处）；归零且处于 Waiting 时恢复。
+    fn complete(&mut self, frame: ExecutionFrame) -> Result<(), String> {
+        let Some(owner_id) = frame.join_target else {
+            return Ok(());
+        };
 
-            if !self.stack.has_active_children(parent_id) {
-                self.log(format!("All children of {:?} completed", parent_id));
-
-                let is_waiting = self
-                    .stack
-                    .get_frame(parent_id)
-                    .map(|f| f.state == FrameState::WaitingForChild)
-                    .unwrap_or(false);
-
-                if is_waiting {
-                    if let Some(mut parent_frame) = self.stack.remove(parent_id) {
-                        self.log(format!("Resuming parent frame {:?}", parent_id));
-
-                        if !parent_frame.remaining_continuations.is_empty() {
-                            let current = parent_frame.remaining_continuations.remove(0);
-                            let remaining =
-                                std::mem::take(&mut parent_frame.remaining_continuations);
-
-                            self.log(format!(
-                                "Triggering {:?} with {} remaining",
-                                current,
-                                remaining.len()
-                            ));
-                            self.trigger_and_continue(parent_frame, current, remaining)?;
-                        } else {
-                            self.log(format!(
-                                "Parent frame {:?} finished all continuations",
-                                parent_id
-                            ));
-                            self.handle_frame_completion(parent_frame)?;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// 触发单个输出
-    fn trigger_output(&mut self, frame: ExecutionFrame, role: ExecRole) -> Result<(), String> {
-        self.trigger_output_from_node(frame.node_id, role, Some(frame.id))
-    }
-
-    /// 从指定节点触发输出
-    fn trigger_output_from_node(
-        &mut self,
-        node_id: NodeId,
-        role: ExecRole,
-        parent_frame: Option<FrameId>,
-    ) -> Result<(), String> {
-        self.trigger_output_from_node_and_check(node_id, role, parent_frame)?;
-        Ok(())
-    }
-
-    /// 触发并继续（用于 Sequence）
-    fn trigger_and_continue(
-        &mut self,
-        mut frame: ExecutionFrame,
-        current: ExecRole,
-        mut remaining: Vec<ExecRole>,
-    ) -> Result<(), String> {
-        let frame_id = frame.id;
-        let node_id = frame.node_id;
-
-        let mut current_role = current;
-        loop {
-            let insert_index = self.stack.len();
-
-            let has_downstream = self.trigger_output_from_node_and_check(
-                node_id,
-                current_role.clone(),
-                Some(frame_id),
-            )?;
-
-            if has_downstream {
-                frame.remaining_continuations = remaining;
-                frame.state = FrameState::WaitingForChild;
-                self.stack.insert_at(insert_index, frame);
+        let should_resume = {
+            let Some(owner) = self.stack.get_mut(owner_id) else {
                 return Ok(());
-            }
-
+            };
+            owner.pending_children = owner.pending_children.saturating_sub(1);
+            let pending = owner.pending_children;
+            let resume = pending == 0 && owner.state == FrameState::Waiting;
             self.log(format!(
-                "No downstream for {:?}, processing next continuation immediately",
-                current_role
+                "Frame {:?} done -> owner {:?} pending={}",
+                frame.id, owner_id, pending
             ));
+            resume
+        };
+
+        if should_resume {
+            self.resume(owner_id)?;
+        }
+        Ok(())
+    }
+
+    /// 让一个 waiter 帧进入等待：park 到 frames，并触发它要等待的分支。
+    ///
+    /// 若该分支没有任何下游（pending 仍为 0），立即恢复（避免死等）。
+    fn begin_wait(&mut self, mut frame: ExecutionFrame, wait: WaitKind) -> Result<(), String> {
+        let owner_id = frame.id;
+        frame.state = FrameState::Waiting;
+        frame.pending_children = 0;
+        frame.wait = Some(wait);
+        self.stack.park(frame);
+
+        self.dispatch_wait(owner_id)
+    }
+
+    /// 触发 Sequence 当前要等待的 Then 分支；无下游时立即推进到下一个，
+    /// 全部耗尽则收尾 waiter。仅用于 `WaitKind::Continuation`。
+    fn dispatch_wait(&mut self, owner_id: FrameId) -> Result<(), String> {
+        loop {
+            let (node_id, kind) = {
+                let owner = self
+                    .stack
+                    .get(owner_id)
+                    .ok_or_else(|| format!("Waiter {:?} not found", owner_id))?;
+                (owner.node_id, owner.wait.clone())
+            };
+
+            let Some(WaitKind::Continuation { mut remaining }) = kind else {
+                return Ok(());
+            };
 
             if remaining.is_empty() {
-                self.log(format!(
-                    "Frame {:?} completed (no more continuations)",
-                    frame_id
-                ));
-                self.handle_frame_completion(frame)?;
-                return Ok(());
+                // 所有 Then 已耗尽 -> Sequence 完成
+                return self.finish_waiter(owner_id);
             }
-
-            current_role = remaining.remove(0);
+            let current = remaining.remove(0);
+            if let Some(owner) = self.stack.get_mut(owner_id) {
+                owner.wait = Some(WaitKind::Continuation { remaining });
+            }
+            let spawned = self.spawn(node_id, current.clone(), Some(owner_id))?;
+            if spawned == 0 {
+                self.log(format!(
+                    "Sequence {:?}: {:?} has no downstream, advancing",
+                    owner_id, current
+                ));
+                continue;
+            }
+            return Ok(());
         }
     }
 
-    /// 触发输出并返回是否有下游连接，同时发送 ConnectionActive 事件
-    fn trigger_output_from_node_and_check(
+    /// waiter 全部子任务完成后的恢复入口。
+    fn resume(&mut self, owner_id: FrameId) -> Result<(), String> {
+        let kind = self.stack.get(owner_id).and_then(|f| f.wait.clone());
+        match kind {
+            Some(WaitKind::Continuation { .. }) => {
+                self.log(format!("Resuming sequence {:?}", owner_id));
+                self.dispatch_wait(owner_id)
+            }
+            Some(WaitKind::LoopReentry) => {
+                self.log(format!("Loop body drained, re-evaluating {:?}", owner_id));
+                self.reenter_loop(owner_id)
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// 循环重入：把循环节点重新入队执行（计数器已在节点内推进）。
+    fn reenter_loop(&mut self, owner_id: FrameId) -> Result<(), String> {
+        let Some(owner) = self.stack.remove(owner_id) else {
+            return Ok(());
+        };
+        self.stack
+            .push_ready(owner.node_id, owner.triggered_by, owner.join_target);
+        Ok(())
+    }
+
+    /// waiter 彻底完成：从 frames 移除，并像普通帧一样对其 join_target 收尾。
+    fn finish_waiter(&mut self, owner_id: FrameId) -> Result<(), String> {
+        let Some(mut owner) = self.stack.remove(owner_id) else {
+            return Ok(());
+        };
+        owner.state = FrameState::Completed;
+        owner.wait = None;
+        self.log(format!("Waiter {:?} finished", owner_id));
+        self.complete(owner)
+    }
+
+    /// spawn 下游帧：为 role 的每个下游创建 Ready 帧，并对 join_target 计数 +1。
+    ///
+    /// 返回创建的下游帧数量（0 表示该输出无连接）。这是 `pending_children`
+    /// 的唯一 +1 处，同时发送 `ConnectionActive` 事件。
+    fn spawn(
         &mut self,
         node_id: NodeId,
         role: ExecRole,
-        parent_frame: Option<FrameId>,
-    ) -> Result<bool, String> {
+        join_target: Option<FrameId>,
+    ) -> Result<usize, String> {
         let pin_role = PinRole::Exec(role);
 
-        let (output_pin_id, downstream_pins, downstream_nodes) = {
+        let (output_pin_id, downstream_nodes) = {
             let graph = self.graph.lock().unwrap();
             let output_pin = graph
                 .get_pin_instance_by_pin_role(node_id, &pin_role)
@@ -542,35 +564,25 @@ impl<E: EventEmitter> Executor<E> {
                 })?;
 
             let output_pin_id = output_pin.id;
-            let downstream_pins = graph.get_downstream_by_pin_id(output_pin_id);
-
-            if downstream_pins.is_empty() {
-                return Ok(false);
-            }
-
-            let downstream_nodes: Vec<_> = downstream_pins
-                .iter()
-                .filter_map(|&pin_id| {
+            let downstream_nodes: Vec<_> = graph
+                .get_downstream_by_pin_id(output_pin_id)
+                .into_iter()
+                .filter_map(|pin_id| {
                     graph
                         .get_node_id_by_pin_id(pin_id)
                         .map(|node_id| (pin_id, node_id))
                 })
                 .collect();
 
-            (output_pin_id, downstream_pins, downstream_nodes)
+            (output_pin_id, downstream_nodes)
         };
 
-        if downstream_pins.is_empty() {
+        if downstream_nodes.is_empty() {
             self.log(format!("No downstream connections for {:?}", pin_role));
-            return Ok(false);
+            return Ok(0);
         }
 
         for (downstream_pin_id, downstream_node) in &downstream_nodes {
-            self.log(format!(
-                "Creating frame for downstream node {:?}",
-                downstream_node
-            ));
-
             self.emit(ExecutionEvent::ConnectionActive {
                 from_pin_id: output_pin_id.to_string(),
                 to_pin_id: downstream_pin_id.to_string(),
@@ -578,54 +590,27 @@ impl<E: EventEmitter> Executor<E> {
 
             let frame_id =
                 self.stack
-                    .push_new(*downstream_node, Some(*downstream_pin_id), parent_frame);
+                    .push_ready(*downstream_node, Some(*downstream_pin_id), join_target);
 
-            self.log(format!("Created frame {:?}", frame_id));
+            if let Some(owner_id) = join_target {
+                if let Some(owner) = self.stack.get_mut(owner_id) {
+                    owner.pending_children += 1;
+                }
+            }
+
+            self.log(format!(
+                "Spawned frame {:?} for node {:?} (owner {:?})",
+                frame_id, downstream_node, join_target
+            ));
         }
 
-        Ok(true)
-    }
-
-    /// 触发序列（逆序压栈）
-    ///
-    /// 本帧触发后立即完成，故各步子帧挂到 `frame.parent_frame`（最近的 waiting 祖先），
-    /// 与 `TriggerOutput` 一致，避免祖先提前恢复。
-    fn trigger_sequence(
-        &mut self,
-        frame: ExecutionFrame,
-        roles: Vec<ExecRole>,
-    ) -> Result<(), String> {
-        for role in roles.into_iter().rev() {
-            self.trigger_output_from_node(frame.node_id, role, frame.parent_frame)?;
-        }
-        Ok(())
-    }
-
-    /// 暂停帧
-    fn suspend_frame(
-        &mut self,
-        mut frame: ExecutionFrame,
-        resume_token: ResumeToken,
-        _resume_output: ExecRole,
-    ) -> Result<(), String> {
-        frame.state = FrameState::Suspended;
-        let frame_id = frame.id;
-        self.suspended_frames.insert(resume_token, frame_id);
-        Ok(())
-    }
-
-    /// 恢复暂停的帧
-    pub fn resume(&mut self, token: ResumeToken) -> Result<(), String> {
-        let frame_id = self
-            .suspended_frames
-            .remove(&token)
-            .ok_or_else(|| format!("Resume token {:?} not found", token))?;
-
-        self.log(format!("Resumed frame {:?}", frame_id));
-        Ok(())
+        Ok(downstream_nodes.len())
     }
 
     /// 处理循环
+    ///
+    /// - 继续：新建作用域 (LoopReentry)，park 并触发 body；body 无下游则直接走完成路径。
+    /// - 停止：触发 completed 到父作用域，本帧完成。
     fn handle_loop(
         &mut self,
         frame: ExecutionFrame,
@@ -633,11 +618,37 @@ impl<E: EventEmitter> Executor<E> {
         completed: ExecRole,
         should_continue: bool,
     ) -> Result<(), String> {
-        if should_continue {
-            self.trigger_output(frame, body)?;
-        } else {
-            self.trigger_output(frame, completed)?;
+        if !should_continue {
+            self.log("Loop finished, triggering completed".to_string());
+            self.spawn(frame.node_id, completed, frame.join_target)?;
+            return self.complete(frame);
         }
+
+        let node_id = frame.node_id;
+        let owner_id = frame.id;
+
+        // 进入 body 作用域：先 park 为 waiter，再 spawn body 到该作用域。
+        let mut waiter = frame;
+        waiter.state = FrameState::Waiting;
+        waiter.pending_children = 0;
+        waiter.wait = Some(WaitKind::LoopReentry);
+        let join_target = waiter.join_target;
+        self.stack.park(waiter);
+
+        self.log(format!("Loop {:?} triggering body {:?}", owner_id, body));
+        let spawned = self.spawn(node_id, body, Some(owner_id))?;
+
+        if spawned == 0 {
+            // body 无下游：不进入等待，直接触发 completed 到父作用域并完成。
+            self.log("Loop body has no downstream, triggering completed".to_string());
+            let waiter = self
+                .stack
+                .remove(owner_id)
+                .ok_or_else(|| format!("Loop waiter {:?} lost", owner_id))?;
+            self.spawn(node_id, completed, join_target)?;
+            return self.complete(waiter);
+        }
+
         Ok(())
     }
 

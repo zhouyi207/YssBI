@@ -341,6 +341,8 @@ export const zhCN = {
     pauseReplay: "暂停回放",
     resumeReplay: "继续回放",
     stopReplay: "停止回放",
+    cancelExecution: "中断执行",
+    executionCancelled: "执行已中断",
     executing: "执行中...",
     executeCurrentEvent: "执行当前 Event",
     getVariable: "获取 {{name}}",

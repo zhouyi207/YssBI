@@ -669,7 +669,14 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.07.08
 
-
+- [x] **画布执行中断**：右上角运行按钮左侧新增「中断执行」；`ExecutionCancelRegistry` + `cancel_execution` command + `Executor` 协作式取消（帧间检查）；前端 `cancelGraphExecution` / `interruptExecution`；与回放 `stopReplay` 分离。
+- [x] **控制流节点 Phase 1（Do / Merge / Sleep）**：`Do`（In→Out 透传 exec）；`Merge`（多路 exec 输入汇合为 Out）；`Sleep`（`Duration` 秒，上限 60s，同步 `thread::sleep`）；`catalog/control` + `docs/en|zh` + 单测。
+- [x] **控制流节点 Phase 2（For Loop / Switch）**：`For Loop`（`Count` + Index + Body/Completed，`ExecutionEffect::Loop` + `loop_counters`）；`Switch`（`Selector: Int64` + Case* + Default，`ExecRole::Cases(usize)`）；文档与单测。
+- [x] **控制流节点 Phase 3（While Loop）**：`While`（`Condition` + `MaxIterations` 默认 1000 + Body/Completed）；`On Error` 待错误传播模型定型后再做。
+- [x] **执行器等待协议根治（join 作用域 + 子任务计数）**：用显式 `join_target` / `pending_children` / `WaitKind` 替换隐式 `parent_frame` + `has_active_children` 扫栈；`ExecutionStack` 拆为 `frames` + `ready`；执行器收敛为 `spawn(+1)` / `complete(-1)` / `resume` 三单点；删除 `Suspend`/`ResumeToken` 死代码及 `insert_at`/`trigger_output` 等冗余；修复 Sequence×For/While 嵌套时 Then1 未跑完就执行 Then2；`logic_test` 新增 `test_sequence_waits_for_for_loop_before_next` / `test_sequence_waits_for_while_loop_before_next`。
+- [x] **View 快照与死代码清理**：View 改为 `ensure_view_source_for_input` 每次发布 `window_{uuid}`；删除 `open_registered_source` / `SourceAction::OpenExisting` / executor 对应分支；测试 `RecordingEmitter` + `WindowSourceEmitter` 合并为 `CapturingEmitter`。
+- [x] **执行前清空运行期状态**：`GraphRuntime::reset_execution_state()` 清空 `pins_runtime_state`、`loop_counters`、`ExecutionDataStore`；`Executor::run` 每次执行前调用；删除从未读写的 `nodes_runtime_state` 及 `NodeRuntimeState`/`NodeState`；`logic_test` 新增 `test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes`。
+- [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 
 ## v1.0 待办
 
