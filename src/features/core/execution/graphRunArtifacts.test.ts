@@ -7,6 +7,7 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     status: 'idle',
     nodeStates: new Map(),
     completedConnections: new Set(),
+    flowingConnections: new Set(),
     recording: [],
     graphDirty: false,
     pinResults: new Map(),

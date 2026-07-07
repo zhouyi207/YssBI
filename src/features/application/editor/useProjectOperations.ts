@@ -9,12 +9,22 @@ import { ProjectService, isExecutionCancelledError } from '@/services/project/pr
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useExecutionStore, getExecutionEventGraph, resolveExecutionGraphId, graphHasClearableArtifacts } from '@/features/core/execution';
+import {
+  useExecutionStore,
+  getExecutionEventGraph,
+  resolveExecutionGraphId,
+  graphHasClearableArtifacts,
+  enqueueLiveExecutionEvent,
+} from '@/features/core/execution';
 import { openPresentationWindowSafe } from '@/features/application/window';
 import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
 import type { Presentation } from '@/features/core/resultSource';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
-import { enqueueLiveExecutionEvent, flushLiveExecutionEventsNow } from '@/features/core/execution';
+import {
+  ensureGraphExecutionTerminal,
+  firstNodeErrorMessage,
+  recordingHadError,
+} from '@/features/core/execution/executionRecording';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
@@ -144,24 +154,20 @@ export function useProjectOperations() {
     recording: RecordedEvent[],
     outcome: 'success' | 'cancelled' | 'error',
   ) => {
-    flushLiveExecutionEventsNow();
     const store = useExecutionStore.getState();
-    store.commitExecutionVisual(graphId);
-
-    if (outcome === 'success') {
-      store.setRecording(graphId, recording);
-      if (store.graphs[graphId]?.status === 'running') {
-        store.completeExecution(graphId);
-      }
-      return;
-    }
 
     if (outcome === 'cancelled') {
       store.interruptExecution(graphId);
       return;
     }
 
-    store.failExecution(graphId);
+    store.commitExecutionVisual(graphId);
+
+    if (recording.length > 0) {
+      store.setRecording(graphId, recording);
+    }
+
+    ensureGraphExecutionTerminal(graphId, outcome === 'error' ? 'error' : 'success');
   }, []);
 
   const executeGraph = useCallback(async (targetGraphId?: string) => {
@@ -203,13 +209,23 @@ export function useProjectOperations() {
       }, graphId);
 
       await Promise.all(pendingWindows);
-      finalizeExecutionRun(graphId, recording, 'success');
+      const hadError = recordingHadError(recording);
+      finalizeExecutionRun(graphId, recording, hadError ? 'error' : 'success');
 
       if (res.logs.length > 0) {
         logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
       }
 
-      uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
+      if (hadError) {
+        const nodeErr = firstNodeErrorMessage(recording);
+        uiStore.showToast(
+          nodeErr ? `执行失败: ${nodeErr}` : `执行失败: ${currentGraph.name}`,
+          "error",
+          5000,
+        );
+      } else {
+        uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
+      }
     } catch (e) {
       if (isExecutionCancelledError(e)) {
         logger.exec.info(`执行已中断: ${currentGraph.name} (${graphId})`);

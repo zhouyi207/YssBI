@@ -514,6 +514,50 @@ impl ProjectState {
         Ok(existing)
     }
 
+    /// 执行前预加载本次可能触达的函数图（含嵌套 Call），避免 Call Function 运行时
+    /// `project_data.graphs` 中缺少目标函数。
+    pub fn preload_execution_dependencies(
+        &self,
+        target_graph_id: Option<GraphId>,
+    ) -> Result<(), String> {
+        use std::collections::{HashSet, VecDeque};
+
+        let entry_ids: Vec<GraphId> = {
+            let data = self.project_data.read().unwrap();
+            data.graphs
+                .iter()
+                .filter(|(graph_id, graph)| {
+                    graph.kind == GraphKind::Event
+                        && target_graph_id.is_none_or(|target| **graph_id == target)
+                })
+                .map(|(graph_id, _)| *graph_id)
+                .collect()
+        };
+
+        let mut seen = HashSet::new();
+        let mut queue: VecDeque<GraphId> = entry_ids.into_iter().collect();
+
+        while let Some(graph_id) = queue.pop_front() {
+            if !seen.insert(graph_id) {
+                continue;
+            }
+
+            if self.get_graph(&graph_id).is_none() {
+                self.load_graph_from_current_project(&graph_id)?;
+            }
+
+            let Some(graph) = self.get_graph(&graph_id) else {
+                continue;
+            };
+
+            for (_, target_id) in call_site_pairs_from_graph(&graph) {
+                queue.push_back(target_id);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Rename a graph: unique name within kind, persist document, return final name + kind.
     pub fn rename_graph(
         &self,

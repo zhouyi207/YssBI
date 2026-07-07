@@ -5,6 +5,7 @@ export const EXECUTION_REPLAY_DELAYS_MS: Record<string, number> = {
   nodeComplete: 80,
   nodeError: 400,
   connectionActive: 100,
+  connectionFlow: 80,
   executionComplete: 80,
 };
 

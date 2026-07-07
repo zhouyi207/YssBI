@@ -28,6 +28,8 @@ pub async fn execute_project(
         })
         .transpose()?;
 
+    state.preload_execution_dependencies(target_graph_id)?;
+
     let cancel_for_task = cancel.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         execute_project_data(

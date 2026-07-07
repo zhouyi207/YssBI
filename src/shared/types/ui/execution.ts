@@ -15,6 +15,7 @@ export type ExecutionEvent =
   | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
   | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
+  | { event: 'connectionFlow'; data: { fromPinId: string; toPinId: string } }
   | {
       event: 'openSourceWindow';
       data: { sourceId: string; presentation: Presentation; windowTitle: string };
@@ -60,7 +61,10 @@ export interface PinResultState {
 export interface GraphExecutionState {
   status: ExecutionStatus;
   nodeStates: Map<string, NodeExecutionState>;
+  /** data 取数阶段已声明的 input 连线（ConnectionActive） */
   completedConnections: Set<string>;
+  /** data 值已就绪、沿 output→input 流动的连线（ConnectionFlow）；exec 仍只用 completedConnections */
+  flowingConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
   /** output pin id -> latest backend source descriptor */

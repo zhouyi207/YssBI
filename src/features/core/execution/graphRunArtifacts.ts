@@ -24,5 +24,6 @@ export function graphHasClearableArtifacts(
     || graph.status === 'error'
     || graph.nodeStates.size > 0
     || graph.completedConnections.size > 0
+    || graph.flowingConnections.size > 0
   );
 }

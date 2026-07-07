@@ -1,13 +1,25 @@
 import { create } from 'zustand';
-import type { ExecutionState, GraphExecutionState, ExecutionEvent, RecordedEvent, PinResultState } from '@/shared/types/ui';
+import type {
+  ExecutionState,
+  GraphExecutionState,
+  ExecutionEvent,
+  RecordedEvent,
+  PinResultState,
+} from '@/shared/types/ui';
 import { flushLiveExecutionEventsNow } from './executionLiveFeed';
-import { clearExecutionVisual, getExecutionVisual, resetExecutionVisual, snapshotToGraphPatch } from './executionVisualSession';
+import {
+  clearExecutionVisual,
+  getExecutionVisual,
+  resetExecutionVisual,
+  snapshotToGraphPatch,
+} from './executionVisualSession';
 import { clearedRunArtifactsPatch } from './graphRunArtifacts';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
   nodeStates: new Map(),
   completedConnections: new Set(),
+  flowingConnections: new Set(),
   recording: [],
   graphDirty: false,
   pinResults: new Map(),
@@ -15,12 +27,13 @@ const emptyGraphState = (): GraphExecutionState => ({
 
 function clearedVisualPatch(): Pick<
   GraphExecutionState,
-  'status' | 'nodeStates' | 'completedConnections'
+  'status' | 'nodeStates' | 'completedConnections' | 'flowingConnections'
 > {
   return {
     status: "idle",
     nodeStates: new Map(),
     completedConnections: new Set(),
+    flowingConnections: new Set(),
   };
 }
 
@@ -73,6 +86,20 @@ function updateGraph(
   };
 }
 
+function commitVisualSnapshot(
+  graphId: string,
+  set: (fn: (state: ExecutionState) => Partial<ExecutionState> | ExecutionState) => void,
+): void {
+  const snap = getExecutionVisual();
+  if (snap.graphId !== graphId) {
+    clearExecutionVisual();
+    return;
+  }
+  const patch = snapshotToGraphPatch(snap);
+  clearExecutionVisual();
+  set((state) => updateGraph(state, graphId, patch));
+}
+
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   graphs: {},
   playbackGraphId: null,
@@ -121,14 +148,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   commitExecutionVisual: (graphId) => {
     flushLiveExecutionEventsNow();
-    const snap = getExecutionVisual();
-    if (snap.graphId !== graphId) {
-      clearExecutionVisual();
-      return;
-    }
-    const patch = snapshotToGraphPatch(snap);
-    clearExecutionVisual();
-    set((state) => updateGraph(state, graphId, patch));
+    commitVisualSnapshot(graphId, set);
   },
 
   recordPinResult: (graphId, result) => set((state) => {

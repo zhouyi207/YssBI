@@ -423,7 +423,7 @@ src/app/appConfig/appLinks.ts
   - 执行 data 线高亮：执行器在每次 `NodeStart` 后调用 `emit_data_input_connections`，为该节点所有已连线 data input 发 `ConnectionActive`；`EdgesOverlay` 改读 `graphDataStore.connections` 作单一数据源
 - [x] 批量节点复制粘贴「一个一个出现并连接」：粘贴改为单次 `ConnectionsBatchCreated` + 一次 `PinTypesInferred`，前端 `batchConnect` 单次 set，节点与连线同时出现（2026.06.28）
 - [x] 连接 Pin 卡顿（后端）：schema 改为增量传播（`propagate_schemas_from` 下游闭包），连接/断开/批量统一经 `finish_graph_effects`，批量粘贴由 O(N) 次全图收尾降为每轮一次；类型推断暂保留全图以确保 unify 正确性（2026.06.28）
-- [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（执行器在 `NodeStart` 后对节点全部已连线 data input 发 `ConnectionActive`，`EdgesOverlay` 读 store 连接，2026.06.28 根治）
+- [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（2026.07.07 按边取数/流动重构，见上条；`EdgesOverlay` 区分 pull/flow 双态）
 - [x] **Sequence 执行顺序修复**：`TriggerOutput` / `TriggerSequence` 触发后立即完成的子帧改挂 `frame.parent_frame`（最近 waiting 祖先），不再挂到即将出栈的本帧；`TriggerAndContinue` 仍挂 `frame.id`；Loop 路径不变 → Then1 整条下游子树执行完毕后再执行 Then2，避免 Then 分支交错（`executor.rs`）
 - [x] **Sequence 执行顺序回归测试**：`tests/common/mod.rs` 新增 `RecordingEmitter` 记录 `NodeStart` 顺序；`logic_test.rs` 新增 `test_sequence_runs_branch_fully_before_next`（Then1→A→A2、Then2→B→B2，断言 `[Seq, A, A2, B, B2]`）
 - [x] **导入数据窗口与卡顿修复**：
@@ -713,6 +713,18 @@ src/app/appConfig/appLinks.ts
   - **Phase 2**：`function_call_site_index.rs` 反向索引；`rebuild_function_call_site_index` 于项目加载；`insert_graph` / `remove_graph` / `unload_graph` + 节点 create/delete/patch 增量维护。
   - **Phase 3**：`collect_function_call_sites` 只查内存索引（零磁盘）；`sync_all_call_nodes_in_graph` 单次 `with_graph_mut` 批量投影；未加载 caller 同步后批量 `persist_loaded_graph`。
   - **验证**：`function_call_test`（8，含 `call_site_index_tracks_create_and_delete_without_full_graph_scan`）、`shell_node_test`（7）、`function_call_site_index` 单测全绿。
+- [x] **执行连线动画根治（live 绿高亮 + 取数/流动双态 + 架构去重）**：
+  - **根因**：`invoke("execute_project")` 在 Channel 排空前返回 → `finalize` 用不完整 recording 提交视觉；`nodeError` 立即把全局 `status` 置 `error` → `isRunning=false` 提前关掉连线动画；旧执行器在 `NodeStart` 批量 `emit_data_input_connections` + `execute_upstream_data_nodes` 导致 fan-out、纯 data 链 pull/flow 顺序错乱、exec 驱动上游无 flow。
+  - **后端执行器拆分**：删除单体 `executor.rs`（~697 行）→ `executor/mod.rs` + `wire_events.rs`（`ConnectionActive`/`ConnectionFlow` **唯一发射点**）+ `data_inputs.rs`（`satisfy_data_inputs` → 按边 `emit_data_pull` → 递归求值 → `emit_data_flow`）；`absorb_pin_side_effects` 共用 pin 副作用收集；`halted` 标志 + 清空 ready 队列，节点失败后 Sequence 不再继续 Then 3。
+  - **Call Function 预加载**：`ProjectState::preload_execution_dependencies`（BFS 扫描 Call 目标函数图）于 `execute.rs` spawn 前调用，修复「目标函数图未加载」。
+  - **Channel 排空**：`executionChannelDrain.ts`（`createExecutionStreamDrain` / `bindExecutionEventChannel`）在 invoke 返回后 `waitForStreamEnd` 直至 `executionComplete` 处理完毕。
+  - **前端视觉单会话**：`executionVisualSession.ts` 承载 live/replay 快照（`completedConnections`=取数 pull、`flowingConnections`=流动 flow）；`executionLiveFeed.ts` 按帧批处理，`connectionFlow` 延后一帧以区分双态；`commitExecutionVisual` 单次 flush + 写入 store。
+  - **live 结束 / replay**：`finalizeExecutionRun` 统一 `commit` → `setRecording` → `ensureGraphExecutionTerminal`（仅 status 仍为 `running` 时兜底）；replay 不再调 `startExecution`（避免清空 recording 导致只能播一次）；`play()` 对 recording 做 spread 快照。
+  - **错误与 toast**：`nodeError` 保持 `running` 直至 `executionComplete`；`executionRecording.ts`（`recordingHadError` 优先读 `executionComplete.hasError`）；`useProjectOperations` 按录制结果 toast。
+  - **画布连线渲染**：`Edge.tsx` / `EdgesOverlay.tsx` 区分 `isPullActive` / `isFlowActive`（pull 脉冲发光 + flow 流动虚线）；`GraphExecutionState` 增 `flowingConnections`。
+  - **死代码清理**：移除 `waitForRecordingIdle`、`commitExecutionVisualFromRecording`、`replayRecordingToVisual`、`applyExecutionVisualEventInternal` 薄包装；`wire_events` 共用 `emit_connection_active`。
+  - **验证**：`cargo check`；`function_call_test` + `logic_test`；vitest `executionVisualSession` / `executionRecording` / `executionChannelDrain` / `useExecutionPlayback` / `graphRunArtifacts`（20 项）全绿。
+- [x] **执行 data 线高亮文档同步（2026.07.07 条目更正）**：历史描述中的 NodeStart 批量 `emit_data_input_connections` 已 supersede 为按边取数/流动模型（见上条）。
 
 ## v1.0 待办
 
@@ -732,7 +744,9 @@ src/app/appConfig/appLinks.ts
 cargo test：150 lib 测试 + 集成套件（含新增 function_call_test.rs、更新的 shell_node_test.rs）全部通过。
 相关前端 vitest（FunctionDetailPanel / graphDocumentActions / GraphEventHandler / functionSignatureSync）全绿。
 tsc：92 个错误，均为既有问题，比干净树的 93 个还少 1 个——本次改动未引入新的类型错误。
-
+- [ ] OLS Summary 取数样式不发光：可能是因为之前 new function 报错的缘故，导致动画不发光了；并没有加错误处理逻辑，在这里需要验证
+- [ ] ols 取数的逻辑是一个个的，之前为什么是一批一批的？之前是做了形式优化吗？
+- [ ] 拖动 divide 节点的 b 打开右键菜单的时候，报错：Uncaught Error: Pin pin-c3f93066-e59b-4f03-8804-5878a11f5e6f (新 Pin) is missing structured dataType
 
 # TODOLIST
 

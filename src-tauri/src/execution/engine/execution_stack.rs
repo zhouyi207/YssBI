@@ -84,6 +84,11 @@ impl ExecutionStack {
         self.ready.is_empty()
     }
 
+    /// 清空待执行队列（节点失败后中止剩余调度）。
+    pub fn clear_ready(&mut self) {
+        self.ready.clear();
+    }
+
     /// 获取栈的调试信息
     pub fn debug_info(&self) -> String {
         let mut info = format!("ExecutionStack (ready: {})\n", self.ready.len());

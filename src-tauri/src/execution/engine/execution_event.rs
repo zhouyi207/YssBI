@@ -33,9 +33,16 @@ pub enum ExecutionEvent {
         duration_ms: u64,
     },
 
-    /// 连接激活（数据/控制流经过该连接）
+    /// 数据取数：消费者节点开始执行时声明依赖的 data 输入连线。
     #[serde(rename_all = "camelCase")]
     ConnectionActive {
+        from_pin_id: String,
+        to_pin_id: String,
+    },
+
+    /// 数据流动：上游产出可用值后，值沿 output→input 连线传向消费者。
+    #[serde(rename_all = "camelCase")]
+    ConnectionFlow {
         from_pin_id: String,
         to_pin_id: String,
     },

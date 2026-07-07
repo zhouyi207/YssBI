@@ -15,6 +15,10 @@ use super::execution_effect::ExecutionEffect;
 use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState, WaitKind};
 use super::execution_stack::ExecutionStack;
+use self::wire_events::emit_exec_spawn;
+
+mod data_inputs;
+mod wire_events;
 use crate::execution::{
     NodeExecutionContext, ResultSourceStore, SourceAction, build_json_presentation_source,
 };
@@ -53,6 +57,12 @@ pub struct Executor<E: EventEmitter> {
 
     /// Cooperative cancellation flag (set by `cancel_execution` command).
     cancel: Option<Arc<AtomicBool>>,
+
+    /// 首个节点失败后置位：不再 resume waiter / 清空待执行队列，避免 Sequence 继续 Then 3。
+    halted: bool,
+
+    /// 与 `halted` 配套的首个失败信息（供子程序向上传播）。
+    failed_message: Option<String>,
 }
 
 impl<E: EventEmitter> Executor<E> {
@@ -79,6 +89,8 @@ impl<E: EventEmitter> Executor<E> {
             result_source_store,
             run_id: uuid::Uuid::new_v4().simple().to_string(),
             cancel,
+            halted: false,
+            failed_message: None,
         }
     }
 
@@ -91,6 +103,13 @@ impl<E: EventEmitter> Executor<E> {
     /// 发送执行事件
     fn emit(&self, event: ExecutionEvent) {
         self.emitter.emit(event);
+    }
+
+    pub(crate) fn absorb_pin_side_effects(&mut self, ctx: &mut NodeExecutionContext) {
+        self.logs.append(&mut ctx.logs);
+        for event in ctx.pin_result_events.drain(..) {
+            self.emit(event);
+        }
     }
 
     /// 开始执行（从指定节点开始）
@@ -145,7 +164,6 @@ impl<E: EventEmitter> Executor<E> {
             self.emit(ExecutionEvent::NodeStart {
                 node_id: node_id_str.clone(),
             });
-            self.emit_data_input_connections(frame.node_id);
 
             match self.execute_node(&frame) {
                 Ok((effect, duration_ms)) => {
@@ -158,6 +176,8 @@ impl<E: EventEmitter> Executor<E> {
                 }
                 Err((err, duration_ms)) => {
                     has_error = true;
+                    self.halted = true;
+                    self.failed_message = Some(err.clone());
                     self.log(format!("Node {:?} failed: {}", frame.node_id, err));
                     log_exec!(
                         crate::log::LogLevel::Error,
@@ -171,6 +191,8 @@ impl<E: EventEmitter> Executor<E> {
                         duration_ms,
                     });
                     self.complete(frame)?;
+                    self.stack.clear_ready();
+                    break;
                 }
             }
         }
@@ -182,12 +204,18 @@ impl<E: EventEmitter> Executor<E> {
     /// `reset_execution_state` 并预置入参；这里不重置、不清 source、不发生命周期事件。
     pub fn run_subroutine(&mut self, entry_node: NodeId) -> Result<(), String> {
         self.stack.push_ready(entry_node, None, None);
-        self.drain().map(|_has_error| ())
+        if self.drain()? {
+            return Err(self
+                .failed_message
+                .take()
+                .unwrap_or_else(|| "子图执行失败".to_string()));
+        }
+        Ok(())
     }
 
     /// 无 exec 入参的函数调用：仅按数据依赖求值 `node_id` 的上游。
     pub fn evaluate_data_target(&mut self, node_id: NodeId) -> Result<(), String> {
-        self.execute_upstream_data_nodes(node_id)
+        self.satisfy_data_inputs(node_id)
     }
 
     /// 执行节点并返回 (ExecutionEffect, duration_ms)
@@ -203,8 +231,8 @@ impl<E: EventEmitter> Executor<E> {
             graph.get_node_definition_by_node_id(node_id)
         };
 
-        // 在执行节点之前，先执行所有上游的纯数据节点
-        self.execute_upstream_data_nodes(node_id)
+        // 在执行节点之前，先满足全部 data input 依赖（取数 → 流动）
+        self.satisfy_data_inputs(node_id)
             .map_err(|e| (e, 0u64))?;
 
         // 创建执行上下文
@@ -231,11 +259,8 @@ impl<E: EventEmitter> Executor<E> {
             Ok(ExecutionEffect::Done)
         };
 
-        // 收集日志
-        self.logs.extend(ctx.logs);
-        for event in ctx.pin_result_events {
-            self.emit(event);
-        }
+        // 收集日志与 pin 结果事件
+        self.absorb_pin_side_effects(&mut ctx);
 
         let node_duration_ms = node_start.elapsed().as_millis() as u64;
 
@@ -279,128 +304,6 @@ impl<E: EventEmitter> Executor<E> {
         }
 
         result.map(|r| (r, node_duration_ms))
-    }
-
-    /// 节点开始执行时，为其所有已连线的 data input 发射 ConnectionActive。
-    ///
-    /// 使「某 input 用到某 output 的值」的连线都能在前端高亮（含同一 output
-    /// 喂多个 input、Categorical 上游、已缓存值复用等场景）。
-    fn emit_data_input_connections(&self, node_id: NodeId) {
-        let connections: Vec<(String, String)> = {
-            let graph = self.graph.lock().unwrap();
-            graph
-                .get_node_pins(node_id)
-                .into_iter()
-                .filter(|pin| pin.is_input() && pin.is_data())
-                .filter_map(|pin| {
-                    graph
-                        .get_upstream_by_pin_id(pin.id)
-                        .map(|upstream_pin_id| (upstream_pin_id.to_string(), pin.id.to_string()))
-                })
-                .collect()
-        };
-
-        for (from_pin_id, to_pin_id) in connections {
-            self.emit(ExecutionEvent::ConnectionActive {
-                from_pin_id,
-                to_pin_id,
-            });
-        }
-    }
-
-    /// 递归执行所有上游的纯数据节点
-    fn execute_upstream_data_nodes(&mut self, node_id: NodeId) -> Result<(), String> {
-        let pins = {
-            let graph = self.graph.lock().unwrap();
-            graph.get_node_pins(node_id)
-        };
-
-        for pin in pins {
-            if !pin.is_input() || !pin.is_data() {
-                continue;
-            }
-
-            let upstream_info = {
-                let graph = self.graph.lock().unwrap();
-                graph
-                    .get_upstream_by_pin_id(pin.id)
-                    .and_then(|upstream_pin_id| {
-                        graph
-                            .get_node_id_by_pin_id(upstream_pin_id)
-                            .map(|upstream_node_id| {
-                                let upstream_definition =
-                                    graph.get_node_definition_by_node_id(upstream_node_id);
-                                (upstream_node_id, upstream_pin_id, upstream_definition)
-                            })
-                    })
-            };
-
-            if let Some((upstream_node_id, upstream_pin_id, upstream_definition)) = upstream_info {
-                // 可拉取的数据节点：有 data_evaluator 且实例上没有任何 exec pin。
-                // 覆盖普通数据节点，以及签名无 exec 的 Call Function。
-                let is_pullable = upstream_definition.data_evaluator.is_some()
-                    && !self.graph.lock().unwrap().node_has_exec_pins(upstream_node_id);
-                if is_pullable {
-                    self.execute_upstream_data_nodes(upstream_node_id)?;
-
-                    // 若上游输出 pin 已有有效值（同一执行内已被其他路径求值），则跳过，避免重复执行
-                    // 仅检查 pins_runtime_state，不包含 resolve 的 default_value，否则 OneOf(Float64,DataSeries)
-                    // 等类型的 default 会误判为已求值，导致 Add 等节点被跳过、Endog 收到 Float64
-                    let already_has_value = {
-                        let graph = self.graph.lock().unwrap();
-                        graph.pin_has_executed_value(upstream_pin_id)
-                    };
-                    if already_has_value {
-                        continue;
-                    }
-
-                    let upstream_node_id_str = upstream_node_id.to_string();
-                    self.emit(ExecutionEvent::NodeStart {
-                        node_id: upstream_node_id_str.clone(),
-                    });
-                    self.emit_data_input_connections(upstream_node_id);
-
-                    let upstream_start = Instant::now();
-                    let mut ctx = NodeExecutionContext::with_result_sources(
-                        self.graph.clone(),
-                        upstream_node_id,
-                        self.result_source_store.clone(),
-                        self.run_id.clone(),
-                    );
-
-                    let eval_result = if let Some(evaluator) = &upstream_definition.data_evaluator {
-                        evaluator(&mut ctx)
-                    } else {
-                        Ok(())
-                    };
-
-                    self.logs.extend(ctx.logs);
-                    for event in ctx.pin_result_events {
-                        self.emit(event);
-                    }
-                    let upstream_duration_ms = upstream_start.elapsed().as_millis() as u64;
-
-                    match eval_result {
-                        Ok(()) => {
-                            self.emit(ExecutionEvent::NodeComplete {
-                                node_id: upstream_node_id_str,
-                                duration_ms: upstream_duration_ms,
-                            });
-                        }
-                        Err(err) => {
-                            self.emit(ExecutionEvent::NodeError {
-                                node_id: upstream_node_id_str,
-                                error: err.clone(),
-                                duration_ms: upstream_duration_ms,
-                            });
-                            return Err(err);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// 解释执行效果并更新栈
@@ -479,7 +382,7 @@ impl<E: EventEmitter> Executor<E> {
             resume
         };
 
-        if should_resume {
+        if should_resume && !self.halted {
             self.resume(owner_id)?;
         }
         Ok(())
@@ -573,8 +476,8 @@ impl<E: EventEmitter> Executor<E> {
 
     /// spawn 下游帧：为 role 的每个下游创建 Ready 帧，并对 join_target 计数 +1。
     ///
-    /// 返回创建的下游帧数量（0 表示该输出无连接）。这是 `pending_children`
-    /// 的唯一 +1 处，同时发送 `ConnectionActive` 事件。
+    /// 返回创建的下游帧数量（0 表示该输出无连接）。这是 `pending_children` 的唯一 +1 处。
+    /// exec 连线视觉事件由 `wire_events::emit_exec_spawn` 统一发射。
     fn spawn(
         &mut self,
         node_id: NodeId,
@@ -611,10 +514,7 @@ impl<E: EventEmitter> Executor<E> {
         }
 
         for (downstream_pin_id, downstream_node) in &downstream_nodes {
-            self.emit(ExecutionEvent::ConnectionActive {
-                from_pin_id: output_pin_id.to_string(),
-                to_pin_id: downstream_pin_id.to_string(),
-            });
+            emit_exec_spawn(&self.emitter, output_pin_id, *downstream_pin_id);
 
             let frame_id =
                 self.stack

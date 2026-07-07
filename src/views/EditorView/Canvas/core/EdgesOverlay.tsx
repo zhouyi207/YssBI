@@ -59,6 +59,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
   const useVisual = (visual.active && visual.graphId === graphId) || isReplay;
   const status = useVisual ? visual.status : (graphState?.status ?? "idle");
   const completedConnections = useVisual ? visual.completedConnections : graphState?.completedConnections;
+  const flowingConnections = useVisual ? visual.flowingConnections : graphState?.flowingConnections;
   const nodeStates = useVisual ? undefined : graphState?.nodeStates;
   const isRunning = status === "running";
 
@@ -94,8 +95,10 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
     >
       <style>{`
         @keyframes edgeFlowData { to { stroke-dashoffset: -40; } }
+        @keyframes edgePullData { to { stroke-dashoffset: 40; } }
         @keyframes edgeFlowExec { to { stroke-dashoffset: -16; } }
         @keyframes edgeGlowData { 0%,100% { opacity: .3; } 50% { opacity: .7; } }
+        @keyframes edgePullGlow { 0%,100% { opacity: .2; } 50% { opacity: .5; } }
         @keyframes edgeGlowExec { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
       `}</style>
       {edges.map((edge) => {
@@ -104,11 +107,14 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
         if (!start || !end) return null;
 
         const connKey = connectionKey(edge.fromPinId, edge.toPinId);
-        const isCompleted = completedConnections?.has(connKey) ?? false;
-        const sourceState = nodeStates?.get(edge.sourceNodeId);
         const isError = useVisual
           ? visual.errorNodeIds.has(edge.sourceNodeId)
-          : sourceState?.status === "error";
+          : nodeStates?.get(edge.sourceNodeId)?.status === "error";
+        const hasPull = completedConnections?.has(connKey) ?? false;
+        const hasFlow = flowingConnections?.has(connKey) ?? false;
+        // data：先取数、后流动；ConnectionFlow 仅在 pin 已有值时由后端发出
+        const isPullActive = edge.pinType !== "exec" && hasPull && !hasFlow && !isError;
+        const isFlowActive = edge.pinType === "exec" ? hasPull : hasFlow;
         const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
         const edgeKind = edge.pinType === "exec" ? "exec" : "data";
 
@@ -125,7 +131,8 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
             color={color}
             thickness={2}
             edgeKind={edgeKind}
-            isCompleted={isCompleted}
+            isPullActive={isPullActive}
+            isFlowActive={isFlowActive}
             isError={isError}
             isRunning={isRunning}
             dimmed={dimmed}

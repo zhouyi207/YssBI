@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useExecutionStore } from './useExecutionStore';
+import { ensureGraphExecutionTerminal, recordingHadError } from './executionRecording';
 import { applyExecutionVisualEvent, resetExecutionVisual } from './executionVisualSession';
 import {
   EXECUTION_REPLAY_DEFAULT_DELAY_MS,
@@ -26,7 +27,7 @@ export function useExecutionPlayback(graphId: string) {
   }, []);
 
   const scheduleSteps = useCallback((rec: typeof recording) => {
-    const { setPlaying, applySideEffectEvent, commitExecutionVisual, startExecution } =
+    const { setPlaying, applySideEffectEvent, commitExecutionVisual } =
       useExecutionStore.getState();
 
     const step = () => {
@@ -35,7 +36,10 @@ export function useExecutionPlayback(graphId: string) {
       if (idx >= rec.length) {
         clearTimer();
         commitExecutionVisual(graphId);
-        useExecutionStore.getState().completeExecution(graphId);
+        ensureGraphExecutionTerminal(
+          graphId,
+          recordingHadError(rec) ? 'error' : 'success',
+        );
         setPlaying(false);
         return;
       }
@@ -44,7 +48,7 @@ export function useExecutionPlayback(graphId: string) {
       if (event.event === 'pinResultReady') {
         applySideEffectEvent(graphId, event);
       } else if (event.event === 'executionStart') {
-        startExecution(graphId);
+        // Do not call startExecution — it clears recording and breaks repeat replay.
         resetExecutionVisual(graphId);
       } else {
         applyExecutionVisualEvent(graphId, event);
@@ -59,7 +63,7 @@ export function useExecutionPlayback(graphId: string) {
 
   const play = useCallback(() => {
     const store = useExecutionStore.getState();
-    const rec = store.graphs[graphId]?.recording ?? [];
+    const rec = [...(store.graphs[graphId]?.recording ?? [])];
     if (rec.length === 0) return;
 
     clearTimer();

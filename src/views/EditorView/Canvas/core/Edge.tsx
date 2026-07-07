@@ -3,8 +3,8 @@ import { computeEdgePath } from "@/features/core/canvas/edgePath";
 
 export type EdgeKind = "exec" | "data";
 
-/** 执行中高亮/流动样式：exec 控制流 vs data 数据流 */
-const ACTIVE_EDGE_STYLE: Record<
+/** 流动态：exec 控制流 / data 值沿 output→input 传递（原高亮流动样式） */
+const FLOW_EDGE_STYLE: Record<
   EdgeKind,
   {
     stroke: string;
@@ -36,6 +36,17 @@ const ACTIVE_EDGE_STYLE: Record<
   },
 };
 
+/** 取数态：消费者声明 data 依赖（ConnectionActive），细虚线向 input 侧轻 pulse */
+const DATA_PULL_STYLE = {
+  stroke: "#2dd4bf",
+  flowStroke: "#99f6e4",
+  glow: "rgba(45, 212, 191, 0.35)",
+  idleGlow: "rgba(45, 212, 191, 0.18)",
+  dasharray: "4 10",
+  animation: "edgePullData 1.6s linear infinite",
+  glowAnimation: "edgePullGlow 2s ease-in-out infinite",
+};
+
 interface EdgeProps {
   edgeId?: string;
   fromPinId?: string;
@@ -46,17 +57,14 @@ interface EdgeProps {
   y2: number;
   color?: string;
   thickness?: number;
-  /** exec 控制流连线 vs data 数据流连线（执行动画/高亮区分） */
   edgeKind?: EdgeKind;
-  /** 起点是否为输入针脚 (默认为 false，即起点为输出) */
   startIsInput?: boolean;
-  /** 是否已完成（绿色高亮） */
-  isCompleted?: boolean;
-  /** 是否为错误下游（红色虚线 + 发光） */
+  /** data 取数依赖已声明 */
+  isPullActive?: boolean;
+  /** data 值流动 / exec 控制流经过 */
+  isFlowActive?: boolean;
   isError?: boolean;
-  /** 执行仍在进行中（启用流动动画） */
   isRunning?: boolean;
-  /** 拖拽连接时整体半透明 */
   dimmed?: boolean;
 }
 
@@ -73,12 +81,12 @@ export function drawEdge(
   const dx = Math.abs(x1 - x2);
   const curvature = Math.max(dx * 0.5, 40);
   const dir = startIsInput ? -1 : 1;
-  
+
   const c1x = x1 + curvature * dir;
   const c1y = y1;
   const c2x = x2 - curvature * dir;
   const c2y = y2;
-  
+
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
@@ -100,16 +108,27 @@ export const Edge = React.memo<EdgeProps>(({
   thickness = 2,
   edgeKind = "data",
   startIsInput = false,
-  isCompleted = false,
+  isPullActive = false,
+  isFlowActive = false,
   isError = false,
   isRunning = false,
   dimmed = false,
 }) => {
   const pathData = computeEdgePath(x1, y1, x2, y2, startIsInput);
-  const active = ACTIVE_EDGE_STYLE[edgeKind];
-  const strokeColor = isError ? "#ef4444" : isCompleted ? active.stroke : color;
-  const strokeW = (isError || isCompleted) ? thickness + 1 : thickness;
-  const animate = isRunning && (isCompleted || isError);
+  const flow = FLOW_EDGE_STYLE[edgeKind];
+  const showPull = edgeKind === "data" && isPullActive && !isError;
+  const showFlow = isFlowActive && !isError;
+  const highlighted = showPull || showFlow;
+  const strokeColor = isError
+    ? "#ef4444"
+    : showFlow
+      ? flow.stroke
+      : showPull
+        ? DATA_PULL_STYLE.stroke
+        : color;
+  const strokeW = (isError || highlighted) ? thickness + 1 : thickness;
+  const animatePullMotion = isRunning && showPull;
+  const animateFlow = isRunning && showFlow;
 
   return (
     <g
@@ -122,46 +141,73 @@ export const Edge = React.memo<EdgeProps>(({
         stroke={strokeColor}
         strokeWidth={strokeW}
         strokeLinecap="round"
-        strokeDasharray={isError ? "6 4" : isCompleted && edgeKind === "exec" && !animate ? "5 4" : undefined}
+        strokeDasharray={showPull && !showFlow && !animatePullMotion ? DATA_PULL_STYLE.dasharray : undefined}
         className="pointer-events-none"
       />
 
-      {animate && (
+      {showPull && !showFlow && (
         <>
-          {/* 流动虚线：data 长段缓流，exec 短段快流 */}
           <path
             d={pathData}
             fill="none"
-            stroke={isError ? "#fca5a5" : active.flowStroke}
-            strokeWidth={edgeKind === "exec" ? thickness + 3 : thickness + 2}
+            stroke={DATA_PULL_STYLE.flowStroke}
+            strokeWidth={thickness}
             strokeLinecap="round"
             className="pointer-events-none"
             style={{
-              strokeDasharray: isError ? "6 4" : active.flowDasharray,
-              animation: isError ? "edgeFlowData 1.2s linear infinite" : active.flowAnimation,
+              strokeDasharray: DATA_PULL_STYLE.dasharray,
+              animation: animatePullMotion ? DATA_PULL_STYLE.animation : undefined,
             }}
           />
-          {/* 脉动发光 */}
           <path
             d={pathData}
             fill="none"
-            stroke={isError ? "rgba(239, 68, 68, 0.5)" : active.glow}
-            strokeWidth={edgeKind === "exec" ? thickness + 10 : thickness + 8}
+            stroke={DATA_PULL_STYLE.glow}
+            strokeWidth={thickness + 5}
             strokeLinecap="round"
             className="pointer-events-none"
             style={{
-              filter: "blur(5px)",
-              animation: isError ? "edgeGlowData 1.6s ease-in-out infinite" : active.glowAnimation,
+              filter: "blur(4px)",
+              animation: DATA_PULL_STYLE.glowAnimation,
             }}
           />
         </>
       )}
 
-      {!animate && isCompleted && !isError && (
+      {animateFlow && (
+        <>
+          <path
+            d={pathData}
+            fill="none"
+            stroke={isError ? "#fca5a5" : flow.flowStroke}
+            strokeWidth={edgeKind === "exec" ? thickness + 3 : thickness + 2}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              strokeDasharray: isError ? "6 4" : flow.flowDasharray,
+              animation: isError ? "edgeFlowData 1.2s linear infinite" : flow.flowAnimation,
+            }}
+          />
+          <path
+            d={pathData}
+            fill="none"
+            stroke={isError ? "rgba(239, 68, 68, 0.5)" : flow.glow}
+            strokeWidth={edgeKind === "exec" ? thickness + 10 : thickness + 8}
+            strokeLinecap="round"
+            className="pointer-events-none"
+            style={{
+              filter: "blur(5px)",
+              animation: isError ? "edgeGlowData 1.6s ease-in-out infinite" : flow.glowAnimation,
+            }}
+          />
+        </>
+      )}
+
+      {!isRunning && showFlow && !isError && (
         <path
           d={pathData}
           fill="none"
-          stroke={active.idleGlow}
+          stroke={flow.idleGlow}
           strokeWidth={edgeKind === "exec" ? thickness + 8 : thickness + 6}
           strokeLinecap="round"
           className="pointer-events-none"
@@ -169,13 +215,14 @@ export const Edge = React.memo<EdgeProps>(({
         />
       )}
 
-      {!animate && isError && (
+      {!animateFlow && isError && (
         <path
           d={pathData}
           fill="none"
           stroke="rgba(239, 68, 68, 0.25)"
           strokeWidth={thickness + 6}
           strokeLinecap="round"
+          strokeDasharray="6 4"
           className="pointer-events-none"
           style={{ filter: "blur(4px)" }}
         />

@@ -10,12 +10,26 @@ const pendingByGraph = new Map<string, ExecutionEvent[]>();
 
 function flushLiveEvents(): void {
   rafId = null;
+  const deferredFlows: Array<{ graphId: string; event: ExecutionEvent }> = [];
+
   for (const [graphId, events] of pendingByGraph) {
     for (const event of events) {
+      if (event.event === 'connectionFlow') {
+        deferredFlows.push({ graphId, event });
+        continue;
+      }
       applyExecutionVisualEvent(graphId, event);
     }
   }
   pendingByGraph.clear();
+
+  if (deferredFlows.length > 0) {
+    requestAnimationFrame(() => {
+      for (const { graphId, event } of deferredFlows) {
+        applyExecutionVisualEvent(graphId, event);
+      }
+    });
+  }
 }
 
 function scheduleFlush(): void {

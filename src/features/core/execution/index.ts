@@ -19,6 +19,11 @@ export {
   flushLiveExecutionEventsNow,
 } from './executionLiveFeed';
 export {
+  recordingHadError,
+  firstNodeErrorMessage,
+  ensureGraphExecutionTerminal,
+} from './executionRecording';
+export {
   buildPinViewParams,
   pinViewDisabledTitle,
   resolvePinViewDisabledReason,

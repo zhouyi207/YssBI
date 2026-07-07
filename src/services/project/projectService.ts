@@ -7,6 +7,7 @@ import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
+import { bindExecutionEventChannel } from "./executionChannelDrain";
 
 type CanvasState = GraphPosition;
 
@@ -493,15 +494,13 @@ export class ProjectService {
         onEvent?: (event: ExecutionEvent) => void,
         graphId?: string,
     ): Promise<{ executedGraphs: number; logs: string[] }> {
-        const channel = trackChannel(new Channel<ExecutionEvent>());
-        channel.onmessage = (msg) => {
-            onEvent?.(msg);
-        };
+        const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
         try {
             const res = await invoke<{ executedGraphs: number; logs: string[] }>(
                 "execute_project",
                 { onEvent: channel, graphId: graphId ?? null },
             );
+            await waitForStreamEnd(res.executedGraphs);
             return res;
         } finally {
             untrackChannel(channel);
