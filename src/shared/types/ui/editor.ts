@@ -74,7 +74,12 @@ export class Node implements UINode {
     }
 
     addInput(pin: Pin): void {
-        this.inputs.push(pin);
+        this.inputs.push({
+            ...pin,
+            connected: false,
+            linkCount: 0,
+            connectionIds: [],
+        });
     }
 
     clone(): Node {

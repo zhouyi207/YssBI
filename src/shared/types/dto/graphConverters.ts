@@ -8,7 +8,6 @@ import type {
 } from './graph';
 import type { ConnectionData } from '../store/graph';
 import type { ProjectData } from '../domain';
-import type { ProjectDataDTO } from './api';
 
 /** 将 ConnectionItemDTO 转为 Store 的 ConnectionData */
 export function connectionItemToConnectionData(

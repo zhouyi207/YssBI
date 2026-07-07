@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import type { GraphDataLike } from '@/shared/types/store/graph';
 import { buildEdgeData } from './EdgesOverlay';
 
-const makeGraph = (graphId: string, color: string) => ({
+const makeGraph = (graphId: string, color: string): GraphDataLike => ({
   id: graphId,
   name: graphId,
   type: 'event' as const,
@@ -24,14 +25,14 @@ const makeGraph = (graphId: string, color: string) => ({
       nodeId: 'local-node',
       name: 'In',
       type: 'Float64',
-      direction: 'input',
+      direction: 'input' as const,
     },
     {
       id: 'local-out',
       nodeId: 'local-node',
       name: 'Out',
       type: 'Float64',
-      direction: 'output',
+      direction: 'output' as const,
       ui: { color },
     },
   ],

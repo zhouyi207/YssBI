@@ -220,7 +220,7 @@ function installPointerLoop(): () => void {
           }
         }
       } else {
-        applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId });
+        applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId! });
       }
     }
 

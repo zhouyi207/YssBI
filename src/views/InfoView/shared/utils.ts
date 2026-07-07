@@ -3,10 +3,14 @@
 import type { Coefficient } from './types';
 
 export function formatNum(value: number, decimals = 4): string {
-  if (Math.abs(value) < 0.0001 && value !== 0) {
-    return value.toExponential(3);
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return String(value);
   }
-  return value.toFixed(decimals);
+  if (Math.abs(n) < 0.0001 && n !== 0) {
+    return n.toExponential(3);
+  }
+  return n.toFixed(decimals);
 }
 
 /** 从系数表构建 param_names（与 exog 列序一致） */

@@ -606,7 +606,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
         const links = state.getGraphPinConnections(graphId, pinId).map((cid) => {
           const conn = state.getGraphConnection(graphId, cid);
           return conn?.from === pinId ? conn?.to : conn?.from;
-        }).filter(Boolean);
+        }).filter((toId): toId is string => Boolean(toId));
         links.forEach((toId) => connectionItems.push({ fromPin: pinId, toPin: toId }));
       });
 

@@ -9,6 +9,7 @@ import { logger } from '@/utils/appLogger';
 import type { DatabaseRecord } from './databaseStore';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
+import type { GraphData } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
 import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useGraphMetaStore } from './graphMetaStore';
@@ -226,11 +227,13 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
         if (!meta || !meta.exists) return null;
 
         const nodeIds = dataStore.getGraphNodeIds(graphId);
-        const nodes = nodeIds.map((nodeId) => dataStore.getGraphNode(graphId, nodeId)).filter(Boolean);
+        const nodes = nodeIds
+          .map((nodeId) => dataStore.getGraphNode(graphId, nodeId))
+          .filter((n): n is NonNullable<typeof n> => n != null);
         const pins = nodeIds.flatMap((nodeId) =>
           dataStore.getGraphNodePins(graphId, nodeId)
             .map((pinId) => dataStore.getGraphPin(graphId, pinId))
-            .filter(Boolean)
+            .filter((p): p is NonNullable<typeof p> => p != null)
         );
         const connectionIds = new Set<string>();
         for (const pin of pins) {
@@ -240,7 +243,7 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
         }
         const connections = Array.from(connectionIds)
           .map((connectionId) => dataStore.getGraphConnection(graphId, connectionId))
-          .filter(Boolean)
+          .filter((c): c is NonNullable<typeof c> => c != null)
           .map((connection) => ({ fromPin: connection.from, toPin: connection.to }));
 
         return [
@@ -254,10 +257,10 @@ function buildGraphSnapshot(): ProjectData['graphs'] {
             connections: { connections },
             canvas: getViewport(graphId),
           },
-        ] as [string, ProjectData['graphs'][string]];
+        ] as [string, GraphData];
       })
-      .filter((entry): entry is [string, ProjectData['graphs'][string]] => entry !== null)
-  ) as ProjectData['graphs'];
+      .filter((entry): entry is [string, GraphData] => entry !== null),
+  ) as unknown as ProjectData['graphs'];
 }
 
 /**
@@ -287,7 +290,7 @@ let loadProjectInFlight: Promise<ProjectData | null> | null = null;
 
 const loadGraphInFlight = new Map<string, Promise<boolean>>();
 
-export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
+export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   status: LoadStatus.Idle,
   error: null,
 
@@ -413,8 +416,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           ...useVariableStore.getState().variables,
           ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
         });
-        const resourceKeyValue = `graph:${frontendGraph.type}:${graphId}` as const;
-        const existingResource = useResourceStore.getState().resources[resourceKeyValue];
         useResourceStore.getState().upsertResource({
           id: graphId,
           kind: frontendGraph.type,

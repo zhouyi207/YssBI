@@ -18,7 +18,6 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 
 function EditorWindowReady() {
-  const { t } = useTranslation();
   const rootId = useLayoutStore((s) => s.rootId);
   const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);

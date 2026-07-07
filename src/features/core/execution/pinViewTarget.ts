@@ -19,7 +19,7 @@ export interface ResolvePinViewTargetParams {
   direction: 'input' | 'output';
   pinType: string;
   connectionIds?: readonly string[];
-  pinResults?: Map<string, PinResultState>;
+  pinResults?: ReadonlyMap<string, PinResultState>;
   executionStatus?: ExecutionStatus;
 }
 
@@ -99,7 +99,7 @@ export function buildPinViewParams(input: {
   direction: 'input' | 'output';
   pinType: string;
   connectionIds?: readonly string[];
-  pinResults?: Map<string, PinResultState>;
+  pinResults?: ReadonlyMap<string, PinResultState>;
   executionStatus?: ExecutionStatus;
 }): ResolvePinViewTargetParams {
   return input;

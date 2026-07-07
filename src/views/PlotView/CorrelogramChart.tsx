@@ -12,8 +12,8 @@ import { plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
 export interface CorrelogramDatum {
   lag: number;
   value: number;
-  q_stat: number;
-  p_value: number;
+  q_stat?: number;
+  p_value?: number;
 }
 
 export interface CorrelogramChartProps {
@@ -136,8 +136,10 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
             `<div style="font-size:11px;line-height:1.6;color:${chartTheme.tooltipFg}">` +
             `<b>Lag ${d.lag}</b><br/>` +
             `${valueLabel}: <b>${d.value.toFixed(4)}</b><br/>` +
-            `Q(${d.lag}): <b>${d.q_stat.toFixed(4)}</b><br/>` +
-            `p-value: <b>${d.p_value < 0.0001 ? d.p_value.toExponential(2) : d.p_value.toFixed(4)}</b>` +
+            (d.q_stat != null ? `Q(${d.lag}): <b>${d.q_stat.toFixed(4)}</b><br/>` : '') +
+            (d.p_value != null
+              ? `p-value: <b>${d.p_value < 0.0001 ? d.p_value.toExponential(2) : d.p_value.toFixed(4)}</b>`
+              : '') +
             `</div>`;
           const rect = (event.currentTarget as SVGRectElement).getBoundingClientRect();
           const containerRect = containerRef.current!.getBoundingClientRect();

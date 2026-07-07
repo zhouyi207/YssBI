@@ -42,7 +42,6 @@ pub enum Token {
 
 /// 词法分析器
 pub struct Lexer<'a> {
-    input: &'a str,
     chars: Peekable<Chars<'a>>,
     pos: usize,
 }
@@ -50,7 +49,6 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Lexer {
-            input,
             chars: input.chars().peekable(),
             pos: 0,
         }

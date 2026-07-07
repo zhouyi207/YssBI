@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,7 +27,7 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
         residuals,
         exog,
         lags: lag,
-        bg_drop_missing: bgDropMissing,
+        bg_nomiss0: !bgDropMissing,
       });
       setResult(res);
     } catch (e) {
@@ -111,7 +111,7 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
             {result.dw != null && (
               <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
                 <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
-                <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw)}</div>
+                <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw.d)}</div>
               </div>
             )}
           </div>

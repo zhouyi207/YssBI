@@ -11,6 +11,7 @@ export function buildSidebarDragData(
   type: "variable" | "function" | "event" | "data",
   extra?: { dataType?: DataType | string },
 ) {
+  void extra;
   const sidebarResource = type === "event" || type === "function"
     ? { id, name, type }
     : undefined;

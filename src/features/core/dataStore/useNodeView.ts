@@ -17,8 +17,8 @@ import { resolveNodeViewMeta } from './serialization';
 
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
-export function useNodeView(nodeId: string, graphId: string): UINode | null {
-  const nodeData = useGraphDataStore((s) => s.getGraphNode(graphId, nodeId));
+export function useNodeView(nodeId: string, graphId?: string): UINode | null {
+  const nodeData = useGraphDataStore((s) => (graphId ? s.getGraphNode(graphId, nodeId) : undefined));
 
   // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
   // 名称以 ResourceStore 为准（重命名的单一事实来源）。
@@ -30,18 +30,18 @@ export function useNodeView(nodeId: string, graphId: string): UINode | null {
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
-      s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPin(graphId, pid)),
+      graphId ? s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPin(graphId, pid)) : [],
     ),
   );
 
   const pinConns = useGraphDataStore(
     useShallow((s) =>
-      s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPinConnections(graphId, pid)),
+      graphId ? s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPinConnections(graphId, pid)) : [],
     ),
   );
 
   return useMemo(() => {
-    if (!nodeData) return null;
+    if (!graphId || !nodeData) return null;
 
     const meta = resolveNodeViewMeta(nodeData);
     const title = callFunctionName ?? meta.title;

@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEye, VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
-import { ContextMenu, type ContextMenuPosition, type ContextMenuSection } from "./ContextMenu";
+import { ContextMenu, type ContextMenuPosition, type ContextMenuSection, type ContextMenuItem } from "./ContextMenu";
 
 export interface PinContextMenuProps {
   position: ContextMenuPosition;
@@ -36,7 +36,7 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
 
   const sections = useMemo((): ContextMenuSection[] => {
     const p = (key: string) => t(`contextMenu.pin.${key}`);
-    const primaryItems = [
+    const primaryItems: ContextMenuItem[] = [
       { id: "breakLinks", label: p("breakLinks"), icon: <VscLink size={12} />, disabled: !hasLinks, onClick: onBreakLinks },
       { id: "resetValue", label: p("resetValue"), icon: <VscRefresh size={12} />, disabled: !canReset, onClick: onResetValue },
     ];

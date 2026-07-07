@@ -73,7 +73,7 @@ describe('pinResultSearch', () => {
           connectionIds: ['out-1->in-1'],
         },
       ],
-      (nodeId, pinId) =>
+      (_nodeId, pinId) =>
         pinId === 'in-1'
           ? { nodeTitle: 'Summary', pinName: 'Data' }
           : { nodeTitle: 'OLS', pinName: 'Result' },

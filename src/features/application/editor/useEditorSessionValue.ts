@@ -50,7 +50,6 @@ export function useEditorSessionValue() {
       ...state,
       setNodes: actions.setNodes,
       setCanvas: actions.setCanvas,
-      setSelectedNodeIds: actions.setSelectedNodeIds,
       setActiveGroupId: actions.setActiveGroupId,
       setContextMenu: actions.setContextMenu,
       setDetailFocus: actions.setDetailFocus,

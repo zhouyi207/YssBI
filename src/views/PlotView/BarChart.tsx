@@ -78,25 +78,27 @@ const BarChart: React.FC<BarChartProps> = ({
     const vMax = (max(data, (d) => d.value) ?? 0) * 1.1;
     const tooltip = select(tooltipRef.current);
 
-    const attachTooltip = (sel: any) => {
+    type D3Onable = { on: (typenames: string, listener: unknown) => unknown };
+
+    const attachTooltip = (sel: D3Onable) => {
       if (!compact) return;
-      sel
-        .on('mouseenter', function (_event: any, d: any) {
-          select(this).attr('fill-opacity', 1);
-          tooltip
-            .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${plotColor}">${d.value}</div>`);
-        })
-        .on('mousemove', function (event: any) {
-          const rect = container!.getBoundingClientRect();
-          tooltip
-            .style('left', `${event.clientX - rect.left + 8}px`)
-            .style('top', `${event.clientY - rect.top - 36}px`);
-        })
-        .on('mouseleave', function () {
-          select(this).attr('fill-opacity', 0.75);
-          tooltip.style('opacity', '0');
-        });
+      sel.on('mouseenter', function (this: SVGRectElement) {
+        const d = select(this).datum() as BarDatum;
+        select(this).attr('fill-opacity', 1);
+        tooltip
+          .style('opacity', '1')
+          .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${plotColor}">${d.value}</div>`);
+      });
+      sel.on('mousemove', (event: MouseEvent) => {
+        const rect = container!.getBoundingClientRect();
+        tooltip
+          .style('left', `${event.clientX - rect.left + 8}px`)
+          .style('top', `${event.clientY - rect.top - 36}px`);
+      });
+      sel.on('mouseleave', function (this: SVGRectElement) {
+        select(this).attr('fill-opacity', 0.75);
+        tooltip.style('opacity', '0');
+      });
     };
 
     if (horizontal) {
@@ -129,7 +131,7 @@ const BarChart: React.FC<BarChartProps> = ({
         .attr('fill-opacity', 0.75)
         .attr('rx', 2);
 
-      attachTooltip(bars);
+      attachTooltip(bars as D3Onable);
 
       if (!compact) {
         g.append('g')
@@ -178,7 +180,7 @@ const BarChart: React.FC<BarChartProps> = ({
         .attr('fill-opacity', 0.75)
         .attr('rx', 2);
 
-      attachTooltip(bars);
+      attachTooltip(bars as D3Onable);
 
       if (!compact) {
         g.append('g')

@@ -1,4 +1,3 @@
-import React from 'react';
 import { SectionHeader } from './RegressionShared';
 import { CoefficientTable } from './CoefficientTable';
 import { CoeffBarChart } from './CoeffBarChart';

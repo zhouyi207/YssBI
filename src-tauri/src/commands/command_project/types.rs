@@ -1,6 +1,4 @@
-use crate::graph::GraphId;
 use crate::schema::{GraphInstanceDTO, VariableInstanceDTO};
-use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(serde::Serialize)]

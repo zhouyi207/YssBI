@@ -615,17 +615,18 @@ export const useLayoutStore = create<LayoutState>()(
                     node.data.activeTabId = undefined;
                 }
             } else {
+                const data = node.data!;
                 // 还有剩余标签，处理激活状态
-                let newActiveTabId = node.data.activeTabId;
+                let newActiveTabId = data.activeTabId;
                 if (newActiveTabId === tabId) {
                     const nextIndex = Math.max(0, closingIndex - 1);
                     newActiveTabId = newTabs[nextIndex]?.id;
                 }
-                node.data.tabs = newTabs;
-                if (node.data.activeTabId !== newActiveTabId) {
-                    node.data = clearSelectedNodeIds(node.data);
+                data.tabs = newTabs;
+                if (data.activeTabId !== newActiveTabId) {
+                    node.data = clearSelectedNodeIds(data);
                 }
-                node.data.activeTabId = newActiveTabId;
+                node.data!.activeTabId = newActiveTabId;
             }
 
             // 最后验证：确保激活的编辑器存在且有效

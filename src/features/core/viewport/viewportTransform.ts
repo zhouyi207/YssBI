@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import type { GraphPosition } from '@/shared/types/domain';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 
 export function applyViewportTransform(el: HTMLElement, viewport: GraphPosition): void {
   el.style.transform = `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`;

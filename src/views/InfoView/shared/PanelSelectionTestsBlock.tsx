@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatNum } from './RegressionShared';
 import type { PanelSelectionTest } from './types';
 

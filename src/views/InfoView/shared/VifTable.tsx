@@ -1,4 +1,3 @@
-import React from 'react';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { VifEntry } from './types';
 import {

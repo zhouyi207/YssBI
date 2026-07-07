@@ -143,11 +143,11 @@ impl Prais {
         let dw_original = durbin_watson(&u_init);
 
         let mut residuals: Vec<f64> = u_init;
-        let mut betas: Array1<f64> = betas_init.as_ref().into_ndarray().to_owned();
+        let mut betas: Array1<f64>;
         let mut rho = 0.0;
         let mut iterations = 0;
-        let mut xtx_inv_s = xtx_inv;
-        let mut cond_no = 0.0f64;
+        let mut xtx_inv_s;
+        let mut cond_no: f64;
         let mut iteration_log: Vec<String> = Vec::new();
 
         loop {

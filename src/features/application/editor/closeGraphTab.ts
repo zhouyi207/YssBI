@@ -14,7 +14,7 @@ import { syncVariablesGraphScopeAfterClose } from '@/features/core/editor/detail
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { clearResourceDocumentState, markResourceDirty } from '@/features/core/resource';
 
-function isGraphTab(tab: LayoutTab | undefined): tab is LayoutTab & { type: 'event' | 'function' } {
+function isGraphTab(tab: LayoutTab | null | undefined): tab is LayoutTab & { type: 'event' | 'function' } {
   return tab?.type === 'event' || tab?.type === 'function';
 }
 

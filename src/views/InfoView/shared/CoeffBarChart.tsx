@@ -1,4 +1,3 @@
-import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatNum } from './utils';
 import type { Coefficient } from './types';

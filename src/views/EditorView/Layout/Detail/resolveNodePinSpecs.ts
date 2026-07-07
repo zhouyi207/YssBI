@@ -49,7 +49,7 @@ function slotNote(slot: PinSlot): ResolvedPinSpec['slotNote'] {
 function findDefinitionForPin(
   pin: PinView,
   slots: PinSlot[] | undefined,
-): { optional: boolean; slotKind?: ResolvedPinSpec['slotKind']; slotNote?: string } {
+): { optional: boolean; slotKind?: ResolvedPinSpec['slotKind']; slotNote?: ResolvedPinSpec['slotNote'] } {
   if (!slots?.length) return { optional: pin.optional ?? false };
 
   for (const slot of slots) {

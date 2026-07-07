@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
@@ -66,7 +66,6 @@ function computeMargins(
   paramNames: string[],
   atOverrides: Record<string, number>
 ): { variable: string; margin: number }[] {
-  const k = betas.length;
   const isLogit = modelType === 'Logit';
 
   const getScale = (eta: number, p: number): number => {

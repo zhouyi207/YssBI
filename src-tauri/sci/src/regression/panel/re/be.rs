@@ -4,8 +4,8 @@ pub fn fit_panel_re_be(
     exog: &Array2<f64>,
     entity_id: &[usize],
     constant: bool,
-    cov_type: &str,
-    cov_params: Option<crate::regression::covariance::CovParams>,
+    _cov_type: &str,
+    _cov_params: Option<crate::regression::covariance::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
     let n = endog.len();
     if exog.nrows() != n || entity_id.len() != n {

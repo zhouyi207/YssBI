@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatNum, InfoRow } from './RegressionShared';
 import type { ModelBasicInfo } from './types';
 

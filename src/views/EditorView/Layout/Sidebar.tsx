@@ -122,9 +122,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
   const variablesGraphScopeId = useEditorStore((s) => s.variablesGraphScopeId);
   const variablesScopeId = variablesGraphScopeId ?? activeTabId;
-  const activeGraphType: GraphResourceType | undefined = activeTabId
-    ? (activeTabId in events ? "event" : activeTabId in functions ? "function" : undefined)
-    : undefined;
   const variablesScopeGraphType: GraphResourceType | undefined = variablesScopeId
     ? (variablesScopeId in events ? "event" : variablesScopeId in functions ? "function" : undefined)
     : undefined;

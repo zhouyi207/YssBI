@@ -1,6 +1,8 @@
 import { Pin, PinDirection } from './pin';
 import { DataType } from './dataType';
 
+export type { PinDirection };
+
 /**
  * Domain Types - Node
  * 

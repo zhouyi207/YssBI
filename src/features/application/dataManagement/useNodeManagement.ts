@@ -90,10 +90,13 @@ export function useNodeManagement() {
 
             try {
                 // 调用后端批量创建（后端会为每个节点发送NodeCreated事件）
-                const nodeIds = await NodeService.createNodes(
+                const nodeIds = await NodeService.batchCreateNodes(
                     activeTabId,
-                    nodeTypes,
-                    positions
+                    nodeTypes.map((nodeType, i) => ({
+                        nodeType,
+                        x: positions?.[i]?.x,
+                        y: positions?.[i]?.y,
+                    })),
                 );
 
                 return nodeIds;

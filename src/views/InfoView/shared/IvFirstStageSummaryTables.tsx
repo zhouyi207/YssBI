@@ -9,7 +9,7 @@ import {
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
 } from './InfoStatsTable';
-import type { Iv2slsFirstStage, Iv2slsFirstStageSummary } from './types';
+import type { Iv2slsFirstStageResult, Iv2slsFirstStageSummary } from './types';
 
 export function IvFirstStageSummaryTables({
   summary,
@@ -17,7 +17,7 @@ export function IvFirstStageSummaryTables({
   variant,
 }: {
   summary: Iv2slsFirstStageSummary;
-  firstStage?: Iv2slsFirstStage[];
+  firstStage?: Iv2slsFirstStageResult[];
   variant: '2sls' | 'liml';
 }) {
   const stockYogoLabel = variant === 'liml' ? 'Stock-Yogo (2005) LIML' : 'Stock-Yogo (2005)';
@@ -55,9 +55,9 @@ export function IvFirstStageSummaryTables({
               <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
                 {firstStage?.[0]?.endog_name ?? '—'}
               </TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.r2, 4)}</TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.r2_adjusted, 4)}</TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.partial_r2, 4)}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.r2 != null ? formatNum(summary.r2, 4) : '—'}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.r2_adjusted != null ? formatNum(summary.r2_adjusted, 4) : '—'}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.partial_r2 != null ? formatNum(summary.partial_r2, 4) : '—'}</TableCell>
               <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
                 {summary.f_stat != null ? formatNum(summary.f_stat, 4) : '—'}
               </TableCell>

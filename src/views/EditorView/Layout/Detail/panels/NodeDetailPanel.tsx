@@ -17,7 +17,6 @@ import { DetailText } from '../shared/DetailText';
 import type { PinResultState } from '@/shared/types/ui';
 
 const EMPTY_PINS: PinData[] = [];
-const EMPTY_CONNECTIONS: string[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
 
 function isPresent<T>(value: T | null | undefined): value is T {

@@ -25,9 +25,12 @@ export function useCanvasOverlayHandlers({
   functions: Record<string, unknown>;
   pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: unknown) => void;
+  setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
-  setCanvas: (updater: unknown, targetGraphId?: string) => void;
+  setCanvas: (
+    updater: import('@/shared/types/domain/graph').GraphPosition | ((prev: import('@/shared/types/domain/graph').GraphPosition) => import('@/shared/types/domain/graph').GraphPosition),
+    targetGraphId?: string,
+  ) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
     async (item: NodeCatalogItem, contextMenu: { x: number; y: number }) => {

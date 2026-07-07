@@ -193,8 +193,8 @@ pub fn fit_panel_re_mle(
 
     // 1. Fit constant-only model for ll_null (Stata "Fitting constant-only model")
     let y_global_mean = endog_vec.iter().sum::<f64>() / n as f64;
-    let mut sigma2_e_null = 0.0;
-    let mut sigma2_u_null = 0.0;
+    let mut sigma2_e_null;
+    let mut sigma2_u_null;
     let mut ll_null = 0.0;
     let mut mle_iter_log_lik_const: Vec<f64> = Vec::new();
     {
@@ -380,8 +380,8 @@ pub fn fit_panel_re_mle(
     let mut sigma2_e = sigma2_e_null;
     let mut sigma2_u = sigma2_u_null;
     let max_iter = 200;
-    let mut betas: Vec<f64> = vec![0.0; k];
-    let mut kept: Vec<usize> = (0..k).collect();
+    let betas: Vec<f64>;
+    let kept: Vec<usize>;
     let mut mle_iter_log_lik: Vec<f64> = Vec::new();
 
     // Full model: use quasi-demeaned OLS for init, then Newton-Raphson on (β, ln σ²_u, ln σ²_e)
@@ -452,7 +452,6 @@ pub fn fit_panel_re_mle(
         ) {
             Ok((new_params, _neg_ll, converged)) => {
                 let n_beta = kept.len();
-                betas = new_params[..n_beta].to_vec();
                 sigma2_u = new_params[n_beta].exp().clamp(1e-12, 1e10);
                 sigma2_e = new_params[n_beta + 1].exp().clamp(1e-12, 1e10);
                 let ll = -re_mle_neg_ll_from_params(
@@ -529,7 +528,6 @@ pub fn fit_panel_re_mle(
     } else {
         Some(omitted_mle)
     };
-    let betas = &result.betas;
 
     // Obs per group
     let mut obs_per_entity: HashMap<usize, usize> = HashMap::new();

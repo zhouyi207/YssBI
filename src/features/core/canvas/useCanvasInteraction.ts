@@ -100,7 +100,7 @@ export function useCanvasInteraction({
         let dragNodeIds = currentSelected;
         if (e.shiftKey) {
             if (currentSelected.includes(nodeId)) {
-                dragNodeIds = currentSelected.filter(id => id !== nodeId);
+                dragNodeIds = currentSelected.filter((id: string) => id !== nodeId);
                 setSelectedNodeIdsRef.current(dragNodeIds, gid);
             } else {
                 dragNodeIds = [...currentSelected, nodeId];

@@ -28,7 +28,7 @@ interface TitleBarProps {
   selectedCellText: string;
 }
 
-const noDragStyle: React.CSSProperties = { WebkitAppRegion: 'no-drag' };
+const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   dataframes,

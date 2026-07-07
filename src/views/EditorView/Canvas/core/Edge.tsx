@@ -98,8 +98,8 @@ export function drawEdge(
 
 export const Edge = React.memo<EdgeProps>(({
   edgeId,
-  fromPinId,
-  toPinId,
+  fromPinId: _fromPinId,
+  toPinId: _toPinId,
   x1,
   y1,
   x2,

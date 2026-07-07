@@ -67,7 +67,6 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
     const availableH = Math.max(0, h - topSpace - bottomSpace);
     const availableSize = Math.min(availableW, availableH);
     const plotSize = Math.max(availableSize, n * 8);
-    const cellSize = plotSize / n;
     const plotW = plotSize;
     const plotH = plotSize;
 
@@ -126,7 +125,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('stroke', chartTheme.grid)
       .attr('stroke-width', 0.5)
       .attr('rx', 2)
-      .on('mouseenter', function (event, d) {
+      .on('mouseenter', function (_event, d) {
         select(this).attr('stroke', seriesColors.primary).attr('stroke-width', 2);
         const pStr = formatP(d.pValue);
         tooltip

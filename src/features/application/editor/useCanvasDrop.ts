@@ -8,6 +8,7 @@ import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import type { Pin } from '@/shared/types/domain/pin';
 import {
   buildVariableDropMenu,
   clientToWorldInCanvas,
@@ -30,7 +31,7 @@ interface UseCanvasDropParams {
   variables: Record<string, unknown>;
   functions: Record<string, unknown>;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: unknown) => void;
+  setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
 }
 
@@ -93,7 +94,7 @@ export function useCanvasDrop({
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
       if (!graphId) return Promise.resolve();
-      return executeCommand(graphId, 'RemoveRepeatablePin', { nodeId, pinId }).catch((err) => {
+      return executeCommand(graphId, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined).catch((err) => {
         uiStore.showToast(err instanceof Error ? err.message : String(err), "error");
         throw err;
       });
@@ -192,7 +193,9 @@ export function useCanvasDrop({
   );
 
   useEffect(() => {
-    canvasDropHandlerStore.setHandler(groupId, handleDropTemplate as Parameters<typeof canvasDropHandlerStore.setHandler>[1]);
+    canvasDropHandlerStore.setHandler(groupId, (dragState, _event) =>
+      handleDropTemplate(dragState, _event as MouseEvent),
+    );
     return () => canvasDropHandlerStore.setHandler(groupId, null);
   }, [groupId, handleDropTemplate]);
 

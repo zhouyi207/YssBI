@@ -34,20 +34,16 @@ type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
 async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: string, table: string) {
   const label =
     engine === 'postgres' ? 'PostgreSQL' : engine === 'mysql' ? 'MySQL' : 'MariaDB';
-  const engineSpec =
+  const engineSpec: import('@/services/database/databaseService').SqlEngineSpec =
     engine === 'postgres'
-      ? { postgres: { ssl: true } }
-      : { mysql: { charset: 'utf8mb4' } };
+      ? { engine: { postgres: { ssl: true } }, connectionString, table }
+      : { engine: { mysql: { charset: 'utf8mb4' } }, connectionString, table };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingRemote', { label, table }),
     () =>
       DatabaseService.loadDatabase({
-        sql: {
-          engine: engineSpec,
-          connectionString,
-          table,
-        },
+        sql: engineSpec,
       }),
   );
   useDatabaseStore.getState().addDatabase(result.id, { ...result });
@@ -247,7 +243,7 @@ export function useDatabaseManagement() {
     try {
       await runWithDataOperationProgress(
         i18n.t('dataOperation.deleting'),
-        previous.name,
+        String(previous.name ?? id),
         () => DatabaseService.deleteDatabase(id),
       );
       useDatabaseStore.getState().deleteDatabase(id);

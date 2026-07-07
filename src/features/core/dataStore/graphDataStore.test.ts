@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useGraphDataStore } from './graphDataStore';
+import type { GraphDataLike } from '@/shared/types/store/graph';
 
 describe('graphDataStore connection truth', () => {
   beforeEach(() => {
@@ -65,7 +66,7 @@ describe('graphDataStore connection truth', () => {
   });
 
   it('keeps remaining graph bucket when graph-local node and pin ids overlap', () => {
-    const graph = (id: string, title: string) => ({
+    const graph = (id: string, title: string): GraphDataLike => ({
       id,
       name: title,
       type: 'event' as const,
@@ -87,14 +88,14 @@ describe('graphDataStore connection truth', () => {
           nodeId: 'local-node',
           name: 'In',
           type: 'Float64',
-          direction: 'input',
+          direction: 'input' as const,
         },
         {
           id: 'local-out',
           nodeId: 'local-node',
           name: 'Out',
           type: 'Float64',
-          direction: 'output',
+          direction: 'output' as const,
         },
       ],
       connections: { connections: [{ fromPin: 'local-out', toPin: 'local-in' }] },

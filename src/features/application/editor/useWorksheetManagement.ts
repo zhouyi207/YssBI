@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
-import { useEditorStore } from '@/features/core/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { uiStore } from '@/features/core/ui/UIStore';

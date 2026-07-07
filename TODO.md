@@ -728,8 +728,101 @@ src/app/appConfig/appLinks.ts
 - [x] **Call Function 右键拖线自动连接 + 签名 pin 类型解析**：
   - **有效定义层（方案 C）**：新增 `features/domain/nodeDefinition/resolveEffectiveDefinition.ts`——`signatureToPinSlots` + `resolveEffectiveDefinition` 为 Call Function 注入投影后 `pinSlots` / `typeCapabilities`（对齐 Rust `function_shell`）；`buildNodeDraft` / `createNodeWithConnection` / `buildContextualCatalogItems` 统一走标准路径（`findAutoConnectPinIndex` / `isNodeCompatibleWithPin`）。
   - **删除重复逻辑**：移除 `callFunctionDraft.ts`、`findAutoConnectPinIndexFromPins`；`CALL_FUNCTION_NODE_TYPE` 单点导出；后端保留 `predetermined_new_pin_ids` 与乐观 pin id 对齐。
+- [x] **前端 `tsc --noEmit` 清零（~92 个既有类型错误 → 0）**：本次函数图改动未引入新错误；系统性修复而非单点 suppress。
+  - **共享类型 / 环境**：`vite-env.d.ts` 补 `import.meta.hot`；`node.ts` 导出 `PinDirection`；`GraphData` 增 `functionInputs`/`functionOutputs`；`graphConverters` / `viewportTransform` 等清理无用导入。
+  - **features/**：`projectIOStore` 补 `useGraphDataStore` 导入 + 快照 `as unknown as`；`useNodeManagement` `batchCreateNodes` 改为 `{ nodeType, x, y }[]` 请求数组；`useCanvasDrop` `setPendingConnection: Pin | null`；`Detail.tsx` Function/Data 分支类型收窄（`selectedFunction` + `DatabaseRecord` 显式映射）；`resolveNodePinSpecs` / `graphDataStore` / canvas 交互等多处小修。
+  - **views/**：`BarChart` D3 tooltip 回调改 `D3Onable` + `this` 取 datum；`CorrelogramChart` `q_stat`/`p_value` 可选；`CorrelationPlot` 清理未用变量；InfoView 13 个组件去掉无用 `React` 导入；`Edge`/`EdgesOverlay`/`NodeDetailPanel`/`Sidebar`/`SettingsView`/`EditorWindow` 未使用符号清理。
+  - **测试夹具**：`graphDataStore.test` / `NodeEventHandler.test` / `EdgesOverlay.test` pin `direction: 'input'|'output' as const`，返回类型 `GraphDataLike`。
+  - **验证**：`npx tsc --noEmit` 退出码 0。
+- [x] **OLS Summary Serial Correlation 点击崩溃修复**：`result.dw` 为 `{ d: number }` 非裸 number，传入 `formatNum` 触发 `toFixed is not a function`；`SerialTestsBlock` 改为 `formatNum(result.dw.d)`；`formatNum` 对非 number 做防御。
+- [x] **Rust 编译 warning 清零**：`yssbi`（`command_project/types`、`pin_data_type`、`persistence`、`lexer`、`panel_nodes` 等）与 `yss-sci`（`prais`/`be`/`mle`/`time`/`twoway` 未使用赋值）清理；`cargo build` 0 warning；`function_call_test` 9/9 通过。
 
 ## v1.0 待办
+
+> **源于 2026.07.08 `tsc` 清零复盘**：以下多为根因治理与类型债清扫，避免修复回潮；优先级按「阻断开发 → 架构单点 → 体验验证」排列。
+
+- [ ] **`DatabaseRecord` 强类型化**：当前 `Record<string, unknown>` 迫使 `Detail.tsx` 等处手写字段提取与断言；定义 `DatabaseDecl` / `DataFrameMeta`（`id`、`name`、`columns`、`rowCount`、`sourcePath` 等），在 `normalizeDatabases` / `projectIOStore` 入库边界一次校验，store 与 `DataDetailPanel` 共用。
+- [ ] **`GraphData` ↔ domain `Graph` 显式转换层**：`projectIOStore.buildGraphSnapshot` 仍靠 `as unknown as ProjectData['graphs']`；新增 `graphDataToDomainGraph` / `domainGraphToGraphData`（或统一只保留一种图表示），导出快照与 `ProjectData` 类型自然对齐，去掉双重模型漂移面。
+- [ ] **Detail 面板 props 解析单入口**：将 Function / Data / Variable 等分支的「target → panel props」从 `Detail.tsx` 抽到 `resolveDetailPanelModel(target)`（按 `kind` 判别联合类型），避免 `selectedData` 式宽 union 再靠运行时收窄。
+- [ ] **共享测试图工厂 `makeTestGraph()`**：`graphDataStore.test` / `NodeEventHandler.test` / `EdgesOverlay.test` 等重复的 `makeGraph` + `direction: 'input' as const` 收敛到 `tests/helpers/graphFixtures.ts`，减少夹具与 `GraphDataLike` 契约漂移。
+- [ ] **PlotView D3 交互工具层**：`BarChart` 临时 `D3Onable` 应升级为 `shared/plot/d3Tooltip.ts`（或同类模块），供 `BarChart` / `CorrelogramChart` / `CorrelationPlot` / InfoView 内嵌图复用；统一 `mouseenter`/`mousemove` 坐标与 theme 取值，消灭各图重复 `select(this)` 模式。
+- [ ] **Plot payload 解析类型收敛**：`parsePlotPayload.ts` 多处 `as unknown as CorrelogramData | HistogramData | …`；为各 plot kind 定义 Zod/类型守卫或后端 DTO 窄化，解析失败走 toast + 空态，不在 View 层裸 cast。
+- [ ] **`ConnectionLine` gesture 类型收窄**：`EditorGesture` 已有 `connect` 分支含 `worldX`/`worldY`，但渲染仍 `(gesture as any)`；改为 `gesture?.type === 'connect' ? gesture : null` 或类型守卫，与 `useGestureStore` API 一致。
+- [ ] **画布拖放 `data.current` 类型契约**：`Workspace.tsx` / `CanvasOverlays` 等 `active.data.current as any`；为 palette / sidebar / variable spawn 定义 `CanvasDragPayload` 联合类型 + `isXxxDragData` 守卫，与 `buildNodeTemplateDragData` / `buildSidebarDragData` 生产端对齐。
+- [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
+- [ ] **Info / 报告统计块 DTO 结构化**：`SerialTestsBlock` 的 `result.dw: { d: number }`、`CorrelogramChart` 的 `q_stat`/`p_value` 可选等，应在 Rust 序列化层或前端 `types/report` 定义明确结构（必填/可选 discriminated），减少 UI 层 `formatNum` 防御式补丁。
+- [ ] **`dataStore` barrel 与跨 store 依赖审计**：`projectIOStore` 曾缺 `useGraphDataStore` 导入（运行时才暴露）；梳理 `features/core/dataStore/index` 导出、禁止「隐式依赖未 import 的 store」，必要时 lint 规则或单测覆盖 `buildGraphSnapshot` / `loadProject` 路径。
+- [ ] **`batchCreateNodes` 请求类型单点定义**：Hook / `NodeService` / Tauri command 共享 `BatchCreateNodeRequest` 类型（含 `nodeType`、`x`、`y`、`params`），避免 API 形参漂移（本次已从三参数改为 requests 数组）。
+- [ ] **残余 `as any` / `as unknown as` 分期清扫**：tsc 已 0 错误但代码库仍有 ~20+ 处逃逸（`ConnectionLine`、`Workspace`、`ParallelCoordinates`、`useEditorGroups`、`CanvasNode`、`parsePlotPayload` 等）；按模块分批替换为守卫或正确泛型，不设「禁止 any」一刀切，但新代码不得新增。
+- [ ] **OLS Summary 取数连线动画验证**：修复函数图相关报错后，需回归验证 data 边 pull/flow 高亮是否正常（`EdgesOverlay` `isPullActive` / `executionVisualSession`）；若仍不发光，查 Channel 排空、guard 跳过或 recording 不完整，而非仅 UI 样式。
+- [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
+- [ ] **`GraphData.connections` 双格式收敛**：`GraphData` 同时接受 `ConnectionData[]` 与 `{ connections: [...] }`，`buildGraphBucket` / `projectHelpers` / 测试夹具需分支处理；hydrate 入口统一规范化为 store 内 `ConnectionData[]`，仅 export/持久化再包装，缩小 `GraphDataLike` 歧义面。
+- [ ] **Canvas 编辑器资源类型贯通**：`useCanvasDrop` / `useCanvasOverlayHandlers` / `variableDrop` 仍用 `variables|functions: Record<string, unknown>`，与 `useEditorCollections`（`Variable` / `FunctionCatalogEntry` / `GraphResourceRecord`）脱节；改为复用 `EditorCollections` 切片或同名类型，drop/spawn 路径获得编译期校验。
+- [ ] **`DatabaseDecl.engine` 与 `SqlEngineSpec` 对齐**：domain `DatabaseDecl.engine` 仍是 `Record<string, unknown>`，`useDatabaseManagement` 需在 service 层 inline 断言 `SqlEngineSpec`；将 `engine` 提升为 `duckdb | sqlite | …` discriminated union，与 `normalizeDatabases` / `databaseService` 共用。
+- [ ] **Store `NodeData` → UI `Node` 单点桥接**：`CanvasNode` 依赖 `node as unknown as NodeModel`；新增 `toUiNode(graphId, node, pinViews)`（或扩展现有 selector），渲染层只消费 `UINode`/`Node` 类，消灭 domain/store/ui 三套 Node 形混用。
+- [ ] **`LayoutTab` / 编辑器组 tabs 强类型**：`useEditorGroups` 中 `tabs.map((t: any) => …) as any[]`；为 layout store 的 tab `type`（event/function/worksheet/…）定义 `LayoutTab` 联合类型，TabBar split/drag 与 `openEditorTab` 共享。
+- [ ] **`PinData.type` 与 `dataType` 职责分离**：`type: PinType | string` 允许任意字符串漂移；约定运行时判断以 `dataType` + `TypeSystemSnapshot` 为准，`type`/`typeDisplay` 仅展示，逐步删除 palette/连接里对裸 `type` 字符串的 fallback。
+- [ ] **InfoView 报告类型分层（`types.ts` 治理）**：`views/InfoView/shared/types.ts` 600+ 行手写接口，与 Rust 序列化易漂移（`SerialTests.dw`、`Iv2slsFirstStage`、Correlogram 可选字段等）；按模型拆到 `types/report/*.ts`，关键块加 Zod/样例 JSON 契约测试，解析失败统一 toast + 区块空态。
+- [ ] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。
+- [ ] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`nodeService.buildTaggedParams`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。
+- [ ] **`projectIOStore` 快照路径单测**：`buildGraphSnapshot`、`loadProjectFromData`、`normalizeDatabases`（`nameFromEngine` 回填）无专测，曾出现缺 `useGraphDataStore` import；补 vitest 覆盖导出图结构与 DB 名合并，防止 cast 修掉后运行时再炸。
+- [ ] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。
+- [ ] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。
+- [ ] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session  Spread 未知字段。
+- [ ] **`NodeTemplateDragPayload` 端到端类型**：`buildNodeTemplateDragData` 产出已有结构，但 `useCanvasDrop` 仍收 `template: Record<string, unknown>`；dnd `data.current` 与 drop handler 共用该类型，闭合 palette → canvas 落点类型链（与「画布拖放 payload」项互补）。
+- [ ] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：测试夹具曾缺 `PinDirection` const、pin 带 `links` 需 `as never`；在 store 层 ADR 或 `graph.ts` 注释写清 hydrate 规则（nodes 内 pin 对象 vs id、必填字段），新建图事件/测试优先走 `makeTestGraph()`。
+- [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
+
+> **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
+
+- [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
+- [ ] **`yss-sci` clippy warning 分期清理（~90+）**：冗余 field name、identity `filter_map`、`too_many_arguments`、索引 loop 等；按模块（`database/`、`regression/`、`ts/`）分批 `-D warnings`，避免一次性大爆炸。
+- [ ] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
+- [ ] **`NodeExecutionContext::get_bound_type` 实现**：`node_execution_context.rs` 仍 TODO 恒返回 `None`，运行时 type var 绑定不可查；在 `GraphRuntime` 暴露 bound 查询，供泛型 pin / 节点求值与连接校验闭环。
+- [ ] **执行期 Graph 锁粒度优化**：`node_execution_context` + `executor/data_inputs` 对 `Arc<Mutex<GraphInstance>>` 高频 `lock().unwrap()`；引入 scoped read guard 或执行帧级缓存，缩短临界区，降低 lock poison 一次拖垮整次执行的概率。
+- [ ] **`with_graph_mut` 死锁规则回归测**：`project_state_graph_mut.rs` 文档禁止闭包内再调 `get_graph`/`load_graph`（`RwLock` 不可重入），但无测试；补 integration test 或 code-review checklist，覆盖 `sync_all_call_nodes_in_graph` / `update_function_signature` 等高频路径。
+- [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
+- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
+- [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
+- [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs` 或 CI 校验「样例 JSON ↔ TypeScript」契约（与前端 `DatabaseRecord` 强类型化项联动）。
+- [ ] **`function_has_side_effect_nodes` 语义补强**：当前仅扫非壳节点的 exec pin，不含 Sleep/View/纯 data 副作用；与 `sideEffectWarning` 产品文案对齐，补 `function_call_test` / `shell_node_test` 用例，避免签名无 exec 时漏警告或误报。
+- [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
+- [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
+- [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。
+- [ ] **`RwLock` poison 策略文档化**：`project_data` / `function_signatures` / `graph.data_state` 普遍 `read().unwrap()`，中毒即 panic IPC 线程；明确运维策略（重启项目会话）或关键 command 改返回 `LockPoisoned` 而非 panic。
+- [ ] **Executor 模块路径确认**：执行器已拆为 `execution/engine/executor/mod.rs` + `wire_events`/`data_inputs`；确认无残留 `executor.rs` 双份实现或 dead re-export，防止合并回潮。
+- [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
+
+> **源于 2026.07.08 函数图层复盘**（Phase 1–4 + 签名索引已落地；缺口主要在**引用生命周期**、**打开图 reconcile**、**UE5 导航 UX**、**三处投影漂移**）：
+
+**P0 — 正确性 / 引用生命周期**
+
+- [ ] **删除函数前引用检查**：`FunctionCallSiteIndex` 已维护 `by_function`，但无前端 IPC（`get_function_call_sites` 未暴露 command）；删除 Function 前应统计调用方 Event 图与 Call 节点数，应用内确认（非 `window.confirm`），可选「取消 / 仍删除 / 删除并移除所有 Call 节点」。
+- [ ] **删除函数后孤儿 Call 与索引清理**：`remove_graph` 仅 `remove_caller(被删图)`，不清理「指向被删函数」的 `by_function` 条目；caller 图内 Call 节点保留无效 `subGraphId`，执行时报错、`useNodeView` 仅回退默认标题。需：删函数时 purge `by_function[function_id]`、画布标记「目标缺失」、或批量删除 orphan Call。
+- [ ] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 只清 `GraphDataStore` + `ResourceStore`，未调 `useGraphMetaStore.deleteGraph` → 已删函数签名仍可能出现在 `useFunctionCatalog` / palette，直至重开项目。
+- [ ] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 只 `sync_all_call_nodes_in_graph`（caller 侧 Call pin），**不**对 Function 图跑 `sync_function_shell_pins`；磁盘壳 pin 与签名头漂移时，重开 Tab 不会自愈（仅 Detail 改签名才触发）。应在 tab 打开路径对 `GraphKind::Function` 追加壳同步 + integration test。
+
+**P1 — 亟需补齐的 UE5 式功能**
+
+- [ ] **Find References（调用方列表）**：基于 `get_function_call_sites` 在 `FunctionDetailPanel` 或 Sidebar 展示「被 N 处调用」，双击打开 caller 图并选中 Call 节点；需新增薄 command + 前端 service。
+- [ ] **Call Function「跳转定义」**：Call 节点双击 / 右键 / Node Detail「打开函数」→ `openGraphInEditor(subGraphId)`；与 Find References 共用导航逻辑。
+- [ ] **Call Function 目标重绑定**：`subGraphId` 仅在 palette/sidebar 拖放时写入，创建后无法改目标；新增 `update_call_function_target`（改 `subGraphId` + 重投影 pin + 维护 call-site 索引）+ Node Detail 或右键入口。
+- [ ] **PinEditor 保护默认 exec 引脚**：新建函数默认含 `exec-in`/`exec-out`，但 Detail 可删至「纯数据函数」且无确认；删除最后一个 exec 入/出前应确认，并与 `sideEffectWarning` 文案一致。
+- [ ] **签名变更断连用户反馈**：`reconcile_shell_pins` / Call 投影删除 pin 时会断连接（设计如此），但无「N 条连接已断开」toast 或 Validation 面板；避免用户以为 bug。
+- [ ] **断裂引用图级诊断**：无效 / 缺失 `subGraphId` 的 Call 节点无 compile 期标记（仅 runtime 失败）；打开图或保存前扫描 dangling Call，在侧栏/节点上显示警告徽章。
+
+**P2 — 重复 / 失效逻辑清理**
+
+- [ ] **签名投影三处手写 → 契约测试**：Rust `function_shell.rs`（`signature_data_type` / `pins_from_signature`）↔ TS `resolveEffectiveDefinition.ts` ↔ `dataTypeFromFunctionSignaturePin` 须手动同步；增加 exec/data/Array/DataSeries 样例 roundtrip 测试（Rust unit + vitest），防 palette 自动连接与后端 pin 漂移。
+- [ ] **`get_function_call_sites` 全量 rescan 优化**：每次查询先 `sync_call_site_index_from_loaded_graphs()` 扫描**所有**已加载图重建索引，与增量 `register_call_site_for_node` 重复；改为「索引脏时才 rescan」，并删除 `collect_function_call_sites` 一行包装死代码。
+- [ ] **Call 节点 Node Detail 走有效定义层**：`resolveNodePinSpecs` 对 Call Function 仍用 registry 静态定义（空 pinSlots），未用 `resolveEffectiveDefinition`；Detail 接口列表与画布/runtime pin 不一致，应统一。
+- [ ] **签名更新刷新路径收敛**：单用户改签名仍走 invoke 全量 `addGraphFromData` + `applyCallerGraphUpdates` + 后端 `FunctionUpdated`/`NodePinsUpdated` 三路（`incrementalPinUpdateGuard` 仅抑制重复）；长期应让 invoke 回包为唯一权威，事件只做增量补洞或删除冗余 handler。
+- [ ] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`（加载时 `functionInputs/Outputs`）；`Detail.tsx` 手合并 `selectedFunction` + `selectedFunctionSignature`。与「Detail 单入口」待办联动，禁止第四份签名拷贝。
+
+**P3 — 体验增强（可 v1.0 后）**
+
+- [ ] **Function Detail 局部变量区块**：后端 `VariableScope::Function` + palette Local 已有，但 `FunctionDetailPanel` 仅名称+签名；可增加当前函数 scope 变量列表与快捷新建（复用 Sidebar Local hook），贴近 UE5「接口+局部状态」一体。
+- [ ] **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 
 - [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
@@ -744,11 +837,8 @@ src/app/appConfig/appLinks.ts
 - [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
 - [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 - [ ] 节点样式问题
-cargo test：150 lib 测试 + 集成套件（含新增 function_call_test.rs、更新的 shell_node_test.rs）全部通过。
-相关前端 vitest（FunctionDetailPanel / graphDocumentActions / GraphEventHandler / functionSignatureSync）全绿。
-tsc：92 个错误，均为既有问题，比干净树的 93 个还少 1 个——本次改动未引入新的类型错误。
-- [ ] OLS Summary 取数样式不发光：可能是因为之前 new function 报错的缘故，导致动画不发光了；并没有加错误处理逻辑，在这里需要验证
-- [ ] ols 取数的逻辑是一个个的，之前为什么是一批一批的？之前是做了形式优化吗？
+- [ ] OLS Summary 取数样式不发光：见上条「取数连线动画验证」（与本节重复项合并跟进时可删此条）
+- [ ] ols 取数的逻辑是一个个的，之前为什么是一批一批的？见上条「逐边 vs 批量语义文档化」
 
 # TODOLIST
 

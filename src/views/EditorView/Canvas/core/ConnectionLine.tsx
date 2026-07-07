@@ -68,7 +68,7 @@ export const ConnectionLine = ({
                 } else {
                     endWorld = getCanvasLocalPointRef.current((gesture as any).currentX, (gesture as any).currentY);
                 }
-            } else if (hasPendingConnection) {
+            } else if (hasPendingConnection && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;
                 endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
             }

@@ -73,6 +73,8 @@ export interface GraphData {
   id: string;
   name: string;
   type: 'event' | 'function';
+  functionInputs?: import('../domain/graph').FunctionSignaturePin[];
+  functionOutputs?: import('../domain/graph').FunctionSignaturePin[];
   nodes: NodeData[];
   pins: PinData[];
   connections: ConnectionData[] | { connections: Array<{ fromPin: string; toPin: string }> };

@@ -58,7 +58,7 @@ struct GraphDocDe {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GraphNodeDe {
+pub(super) struct GraphNodeDe {
     id: NodeId,
     node_type: String,
     #[serde(default)]

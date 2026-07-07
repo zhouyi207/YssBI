@@ -4,7 +4,7 @@ import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";

@@ -14,8 +14,6 @@ interface EdgesOverlayProps {
   dimmed?: boolean;
 }
 
-const EMPTY_IDS: string[] = [];
-
 export interface EdgeData {
   id: string;
   fromPinId: string;
