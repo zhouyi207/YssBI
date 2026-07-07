@@ -2,7 +2,9 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
-import { syncFunctionSignatureMeta, useGraphDataStore } from '@/features/core/dataStore';
+import { syncFunctionSignatureFromGraph } from '@/features/application/graphDocument/functionSignatureSync';
+import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
+import { useGraphDataStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { updateOpenResourceLabels, useResourceStore, resourceKey } from '@/features/core/resource';
 import type { Graph } from '@/shared/types/domain';
@@ -123,7 +125,7 @@ export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload
             hasStaleDocument: false,
             hasConflictDocument: false,
         });
-        syncFunctionSignatureMeta(g);
+        syncFunctionSignatureFromGraph(g);
         
         callbacks?.onFunctionCreated?.(payload.id, payload.data);
     }
@@ -139,7 +141,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
         syncGraphResource(payload, 'function');
         const name = payload.data.name ?? meta?.name;
         if (name) {
-          syncFunctionSignatureMeta({
+          syncFunctionSignatureFromGraph({
             id: payload.id,
             name,
             type: 'function',
@@ -147,7 +149,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
             functionOutputs: payload.data.functionOutputs,
           });
         }
-        if (payload.data.nodes && meta) {
+        if (payload.data.nodes && meta && !shouldSuppressIncrementalPinUpdate(payload.id)) {
           useGraphDataStore.getState().addGraphFromData(
             payload.id,
             buildGraphUpdateData(payload, meta, 'function'),

@@ -1,7 +1,9 @@
 use crate::event::emit_project_event;
 use crate::event::{EventEvent, EventFunction};
+use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
+use crate::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use crate::graph::{FunctionSignaturePin, GraphId, GraphKind};
-use crate::project::{GraphDocumentKind, read_project_index};
+use crate::project::{GraphDocumentKind, emit_pin_change_events, read_project_index};
 use crate::schema::GraphInstanceDTO;
 use crate::{event::Event, project::ProjectState};
 use tauri::{AppHandle, State};
@@ -49,6 +51,8 @@ pub fn create_event(
         GraphKind::Event,
         existing_graph_names(&state, GraphKind::Event, None)?,
     );
+    // 每个事件图自动拥有一个系统托管的 Event Begin 壳节点（对齐 UE5 事件图）。
+    graph.create_node_with_position(EVENT_BEGIN_NODE_TYPE, 120.0, 120.0, None)?;
     let graph_id = graph.id.to_string();
     state.persist_current_project()?;
     emit_project_event(
@@ -72,6 +76,11 @@ pub fn create_function(
         GraphKind::Function,
         existing_graph_names(&state, GraphKind::Function, None)?,
     );
+    // 每个函数图自动拥有 Entry / Return 壳节点（对齐 UE5 函数图）。
+    graph.create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
+    graph.create_node_with_position(FUNCTION_RETURN_NODE_TYPE, 560.0, 160.0, None)?;
+    // 默认签名含 exec 入/出参；投影到 Entry / Return 壳节点 pin。
+    let _ = graph.sync_function_shell_pins();
     let graph_id = graph.id.to_string();
     state.persist_current_project()?;
     emit_project_event(
@@ -111,6 +120,16 @@ pub fn remove_graph(
     Ok(())
 }
 
+/// `update_function_signature` 的返回：函数图 DTO + 已同步 Call pin 的调用方图 DTO + 副作用警告。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateFunctionSignatureResult {
+    pub graph: GraphInstanceDTO,
+    pub caller_graphs: Vec<GraphInstanceDTO>,
+    /// 签名无 exec 入参但函数体含副作用节点时前端据此提示。
+    pub side_effect_warning: bool,
+}
+
 #[tauri::command]
 pub fn update_function_signature(
     app: AppHandle,
@@ -118,8 +137,8 @@ pub fn update_function_signature(
     function_id: GraphId,
     inputs: Option<Vec<FunctionSignaturePin>>,
     outputs: Option<Vec<FunctionSignaturePin>>,
-) -> Result<GraphInstanceDTO, String> {
-    let graph = state.update_function_signature(&function_id, inputs, outputs)?;
+) -> Result<UpdateFunctionSignatureResult, String> {
+    let (graph, change_sets) = state.update_function_signature(&function_id, inputs, outputs)?;
     let dto: GraphInstanceDTO = (&graph).into();
     emit_project_event(
         &app,
@@ -128,7 +147,21 @@ pub fn update_function_signature(
             data: dto.clone(),
         }),
     );
-    Ok(dto)
+    // 签名变更后同步 Entry / Return 壳节点 pin（新增 / 移除 / 更新）到前端画布。
+    emit_pin_change_events(&app, function_id, &graph, &change_sets);
+    // 同步所有引用该函数的 Call 节点 pin，并随 invoke 回包带回调用方图供前端即时刷新。
+    let mut caller_graphs = Vec::new();
+    for (caller_id, caller_graph, caller_sets) in state.sync_call_nodes_for_function(&function_id) {
+        emit_pin_change_events(&app, caller_id, &caller_graph, &caller_sets);
+        caller_graphs.push((&caller_graph).into());
+    }
+    let side_effect_warning = !graph.signature_has_exec_input()
+        && state.function_has_side_effect_nodes(&function_id);
+    Ok(UpdateFunctionSignatureResult {
+        graph: dto,
+        caller_graphs,
+        side_effect_warning,
+    })
 }
 
 #[tauri::command]

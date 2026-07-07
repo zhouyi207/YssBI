@@ -677,6 +677,42 @@ src/app/appConfig/appLinks.ts
 - [x] **View 快照与死代码清理**：View 改为 `ensure_view_source_for_input` 每次发布 `window_{uuid}`；删除 `open_registered_source` / `SourceAction::OpenExisting` / executor 对应分支；测试 `RecordingEmitter` + `WindowSourceEmitter` 合并为 `CapturingEmitter`。
 - [x] **执行前清空运行期状态**：`GraphRuntime::reset_execution_state()` 清空 `pins_runtime_state`、`loop_counters`、`ExecutionDataStore`；`Executor::run` 每次执行前调用；删除从未读写的 `nodes_runtime_state` 及 `NodeRuntimeState`/`NodeState`；`logic_test` 新增 `test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes`。
 - [x] **运行结果清除（Clear）**：重跑 = 替换（`reset_execution_state` + `clear_runtime_graph` + 前端 `startExecution` 清 artifacts）；工具栏新增 Clear（`VscClearAll`）手动清当前图 runtime pin sources + 前端 `pinResults`/回放/动效；`window_*` 快照保留；`clear_graph_execution_artifacts` command + `clearGraphRunArtifacts` store 单点；取消执行同步清 partial artifacts。
+- [x] **函数图设计（对齐 UE5 Blueprint）**：把「图的数据接口（签名）」与「图上的执行边界（壳节点）」彻底分开。签名（`function_inputs`/`function_outputs`）继续由 graph document + Detail 面板 `PinEditor` 作为**单一事实来源**；画布上的 Event Begin / Function Entry / Function Return 只是系统托管的**壳节点（Shell）**，其 pin 是签名的**投影**，用户不能删除 / 复制 / 从 palette 再添加，可自由移动连线。
+  - **壳节点协议（后端为准）**：`NodeMetaData` 增加 `graph_scope`（`Any` / `Event` / `Function`，决定该节点能出现在哪种图）+ `shell_role`（`Option<EventBegin | FunctionEntry | FunctionReturn>`）。派生语义：`shell_role.is_some()` ⇒ 不可删、不可复制、每图至多 1 个、palette 隐藏。删除/创建保护与作用域校验统一在后端 `create_node_raw`（作用域 + 单例校验）与删除命令（壳节点跳过/拒绝）里做，前端仅做 UX 预防。
+  - [x] **Phase 1（已完成）**：`NodeMetaData` 新增 `graph_scope`（`node_scope.rs`：`NodeGraphScope`）+ `shell_role`（`ShellRole`），`NodeDefinition::with_graph_scope` / `as_shell` 构建器；Event Begin 标记为 `EventBegin` 壳 + `NodeGraphScope::Event`；`create_node_raw` 统一做作用域 + 壳单例校验；`delete_node` 拒绝壳节点、`batch_delete_nodes` 过滤壳节点；`create_event` 自动种 Event Begin（复用 `EVENT_BEGIN_NODE_TYPE` 常量，`project_execution` 也改用该常量）；前端 DTO `graph_scope`/`shell_role` + `isShellNodeDefinition`/`nodeDefinitionAllowedInGraphKind`；palette/sidebar catalog 隐藏壳节点 + 按 GraphKind 过滤；`buildClipboardSnapshot` 与删除路径（`useEditorOperations.deleteSelected`、`useNodeManagement`）跳过壳节点；清理失效 `pub mod function`；新增 `tests/shell_node_test.rs`。
+  - [x] **Phase 2（已完成，Function Entry/Return）**：注册 `Functions:Function Entry` / `Functions:Function Return` 壳节点（`register/catalog/function/mod.rs`，`NodeGraphScope::Function` + `ShellRole::FunctionEntry/Return`）；`create_function` 自动种 Entry + Return；新增 `graph_instance/function_shell.rs`：`sync_function_shell_pins` 把 `function_inputs`→Entry 输出 pin、`function_outputs`→Return 输入 pin，按 role 编码的签名 `id` 匹配复用（改名/改类型/重排保连接，删除断连接）；`update_function_signature`（state）改签名后调用同步并返回 `Vec<PinChangeSet>`，command 复用 `emit_pin_change_events` 发 `NodePinsUpdated`，前端 `NodeEventHandler` 现有路径即可实时刷新画布 pin；`graph_scope` 统一驱动 Event 图屏蔽 Entry/Return、Function 图屏蔽 Event Begin；投影 pin 标 `with_dynamic(true)` 以持久化并避免静态同步覆盖；壳保护（不可删/复制）沿用 Phase 1 机制；新增 4 个投影测试于 `tests/shell_node_test.rs`。**同时去掉 Phase 1 兼容代码**：`NodeMetaData.graph_scope`/`shell_role` 去掉 `#[serde(default)]` 与前端可选 `?`（改为必填 + 恒序列化）。
+  - [x] **Phase 3（局部变量，已完成）**：函数作用域 local variables 后端已就绪（`VariableScope::Function` + Runtime SymbolTable 作用域校验）；前端 palette Get/Set 按可见性过滤——新增 `variableVisibleInGraph`（`domain/variable.ts`），`buildContextualCatalogItems` 接收 `graphId`/`graphKind` 过滤 `Variables:Get/Set Variable`，`NodePalette` / `CanvasOverlays` 透传 `activeTabId` 作为 `graphId`。
+  - [x] **Phase 4（Call Function 执行 + 签名 exec，已完成）**：`function_shell.rs` 以 `pins_from_signature` 将签名 data/exec 项统一投影到 Entry/Return/Call（`DataRole::Custom` / `ExecRole::Custom(sig.id)`）；`Call Function` 动态投影所有 pin，签名含 exec 入参走 `flow_processor` + `run_subroutine`，否则 `data_evaluator` + `evaluate_data_target`（pull gate 按 `node_has_exec_pins`）；`call_subgraph` 嵌套 `Executor`（`NoopEmitter`）+ `CallDepthGuard`；`update_function_signature` 经 `sync_call_nodes_for_function` 扇出 Call pin 更新，`invoke` 回包 `callerGraphs` 供前端即时刷新；`create_node_with_id` / `project_call_node_pins` 创建后即投影；`tests/function_call_test.rs`（exec 控制流透传 / 数据拉取 / 签名变更同步）、`shell_node_test.rs`（含 exec 签名投影）全绿。
+- [x] **函数图 Phase 3–4（承接上一条）**：局部变量与签名驱动的 Call Function 执行已落地；节点长文档与签名 exec 模型一致。
+- [x] **节点长文档（函数图 / 未来节点）**：补齐函数图三节点的 Markdown 长文档并接入节点文档面板——`docs/en|zh/call_function.md`、`function_entry.md`、`function_return.md` 已改为「签名 exec/data 投影」表述（移除 Pure/Impure / is_pure）；`docs/function.rs` + `docs/mod.rs` 注册；`nodeDocumentation.test.ts` 全绿。
+- [x] **函数图 Phase 3–4 复审的四项修复/增强**：
+  - **未加载图的 Call pin 陈旧根治**：`ProjectState::sync_all_call_nodes_in_graph` + `resolve_graph_dynamic_pins`（tab 打开）按目标函数当前签名重投影 Call pin——持久化仅作缓存。
+  - **嵌套调用 runtime 文档化（不加缓存）**：`call_subgraph` 每次新建嵌套 runtime，避免递归/多 Call 共享可变执行态。
+  - **签名无 exec 但含副作用节点警告**：`function_has_side_effect_nodes`；`update_function_signature` 返回 `sideEffectWarning`，前端 `detail.signature.sideEffectWarning` toast（已移除纯度 Switch 与 `set_function_purity`）。
+  - ~~**纯函数 Call 节点视觉区分**~~（**已取消**）：不再为无 exec 的 Call 节点做绿色标题 / `pure` 徽章。
+- [x] **函数签名统一为 exec/data 单一事实来源（移除 is_pure）**：删除 `GraphInstance.is_pure`、持久化、DTO、`set_function_purity` command 及前端 `Graph.isPure` / `FunctionDetailPanel` 纯度 Switch / `setFunctionPurity` 全链；新建函数默认签名含 `exec-in`/`exec-out`；Entry/Call `flow_processor` 经 `get_exec_output_roles()` 触发签名 exec 输出；`NodePinsUpdated` `updatePins` 采用完整 pin 字段（修复签名就地修改后画布 pin 对不上）；`applyCallerGraphUpdates` 合并 invoke 回包与打开图 fallback 刷新。
+- [x] **函数图签名就地修改后画布 pin「对不上」修复**：后端投影方向经 `function_call_test` 新增 `call_node_input_output_directions_match_signature` 验证无误；根因在前端 `NodePinsUpdatedHandler` 的 `updatePins` 只 patch `name`，丢弃了就地更新 pin 的 type/direction/container/typeDisplay/dataType——改为采用 DTO 完整可见字段（与 `addPins` 一致），惠及函数壳节点、repeatable pin 重排、动态 pin reconcile 所有走 `updated_pins` 的路径。
+- [x] **Call Function 节点画布显示函数名**：`useNodeView` 对 `Functions:Call Function` 节点按 `subGraphId` 从 ResourceStore（重命名单一事实来源）解析函数名作标题，随函数重命名实时更新；函数已删除时回退默认标题。
+- [x] **图下拉/palette 函数项去掉「Call 」前缀**：`buildContextualCatalogItems` 函数项 `title` 由 `Call ${sub.name}` 改为裸 `sub.name`；并清理由此失效的 `template.subName`（palette / sidebar drag data 生产端 + `Workspace.tsx` preview 消费端全部移除，改由 `template.title` 承载，落节点仍只用 `subGraphId`）。
+- [x] **日志 sash 拖动方向修复**：`resolveSashResizeTarget` 中 after 节点（sash 右侧/下方）无论行/列 `deltaSign` 统一为 `-1`（原列布局误用 `1` 导致向上拖反而缩小日志高度）；同步更新 `sashResizeLogic.test.ts` 的列布局断言，未用的 `orientation` 参数标记为 `_orientation`。
+- [x] **函数图架构复审六项修复（去重 / 去失效逻辑）**：
+  - **文档漂移**：`docs/en|zh/call_function.md`、`function_entry.md`、`function_return.md` 全文改为「签名 exec/data 投影」模型，移除 Pure/Impure / `is_pure` / 硬编码 Then/In/Out 叙述。
+  - **过期注释**：`project_state.rs`、`project_state_graph.rs` 中「纯度」表述改为「签名」。
+  - **前端三重刷新**：新增 `incrementalPinUpdateGuard.ts`；`updateFunctionSignature` 全量 `addGraphFromData` 期间 guard 函数图 + 调用方图；`NodePinsUpdatedHandler` / `FunctionUpdatedHandler` 在 guard 激活时跳过增量 pin / 全图事件，避免与 invoke 回包重复应用。
+  - **签名 meta 单入口**：新增 `functionSignatureSync.ts`（`syncFunctionSignatureFromGraph`）；删除 `graphDocumentMeta.ts`；`graphDocumentActions` / `GraphEventHandler` / `projectIOStore` 统一经此写入 `graphMetaStore`（Detail 面板签名来源）。
+  - **Call 创建单步事件**：`command_node.rs` 提取 `node_create_dto_from_graph` + `sync_call_function_pins_if_needed`；`create_node` / `create_node_with_id` / `batch_create_nodes` / `batch_create_with_connections` 先投影 Call pin 再发一次 `NodeCreated` / `NodesBatchCreated`；移除 `emit_derived_pin_projection_after_create`（不再 0 pin → `NodePinsUpdated` 两步）。
+  - **执行分支单一判定**：`call_subgraph` 以 Call 节点实例 `node_has_exec_pins` 分支（签名投影结果），不再读取目标图 `signature_has_exec_input()`；`applyCallerGraphUpdates` 并入 `graphDocumentActions.ts`。
+  - **验证**：`function_call_test`（6）、`shell_node_test`（7）、`functionSignatureSync` / `graphDocumentActions` / `GraphEventHandler` vitest 全绿。
+- [x] **函数签名项目索引层 + 单事实源（对齐 graphMetaStore，根治 Call 投影死锁）**：
+  - **后端 `FunctionSignatureTable`**（`function_signature_table.rs`）：`ProjectState` 持有内存签名表；`read_project_index` 扩展 `function_inputs`/`function_outputs`；`rebuild_function_signature_table` 于项目加载时从索引 hydrate，已加载函数图覆盖；`get_function_signature` 读路径：已加载图 > 表 > 图文件头（不加载整图）；`update_function_signature` / `insert_graph` / `remove_graph` 维护 upsert/remove。
+  - **Call 投影只读签名**：删除 `resolve_call_projection_target` / `ensure_call_target_graph_loaded`；`resolve_call_projection_signature` 锁外解析；`sync_call_function_pins_from_signature` 替代整图 clone；`with_graph_mut` 内禁止再调 `get_graph`/`load_graph`（`project_state_graph_mut.rs` 文档化锁规则）。
+  - **前端对齐**：`hydrateFunctionSignaturesFromProjectIndex` + `ProjectGraphIndexRow.functionInputs/Outputs`；`useFunctionCatalog`（ResourceStore 名称 + graphMetaStore 签名）供 palette/右键；`buildContextualCatalogItems` 修复 `sub.inputs`/`sub.outputs` 误用；`CanvasOverlays` 去掉 `functions as Graph` 强转。
+  - **验证**：`function_call_test`（7，含 `resolve_call_projection_signature_then_sync_inside_graph_mut`）、`shell_node_test`（7）、`functionSignatureSync` vitest 全绿。
+- [x] **Call 调用点索引（Phase 1–3，`FunctionCallSiteIndex`）**：
+  - **Phase 1**：`read_graph_call_sites_from_file` / `read_graph_call_sites_from_project` 轻量 stub 扫描；`sync_call_nodes_for_function` 改读 `get_function_signature` + `sync_call_function_pins_from_signature`（不再加载目标整图）；删除 `sync_call_function_pins` 包装。
+  - **Phase 2**：`function_call_site_index.rs` 反向索引；`rebuild_function_call_site_index` 于项目加载；`insert_graph` / `remove_graph` / `unload_graph` + 节点 create/delete/patch 增量维护。
+  - **Phase 3**：`collect_function_call_sites` 只查内存索引（零磁盘）；`sync_all_call_nodes_in_graph` 单次 `with_graph_mut` 批量投影；未加载 caller 同步后批量 `persist_loaded_graph`。
+  - **验证**：`function_call_test`（8，含 `call_site_index_tracks_create_and_delete_without_full_graph_scan`）、`shell_node_test`（7）、`function_call_site_index` 单测全绿。
 
 ## v1.0 待办
 
@@ -687,14 +723,15 @@ src/app/appConfig/appLinks.ts
 - [ ] **View：大 Array 分页 tabular（暂缓，没有合适的前端表现）**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
 - [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
-- [ ] 函数图应该如何设计？？？设置不可删除节点，但是可以移动，如 event 中的 event begin，function 中的 inputs 节点 和 outputs 节点？？或许 function 中不应该使用节点形式？？在这里还需要对 event begin 屏蔽，同理 event 需要对 inputs 节点和 outputs 节点屏蔽
-- [ ] **节点长文档（函数图 / 未来节点）**：Function 图 Inputs/Outputs（及 Event 与 Function 互斥壳层）设计落地后，补充对应 Markdown 文档（见 v1.0「函数图应该如何设计」）。
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
 - [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。
 - [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
 - [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
-
+- [ ] 节点样式问题
+cargo test：150 lib 测试 + 集成套件（含新增 function_call_test.rs、更新的 shell_node_test.rs）全部通过。
+相关前端 vitest（FunctionDetailPanel / graphDocumentActions / GraphEventHandler / functionSignatureSync）全绿。
+tsc：92 个错误，均为既有问题，比干净树的 93 个还少 1 个——本次改动未引入新的类型错误。
 
 
 # TODOLIST

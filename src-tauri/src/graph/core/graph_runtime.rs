@@ -59,6 +59,24 @@ impl GraphRuntime {
         self.graph_instance.id
     }
 
+    /// 项目数据引用（用于函数调用时加载目标函数图）。
+    pub fn project_data(&self) -> Arc<RwLock<ProjectData>> {
+        Arc::clone(&self.project_data)
+    }
+
+    /// 项目运行时存储引用。
+    pub fn project_store(&self) -> Arc<RwLock<ProjectStore>> {
+        Arc::clone(&self.project_store)
+    }
+
+    /// 节点是否带有任意 exec pin（用于区分「纯数据可拉取」节点）。
+    pub fn node_has_exec_pins(&self, node_id: NodeId) -> bool {
+        self.graph_instance
+            .get_pin_instances_by_node_id(node_id)
+            .iter()
+            .any(|pin| pin.is_exec())
+    }
+
     pub fn set_pin_current_value(&mut self, pin_id: PinId, value: DataValue) {
         let pin_instance = self.get_pin_instance_by_pin_id(pin_id).unwrap();
         let pin_runtime_state = self.pins_runtime_state.get_mut(&pin_id);
@@ -337,7 +355,12 @@ impl GraphRuntime {
         if is_variable_handle(db_id) {
             let store = self.project_store.read().map_err(|e| e.to_string())?;
             if let Some(entry) = store.variable_tabular.get(db_id) {
-                return Ok(entry.schema.columns.iter().map(|c| c.name.clone()).collect());
+                return Ok(entry
+                    .schema
+                    .columns
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect());
             }
             return Err(format!("Variable tabular '{db_id}' not found"));
         }
@@ -357,7 +380,11 @@ impl GraphRuntime {
     }
 
     /// 按列加载 Series：DuckDB 列裁剪 → Polars；结果缓存在 `data_store`。
-    pub fn load_database_data_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+    pub fn load_database_data_series(
+        &mut self,
+        db_id: &str,
+        column: &str,
+    ) -> Result<Series, String> {
         let cache_key = Self::data_series_cache_key(db_id, column);
         if let Some(series) = self.data_store.get_data_series(&cache_key) {
             return Ok(series.clone());

@@ -7,6 +7,7 @@ import { useGraphDataStore } from '@/features/core/dataStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
+import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
 import { isPending } from '../utils/echoSuppressor';
 import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
@@ -147,6 +148,11 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
     eventType = 'NodePinsUpdated';
 
     handle(payload: NodePinsUpdatedPayload, _callbacks?: EventCallbacks): void {
+        if (shouldSuppressIncrementalPinUpdate(payload.graphId)) {
+            this.log('Node pins updated (suppressed — full graph refresh in progress):', payload.graphId);
+            return;
+        }
+
         this.log(
             'Node pins updated:',
             payload.nodeId,
@@ -164,7 +170,18 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
             removePinIds: payload.removedPinIds,
             updatePins: (payload.updatedPins ?? []).map((pin) => ({
                 pinId: pin.id,
-                patch: { name: pin.name },
+                // 签名/投影 pin 就地更新时，类型、容器、方向都可能变（如 input int → float），
+                // 不能只改 name，否则画布上的 pin 与函数签名「对不上」。
+                // 与 addPins 一致：直接采用 DTO 字段（dataType 保持后端形状），
+                // 避免只改 name 导致类型/方向与签名不符。
+                patch: {
+                    name: pin.name,
+                    type: pin.type,
+                    direction: pin.direction,
+                    containerType: pin.containerType ?? undefined,
+                    typeDisplay: pin.typeDisplay ?? undefined,
+                    dataType: pin.dataType,
+                },
             })),
             addPins: payload.addedPins.map((pin) => ({
                 nodeId: payload.nodeId,

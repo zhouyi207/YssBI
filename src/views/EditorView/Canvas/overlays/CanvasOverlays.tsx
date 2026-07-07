@@ -2,7 +2,6 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { LayoutTab } from "@/shared/types";
-import type { Graph } from "@/shared/types/domain";
 import { useEditorGroup } from "@/features/application/editor";
 
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
@@ -60,7 +59,10 @@ export default function CanvasOverlays({
     const onPaletteSelect = (item: PaletteItem) =>
         contextMenu && handleNodePaletteSelect(item, contextMenu);
 
-    const isEventTab = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type === "event";
+    const activeTabType = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type;
+    const isEventTab = activeTabType === "event";
+    const graphKind: "event" | "function" | undefined =
+        activeTabType === "event" ? "event" : activeTabType === "function" ? "function" : undefined;
 
     return (
         <>
@@ -88,7 +90,9 @@ export default function CanvasOverlays({
                         onSelect={onPaletteSelect}
                         filterPin={pendingConnection}
                         variables={variables}
-                        functions={functions as unknown as Record<string, Graph>}
+                        functions={functions}
+                        graphKind={graphKind}
+                        graphId={activeTabId ?? undefined}
                     />
                 </div>,
                 document.body

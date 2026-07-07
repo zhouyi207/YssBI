@@ -1,16 +1,18 @@
 //! 状态管理模块
 
+use super::function_call_site_index::FunctionCallSiteIndex;
+use super::function_signature_table::FunctionSignatureTable;
 use crate::application::database::bind_duckdb_instance;
 use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
 use crate::graph::value::DataType;
 use crate::graph::{GraphId, GraphInstance, GraphKind, GraphRecompileScope, PinChangeSet, PinId};
-use crate::tabular::is_variable_handle;
 use crate::log::log_sys;
 use crate::project::{
     GraphDocument, ProjectData, ProjectStore, load_project_graph_from_file,
     save_project_graph_to_file, save_project_to_file,
 };
+use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -27,6 +29,10 @@ pub struct ProjectState {
     /// Bumped when project-wide graph runtime inputs change (e.g. database catalog).
     /// Compared against `GraphInstance::runtime_prepared_epoch` to skip redundant prepare.
     graph_runtime_epoch: Arc<RwLock<u64>>,
+    /// 函数签名表（项目索引层缓存，与 `read_project_index` / 已加载函数图对齐）。
+    function_signatures: Arc<RwLock<FunctionSignatureTable>>,
+    /// Call Function 调用点反向索引（与磁盘 stub 扫描 / 已加载图对齐）。
+    function_call_sites: Arc<RwLock<FunctionCallSiteIndex>>,
 }
 
 impl ProjectState {
@@ -36,7 +42,17 @@ impl ProjectState {
             project_path: Arc::new(RwLock::new(None)),
             project_store: Arc::new(RwLock::new(ProjectStore::default())),
             graph_runtime_epoch: Arc::new(RwLock::new(1)),
+            function_signatures: Arc::new(RwLock::new(FunctionSignatureTable::default())),
+            function_call_sites: Arc::new(RwLock::new(FunctionCallSiteIndex::default())),
         }
+    }
+
+    pub(crate) fn function_signatures(&self) -> &Arc<RwLock<FunctionSignatureTable>> {
+        &self.function_signatures
+    }
+
+    pub(crate) fn function_call_sites(&self) -> &Arc<RwLock<FunctionCallSiteIndex>> {
+        &self.function_call_sites
     }
 
     fn graph_runtime_epoch(&self) -> u64 {
@@ -194,13 +210,9 @@ impl ProjectState {
                 Some(graph) => graph.kind.clone(),
                 None => continue,
             };
-            let variable_symbols = Self::variable_symbols_from_variables(
-                &data.variables,
-                &graph_id,
-                &graph_kind,
-            );
-            let dataframe_symbols =
-                Self::dataframe_symbols_from_databases(&data.databases);
+            let variable_symbols =
+                Self::variable_symbols_from_variables(&data.variables, &graph_id, &graph_kind);
+            let dataframe_symbols = Self::dataframe_symbols_from_databases(&data.databases);
             let Some(graph) = data.graphs.get_mut(&graph_id) else {
                 continue;
             };
@@ -264,14 +276,20 @@ impl ProjectState {
     }
 
     /// Materialize schema-derived pins for a loaded graph (tab open path).
+    ///
+    /// 同时把本图内所有 Call Function 节点的 pin 按各自目标函数的当前签名重建，
+    /// 消除「本图 unload 期间目标函数改过签名」导致的 Call pin 陈旧。
     pub fn resolve_graph_dynamic_pins(
         &self,
         graph_id: &GraphId,
     ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+        let mut call_sets = self.sync_all_call_nodes_in_graph(graph_id);
+
         let graph = self
             .get_graph(graph_id)
             .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
-        let (change_sets, inferred) = graph.materialize_dynamic_pins();
+        let (mut change_sets, inferred) = graph.materialize_dynamic_pins();
+        change_sets.append(&mut call_sets);
         Ok((graph, change_sets, inferred))
     }
 
@@ -292,6 +310,13 @@ impl ProjectState {
             .unwrap()
             .graphs
             .insert(graph_id, graph.clone());
+        if graph.kind == GraphKind::Function {
+            self.function_signatures()
+                .write()
+                .unwrap()
+                .upsert_from_graph(&graph);
+        }
+        self.refresh_call_sites_for_caller(&graph_id);
         graph
     }
 
@@ -357,6 +382,8 @@ impl ProjectState {
         *self.project_path.write().unwrap() = None;
         *self.project_store.write().unwrap() = ProjectStore::default();
         *self.graph_runtime_epoch.write().unwrap() = 1;
+        self.function_signatures().write().unwrap().clear();
+        self.function_call_sites().write().unwrap().clear();
     }
 
     /// Reset in-memory project after disk load or save-as. Clears execution caches too.
@@ -370,6 +397,12 @@ impl ProjectState {
         source_store.clear_all();
         self.set_path(Some(path));
         self.set_data(project_data);
+        if let Err(e) = self.rebuild_function_signature_table() {
+            log_sys::warn!("function signature table rebuild failed: {}", e);
+        }
+        if let Err(e) = self.rebuild_function_call_site_index() {
+            log_sys::warn!("function call site index rebuild failed: {}", e);
+        }
     }
 
     pub fn persist_current_project(&self) -> Result<(), String> {

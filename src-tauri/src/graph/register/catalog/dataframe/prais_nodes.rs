@@ -2,8 +2,8 @@
 //!
 //! Stata: prais y x1 x2 [, corc]
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -526,7 +526,10 @@ fn register_prais_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::prais::PRAIS_CONFIGURE_ZH, docs::prais::PRAIS_CONFIGURE_EN)
+    .with_documentation(
+        docs::prais::PRAIS_CONFIGURE_ZH,
+        docs::prais::PRAIS_CONFIGURE_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -602,7 +605,7 @@ fn register_prais(registry: &NodeRegistry) {
 
     let def = NodeDefinition::new("Prais", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-                .with_documentation(docs::prais::PRAIS_ZH, docs::prais::PRAIS_EN)
+        .with_documentation(docs::prais::PRAIS_ZH, docs::prais::PRAIS_EN)
         .with_pin_slots(slots)
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_prais_regression(ctx)?;
@@ -655,7 +658,7 @@ fn register_prais_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::prais::PRAIS_SUMMARY_ZH, docs::prais::PRAIS_SUMMARY_EN)
+    .with_documentation(docs::prais::PRAIS_SUMMARY_ZH, docs::prais::PRAIS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_prais_regression(ctx)?;

@@ -1,12 +1,14 @@
 //! 项目管理模块
 
+pub mod execution_cancel;
 pub mod graph_events;
+pub mod function_call_site_index;
+pub mod function_signature_table;
 pub mod graph_resource_index;
 pub mod path_format;
 pub mod project_data;
 pub mod project_error;
 pub mod project_execution;
-pub mod execution_cancel;
 pub mod project_io;
 pub mod project_metadata;
 pub mod project_picker_task;
@@ -24,12 +26,14 @@ pub mod resource_reveal;
 pub mod unique_name;
 pub mod worksheet_io;
 
+pub use execution_cancel::*;
 pub use graph_events::*;
+pub use function_call_site_index::*;
+pub use function_signature_table::*;
 pub use graph_resource_index::*;
 pub use path_format::*;
 pub use project_data::*;
 pub use project_error::*;
-pub use execution_cancel::*;
 pub use project_execution::*;
 pub use project_io::*;
 pub use project_metadata::*;

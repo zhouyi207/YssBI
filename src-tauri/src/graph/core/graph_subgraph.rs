@@ -61,11 +61,8 @@ impl GraphInstance {
         }
     }
 
-    fn capture_subgraph_inner(
-        &self,
-        node_ids: &[NodeId],
-        delete_closure: bool,
-    ) -> GraphUndoPatch {        let data_state = self.data_state.read().unwrap();
+    fn capture_subgraph_inner(&self, node_ids: &[NodeId], delete_closure: bool) -> GraphUndoPatch {
+        let data_state = self.data_state.read().unwrap();
 
         let mut nodes = Vec::new();
         let mut primary_pin_set: HashSet<PinId> = HashSet::new();
@@ -186,10 +183,7 @@ impl GraphInstance {
         }
     }
 
-    fn apply_neighbor_patch(
-        &self,
-        neighbor_nodes: &[NodeSubgraphDTO],
-    ) -> Vec<PinChangeSet> {
+    fn apply_neighbor_patch(&self, neighbor_nodes: &[NodeSubgraphDTO]) -> Vec<PinChangeSet> {
         if neighbor_nodes.is_empty() {
             return Vec::new();
         }
@@ -482,12 +476,12 @@ impl GraphInstance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::GraphKind;
     use crate::graph::node::{ColumnSchema, DataSchema, NodeInstanceParams, SchemaProvider};
     use crate::graph::pin::{DataRole, PinRole};
-    use crate::graph::register::catalog::register_builtin_nodes;
     use crate::graph::register::NodeRegistry;
+    use crate::graph::register::catalog::register_builtin_nodes;
     use crate::graph::value::DataType;
-    use crate::graph::GraphKind;
 
     fn test_graph() -> GraphInstance {
         let registry = Arc::new(NodeRegistry::new());
@@ -651,9 +645,7 @@ mod tests {
             .unwrap()
             .id;
 
-        graph
-            .connect(decompose_pins["time"], add_time_in)
-            .unwrap();
+        graph.connect(decompose_pins["time"], add_time_in).unwrap();
         graph
             .connect(decompose_pins["value"], add_value_in)
             .unwrap();
@@ -679,17 +671,22 @@ mod tests {
             .map(|p| (p.definition.name.clone(), p.id))
             .collect();
         assert_eq!(columns_after_delete.get("time"), decompose_pins.get("time"));
-        assert_eq!(columns_after_delete.get("value"), decompose_pins.get("value"));
+        assert_eq!(
+            columns_after_delete.get("value"),
+            decompose_pins.get("value")
+        );
 
         let ds = graph.data_state.read().unwrap();
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["time"])
-            .contains(&add_time_in));
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["value"])
-            .contains(&add_value_in));
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["time"])
+                .contains(&add_time_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["value"])
+                .contains(&add_value_in)
+        );
         drop(ds);
 
         let merge_result = graph
@@ -699,18 +696,21 @@ mod tests {
         assert_eq!(merge_result.established_connections.len(), 1);
 
         let ds = graph.data_state.read().unwrap();
-        assert!(ds
-            .connections
-            .get_downstream(source_out)
-            .contains(&decompose_in));
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["time"])
-            .contains(&add_time_in));
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["value"])
-            .contains(&add_value_in));
+        assert!(
+            ds.connections
+                .get_downstream(source_out)
+                .contains(&decompose_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["time"])
+                .contains(&add_time_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["value"])
+                .contains(&add_value_in)
+        );
     }
 
     #[test]
@@ -766,7 +766,9 @@ mod tests {
             .unwrap()
             .id;
         graph.connect(decompose_pins["time"], add_time_in).unwrap();
-        graph.connect(decompose_pins["value"], add_value_in).unwrap();
+        graph
+            .connect(decompose_pins["value"], add_value_in)
+            .unwrap();
 
         let snapshot = graph.capture_subgraph_for_delete(&[decompose]);
         assert_eq!(snapshot.nodes.len(), 1);
@@ -790,14 +792,16 @@ mod tests {
         assert_eq!(restored_cols.get("value"), decompose_pins.get("value"));
 
         let ds = graph.data_state.read().unwrap();
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["time"])
-            .contains(&add_time_in));
-        assert!(ds
-            .connections
-            .get_downstream(source_out)
-            .contains(&decompose_in));
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["time"])
+                .contains(&add_time_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(source_out)
+                .contains(&decompose_in)
+        );
     }
 
     #[test]
@@ -848,7 +852,10 @@ mod tests {
             .filter(|p| p.is_output() && p.is_data())
             .map(|p| p.definition.name.clone())
             .collect();
-        assert_ne!(cols_after_resolve, before_cols, "test setup: resolve should mutate neighbor");
+        assert_ne!(
+            cols_after_resolve, before_cols,
+            "test setup: resolve should mutate neighbor"
+        );
 
         graph
             .apply_graph_patch(snapshot, &HashMap::new(), &HashMap::new())
@@ -956,9 +963,7 @@ mod tests {
             .unwrap()
             .id;
 
-        graph
-            .connect(decompose_pins["time"], add_time_in)
-            .unwrap();
+        graph.connect(decompose_pins["time"], add_time_in).unwrap();
         graph
             .connect(decompose_pins["value"], add_value_in)
             .unwrap();
@@ -988,10 +993,11 @@ mod tests {
         );
 
         let ds = graph.data_state.read().unwrap();
-        assert!(!ds
-            .connections
-            .get_downstream(decompose_pins["time"])
-            .contains(&add_time_in));
+        assert!(
+            !ds.connections
+                .get_downstream(decompose_pins["time"])
+                .contains(&add_time_in)
+        );
         drop(ds);
 
         graph
@@ -1007,17 +1013,20 @@ mod tests {
         assert_eq!(restored_cols, vec!["time".to_string(), "value".to_string()]);
 
         let ds = graph.data_state.read().unwrap();
-        assert!(ds
-            .connections
-            .get_downstream(source_out)
-            .contains(&decompose_in));
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["time"])
-            .contains(&add_time_in));
-        assert!(ds
-            .connections
-            .get_downstream(decompose_pins["value"])
-            .contains(&add_value_in));
+        assert!(
+            ds.connections
+                .get_downstream(source_out)
+                .contains(&decompose_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["time"])
+                .contains(&add_time_in)
+        );
+        assert!(
+            ds.connections
+                .get_downstream(decompose_pins["value"])
+                .contains(&add_value_in)
+        );
     }
 }

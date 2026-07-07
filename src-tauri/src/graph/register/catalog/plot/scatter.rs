@@ -57,26 +57,22 @@ fn series_to_plot_f64(s: &polars::prelude::Series) -> Result<polars::prelude::Se
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Scatter", vec!["Plot".to_string()])
         .with_ui_style("plot")
-                .with_documentation(docs::plot::SCATTER_ZH, docs::plot::SCATTER_EN)
+        .with_documentation(docs::plot::SCATTER_ZH, docs::plot::SCATTER_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
                 "X",
                 DataRole::Inputs(0),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Float64,
-                    DataType::Int64,
-                    DataType::Date,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Float64, DataType::Int64, DataType::Date],
+                )))),
             )),
             PinSlot::fixed(PinDefinition::data_input(
                 "Y",
                 DataRole::Inputs(1),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                    DataType::Float64,
-                    DataType::Int64,
-                    DataType::Date,
-                ])))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                    vec![DataType::Float64, DataType::Int64, DataType::Date],
+                )))),
             )),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
@@ -96,13 +92,15 @@ pub fn register(registry: &NodeRegistry) {
             let x_series = ctx.get_data_series(&x_id)?;
             let y_series = ctx.get_data_series(&y_id)?;
 
-            let x_cast = series_to_plot_f64(&x_series)
-                .map_err(|e| format!("Scatter: X {}", e))?;
-            let y_cast = series_to_plot_f64(&y_series)
-                .map_err(|e| format!("Scatter: Y {}", e))?;
+            let x_cast = series_to_plot_f64(&x_series).map_err(|e| format!("Scatter: X {}", e))?;
+            let y_cast = series_to_plot_f64(&y_series).map_err(|e| format!("Scatter: Y {}", e))?;
 
-            let x_f64 = x_cast.f64().map_err(|e| format!("X is not plottable: {}", e))?;
-            let y_f64 = y_cast.f64().map_err(|e| format!("Y is not plottable: {}", e))?;
+            let x_f64 = x_cast
+                .f64()
+                .map_err(|e| format!("X is not plottable: {}", e))?;
+            let y_f64 = y_cast
+                .f64()
+                .map_err(|e| format!("Y is not plottable: {}", e))?;
 
             let data: Vec<ScatterPoint> = x_f64
                 .into_iter()
@@ -133,13 +131,22 @@ pub fn register(registry: &NodeRegistry) {
 
             let plot_data = ScatterPlotData {
                 data,
-                x_label: if x_label.is_empty() { None } else { Some(x_label) },
-                y_label: if y_label.is_empty() { None } else { Some(y_label) },
+                x_label: if x_label.is_empty() {
+                    None
+                } else {
+                    Some(x_label)
+                },
+                y_label: if y_label.is_empty() {
+                    None
+                } else {
+                    Some(y_label)
+                },
                 x_format: x_format.to_string(),
                 y_format: y_format.to_string(),
             };
 
-            let json = serde_json::to_string(&plot_data).map_err(|e| format!("Scatter: serialize failed: {}", e))?;
+            let json = serde_json::to_string(&plot_data)
+                .map_err(|e| format!("Scatter: serialize failed: {}", e))?;
             ctx.publish_plot(PlotChart::Scatter, json);
 
             Ok(ExecutionEffect::trigger(ExecRole::ExecOut))

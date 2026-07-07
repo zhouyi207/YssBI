@@ -66,6 +66,8 @@ export interface ProjectGraphIndexRow {
     id: string;
     name: string;
     type: "event" | "function";
+    functionInputs?: import('@/shared/types/domain').FunctionSignaturePin[];
+    functionOutputs?: import('@/shared/types/domain').FunctionSignaturePin[];
 }
 
 export interface ProjectWorksheetIndexRow {

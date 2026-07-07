@@ -3,13 +3,21 @@ use super::*;
 /// 创建和清理
 impl GraphInstance {
     pub fn new(name: impl Into<String>, kind: GraphKind, registry: Arc<NodeRegistry>) -> Self {
+        let (function_inputs, function_outputs) = if kind == GraphKind::Function {
+            (
+                super::types::default_function_exec_inputs(),
+                super::types::default_function_exec_outputs(),
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
         Self {
             id: GraphId::new(),
             name: name.into(),
             position: GraphPosition::default(),
             kind,
-            function_inputs: Vec::new(),
-            function_outputs: Vec::new(),
+            function_inputs,
+            function_outputs,
             data_state: Default::default(),
             registry,
             schema_provider: None,
@@ -251,4 +259,3 @@ impl GraphInstance {
         Ok(())
     }
 }
-

@@ -107,11 +107,7 @@ pub fn run_hypothesis_test(input: HypothesisTestInput) -> Result<HypothesisTestO
     let betas = Array1::from_vec(input.betas);
     let cov_beta = Array2::from_shape_vec(
         (k, k),
-        input
-            .cov_beta
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>(),
+        input.cov_beta.into_iter().flatten().collect::<Vec<_>>(),
     )
     .map_err(|e| format!("cov_beta 形状错误: {}", e))?;
 
@@ -164,7 +160,10 @@ pub fn run_hypothesis_test(input: HypothesisTestInput) -> Result<HypothesisTestO
 }
 
 /// Parse margins `at()` specs such as `x1 = 0, x2 = 1.5` into param -> value.
-pub fn parse_at_values(at_spec: &str, param_names: &[String]) -> Result<HashMap<String, f64>, String> {
+pub fn parse_at_values(
+    at_spec: &str,
+    param_names: &[String],
+) -> Result<HashMap<String, f64>, String> {
     let trimmed = at_spec.trim();
     if trimmed.is_empty() {
         return Ok(HashMap::new());
@@ -221,9 +220,9 @@ fn format_linear_forms(
     let mut h1_rows = Vec::new();
     for i in 0..r.nrows() {
         let h1_op = constraints.get(i).map(h1_display_op).unwrap_or(" ≠ ");
-        let flip = constraints.get(i).is_some_and(|h| {
-            matches!(h, HypothesisExpr::Lt(_, _) | HypothesisExpr::Le(_, _))
-        });
+        let flip = constraints
+            .get(i)
+            .is_some_and(|h| matches!(h, HypothesisExpr::Lt(_, _) | HypothesisExpr::Le(_, _)));
         let sign = if flip { -1.0 } else { 1.0 };
 
         let mut terms = Vec::new();

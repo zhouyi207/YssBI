@@ -112,108 +112,113 @@ fn register_decompose_dataframe(registry: &NodeRegistry) {
 fn register_combine_dataframe(registry: &NodeRegistry) {
     let definition = docs::dataframe::apply_docs(
         NodeDefinition::new("Combine DataFrame", vec!["Data".to_string()])
-        .with_ui_style("dataframe")
-        .with_output_schema_resolver(Arc::new(|ctx| {
-            let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
-                .input_schemas
-                .iter()
-                .filter_map(|(role, schema)| {
-                    let idx = role.index()?;
-                    if !role.matches_family(&PinRole::Data(DataRole::Inputs(0))) {
-                        return None;
-                    }
-                    Some((idx, schema))
-                })
-                .collect();
-            indexed.sort_by_key(|(i, _)| *i);
-
-            let columns: Vec<crate::graph::node::ColumnSchema> = indexed
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, (_, schema))| {
-                    let col = schema.columns.first()?;
-                    let name = if col.name.is_empty() || col.name == "literal" {
-                        format!("col_{}", i)
-                    } else {
-                        col.name.clone()
-                    };
-                    Some(crate::graph::node::ColumnSchema {
-                        name,
-                        data_type: col.data_type.clone(),
+            .with_ui_style("dataframe")
+            .with_output_schema_resolver(Arc::new(|ctx| {
+                let mut indexed: Vec<(usize, &crate::graph::node::DataSchema)> = ctx
+                    .input_schemas
+                    .iter()
+                    .filter_map(|(role, schema)| {
+                        let idx = role.index()?;
+                        if !role.matches_family(&PinRole::Data(DataRole::Inputs(0))) {
+                            return None;
+                        }
+                        Some((idx, schema))
                     })
-                })
-                .collect();
-            if columns.is_empty() {
-                None
-            } else {
-                Some(crate::graph::node::DataSchema { columns })
-            }
-        }))
-        .with_pin_slots(vec![
-            PinSlot::repeatable(
-                PinDefinition::data_input(
+                    .collect();
+                indexed.sort_by_key(|(i, _)| *i);
+
+                let columns: Vec<crate::graph::node::ColumnSchema> = indexed
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, (_, schema))| {
+                        let col = schema.columns.first()?;
+                        let name = if col.name.is_empty() || col.name == "literal" {
+                            format!("col_{}", i)
+                        } else {
+                            col.name.clone()
+                        };
+                        Some(crate::graph::node::ColumnSchema {
+                            name,
+                            data_type: col.data_type.clone(),
+                        })
+                    })
+                    .collect();
+                if columns.is_empty() {
+                    None
+                } else {
+                    Some(crate::graph::node::DataSchema { columns })
+                }
+            }))
+            .with_pin_slots(vec![
+                PinSlot::repeatable(
+                    PinDefinition::data_input(
+                        "Column",
+                        DataRole::Inputs(0),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
+                            DataType::Any,
+                        ))),
+                    )
+                    .with_optional(true),
                     "Column",
-                    DataRole::Inputs(0),
-                    PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
-                )
-                .with_optional(true),
-                "Column",
-                1,
-                None,
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "DataFrame",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(DataType::DataFrame),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
-            let series_vec: Vec<polars::prelude::Series> = values
-                .into_iter()
-                .filter_map(|v| {
-                    if let DataValue::DataSeries(dsv) = v {
-                        ctx.get_data_series(&dsv.id).ok()
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+                    1,
+                    None,
+                ),
+                PinSlot::fixed(PinDefinition::data_output(
+                    "DataFrame",
+                    DataRole::Output,
+                    PinDataTypeDefinition::concrete(DataType::DataFrame),
+                )),
+            ])
+            .with_data_evaluator(Arc::new(|ctx| {
+                let values = ctx.get_inputs_by_family(&PinRole::Data(DataRole::Inputs(0)))?;
+                let series_vec: Vec<polars::prelude::Series> = values
+                    .into_iter()
+                    .filter_map(|v| {
+                        if let DataValue::DataSeries(dsv) = v {
+                            ctx.get_data_series(&dsv.id).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-            if series_vec.is_empty() {
-                return Err(
-                    "Combine DataFrame: at least one DataSeries input must be connected"
-                        .to_string(),
-                );
-            }
+                if series_vec.is_empty() {
+                    return Err(
+                        "Combine DataFrame: at least one DataSeries input must be connected"
+                            .to_string(),
+                    );
+                }
 
-            let max_len = series_vec.iter().map(|s| s.len()).max().unwrap_or(0);
-            let columns: Vec<Column> = series_vec
-                .into_iter()
-                .enumerate()
-                .map(|(i, s)| {
-                    let name = s.name().to_string();
-                    let name = if name.is_empty() || name == "literal" {
-                        format!("col_{}", i).into()
-                    } else {
-                        name.into()
-                    };
-                    let s = if s.len() < max_len {
-                        s.extend_constant(polars::prelude::AnyValue::Null, max_len - s.len())
-                            .unwrap_or(s)
-                    } else {
-                        s
-                    };
-                    Column::from(s.with_name(name))
-                })
-                .collect();
+                let max_len = series_vec.iter().map(|s| s.len()).max().unwrap_or(0);
+                let columns: Vec<Column> = series_vec
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, s)| {
+                        let name = s.name().to_string();
+                        let name = if name.is_empty() || name == "literal" {
+                            format!("col_{}", i).into()
+                        } else {
+                            name.into()
+                        };
+                        let s = if s.len() < max_len {
+                            s.extend_constant(polars::prelude::AnyValue::Null, max_len - s.len())
+                                .unwrap_or(s)
+                        } else {
+                            s
+                        };
+                        Column::from(s.with_name(name))
+                    })
+                    .collect();
 
-            let df = DataFrame::new(max_len, columns)
-                .map_err(|e| format!("Combine DataFrame: {}", e))?;
-            let id = ctx.put_dataframe(df)?;
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), DataValue::DataFrame(id))?;
-            Ok(())
-        })),
+                let df = DataFrame::new(max_len, columns)
+                    .map_err(|e| format!("Combine DataFrame: {}", e))?;
+                let id = ctx.put_dataframe(df)?;
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Output),
+                    DataValue::DataFrame(id),
+                )?;
+                Ok(())
+            })),
         "Combine DataFrame",
     );
     registry.register(definition);

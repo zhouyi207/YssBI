@@ -2,8 +2,8 @@
 //!
 //! 对应 Stata vec x y z, lags(#) rank(#) trend(none|constant|trend) sindicators(varlist)
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -450,7 +450,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::vec::VEC_ZH, docs::vec::VEC_EN)
+    .with_documentation(docs::vec::VEC_ZH, docs::vec::VEC_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_vec(ctx)?;

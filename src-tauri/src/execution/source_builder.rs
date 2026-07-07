@@ -462,10 +462,7 @@ fn serialize_struct_value(
 fn is_scalar_data_value(value: &DataValue) -> bool {
     matches!(
         value,
-        DataValue::Boolean(_)
-            | DataValue::Int64(_)
-            | DataValue::Float64(_)
-            | DataValue::String(_)
+        DataValue::Boolean(_) | DataValue::Int64(_) | DataValue::Float64(_) | DataValue::String(_)
     )
 }
 
@@ -612,7 +609,11 @@ mod tests {
         );
         assert_eq!(record.descriptor.presentation.route(), "/plot");
         assert_eq!(
-            record.descriptor.presentation.plot_chart().map(PlotChart::as_str),
+            record
+                .descriptor
+                .presentation
+                .plot_chart()
+                .map(PlotChart::as_str),
             Some("scatter")
         );
     }

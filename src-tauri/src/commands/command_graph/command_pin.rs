@@ -1,9 +1,9 @@
-use crate::project::emit_pin_change_events;
 use crate::graph::pin::PinDataTypeDefinition;
 use crate::graph::value::{DataType, DataValue};
 use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
 use crate::project::ProjectState;
+use crate::project::emit_pin_change_events;
 use crate::schema::{GraphInstanceDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};

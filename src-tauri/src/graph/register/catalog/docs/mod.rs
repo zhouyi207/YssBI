@@ -1,11 +1,12 @@
 pub mod adf;
 pub mod align;
 pub mod control;
-pub mod dataframe;
 pub mod data_series;
+pub mod dataframe;
 pub mod debug;
 pub mod distribution;
 pub mod event;
+pub mod function;
 pub mod gls;
 pub mod iv;
 pub mod logic;

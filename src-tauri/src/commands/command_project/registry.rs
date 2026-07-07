@@ -1,9 +1,9 @@
 use crate::event::{Event, EventProject, emit_project_event};
 use crate::project::{
-    CleanupInvalidProjectsResult, ProjectRecord, ProjectRegistry, ProjectPickerTaskCancelRegistry,
+    CleanupInvalidProjectsResult, ProjectPickerTaskCancelRegistry, ProjectRecord, ProjectRegistry,
     ScanProjectsResult,
 };
-use tauri::{ipc::Channel, State};
+use tauri::{State, ipc::Channel};
 
 #[tauri::command]
 pub async fn list_registered_projects(

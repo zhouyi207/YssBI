@@ -2,7 +2,7 @@ use crate::event::{Event, EventConnection, emit_project_event};
 use crate::execution::ResultSourceStore;
 use crate::graph::{GraphId, NodeId, PinId};
 use crate::log::log_app;
-use crate::project::{emit_graph_pin_mutation_sync, ProjectState};
+use crate::project::{ProjectState, emit_graph_pin_mutation_sync};
 use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

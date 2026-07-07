@@ -14,9 +14,9 @@ pub mod graph;
 pub mod log;
 pub mod project;
 pub mod schema;
+pub mod tabular;
 pub mod variable;
 pub mod window_state;
-pub mod tabular;
 
 use commands::*;
 use tauri::Manager;

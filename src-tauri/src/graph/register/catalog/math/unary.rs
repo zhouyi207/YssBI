@@ -27,50 +27,52 @@ fn scalar_to_f64(v: &DataValue) -> Option<f64> {
     v.as_f64()
 }
 
-fn register_unary_fn(
-    registry: &NodeRegistry,
-    name: &str,
-    f: fn(f64) -> f64,
-) {
+fn register_unary_fn(registry: &NodeRegistry, name: &str, f: fn(f64) -> f64) {
     let name_owned = name.to_string();
     let definition = docs::math::apply_docs(
         NodeDefinition::new(name, vec!["Math".to_string(), "Functions".to_string()])
-        .with_ui_style("math")
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "X",
-                DataRole::Input,
-                PinDataTypeDefinition::concrete(numeric_input_type()),
-            )),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Result",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(numeric_output_type()),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(move |ctx| {
-            let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let result = match &input {
-                DataValue::DataSeries(dsv) => {
-                    let series = ctx.get_data_series(&dsv.id)?;
-                    let cast = series
-                        .cast(&polars::prelude::DataType::Float64)
-                        .map_err(|e| format!("{}: cannot cast to Float64: {}", name_owned, e))?;
-                    let ca = cast.f64().map_err(|e| format!("{}: {}", name_owned, e))?;
-                    let result_series: polars::prelude::Float64Chunked =
-                        ca.into_iter().map(|opt| opt.map(f)).collect();
-                    let id = ctx.put_data_series(result_series.into_series())?;
-                    DataValue::DataSeries(DataSeriesValue::with_element_type(id, DataType::Float64))
-                }
-                _ => {
-                    let x = scalar_to_f64(&input)
-                        .ok_or_else(|| format!("{}: input is not numeric", name_owned))?;
-                    DataValue::Float64(f(x))
-                }
-            };
-            ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), result)?;
-            Ok(())
-        })),
+            .with_ui_style("math")
+            .with_pin_slots(vec![
+                PinSlot::fixed(PinDefinition::data_input(
+                    "X",
+                    DataRole::Input,
+                    PinDataTypeDefinition::concrete(numeric_input_type()),
+                )),
+                PinSlot::fixed(PinDefinition::data_output(
+                    "Result",
+                    DataRole::Output,
+                    PinDataTypeDefinition::concrete(numeric_output_type()),
+                )),
+            ])
+            .with_data_evaluator(Arc::new(move |ctx| {
+                let input = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+                let result = match &input {
+                    DataValue::DataSeries(dsv) => {
+                        let series = ctx.get_data_series(&dsv.id)?;
+                        let cast =
+                            series
+                                .cast(&polars::prelude::DataType::Float64)
+                                .map_err(|e| {
+                                    format!("{}: cannot cast to Float64: {}", name_owned, e)
+                                })?;
+                        let ca = cast.f64().map_err(|e| format!("{}: {}", name_owned, e))?;
+                        let result_series: polars::prelude::Float64Chunked =
+                            ca.into_iter().map(|opt| opt.map(f)).collect();
+                        let id = ctx.put_data_series(result_series.into_series())?;
+                        DataValue::DataSeries(DataSeriesValue::with_element_type(
+                            id,
+                            DataType::Float64,
+                        ))
+                    }
+                    _ => {
+                        let x = scalar_to_f64(&input)
+                            .ok_or_else(|| format!("{}: input is not numeric", name_owned))?;
+                        DataValue::Float64(f(x))
+                    }
+                };
+                ctx.emit_output_by_role(&PinRole::Data(DataRole::Output), result)?;
+                Ok(())
+            })),
         name,
     );
     registry.register(definition);

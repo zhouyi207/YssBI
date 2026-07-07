@@ -588,6 +588,10 @@ export const zhCN = {
     typeLabels: {
       function: "函数",
     },
+    signature: {
+      sideEffectWarning:
+        "函数签名未包含 exec 入参，但函数体含有副作用节点（如 View、Set Variable），按数据求值时这些节点不会执行。",
+    },
     counts: {
       columns: "{{count}} 列",
       rows: "{{count}} 行",

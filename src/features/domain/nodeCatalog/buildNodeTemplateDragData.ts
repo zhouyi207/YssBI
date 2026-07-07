@@ -17,7 +17,6 @@ export function buildNodeTemplateDragData(item: NodeCatalogItem) {
       ...(item.overrides?.subGraphId
         ? {
             subGraphId: item.overrides.subGraphId,
-            subName: item.title.replace(/^Call /, ''),
             category: 'Functions',
           }
         : {}),

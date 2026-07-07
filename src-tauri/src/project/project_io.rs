@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::function_signature_table::FunctionSignatureEntry;
 use super::{
     GraphResourceIndex, GraphResourceManifestEntry, PROJECT_METADATA_FILE, ProjectData,
     ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir, flatten_worksheet_layout,
@@ -10,7 +11,7 @@ use super::{
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::NodeInstanceParams;
-use crate::graph::{GraphId, GraphInstance, GraphKind};
+use crate::graph::{FunctionSignaturePin, GraphId, GraphInstance, GraphKind, NodeId};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -63,6 +64,11 @@ pub struct ProjectGraphIndexEntry {
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
+    /// 函数图签名（仅 `type=function` 时有值；Event 图为空数组且不序列化）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_outputs: Vec<FunctionSignaturePin>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -298,6 +304,67 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
         worksheets,
         variables,
     })
+}
+
+/// 仅读取函数图文件头部的签名（不反序列化 nodes/pins）。
+pub fn read_function_signature_header_from_project(
+    project_path: &str,
+    graph_id: &GraphId,
+) -> Result<Option<FunctionSignatureEntry>, ProjectError> {
+    let root = project_root_from_path(project_path);
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    let Some(resource) = graph_resources.get_by_id(graph_id) else {
+        return Ok(None);
+    };
+    if resource.kind != GraphDocumentKind::Function {
+        return Ok(None);
+    }
+    let header = read_graph_file_header(root.join(&resource.path).as_path())?;
+    Ok(Some(FunctionSignatureEntry {
+        inputs: header.graph.function_inputs,
+        outputs: header.graph.function_outputs,
+    }))
+}
+
+/// 轻量 Call 扫描结果：仅 node id + 目标函数 id（不构建 `GraphInstance`）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphCallSiteStub {
+    pub node_id: NodeId,
+    pub target_function_id: Option<GraphId>,
+}
+
+/// 从图文件读取 Call Function 节点 stub（跳过 pins / connections / localVariables 物化）。
+pub fn read_graph_call_sites_from_file(path: &Path) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
+    let scan: GraphCallSiteScanDocument = read_json(path)?;
+    Ok(scan
+        .graph
+        .nodes
+        .into_iter()
+        .filter(|node| {
+            node.node_type == crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE
+        })
+        .map(|node| GraphCallSiteStub {
+            node_id: node.id,
+            target_function_id: node
+                .instance_params
+                .sub_graph_id()
+                .and_then(|s| uuid::Uuid::parse_str(s).ok())
+                .map(GraphId::from),
+        })
+        .collect())
+}
+
+/// 从项目磁盘读取某张图的 Call stub（图未加载时使用）。
+pub fn read_graph_call_sites_from_project(
+    project_path: &str,
+    graph_id: &GraphId,
+) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
+    let root = project_root_from_path(project_path);
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    let Some(resource) = graph_resources.get_by_id(graph_id) else {
+        return Ok(Vec::new());
+    };
+    read_graph_call_sites_from_file(root.join(&resource.path).as_path())
 }
 
 pub fn load_project_graph_from_file(
@@ -587,8 +654,29 @@ fn bind_graph_document_resource_identity(
     document
 }
 
-/// 仅读取当前图文件头部（`graph.name`）。
-/// 用于索引显示名，避免对每个文件做完整反序列化。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanDocument {
+    graph: GraphCallSiteScanGraph,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanGraph {
+    #[serde(default)]
+    nodes: Vec<GraphCallSiteScanNode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanNode {
+    id: NodeId,
+    node_type: String,
+    #[serde(default)]
+    instance_params: NodeInstanceParams,
+}
+
+/// 仅读取图文件头部（`graph.name` + 函数签名），避免完整反序列化。
 #[derive(Deserialize)]
 struct GraphFileHeader {
     graph: GraphFileHeaderGraph,
@@ -599,6 +687,10 @@ struct GraphFileHeader {
 struct GraphFileHeaderGraph {
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default)]
+    function_outputs: Vec<FunctionSignaturePin>,
 }
 
 fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> {
@@ -633,10 +725,20 @@ fn read_graph_index_entries(
             continue;
         };
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.graph.name);
+        let (function_inputs, function_outputs) = if expected_kind == GraphDocumentKind::Function {
+            (
+                header.graph.function_inputs,
+                header.graph.function_outputs,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
         entries.push(ProjectGraphIndexEntry {
             id: resource.id,
             name,
             graph_type: expected_kind,
+            function_inputs,
+            function_outputs,
         });
     }
     Ok(entries)

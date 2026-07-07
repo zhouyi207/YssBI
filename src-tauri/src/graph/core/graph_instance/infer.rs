@@ -13,4 +13,3 @@ impl GraphInstance {
         crate::graph::infer::infer_graph(self)
     }
 }
-

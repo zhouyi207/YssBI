@@ -53,21 +53,22 @@ fn cumulative_ljung_box(acf_vals: &[f64], n: usize) -> Vec<(f64, f64)> {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Correlogram (ACF & PACF)", vec!["Plot".to_string()])
         .with_ui_style("plot")
-                .with_documentation(docs::plot::CORRELOGRAM_ZH, docs::plot::CORRELOGRAM_EN)
+        .with_documentation(docs::plot::CORRELOGRAM_ZH, docs::plot::CORRELOGRAM_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
                 "DataSeries",
                 DataRole::Inputs(0),
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
-                    DataType::Float64,
-                ))),
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
             )),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Lags",
-                DataRole::Inputs(1),
-                PinDataTypeDefinition::concrete(DataType::Int64),
-            ).with_default_value(DataValue::Int64(DEFAULT_MAX_LAG as i64))),
+            PinSlot::fixed(
+                PinDefinition::data_input(
+                    "Lags",
+                    DataRole::Inputs(1),
+                    PinDataTypeDefinition::concrete(DataType::Int64),
+                )
+                .with_default_value(DataValue::Int64(DEFAULT_MAX_LAG as i64)),
+            ),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
         ])
         .with_flow_processor(Arc::new(|ctx| {
@@ -88,9 +89,7 @@ pub fn register(registry: &NodeRegistry) {
             let cast = series
                 .cast(&polars::prelude::DataType::Float64)
                 .map_err(|e| format!("Correlogram: cannot cast to Float64: {}", e))?;
-            let ca = cast
-                .f64()
-                .map_err(|e| format!("Correlogram: {}", e))?;
+            let ca = cast.f64().map_err(|e| format!("Correlogram: {}", e))?;
 
             let values: Vec<f64> = ca.into_no_null_iter().collect();
             let n = values.len();
@@ -112,7 +111,12 @@ pub fn register(registry: &NodeRegistry) {
                 .enumerate()
                 .map(|(i, &value)| {
                     let (q_stat, p_value) = q_stats[i];
-                    CorrelogramDatum { lag: i + 1, value, q_stat, p_value }
+                    CorrelogramDatum {
+                        lag: i + 1,
+                        value,
+                        q_stat,
+                        p_value,
+                    }
                 })
                 .collect();
 
@@ -121,7 +125,12 @@ pub fn register(registry: &NodeRegistry) {
                 .enumerate()
                 .map(|(i, &value)| {
                     let (q_stat, p_value) = q_stats[i];
-                    CorrelogramDatum { lag: i + 1, value, q_stat, p_value }
+                    CorrelogramDatum {
+                        lag: i + 1,
+                        value,
+                        q_stat,
+                        p_value,
+                    }
                 })
                 .collect();
 

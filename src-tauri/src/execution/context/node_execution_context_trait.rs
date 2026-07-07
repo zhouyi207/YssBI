@@ -50,6 +50,9 @@ pub trait NodeExecutionContextTrait {
     /// 用于常数节点等仅输出、无输入的节点，获取输出 pin 的 user_value 或默认值
     fn get_resolved_value_by_role(&self, role: &PinRole) -> Result<DataValue, String>;
 
+    /// 获取当前节点所有 exec 输出 pin 的角色（按节点 pin 顺序）。
+    fn get_exec_output_roles(&self) -> Vec<ExecRole>;
+
     /// 获取当前节点所有 exec step 输出（如 Sequence 的 Then pins），按步骤索引排序
     fn get_exec_step_outputs(&self) -> Vec<ExecRole>;
 
@@ -71,6 +74,17 @@ pub trait NodeExecutionContextTrait {
 
     /// 获取当前节点的实例参数（variable_id、dataframe_id 等）
     fn get_instance_params(&self) -> NodeInstanceParams;
+
+    // ====================================================================
+    // 函数调用
+    // ====================================================================
+
+    /// 以当前节点为 Call Function 节点：按目标函数签名把本节点输入映射到函数 Entry，
+    /// 同步运行目标函数图，再把 Return 值写回本节点输出。默认实现报错（仅
+    /// [`NodeExecutionContext`] 支持）。
+    fn call_subgraph(&mut self) -> Result<(), String> {
+        Err("call_subgraph is not supported in this context".to_string())
+    }
 
     // ====================================================================
     // 数据缓存操作（DataFrame / Series / 变量）

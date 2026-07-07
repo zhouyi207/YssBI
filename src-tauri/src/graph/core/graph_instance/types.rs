@@ -1,7 +1,6 @@
-use super::{GraphDataState, GraphKind, GraphPosition};
 use crate::graph::pin::{PinId, PinInstance};
 use crate::graph::value::DataType;
-use crate::graph::{GraphId, NodeId};
+use crate::graph::NodeId;
 use serde::{Deserialize, Serialize};
 
 /// Post-mutation graph compile scope — single entry for schema propagation,
@@ -65,3 +64,39 @@ pub struct FunctionSignaturePin {
     pub container_type: Option<String>,
 }
 
+impl FunctionSignaturePin {
+    pub fn is_exec(&self) -> bool {
+        self.pin_type.eq_ignore_ascii_case("exec")
+    }
+}
+
+/// 新建函数图默认 exec 入参签名 id。
+pub const DEFAULT_FUNCTION_EXEC_IN_ID: &str = "exec-in";
+/// 新建函数图默认 exec 出参签名 id。
+pub const DEFAULT_FUNCTION_EXEC_OUT_ID: &str = "exec-out";
+
+pub fn default_function_exec_input() -> FunctionSignaturePin {
+    FunctionSignaturePin {
+        id: DEFAULT_FUNCTION_EXEC_IN_ID.to_string(),
+        name: "In".to_string(),
+        pin_type: "exec".to_string(),
+        container_type: None,
+    }
+}
+
+pub fn default_function_exec_output() -> FunctionSignaturePin {
+    FunctionSignaturePin {
+        id: DEFAULT_FUNCTION_EXEC_OUT_ID.to_string(),
+        name: "Out".to_string(),
+        pin_type: "exec".to_string(),
+        container_type: None,
+    }
+}
+
+pub fn default_function_exec_inputs() -> Vec<FunctionSignaturePin> {
+    vec![default_function_exec_input()]
+}
+
+pub fn default_function_exec_outputs() -> Vec<FunctionSignaturePin> {
+    vec![default_function_exec_output()]
+}

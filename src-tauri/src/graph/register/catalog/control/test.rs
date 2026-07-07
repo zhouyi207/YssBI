@@ -596,12 +596,7 @@ mod tests {
         let pins = graph.get_pin_instances_by_node_id(merge_node);
         let input_pins: Vec<_> = pins
             .iter()
-            .filter(|p| {
-                matches!(
-                    p.definition.role,
-                    PinRole::Exec(ExecRole::ExecInputs(_))
-                )
-            })
+            .filter(|p| matches!(p.definition.role, PinRole::Exec(ExecRole::ExecInputs(_))))
             .collect();
 
         assert_eq!(input_pins.len(), 2, "Merge should have 2 default In pins");
@@ -774,9 +769,7 @@ mod tests {
 
         let index_pin = pins
             .iter()
-            .find(|p| {
-                p.definition.role == PinRole::Data(DataRole::Custom("index".to_string()))
-            })
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Custom("index".to_string())))
             .expect("Index pin not found");
         let index_value = runtime
             .lock()

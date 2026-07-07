@@ -1,9 +1,19 @@
 import type { NodeData, RuntimeNodeInput } from '@/shared/types/store/graph';
+import { isShellNodeDefinition } from '@/shared/types/domain';
+import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { useGraphDataStore } from './graphDataStore';
 import { resolveNodeViewMeta } from './serialization';
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
+}
+
+/** Whether a node instance is a system-managed shell (Event Begin, Function Entry/Return). */
+export function isShellNode(graphId: string, nodeId: string): boolean {
+  const node = useGraphDataStore.getState().getGraphNode(graphId, nodeId);
+  if (!node) return false;
+  const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
+  return isShellNodeDefinition(def);
 }
 
 /** Find an internal node in a graph by nodeType (store-native, no links rebuild). */

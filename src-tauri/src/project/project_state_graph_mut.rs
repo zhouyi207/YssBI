@@ -46,6 +46,10 @@ impl ProjectState {
     }
 
     /// Acquire project write lock, bind runtime context, and run a graph mutation closure.
+    ///
+    /// **Lock rule:** the closure must not call back into `ProjectState` methods that take
+    /// `project_data` read/write locks (e.g. `get_graph`, `load_graph_from_current_project`).
+    /// `std::sync::RwLock` is not re-entrant — doing so deadlocks the IPC thread.
     pub fn with_graph_mut<R>(
         &self,
         graph_id: &GraphId,
@@ -58,11 +62,7 @@ impl ProjectState {
                 .get(graph_id)
                 .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
             (
-                Self::variable_symbols_from_variables(
-                    &data.variables,
-                    graph_id,
-                    &graph.kind,
-                ),
+                Self::variable_symbols_from_variables(&data.variables, graph_id, &graph.kind),
                 Self::dataframe_symbols_from_databases(&data.databases),
             )
         };

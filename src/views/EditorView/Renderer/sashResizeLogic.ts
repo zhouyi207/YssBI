@@ -57,7 +57,7 @@ function panelTarget(
 }
 
 export function resolveSashResizeTarget(
-  orientation: LayoutDirection,
+  _orientation: LayoutDirection,
   beforeNode: LayoutNode | undefined,
   afterNode: LayoutNode | undefined,
   beforeSize: number,
@@ -67,7 +67,9 @@ export function resolveSashResizeTarget(
     return panelTarget(beforeNode, beforeSize, 1);
   }
   if (afterNode?.pixelSize !== undefined) {
-    return panelTarget(afterNode, afterSize, orientation === 'row' ? -1 : 1);
+    // after 节点在 sash 之后（右侧 / 下方）：把它拖大需要朝 sash 反方向拖动，
+    // 即指针 delta 为负时增大尺寸，故行/列都用 -1。
+    return panelTarget(afterNode, afterSize, -1);
   }
   if (!beforeNode) return null;
   return panelTarget(beforeNode, beforeSize, 1);

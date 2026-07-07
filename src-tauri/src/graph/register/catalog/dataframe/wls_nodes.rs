@@ -1,7 +1,7 @@
 //! WLS (Weighted Least Squares) 回归节点
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -875,7 +875,7 @@ fn register_wls(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("WLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-                .with_documentation(docs::wls::WLS_ZH, docs::wls::WLS_EN)
+        .with_documentation(docs::wls::WLS_ZH, docs::wls::WLS_EN)
         .with_pin_slots(slots)
         .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
@@ -936,7 +936,7 @@ fn register_wls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::wls::WLS_SUMMARY_ZH, docs::wls::WLS_SUMMARY_EN)
+    .with_documentation(docs::wls::WLS_SUMMARY_ZH, docs::wls::WLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_wls_regression(ctx)?;

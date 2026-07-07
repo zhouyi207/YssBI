@@ -1,7 +1,7 @@
 //! Probit (binary probit regression) nodes
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -512,7 +512,10 @@ fn register_probit_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::probit::PROBIT_CONFIGURE_ZH, docs::probit::PROBIT_CONFIGURE_EN)
+    .with_documentation(
+        docs::probit::PROBIT_CONFIGURE_ZH,
+        docs::probit::PROBIT_CONFIGURE_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -570,7 +573,7 @@ fn register_probit(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Probit", vec!["Data".to_string(), "Statistics".to_string()])
             .with_ui_style("dataframe")
-                        .with_documentation(docs::probit::PROBIT_ZH, docs::probit::PROBIT_EN)
+            .with_documentation(docs::probit::PROBIT_ZH, docs::probit::PROBIT_EN)
             .with_pin_slots(slots)
             .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
             .with_flow_processor(Arc::new(|ctx| {
@@ -629,7 +632,10 @@ fn register_probit_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::probit::PROBIT_SUMMARY_ZH, docs::probit::PROBIT_SUMMARY_EN)
+    .with_documentation(
+        docs::probit::PROBIT_SUMMARY_ZH,
+        docs::probit::PROBIT_SUMMARY_EN,
+    )
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_probit_regression(ctx)?;

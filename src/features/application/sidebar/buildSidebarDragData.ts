@@ -35,7 +35,6 @@ export function buildSidebarDragData(
         nodeType: "Functions:Call Function",
         category: "Functions",
         subGraphId: id,
-        subName: name,
       },
     };
   }

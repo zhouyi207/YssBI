@@ -228,4 +228,3 @@ impl GraphInstance {
         data_state.connections.all_connections()
     }
 }
-

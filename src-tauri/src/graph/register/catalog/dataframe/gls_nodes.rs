@@ -1,7 +1,7 @@
 //! GLS (Generalized Least Squares) 回归节点
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -850,7 +850,7 @@ fn register_gls_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::gls::GLS_CONFIGURE_ZH, docs::gls::GLS_CONFIGURE_EN)
+    .with_documentation(docs::gls::GLS_CONFIGURE_ZH, docs::gls::GLS_CONFIGURE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -931,7 +931,7 @@ fn register_gls(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("GLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-                .with_documentation(docs::gls::GLS_ZH, docs::gls::GLS_EN)
+        .with_documentation(docs::gls::GLS_ZH, docs::gls::GLS_EN)
         .with_pin_slots(slots)
         .with_output_schema_resolver(Arc::new(super::ols_nodes::regression_exog_output_schema))
         .with_flow_processor(Arc::new(|ctx| {
@@ -992,7 +992,7 @@ fn register_gls_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::gls::GLS_SUMMARY_ZH, docs::gls::GLS_SUMMARY_EN)
+    .with_documentation(docs::gls::GLS_SUMMARY_ZH, docs::gls::GLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_gls_regression(ctx)?;

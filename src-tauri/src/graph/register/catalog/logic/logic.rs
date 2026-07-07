@@ -21,7 +21,7 @@ fn register_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-        .with_documentation(
+    .with_documentation(
         docs::logic::documentation("Equal (==)").unwrap().0,
         docs::logic::documentation("Equal (==)").unwrap().1,
     )
@@ -64,7 +64,7 @@ fn register_not_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-        .with_documentation(
+    .with_documentation(
         docs::logic::documentation("Not Equal (!=)").unwrap().0,
         docs::logic::documentation("Not Equal (!=)").unwrap().1,
     )
@@ -105,7 +105,7 @@ fn register_and(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("And (&&)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-                        .with_documentation(
+            .with_documentation(
                 docs::logic::documentation("And (&&)").unwrap().0,
                 docs::logic::documentation("And (&&)").unwrap().1,
             )
@@ -154,7 +154,7 @@ fn register_or(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Or (||)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-                        .with_documentation(
+            .with_documentation(
                 docs::logic::documentation("Or (||)").unwrap().0,
                 docs::logic::documentation("Or (||)").unwrap().1,
             )
@@ -203,7 +203,7 @@ fn register_not(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Not (!)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-                        .with_documentation(
+            .with_documentation(
                 docs::logic::documentation("Not (!)").unwrap().0,
                 docs::logic::documentation("Not (!)").unwrap().1,
             )

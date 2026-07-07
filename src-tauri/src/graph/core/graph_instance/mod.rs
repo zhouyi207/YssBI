@@ -63,6 +63,7 @@ pub struct GraphInstance {
 
 mod connections;
 mod dynamic_pins;
+mod function_shell;
 mod infer;
 mod lifecycle;
 mod nodes;

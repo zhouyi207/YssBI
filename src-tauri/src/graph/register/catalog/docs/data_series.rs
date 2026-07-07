@@ -21,7 +21,6 @@ pub const DATASERIES_EQ_EN: &str = include_str!("en/dataseries_eq.md");
 pub const DATASERIES_NEQ_ZH: &str = include_str!("zh/dataseries_neq.md");
 pub const DATASERIES_NEQ_EN: &str = include_str!("en/dataseries_neq.md");
 
-
 pub fn compare_documentation(node_name: &str) -> Option<(&'static str, &'static str)> {
     Some(match node_name {
         "DataSeries Greater Than (>)" => (DATASERIES_GT_ZH, DATASERIES_GT_EN),

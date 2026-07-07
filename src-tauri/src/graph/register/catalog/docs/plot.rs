@@ -12,4 +12,3 @@ pub const CORRELOGRAM_ZH: &str = include_str!("zh/correlogram.md");
 pub const CORRELOGRAM_EN: &str = include_str!("en/correlogram.md");
 pub const CORRELATION_PLOT_ZH: &str = include_str!("zh/correlation_plot.md");
 pub const CORRELATION_PLOT_EN: &str = include_str!("en/correlation_plot.md");
-

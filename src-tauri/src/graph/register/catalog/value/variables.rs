@@ -14,7 +14,9 @@ pub fn register(registry: &NodeRegistry) {
     register_set_variable(registry);
 }
 
-fn get_variable_dataframe_schema(ctx: &OutputSchemaContext) -> Option<crate::graph::node::DataSchema> {
+fn get_variable_dataframe_schema(
+    ctx: &OutputSchemaContext,
+) -> Option<crate::graph::node::DataSchema> {
     let variable_id = ctx.instance_params.variable_id()?;
     let provider = ctx.schema_provider.as_ref()?;
     provider(&variable_handle_str(variable_id))

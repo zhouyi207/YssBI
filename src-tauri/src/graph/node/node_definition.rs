@@ -87,6 +87,12 @@ pub struct NodeMetaData {
     pub documentation: Option<NodeDocumentation>,
 
     pub supports_dynamic_pins: bool,
+
+    /// 该节点允许出现的图类型。
+    pub graph_scope: super::NodeGraphScope,
+
+    /// 系统托管壳节点角色；`Some` 即为壳节点（不可删 / 不可复制 / 每图至多 1 个 / palette 隐藏）。
+    pub shell_role: Option<super::ShellRole>,
 }
 
 impl Default for NodeMetaData {
@@ -96,7 +102,16 @@ impl Default for NodeMetaData {
             description: None,
             documentation: None,
             supports_dynamic_pins: false,
+            graph_scope: super::NodeGraphScope::default(),
+            shell_role: None,
         }
+    }
+}
+
+impl NodeMetaData {
+    /// 是否为系统托管壳节点。
+    pub fn is_shell(&self) -> bool {
+        self.shell_role.is_some()
     }
 }
 
@@ -232,6 +247,23 @@ impl NodeDefinition {
     pub fn with_ui_style(mut self, style: impl Into<String>) -> Self {
         self.metadata.ui_style = style.into();
         self
+    }
+
+    /// 限定该节点只能出现在指定图类型中。
+    pub fn with_graph_scope(mut self, scope: super::NodeGraphScope) -> Self {
+        self.metadata.graph_scope = scope;
+        self
+    }
+
+    /// 标记为系统托管壳节点（不可删 / 不可复制 / 每图至多 1 个 / palette 隐藏）。
+    pub fn as_shell(mut self, role: super::ShellRole) -> Self {
+        self.metadata.shell_role = Some(role);
+        self
+    }
+
+    /// 是否为系统托管壳节点。
+    pub fn is_shell(&self) -> bool {
+        self.metadata.is_shell()
     }
 
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {

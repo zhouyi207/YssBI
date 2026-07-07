@@ -23,7 +23,6 @@ pub const VCE_HC2_EN: &str = include_str!("en/vce_hc2.md");
 pub const VCE_HC3_ZH: &str = include_str!("zh/vce_hc3.md");
 pub const VCE_HC3_EN: &str = include_str!("en/vce_hc3.md");
 
-
 /// VCE constant node documentation by struct key.
 pub fn vce_documentation(struct_key: &str) -> Option<(&'static str, &'static str)> {
     Some(match struct_key {

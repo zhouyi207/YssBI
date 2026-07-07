@@ -1,5 +1,6 @@
 use crate::project::{
-    ProjectPathValidation, default_project_parent_directory as default_project_parent_directory_impl,
+    ProjectPathValidation,
+    default_project_parent_directory as default_project_parent_directory_impl,
     validate_new_project_path as validate_new_project_path_impl,
 };
 

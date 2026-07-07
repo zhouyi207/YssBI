@@ -978,27 +978,27 @@ fn register_ols_vce_constants(registry: &NodeRegistry) {
             definition = definition.with_documentation(zh, en);
         }
         definition = definition
-        .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
-            "VCE",
-            DataRole::Result,
-            PinDataTypeDefinition::concrete(DataType::Struct(struct_key.clone())),
-        ))])
-        .with_data_evaluator(Arc::new(move |ctx| {
-            let config: Box<dyn std::any::Any + Send + Sync> = match struct_key.as_str() {
-                "VCENonRobust" => Box::new(VCENonRobust),
-                "VCEHC0" => Box::new(VCEHC0),
-                "VCEHC1" => Box::new(VCEHC1),
-                "VCEHC2" => Box::new(VCEHC2),
-                "VCEHC3" => Box::new(VCEHC3),
-                _ => return Err("Unknown VCE type".to_string()),
-            };
-            let handle_id = ctx.put_handle(config);
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Result),
-                DataValue::new_struct(struct_key.clone(), handle_id),
-            )?;
-            Ok(())
-        }));
+            .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
+                "VCE",
+                DataRole::Result,
+                PinDataTypeDefinition::concrete(DataType::Struct(struct_key.clone())),
+            ))])
+            .with_data_evaluator(Arc::new(move |ctx| {
+                let config: Box<dyn std::any::Any + Send + Sync> = match struct_key.as_str() {
+                    "VCENonRobust" => Box::new(VCENonRobust),
+                    "VCEHC0" => Box::new(VCEHC0),
+                    "VCEHC1" => Box::new(VCEHC1),
+                    "VCEHC2" => Box::new(VCEHC2),
+                    "VCEHC3" => Box::new(VCEHC3),
+                    _ => return Err("Unknown VCE type".to_string()),
+                };
+                let handle_id = ctx.put_handle(config);
+                ctx.emit_output_by_role(
+                    &PinRole::Data(DataRole::Result),
+                    DataValue::new_struct(struct_key.clone(), handle_id),
+                )?;
+                Ok(())
+            }));
         registry.register(definition);
     }
 }
@@ -1011,7 +1011,7 @@ fn register_ols_fixed_scale_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(
+    .with_documentation(
         docs::ols::OLS_FIXED_SCALE_CONFIG_ZH,
         docs::ols::OLS_FIXED_SCALE_CONFIG_EN,
     )
@@ -1110,7 +1110,7 @@ fn register_ols_cluster_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(
+    .with_documentation(
         docs::ols::OLS_CLUSTER_CONFIG_ZH,
         docs::ols::OLS_CLUSTER_CONFIG_EN,
     )
@@ -1152,7 +1152,7 @@ fn register_ols_hac_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::ols::OLS_HAC_CONFIG_ZH, docs::ols::OLS_HAC_CONFIG_EN)
+    .with_documentation(docs::ols::OLS_HAC_CONFIG_ZH, docs::ols::OLS_HAC_CONFIG_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1212,7 +1212,10 @@ fn register_ols_newey_config(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::ols::OLS_NEWEY_CONFIG_ZH, docs::ols::OLS_NEWEY_CONFIG_EN)
+    .with_documentation(
+        docs::ols::OLS_NEWEY_CONFIG_ZH,
+        docs::ols::OLS_NEWEY_CONFIG_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1252,7 +1255,7 @@ fn register_ols_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::ols::OLS_CONFIGURE_ZH, docs::ols::OLS_CONFIGURE_EN)
+    .with_documentation(docs::ols::OLS_CONFIGURE_ZH, docs::ols::OLS_CONFIGURE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1390,7 +1393,7 @@ fn register_ols(registry: &NodeRegistry) {
 
     let definition = NodeDefinition::new("OLS", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-                .with_documentation(docs::ols::OLS_ZH, docs::ols::OLS_EN)
+        .with_documentation(docs::ols::OLS_ZH, docs::ols::OLS_EN)
         .with_pin_slots(slots)
         .with_struct_types(vec![StructTypeMeta {
             key: "OLSModel".to_string(),
@@ -1457,7 +1460,7 @@ fn register_ols_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::ols::OLS_SUMMARY_ZH, docs::ols::OLS_SUMMARY_EN)
+    .with_documentation(docs::ols::OLS_SUMMARY_ZH, docs::ols::OLS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_ols_regression(ctx)?;

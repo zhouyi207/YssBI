@@ -1238,9 +1238,7 @@ fn test_view_snapshots_index_per_for_loop_iteration() {
     let forloop = graph
         .create_node("Control Flow:For Loop")
         .expect("create for loop");
-    let view = graph
-        .create_node("Debug:Data:View")
-        .expect("create view");
+    let view = graph.create_node("Debug:Data:View").expect("create view");
 
     let count_pin = graph
         .get_pin_instances_by_node_id(forloop)
@@ -1334,12 +1332,8 @@ fn test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes() {
         registry.clone(),
     ));
 
-    let do_node = graph
-        .create_node("Control Flow:Do")
-        .expect("create do");
-    let print_node = graph
-        .create_node("Debug:Print")
-        .expect("create print");
+    let do_node = graph.create_node("Control Flow:Do").expect("create do");
+    let print_node = graph.create_node("Debug:Print").expect("create print");
     let const_node = graph
         .create_node("Value:Constants:String")
         .expect("create string constant");
@@ -1390,14 +1384,22 @@ fn test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes() {
     let const_id = const_node.to_string();
     executor.start(do_node).expect("run 1");
     assert_eq!(
-        recorder.order().iter().filter(|id| **id == const_id).count(),
+        recorder
+            .order()
+            .iter()
+            .filter(|id| **id == const_id)
+            .count(),
         1,
         "首次执行应求值上游 String 常量"
     );
 
     executor.start(do_node).expect("run 2");
     assert_eq!(
-        recorder.order().iter().filter(|id| **id == const_id).count(),
+        recorder
+            .order()
+            .iter()
+            .filter(|id| **id == const_id)
+            .count(),
         2,
         "第二次执行前应清空 pins_runtime_state，上游数据节点须重新求值"
     );

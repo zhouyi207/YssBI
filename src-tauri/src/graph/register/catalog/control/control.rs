@@ -2,11 +2,11 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::register::catalog::docs;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 use std::time::Duration;
@@ -92,7 +92,9 @@ fn register_do(registry: &NodeRegistry) {
                 PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
                 PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
             ])
-            .with_flow_processor(Arc::new(|_| Ok(ExecutionEffect::trigger(ExecRole::ExecOut)))),
+            .with_flow_processor(Arc::new(|_| {
+                Ok(ExecutionEffect::trigger(ExecRole::ExecOut))
+            })),
         "Do",
     );
     registry.register(definition);
@@ -170,15 +172,16 @@ fn register_for_loop(registry: &NodeRegistry) {
                     .with_optional(true)
                     .with_default_value(DataValue::Int64(1)),
                 ),
-                PinSlot::fixed(
-                    PinDefinition::data_output(
-                        "Index",
-                        DataRole::Custom("index".to_string()),
-                        PinDataTypeDefinition::concrete(DataType::Int64),
-                    ),
-                ),
+                PinSlot::fixed(PinDefinition::data_output(
+                    "Index",
+                    DataRole::Custom("index".to_string()),
+                    PinDataTypeDefinition::concrete(DataType::Int64),
+                )),
                 PinSlot::fixed(PinDefinition::exec_output("Body", ExecRole::ExecLoopBody)),
-                PinSlot::fixed(PinDefinition::exec_output("Completed", ExecRole::ExecLoopComplete)),
+                PinSlot::fixed(PinDefinition::exec_output(
+                    "Completed",
+                    ExecRole::ExecLoopComplete,
+                )),
             ])
             .with_flow_processor(Arc::new(|ctx| {
                 let count = ctx
@@ -285,7 +288,10 @@ fn register_while_loop(registry: &NodeRegistry) {
                     .with_default_value(DataValue::Int64(DEFAULT_WHILE_MAX_ITERATIONS)),
                 ),
                 PinSlot::fixed(PinDefinition::exec_output("Body", ExecRole::ExecLoopBody)),
-                PinSlot::fixed(PinDefinition::exec_output("Completed", ExecRole::ExecLoopComplete)),
+                PinSlot::fixed(PinDefinition::exec_output(
+                    "Completed",
+                    ExecRole::ExecLoopComplete,
+                )),
             ])
             .with_flow_processor(Arc::new(|ctx| {
                 let max_iterations = ctx

@@ -588,6 +588,10 @@ export const enUS = {
     typeLabels: {
       function: "Function",
     },
+    signature: {
+      sideEffectWarning:
+        "This function has no exec input in its signature, but the body contains side-effect nodes (e.g. View, Set Variable) that will not run when evaluated as data.",
+    },
     counts: {
       columns: "{{count}} columns",
       rows: "{{count}} rows",

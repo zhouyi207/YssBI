@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { Graph, Pin, Variable } from '@/shared/types/domain';
+import type { Pin, Variable } from '@/shared/types/domain';
+import type { FunctionCatalogEntry } from '@/features/core/editor/hooks/useFunctionCatalog';
 import { buildContextualCatalogItems, type NodeCatalogItem } from '@/features/domain/nodeCatalog';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { Card } from '@/components/ui/card';
@@ -15,13 +16,17 @@ export function NodePalette({
   filterPin,
   variables = {},
   functions = {},
+  graphKind,
+  graphId,
 }: {
   x: number;
   y: number;
   onSelect: (item: PaletteItem) => void;
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
-  functions?: Record<string, Graph>;
+  functions?: Record<string, FunctionCatalogEntry>;
+  graphKind?: 'event' | 'function';
+  graphId?: string;
 }) {
   const definitions = useNodeRegistryStore((s) => s.definitionsArray);
 
@@ -35,8 +40,10 @@ export function NodePalette({
         filterPin,
         variables,
         functions,
+        graphKind,
+        graphId,
       }),
-    [definitions, filterPin, variableKeysStr, functionKeysStr, variables, functions],
+    [definitions, filterPin, variableKeysStr, functionKeysStr, variables, functions, graphKind, graphId],
   );
 
   return (

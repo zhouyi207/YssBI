@@ -6,6 +6,7 @@ pub mod debug;
 pub mod distribution;
 pub mod docs;
 pub mod event;
+pub mod function;
 pub mod logic;
 pub mod math;
 pub mod plot;
@@ -22,6 +23,7 @@ pub fn register_builtin_nodes(registry: &NodeRegistry) {
     value::register(registry);
     dataframe::register(registry);
     event::register(registry);
+    function::register(registry);
     plot::register(registry);
     distribution::register(registry);
 }

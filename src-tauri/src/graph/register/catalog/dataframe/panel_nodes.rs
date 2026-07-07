@@ -1,7 +1,7 @@
 //! Panel Summary node — runs FE, FD, RE and displays all results
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -1410,7 +1410,10 @@ fn register_panel_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::panel::PANEL_CONFIGURE_ZH, docs::panel::PANEL_CONFIGURE_EN)
+    .with_documentation(
+        docs::panel::PANEL_CONFIGURE_ZH,
+        docs::panel::PANEL_CONFIGURE_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -1490,7 +1493,10 @@ fn register_panel_vce_cluster(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::panel::PANEL_VCE_CLUSTER_ZH, docs::panel::PANEL_VCE_CLUSTER_EN)
+    .with_documentation(
+        docs::panel::PANEL_VCE_CLUSTER_ZH,
+        docs::panel::PANEL_VCE_CLUSTER_EN,
+    )
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "VCE",
         DataRole::Result,

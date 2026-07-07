@@ -40,7 +40,7 @@ fn register_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::prediction::PREDICT_ZH, docs::prediction::PREDICT_EN)
+    .with_documentation(docs::prediction::PREDICT_ZH, docs::prediction::PREDICT_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -51,10 +51,9 @@ fn register_predict(registry: &NodeRegistry) {
         PinSlot::derived_from_input(
             model_role.clone(),
             PinDirection::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Categorical,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Categorical],
+            )))),
         ),
         PinSlot::fixed(PinDefinition::data_output(
             "Predicted",
@@ -65,14 +64,19 @@ fn register_predict(registry: &NodeRegistry) {
     ])
     .with_pin_resolver(Arc::new(|ctx: &PinResolverContext| {
         let mut pins = vec![];
-        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string()))) {
+        if let Some(schema) = ctx
+            .input_schemas
+            .get(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string())))
+        {
             for col in &schema.columns {
                 let role = prediction_input_role(&col.name);
                 pins.push(
                     PinDefinition::data_input(
                         &col.name,
                         role.clone(),
-                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(col.data_type.clone()))),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
+                            col.data_type.clone(),
+                        ))),
                     )
                     .with_dynamic(true),
                 );
@@ -251,7 +255,10 @@ fn register_logit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::prediction::LOGIT_PREDICT_ZH, docs::prediction::LOGIT_PREDICT_EN)
+    .with_documentation(
+        docs::prediction::LOGIT_PREDICT_ZH,
+        docs::prediction::LOGIT_PREDICT_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -474,7 +481,10 @@ fn register_probit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::prediction::PROBIT_PREDICT_ZH, docs::prediction::PROBIT_PREDICT_EN)
+    .with_documentation(
+        docs::prediction::PROBIT_PREDICT_ZH,
+        docs::prediction::PROBIT_PREDICT_EN,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(

@@ -545,7 +545,7 @@ fn register_varsoc(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::var::VAR_VARSOC_ZH, docs::var::VAR_VARSOC_EN)
+    .with_documentation(docs::var::VAR_VARSOC_ZH, docs::var::VAR_VARSOC_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_varsoc(ctx)?;
@@ -591,7 +591,7 @@ fn register_var_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::var::VAR_SUMMARY_ZH, docs::var::VAR_SUMMARY_EN)
+    .with_documentation(docs::var::VAR_SUMMARY_ZH, docs::var::VAR_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_var(ctx)?;

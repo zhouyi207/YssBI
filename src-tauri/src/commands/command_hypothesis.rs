@@ -1,6 +1,8 @@
 //! 假设检验 Tauri 命令（薄包装）
 
-use crate::application::hypothesis::{HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test};
+use crate::application::hypothesis::{
+    HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test,
+};
 use serde::{Deserialize, Serialize};
 
 /// 假设检验请求

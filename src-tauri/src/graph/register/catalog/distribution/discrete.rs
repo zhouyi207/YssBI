@@ -1,9 +1,9 @@
 //! 离散分布节点：Bernoulli, Binomial, Poisson, Geometric, NegativeBinomial, DiscreteUniform, Hypergeometric
 
 use crate::graph::node::NodeDefinition;
-use crate::graph::register::catalog::docs;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::Series;
 use rand::SeedableRng;
@@ -70,39 +70,39 @@ pub fn register(registry: &NodeRegistry) {
 fn register_bernoulli(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "Bernoulli",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "P",
-            DataRole::Inputs(0),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(1),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let p = float_input(ctx, DataRole::Inputs(0))?;
-        let n = int_input(ctx, DataRole::Inputs(1))?;
-        if n < 0 {
-            return Err("Bernoulli: N must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::Bernoulli::new(p)
-            .map_err(|e| format!("Bernoulli: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
-        emit_int_series(ctx, values, "bernoulli")
-    })),
+            "Bernoulli",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "P",
+                DataRole::Inputs(0),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(1),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let p = float_input(ctx, DataRole::Inputs(0))?;
+            let n = int_input(ctx, DataRole::Inputs(1))?;
+            if n < 0 {
+                return Err("Bernoulli: N must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::Bernoulli::new(p)
+                .map_err(|e| format!("Bernoulli: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
+            emit_int_series(ctx, values, "bernoulli")
+        })),
         "Bernoulli",
     );
     registry.register(def);
@@ -111,50 +111,50 @@ fn register_bernoulli(registry: &NodeRegistry) {
 fn register_binomial(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "Binomial",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "N Trials",
-            DataRole::Inputs(0),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "P",
-            DataRole::Inputs(1),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N Samples",
-            DataRole::Inputs(2),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let n_trials = int_input(ctx, DataRole::Inputs(0))?;
-        let p = float_input(ctx, DataRole::Inputs(1))?;
-        let n_samples = int_input(ctx, DataRole::Inputs(2))?;
-        if n_samples < 0 {
-            return Err("Binomial: N Samples must be non-negative".to_string());
-        }
-        if n_trials < 0 {
-            return Err("Binomial: N Trials must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::Binomial::new(p, n_trials as u64)
-            .map_err(|e| format!("Binomial: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n_samples)
-            .map(|_| dist.sample(&mut rng) as i64)
-            .collect();
-        emit_int_series(ctx, values, "binomial")
-    })),
+            "Binomial",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "N Trials",
+                DataRole::Inputs(0),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "P",
+                DataRole::Inputs(1),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N Samples",
+                DataRole::Inputs(2),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let n_trials = int_input(ctx, DataRole::Inputs(0))?;
+            let p = float_input(ctx, DataRole::Inputs(1))?;
+            let n_samples = int_input(ctx, DataRole::Inputs(2))?;
+            if n_samples < 0 {
+                return Err("Binomial: N Samples must be non-negative".to_string());
+            }
+            if n_trials < 0 {
+                return Err("Binomial: N Trials must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::Binomial::new(p, n_trials as u64)
+                .map_err(|e| format!("Binomial: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n_samples)
+                .map(|_| dist.sample(&mut rng) as i64)
+                .collect();
+            emit_int_series(ctx, values, "binomial")
+        })),
         "Binomial",
     );
     registry.register(def);
@@ -163,39 +163,39 @@ fn register_binomial(registry: &NodeRegistry) {
 fn register_poisson(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "Poisson",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "Lambda",
-            DataRole::Inputs(0),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(1),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let lambda = float_input(ctx, DataRole::Inputs(0))?;
-        let n = int_input(ctx, DataRole::Inputs(1))?;
-        if n < 0 {
-            return Err("Poisson: N must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::Poisson::new(lambda)
-            .map_err(|e| format!("Poisson: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
-        emit_int_series(ctx, values, "poisson")
-    })),
+            "Poisson",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "Lambda",
+                DataRole::Inputs(0),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(1),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let lambda = float_input(ctx, DataRole::Inputs(0))?;
+            let n = int_input(ctx, DataRole::Inputs(1))?;
+            if n < 0 {
+                return Err("Poisson: N must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::Poisson::new(lambda)
+                .map_err(|e| format!("Poisson: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
+            emit_int_series(ctx, values, "poisson")
+        })),
         "Poisson",
     );
     registry.register(def);
@@ -204,39 +204,39 @@ fn register_poisson(registry: &NodeRegistry) {
 fn register_geometric(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "Geometric",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "P",
-            DataRole::Inputs(0),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(1),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let p = float_input(ctx, DataRole::Inputs(0))?;
-        let n = int_input(ctx, DataRole::Inputs(1))?;
-        if n < 0 {
-            return Err("Geometric: N must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::Geometric::new(p)
-            .map_err(|e| format!("Geometric: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
-        emit_int_series(ctx, values, "geometric")
-    })),
+            "Geometric",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "P",
+                DataRole::Inputs(0),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(1),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let p = float_input(ctx, DataRole::Inputs(0))?;
+            let n = int_input(ctx, DataRole::Inputs(1))?;
+            if n < 0 {
+                return Err("Geometric: N must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::Geometric::new(p)
+                .map_err(|e| format!("Geometric: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
+            emit_int_series(ctx, values, "geometric")
+        })),
         "Geometric",
     );
     registry.register(def);
@@ -245,45 +245,45 @@ fn register_geometric(registry: &NodeRegistry) {
 fn register_negative_binomial(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "NegativeBinomial",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "R",
-            DataRole::Inputs(0),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "P",
-            DataRole::Inputs(1),
-            float_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(2),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let r = float_input(ctx, DataRole::Inputs(0))?;
-        let p = float_input(ctx, DataRole::Inputs(1))?;
-        let n = int_input(ctx, DataRole::Inputs(2))?;
-        if n < 0 {
-            return Err("NegativeBinomial: N must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::NegativeBinomial::new(r, p)
-            .map_err(|e| format!("NegativeBinomial: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
-        emit_int_series(ctx, values, "negative_binomial")
-    })),
+            "NegativeBinomial",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "R",
+                DataRole::Inputs(0),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "P",
+                DataRole::Inputs(1),
+                float_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(2),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let r = float_input(ctx, DataRole::Inputs(0))?;
+            let p = float_input(ctx, DataRole::Inputs(1))?;
+            let n = int_input(ctx, DataRole::Inputs(2))?;
+            if n < 0 {
+                return Err("NegativeBinomial: N must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::NegativeBinomial::new(r, p)
+                .map_err(|e| format!("NegativeBinomial: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
+            emit_int_series(ctx, values, "negative_binomial")
+        })),
         "NegativeBinomial",
     );
     registry.register(def);
@@ -292,45 +292,45 @@ fn register_negative_binomial(registry: &NodeRegistry) {
 fn register_discrete_uniform(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "DiscreteUniform",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "Low",
-            DataRole::Inputs(0),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "High",
-            DataRole::Inputs(1),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(2),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let low = int_input(ctx, DataRole::Inputs(0))?;
-        let high = int_input(ctx, DataRole::Inputs(1))?;
-        let n = int_input(ctx, DataRole::Inputs(2))?;
-        if n < 0 {
-            return Err("DiscreteUniform: N must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::DiscreteUniform::new(low, high)
-            .map_err(|e| format!("DiscreteUniform: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
-        emit_int_series(ctx, values, "discrete_uniform")
-    })),
+            "DiscreteUniform",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "Low",
+                DataRole::Inputs(0),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "High",
+                DataRole::Inputs(1),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(2),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let low = int_input(ctx, DataRole::Inputs(0))?;
+            let high = int_input(ctx, DataRole::Inputs(1))?;
+            let n = int_input(ctx, DataRole::Inputs(2))?;
+            if n < 0 {
+                return Err("DiscreteUniform: N must be non-negative".to_string());
+            }
+            let dist = statrs::distribution::DiscreteUniform::new(low, high)
+                .map_err(|e| format!("DiscreteUniform: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n).map(|_| dist.sample(&mut rng) as i64).collect();
+            emit_int_series(ctx, values, "discrete_uniform")
+        })),
         "DiscreteUniform",
     );
     registry.register(def);
@@ -339,53 +339,54 @@ fn register_discrete_uniform(registry: &NodeRegistry) {
 fn register_hypergeometric(registry: &NodeRegistry) {
     let def = docs::distribution::apply_docs(
         NodeDefinition::new(
-        "Hypergeometric",
-        vec!["Distribution".to_string(), "Random".to_string()],
-    )
-    .with_ui_style("value")
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "N",
-            DataRole::Inputs(0),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "K",
-            DataRole::Inputs(1),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "n",
-            DataRole::Inputs(2),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_input(
-            "N Samples",
-            DataRole::Inputs(3),
-            int_type(),
-        )),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Samples",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(|ctx| {
-        let n_pop = int_input(ctx, DataRole::Inputs(0))?;
-        let k = int_input(ctx, DataRole::Inputs(1))?;
-        let n_draw = int_input(ctx, DataRole::Inputs(2))?;
-        let n_samples = int_input(ctx, DataRole::Inputs(3))?;
-        if n_samples < 0 {
-            return Err("Hypergeometric: N Samples must be non-negative".to_string());
-        }
-        let dist = statrs::distribution::Hypergeometric::new(n_pop as u64, k as u64, n_draw as u64)
-            .map_err(|e| format!("Hypergeometric: invalid params: {}", e))?;
-        let mut rng = StdRng::from_entropy();
-        let values: Vec<i64> = (0..n_samples)
-            .map(|_| dist.sample(&mut rng) as i64)
-            .collect();
-        emit_int_series(ctx, values, "hypergeometric")
-    })),
+            "Hypergeometric",
+            vec!["Distribution".to_string(), "Random".to_string()],
+        )
+        .with_ui_style("value")
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "N",
+                DataRole::Inputs(0),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "K",
+                DataRole::Inputs(1),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "n",
+                DataRole::Inputs(2),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_input(
+                "N Samples",
+                DataRole::Inputs(3),
+                int_type(),
+            )),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Samples",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Int64))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(|ctx| {
+            let n_pop = int_input(ctx, DataRole::Inputs(0))?;
+            let k = int_input(ctx, DataRole::Inputs(1))?;
+            let n_draw = int_input(ctx, DataRole::Inputs(2))?;
+            let n_samples = int_input(ctx, DataRole::Inputs(3))?;
+            if n_samples < 0 {
+                return Err("Hypergeometric: N Samples must be non-negative".to_string());
+            }
+            let dist =
+                statrs::distribution::Hypergeometric::new(n_pop as u64, k as u64, n_draw as u64)
+                    .map_err(|e| format!("Hypergeometric: invalid params: {}", e))?;
+            let mut rng = StdRng::from_entropy();
+            let values: Vec<i64> = (0..n_samples)
+                .map(|_| dist.sample(&mut rng) as i64)
+                .collect();
+            emit_int_series(ctx, values, "hypergeometric")
+        })),
         "Hypergeometric",
     );
     registry.register(def);

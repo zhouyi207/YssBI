@@ -1,15 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use crate::application::database_schema::{
-    column_info_from_duckdb, database_display_name, extract_database_schema,
-    DatabaseSchemaSnapshot,
-};
 pub use crate::application::database_schema::name_from_path;
+use crate::application::database_schema::{
+    DatabaseSchemaSnapshot, column_info_from_duckdb, database_display_name, extract_database_schema,
+};
 use crate::database::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseInstance, DatabaseState,
-    drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
-    ingest_excel_to_duckdb, ingest_parquet_to_duckdb, read_table_meta, sql_reader,
-    write_display_name,
+    drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
+    ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
 };
 use crate::project::{
     ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,

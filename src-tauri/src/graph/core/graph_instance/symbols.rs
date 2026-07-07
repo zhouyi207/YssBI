@@ -79,4 +79,3 @@ impl std::fmt::Debug for GraphInstance {
             .finish_non_exhaustive()
     }
 }
-

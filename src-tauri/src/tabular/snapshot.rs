@@ -19,12 +19,16 @@ impl TabularSnapshot {
         let parsed: Value =
             serde_json::from_str(json).map_err(|e| format!("Tabular JSON parse error: {e}"))?;
         let Value::Object(map) = parsed else {
-            return Err("Tabular JSON: expected object mapping column names to value arrays".to_string());
+            return Err(
+                "Tabular JSON: expected object mapping column names to value arrays".to_string(),
+            );
         };
         let mut columns = BTreeMap::new();
         for (name, value) in map {
             let Value::Array(values) = value else {
-                return Err(format!("Tabular JSON: column '{name}' must be an array of values"));
+                return Err(format!(
+                    "Tabular JSON: column '{name}' must be an array of values"
+                ));
             };
             columns.insert(name, values);
         }
@@ -137,10 +141,8 @@ fn infer_polars_dtype(values: &[Value]) -> PDataType {
 
 fn values_to_series(name: &str, values: &[Value]) -> Result<Series, String> {
     let dtype = infer_polars_dtype(values);
-    let any_values: Result<Vec<AnyValue<'static>>, String> = values
-        .iter()
-        .map(|v| json_to_anyvalue(v, &dtype))
-        .collect();
+    let any_values: Result<Vec<AnyValue<'static>>, String> =
+        values.iter().map(|v| json_to_anyvalue(v, &dtype)).collect();
     let any_values = any_values?;
     Series::from_any_values(PlSmallStr::from(name), &any_values, false)
         .map_err(|e| format!("Failed to build Series '{name}': {e}"))

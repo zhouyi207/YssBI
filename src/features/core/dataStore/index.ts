@@ -4,7 +4,6 @@ export * from './columnDistributionStore';
 export * from './datasetOverviewStore';
 export * from './editStateStore';
 export * from './graphMetaStore';
-export * from './graphDocumentMeta';
 export * from './graphRuntimeStore';
 export * from './projectIOStore';
 export * from './projectHelpers';

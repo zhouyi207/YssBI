@@ -2,8 +2,8 @@
 //!
 //! 对应 Stata dfuller y, lags(p) regress noconstant drift trend
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
@@ -59,7 +59,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::adf::DF_ADF_ZH, docs::adf::DF_ADF_EN)
+    .with_documentation(docs::adf::DF_ADF_ZH, docs::adf::DF_ADF_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -125,7 +125,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-        .with_documentation(docs::adf::DF_ADF_SUMMARY_ZH, docs::adf::DF_ADF_SUMMARY_EN)
+    .with_documentation(docs::adf::DF_ADF_SUMMARY_ZH, docs::adf::DF_ADF_SUMMARY_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(

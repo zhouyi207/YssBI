@@ -11,11 +11,22 @@ import { useShallow } from 'zustand/react/shallow';
 import type { PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
+import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { derivePinConnectionView } from './pinLinks';
 import { resolveNodeViewMeta } from './serialization';
 
+const CALL_FUNCTION_NODE_TYPE = 'Functions:Call Function';
+
 export function useNodeView(nodeId: string, graphId: string): UINode | null {
   const nodeData = useGraphDataStore((s) => s.getGraphNode(graphId, nodeId));
+
+  // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
+  // 名称以 ResourceStore 为准（重命名的单一事实来源）。
+  const callFunctionName = useResourceStore((s) => {
+    if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphId) return undefined;
+    const meta = s.resources[resourceKey({ id: nodeData.subGraphId, kind: 'function' })];
+    return meta?.exists ? meta.name : undefined;
+  });
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
@@ -33,6 +44,7 @@ export function useNodeView(nodeId: string, graphId: string): UINode | null {
     if (!nodeData) return null;
 
     const meta = resolveNodeViewMeta(nodeData);
+    const title = callFunctionName ?? meta.title;
     const inputs: PinView[] = [];
     const outputs: PinView[] = [];
 
@@ -49,7 +61,7 @@ export function useNodeView(nodeId: string, graphId: string): UINode | null {
       id: nodeData.id,
       nodeType: meta.nodeType,
       category: meta.category,
-      title: meta.title,
+      title,
       uiStyle: meta.uiStyle,
       description: meta.description,
       position: nodeData.position ?? { x: 0, y: 0 },
@@ -64,5 +76,5 @@ export function useNodeView(nodeId: string, graphId: string): UINode | null {
       outputs,
     };
     return view;
-  }, [nodeData, pinObjs, pinConns]);
+  }, [nodeData, pinObjs, pinConns, callFunctionName]);
 }

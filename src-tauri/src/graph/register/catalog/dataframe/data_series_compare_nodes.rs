@@ -103,11 +103,7 @@ fn compare_series_series(a: &Series, b: &Series, op: &str) -> Result<Series, Str
         .map(|ca: BooleanChunked| ca.into_series())
 }
 
-fn register_compare_node(
-    registry: &NodeRegistry,
-    name: &str,
-    op: &str,
-) {
+fn register_compare_node(registry: &NodeRegistry, name: &str, op: &str) {
     let name = name.to_string();
     let op = op.to_string();
     let mut definition = NodeDefinition::new(
@@ -123,77 +119,77 @@ fn register_compare_node(
         definition = definition.with_documentation(zh, en);
     }
     let definition = definition
-    .with_pin_slots(vec![
-        PinSlot::fixed(PinDefinition::data_input(
-            "DataSeries",
-            DataRole::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
-        )),
-        PinSlot::fixed(
-            PinDefinition::data_input(
-                "Value",
-                DataRole::Custom("value".to_string()),
-                PinDataTypeDefinition::concrete(DataType::one_of(vec![
-                    DataType::Float64,
-                    DataType::Int64,
-                    DataType::String,
-                    DataType::Boolean,
-                    DataType::DataSeries(Box::new(DataType::Any)),
-                ])),
-            )
-            .with_optional(true),
-        ),
-        PinSlot::fixed(PinDefinition::data_output(
-            "Result",
-            DataRole::Output,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Boolean))),
-        )),
-    ])
-    .with_data_evaluator(Arc::new(move |ctx| {
-        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-        let series_id = match &series_value {
-            DataValue::DataSeries(v) => v.id.clone(),
-            DataValue::Null => {
-                return Err(format!("{}: DataSeries input is not connected", name));
-            }
-            other => {
-                return Err(format!(
-                    "{}: DataSeries input must be a DataSeries (got {:?})",
-                    name,
-                    other.value_type().unwrap_or(DataType::Any)
-                ));
-            }
-        };
-
-        let value_input =
-            ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
-
-        let series = ctx.get_data_series(&series_id)?;
-
-        let result_series = match &value_input {
-            DataValue::DataSeries(v) => {
-                let other = ctx.get_data_series(&v.id)?;
-                compare_series_series(&series, &other, &op)?
-            }
-            DataValue::Null => {
-                return Err(format!(
-                    "{}: Value is not connected. Connect a scalar or another DataSeries.",
-                    name
-                ));
-            }
-            scalar => compare_series_scalar(&series, scalar, &op)?,
-        };
-
-        let result_id = ctx.put_data_series(result_series)?;
-        ctx.emit_output_by_role(
-            &PinRole::Data(DataRole::Output),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(
-                result_id,
-                DataType::Boolean,
+        .with_pin_slots(vec![
+            PinSlot::fixed(PinDefinition::data_input(
+                "DataSeries",
+                DataRole::Input,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Any))),
             )),
-        )?;
-        Ok(())
-    }));
+            PinSlot::fixed(
+                PinDefinition::data_input(
+                    "Value",
+                    DataRole::Custom("value".to_string()),
+                    PinDataTypeDefinition::concrete(DataType::one_of(vec![
+                        DataType::Float64,
+                        DataType::Int64,
+                        DataType::String,
+                        DataType::Boolean,
+                        DataType::DataSeries(Box::new(DataType::Any)),
+                    ])),
+                )
+                .with_optional(true),
+            ),
+            PinSlot::fixed(PinDefinition::data_output(
+                "Result",
+                DataRole::Output,
+                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Boolean))),
+            )),
+        ])
+        .with_data_evaluator(Arc::new(move |ctx| {
+            let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+            let series_id = match &series_value {
+                DataValue::DataSeries(v) => v.id.clone(),
+                DataValue::Null => {
+                    return Err(format!("{}: DataSeries input is not connected", name));
+                }
+                other => {
+                    return Err(format!(
+                        "{}: DataSeries input must be a DataSeries (got {:?})",
+                        name,
+                        other.value_type().unwrap_or(DataType::Any)
+                    ));
+                }
+            };
+
+            let value_input =
+                ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("value".to_string())))?;
+
+            let series = ctx.get_data_series(&series_id)?;
+
+            let result_series = match &value_input {
+                DataValue::DataSeries(v) => {
+                    let other = ctx.get_data_series(&v.id)?;
+                    compare_series_series(&series, &other, &op)?
+                }
+                DataValue::Null => {
+                    return Err(format!(
+                        "{}: Value is not connected. Connect a scalar or another DataSeries.",
+                        name
+                    ));
+                }
+                scalar => compare_series_scalar(&series, scalar, &op)?,
+            };
+
+            let result_id = ctx.put_data_series(result_series)?;
+            ctx.emit_output_by_role(
+                &PinRole::Data(DataRole::Output),
+                DataValue::DataSeries(DataSeriesValue::with_element_type(
+                    result_id,
+                    DataType::Boolean,
+                )),
+            )?;
+            Ok(())
+        }));
     registry.register(definition);
 }
 

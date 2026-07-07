@@ -10,7 +10,8 @@ import type { DatabaseRecord } from './databaseStore';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
-import { syncFunctionSignatureMeta } from './graphDocumentMeta';
+import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
+import { useGraphMetaStore } from './graphMetaStore';
 import { useEditStateStore } from './editStateStore';
 import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
@@ -202,6 +203,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       resources,
       graphOrder,
     });
+    hydrateFunctionSignaturesFromProjectIndex(index.graphs);
     return true;
   } catch (err) {
     const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
@@ -277,6 +279,7 @@ function resetClientProjectState(): void {
   useWorksheetStore.getState().clear();
   useResourceStore.getState().clear();
   useDocumentStateStore.getState().clear();
+  useGraphMetaStore.getState().clear();
 }
 
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
@@ -336,6 +339,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           }),
           graphOrder,
         });
+        hydrateFunctionSignaturesFromProjectIndex(index.graphs);
 
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -423,7 +427,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, get) => ({
           hasConflictDocument: false,
         });
         markResourceLoaded({ id: graphId, kind: frontendGraph.type });
-        syncFunctionSignatureMeta({
+        syncFunctionSignatureFromGraph({
           ...frontendGraph,
         });
         useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);

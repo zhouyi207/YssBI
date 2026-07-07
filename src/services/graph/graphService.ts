@@ -60,15 +60,29 @@ export class GraphService {
         }
     }
 
-    static async updateFunctionSignature(functionId: string, patch: FunctionSignaturePatch): Promise<Graph> {
+    static async updateFunctionSignature(
+        functionId: string,
+        patch: FunctionSignaturePatch,
+    ): Promise<{ graph: Graph; callerGraphs: Graph[]; sideEffectWarning: boolean }> {
         try {
-            const graph = await invoke<GraphInstanceDTO>("update_function_signature", {
-                functionId,
-                inputs: patch.inputs,
-                outputs: patch.outputs,
-            });
+            const result = await invoke<{
+                graph: GraphInstanceDTO;
+                callerGraphs: GraphInstanceDTO[];
+                sideEffectWarning: boolean;
+            }>(
+                "update_function_signature",
+                {
+                    functionId,
+                    inputs: patch.inputs,
+                    outputs: patch.outputs,
+                },
+            );
             logger.graph.info(`Function '${functionId}' signature updated successfully`, 'GraphService');
-            return toFrontendGraph(graph);
+            return {
+                graph: toFrontendGraph(result.graph),
+                callerGraphs: (result.callerGraphs ?? []).map(toFrontendGraph),
+                sideEffectWarning: result.sideEffectWarning ?? false,
+            };
         } catch (error) {
             logger.graph.error(`Error updating function signature: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;

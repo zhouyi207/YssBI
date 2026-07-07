@@ -7,7 +7,8 @@ use std::collections::{HashMap, HashSet};
 pub fn collect_invalid_graph_references(
     data: &ProjectData,
 ) -> HashMap<GraphId, Vec<InvalidReferenceDTO>> {
-    let valid_variable_ids: HashSet<String> = data.variables.keys().map(|k| k.to_string()).collect();
+    let valid_variable_ids: HashSet<String> =
+        data.variables.keys().map(|k| k.to_string()).collect();
     let valid_dataframe_ids: HashSet<String> = data.databases.keys().cloned().collect();
     let valid_graph_ids: HashSet<GraphId> = data.graphs.keys().copied().collect();
 

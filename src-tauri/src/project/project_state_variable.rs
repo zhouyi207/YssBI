@@ -330,14 +330,7 @@ mod tests {
         let variable = add_int_variable(&state);
 
         let updated = state
-            .update_variable(
-                &variable.id,
-                None,
-                Some(DataType::Object),
-                None,
-                None,
-                None,
-            )
+            .update_variable(&variable.id, None, Some(DataType::Object), None, None, None)
             .expect("updated variable");
 
         let DataValue::Object(map) = updated.data_value else {

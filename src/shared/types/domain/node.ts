@@ -18,6 +18,9 @@ export interface Node {
     description?: string;
 }
 
+export type NodeGraphScope = 'any' | 'event' | 'function';
+export type ShellRole = 'event_begin' | 'function_entry' | 'function_return';
+
 export interface NodeMetaData {
     uiStyle?: string;
     /** @deprecated 后端 DTO 格式，优先使用 uiStyle */
@@ -25,6 +28,10 @@ export interface NodeMetaData {
     description?: string;
     documentation?: NodeDocumentation;
     supports_dynamic_pins: boolean;
+    /** 节点允许出现的图类型。 */
+    graph_scope: NodeGraphScope;
+    /** 系统托管壳节点角色；非 null 即为壳节点（不可删 / 复制 / palette 隐藏）。 */
+    shell_role: ShellRole | null;
 }
 
 export interface NodeDocumentation {
@@ -99,6 +106,21 @@ export interface NodeDefinitionDTO {
 export function getNodeDefinitionMeta(def: NodeDefinition | undefined): NodeMetaData | undefined {
     if (!def) return undefined;
     return def.nodeMetadata ?? def.node_metadata;
+}
+
+/** 系统托管壳节点（Event Begin / Function Entry/Return）：不可删除、不从 palette 添加。 */
+export function isShellNodeDefinition(def: NodeDefinition | undefined): boolean {
+    return getNodeDefinitionMeta(def)?.shell_role != null;
+}
+
+/** 该节点定义允许出现在指定图类型中（默认 any）。 */
+export function nodeDefinitionAllowedInGraphKind(
+    def: NodeDefinition | undefined,
+    graphKind: 'event' | 'function' | undefined,
+): boolean {
+    const scope = getNodeDefinitionMeta(def)?.graph_scope ?? 'any';
+    if (scope === 'any' || !graphKind) return true;
+    return scope === graphKind;
 }
 
 export function pickLocalizedText(

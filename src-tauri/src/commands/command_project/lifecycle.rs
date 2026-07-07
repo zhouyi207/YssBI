@@ -82,7 +82,11 @@ pub async fn save_project_as(
 
     let project_data = load_project_from_file(&new_metadata_path).map_err(|e| e.to_string())?;
 
-    state.activate_loaded_snapshot(&source_store, new_metadata_path.clone(), project_data.clone());
+    state.activate_loaded_snapshot(
+        &source_store,
+        new_metadata_path.clone(),
+        project_data.clone(),
+    );
     start_project_watcher(&app, &watcher, &new_metadata_path);
 
     let record = registry

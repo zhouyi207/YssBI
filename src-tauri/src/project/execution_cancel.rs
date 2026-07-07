@@ -25,10 +25,7 @@ impl ExecutionCancelRegistry {
 
     pub fn begin(&self) -> Arc<AtomicBool> {
         let flag = Arc::new(AtomicBool::new(false));
-        *self
-            .active
-            .lock()
-            .expect("execution cancel registry lock") = Some(flag.clone());
+        *self.active.lock().expect("execution cancel registry lock") = Some(flag.clone());
         flag
     }
 
@@ -44,10 +41,7 @@ impl ExecutionCancelRegistry {
     }
 
     pub fn end(&self, flag: &Arc<AtomicBool>) {
-        let mut active = self
-            .active
-            .lock()
-            .expect("execution cancel registry lock");
+        let mut active = self.active.lock().expect("execution cancel registry lock");
         if active
             .as_ref()
             .is_some_and(|current| Arc::ptr_eq(current, flag))

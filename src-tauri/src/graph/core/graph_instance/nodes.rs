@@ -33,6 +33,21 @@ impl GraphInstance {
             .get(node_type)
             .ok_or_else(|| format!("Node type '{}' not found", node_type))?;
 
+        if !definition.metadata.graph_scope.allows(&self.kind) {
+            return Err(format!(
+                "Node '{}' is not allowed in {:?} graphs",
+                node_type, self.kind
+            ));
+        }
+
+        // 壳节点每图至多一个（EventBegin / FunctionEntry / FunctionReturn）。
+        if definition.is_shell() && self.has_node_of_type(node_type) {
+            return Err(format!(
+                "Shell node '{}' already exists in this graph",
+                node_type
+            ));
+        }
+
         let result = NodeInstance::from_definition(definition.clone())?;
         let node_id = result.node.id;
 
@@ -119,6 +134,25 @@ impl GraphInstance {
         data_state.nodes.get(&node_id).cloned()
     }
 
+    /// 图内是否已存在指定 node_type 的节点。
+    pub fn has_node_of_type(&self, node_type: &str) -> bool {
+        let data_state = self.data_state.read().unwrap();
+        data_state
+            .nodes
+            .values()
+            .any(|node| node.definition.node_type == node_type)
+    }
+
+    /// 节点是否为系统托管壳节点（不可删除 / 复制）。
+    pub fn is_shell_node(&self, node_id: NodeId) -> bool {
+        let data_state = self.data_state.read().unwrap();
+        data_state
+            .nodes
+            .get(&node_id)
+            .map(|node| node.definition.is_shell())
+            .unwrap_or(false)
+    }
+
     /// 更新节点的 instance_params 并触发动态 pin 重建
     /// 批量更新节点位置（拖拽结束时调用，CQRS 模式）
     pub fn set_node_positions(&self, updates: &[(NodeId, f32, f32)]) -> Result<(), String> {
@@ -193,4 +227,3 @@ impl GraphInstance {
         data_state.nodes.values().cloned().collect()
     }
 }
-

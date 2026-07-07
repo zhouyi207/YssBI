@@ -364,17 +364,23 @@ fn dataframe_page(df: &DataFrame, offset: usize, limit: usize) -> Result<SourceP
     })
 }
 
-fn data_series_page(data_series: &Series, offset: usize, limit: usize) -> Result<SourcePage, String> {
+fn data_series_page(
+    data_series: &Series,
+    offset: usize,
+    limit: usize,
+) -> Result<SourcePage, String> {
     let total_count = data_series.len();
     let start = offset.min(total_count);
     let end = (offset.saturating_add(limit)).min(total_count);
     let columns = crate::execution::data_series_table_columns(data_series);
     let rows: Vec<Vec<serde_json::Value>> = (start..end)
         .map(|i| {
-            vec![data_series
-                .get(i)
-                .map(anyvalue_to_json)
-                .unwrap_or(serde_json::Value::Null)]
+            vec![
+                data_series
+                    .get(i)
+                    .map(anyvalue_to_json)
+                    .unwrap_or(serde_json::Value::Null),
+            ]
         })
         .collect();
     Ok(SourcePage {
@@ -541,8 +547,16 @@ mod tests {
 
         let removed = store.invalidate_runtime_pins("graph", &[pin_a]);
         assert_eq!(removed, vec![pin_a]);
-        assert!(store.get_pin_descriptor("graph", &pin_a.to_string()).is_none());
-        assert!(store.get_pin_descriptor("graph", &pin_b.to_string()).is_some());
+        assert!(
+            store
+                .get_pin_descriptor("graph", &pin_a.to_string())
+                .is_none()
+        );
+        assert!(
+            store
+                .get_pin_descriptor("graph", &pin_b.to_string())
+                .is_some()
+        );
     }
 
     #[test]

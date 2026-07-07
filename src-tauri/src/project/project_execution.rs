@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::ipc::Channel;
 
-const EVENT_BEGIN_NODE_TYPE: &str = "Event:Event Begin";
+use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 
 /// Collect Event graphs to run under a brief read lock (no full `ProjectData` clone).
 fn collect_event_graphs(

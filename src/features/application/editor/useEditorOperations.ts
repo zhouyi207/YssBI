@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { Node } from '@/shared/types/ui';
 import { getGraphById } from '@/features/core/dataStore';
+import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useClipboardStore } from '@/features/core/editor';
@@ -224,7 +225,7 @@ export function useEditorOperations() {
 
     const currentNodes = (currentGraph.nodes || []) as unknown as Node[];
     const idsToDelete = currentNodes
-      .filter(n => sIds.has(n.id) && !n.isInternal)
+      .filter(n => sIds.has(n.id) && !n.isInternal && !isShellNode(tid, n.id))
       .map(n => n.id);
     if (idsToDelete.length === 0) return;
 

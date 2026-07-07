@@ -6,10 +6,11 @@
 import { useMemo } from 'react';
 import { useVariableStore, useDatabaseStore } from '@/features/core/dataStore';
 import { useGraphResourcesByKind } from '@/features/core/resource';
+import { useFunctionCatalog } from './useFunctionCatalog';
 
 export function useEditorCollections() {
   const events = useGraphResourcesByKind('event');
-  const functions = useGraphResourcesByKind('function');
+  const functions = useFunctionCatalog();
   const variables = useVariableStore((s) => s.variables);
   const dataframes = useDatabaseStore((s) => s.databases);
 

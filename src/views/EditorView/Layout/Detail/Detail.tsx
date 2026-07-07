@@ -9,6 +9,7 @@ import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { renameGraph } from '@/features/application/dataManagement/graphActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { DetailEmptyState } from './DetailEmptyState';
 import { VariableDetailPanel } from './panels/VariableDetailPanel';
 import { EventDetailPanel } from './panels/EventDetailPanel';
@@ -107,7 +108,11 @@ export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) =>
             void renameGraph(targetId!, name, 'function');
           }}
           onSignatureChange={(patch) => {
-            void updateFunctionSignature(targetId!, patch);
+            void updateFunctionSignature(targetId!, patch).then(({ sideEffectWarning }) => {
+              if (sideEffectWarning) {
+                uiStore.showToast(t('detail.signature.sideEffectWarning'), 'warning');
+              }
+            });
           }}
         />
       ) : target?.kind === 'worksheet' && worksheetDocument ? (

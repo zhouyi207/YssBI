@@ -4,8 +4,8 @@
 
 use crate::graph::node::{NodeInstanceParams, NodePosition};
 use crate::graph::pin::PinInstance;
-use crate::graph::{NodeId, TypeVarDefinition, TypeVarId};
 use crate::graph::value::DataValue;
+use crate::graph::{NodeId, TypeVarDefinition, TypeVarId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

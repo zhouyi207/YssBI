@@ -32,10 +32,11 @@ describe('resolveSashResizeTarget', () => {
     expect(target?.deltaSign).toBe(-1);
   });
 
-  it('uses after panel for col log panel sash', () => {
+  it('uses after panel for col log panel sash (drag up grows the bottom panel)', () => {
     const target = resolveSashResizeTarget('col', flex('editor'), fixed('panel', 200), 600, 200);
     expect(target?.nodeId).toBe('panel');
-    expect(target?.deltaSign).toBe(1);
+    // after 节点在下方：向上拖（delta 为负）应增大其高度，故 deltaSign 为 -1。
+    expect(target?.deltaSign).toBe(-1);
   });
 });
 

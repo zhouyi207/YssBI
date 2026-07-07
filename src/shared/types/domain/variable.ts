@@ -47,3 +47,25 @@ export interface Variable {
   scope: VariableScope;
   tags: string[];
 }
+
+/**
+ * 变量在某个图中是否可见（对齐后端 `GraphRuntime::variable_visible_in_graph`）。
+ * - Global：任意图可见。
+ * - Event / Function 局部：仅其所属图（且图类型匹配）可见。
+ */
+export function variableVisibleInGraph(
+  scope: VariableScope,
+  graphId: string | undefined,
+  graphKind: 'event' | 'function' | undefined,
+): boolean {
+  switch (scope.type) {
+    case 'global':
+      return true;
+    case 'event':
+      return graphKind === 'event' && !!graphId && scope.eventId === graphId;
+    case 'function':
+      return graphKind === 'function' && !!graphId && scope.functionId === graphId;
+    default:
+      return false;
+  }
+}

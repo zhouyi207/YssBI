@@ -1,7 +1,7 @@
 use crate::event::event_node::InferredPinType;
-use crate::event::{emit_project_event, Event, EventNode};
+use crate::event::{Event, EventNode, emit_project_event};
 use crate::execution::{
-    apply_runtime_pin_invalidation, collect_invalidation_pins, ResultSourceStore,
+    ResultSourceStore, apply_runtime_pin_invalidation, collect_invalidation_pins,
 };
 use crate::graph::{DataType, GraphId, GraphInstance, PinChangeSet, PinId};
 use crate::schema::PinInstanceDTO;

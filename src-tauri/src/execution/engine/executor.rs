@@ -111,12 +111,28 @@ impl<E: EventEmitter> Executor<E> {
         self.graph.lock().unwrap().reset_execution_state();
         self.result_source_store.clear_runtime_graph(&graph_id);
         self.emit(ExecutionEvent::ExecutionStart);
+
+        match self.drain() {
+            Ok(has_error) => {
+                self.log("Execution completed".to_string());
+                self.emit(ExecutionEvent::ExecutionComplete { has_error });
+                Ok(())
+            }
+            Err(err) => {
+                self.emit(ExecutionEvent::ExecutionComplete { has_error: true });
+                Err(err)
+            }
+        }
+    }
+
+    /// 排空执行栈，返回是否发生过节点错误。不做 reset / clear / 生命周期事件，
+    /// 供顶层 `run` 与子程序（函数调用）复用。
+    fn drain(&mut self) -> Result<bool, String> {
         let mut has_error = false;
 
         while !self.stack.is_empty() {
             if self.is_cancelled() {
                 self.log("Execution cancelled by user".to_string());
-                self.emit(ExecutionEvent::ExecutionComplete { has_error: true });
                 return Err(crate::project::execution_cancelled_error());
             }
 
@@ -159,9 +175,19 @@ impl<E: EventEmitter> Executor<E> {
             }
         }
 
-        self.log("Execution completed".to_string());
-        self.emit(ExecutionEvent::ExecutionComplete { has_error });
-        Ok(())
+        Ok(has_error)
+    }
+
+    /// 作为子程序从 `entry_node` 运行（函数调用用）。调用方负责在此之前
+    /// `reset_execution_state` 并预置入参；这里不重置、不清 source、不发生命周期事件。
+    pub fn run_subroutine(&mut self, entry_node: NodeId) -> Result<(), String> {
+        self.stack.push_ready(entry_node, None, None);
+        self.drain().map(|_has_error| ())
+    }
+
+    /// 无 exec 入参的函数调用：仅按数据依赖求值 `node_id` 的上游。
+    pub fn evaluate_data_target(&mut self, node_id: NodeId) -> Result<(), String> {
+        self.execute_upstream_data_nodes(node_id)
     }
 
     /// 执行节点并返回 (ExecutionEffect, duration_ms)
@@ -310,9 +336,11 @@ impl<E: EventEmitter> Executor<E> {
             };
 
             if let Some((upstream_node_id, upstream_pin_id, upstream_definition)) = upstream_info {
-                if upstream_definition.flow_processor.is_none()
-                    && upstream_definition.data_evaluator.is_some()
-                {
+                // 可拉取的数据节点：有 data_evaluator 且实例上没有任何 exec pin。
+                // 覆盖普通数据节点，以及签名无 exec 的 Call Function。
+                let is_pullable = upstream_definition.data_evaluator.is_some()
+                    && !self.graph.lock().unwrap().node_has_exec_pins(upstream_node_id);
+                if is_pullable {
                     self.execute_upstream_data_nodes(upstream_node_id)?;
 
                     // 若上游输出 pin 已有有效值（同一执行内已被其他路径求值），则跳过，避免重复执行

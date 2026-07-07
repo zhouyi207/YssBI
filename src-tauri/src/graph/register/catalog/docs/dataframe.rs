@@ -1,5 +1,7 @@
-
-pub fn apply_docs(mut def: crate::graph::node::NodeDefinition, name: &str) -> crate::graph::node::NodeDefinition {
+pub fn apply_docs(
+    mut def: crate::graph::node::NodeDefinition,
+    name: &str,
+) -> crate::graph::node::NodeDefinition {
     if let Some((zh, en)) = documentation(name) {
         def = def.with_documentation(zh, en);
     }

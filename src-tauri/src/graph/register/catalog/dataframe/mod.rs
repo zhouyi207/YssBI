@@ -1,5 +1,7 @@
 //! DataFrame 和 DataSeries 相关节点
 
+mod data_series_compare_nodes;
+mod data_series_nodes;
 mod df_adf_nodes;
 mod dummy_nodes;
 mod gls_nodes;
@@ -16,8 +18,6 @@ mod panel_nodes;
 mod prais_nodes;
 mod prediction_nodes;
 mod probit_nodes;
-mod data_series_compare_nodes;
-mod data_series_nodes;
 mod transform_nodes;
 mod ts_align_nodes;
 mod var_nodes;

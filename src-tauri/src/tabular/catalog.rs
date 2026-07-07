@@ -33,7 +33,10 @@ impl<'a> TabularCatalog<'a> {
 
     pub fn schema(&mut self, id: &str) -> Option<DataSchema> {
         if super::r#ref::is_variable_handle(id) {
-            return self.variable_cache.get(id).map(|entry| entry.schema.clone());
+            return self
+                .variable_cache
+                .get(id)
+                .map(|entry| entry.schema.clone());
         }
         if let Some(df) = self.dataframe(id).ok() {
             let columns = df
@@ -86,7 +89,12 @@ impl<'a> TabularCatalog<'a> {
 
     pub fn column_names(&mut self, id: &str) -> Result<Vec<String>, String> {
         if let Some(entry) = self.variable_cache.get(id) {
-            return Ok(entry.schema.columns.iter().map(|c| c.name.clone()).collect());
+            return Ok(entry
+                .schema
+                .columns
+                .iter()
+                .map(|c| c.name.clone())
+                .collect());
         }
         if let Some(store) = self.execution {
             if let Some(df) = store.get_dataframe(id) {
@@ -144,7 +152,9 @@ impl<'a> TabularCatalog<'a> {
     }
 }
 
-pub fn build_variable_cache_entry(snapshot: &TabularSnapshot) -> Result<VariableTabularCache, String> {
+pub fn build_variable_cache_entry(
+    snapshot: &TabularSnapshot,
+) -> Result<VariableTabularCache, String> {
     let dataframe = Arc::new(snapshot.to_dataframe()?);
     let schema = snapshot.to_schema()?;
     Ok(VariableTabularCache { schema, dataframe })

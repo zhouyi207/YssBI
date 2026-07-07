@@ -141,10 +141,7 @@ mod tests {
         stack.park(parent);
 
         let child_id = stack.push_ready(child_node, None, Some(parent_id));
-        assert_eq!(
-            stack.get(child_id).unwrap().join_target,
-            Some(parent_id)
-        );
+        assert_eq!(stack.get(child_id).unwrap().join_target, Some(parent_id));
         assert_eq!(stack.get(parent_id).unwrap().pending_children, 1);
 
         // parent 已 park，不在 ready 队列中

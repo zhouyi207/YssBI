@@ -12,4 +12,3 @@ pub const XT_ALIGN_ZH: &str = include_str!("zh/xt_align.md");
 pub const XT_ALIGN_EN: &str = include_str!("en/xt_align.md");
 pub const XT_DIFF_ZH: &str = include_str!("zh/xt_diff.md");
 pub const XT_DIFF_EN: &str = include_str!("en/xt_diff.md");
-

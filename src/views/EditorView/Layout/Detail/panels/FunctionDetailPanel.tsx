@@ -15,7 +15,11 @@ interface FunctionDetailPanelProps {
   onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
 
-export function FunctionDetailPanel({ fn, onRename, onSignatureChange }: FunctionDetailPanelProps) {
+export function FunctionDetailPanel({
+  fn,
+  onRename,
+  onSignatureChange,
+}: FunctionDetailPanelProps) {
   const { t } = useTranslation();
 
   return (

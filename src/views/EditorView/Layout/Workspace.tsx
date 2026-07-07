@@ -65,7 +65,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
         activeData.sidebarResource?.name ??
         activeData.template?.title ??
         activeData.template?.variableName ??
-        activeData.template?.subName ??
         activeData.template?.nodeType;
       setActiveDrag({
         type: activeData.type,

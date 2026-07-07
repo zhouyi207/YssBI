@@ -36,17 +36,14 @@ fn sturges_bins(n: usize) -> usize {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Histogram", vec!["Plot".to_string()])
         .with_ui_style("plot")
-                .with_documentation(docs::plot::HISTOGRAM_ZH, docs::plot::HISTOGRAM_EN)
+        .with_documentation(docs::plot::HISTOGRAM_ZH, docs::plot::HISTOGRAM_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::fixed(PinDefinition::data_input(
                 "Values",
                 DataRole::Inputs(0),
                 PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
-                    vec![
-                        DataType::Float64,
-                        DataType::Int64,
-                    ],
+                    vec![DataType::Float64, DataType::Int64],
                 )))),
             )),
             PinSlot::fixed(PinDefinition::exec_output("Out", ExecRole::ExecOut)),
