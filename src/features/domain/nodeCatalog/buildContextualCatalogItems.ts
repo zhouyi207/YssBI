@@ -1,21 +1,17 @@
-import type { NodeDefinition, Pin, Variable, FunctionSignaturePin } from '@/shared/types/domain';
+import type { NodeDefinition, Pin, Variable } from '@/shared/types/domain';
 import {
   isShellNodeDefinition,
   nodeDefinitionAllowedInGraphKind,
   variableVisibleInGraph,
 } from '@/shared/types/domain';
-import { isNodeCompatibleWithPin, pinAcceptsType, buildPinDataType } from '@/shared/utils/pinCompatibility';
+import {
+  CALL_FUNCTION_NODE_TYPE,
+  resolveEffectiveDefinition,
+} from '@/features/domain/nodeDefinition';
+import { isNodeCompatibleWithPin, pinAcceptsType } from '@/shared/utils/pinCompatibility';
 import type { FunctionCatalogEntry } from '@/features/core/editor/hooks/useFunctionCatalog';
 import type { NodeCatalogItem } from './types';
-
-function signaturePinToDataType(pin: FunctionSignaturePin) {
-  return buildPinDataType({
-    id: pin.id,
-    name: pin.name,
-    type: pin.type,
-    containerType: pin.containerType,
-  });
-}
+import { RESOURCE_SPAWNED_NODE_TYPES } from './types';
 
 export function buildContextualCatalogItems(options: {
   definitions: NodeDefinition[];
@@ -27,9 +23,10 @@ export function buildContextualCatalogItems(options: {
 }): NodeCatalogItem[] {
   const { definitions, filterPin, variables = {}, functions = {}, graphKind, graphId } = options;
   const items: NodeCatalogItem[] = [];
+  const callBase = definitions.find((d) => d.nodeType === CALL_FUNCTION_NODE_TYPE);
 
   definitions.forEach((node) => {
-    if (['Variables:Get Variable', 'Variables:Set Variable', 'Functions:Call Function'].includes(node.nodeType)) {
+    if (RESOURCE_SPAWNED_NODE_TYPES.has(node.nodeType)) {
       return;
     }
     if (isShellNodeDefinition(node)) return;
@@ -74,23 +71,24 @@ export function buildContextualCatalogItems(options: {
     }
   });
 
-  Object.values(functions).forEach((sub) => {
-    if (!sub?.name || !sub?.id) return;
-    if (filterPin && filterPin.type !== 'exec') {
-      const signaturePins =
-        filterPin.direction === 'input' ? sub.functionInputs : sub.functionOutputs;
-      const hasCompatible = signaturePins.some(
-        (p) => p.type !== 'exec' && pinAcceptsType(filterPin, signaturePinToDataType(p)),
-      );
-      if (!hasCompatible) return;
-    }
-    items.push({
-      nodeType: 'Functions:Call Function',
-      title: sub.name,
-      category: ['Functions'],
-      overrides: { subGraphId: sub.id, title: sub.name },
+  if (callBase) {
+    Object.values(functions).forEach((sub) => {
+      if (!sub?.name || !sub?.id) return;
+      const effective = resolveEffectiveDefinition(callBase, {
+        subGraphId: sub.id,
+        functionInputs: sub.functionInputs,
+        functionOutputs: sub.functionOutputs,
+      });
+      if (filterPin && !isNodeCompatibleWithPin(effective, filterPin)) return;
+
+      items.push({
+        nodeType: CALL_FUNCTION_NODE_TYPE,
+        title: sub.name,
+        category: ['Functions'],
+        overrides: { subGraphId: sub.id, title: sub.name },
+      });
     });
-  });
+  }
 
   return items;
 }

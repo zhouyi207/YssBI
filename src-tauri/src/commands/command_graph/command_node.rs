@@ -4,6 +4,7 @@ use crate::graph::{
     DataType, DataValue, GraphId, GraphRecompileScope, NodeId, NodeInstanceParams, PinChangeSet,
     PinDirection, PinId,
 };
+use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use crate::graph::core::GraphInstance;
 use crate::project::FunctionSignatureEntry;
 use crate::log::log_app;
@@ -130,6 +131,7 @@ pub fn create_node(
                 node_id,
                 &sig.inputs,
                 &sig.outputs,
+                None,
             );
             ctx.recompile(GraphRecompileScope::InferOnly);
         }
@@ -217,6 +219,7 @@ pub fn batch_create_nodes(
                         node_id,
                         &target.inputs,
                         &target.outputs,
+                        None,
                     );
                 }
             }
@@ -483,11 +486,19 @@ pub fn create_node_with_id(
 
     let signature = state.resolve_call_projection_signature(&node_type, projection_params.as_ref())?;
 
+    let is_call_function = node_type == CALL_FUNCTION_NODE_TYPE;
+    let call_projection_pin_ids = if is_call_function && !pids.is_empty() {
+        Some(pids.as_slice())
+    } else {
+        None
+    };
+    let create_pin_ids: &[PinId] = if is_call_function { &[] } else { &pids };
+
     let (node_dto, pins_dto) = state.with_graph_mut(&graph_id, |mut ctx| {
         ctx.graph().create_node_raw_with_ids(
             &node_type,
             nid,
-            &pids,
+            create_pin_ids,
             x.unwrap_or(0.0),
             y.unwrap_or(0.0),
             params,
@@ -498,6 +509,7 @@ pub fn create_node_with_id(
                 nid,
                 &sig.inputs,
                 &sig.outputs,
+                call_projection_pin_ids,
             );
             ctx.recompile(GraphRecompileScope::InferOnly);
         }
@@ -639,6 +651,7 @@ pub fn batch_create_with_connections(
                         node_id,
                         &target.inputs,
                         &target.outputs,
+                        None,
                     );
                 }
             }

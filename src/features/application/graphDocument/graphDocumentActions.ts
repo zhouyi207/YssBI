@@ -4,6 +4,8 @@ import type { Graph } from '@/shared/types/domain';
 
 import { GraphService } from '@/services/graph/graphService';
 
+import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+
 import {
   guardFullGraphPinRefresh,
   shouldSuppressIncrementalPinUpdate,
@@ -58,10 +60,6 @@ export async function updateFunctionSignature(
   return { sideEffectWarning };
 
 }
-
-
-
-const CALL_FUNCTION_NODE_TYPE = 'Functions:Call Function';
 
 
 

@@ -155,7 +155,7 @@ function generateSlotName(prefix: string, index: number): string {
  * Generate the ordered list of initial PinDefinitionDTOs from pin slots.
  * Matches the backend's generate_initial_pins() ordering.
  */
-export function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
+function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
   const pins: PinDefinitionDTO[] = [];
   for (const slot of slots) {
     if (slot.slotKind === 'fixed') {

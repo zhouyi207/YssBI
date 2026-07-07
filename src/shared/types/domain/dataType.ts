@@ -301,3 +301,18 @@ export function dataTypeFromPinType(pinType: string): DataType {
       return { kind: 'String' };
   }
 }
+
+/** 函数签名 pin（Detail PinEditor 的 type + containerType）→ 结构化 DataType；对齐 Rust `signature_data_type`。 */
+export function dataTypeFromFunctionSignaturePin(pin: {
+  type: string;
+  containerType?: string;
+}): DataType {
+  const base = dataTypeFromPinType(pin.type);
+  if (pin.containerType === 'array') {
+    return { kind: 'Array', inner: base };
+  }
+  if (pin.containerType === 'dataseries') {
+    return { kind: 'DataSeries', inner: base };
+  }
+  return base;
+}

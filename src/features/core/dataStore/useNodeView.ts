@@ -15,7 +15,7 @@ import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { derivePinConnectionView } from './pinLinks';
 import { resolveNodeViewMeta } from './serialization';
 
-const CALL_FUNCTION_NODE_TYPE = 'Functions:Call Function';
+import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 export function useNodeView(nodeId: string, graphId: string): UINode | null {
   const nodeData = useGraphDataStore((s) => s.getGraphNode(graphId, nodeId));

@@ -4,18 +4,11 @@ import { getViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
+import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
+import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
 import type { Pin } from "@/shared/types/domain/pin";
 import { logger } from '@/utils/appLogger';
 import type { CreateNodeFn } from "./canvasDrop";
-
-export interface PaletteItem {
-  nodeType: string;
-  overrides?: {
-    subGraphId?: string;
-    variableId?: string;
-    dataframeId?: string;
-  };
-}
 
 export function useCanvasOverlayHandlers({
   canvasElementRef,
@@ -37,7 +30,7 @@ export function useCanvasOverlayHandlers({
   setCanvas: (updater: unknown, targetGraphId?: string) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
-    async (item: PaletteItem, contextMenu: { x: number; y: number }) => {
+    async (item: NodeCatalogItem, contextMenu: { x: number; y: number }) => {
       if (!contextMenu || !canvasElementRef.current) return;
 
       const internalNodeTypes = [
@@ -71,7 +64,7 @@ export function useCanvasOverlayHandlers({
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      if (item.nodeType === "Functions:Call Function") {
+      if (item.nodeType === CALL_FUNCTION_NODE_TYPE) {
         const subId = item.overrides?.subGraphId;
         if (!subId || !functions[subId]) {
           setContextMenu(null);

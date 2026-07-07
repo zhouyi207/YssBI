@@ -725,6 +725,9 @@ src/app/appConfig/appLinks.ts
   - **死代码清理**：移除 `waitForRecordingIdle`、`commitExecutionVisualFromRecording`、`replayRecordingToVisual`、`applyExecutionVisualEventInternal` 薄包装；`wire_events` 共用 `emit_connection_active`。
   - **验证**：`cargo check`；`function_call_test` + `logic_test`；vitest `executionVisualSession` / `executionRecording` / `executionChannelDrain` / `useExecutionPlayback` / `graphRunArtifacts`（20 项）全绿。
 - [x] **执行 data 线高亮文档同步（2026.07.07 条目更正）**：历史描述中的 NodeStart 批量 `emit_data_input_connections` 已 supersede 为按边取数/流动模型（见上条）。
+- [x] **Call Function 右键拖线自动连接 + 签名 pin 类型解析**：
+  - **有效定义层（方案 C）**：新增 `features/domain/nodeDefinition/resolveEffectiveDefinition.ts`——`signatureToPinSlots` + `resolveEffectiveDefinition` 为 Call Function 注入投影后 `pinSlots` / `typeCapabilities`（对齐 Rust `function_shell`）；`buildNodeDraft` / `createNodeWithConnection` / `buildContextualCatalogItems` 统一走标准路径（`findAutoConnectPinIndex` / `isNodeCompatibleWithPin`）。
+  - **删除重复逻辑**：移除 `callFunctionDraft.ts`、`findAutoConnectPinIndexFromPins`；`CALL_FUNCTION_NODE_TYPE` 单点导出；后端保留 `predetermined_new_pin_ids` 与乐观 pin id 对齐。
 
 ## v1.0 待办
 
@@ -746,7 +749,6 @@ cargo test：150 lib 测试 + 集成套件（含新增 function_call_test.rs、�
 tsc：92 个错误，均为既有问题，比干净树的 93 个还少 1 个——本次改动未引入新的类型错误。
 - [ ] OLS Summary 取数样式不发光：可能是因为之前 new function 报错的缘故，导致动画不发光了；并没有加错误处理逻辑，在这里需要验证
 - [ ] ols 取数的逻辑是一个个的，之前为什么是一批一批的？之前是做了形式优化吗？
-- [ ] 拖动 divide 节点的 b 打开右键菜单的时候，报错：Uncaught Error: Pin pin-c3f93066-e59b-4f03-8804-5878a11f5e6f (新 Pin) is missing structured dataType
 
 # TODOLIST
 

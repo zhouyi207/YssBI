@@ -1,5 +1,6 @@
 import type { DataType } from "@/shared/types/domain";
 import { DRAG_TYPES } from "@/features/core/dnd";
+import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 
 /**
  * Build drag data for sidebar items (variables, functions, events, data).
@@ -32,7 +33,7 @@ export function buildSidebarDragData(
       sidebarResource,
       template: {
         title: name,
-        nodeType: "Functions:Call Function",
+        nodeType: CALL_FUNCTION_NODE_TYPE,
         category: "Functions",
         subGraphId: id,
       },

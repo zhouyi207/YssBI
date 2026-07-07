@@ -333,6 +333,7 @@ impl ProjectState {
                 call_node_id,
                 &signature.inputs,
                 &signature.outputs,
+                None,
             );
             ctx.recompile(GraphRecompileScope::InferOnly);
             Ok((ctx.graph_ref().clone(), change_set))
@@ -397,6 +398,7 @@ impl ProjectState {
                         *nid,
                         &signature.inputs,
                         &signature.outputs,
+                        None,
                     ));
                 }
                 ctx.recompile(GraphRecompileScope::InferOnly);
@@ -474,6 +476,7 @@ impl ProjectState {
                     call_node_id,
                     &signature.inputs,
                     &signature.outputs,
+                    None,
                 ));
             }
             ctx.recompile(GraphRecompileScope::InferOnly);

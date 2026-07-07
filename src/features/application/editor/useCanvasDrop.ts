@@ -4,6 +4,7 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
+import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
@@ -178,10 +179,10 @@ export function useCanvasDrop({
         return;
       }
 
-      if (template.nodeType === "Functions:Call Function") {
+      if (template.nodeType === CALL_FUNCTION_NODE_TYPE) {
         const subId = String(template.subGraphId);
         if (!functions[subId]) return;
-        await createNode("Functions:Call Function", { x, y }, { subGraphId: subId });
+        await createNode(CALL_FUNCTION_NODE_TYPE, { x, y }, { subGraphId: subId });
         return;
       }
 

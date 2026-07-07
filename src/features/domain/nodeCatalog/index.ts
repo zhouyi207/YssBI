@@ -1,5 +1,5 @@
-export type { NodeCatalogItem, PaletteItem } from './types';
-export { catalogItemKey } from './types';
+export type { NodeCatalogItem } from './types';
+export { catalogItemKey, RESOURCE_SPAWNED_NODE_TYPES } from './types';
 export { buildBuiltinCatalogItems } from './buildBuiltinCatalogItems';
 export { buildContextualCatalogItems } from './buildContextualCatalogItems';
 export { buildNodeTemplateDragData } from './buildNodeTemplateDragData';

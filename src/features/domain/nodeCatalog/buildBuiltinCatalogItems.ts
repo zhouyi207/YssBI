@@ -1,12 +1,7 @@
 import type { NodeDefinition } from '@/shared/types/domain';
 import { isShellNodeDefinition, nodeDefinitionAllowedInGraphKind } from '@/shared/types/domain';
 import type { NodeCatalogItem } from './types';
-
-const SPAWN_FROM_RESOURCE = new Set([
-  'Variables:Get Variable',
-  'Variables:Set Variable',
-  'Functions:Call Function',
-]);
+import { RESOURCE_SPAWNED_NODE_TYPES } from './types';
 
 /**
  * Builtin registry nodes for the sidebar catalog.
@@ -18,7 +13,7 @@ export function buildBuiltinCatalogItems(
   graphKind?: 'event' | 'function',
 ): NodeCatalogItem[] {
   return definitions
-    .filter((node) => !SPAWN_FROM_RESOURCE.has(node.nodeType))
+    .filter((node) => !RESOURCE_SPAWNED_NODE_TYPES.has(node.nodeType))
     .filter((node) => !isShellNodeDefinition(node))
     .filter((node) => nodeDefinitionAllowedInGraphKind(node, graphKind))
     .map((node) => ({

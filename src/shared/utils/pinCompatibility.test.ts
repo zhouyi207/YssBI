@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
-import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins } from './pinCompatibility';
+import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins, findAutoConnectPinIndex } from './pinCompatibility';
+import { defaultFunctionSignature, resolveEffectiveDefinition, CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 const FLOAT64: DataType = { kind: 'Float64' };
 const STRING: DataType = { kind: 'String' };
@@ -116,6 +117,31 @@ describe('pinAcceptsType - Struct family matching', () => {
   it('does not allow unrelated Struct outputs into a Model family input', () => {
     const draggedResultOutput = pin({ direction: 'output', dataType: OLS_RESULT });
     expect(pinAcceptsType(draggedResultOutput, MODEL, TYPE_SYSTEM)).toBe(false);
+  });
+});
+
+describe('findAutoConnectPinIndex via effective call definition', () => {
+  const callBase = {
+    name: 'Call Function',
+    category: ['Functions'],
+    nodeType: CALL_FUNCTION_NODE_TYPE,
+    nodeMetadata: {
+      uiStyle: 'function',
+      supports_dynamic_pins: true,
+      graph_scope: 'any' as const,
+      shell_role: null,
+    },
+    pinSlots: [],
+    typeCapabilities: [],
+  };
+
+  it('connects exec output drag to exec input on projected call pinSlots', () => {
+    const effective = resolveEffectiveDefinition(callBase, {
+      subGraphId: 'fn-1',
+      ...defaultFunctionSignature(),
+    });
+    const draggedExecOutput = pin({ direction: 'output', type: 'exec' });
+    expect(findAutoConnectPinIndex(effective.pinSlots, draggedExecOutput)).toBe(0);
   });
 });
 

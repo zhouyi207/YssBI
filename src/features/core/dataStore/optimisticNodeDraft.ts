@@ -20,18 +20,22 @@ import type {
   PinDataTypeDefinition,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
+import {
+  resolveEffectiveDefinition,
+  type ResolveEffectiveOptions,
+} from '@/features/domain/nodeDefinition';
 
-export interface CreateNodeDraftParams {
+export interface CreateNodeDraftParams extends ResolveEffectiveOptions {
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  subGraphId?: string;
   dataframeId?: string;
 }
 
 export interface NodeDraft {
   node: NodeData;
   pins: PinData[];
+  effectiveDefinition: NodeDefinition;
 }
 
 /** 对齐后端 `data_type_to_pin_type`：容器类型递归到内部类型。 */
@@ -144,7 +148,8 @@ export function buildNodeDraft(
   params?: CreateNodeDraftParams,
 ): NodeDraft {
   const nodeId = crypto.randomUUID();
-  const pins = buildInitialPins(definition, nodeId);
+  const effectiveDefinition = resolveEffectiveDefinition(definition, params);
+  const pins = buildInitialPins(effectiveDefinition, nodeId);
 
   const inputs = pins.filter((p) => p.direction === 'input').map((p) => p.id);
   const outputs = pins.filter((p) => p.direction === 'output').map((p) => p.id);
@@ -178,5 +183,5 @@ export function buildNodeDraft(
     dataframeId: params?.dataframeId,
   };
 
-  return { node, pins };
+  return { node, pins, effectiveDefinition };
 }

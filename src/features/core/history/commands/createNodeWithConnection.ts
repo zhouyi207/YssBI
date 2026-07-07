@@ -59,8 +59,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
       throw new Error(`No node definition for type "${args.nodeType}"`);
     }
 
-    // 1) 乐观插入节点（同步，先于任何 await 渲染）。
-    const { node, pins } = buildNodeDraft(
+    const { node, pins, effectiveDefinition } = buildNodeDraft(
       graphId,
       args.nodeType,
       definition,
@@ -72,19 +71,14 @@ export const createNodeWithConnectionCommand: CommandHandler<
     const pinIds = pins.map((p) => p.id);
     store.applyNodeDraft(graphId, node, pins);
 
-    // 2) 计算自动连线目标并乐观建立连接（同步，连线立即出现）。
     let targetPinId: string | null = null;
     let connDraft: ReturnType<typeof store.applyConnectionDraft> = null;
-    const matchIdx = definition.pinSlots
-      ? findAutoConnectPinIndex(definition.pinSlots, args.sourcePin)
-      : -1;
+    const matchIdx = findAutoConnectPinIndex(effectiveDefinition.pinSlots, args.sourcePin);
     if (matchIdx >= 0 && matchIdx < pinIds.length) {
       targetPinId = pinIds[matchIdx];
       connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphId);
     }
 
-    // 3) 位置对齐：等待目标 pin 偏移被测量出来后，反向平移节点，使该 pin 精确落在
-    //    拖拽释放点（args.x/args.y）。节点宽高随内容变化，故用测量值而非常量推算。
     let finalX = args.x;
     let finalY = args.y;
     if (targetPinId) {
@@ -96,7 +90,6 @@ export const createNodeWithConnectionCommand: CommandHandler<
       }
     }
 
-    // 4) 后端创建节点（id 与对齐后的位置由客户端提供）。失败则回滚连线与节点。
     try {
       await trackPending(
         NODE_CREATE_ECHO_DOMAIN,
@@ -117,7 +110,6 @@ export const createNodeWithConnectionCommand: CommandHandler<
       throw error;
     }
 
-    // 5) 节点已存在于后端后再连线。连线失败仅回滚连线，保留节点。
     let autoDisconnectedList: AutoDisconnectedEntry[] = [];
     if (connDraft && targetPinId) {
       const keys = [connDraft.connectionId, ...connDraft.disconnectedIds];
@@ -148,7 +140,6 @@ export const createNodeWithConnectionCommand: CommandHandler<
   },
 
   async undo(graphId, context) {
-    // 删除节点会一并移除其上的新连接；随后恢复被自动断开的源端连接。
     await NodeService.deleteNode(graphId, context.nodeId);
     for (const entry of context.autoDisconnectedList) {
       await ConnectionService.connectPins(graphId, entry.fromPin, entry.toPin);

@@ -454,6 +454,7 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
                 call,
                 &signature.inputs,
                 &signature.outputs,
+                None,
             );
             Ok(call)
         })
@@ -511,4 +512,45 @@ fn call_site_index_tracks_create_and_delete_without_full_graph_scan() {
 
     state.unregister_call_site_for_node(&event.id, call, CALL_FUNCTION_NODE_TYPE);
     assert!(state.get_function_call_sites(&func_id).is_empty());
+}
+
+#[test]
+fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
+    let state = ProjectState::new();
+    let func_id = state.add_function("F").id;
+    let signature = state
+        .get_function_signature(&func_id)
+        .expect("signature");
+
+    let event = state.add_event("Main");
+    let call = event
+        .create_node_raw_with_ids(
+            CALL_FUNCTION_NODE_TYPE,
+            uuid::Uuid::new_v4().into(),
+            &[],
+            0.0,
+            0.0,
+            Some(NodeInstanceParams::SubGraph {
+                sub_graph_id: func_id.to_string(),
+            }),
+        )
+        .expect("create call");
+
+    let exec_in_id: PinId = uuid::Uuid::new_v4().into();
+    let exec_out_id: PinId = uuid::Uuid::new_v4().into();
+
+    event.sync_call_function_pins_from_signature(
+        call,
+        &signature.inputs,
+        &signature.outputs,
+        Some(&[exec_in_id, exec_out_id]),
+    );
+
+    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let pin_ids: Vec<PinId> = event_graph
+        .get_pin_instances_by_node_id(call)
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(pin_ids, vec![exec_in_id, exec_out_id]);
 }

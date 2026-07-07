@@ -154,12 +154,12 @@ impl GraphInstance {
 
         if let Some(node_id) = entry_id {
             let desired = pins_from_signature(&self.function_inputs, PinDirection::Output);
-            sets.push(self.reconcile_shell_pins(node_id, desired));
+            sets.push(self.reconcile_shell_pins(node_id, desired, None));
         }
 
         if let Some(node_id) = return_id {
             let desired = pins_from_signature(&self.function_outputs, PinDirection::Input);
-            sets.push(self.reconcile_shell_pins(node_id, desired));
+            sets.push(self.reconcile_shell_pins(node_id, desired, None));
         }
 
         sets
@@ -171,14 +171,20 @@ impl GraphInstance {
         call_node_id: NodeId,
         inputs: &[FunctionSignaturePin],
         outputs: &[FunctionSignaturePin],
+        predetermined_new_pin_ids: Option<&[PinId]>,
     ) -> PinChangeSet {
         let mut desired = pins_from_signature(inputs, PinDirection::Input);
         desired.extend(pins_from_signature(outputs, PinDirection::Output));
-        self.reconcile_shell_pins(call_node_id, desired)
+        self.reconcile_shell_pins(call_node_id, desired, predetermined_new_pin_ids)
     }
 
     /// 将某壳 / Call 节点的 pin 调整为 `desired`，按 role 匹配复用已有 pin 以保留连接。
-    fn reconcile_shell_pins(&self, node_id: NodeId, desired: Vec<DesiredShellPin>) -> PinChangeSet {
+    fn reconcile_shell_pins(
+        &self,
+        node_id: NodeId,
+        desired: Vec<DesiredShellPin>,
+        predetermined_new_pin_ids: Option<&[PinId]>,
+    ) -> PinChangeSet {
         let mut data_state = self.data_state.write().unwrap();
 
         let current_ids: Vec<PinId> = data_state
@@ -191,6 +197,7 @@ impl GraphInstance {
         let mut updated_pins = Vec::new();
         let mut new_order = Vec::new();
         let mut used: std::collections::HashSet<PinId> = std::collections::HashSet::new();
+        let mut new_pin_slot = 0usize;
 
         for (i, d) in desired.iter().enumerate() {
             let existing = current_ids.iter().copied().find(|pid| {
@@ -210,7 +217,14 @@ impl GraphInstance {
                 }
                 new_order.push(pid);
             } else {
-                let new_pin = PinInstance::from_definition(&d.to_pin_definition(), node_id, i as i32);
+                let mut new_pin =
+                    PinInstance::from_definition(&d.to_pin_definition(), node_id, i as i32);
+                if let Some(ids) = predetermined_new_pin_ids {
+                    if let Some(&predetermined_id) = ids.get(new_pin_slot) {
+                        new_pin.id = predetermined_id;
+                    }
+                    new_pin_slot += 1;
+                }
                 let new_id = new_pin.id;
                 data_state.connections.register_pin(new_id, node_id);
                 data_state.pins.insert(new_id, new_pin.clone());
