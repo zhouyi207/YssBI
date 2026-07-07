@@ -1,7 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useExecutionPlayback, useExecutionStore } from "@/features/core/execution";
 import {
+  useExecutionPlayback,
+  useExecutionStore,
+  graphHasClearableArtifacts,
+} from "@/features/core/execution";
+import {
+  VscClearAll,
   VscDebugPause,
   VscDebugStop,
   VscDebugRestart,
@@ -29,19 +34,26 @@ export function CanvasExecutionToolbar({
   graphId,
   onExecute,
   onCancelExecution,
+  onClearArtifacts,
 }: {
   graphId: string;
   onExecute: () => void;
   onCancelExecution: () => void;
+  onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
   const { stop: stopReplay, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } =
     useExecutionPlayback(graphId);
-  const graphStatus = useExecutionStore((s) => s.graphs[graphId]?.status ?? "idle");
+  const graphState = useExecutionStore((s) => s.graphs[graphId]);
+  const graphStatus = graphState?.status ?? "idle";
 
   const playbackActive = isPlaying || isPaused;
   const isLiveRunning = graphStatus === "running";
   const canReplay = hasRecording && !graphDirty && !isLiveRunning;
+  const canClear =
+    !isLiveRunning
+    && !playbackActive
+    && graphHasClearableArtifacts(graphState);
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
@@ -93,6 +105,26 @@ export function CanvasExecutionToolbar({
       )}
 
       <div className="w-px h-5 bg-[var(--border-color)]" />
+
+      <CanvasToolbarButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onClearArtifacts}
+        disabled={!canClear}
+        className={
+          canClear
+            ? "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            : "text-[var(--text-secondary)] opacity-40 cursor-not-allowed"
+        }
+        tooltip={
+          canClear
+            ? t("canvas.clearExecutionArtifacts")
+            : t("canvas.clearExecutionArtifactsDisabled")
+        }
+      >
+        <VscClearAll size={14} />
+      </CanvasToolbarButton>
 
       {isLiveRunning && (
         <CanvasToolbarButton

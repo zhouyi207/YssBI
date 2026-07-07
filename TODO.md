@@ -676,7 +676,7 @@ src/app/appConfig/appLinks.ts
 - [x] **执行器等待协议根治（join 作用域 + 子任务计数）**：用显式 `join_target` / `pending_children` / `WaitKind` 替换隐式 `parent_frame` + `has_active_children` 扫栈；`ExecutionStack` 拆为 `frames` + `ready`；执行器收敛为 `spawn(+1)` / `complete(-1)` / `resume` 三单点；删除 `Suspend`/`ResumeToken` 死代码及 `insert_at`/`trigger_output` 等冗余；修复 Sequence×For/While 嵌套时 Then1 未跑完就执行 Then2；`logic_test` 新增 `test_sequence_waits_for_for_loop_before_next` / `test_sequence_waits_for_while_loop_before_next`。
 - [x] **View 快照与死代码清理**：View 改为 `ensure_view_source_for_input` 每次发布 `window_{uuid}`；删除 `open_registered_source` / `SourceAction::OpenExisting` / executor 对应分支；测试 `RecordingEmitter` + `WindowSourceEmitter` 合并为 `CapturingEmitter`。
 - [x] **执行前清空运行期状态**：`GraphRuntime::reset_execution_state()` 清空 `pins_runtime_state`、`loop_counters`、`ExecutionDataStore`；`Executor::run` 每次执行前调用；删除从未读写的 `nodes_runtime_state` 及 `NodeRuntimeState`/`NodeState`；`logic_test` 新增 `test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes`。
-- [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
+- [x] **运行结果清除（Clear）**：重跑 = 替换（`reset_execution_state` + `clear_runtime_graph` + 前端 `startExecution` 清 artifacts）；工具栏新增 Clear（`VscClearAll`）手动清当前图 runtime pin sources + 前端 `pinResults`/回放/动效；`window_*` 快照保留；`clear_graph_execution_artifacts` command + `clearGraphRunArtifacts` store 单点；取消执行同步清 partial artifacts。
 
 ## v1.0 待办
 
@@ -692,9 +692,8 @@ src/app/appConfig/appLinks.ts
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
 - [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。
-- [ ] 右上角添加一个 clear 图标，点击清空运行缓存？？每次重新运行的时候也清除运行缓存？还是保存缓存？
-
-
+- [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
+- [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 
 
 

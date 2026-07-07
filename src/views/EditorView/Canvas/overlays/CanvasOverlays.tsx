@@ -38,6 +38,7 @@ export default function CanvasOverlays({
         groupId,
         executeGraph,
         cancelGraphExecution,
+        clearGraphArtifacts,
         setCanvas,
         createNode,
     } = useEditorGroup();
@@ -74,6 +75,7 @@ export default function CanvasOverlays({
                     graphId={tabId}
                     onExecute={() => executeGraph(tabId)}
                     onCancelExecution={() => void cancelGraphExecution()}
+                    onClearArtifacts={() => void clearGraphArtifacts(tabId)}
                 />
             )}
 

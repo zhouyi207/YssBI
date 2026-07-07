@@ -9,12 +9,12 @@ import { ProjectService, isExecutionCancelledError } from '@/services/project/pr
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useExecutionStore, getExecutionEventGraph, resolveExecutionGraphId } from '@/features/core/execution';
+import { useExecutionStore, getExecutionEventGraph, resolveExecutionGraphId, graphHasClearableArtifacts } from '@/features/core/execution';
 import { openPresentationWindowSafe } from '@/features/application/window';
 import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
 import type { Presentation } from '@/features/core/resultSource';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
-import { enqueueLiveExecutionEvent, flushLiveExecutionEventsNow, resetExecutionVisual } from '@/features/core/execution';
+import { enqueueLiveExecutionEvent, flushLiveExecutionEventsNow } from '@/features/core/execution';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
@@ -186,7 +186,6 @@ export function useProjectOperations() {
       const recording: RecordedEvent[] = [];
       const pendingWindows: Promise<void>[] = [];
       const { startExecution, applySideEffectEvent } = useExecutionStore.getState();
-      resetExecutionVisual(graphId);
       startExecution(graphId);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
@@ -234,11 +233,42 @@ export function useProjectOperations() {
     }
   }, []);
 
+  const clearGraphArtifacts = useCallback(async (targetGraphId?: string) => {
+    const graphId = resolveExecutionGraphId(targetGraphId);
+    if (!graphId) {
+      uiStore.showToast("请先打开一个 Event", "warning", 3000);
+      return;
+    }
+
+    const store = useExecutionStore.getState();
+    const graphState = store.getGraph(graphId);
+    if (graphState.status === "running") {
+      return;
+    }
+    if (!graphHasClearableArtifacts(graphState)) {
+      return;
+    }
+
+    try {
+      await ProjectService.clearGraphExecutionArtifacts(graphId);
+      store.clearGraphRunArtifacts(graphId);
+      uiStore.showToast(t("canvas.executionArtifactsCleared"), "success", 2000);
+    } catch (e) {
+      logger.exec.error(`清除运行结果失败: ${formatErrorMessage(e)}`);
+      uiStore.showToast(
+        t("canvas.executionArtifactsClearFailed", { message: formatErrorMessage(e) }),
+        "error",
+        3000,
+      );
+    }
+  }, [t]);
+
   return {
     saveGraph,
     saveGraphAs,
     importGraph,
     executeGraph,
     cancelGraphExecution,
+    clearGraphArtifacts,
   };
 }

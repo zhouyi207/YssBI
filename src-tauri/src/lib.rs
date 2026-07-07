@@ -123,6 +123,7 @@ pub fn run() {
             save_project_as,
             execute_project,
             cancel_execution,
+            clear_graph_execution_artifacts,
             get_result_source_descriptor,
             get_result_source_value,
             get_result_source_page,

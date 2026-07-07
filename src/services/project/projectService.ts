@@ -510,6 +510,10 @@ export class ProjectService {
         await invoke("cancel_execution");
     }
 
+    static async clearGraphExecutionArtifacts(graphId: string): Promise<void> {
+        await invoke("clear_graph_execution_artifacts", { graphId });
+    }
+
     static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {
         const path = await invoke<string>("get_project_resource_path", {
             kind: request.kind,

@@ -1,6 +1,10 @@
 export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
 export { resolveExecutionGraphId, getExecutionEventGraph } from './resolveExecutionGraphId';
+export {
+  clearedRunArtifactsPatch,
+  graphHasClearableArtifacts,
+} from './graphRunArtifacts';
 export { useExecutionVisualBinder } from './useExecutionVisualBinder';
 export {
   getExecutionVisual,
