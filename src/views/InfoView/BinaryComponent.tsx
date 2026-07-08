@@ -11,6 +11,7 @@ import {
   CoefficientsBlock,
   HypothesisTestBlock,
   MarginsBlock,
+  formatNum,
 } from './shared';
 import type { OLSResultData } from './shared/types';
 
@@ -26,7 +27,7 @@ export const BinaryComponent: FC<{ data: OLSResultData }> = ({ data }) => {
       badges={
         <>
           <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
-            Pseudo R² = {info.r_squared.toFixed(3)}
+            Pseudo R² = {formatNum(info.r_squared, 3)}
           </span>
           <span className="text-xs text-muted-foreground">
             {info.method} &middot; n={info.num_observation}

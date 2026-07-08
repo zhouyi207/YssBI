@@ -108,12 +108,10 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
                 </div>
               </div>
             )}
-            {result.dw != null && (
-              <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
-                <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
-                <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw.d)}</div>
-              </div>
-            )}
+            <div className="rounded-lg border border-border bg-muted px-4 py-3 hover:border-border transition-colors">
+              <div className="text-[11px] text-muted-foreground font-mono mb-2">Durbin-Watson</div>
+              <div className="text-foreground font-mono text-sm font-medium">DW = {formatNum(result.dw.d)}</div>
+            </div>
           </div>
         )}
       </div>

@@ -7,8 +7,9 @@ import { executeCommand } from "@/features/core/history";
 import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
 import type { Pin } from "@/shared/types/domain/pin";
+import type { EditorFunctions } from "@/features/core/editor";
 import { logger } from '@/utils/appLogger';
-import type { CreateNodeFn } from "./canvasDrop";
+import { isFunctionAvailable, type CreateNodeFn } from "./canvasDrop";
 
 export function useCanvasOverlayHandlers({
   canvasElementRef,
@@ -22,7 +23,7 @@ export function useCanvasOverlayHandlers({
 }: {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
   activeTabId: string | null;
-  functions: Record<string, unknown>;
+  functions: EditorFunctions;
   pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
@@ -69,7 +70,7 @@ export function useCanvasOverlayHandlers({
 
       if (item.nodeType === CALL_FUNCTION_NODE_TYPE) {
         const subId = item.overrides?.subGraphId;
-        if (!subId || !functions[subId]) {
+        if (!subId || !isFunctionAvailable(subId, functions)) {
           setContextMenu(null);
           setPendingConnection(null);
           return;

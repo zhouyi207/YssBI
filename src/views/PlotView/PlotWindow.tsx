@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parsePlotPayload, usePresentationWindow } from '@/features/application/presentation';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { PlotWindowContent } from './PlotWindowContent';
 
 const PLOT_ICON = (
@@ -24,6 +25,16 @@ export const PlotWindow: React.FC = () => {
     return parsePlotPayload(state.payload.chart, state.payload.data);
   }, [state]);
 
+  const plotParseKey =
+    state.status === 'ready' && state.payload.mode === 'plot'
+      ? `${state.descriptor.sourceId}:${state.payload.chart}`
+      : null;
+
+  useEffect(() => {
+    if (!plotParseKey || plotPayload) return;
+    uiStore.showToast(t('plot.invalidData'), 'error', 4000);
+  }, [plotParseKey, plotPayload, t]);
+
   const title =
     state.status === 'ready' ? state.descriptor.title : t('plot.title');
 
@@ -44,8 +55,6 @@ export const PlotWindow: React.FC = () => {
       <PlotWindowContent
         payload={plotPayload}
         invalidFormatMessage={t('plot.invalidData')}
-        readyTitle={t('plot.readyTitle')}
-        readyHint={t('plot.readyHint')}
       />
     </PresentationWindowShell>
   );

@@ -8,14 +8,22 @@ import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import {
-  DRAG_TYPES,
   isCanvasDrop,
   isLayoutRegionDrop,
   isTabbarDrop,
-  type GraphResourceDragData,
+  isGraphResourceDragPayload,
+  isLeafDragData,
+  isNodeTemplateDragData,
+  isNodeTemplateDragState,
+  isSidebarSpawnDrag,
+  isTabDragData,
+  getSidebarResourceFromDrag,
+  buildSidebarDragState,
+  parseCanvasDragPayload,
 } from "@/features/core/dnd";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DropIndicator } from "../Renderer/DropIndicator";
+import type { DropIndicatorProps } from "../Renderer/DropIndicator";
 import { SidebarDragOverlay } from "./SidebarDragOverlay";
 import { LayoutNode } from "@/shared/types/ui";
 import "../Renderer/viewRegistry"; // 确保业务组件已注册
@@ -29,8 +37,12 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
   const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
 
-  const [dropState, setDropState] = useState<{ visible: boolean; position: any; type?: 'dock' | 'merge' }>({
-    visible: false, position: {}, type: 'dock'
+  const [dropState, setDropState] = useState<{
+    visible: boolean;
+    position: DropIndicatorProps['position'];
+    type?: 'dock' | 'merge';
+  }>({
+    visible: false, position: { top: 0, left: 0, width: 0, height: 0 }, type: 'dock'
   });
 
   const sensors = useSensors(
@@ -56,23 +68,12 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
   const handleDragStart = (event: DragStartEvent) => {
     setDragging(true);
-    const activeData = event.active.data.current as any;
-    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE || activeData?.type === DRAG_TYPES.GRAPH_RESOURCE) {
+    const activeData = parseCanvasDragPayload(event.active.data.current);
+    if (isSidebarSpawnDrag(activeData)) {
       const activatorEvent = event.activatorEvent as PointerEvent;
       const x = activatorEvent?.clientX ?? 0;
       const y = activatorEvent?.clientY ?? 0;
-      const title =
-        activeData.sidebarResource?.name ??
-        activeData.template?.title ??
-        activeData.template?.variableName ??
-        activeData.template?.nodeType;
-      setActiveDrag({
-        type: activeData.type,
-        template: { ...activeData.template, title },
-        sidebarResource: activeData.sidebarResource,
-        x,
-        y,
-      });
+      setActiveDrag(buildSidebarDragState(activeData, x, y));
       const onMove = (e: PointerEvent) => updatePosition(e.clientX, e.clientY);
       pointerMoveCleanupRef.current?.();
       pointerMoveCleanupRef.current = addGlobalEventListener(document, "pointermove", onMove);
@@ -81,10 +82,10 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
-    const activeData = active.data.current as any;
+    const activeData = parseCanvasDragPayload(active.data.current);
 
     // Sidebar drags are handled by canvas drop zones, so hide layout docking preview.
-    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE || activeData?.sidebarResource) {
+    if (isSidebarSpawnDrag(activeData)) {
       setDropState(s => ({ ...s, visible: false }));
       return;
     }
@@ -151,11 +152,9 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     setDragging(false);
     setDropState(s => ({ ...s, visible: false }));
     const { active, over } = event;
-    const activeData = active.data.current as any;
+    const activeData = parseCanvasDragPayload(active.data.current);
     const overData = over?.data.current;
-    const sidebarResource = activeData?.sidebarResource as
-      | GraphResourceDragData
-      | undefined;
+    const sidebarResource = getSidebarResourceFromDrag(activeData);
 
     if (sidebarResource && isCanvasDrop(overData)) {
       finishSidebarDrag();
@@ -166,16 +165,16 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       return;
     }
 
-    if (activeData?.type === DRAG_TYPES.GRAPH_RESOURCE) {
+    if (isGraphResourceDragPayload(activeData)) {
       finishSidebarDrag();
       return;
     }
 
-    if (activeData?.type === DRAG_TYPES.NODE_TEMPLATE) {
+    if (isNodeTemplateDragData(activeData)) {
       const dragState = useSidebarDragStore.getState().activeDrag;
       finishSidebarDrag();
       const groupId = isCanvasDrop(overData) ? overData.groupId : null;
-      if (groupId && dragState) {
+      if (groupId && dragState && isNodeTemplateDragState(dragState)) {
         // 将目标 canvas 设为 active group（确保 variable drop menu 等 UI 正确显示）
         useLayoutStore.getState().setActiveGroup(groupId);
 
@@ -198,10 +197,9 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
         ? dropData.targetNodeId
         : over.id;
 
-      if (activeData?.type === DRAG_TYPES.TAB) {
+      if (isTabDragData(activeData)) {
         // 处理 Tab 拖拽
-        const sourceNodeId = activeData.sourceNodeId;
-        const tabId = activeData.tabId;
+        const { sourceNodeId, tabId } = activeData;
         const isTabbarTarget = isTabbarDrop(dropData);
 
         if (isTabbarTarget) {
@@ -285,7 +283,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
             });
           }
         }
-      } else if (activeData?.type === DRAG_TYPES.LEAF) {
+      } else if (isLeafDragData(activeData)) {
         // 处理节点拖拽
         moveNode(active.id as string, targetNodeId as string, dropPosition);
       }

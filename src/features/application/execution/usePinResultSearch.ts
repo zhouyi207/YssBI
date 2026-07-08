@@ -8,6 +8,7 @@ import {
 } from '@/features/core/execution/pinResultSearch';
 import { useExecutionStore } from '@/features/core/execution';
 import type { PinResultState } from '@/shared/types/ui';
+import { isExecPin } from '@/shared/types/domain/pinSemantics';
 
 const EMPTY_PIN_RESULTS = new Map<string, PinResultState>();
 
@@ -25,7 +26,7 @@ function collectGraphPins(graphId: string): PinResultSearchPinRef[] {
         pinId: pin.id,
         nodeId: pin.nodeId,
         direction: pin.direction,
-        pinType: pin.type,
+        isExec: isExecPin(pin),
         connectionIds: graphStore.getGraphPinConnections(graphId, pinId),
       });
     }

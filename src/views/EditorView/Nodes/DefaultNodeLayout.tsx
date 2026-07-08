@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback } from "react";
 import { Pin } from "../Pins/Pin";
-import { Pin as PinModel, Node } from "@/shared/types/domain";
+import { Pin as PinModel } from "@/shared/types/domain";
+import type { UINode } from "@/shared/types/ui";
 import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
@@ -8,10 +9,11 @@ import {
   getRepeatableSlot,
 } from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
 
 interface DefaultNodeLayoutProps {
-  node: Node & { nodeType?: string; variableId?: string; dataframeId?: string };
+  node: UINode;
   activePinId?: string | null;
   activePin?: PinModel | null;
   subgraphId?: string;
@@ -61,21 +63,21 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const displayTitle = node.title;
   const isConstantNode = node.category?.[1] === "Constants";
   const resolveResourcePin = useCallback((pin: PinModel): PinModel => {
-    if (pin.type === 'exec') return pin;
+    if (isExecPin(pin)) return pin;
     if (variable && isVariableNode(node.nodeType)) {
       return { ...pin, name: variable.name };
     }
     if (database && isDataframeNode(node.nodeType)) {
-      const name = (database as Record<string, unknown>).name;
-      return typeof name === 'string' && name ? { ...pin, name } : pin;
+      const name = database.name;
+      return name ? { ...pin, name } : pin;
     }
     return pin;
   }, [database, node.nodeType, variable]);
 
-  const inputsExec = node.inputs.filter(p => p.type === 'exec');
-  const inputsData = node.inputs.filter(p => p.type !== 'exec').map(resolveResourcePin);
-  const outputsExec = node.outputs.filter(p => p.type === 'exec');
-  const outputsData = node.outputs.filter(p => p.type !== 'exec').map(resolveResourcePin);
+  const inputsExec = node.inputs.filter(isExecPin);
+  const inputsData = node.inputs.filter((p) => !isExecPin(p)).map(resolveResourcePin);
+  const outputsExec = node.outputs.filter(isExecPin);
+  const outputsData = node.outputs.filter((p) => !isExecPin(p)).map(resolveResourcePin);
 
   const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
 

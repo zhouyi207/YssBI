@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GraphUndoPatch } from "../node/graphUndoPatch";
+import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 
 export interface AutoDisconnected {
     fromPin: string;

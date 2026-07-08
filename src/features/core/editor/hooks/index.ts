@@ -3,10 +3,10 @@ export { useFunctionCatalog } from './useFunctionCatalog';
 export type { FunctionCatalogEntry } from './useFunctionCatalog';
 export { useEditorCollections } from './useEditorCollections';
 export { useEditorGroups } from './useEditorGroups';
+export type { EditorGroupSnapshot } from '@/shared/types';
 export { useEditorUIState } from './useEditorUIState';
 export { useEditorState, buildEditorState } from './useEditorState';
 
-export { useEditorNodeActions } from './useEditorNodeActions';
 export { useEditorCanvasActions } from './useEditorCanvasActions';
 export { useEditorUIActions } from './useEditorUIActions';
 export { useEditorLayoutActions } from './useEditorLayoutActions';

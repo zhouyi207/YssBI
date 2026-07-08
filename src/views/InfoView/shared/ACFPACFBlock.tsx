@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { computeAcfPacf } from '@/features/application/stats/statsActions';
 import type { AcfPacfResponse } from '@/features/application/stats/statsActions';
+import { acfSeriesToBars, pacfSeriesToBars } from '@/shared/types/report';
 import { useChartSeriesColors } from '@/shared/theme/chartTheme';
 import { SectionHeader } from './RegressionShared';
 import { InfoAccentButton } from './InfoViewControls';
@@ -72,7 +73,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
             <div>
               <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
                 <CorrelogramChart
-                  data={result.acf.map((v, i) => ({ lag: i, value: v }))}
+                  data={acfSeriesToBars(result.acf)}
                   ciHalfWidth={ciHalfWidth}
                   title="ACF"
                 />
@@ -81,7 +82,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
             <div>
               <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
                 <CorrelogramChart
-                  data={result.pacf.map((v, i) => ({ lag: i + 1, value: v }))}
+                  data={pacfSeriesToBars(result.pacf)}
                   ciHalfWidth={ciHalfWidth}
                   title="PACF"
                   color={seriesColors.secondary}

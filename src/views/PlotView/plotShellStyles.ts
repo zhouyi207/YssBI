@@ -23,5 +23,16 @@ export function plotContainerClass(embedded?: boolean, heightProp?: number | und
   return cn(plotShellClass, !heightProp ? 'w-full h-full min-h-0' : 'relative');
 }
 
+/** 标准 XY 图边距（Line / Scatter / ECDF / KDE / Bar / Histogram） */
+export const DEFAULT_PLOT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 } as const;
+
+/** 紧凑模式边距 */
+export const COMPACT_PLOT_MARGIN = { top: 4, right: 4, bottom: 4, left: 4 } as const;
+
+/** 相关矩阵图边距 */
+export const CORRELATION_PLOT_MARGIN = { top: 40, right: 24, bottom: 120, left: 120 } as const;
+
+export type PlotMargin = { top: number; right: number; bottom: number; left: number };
+
 /** Flex 子项图表（如 ACF/PACF 并排列） */
 export const plotFlexShellClass = cn(plotShellClass, 'relative w-full flex-1 min-h-0');

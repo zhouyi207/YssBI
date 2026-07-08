@@ -1,3 +1,4 @@
+import type { SidebarDragPayload } from "@/features/core/dnd";
 import { SidebarDraggableItem } from "./SidebarDraggableItem";
 import { sidebarItemIndent, sidebarItemLabelClass, sidebarItemRowClass } from "./sidebarStyles";
 
@@ -14,7 +15,7 @@ export function SidebarListItem({
   onContextMenu,
 }: {
   id: string;
-  dragData?: { type: string; template?: unknown } | null;
+  dragData?: SidebarDragPayload | null;
   isSelected?: boolean;
   indentDepth?: number;
   icon: React.ReactNode;

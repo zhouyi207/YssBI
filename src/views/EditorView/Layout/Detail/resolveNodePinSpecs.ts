@@ -1,5 +1,6 @@
 import type { PinView } from '@/shared/types/store/graph';
 import type { NodeDefinition, PinDefinitionDTO, PinSlot } from '@/shared/types/domain/node';
+import { pinFlowKind, pinTypeLabel } from '@/shared/types/domain/pinSemantics';
 
 export interface ResolvedPinSpec {
   id: string;
@@ -15,9 +16,6 @@ export interface ResolvedPinSpec {
   connectionIds: string[];
 }
 
-function pinKindFromType(type: string): 'Data' | 'Exec' {
-  return type === 'exec' ? 'Exec' : 'Data';
-}
 
 function formatDefinitionType(def: PinDefinitionDTO): string {
   if (def.kind === 'Exec') return 'exec';
@@ -91,13 +89,14 @@ function resolvePin(
   definition: NodeDefinition | undefined,
 ): ResolvedPinSpec {
   const meta = findDefinitionForPin(pin, definition?.pinSlots);
+  const label = pinTypeLabel(pin);
   return {
     id: pin.id,
     name: pin.name,
     direction: pin.direction,
-    kind: pinKindFromType(String(pin.type)),
-    type: pin.typeDisplay ?? String(pin.type),
-    typeDisplay: pin.typeDisplay,
+    kind: pinFlowKind(pin),
+    type: label,
+    typeDisplay: pin.typeDisplay ?? label,
     optional: meta.optional,
     slotKind: meta.slotKind,
     slotNote: meta.slotNote,

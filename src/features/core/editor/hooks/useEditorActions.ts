@@ -1,12 +1,11 @@
 /**
  * 编辑器操作（组合 hook）
- * 组合 useEditorNodeActions、useEditorCanvasActions、useEditorUIActions、useEditorLayoutActions
+ * 组合 useEditorCanvasActions、useEditorUIActions、useEditorLayoutActions
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 GraphPosition 快照）
  */
 import { useRef, useEffect } from 'react';
 import { getViewport, subscribeToViewport } from '@/features/core/viewport';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
-import { useEditorNodeActions } from './useEditorNodeActions';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
 import { useEditorLayoutActions } from './useEditorLayoutActions';
@@ -20,7 +19,6 @@ export function useEditorActions(active: ActiveEditorGroup) {
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
 
-  const nodeActions = useEditorNodeActions(activeTabIdRef, editorGroupId);
   const canvasActions = useEditorCanvasActions(activeTabIdRef);
   const uiActions = useEditorUIActions();
   const layoutActions = useEditorLayoutActions();
@@ -40,7 +38,6 @@ export function useEditorActions(active: ActiveEditorGroup) {
     activeGroupIdRef,
     activeTabIdRef,
     viewportRef,
-    ...nodeActions,
     ...canvasActions,
     ...uiActions,
     ...layoutActions,

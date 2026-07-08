@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleBand, scaleSequential, interpolateRdBu } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  attachHoverTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  tooltipMutedLine,
+  tooltipStrongLine,
+  tooltipTickLine,
+} from '@/shared/plot/d3Tooltip';
 import { cn } from '@/lib/utils';
 import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
 
@@ -94,7 +102,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .append('g')
       .attr('transform', `translate(${margin.left + offsetX},${margin.top + offsetY})`);
 
-    const tooltip = select(tooltipRef.current);
+    const tooltip = new PlotTooltipController(tooltipRef.current, container);
 
     const cells: { i: number; j: number; value: number; pValue?: number }[] = [];
     for (let i = 0; i < n; i++) {
@@ -113,7 +121,8 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       return `p = ${p.toFixed(3)}`;
     };
 
-    g.selectAll('rect.cell')
+    const cellRects = g
+      .selectAll('rect.cell')
       .data(cells)
       .join('rect')
       .attr('class', 'cell')
@@ -124,28 +133,26 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('fill', (d) => colorScale(d.value))
       .attr('stroke', chartTheme.grid)
       .attr('stroke-width', 0.5)
-      .attr('rx', 2)
-      .on('mouseenter', function (_event, d) {
-        select(this).attr('stroke', seriesColors.primary).attr('stroke-width', 2);
-        const pStr = formatP(d.pValue);
-        tooltip
-          .style('opacity', '1')
-          .html(
-            `<div style="font-size:10px;color:${chartTheme.tooltipMuted}">${labels[d.i]} × ${labels[d.j]}</div>` +
-            `<div style="font-size:12px;font-weight:600;color:${chartTheme.tooltipFg}">r = ${d.value.toFixed(3)}</div>` +
-            `<div style="font-size:10px;color:${chartTheme.tick}">${pStr}</div>`
-          );
-      })
-      .on('mousemove', function (event) {
-        const rect = container!.getBoundingClientRect();
-        tooltip
-          .style('left', `${event.clientX - rect.left + 12}px`)
-          .style('top', `${event.clientY - rect.top - 10}px`);
-      })
-      .on('mouseleave', function () {
-        select(this).attr('stroke', chartTheme.grid).attr('stroke-width', 0.5);
-        tooltip.style('opacity', '0');
-      });
+      .attr('rx', 2);
+
+    attachHoverTooltip(
+      cellRects as D3Onable<
+        SVGRectElement,
+        { i: number; j: number; value: number; pValue?: number }
+      >,
+      {
+        tooltip,
+        cursorOffset: { x: 12, y: -10 },
+        getHtml: (d) =>
+          tooltipMutedLine(`${labels[d.i]} × ${labels[d.j]}`, chartTheme) +
+          tooltipStrongLine(`r = ${d.value.toFixed(3)}`, chartTheme) +
+          tooltipTickLine(formatP(d.pValue), chartTheme),
+        onEnter: (el) =>
+          select(el).attr('stroke', seriesColors.primary).attr('stroke-width', 2),
+        onLeave: (el) =>
+          select(el).attr('stroke', chartTheme.grid).attr('stroke-width', 0.5),
+      },
+    );
 
     // X 轴标签（旋转 -45° 避免重叠）
     const xAxisG = g.append('g').attr('transform', `translate(0,${plotH})`);

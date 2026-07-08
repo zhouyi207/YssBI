@@ -1,5 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { NodeService } from '@/services';
+import type { BatchCreateNodeRequest } from '@/shared/types/dto/batchCreateNode';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import { Node as DomainNode } from '@/shared/types/domain';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { executeCommand } from '@/features/core/history';
@@ -42,13 +44,7 @@ export function useNodeManagement() {
         async (
             nodeType: string,
             position: { x: number; y: number },
-            params?: {
-                variableId?: string;
-                variableName?: string;
-                variableType?: string;
-                subGraphId?: string;
-                dataframeId?: string;
-            }
+            params?: NodeSpawnParams
         ): Promise<{ nodeId: string; pinIds: string[] } | undefined> => {
             if (!activeTabId) {
                 logger.graph.warn('Cannot create node: no active tab', 'NodeManagement');
@@ -74,33 +70,16 @@ export function useNodeManagement() {
 
     /**
      * 批量创建节点（CQRS模式）
-     * @param nodeTypes 节点类型数组
-     * @param positions 节点位置数组（可选）
-     * @returns Promise<string[]> 创建成功的节点ID数组
      */
     const createNodes = useCallback(
-        async (
-            nodeTypes: string[],
-            positions?: Array<{ x: number; y: number }>
-        ): Promise<string[]> => {
-            if (!activeTabId || nodeTypes.length === 0) {
-                logger.graph.warn('Cannot create nodes: no active tab or empty node types', 'NodeManagement');
+        async (requests: BatchCreateNodeRequest[]): Promise<string[]> => {
+            if (!activeTabId || requests.length === 0) {
+                logger.graph.warn('Cannot create nodes: no active tab or empty requests', 'NodeManagement');
                 return [];
             }
 
             try {
-                // 调用后端批量创建（后端会为每个节点发送NodeCreated事件）
-                const nodeIds = await NodeService.batchCreateNodes(
-                    activeTabId,
-                    nodeTypes.map((nodeType, i) => ({
-                        nodeType,
-                        x: positions?.[i]?.x,
-                        y: positions?.[i]?.y,
-                    })),
-                );
-
-                return nodeIds;
-
+                return await NodeService.batchCreateNodes(activeTabId, requests);
             } catch (error) {
                 logger.graph.error(`Failed to create nodes: ${error instanceof Error ? error.message : String(error)}`, 'NodeManagement');
                 return [];

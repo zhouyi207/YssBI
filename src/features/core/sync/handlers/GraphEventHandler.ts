@@ -10,6 +10,7 @@ import { updateOpenResourceLabels, useResourceStore, resourceKey } from '@/featu
 import type { Graph } from '@/shared/types/domain';
 import type { ProjectResourceMeta } from '@/features/core/resource';
 import type { GraphDataLike } from '@/shared/types/store/graph';
+import { graphUpdatedPayloadToGraphDataLike } from '@/shared/types/dto/graphModel';
 
 type GraphWithMeta = Graph & { entryNodeId?: string };
 
@@ -29,16 +30,7 @@ function buildGraphUpdateData(
   meta: ProjectResourceMeta,
   kind: 'event' | 'function',
 ): GraphDataLike {
-  return {
-    id: payload.id,
-    name: payload.data.name ?? meta.name,
-    type: kind,
-    ...payload.data,
-    nodes: payload.data.nodes ?? [],
-    pins: payload.data.pins ?? [],
-    connections: payload.data.connections ?? { connections: [] },
-    canvas: payload.data.canvas ?? { x: 0, y: 0, scale: 1 },
-  };
+  return graphUpdatedPayloadToGraphDataLike(payload.id, kind, meta.name, payload.data);
 }
 
 // ==================== Event Handlers ====================

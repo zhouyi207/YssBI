@@ -8,10 +8,10 @@ import {
   NodeData,
   PinData,
   ConnectionData,
-  RuntimeNodeInput,
 } from '@/shared/types';
+import { normalizeGraphDataLike } from '@/shared/types/dto/graphModel';
+import { isExecPin } from '@/shared/types/domain/pinSemantics';
 import { logger } from '@/utils/appLogger';
-import { getViewport } from '@/features/core/viewport';
 import {
   type GraphEntityBucket,
   getGraphConnection,
@@ -113,52 +113,26 @@ function toStoredPin(pin: PinDataInput): PinData {
   return stored;
 }
 
-function toPinIds(arr: unknown): string[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.map((p) => (typeof p === 'string' ? p : (p as { id?: string })?.id ?? '')).filter(Boolean);
-}
-
 function buildGraphBucket(graphId: GraphId, graph: GraphDataLike): GraphEntityBucket {
+  const normalized = normalizeGraphDataLike(graphId, graph);
   const bucket = emptyGraphBucket();
-  const conns = Array.isArray(graph.connections)
-    ? graph.connections.map((c: { from: string; to: string }) => ({ fromPin: c.from, toPin: c.to }))
-    : graph.connections.connections;
 
-  (graph.nodes || []).forEach((node) => {
-    const inputIds = toPinIds(node.inputs);
-    const outputIds = toPinIds(node.outputs);
-    bucket.nodes[node.id] = {
-      ...node,
-      graphId,
-      inputs: inputIds,
-      outputs: outputIds,
-      nodeType: (node as NodeData).nodeType ?? (node as { nodeType?: string }).nodeType ?? '',
-      category: (node as NodeData).category ?? [],
-      title: (node as NodeData).title ?? '',
-      uiStyle: (node as NodeData).uiStyle ?? 'default',
-      position: (node as NodeData).position ?? { x: 0, y: 0 },
-    };
+  normalized.nodes.forEach((node) => {
+    bucket.nodes[node.id] = node;
     bucket.graphNodes.push(node.id);
-    const pinIds = [...inputIds, ...outputIds];
+    const pinIds = [...node.inputs, ...node.outputs];
     bucket.nodePins[node.id] = pinIds;
     pinIds.forEach((pinId) => {
       bucket.pinConnections[pinId] = bucket.pinConnections[pinId] ?? [];
     });
   });
 
-  (graph.pins || []).forEach((pin: PinDataInput) => {
+  normalized.pins.forEach((pin: PinDataInput) => {
     bucket.pins[pin.id] = toStoredPin(pin);
   });
 
-  conns.forEach((connection: { fromPin: string; toPin: string }) => {
-    const from = connection.fromPin;
-    const to = connection.toPin;
-    const id = `${from}->${to}`;
-    bucket.connections[id] = { id, from, to };
-    bucket.pinConnections[from] = bucket.pinConnections[from] ?? [];
-    bucket.pinConnections[from].push(id);
-    bucket.pinConnections[to] = bucket.pinConnections[to] ?? [];
-    bucket.pinConnections[to].push(id);
+  normalized.connections.forEach((connection) => {
+    connectBucketPins(bucket, connection.from, connection.to);
   });
 
   return bucket;
@@ -216,7 +190,6 @@ interface GraphDataStore {
   clearGraph(graphId: GraphId): void;
   hydrateGraphs(graphs: Record<GraphId, GraphDataLike>): void;
   addGraphFromData(graphId: GraphId, graph: GraphDataLike): void;
-  replaceGraphNodes(graphId: GraphId, nodes: RuntimeNodeInput[]): void;
 }
 
 export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
@@ -502,7 +475,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     if (toPin.direction === 'input') {
       for (const cid of readPinConnections(to)) disconnectedIds.push(cid);
     }
-    if (fromPin.direction === 'output' && fromPin.type === 'exec') {
+    if (fromPin.direction === 'output' && isExecPin(fromPin)) {
       for (const cid of readPinConnections(from)) {
         const conn = readConnection(cid);
         if (conn?.from === from && !disconnectedIds.includes(cid)) disconnectedIds.push(cid);
@@ -581,47 +554,6 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     set((state) => {
       const bucket = buildGraphBucket(graphId, graph);
       return commitGraphBucket(state, graphId, bucket);
-    });
-  },
-
-  replaceGraphNodes: (graphId, nodes) => {
-    const state = get();
-    const pins: PinData[] = [];
-    const connectionItems: { fromPin: string; toPin: string }[] = [];
-    const toPinId = (p: string | PinDataInput): string => (typeof p === 'string' ? p : (p?.id ?? ''));
-
-    const nodeData = nodes.map((n: RuntimeNodeInput) => {
-      const inputIds = (n.inputs || []).map(toPinId).filter(Boolean);
-      const outputIds = (n.outputs || []).map(toPinId).filter(Boolean);
-
-      [...(n.inputs || []), ...(n.outputs || [])].forEach((p) => {
-        const pin = typeof p === 'object' && p?.id ? p : state.getGraphPin(graphId, toPinId(p));
-        if (pin && !pins.some((x) => x.id === (pin.id ?? toPinId(p)))) {
-          pins.push(pin);
-        }
-      });
-
-      (n.outputs || []).forEach((p) => {
-        const pinId = toPinId(p);
-        const links = state.getGraphPinConnections(graphId, pinId).map((cid) => {
-          const conn = state.getGraphConnection(graphId, cid);
-          return conn?.from === pinId ? conn?.to : conn?.from;
-        }).filter((toId): toId is string => Boolean(toId));
-        links.forEach((toId) => connectionItems.push({ fromPin: pinId, toPin: toId }));
-      });
-
-      return { ...n, inputs: inputIds, outputs: outputIds };
-    });
-
-    get().clearGraph(graphId);
-    get().addGraphFromData(graphId, {
-      id: graphId,
-      name: '',
-      type: 'event',
-      canvas: getViewport(graphId),
-      nodes: nodeData,
-      pins,
-      connections: { connections: connectionItems },
     });
   },
 }));

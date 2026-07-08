@@ -275,7 +275,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     onContextMenu?: (e: React.MouseEvent) => void
   ) => {
     const isSelected = isDetailSelected(id, type);
-    const dragData = readOnly ? null : buildSidebarDragData(id, name, type, extra as { dataType?: DataType | string } | undefined);
+    const dragData = readOnly ? null : buildSidebarDragData(id, name, type);
 
     const iconColor =
       type === "event"
@@ -573,10 +573,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
               >
-                  {Object.entries(dataframes || {}).map(([id, data]) => {
-                    const name = String((data as { name?: unknown }).name ?? "");
-                    return renderDataItem(id, name, data);
-                  })}
+                  {Object.entries(dataframes || {}).map(([id, data]) =>
+                    renderDataItem(id, data.name, data),
+                  )}
                   {Object.keys(dataframes || {}).length === 0 && (
                     <SidebarEmptyPlaceholder>{t("sidebar.noData")}</SidebarEmptyPlaceholder>
                   )}

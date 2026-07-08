@@ -23,6 +23,11 @@ export function connectionDataToItem(conn: ConnectionData): ConnectionItemDTO {
   return { fromPin: conn.from, toPin: conn.to };
 }
 
+/** 将 ConnectionData 列表转为 ConnectionItemDTO */
+export function connectionDataToItems(conns: ConnectionData[]): ConnectionItemDTO[] {
+  return conns.map(connectionDataToItem);
+}
+
 /** 验证 Graph DTO */
 export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
   valid: boolean;

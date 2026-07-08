@@ -99,3 +99,33 @@ export function resolveEditorGroupId(
   const ctx = context ?? useLayoutStore.getState();
   return groupId ?? ctx.activeEditorGroupId ?? ctx.activeGroupId ?? null;
 }
+
+function areStringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((value) => set.has(value));
+}
+
+/** 更新编辑器组内画布选中节点（`activeEditorGroupId` 优先于 `activeGroupId`） */
+export function updateEditorGroupSelectedNodeIds(
+  updater: string[] | ((prev: string[]) => string[]),
+  targetGroupId?: string | null,
+): void {
+  const gid = resolveEditorGroupId(targetGroupId);
+  if (!gid) return;
+
+  const state = useLayoutStore.getState();
+  const node = state.nodes[gid];
+  if (!node) return;
+
+  const current = node.data?.params?.selectedNodeIds ?? [];
+  const next = typeof updater === 'function' ? updater(current) : updater;
+  if (areStringArraysEqual(current, next)) return;
+
+  useLayoutStore.getState().updateNode(gid, {
+    data: {
+      ...node.data,
+      params: { ...node.data?.params, selectedNodeIds: next },
+    },
+  });
+}

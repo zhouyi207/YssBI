@@ -6,23 +6,30 @@ import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
+import type { LoadDatabaseResult } from '@/services/database/databaseService';
+import { databaseRecordFromLoad } from '@/shared/types/dto/database';
+import type { DatabaseRecord, LoadDatabaseEngineSpec } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
 
+function commitLoadedDatabase(result: LoadDatabaseResult, engine: LoadDatabaseEngineSpec) {
+  useDatabaseStore.getState().addDatabase(result.id, databaseRecordFromLoad(result, engine));
+}
+
 async function loadSqliteTable(dbPath: string, table: string) {
+  const engine: LoadDatabaseEngineSpec = {
+    sql: {
+      engine: { sqlite: { autoCreate: false } },
+      connectionString: dbPath,
+      table,
+    },
+  };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingSqlite', { table }),
-    () =>
-      DatabaseService.loadDatabase({
-        sql: {
-          engine: { sqlite: { autoCreate: false } },
-          connectionString: dbPath,
-          table,
-        },
-      }),
+    () => DatabaseService.loadDatabase(engine),
   );
-  useDatabaseStore.getState().addDatabase(result.id, { ...result });
+  commitLoadedDatabase(result, engine);
   uiStore.showToast(
     i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }),
     'success',
@@ -34,19 +41,16 @@ type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
 async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: string, table: string) {
   const label =
     engine === 'postgres' ? 'PostgreSQL' : engine === 'mysql' ? 'MySQL' : 'MariaDB';
-  const engineSpec: import('@/services/database/databaseService').SqlEngineSpec =
+  const loadEngine: LoadDatabaseEngineSpec =
     engine === 'postgres'
-      ? { engine: { postgres: { ssl: true } }, connectionString, table }
-      : { engine: { mysql: { charset: 'utf8mb4' } }, connectionString, table };
+      ? { sql: { engine: { postgres: { ssl: true } }, connectionString, table } }
+      : { sql: { engine: { mysql: { charset: 'utf8mb4' } }, connectionString, table } };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingRemote', { label, table }),
-    () =>
-      DatabaseService.loadDatabase({
-        sql: engineSpec,
-      }),
+    () => DatabaseService.loadDatabase(loadEngine),
   );
-  useDatabaseStore.getState().addDatabase(result.id, { ...result });
+  commitLoadedDatabase(result, loadEngine);
   uiStore.showToast(
     i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }),
     'success',
@@ -54,15 +58,13 @@ async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: str
 }
 
 async function loadExcelSheet(filePath: string, sheet: string) {
+  const engine: LoadDatabaseEngineSpec = { excel: { path: filePath, sheet } };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingExcel', { sheet }),
-    () =>
-      DatabaseService.loadDatabase({
-        excel: { path: filePath, sheet },
-      }),
+    () => DatabaseService.loadDatabase(engine),
   );
-  useDatabaseStore.getState().addDatabase(result.id, { ...result });
+  commitLoadedDatabase(result, engine);
   uiStore.showToast(
     i18n.t('dataOperation.importSuccess', { name: sheet, rows: result.rowCount }),
     'success',
@@ -70,20 +72,20 @@ async function loadExcelSheet(filePath: string, sheet: string) {
 }
 
 async function loadCsv(path: string) {
+  const engine: LoadDatabaseEngineSpec = {
+    csv: {
+      path,
+      delimiter: ',',
+      hasHeader: true,
+      inferSchemaLength: 1000,
+    },
+  };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingCsv'),
-    () =>
-      DatabaseService.loadDatabase({
-        csv: {
-          path,
-          delimiter: ',',
-          hasHeader: true,
-          inferSchemaLength: 1000,
-        },
-      }),
+    () => DatabaseService.loadDatabase(engine),
   );
-  useDatabaseStore.getState().addDatabase(result.id, { ...result });
+  commitLoadedDatabase(result, engine);
   uiStore.showToast(
     i18n.t('dataOperation.importSuccess', { name: result.name, rows: result.rowCount }),
     'success',
@@ -232,7 +234,7 @@ export function useDatabaseManagement() {
   const detailFocus = useEditorStore((s) => s.detailFocus);
   const clearDetailFocus = useEditorStore((s) => s.clearDetailFocus);
 
-  const updateDataFrame = useCallback((id: string, data: any) => {
+  const updateDataFrame = useCallback((id: string, data: Partial<DatabaseRecord>) => {
     useDatabaseStore.getState().updateDatabase(id, data);
   }, []);
 

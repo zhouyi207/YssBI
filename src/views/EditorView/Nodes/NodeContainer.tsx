@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
-import { Node } from "@/shared/types/ui";
+import type { UINode } from "@/shared/types/ui";
+import { uiNodeHasNoHeader } from "@/features/core/dataStore";
 import { useNodeExecution } from "@/features/core/node";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
@@ -8,7 +9,7 @@ import { useCanvasContextMenuActionsOptional } from "@/features/application/edit
 import { NodeContextMenu } from "../ContextMenu";
 
 interface NodeContainerProps {
-  node: Node;
+  node: UINode;
   graphId?: string;
   groupId?: string;
   selected?: boolean;
@@ -61,7 +62,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
     isCompleted,
   });
 
-  const minSize = getNodeMinSize(node.noHeader);
+  const minSize = getNodeMinSize(uiNodeHasNoHeader(node));
 
   return (
     <div

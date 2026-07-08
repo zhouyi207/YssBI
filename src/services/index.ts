@@ -6,6 +6,12 @@ export * from "./stats";
 export * from "./window";
 export * from "./log";
 export { NodeService } from "./graph/node/nodeService";
+export type {
+  BatchCreateNodeRequest,
+  NodeSpawnParams,
+  CreateNodeSpawnParams,
+  BatchCreateWithConnectionsEntry,
+} from "./graph/node/nodeService";
 export { ConnectionService } from "./graph/connection/connectionService";
 export { PinService } from "./graph/pin/pinService";
 export { GraphService } from "./graph/graphService";

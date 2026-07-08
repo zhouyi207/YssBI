@@ -37,7 +37,7 @@ export function NodePinSpecRow({
         graphId,
         pinId: pin.id,
         direction: pin.direction,
-        pinType: pin.kind === 'Exec' ? 'exec' : pin.type,
+        isExec: pin.kind === 'Exec',
         connectionIds: pin.connectionIds,
         pinResults,
         executionStatus,

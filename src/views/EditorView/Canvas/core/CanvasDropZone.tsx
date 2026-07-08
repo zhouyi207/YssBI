@@ -1,6 +1,6 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
-import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
+import { DROP_TYPES, getCanvasDropZoneId, getSidebarResourceFromDragState } from "@/features/core/dnd";
 
 /**
  * Invisible droppable zone that covers the canvas area.
@@ -17,7 +17,7 @@ export function CanvasDropZone({
     id: getCanvasDropZoneId(groupId),
     data: { dropType: DROP_TYPES.CANVAS, groupId },
   });
-  const sidebarResource = useSidebarDragStore((s) => s.activeDrag?.sidebarResource);
+  const sidebarResource = useSidebarDragStore((s) => getSidebarResourceFromDragState(s.activeDrag));
 
   return (
     <div ref={setNodeRef} className="absolute inset-0 pointer-events-none">

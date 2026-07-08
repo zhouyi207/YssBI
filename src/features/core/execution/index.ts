@@ -33,7 +33,6 @@ export {
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
 export {
-  buildPinResultSearchEntries,
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,

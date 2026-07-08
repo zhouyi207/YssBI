@@ -6,6 +6,7 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
+import { pinThemeTypeKey } from '@/shared/types/domain/pinSemantics';
 import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
@@ -41,7 +42,7 @@ export function buildEdgeData(
       toPinId: conn.to,
       sourceNodeId: fromPin.nodeId,
       targetNodeId: toPin?.nodeId,
-      pinType: fromPin.type ?? "any",
+      pinType: pinThemeTypeKey(fromPin),
       pinColor: fromPin.ui?.color,
     });
   }

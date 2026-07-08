@@ -5,6 +5,7 @@ import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useSidebarTab } from './useSidebarTab';
+import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { openEditorTab } from './openEditorTab';
 
 export function useWorksheetManagement(openWorksheet: (id: string, name: string) => Promise<void>) {
@@ -57,15 +58,7 @@ export function useOpenWorksheet() {
       }
     }
 
-    openEditorTab(
-      {
-        id,
-        title: name,
-        component: 'WorksheetEditor',
-        type: 'worksheet',
-      },
-      { focusDetail: { kind: 'worksheet', id } },
-    );
+    openEditorTab(buildWorksheetLayoutTab(id, name), { focusDetail: { kind: 'worksheet', id } });
 
     switchSidebarTab('charts');
   }, [switchSidebarTab]);

@@ -4,14 +4,8 @@ import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { FormulaMappingTable } from './shared/FormulaMappingTable';
+import { formatNum } from './shared/utils';
 import type { Coefficient } from './shared/types';
-
-function formatNum(value: number, decimals = 4): string {
-  if (Math.abs(value) < 0.0001 && value !== 0) {
-    return value.toExponential(3);
-  }
-  return value.toFixed(decimals);
-}
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);

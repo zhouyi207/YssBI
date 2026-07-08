@@ -7,6 +7,7 @@ import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasC
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
 import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
+import { getConnectGesture, type EditorGesture } from "@/shared/types/ui";
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
 import { useExecutionVisualBinder } from "@/features/core/execution";
@@ -16,11 +17,9 @@ import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
 
-const selectGestureType = (state: { gesture: any }) => state.gesture?.type ?? null;
-const selectActivePin = (state: { gesture: any }) => {
-  const g = state.gesture;
-  return g?.type === "connect" ? g.startPin : null;
-};
+const selectGestureType = (state: { gesture: EditorGesture }) => state.gesture?.type ?? null;
+const selectActivePin = (state: { gesture: EditorGesture }) =>
+  getConnectGesture(state.gesture)?.startPin ?? null;
 
 const EMPTY_NODE_IDS: string[] = [];
 

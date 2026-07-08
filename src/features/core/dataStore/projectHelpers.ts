@@ -50,8 +50,7 @@ export function getGraphById(graphId: string): GraphData | null {
   });
   const connections = Array.from(connIds)
     .map((cid) => dataState.getGraphConnection(graphId, cid))
-    .filter(isPresent)
-    .map((conn) => ({ fromPin: conn.from, toPin: conn.to }));
+    .filter(isPresent);
 
   return {
     ...meta,
@@ -59,7 +58,7 @@ export function getGraphById(graphId: string): GraphData | null {
     functionOutputs: graphMeta?.functionOutputs ?? [],
     nodes,
     pins,
-    connections: { connections },
+    connections,
     canvas: getViewport(graphId),
   };
 }
@@ -146,9 +145,7 @@ export function useGraphData(activeTabId: string | null) {
       ...meta,
       nodes: graphNodes,
       pins: graphPins ?? [],
-      connections: {
-        connections: (graphConnections ?? []).map((conn) => ({ fromPin: conn.from, toPin: conn.to })),
-      },
+      connections: graphConnections ?? [],
       canvas: getViewport(activeTabId),
     };
     prevRef.current = result;

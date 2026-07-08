@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PinResultState } from '@/shared/types/ui';
 import {
-  buildPinResultSearchEntries,
+  buildPinResultSearchEntry,
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
 } from './pinResultSearch';
@@ -23,10 +23,14 @@ function pinResult(pinId: string, title: string, nodeId = 'node-1'): PinResultSt
 
 describe('pinResultSearch', () => {
   it('builds searchable entries with node and pin labels', () => {
-    const entries = buildPinResultSearchEntries(
-      [pinResult('out-1', 'OLS Result')],
-      () => ({ nodeTitle: 'OLS Regression', pinName: 'Result' }),
-    );
+    const entries = [
+      buildPinResultSearchEntry(
+        'output:out-1',
+        'output',
+        pinResult('out-1', 'OLS Result'),
+        { nodeTitle: 'OLS Regression', pinName: 'Result' },
+      ),
+    ];
 
     expect(entries).toHaveLength(1);
     expect(entries[0]?.nodeTitle).toBe('OLS Regression');
@@ -36,16 +40,20 @@ describe('pinResultSearch', () => {
   });
 
   it('filters entries by node, pin, or source title', () => {
-    const entries = buildPinResultSearchEntries(
-      [
+    const entries = [
+      buildPinResultSearchEntry(
+        'output:out-1',
+        'output',
         pinResult('out-1', 'Alpha Table', 'node-a'),
+        { nodeTitle: 'Alpha Node', pinName: 'Output' },
+      ),
+      buildPinResultSearchEntry(
+        'output:out-2',
+        'output',
         pinResult('out-2', 'Beta Table', 'node-b'),
-      ],
-      (result) => ({
-        nodeTitle: result.nodeId === 'node-a' ? 'Alpha Node' : 'Beta Node',
-        pinName: 'Output',
-      }),
-    );
+        { nodeTitle: 'Beta Node', pinName: 'Output' },
+      ),
+    ];
 
     expect(filterPinResultSearchEntries(entries, 'alpha')).toHaveLength(1);
     expect(filterPinResultSearchEntries(entries, 'output')).toHaveLength(2);
@@ -62,14 +70,14 @@ describe('pinResultSearch', () => {
           pinId: 'out-1',
           nodeId: 'node-out',
           direction: 'output',
-          pinType: 'dataframe',
+          isExec: false,
           connectionIds: ['out-1->in-1'],
         },
         {
           pinId: 'in-1',
           nodeId: 'node-in',
           direction: 'input',
-          pinType: 'dataframe',
+          isExec: false,
           connectionIds: ['out-1->in-1'],
         },
       ],

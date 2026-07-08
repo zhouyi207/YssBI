@@ -1,12 +1,36 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logger } from '@/utils/appLogger';
-import type { GraphUndoPatch } from './graphUndoPatch';
+import {
+  toBatchCreateNodeIpcItems,
+  spawnParamsToInstanceParams,
+  type BatchCreateNodeRequest,
+  type NodeSpawnParams,
+} from '@/shared/types/dto/batchCreateNode';
+import { EMPTY_GRAPH_UNDO_PATCH, type GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 
-export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from './graphUndoPatch';
+export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from '@/shared/types/dto/graphUndoPatch';
+export type {
+  BatchCreateNodeRequest,
+  NodeSpawnParams,
+  CreateNodeSpawnParams,
+  BatchCreateNodeIpcItem,
+  NodeInstanceParamsDTO,
+} from '@/shared/types/dto/batchCreateNode';
 
 export interface CreateNodeResult {
     nodeId: string;
     pinIds: string[];
+}
+
+export interface BatchCreateWithConnectionsEntry extends BatchCreateNodeRequest {
+    x: number;
+    y: number;
+    pins: Array<{
+        pinId: string;
+        name: string;
+        direction: 'input' | 'output';
+        userValue?: unknown;
+    }>;
 }
 
 export class NodeService {
@@ -28,20 +52,15 @@ export class NodeService {
         nodeType: string,
         x?: number,
         y?: number,
-        params?: {
-            variableId?: string;
-            subGraphId?: string;
-            dataframeId?: string;
-        }
+        params?: NodeSpawnParams,
     ): Promise<CreateNodeResult> {
         logger.graph.debug(`Creating node: subgraphId=${subgraphId}, nodeType=${nodeType}, x=${x}, y=${y}`, 'NodeService');
-        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
         const result = await invoke<CreateNodeResult>("create_node", { 
             graphId: subgraphId, 
             nodeType: nodeType,
             x: x !== undefined ? x : null,
             y: y !== undefined ? y : null,
-            params: taggedParams,
+            params: spawnParamsToInstanceParams(params),
         });
         logger.graph.info(`Node created successfully, ID: ${result.nodeId}`, 'NodeService');
         return result;
@@ -57,13 +76,8 @@ export class NodeService {
         nodeType: string,
         x?: number,
         y?: number,
-        params?: {
-            variableId?: string;
-            subGraphId?: string;
-            dataframeId?: string;
-        }
+        params?: NodeSpawnParams,
     ): Promise<void> {
-        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
         await invoke("create_node_with_id", {
             graphId,
             nodeId,
@@ -71,7 +85,7 @@ export class NodeService {
             nodeType,
             x: x ?? null,
             y: y ?? null,
-            params: taggedParams,
+            params: spawnParamsToInstanceParams(params),
         });
     }
 
@@ -83,7 +97,7 @@ export class NodeService {
         nodeIds: string[],
     ): Promise<GraphUndoPatch> {
         if (nodeIds.length === 0) {
-            return { nodes: [], neighborNodes: [], connections: [] };
+            return EMPTY_GRAPH_UNDO_PATCH;
         }
         return await invoke<GraphUndoPatch>("batch_delete_nodes", { graphId, nodeIds });
     }
@@ -103,26 +117,12 @@ export class NodeService {
      */
     static async batchCreateNodes(
         graphId: string,
-        requests: Array<{
-            nodeType: string;
-            x?: number;
-            y?: number;
-            params?: {
-                variableId?: string;
-                subGraphId?: string;
-                dataframeId?: string;
-            };
-        }>
+        requests: BatchCreateNodeRequest[],
     ): Promise<string[]> {
         if (requests.length === 0) return [];
         return await invoke<string[]>("batch_create_nodes", {
             graphId,
-            requests: requests.map(r => ({
-                nodeType: r.nodeType,
-                x: r.x ?? null,
-                y: r.y ?? null,
-                params: r.params ? NodeService.buildTaggedParams(r.params) : null,
-            })),
+            requests: toBatchCreateNodeIpcItems(requests),
         });
     }
 
@@ -149,22 +149,7 @@ export class NodeService {
      */
     static async batchCreateWithConnections(
         graphId: string,
-        entries: Array<{
-            nodeType: string;
-            x: number;
-            y: number;
-            params?: {
-                variableId?: string;
-                subGraphId?: string;
-                dataframeId?: string;
-            };
-            pins: Array<{
-                pinId: string;
-                name: string;
-                direction: 'input' | 'output';
-                userValue?: unknown;
-            }>;
-        }>,
+        entries: BatchCreateWithConnectionsEntry[],
         connections: Array<{ fromPin: string; toPin: string }>,
     ): Promise<{
         nodeIds: string[];
@@ -172,38 +157,18 @@ export class NodeService {
         undoPatch: GraphUndoPatch;
     }> {
         if (entries.length === 0) {
-            return { nodeIds: [], pinMapping: {}, undoPatch: { nodes: [], neighborNodes: [], connections: [] } };
+            return { nodeIds: [], pinMapping: {}, undoPatch: EMPTY_GRAPH_UNDO_PATCH };
         }
         return await invoke("batch_create_with_connections", {
             graphId,
-            entries: entries.map(e => ({
-                nodeType: e.nodeType,
-                x: e.x,
-                y: e.y,
-                params: e.params ? NodeService.buildTaggedParams(e.params) : null,
-                pins: e.pins,
+            entries: entries.map((entry) => ({
+                nodeType: entry.nodeType,
+                x: entry.x,
+                y: entry.y,
+                params: spawnParamsToInstanceParams(entry.params),
+                pins: entry.pins,
             })),
             connections,
         });
-    }
-
-    private static buildTaggedParams(params: {
-        variableId?: string;
-        subGraphId?: string;
-        dataframeId?: string;
-    }): Record<string, unknown> {
-        if (params.variableId) {
-            return {
-                paramsKind: 'variable',
-                variableId: params.variableId,
-            };
-        }
-        if (params.subGraphId) {
-            return { paramsKind: 'subGraph', subGraphId: params.subGraphId };
-        }
-        if (params.dataframeId) {
-            return { paramsKind: 'dataFrame', dataframeId: params.dataframeId };
-        }
-        return { paramsKind: 'none' };
     }
 }

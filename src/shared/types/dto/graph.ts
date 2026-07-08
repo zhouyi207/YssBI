@@ -7,6 +7,7 @@
 import type { GraphPosition } from '../domain/graph';
 import type { PinDirection } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
+import type { NodeInstanceParamsDTO } from './nodeInstanceParams';
 
 // ==================== Node DTO ====================
 
@@ -15,31 +16,22 @@ export interface NodePositionDTO {
   y: number;
 }
 
-/** Tagged enum 判别字段 */
-export type ParamsKind = 'none' | 'variable' | 'subGraph' | 'dataFrame';
+export type { ParamsKind, NodeInstanceParamsDTO, NodeSpawnParams } from './nodeInstanceParams';
 
-/** 后端 NodeInstanceDTO 对应（camelCase），instance_params 通过 flatten 展开到顶层 */
-export interface NodeInstanceDTO {
+type NodeInstanceCoreDTO = {
   id: string;
   nodeType: string;
   category: string[];
   title: string;
-  inputs: string[];  // Pin IDs
-  outputs: string[]; // Pin IDs
+  inputs: string[];
+  outputs: string[];
   uiStyle: string;
   description?: string;
   position: NodePositionDTO;
-  /** 参数类型判别字段 */
-  paramsKind: ParamsKind;
-  /** Variable 变体 */
-  variableId?: string;
-  variableName?: string;
-  variableType?: string;
-  /** SubGraph 变体 */
-  subGraphId?: string;
-  /** DataFrame 变体 */
-  dataframeId?: string;
-}
+};
+
+/** 后端 NodeInstanceDTO：`instance_params` 经 `#[serde(flatten)]` 展开到顶层 */
+export type NodeInstanceDTO = NodeInstanceCoreDTO & NodeInstanceParamsDTO;
 
 // ==================== Pin DTO ====================
 

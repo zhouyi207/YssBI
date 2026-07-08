@@ -5,12 +5,12 @@
 
 import type { GraphInstanceDTO } from './graph';
 import type { VariableInstanceDTO } from './variable';
-import type { DatabaseDecl } from '../domain/database';
+import type { DatabaseDeclDTO } from './database';
 
 /** 项目数据 DTO（get_project_data / load_project 返回值） */
 export interface ProjectDataDTO {
   variables: Record<string, VariableInstanceDTO>;
   graphs: Record<string, GraphInstanceDTO>;
-  databases: Record<string, DatabaseDecl>;
+  databases: Record<string, DatabaseDeclDTO>;
   metadata: { exportTime: string; appVersion: string };
 }

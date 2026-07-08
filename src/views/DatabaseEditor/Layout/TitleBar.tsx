@@ -14,6 +14,7 @@ import {
 import { useWindowMaximized } from '@/features/application/window';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
+import { TAURI_NO_DRAG_STYLE, stopTauriDragPropagation } from '@/shared/platform/tauriWebview';
 
 export interface DataframeOption {
   label: string;
@@ -27,8 +28,6 @@ interface TitleBarProps {
   /** 当前选中单元格（或行/列选时的参考格）的文本预览 */
   selectedCellText: string;
 }
-
-const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   dataframes,
@@ -56,8 +55,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         <span className="shrink-0 text-[13px] font-semibold tracking-tight text-foreground">{t('databaseEditor.title')}</span>
         <div
           className="min-w-0 flex-1 max-w-[min(360px,42vw)] pl-1"
-          style={noDragStyle}
-          onPointerDown={(e) => e.stopPropagation()}
+          style={TAURI_NO_DRAG_STYLE}
+          onPointerDown={stopTauriDragPropagation}
         >
           {dataframes.length === 0 ? (
             <span className="text-xs text-muted-foreground">{t('databaseEditor.noDataFrame')}</span>
@@ -81,8 +80,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
       <div
         className="flex min-w-[10rem] max-w-xl flex-1 items-center px-2"
-        style={noDragStyle}
-        onPointerDown={(e) => e.stopPropagation()}
+        style={TAURI_NO_DRAG_STYLE}
+        onPointerDown={stopTauriDragPropagation}
       >
         <Tooltip>
           <TooltipTrigger asChild>

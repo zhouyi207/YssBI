@@ -4,20 +4,25 @@
  * Stata 风格：垂直柱状图，y 轴 -1..1，置信区间 ±1.96/√n
  * Hover tooltip 显示 lag、value、Q 统计量及 p-value
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  attachHoverTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  tooltipRichBlock,
+} from '@/shared/plot/d3Tooltip';
+import {
+  type CorrelogramBarDTO,
+  correlogramLjungBoxTooltipHtml,
+} from '@/shared/types/report';
 import { plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
 
-export interface CorrelogramDatum {
-  lag: number;
-  value: number;
-  q_stat?: number;
-  p_value?: number;
-}
+export type { CorrelogramBarDTO };
 
 export interface CorrelogramChartProps {
-  data: CorrelogramDatum[];
+  data: CorrelogramBarDTO[];
   ciHalfWidth: number;
   title?: string;
   color?: string;
@@ -52,11 +57,6 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
     ro.observe(container);
     setSize({ width: container.clientWidth, height: container.clientHeight });
     return () => ro.disconnect();
-  }, []);
-
-  const hideTooltip = useCallback(() => {
-    const tip = tooltipRef.current;
-    if (tip) tip.style.opacity = '0';
   }, []);
 
   useEffect(() => {
@@ -108,7 +108,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
       .attr('y1', zeroY).attr('y2', zeroY)
       .attr('stroke', chartTheme.zeroLine);
 
-    const tipEl = tooltipRef.current;
+    const tip = new PlotTooltipController(tooltipRef.current, containerRef.current);
 
     data.forEach((d) => {
       const x = xBand(String(d.lag))!;
@@ -119,7 +119,9 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
       const yMax = Math.max(y0, y1);
       const barH = yMax - yMin || 1;
 
-      g.append('rect')
+      const bar = g
+        .append('rect')
+        .datum(d)
         .attr('x', x)
         .attr('y', yMin)
         .attr('width', bw)
@@ -127,34 +129,27 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('fill', d.value >= 0 ? plotColor : negativeColor)
         .attr('fill-opacity', 0.85)
         .attr('rx', 2)
-        .style('cursor', 'pointer')
-        .on('mouseenter', function (event) {
-          select(this).attr('fill-opacity', 1).attr('stroke', chartTheme.tooltipFg).attr('stroke-width', 1);
-          if (!tipEl) return;
-          tipEl.style.opacity = '1';
-          tipEl.innerHTML =
-            `<div style="font-size:11px;line-height:1.6;color:${chartTheme.tooltipFg}">` +
-            `<b>Lag ${d.lag}</b><br/>` +
-            `${valueLabel}: <b>${d.value.toFixed(4)}</b><br/>` +
-            (d.q_stat != null ? `Q(${d.lag}): <b>${d.q_stat.toFixed(4)}</b><br/>` : '') +
-            (d.p_value != null
-              ? `p-value: <b>${d.p_value < 0.0001 ? d.p_value.toExponential(2) : d.p_value.toFixed(4)}</b>`
-              : '') +
-            `</div>`;
-          const rect = (event.currentTarget as SVGRectElement).getBoundingClientRect();
-          const containerRect = containerRef.current!.getBoundingClientRect();
-          const tipW = tipEl.offsetWidth;
-          let left = rect.left + rect.width / 2 - containerRect.left - tipW / 2;
-          left = Math.max(4, Math.min(left, containerRect.width - tipW - 4));
-          const above = rect.top - containerRect.top - tipEl.offsetHeight - 6;
-          const below = rect.bottom - containerRect.top + 6;
-          tipEl.style.left = `${left}px`;
-          tipEl.style.top = above > 0 ? `${above}px` : `${below}px`;
-        })
-        .on('mouseleave', function () {
-          select(this).attr('fill-opacity', 0.85).attr('stroke', 'none');
-          hideTooltip();
-        });
+        .style('cursor', 'pointer');
+
+      attachHoverTooltip(bar as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
+        tooltip: tip,
+        position: 'anchor',
+        getHtml: (datum) => {
+          const ljungBox = correlogramLjungBoxTooltipHtml(datum);
+          return tooltipRichBlock(
+            `<b>Lag ${datum.lag}</b><br/>` +
+              `${valueLabel}: <b>${datum.value.toFixed(4)}</b><br/>` +
+              (ljungBox ? `${ljungBox}` : ''),
+            chartTheme,
+          );
+        },
+        onEnter: (el) =>
+          select(el)
+            .attr('fill-opacity', 1)
+            .attr('stroke', chartTheme.tooltipFg)
+            .attr('stroke-width', 1),
+        onLeave: (el) => select(el).attr('fill-opacity', 0.85).attr('stroke', 'none'),
+      });
     });
 
     g.append('g')
@@ -184,7 +179,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('font-weight', '500')
         .text(title);
     }
-  }, [data, ciHalfWidth, title, plotColor, negativeColor, valueLabel, size, hideTooltip, chartTheme]);
+  }, [data, ciHalfWidth, title, plotColor, negativeColor, valueLabel, size, chartTheme]);
 
   return (
     <div ref={containerRef} className={plotFlexShellClass}>

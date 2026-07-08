@@ -1,13 +1,5 @@
 import { create } from "zustand";
-import type { GraphResourceDragData } from "@/features/core/dnd";
-
-export interface SidebarDragState {
-  type: string;
-  template: any;
-  sidebarResource?: GraphResourceDragData;
-  x: number;
-  y: number;
-}
+import type { SidebarDragState } from "@/features/core/dnd";
 
 interface SidebarDragStore {
   activeDrag: SidebarDragState | null;
@@ -25,3 +17,5 @@ export const useSidebarDragStore = create<SidebarDragStore>((set) => ({
         : state
     ),
 }));
+
+export type { SidebarDragState };

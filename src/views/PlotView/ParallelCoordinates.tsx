@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { select, scaleLinear, scalePoint, line, extent } from 'd3';
+import { select, scalePoint, line } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  attachHoverTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  escapeTooltipHtml,
+  tooltipRichBlock,
+} from '@/shared/plot/d3Tooltip';
+import {
+  columnAxisKindFromType,
+  createColumnAxisScale,
+  mapColumnAxisValue,
+  numericColumnAxisTicks,
+  type ColumnAxisScale,
+} from '@/shared/plot/axisScale';
 import { cn } from '@/lib/utils';
 import { plotContainerClass, plotTooltipRichClass } from './plotShellStyles';
 
@@ -22,6 +36,12 @@ export interface ParallelCoordinatesProps {
 
 const MARGIN = { top: 28, right: 16, bottom: 12, left: 16 };
 const AXIS_LABEL_SIZE = 10;
+
+interface ParallelLineDatum {
+  points: { x: number; y: number }[];
+  row: (string | number | null)[];
+  rowIdx: number;
+}
 
 const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   axes,
@@ -69,17 +89,13 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
       .domain(axes.map((_, i) => String(i)))
       .range([0, w]);
 
-    type YScale = ((v: any) => number | undefined);
-    const yScales: YScale[] = axes.map((axis, colIdx) => {
-      if (axis.type === 'number') {
-        const vals = rows.map(r => r[colIdx]).filter(v => v != null) as number[];
-        const [lo, hi] = extent(vals) as [number, number];
-        const pad = (hi - lo) * 0.05 || 1;
-        return scaleLinear().domain([lo - pad, hi + pad]).range([h, 0]) as unknown as YScale;
-      } else {
-        const unique = [...new Set(rows.map(r => r[colIdx]).filter(v => v != null).map(String))];
-        return scalePoint().domain(unique).range([h, 0]).padding(0.1) as unknown as YScale;
-      }
+    const yScales: ColumnAxisScale[] = axes.map((axis, colIdx) => {
+      const colValues = rows.map((r) => r[colIdx]);
+      return createColumnAxisScale(
+        columnAxisKindFromType(axis.type),
+        colValues,
+        [h, 0],
+      );
     });
 
     const g = svg
@@ -88,7 +104,6 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
 
-    // axes
     axes.forEach((axis, i) => {
       const x = xScale(String(i))!;
 
@@ -105,12 +120,11 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
         .attr('font-weight', '600')
         .text(axis.name.length > 10 ? axis.name.slice(0, 9) + '…' : axis.name);
 
-      if (axis.type === 'number') {
-        const sc = yScales[i] as unknown as ReturnType<typeof scaleLinear>;
-        const ticks = sc.ticks ? sc.ticks(4) : [];
-        ticks.forEach((t: number) => {
-          const y = sc(t) as number | undefined;
-          if (y == null) return;
+      const axisScale = yScales[i];
+      if (axisScale.kind === 'numeric') {
+        numericColumnAxisTicks(axisScale, 4).forEach((t) => {
+          const y = axisScale.scale(t);
+          if (y == null || Number.isNaN(y)) return;
           g.append('text')
             .attr('x', x - 4).attr('y', y + 3)
             .attr('text-anchor', 'end')
@@ -121,54 +135,53 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
       }
     });
 
-    const tooltip = select(tooltipRef.current);
+    const tip = new PlotTooltipController(tooltipRef.current, container);
+    const lineOpacity = Math.min(0.35, 60 / sampled.length);
 
     const pathGen = line<{ x: number; y: number }>()
-      .defined(d => d.y != null && !isNaN(d.y))
-      .x(d => d.x)
-      .y(d => d.y);
+      .defined((d) => d.y != null && !Number.isNaN(d.y))
+      .x((d) => d.x)
+      .y((d) => d.y);
 
-    // lines
     const linesGroup = g.append('g');
     sampled.forEach((row, rowIdx) => {
       const points = axes.map((_, colIdx) => {
         const x = xScale(String(colIdx))!;
         const val = row[colIdx];
         if (val == null) return { x, y: NaN };
-        const y = (yScales[colIdx] as any)(axis_val(axes[colIdx], val));
+        const y = mapColumnAxisValue(yScales[colIdx], val);
         return { x, y: y ?? NaN };
       });
 
-      linesGroup.append('path')
-        .datum({ points, row, rowIdx })
-        .attr('d', (d: any) => pathGen(d.points))
+      const path = linesGroup
+        .append('path')
+        .datum({ points, row, rowIdx } satisfies ParallelLineDatum)
+        .attr('d', (d) => pathGen(d.points) ?? '')
         .attr('fill', 'none')
         .attr('stroke', plotColor)
-        .attr('stroke-opacity', Math.min(0.35, 60 / sampled.length))
-        .attr('stroke-width', 1.2)
-        .on('mouseenter', function (_, d: any) {
-          select(this)
-            .attr('stroke-opacity', 1)
-            .attr('stroke-width', 2.5)
-            .raise();
-          const html = axes.map((a, ci) => {
-            const v = d.row[ci];
-            return `<span style="color:${chartTheme.tooltipMuted}">${a.name}:</span> <span style="color:${chartTheme.tooltipFg}">${v ?? 'null'}</span>`;
-          }).join('<br/>');
-          tooltip.style('opacity', '1').html(html);
-        })
-        .on('mousemove', function (event) {
-          const rect = container!.getBoundingClientRect();
-          tooltip
-            .style('left', `${event.clientX - rect.left + 12}px`)
-            .style('top', `${event.clientY - rect.top - 10}px`);
-        })
-        .on('mouseleave', function () {
-          select(this)
-            .attr('stroke-opacity', Math.min(0.35, 60 / sampled.length))
-            .attr('stroke-width', 1.2);
-          tooltip.style('opacity', '0');
-        });
+        .attr('stroke-opacity', lineOpacity)
+        .attr('stroke-width', 1.2);
+
+      attachHoverTooltip(path as D3Onable<SVGPathElement, ParallelLineDatum>, {
+        tooltip: tip,
+        cursorOffset: { x: 12, y: -10 },
+        getHtml: (d) => {
+          const inner = axes
+            .map((a, ci) => {
+              const v = d.row[ci];
+              const display = v == null ? 'null' : String(v);
+              return `<span style="color:${chartTheme.tooltipMuted}">${escapeTooltipHtml(a.name)}:</span> <span style="color:${chartTheme.tooltipFg}">${escapeTooltipHtml(display)}</span>`;
+            })
+            .join('<br/>');
+          return tooltipRichBlock(inner, chartTheme);
+        },
+        onEnter: (el) => {
+          select(el).attr('stroke-opacity', 1).attr('stroke-width', 2.5).raise();
+        },
+        onLeave: (el) => {
+          select(el).attr('stroke-opacity', lineOpacity).attr('stroke-width', 1.2);
+        },
+      });
     });
   }, [axes, rows, plotColor, maxLines, size, chartTheme]);
 
@@ -179,10 +192,5 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
     </div>
   );
 };
-
-function axis_val(axis: ParallelAxis, val: string | number | null): any {
-  if (val == null) return val;
-  return axis.type === 'number' ? Number(val) : String(val);
-}
 
 export default ParallelCoordinates;

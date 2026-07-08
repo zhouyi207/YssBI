@@ -35,8 +35,8 @@ export async function resolvePinViewTarget(
   const cached = resolvePinViewTargetFromCache(params);
   if (cached) return cached;
 
-  const { graphId, pinId, direction, pinType, connectionIds } = params;
-  if (!isInspectableDataPin(pinType)) return null;
+  const { graphId, pinId, direction, isExec, connectionIds } = params;
+  if (!isInspectableDataPin(isExec)) return null;
 
   let descriptorPinIds: string[] = [];
   if (direction === 'output') {

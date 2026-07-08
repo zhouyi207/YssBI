@@ -8,6 +8,8 @@ import {
     EventCallbacks,
 } from '../types';
 import { useDatabaseStore } from '@/features/core/dataStore';
+import { normalizeDatabaseRecord } from '@/shared/types/dto/database';
+import type { DatabaseRecord } from '@/shared/types/dto/database';
 
 export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPayload> {
     eventType = 'DataFrameCreated';
@@ -15,7 +17,10 @@ export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPa
     handle(payload: DataFrameCreatedPayload, callbacks?: EventCallbacks): void {
         this.log('DataFrame created:', payload.id);
         
-        useDatabaseStore.getState().addDatabase(payload.id, payload.data as Record<string, unknown>);
+        useDatabaseStore.getState().addDatabase(
+            payload.id,
+            normalizeDatabaseRecord(payload.id, payload.data),
+        );
         
         callbacks?.onDataFrameCreated?.(payload.id, payload.data);
     }
@@ -42,7 +47,7 @@ export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSch
     handle(payload: DataFrameSchemaUpdatedPayload): void {
         this.log('DataFrame schema updated:', payload.id, payload.error ? `error=${payload.error}` : `rows=${payload.rowCount}`);
 
-        const patch: Record<string, unknown> = {};
+        const patch: Partial<DatabaseRecord> = {};
 
         if (payload.error) {
             patch.loadError = payload.error;

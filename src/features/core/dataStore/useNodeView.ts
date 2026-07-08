@@ -8,12 +8,10 @@
  */
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
-import { derivePinConnectionView } from './pinLinks';
-import { resolveNodeViewMeta } from './serialization';
+import { toUiNode } from './nodeView';
 
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
@@ -43,38 +41,13 @@ export function useNodeView(nodeId: string, graphId?: string): UINode | null {
   return useMemo(() => {
     if (!graphId || !nodeData) return null;
 
-    const meta = resolveNodeViewMeta(nodeData);
-    const title = callFunctionName ?? meta.title;
-    const inputs: PinView[] = [];
-    const outputs: PinView[] = [];
+    const pins = pinObjs.flatMap((pin, index) =>
+      pin ? [{ pin, connectionIds: pinConns[index] ?? [] }] : [],
+    );
 
-    for (let i = 0; i < pinObjs.length; i++) {
-      const p = pinObjs[i];
-      if (!p) continue;
-      const connectionView = derivePinConnectionView(pinConns[i]);
-      const pin: PinView = { ...p, ...connectionView };
-      if (p.direction === 'output') outputs.push(pin);
-      else inputs.push(pin);
-    }
-
-    const view: UINode = {
-      id: nodeData.id,
-      nodeType: meta.nodeType,
-      category: meta.category,
-      title,
-      uiStyle: meta.uiStyle,
-      description: meta.description,
-      position: nodeData.position ?? { x: 0, y: 0 },
-      isInternal: nodeData.isInternal,
-      paramsKind: nodeData.paramsKind,
-      variableId: nodeData.variableId,
-      variableName: nodeData.variableName,
-      variableType: nodeData.variableType,
-      subGraphId: nodeData.subGraphId,
-      dataframeId: nodeData.dataframeId,
-      inputs,
-      outputs,
-    };
-    return view;
-  }, [nodeData, pinObjs, pinConns, callFunctionName]);
+    return toUiNode(nodeData, {
+      title: callFunctionName,
+      pins,
+    });
+  }, [graphId, nodeData, pinObjs, pinConns, callFunctionName]);
 }

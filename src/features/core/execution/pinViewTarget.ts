@@ -17,14 +17,14 @@ export interface ResolvePinViewTargetParams {
   graphId: string;
   pinId: string;
   direction: 'input' | 'output';
-  pinType: string;
+  isExec: boolean;
   connectionIds?: readonly string[];
   pinResults?: ReadonlyMap<string, PinResultState>;
   executionStatus?: ExecutionStatus;
 }
 
-export function isInspectableDataPin(pinType: string): boolean {
-  return pinType !== 'exec';
+export function isInspectableDataPin(isExec: boolean): boolean {
+  return !isExec;
 }
 
 export function resolveUpstreamPinIds(
@@ -39,8 +39,8 @@ export function resolveUpstreamPinIds(
 export function resolvePinViewTargetFromCache(
   params: ResolvePinViewTargetParams,
 ): PinViewTarget | null {
-  const { graphId, pinId, direction, pinType, connectionIds, pinResults } = params;
-  if (!isInspectableDataPin(pinType) || !pinResults) return null;
+  const { graphId, pinId, direction, isExec, connectionIds, pinResults } = params;
+  if (!isInspectableDataPin(isExec) || !pinResults) return null;
 
   if (direction === 'output') {
     const pinResult = pinResults.get(pinId);
@@ -62,8 +62,8 @@ export function resolvePinViewTargetFromCache(
 export function resolvePinViewDisabledReason(
   params: ResolvePinViewTargetParams,
 ): PinViewDisabledReason | null {
-  const { pinType, direction, connectionIds } = params;
-  if (!isInspectableDataPin(pinType)) return 'exec_pin';
+  const { isExec, direction, connectionIds } = params;
+  if (!isInspectableDataPin(isExec)) return 'exec_pin';
   if (resolvePinViewTargetFromCache(params)) return null;
 
   if (direction === 'input') {
@@ -97,7 +97,7 @@ export function buildPinViewParams(input: {
   graphId: string;
   pinId: string;
   direction: 'input' | 'output';
-  pinType: string;
+  isExec: boolean;
   connectionIds?: readonly string[];
   pinResults?: ReadonlyMap<string, PinResultState>;
   executionStatus?: ExecutionStatus;

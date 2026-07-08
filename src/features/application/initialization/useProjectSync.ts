@@ -5,6 +5,7 @@ import { useEffect, useRef, useMemo } from 'react';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
 import { useEditorSession } from '@/features/application/editor';
+import { pickEditorSessionSyncCallbacks } from '@/features/application/editor/editorSessionTypes';
 import type { EventCallbacks } from '@/features/core/sync/types';
 import { logger } from '@/utils/appLogger';
 
@@ -64,23 +65,32 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
  */
 export function useProjectSyncWithEditor() {
   const editor = useEditorSession();
+  const {
+    handleEventCreated,
+    handleEventCreatedFailed,
+    handleFunctionCreated,
+    handleFunctionCreatedFailed,
+    handleNodeCreated,
+    handleNodeDeleted,
+  } = pickEditorSessionSyncCallbacks(editor);
+
   const callbacks = useMemo<EventCallbacks>(
     () => ({
-      onEventCreated: editor.handleEventCreated,
-      onEventCreatedFailed: editor.handleEventCreatedFailed,
-      onFunctionCreated: editor.handleFunctionCreated,
-      onFunctionCreatedFailed: editor.handleFunctionCreatedFailed,
-      onNodeCreated: editor.handleNodeCreated as EventCallbacks['onNodeCreated'],
-      onNodeDeleted: editor.handleNodeDeleted,
+      onEventCreated: handleEventCreated,
+      onEventCreatedFailed: handleEventCreatedFailed,
+      onFunctionCreated: handleFunctionCreated,
+      onFunctionCreatedFailed: handleFunctionCreatedFailed,
+      onNodeCreated: handleNodeCreated as EventCallbacks['onNodeCreated'],
+      onNodeDeleted: handleNodeDeleted,
     }),
     [
-      editor.handleEventCreated,
-      editor.handleEventCreatedFailed,
-      editor.handleFunctionCreated,
-      editor.handleFunctionCreatedFailed,
-      editor.handleNodeCreated,
-      editor.handleNodeDeleted,
-    ]
+      handleEventCreated,
+      handleEventCreatedFailed,
+      handleFunctionCreated,
+      handleFunctionCreatedFailed,
+      handleNodeCreated,
+      handleNodeDeleted,
+    ],
   );
   useProjectSyncCore(callbacks);
 }

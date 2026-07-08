@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { useEditorSessionValue, type EditorSession } from './useEditorSessionValue';
-
+import type { EditorSession } from './editorSessionTypes';
+import { useEditorSessionValue } from './useEditorSessionValue';
 const EditorSessionContext = createContext<EditorSession | null>(null);
 
 export function EditorSessionProvider({ children }: { children: ReactNode }) {
@@ -24,4 +24,4 @@ export function useEditorSessionOptional(): EditorSession | null {
   return useContext(EditorSessionContext);
 }
 
-export type { EditorSession };
+export type { EditorSession } from './editorSessionTypes';

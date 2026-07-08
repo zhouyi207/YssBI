@@ -3,7 +3,10 @@
  * 仅依赖 layout store
  */
 
+import { useMemo } from 'react';
+import type { LayoutTab } from '@/shared/types';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { normalizeLayoutTabs } from '@/features/core/layout/layoutTabModel';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
   const activeGroupIdFromStore = useLayoutStore((s: LayoutState) => s.activeGroupId);
@@ -17,7 +20,10 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
   const isEditor = node?.type === 'component' && !!node.data?.tabs;
   const functionalNode = isEditor ? node : editorNode ?? node;
 
-  const tabs = functionalNode?.data?.tabs || [];
+  const tabs: LayoutTab[] = useMemo(
+    () => normalizeLayoutTabs(functionalNode?.data?.tabs ?? []),
+    [functionalNode?.data?.tabs],
+  );
   const activeTabId = functionalNode?.data?.activeTabId || null;
   const selectedNodeIds = functionalNode?.data?.params?.selectedNodeIds || [];
 

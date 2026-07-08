@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { openGraphInEditor } from './openGraphInEditor';
 import { getGraphById } from '@/features/core/dataStore';
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { releaseGraphCacheIfClosed } from './releaseGraphCache';
 import { closeEditorTab } from './closeEditorTab';
 import { ensureGraphViewport } from '@/features/core/viewport';
@@ -14,10 +14,8 @@ import { logger } from '@/utils/appLogger';
  * Handles opening, closing, and switching between tabs
  */
 export function useTabManagement() {
-  const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
-
   const setActiveTabId = useCallback((id: string | null, targetGroupId?: string) => {
-    const groupId = targetGroupId || activeGroupId;
+    const groupId = resolveEditorGroupId(targetGroupId);
     if (groupId) {
       const currentData = useLayoutStore.getState().nodes[groupId].data;
       useLayoutStore.getState().updateNode(groupId, {
@@ -30,7 +28,7 @@ export function useTabManagement() {
         }
       });
     }
-  }, [activeGroupId]);
+  }, []);
 
   const handleSetActiveTabId = useCallback((
     newId: string | null,

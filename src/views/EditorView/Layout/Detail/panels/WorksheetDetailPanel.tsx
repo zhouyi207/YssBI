@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { useEditorGroup } from '@/features/application/editor';
+import { useEditorSessionResources } from '@/features/application/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
@@ -33,7 +33,7 @@ interface WorksheetDetailPanelProps {
 
 export function WorksheetDetailPanel({ document }: WorksheetDetailPanelProps) {
   const { t } = useTranslation();
-  const { dataframes } = useEditorGroup();
+  const { dataframes } = useEditorSessionResources();
   const updateDocument = useWorksheetStore((s) => s.updateDocument);
   const updateDatabase = useDatabaseStore((s) => s.updateDatabase);
   const databases = dataframes ?? {};

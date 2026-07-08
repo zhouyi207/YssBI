@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { splitComponentForTab } from "@/features/core/layout/layoutTabModel";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -90,19 +91,15 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     void closeEditorTab(id, layoutNodeId);
   };
 
-  const handleSplit = (e: React.MouseEvent) => {
+  const handleSplit = (e: Pick<PointerEvent, 'altKey' | 'stopPropagation'>) => {
     e.stopPropagation();
     const nodes = useLayoutStore.getState().nodes;
     const activeTab = getActiveLayoutTab(layoutNodeId, nodes)?.tab;
-    
-    // 优先使用事件中的 altKey 状态，实现零延迟响应
+
     const currentAlt = e.altKey || isAltPressed;
-    
-    // 默认左右分栏 (row)，按住 Alt 时上下分栏 (col)
-    // 注意：在我们的布局引擎中，'row' 表示子节点水平排列（左右），'col' 表示垂直排列（上下）
     const direction = currentAlt ? 'col' : 'row';
-    
-    splitNode(layoutNodeId, direction, activeTab?.component || 'GraphEditor');
+
+    splitNode(layoutNodeId, direction, splitComponentForTab(activeTab));
   };
 
   const handleCloseGroup = async (e: React.MouseEvent) => {
@@ -221,7 +218,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
               size="icon-sm"
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
-                handleSplit(e as any);
+                handleSplit(e);
               }}
               onMouseEnter={(e) => {
                 if (e.altKey !== isAltPressed) {

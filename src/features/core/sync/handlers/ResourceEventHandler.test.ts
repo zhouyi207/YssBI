@@ -45,9 +45,11 @@ describe('Resource event handlers', () => {
   it('ProjectIndexInvalidatedHandler coalesces bursts into one refreshResourceIndex call', async () => {
     vi.useFakeTimers();
     const refreshResourceIndex = vi.fn().mockResolvedValue(true);
+    const baseState = useProjectIOStore.getState();
     vi.spyOn(useProjectIOStore, 'getState').mockReturnValue({
+      ...baseState,
       refreshResourceIndex,
-    } as unknown as ReturnType<typeof useProjectIOStore.getState>);
+    });
 
     const handler = new ProjectIndexInvalidatedHandler();
     handler.handle({ source: 'watcher', version: 1 });

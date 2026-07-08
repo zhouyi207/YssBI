@@ -29,7 +29,7 @@ describe('resolvePinViewTarget', () => {
       graphId: 'g1',
       pinId: 'out-1',
       direction: 'output',
-      pinType: 'float',
+      isExec: false,
       pinResults,
     });
     expect(target?.sourcePinId).toBe('out-1');
@@ -41,7 +41,7 @@ describe('resolvePinViewTarget', () => {
       graphId: 'g1',
       pinId: 'in-1',
       direction: 'input',
-      pinType: 'float',
+      isExec: false,
       connectionIds: ['out-1->in-1'],
       pinResults,
     });
@@ -54,7 +54,7 @@ describe('resolvePinViewTarget', () => {
         graphId: 'g1',
         pinId: 'exec',
         direction: 'input',
-        pinType: 'exec',
+        isExec: true,
       }),
     ).toBe(false);
     expect(
@@ -62,7 +62,7 @@ describe('resolvePinViewTarget', () => {
         graphId: 'g1',
         pinId: 'in-1',
         direction: 'input',
-        pinType: 'float',
+        isExec: false,
       }),
     ).toBe(false);
   });
@@ -73,7 +73,7 @@ describe('resolvePinViewTarget', () => {
         graphId: 'g1',
         pinId: 'out-1',
         direction: 'output',
-        pinType: 'float',
+        isExec: false,
         pinResults: new Map(),
       }),
     ).toBe('no_run');

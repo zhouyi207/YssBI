@@ -6,6 +6,7 @@ import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
 
 import { Pin } from "@/shared/types/domain";
+import { getConnectGesture } from "@/shared/types/ui";
 
 export const ConnectionLine = ({
     graphId,
@@ -43,9 +44,8 @@ export const ConnectionLine = ({
 
     useEffect(() => {
         const render = () => {
-            const { gesture } = useGestureStore.getState();
-            const isConnecting = gesture?.type === "connect";
-            const gestureStartPin = isConnecting ? (gesture as any).startPin : null;
+            const connectGesture = getConnectGesture(useGestureStore.getState().gesture);
+            const gestureStartPin = connectGesture?.startPin ?? null;
             const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
             const canvasEl = lineCanvasRef.current;
@@ -60,13 +60,16 @@ export const ConnectionLine = ({
             let activeStart = null;
             let endWorld: { x: number, y: number } | null = null;
 
-            if (isConnecting && gestureStartPin) {
+            if (connectGesture && gestureStartPin) {
                 activeStart = gestureStartPin;
                 // 优先使用世界坐标（多 editor 同步正确），回退到屏幕坐标转换
-                if ((gesture as any).worldX != null && (gesture as any).worldY != null) {
-                    endWorld = { x: (gesture as any).worldX, y: (gesture as any).worldY };
+                if (connectGesture.worldX != null && connectGesture.worldY != null) {
+                    endWorld = { x: connectGesture.worldX, y: connectGesture.worldY };
                 } else {
-                    endWorld = getCanvasLocalPointRef.current((gesture as any).currentX, (gesture as any).currentY);
+                    endWorld = getCanvasLocalPointRef.current(
+                        connectGesture.currentX,
+                        connectGesture.currentY,
+                    );
                 }
             } else if (hasPendingConnection && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;

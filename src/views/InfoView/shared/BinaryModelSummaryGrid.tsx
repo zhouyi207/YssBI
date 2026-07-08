@@ -13,8 +13,8 @@ export function BinaryModelSummaryGrid({
     <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border mb-2">
       <InfoRow label="Model">{info.model_type}</InfoRow>
       <InfoRow label="Method">{info.method}</InfoRow>
-      <InfoRow label="Pseudo R-squared">{info.r_squared.toFixed(4)}</InfoRow>
-      <InfoRow label="Pseudo Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
+      <InfoRow label="Pseudo R-squared">{formatNum(info.r_squared)}</InfoRow>
+      <InfoRow label="Pseudo Adj. R-squared">{formatNum(info.adj_r_squared)}</InfoRow>
       {info.wald_chi2 != null && (
         <>
           <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.wald_chi2)}</InfoRow>

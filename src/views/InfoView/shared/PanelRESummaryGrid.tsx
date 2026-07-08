@@ -31,17 +31,17 @@ export function PanelRESummaryGrid({
       {/* R-squared: Within, Between, Overall (FGLS only; MLE does not report these) */}
       {panelFe.r2_within != null && panelFe.r2_between != null && panelFe.r2_overall != null && (
         <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
-          <InfoRow label="R-squared Within">{panelFe.r2_within.toFixed(4)}</InfoRow>
-          <InfoRow label="R-squared Between">{panelFe.r2_between.toFixed(4)}</InfoRow>
-          <InfoRow label="R-squared Overall">{panelFe.r2_overall.toFixed(4)}</InfoRow>
-          <InfoRow label="Adj. R-squared">{info.adj_r_squared.toFixed(4)}</InfoRow>
+          <InfoRow label="R-squared Within">{formatNum(panelFe.r2_within)}</InfoRow>
+          <InfoRow label="R-squared Between">{formatNum(panelFe.r2_between)}</InfoRow>
+          <InfoRow label="R-squared Overall">{formatNum(panelFe.r2_overall)}</InfoRow>
+          <InfoRow label="Adj. R-squared">{formatNum(info.adj_r_squared)}</InfoRow>
         </div>
       )}
 
       {/* Obs per group */}
       <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         <InfoRow label="Obs per group (min)">{panelFe.obs_per_group.min}</InfoRow>
-        <InfoRow label="Obs per group (avg)">{panelFe.obs_per_group.avg.toFixed(1)}</InfoRow>
+        <InfoRow label="Obs per group (avg)">{formatNum(panelFe.obs_per_group.avg, 1)}</InfoRow>
         <InfoRow label="Obs per group (max)">{panelFe.obs_per_group.max}</InfoRow>
       </div>
 

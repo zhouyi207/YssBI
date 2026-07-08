@@ -253,7 +253,7 @@ export function getDefaultValue(dataType: DataType): unknown {
   }
 }
 
-/** 从 Pin 的 type 字符串（如 "string"、"int"）映射为 DataType */
+/** 函数签名编辑专用：从 legacy type 字符串映射为 DataType。运行时 pin 以 `dataType` 为准。 */
 export function dataTypeFromPinType(pinType: string): DataType {
   const t = pinType?.toLowerCase() ?? 'any';
   switch (t) {

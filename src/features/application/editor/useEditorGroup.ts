@@ -4,16 +4,26 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditorSession } from './EditorSessionContext';
 import type { Pin } from '@/shared/types/domain';
+import type { GraphPosition } from '@/shared/types/domain';
+import {
+  composeEditorGroupSession,
+  type EditorGroupInteractionSlice,
+  type EditorGroupSession,
+  type EditorGroupWorkspaceSlice,
+} from './editorSessionTypes';
 
 export type UseEditorGroupOptions = {
   /** Mount the global canvas pointer loop. Only Canvas should pass true. */
   withCanvasInteraction?: boolean;
 };
 
+const noopPointer = () => undefined;
+const noopConnectPins = async () => {};
+
 /**
  * Group-scoped editor API backed by a single EditorSessionProvider instance.
  */
-export function useEditorGroup(options?: UseEditorGroupOptions) {
+export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSession {
   const session = useEditorSession();
   const currentGroupId = useContext(GroupContext);
   const overrideGroupId = currentGroupId || undefined;
@@ -23,7 +33,7 @@ export function useEditorGroup(options?: UseEditorGroupOptions) {
   const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
 
   const canvasInteraction = useCanvasInteraction({
-    activeGroupIdRef: session.activeGroupIdRef,
+    activeGroupIdRef: session.activeGroupIdRef as React.RefObject<string>,
     activeTabIdRef: session.activeTabIdRef,
     viewportRef: session.viewportRef,
     setSelectedNodeIds: session.setSelectedNodeIds,
@@ -31,7 +41,7 @@ export function useEditorGroup(options?: UseEditorGroupOptions) {
   });
 
   const ensureActiveGroup = useCallback(() => {
-    if (useLayoutStore.getState().activeGroupId !== groupId) {
+    if (useLayoutStore.getState().activeEditorGroupId !== groupId) {
       setActiveGroup(groupId);
     }
   }, [groupId, setActiveGroup]);
@@ -61,34 +71,32 @@ export function useEditorGroup(options?: UseEditorGroupOptions) {
   );
 
   const wrappedSetCanvas = useCallback(
-    (updater: Parameters<typeof session.setCanvas>[0]) => {
+    (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition)) => {
       ensureActiveGroup();
       session.setCanvas(updater);
     },
     [ensureActiveGroup, session.setCanvas],
   );
 
-  return useMemo(
-    () => ({
-      ...session,
+  const workspace = useMemo(
+    (): EditorGroupWorkspaceSlice => ({
       groupId,
       tabs,
       activeTabId,
       selectedNodeIds,
-      onCanvasPointerDown: withCanvasInteraction
-        ? wrappedOnCanvasPointerDown
-        : () => undefined,
-      onNodePointerDown: withCanvasInteraction ? wrappedOnNodePointerDown : () => undefined,
-      onPinPointerDown: withCanvasInteraction ? wrappedOnPinPointerDown : () => undefined,
-      connectPins: withCanvasInteraction ? canvasInteraction.connectPins : async () => {},
+    }),
+    [groupId, tabs, activeTabId, selectedNodeIds],
+  );
+
+  const interaction = useMemo(
+    (): EditorGroupInteractionSlice => ({
+      onCanvasPointerDown: withCanvasInteraction ? wrappedOnCanvasPointerDown : noopPointer,
+      onNodePointerDown: withCanvasInteraction ? wrappedOnNodePointerDown : noopPointer,
+      onPinPointerDown: withCanvasInteraction ? wrappedOnPinPointerDown : noopPointer,
+      connectPins: withCanvasInteraction ? canvasInteraction.connectPins : noopConnectPins,
       setCanvas: wrappedSetCanvas,
     }),
     [
-      session,
-      groupId,
-      tabs,
-      activeTabId,
-      selectedNodeIds,
       withCanvasInteraction,
       wrappedOnCanvasPointerDown,
       wrappedOnNodePointerDown,
@@ -97,4 +105,11 @@ export function useEditorGroup(options?: UseEditorGroupOptions) {
       wrappedSetCanvas,
     ],
   );
+
+  return useMemo(
+    () => composeEditorGroupSession(session, workspace, interaction),
+    [session, workspace, interaction],
+  );
 }
+
+export type { EditorGroupSession } from './editorSessionTypes';

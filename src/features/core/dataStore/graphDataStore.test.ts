@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useGraphDataStore } from './graphDataStore';
-import type { GraphDataLike } from '@/shared/types/store/graph';
+import { makeOverlappingLocalIdGraphPair, makeTestGraph } from '@/tests/helpers/graphFixtures';
 
 describe('graphDataStore connection truth', () => {
   beforeEach(() => {
@@ -8,44 +8,18 @@ describe('graphDataStore connection truth', () => {
   });
 
   it('hydrates pinConnections from connections and ignores incoming pin links', () => {
-    useGraphDataStore.getState().addGraphFromData('graph-1', {
-      id: 'graph-1',
-      name: 'Test',
-      type: 'event',
-      canvas: { x: 0, y: 0, scale: 1 },
-      nodes: [
-        {
-          id: 'node-a',
-          nodeType: 'Data:Constant',
-          category: ['Data'],
-          title: 'A',
-          position: { x: 0, y: 0 },
-          inputs: ['pin-in'],
-          outputs: ['pin-out'],
-        },
-      ],
-      pins: [
-        {
-          id: 'pin-in',
-          nodeId: 'node-a',
-          name: 'In',
-          type: 'Float64',
-          direction: 'input',
-          links: ['should-be-ignored'],
-        } as never,
-        {
-          id: 'pin-out',
-          nodeId: 'node-a',
-          name: 'Out',
-          type: 'Float64',
-          direction: 'output',
-          links: ['should-be-ignored'],
-        } as never,
-      ],
-      connections: {
-        connections: [{ fromPin: 'pin-out', toPin: 'pin-in' }],
-      },
-    });
+    useGraphDataStore.getState().addGraphFromData(
+      'graph-1',
+      makeTestGraph({
+        id: 'graph-1',
+        name: 'Test',
+        title: 'A',
+        nodeId: 'node-a',
+        inputPinId: 'pin-in',
+        outputPinId: 'pin-out',
+        withLegacyPinLinks: true,
+      }),
+    );
 
     const state = useGraphDataStore.getState();
     const bucket = state.graphEntities['graph-1'];
@@ -66,45 +40,12 @@ describe('graphDataStore connection truth', () => {
   });
 
   it('keeps remaining graph bucket when graph-local node and pin ids overlap', () => {
-    const graph = (id: string, title: string): GraphDataLike => ({
-      id,
-      name: title,
-      type: 'event' as const,
-      canvas: { x: 0, y: 0, scale: 1 },
-      nodes: [
-        {
-          id: 'local-node',
-          nodeType: 'Data:Constant',
-          category: ['Data'],
-          title,
-          position: { x: 0, y: 0 },
-          inputs: ['local-in'],
-          outputs: ['local-out'],
-        },
-      ],
-      pins: [
-        {
-          id: 'local-in',
-          nodeId: 'local-node',
-          name: 'In',
-          type: 'Float64',
-          direction: 'input' as const,
-        },
-        {
-          id: 'local-out',
-          nodeId: 'local-node',
-          name: 'Out',
-          type: 'Float64',
-          direction: 'output' as const,
-        },
-      ],
-      connections: { connections: [{ fromPin: 'local-out', toPin: 'local-in' }] },
-    });
-
-    useGraphDataStore.getState().hydrateGraphs({
-      'graph-1': graph('graph-1', 'First'),
-      'graph-2': graph('graph-2', 'Second'),
-    });
+    useGraphDataStore.getState().hydrateGraphs(
+      makeOverlappingLocalIdGraphPair(
+        { id: 'graph-1', title: 'First' },
+        { id: 'graph-2', title: 'Second' },
+      ),
+    );
 
     useGraphDataStore.getState().clearGraph('graph-1');
 

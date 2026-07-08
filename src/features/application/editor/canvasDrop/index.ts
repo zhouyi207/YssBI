@@ -1,14 +1,12 @@
-export type {
-  CreateNodeFn,
-  VariableDropMenu,
-  VariableNodeType,
-} from './variableDrop';
+export type { CanvasCreateNodeParams, CreateNodeFn } from './createNodeFn';
+export type { VariableDropMenu, VariableNodeType } from './variableDrop';
 export {
   buildVariableDropMenu,
   clientToWorldInCanvas,
   isPointInsideCanvas,
-  isVariableAvailable,
   resolveVariableSpawnType,
   spawnVariableFromMenu,
   spawnVariableNode,
 } from './variableDrop';
+export { isFunctionAvailable, isVariableAvailable } from './editorResources';
+export { spawnNodeFromTemplate, type SpawnFromTemplateContext } from './spawnFromTemplate';

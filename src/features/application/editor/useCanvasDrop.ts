@@ -1,22 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
-import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
-import { logger } from '@/utils/appLogger';
+import { uiStore } from "@/features/core/ui/UIStore";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
+import type { NodeTemplateDragState } from '@/features/core/dnd';
+import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
 import {
-  buildVariableDropMenu,
   clientToWorldInCanvas,
   isPointInsideCanvas,
-  isVariableAvailable,
-  resolveVariableSpawnType,
+  spawnNodeFromTemplate,
   spawnVariableFromMenu,
-  spawnVariableNode,
   type CreateNodeFn,
   type VariableDropMenu,
   type VariableNodeType,
@@ -28,8 +25,8 @@ interface UseCanvasDropParams {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
   groupId: string;
   graphId: string | null;
-  variables: Record<string, unknown>;
-  functions: Record<string, unknown>;
+  variables: EditorVariables;
+  functions: EditorFunctions;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
@@ -140,61 +137,33 @@ export function useCanvasDrop({
   );
 
   const handleDropTemplate = useCallback(
-    async (dragState: { x: number; y: number; template: Record<string, unknown> }, event: MouseEvent | PointerEvent) => {
+    async (dragState: NodeTemplateDragState, event: MouseEvent | PointerEvent) => {
       const el = canvasElementRef.current;
       if (!el) return;
 
       if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
 
-      const { x, y } = clientToWorldInCanvas(el, graphId, dragState.x, dragState.y);
-      const template = dragState.template;
+      const worldPosition = clientToWorldInCanvas(el, graphId, dragState.x, dragState.y);
 
-      if (template.category === "Data") {
-        await createNode(String(template.nodeType), { x, y }, {
-          dataframeId: template.variableId,
-          variableName: template.variableName,
-        });
-        return;
-      }
-
-      if (template.category === "Variable") {
-        const variableId = String(template.variableId);
-        if (!isVariableAvailable(variableId, variables)) {
-          logger.graph.warn('Variable no longer exists. Aborting drop', 'CanvasDrop');
-          return;
-        }
-
-        const spawnType = resolveVariableSpawnType(event, dragState.x, dragState.y);
-        if (spawnType === 'menu') {
-          setVariableDropMenu(buildVariableDropMenu(
-            dragState.x,
-            dragState.y,
-            { x, y },
-            variableId,
-            String(template.variableName),
-          ));
-          return;
-        }
-
-        await spawnVariableNode(spawnType, { x, y }, variableId, createNode);
-        return;
-      }
-
-      if (template.nodeType === CALL_FUNCTION_NODE_TYPE) {
-        const subId = String(template.subGraphId);
-        if (!functions[subId]) return;
-        await createNode(CALL_FUNCTION_NODE_TYPE, { x, y }, { subGraphId: subId });
-        return;
-      }
-
-      await createNode(String(template.nodeType), { x, y });
+      await spawnNodeFromTemplate(
+        dragState.template,
+        worldPosition,
+        { x: dragState.x, y: dragState.y },
+        event,
+        {
+          variables,
+          functions,
+          createNode,
+          onVariableMenu: setVariableDropMenu,
+        },
+      );
     },
     [canvasElementRef, graphId, variables, functions, createNode],
   );
 
   useEffect(() => {
-    canvasDropHandlerStore.setHandler(groupId, (dragState, _event) =>
-      handleDropTemplate(dragState, _event as MouseEvent),
+    canvasDropHandlerStore.setHandler(groupId, (dragState, event) =>
+      handleDropTemplate(dragState, event as MouseEvent),
     );
     return () => canvasDropHandlerStore.setHandler(groupId, null);
   }, [groupId, handleDropTemplate]);

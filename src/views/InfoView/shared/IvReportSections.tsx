@@ -46,7 +46,7 @@ function IvFirstStageResultsSection({
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <span className="text-sm font-medium text-foreground">{fs.endog_name} on exog + instruments</span>
               <span className="text-xs text-muted-foreground">
-                R² = {fs.r_squared.toFixed(4)} · Adj R² = {fs.adj_r_squared.toFixed(4)}
+                R² = {formatNum(fs.r_squared)} · Adj R² = {formatNum(fs.adj_r_squared)}
               </span>
             </div>
             <CoefficientTable coefficients={fs.coefficients} hasCategorical={false} />

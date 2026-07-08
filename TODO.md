@@ -6,6 +6,10 @@
 
 由于历史代码重构原因，目前项目中存在许多的历史遗留代码，或多余或逻辑重复或实现低效；请检查整体项目，寻找出项目中的重复逻辑和未使用的逻辑，分析必要性，如果有更高效的更干净的架构请添加到 todo 的 v1.0 待办中，如果单纯的逻辑重复或者多余，也请添加到 v1.0 待办中
 
+请分析这个问题有没有必要修复，如果有必要，则使用高效且干净的架构来执行这个逻辑，同时清除掉无效逻辑代码和重复逻辑代码
+
+重复逻辑问题？无效逻辑问题？代码漂移问题？多事实源问题？代码冲突问题？
+
 ```
 同步改四处版本（例如 0.1.1）：
 
@@ -737,41 +741,129 @@ src/app/appConfig/appLinks.ts
 - [x] **OLS Summary Serial Correlation 点击崩溃修复**：`result.dw` 为 `{ d: number }` 非裸 number，传入 `formatNum` 触发 `toFixed is not a function`；`SerialTestsBlock` 改为 `formatNum(result.dw.d)`；`formatNum` 对非 number 做防御。
 - [x] **Rust 编译 warning 清零**：`yssbi`（`command_project/types`、`pin_data_type`、`persistence`、`lexer`、`panel_nodes` 等）与 `yss-sci`（`prais`/`be`/`mle`/`time`/`twoway` 未使用赋值）清理；`cargo build` 0 warning；`function_call_test` 9/9 通过。
 
+## 2026.07.09
+
+- [x] **`DatabaseRecord` 强类型化**：`shared/types/dto/database.ts` 对齐 Rust `DatabaseDeclDTO`；入库边界 `normalizeDatabaseRecord` / `normalizeDatabases`；`Detail.tsx` / `DataDetailPanel` / `Sidebar` / 事件 handler / import 路径去除 `Record<string, unknown>` 与重复字段映射；`sourcePath` 由 `databaseSourcePath(engine)` 派生。
+- [x] **`LoadDatabaseEngineSpec` 去重 + import 写入 engine**：`databaseService` 删除重复 engine 类型，复用 `dto/database`；`databaseRecordFromLoad` + `commitLoadedDatabase` 在 import 时持久化 engine，Detail 数据源路径无需等项目重载。
+- [x] **`projectIOStore` 快照路径单测**：`projectSnapshot.ts` 纯函数 + 8 项 vitest（`database.test` / `projectSnapshot.test` / `projectIOStore.test`）。
+- [x] **`GraphData` ↔ `Graph` 转换层**：`dto/graphModel.ts`；`exportSnapshot`/`loadProjectFromData`/`toFrontendGraph` 显式转换，删除 `as unknown as` 与 `toFrontendGraph` 内 ~90 行重复 pin 解析。
+- [x] **Detail 面板 props 单入口**：`resolveDetailPanelModel` / `useDetailPanelModel` / `DetailPanelModel` 判别联合 + vitest。
+- [x] **共享测试图工厂**：`@/tests/helpers/graphFixtures`（`makeTestGraph` / `makeOverlappingLocalIdGraphPair`）+ 3 项消费方测试迁移。
+- [x] **PlotView D3 交互工具层**：`shared/plot/d3Tooltip.ts` 统一 tooltip 坐标与 theme HTML；7 个图表组件迁移 + 4 项 positioning 单测。
+- [x] **Plot payload 解析类型收敛**：`dto/plotPayload.ts` + 9 项 vitest；`PlotWindow` toast + 空态。
+- [x] **`ConnectionLine` gesture 类型收窄**：`getConnectGesture` 类型守卫；`ConnectionLine` / `Canvas` 去除 gesture `any`。
+- [x] **画布拖放 `data.current` 类型契约**：`CanvasDragPayload` + 守卫；生产/消费端贯通 + 5 项 vitest。
+- [x] **Info / 报告统计块 DTO 结构化**：`types/report` serialTests + correlogram；6 项 vitest。
+- [x] **`dataStore` barrel 与跨 store 依赖审计**：lifecycle 模块拆分 + audit 单测 + `loadProject` 路径测试。
+- [x] **`batchCreateNodes` 请求类型单点定义**：`dto/batchCreateNode.ts` + 2 项 vitest；Hook 改 `requests[]` API。
+- [x] **`GraphData.connections` 双格式收敛**：store 固定 `ConnectionData[]`；`normalizeGraphDataLike` hydrate 单点 + `buildGraphBucket` 去分支；export 仍经 `graphDataToDomainGraph` 包装。
+- [x] **Canvas 编辑器资源类型贯通**：`EditorCollections` + `EditorVariables`/`EditorFunctions`；canvas drop 路径编译期校验 + 2 项 vitest。
+- [x] **Store `NodeData` → UI `Node` 单点桥接**：`toUiNode` + `UINode` 渲染层；3 项 vitest。
+- [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`layoutTabModel` + `EditorGroupSnapshot`；`useEditorGroups` 去 `any`；4 项 vitest。
+- [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts`；连接/值写入以 `dataType` 为准；`pinViewTarget` 改 `isExec`；5 项 vitest。
+- [x] **InfoView 报告类型分层**：`shared/types/report/` 按模型拆分 + `guards` 去重；`types.ts` 薄 re-export；IV 契约测试 7 项 vitest。
+- [x] **Info 报告 IPC 边界窄化**：`parseReportPayload` 单点分发 + `parseRegression`/`parsePanel`/`parseVar` 等；`ReportView` 渲染前校验；`parseCommon` 去重系数解析；11 项 vitest。
+
 ## v1.0 待办
 
 > **源于 2026.07.08 `tsc` 清零复盘**：以下多为根因治理与类型债清扫，避免修复回潮；优先级按「阻断开发 → 架构单点 → 体验验证」排列。
 
-- [ ] **`DatabaseRecord` 强类型化**：当前 `Record<string, unknown>` 迫使 `Detail.tsx` 等处手写字段提取与断言；定义 `DatabaseDecl` / `DataFrameMeta`（`id`、`name`、`columns`、`rowCount`、`sourcePath` 等），在 `normalizeDatabases` / `projectIOStore` 入库边界一次校验，store 与 `DataDetailPanel` 共用。
-- [ ] **`GraphData` ↔ domain `Graph` 显式转换层**：`projectIOStore.buildGraphSnapshot` 仍靠 `as unknown as ProjectData['graphs']`；新增 `graphDataToDomainGraph` / `domainGraphToGraphData`（或统一只保留一种图表示），导出快照与 `ProjectData` 类型自然对齐，去掉双重模型漂移面。
-- [ ] **Detail 面板 props 解析单入口**：将 Function / Data / Variable 等分支的「target → panel props」从 `Detail.tsx` 抽到 `resolveDetailPanelModel(target)`（按 `kind` 判别联合类型），避免 `selectedData` 式宽 union 再靠运行时收窄。
-- [ ] **共享测试图工厂 `makeTestGraph()`**：`graphDataStore.test` / `NodeEventHandler.test` / `EdgesOverlay.test` 等重复的 `makeGraph` + `direction: 'input' as const` 收敛到 `tests/helpers/graphFixtures.ts`，减少夹具与 `GraphDataLike` 契约漂移。
-- [ ] **PlotView D3 交互工具层**：`BarChart` 临时 `D3Onable` 应升级为 `shared/plot/d3Tooltip.ts`（或同类模块），供 `BarChart` / `CorrelogramChart` / `CorrelationPlot` / InfoView 内嵌图复用；统一 `mouseenter`/`mousemove` 坐标与 theme 取值，消灭各图重复 `select(this)` 模式。
-- [ ] **Plot payload 解析类型收敛**：`parsePlotPayload.ts` 多处 `as unknown as CorrelogramData | HistogramData | …`；为各 plot kind 定义 Zod/类型守卫或后端 DTO 窄化，解析失败走 toast + 空态，不在 View 层裸 cast。
-- [ ] **`ConnectionLine` gesture 类型收窄**：`EditorGesture` 已有 `connect` 分支含 `worldX`/`worldY`，但渲染仍 `(gesture as any)`；改为 `gesture?.type === 'connect' ? gesture : null` 或类型守卫，与 `useGestureStore` API 一致。
-- [ ] **画布拖放 `data.current` 类型契约**：`Workspace.tsx` / `CanvasOverlays` 等 `active.data.current as any`；为 palette / sidebar / variable spawn 定义 `CanvasDragPayload` 联合类型 + `isXxxDragData` 守卫，与 `buildNodeTemplateDragData` / `buildSidebarDragData` 生产端对齐。
-- [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
-- [ ] **Info / 报告统计块 DTO 结构化**：`SerialTestsBlock` 的 `result.dw: { d: number }`、`CorrelogramChart` 的 `q_stat`/`p_value` 可选等，应在 Rust 序列化层或前端 `types/report` 定义明确结构（必填/可选 discriminated），减少 UI 层 `formatNum` 防御式补丁。
-- [ ] **`dataStore` barrel 与跨 store 依赖审计**：`projectIOStore` 曾缺 `useGraphDataStore` 导入（运行时才暴露）；梳理 `features/core/dataStore/index` 导出、禁止「隐式依赖未 import 的 store」，必要时 lint 规则或单测覆盖 `buildGraphSnapshot` / `loadProject` 路径。
-- [ ] **`batchCreateNodes` 请求类型单点定义**：Hook / `NodeService` / Tauri command 共享 `BatchCreateNodeRequest` 类型（含 `nodeType`、`x`、`y`、`params`），避免 API 形参漂移（本次已从三参数改为 requests 数组）。
-- [ ] **残余 `as any` / `as unknown as` 分期清扫**：tsc 已 0 错误但代码库仍有 ~20+ 处逃逸（`ConnectionLine`、`Workspace`、`ParallelCoordinates`、`useEditorGroups`、`CanvasNode`、`parsePlotPayload` 等）；按模块分批替换为守卫或正确泛型，不设「禁止 any」一刀切，但新代码不得新增。
-- [ ] **OLS Summary 取数连线动画验证**：修复函数图相关报错后，需回归验证 data 边 pull/flow 高亮是否正常（`EdgesOverlay` `isPullActive` / `executionVisualSession`）；若仍不发光，查 Channel 排空、guard 跳过或 recording 不完整，而非仅 UI 样式。
-- [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
-- [ ] **`GraphData.connections` 双格式收敛**：`GraphData` 同时接受 `ConnectionData[]` 与 `{ connections: [...] }`，`buildGraphBucket` / `projectHelpers` / 测试夹具需分支处理；hydrate 入口统一规范化为 store 内 `ConnectionData[]`，仅 export/持久化再包装，缩小 `GraphDataLike` 歧义面。
-- [ ] **Canvas 编辑器资源类型贯通**：`useCanvasDrop` / `useCanvasOverlayHandlers` / `variableDrop` 仍用 `variables|functions: Record<string, unknown>`，与 `useEditorCollections`（`Variable` / `FunctionCatalogEntry` / `GraphResourceRecord`）脱节；改为复用 `EditorCollections` 切片或同名类型，drop/spawn 路径获得编译期校验。
-- [ ] **`DatabaseDecl.engine` 与 `SqlEngineSpec` 对齐**：domain `DatabaseDecl.engine` 仍是 `Record<string, unknown>`，`useDatabaseManagement` 需在 service 层 inline 断言 `SqlEngineSpec`；将 `engine` 提升为 `duckdb | sqlite | …` discriminated union，与 `normalizeDatabases` / `databaseService` 共用。
-- [ ] **Store `NodeData` → UI `Node` 单点桥接**：`CanvasNode` 依赖 `node as unknown as NodeModel`；新增 `toUiNode(graphId, node, pinViews)`（或扩展现有 selector），渲染层只消费 `UINode`/`Node` 类，消灭 domain/store/ui 三套 Node 形混用。
-- [ ] **`LayoutTab` / 编辑器组 tabs 强类型**：`useEditorGroups` 中 `tabs.map((t: any) => …) as any[]`；为 layout store 的 tab `type`（event/function/worksheet/…）定义 `LayoutTab` 联合类型，TabBar split/drag 与 `openEditorTab` 共享。
-- [ ] **`PinData.type` 与 `dataType` 职责分离**：`type: PinType | string` 允许任意字符串漂移；约定运行时判断以 `dataType` + `TypeSystemSnapshot` 为准，`type`/`typeDisplay` 仅展示，逐步删除 palette/连接里对裸 `type` 字符串的 fallback。
-- [ ] **InfoView 报告类型分层（`types.ts` 治理）**：`views/InfoView/shared/types.ts` 600+ 行手写接口，与 Rust 序列化易漂移（`SerialTests.dw`、`Iv2slsFirstStage`、Correlogram 可选字段等）；按模型拆到 `types/report/*.ts`，关键块加 Zod/样例 JSON 契约测试，解析失败统一 toast + 区块空态。
-- [ ] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。
-- [ ] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`nodeService.buildTaggedParams`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。
-- [ ] **`projectIOStore` 快照路径单测**：`buildGraphSnapshot`、`loadProjectFromData`、`normalizeDatabases`（`nameFromEngine` 回填）无专测，曾出现缺 `useGraphDataStore` import；补 vitest 覆盖导出图结构与 DB 名合并，防止 cast 修掉后运行时再炸。
-- [ ] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。
-- [ ] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。
-- [ ] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session  Spread 未知字段。
-- [ ] **`NodeTemplateDragPayload` 端到端类型**：`buildNodeTemplateDragData` 产出已有结构，但 `useCanvasDrop` 仍收 `template: Record<string, unknown>`；dnd `data.current` 与 drop handler 共用该类型，闭合 palette → canvas 落点类型链（与「画布拖放 payload」项互补）。
-- [ ] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：测试夹具曾缺 `PinDirection` const、pin 带 `links` 需 `as never`；在 store 层 ADR 或 `graph.ts` 注释写清 hydrate 规则（nodes 内 pin 对象 vs id、必填字段），新建图事件/测试优先走 `makeTestGraph()`。
-- [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
+- [x] **`DatabaseRecord` 强类型化**：`shared/types/dto/database.ts` 定义 `DatabaseDeclDTO` / `DatabaseRecord` + `normalizeDatabaseRecord` / `normalizeDatabases`；`projectIOStore`、事件 handler、import 路径在入库边界一次规范化；store 与 `DataDetailPanel` 共用，`sourcePath` 由 `databaseSourcePath(engine)` 派生。
+- [x] **`GraphData` ↔ domain `Graph` 显式转换层**：`dto/graphModel.ts` 提供 `graphDataToDomainGraph` / `domainGraphToGraphData` / `graphDataRecordToDomainGraphs`；`exportSnapshot` 与 `loadProjectFromData` 走转换层，去掉 `as unknown as`；`toFrontendGraph` 复用 `graphInstanceDtoToGraphData`。
+- [x] **`Detail 面板 props 解析单入口**：`resolveDetailPanelModel` + `useDetailPanelModel`；`DetailPanelModel` 判别联合；`Detail.tsx` 仅 switch 渲染与回调，删除 `targetId`/`selectedFunction` 重复收窄。
+- [x] **共享测试图工厂 `makeTestGraph()`**：`src/tests/helpers/graphFixtures.ts` 提供 `makeTestGraph` / `makeOverlappingLocalIdGraphPair`；`graphDataStore` / `NodeEventHandler` / `EdgesOverlay` 测试去重，去掉 `as const` / `as never` pin 夹具。
+- [x] **PlotView D3 交互工具层**：`shared/plot/d3Tooltip.ts`（`PlotTooltipController` / `attachHoverTooltip` / `attachOverlayCursorTooltip` / theme HTML helpers）；`BarChart` / `Histogram` / `CorrelogramChart` / `CorrelationPlot` / `ParallelCoordinates` / InfoView `IRFChartSingle` / `VARStableChart` 已迁移，消灭各图重复 `select(this)` + 手写坐标逻辑。
+- [x] **Plot payload 解析类型收敛**：`shared/types/dto/plotPayload.ts` 对齐 Rust plot 序列化 + 类型守卫窄化；`parsePlotPayload` 返回判别联合；解析失败 `PlotWindow` toast + 空态；`PlotWindowContent` 无裸 cast。
+- [x] **`ConnectionLine` gesture 类型收窄**：`getConnectGesture` / `ConnectGesture` 置于 `shared/types/ui/editor.ts`；`ConnectionLine` 与 `Canvas` selector 去除 `gesture as any` / `gesture: any`。
+- [x] **画布拖放 `data.current` 类型契约**：`dndContracts.ts` 扩展 `CanvasDragPayload` / `NodeSpawnTemplate` + 守卫；`buildSidebarDragData` / `buildNodeTemplateDragData` 生产端对齐；`Workspace` / sidebar UI / drop handler 去除 `as any`。
+- [x] **Info / 报告统计块 DTO 结构化**：`shared/types/report/`（`serialTests` DW `{ d }` 窄化、`correlogram` Report vs Plot 柱条分离 + `hasLjungBoxStats`）；IPC/service 边界 normalize；`CorrelogramChart` / `ACFPACFBlock` / `plotPayload` 贯通 + 6 项 vitest。
+- [x] **`dataStore` barrel 与跨 store 依赖审计**：`projectSnapshotBridge` / `projectClientReset` 集中跨 store 编排；`index.ts` 显式导出 snapshot API；`projectStoreDeps` + `dataStore.audit.test` 校验 hook import；`loadProject` / `exportSnapshot` 单测覆盖。
+- [x] **残余 `as any` / `as unknown as` 分期清扫（报告 IPC + 边角）**：`ParallelCoordinates` / `CanvasNode` / `useEditorGroups` 等已在前期条目清零；本轮清除 `shared/types/report/*` 全部 `as unknown as`（`assignPresentKeys` + 显式字段构建）、`useGraphManagement` `any`、`Workspace` drop `position: any`、测试 mock 双 cast；`src/` 现 0 处 `as unknown as`。
+- [x] **OLS Summary 取数连线动画验证**：根因修复见上条「执行连线动画根治」（Channel 排空、`executionVisualSession` pull/flow 双态、`EdgesOverlay` `isPullActive`/`isFlowActive`、按边 `emit_data_pull`→`emit_data_flow`）；函数图报错修复后无新增缺口；执行相关 vitest 20 项全绿。OLS Summary 走标准 data input 取数链，无专项 bypass。
+- [x] **`DatabaseDecl.engine` 与 `LoadDatabaseEngineSpec` 单点定义**：`dto/database.ts` 派生 `SqlEngineConfig` / `CsvEngineConfig` 等 + `LoadDatabaseEngineSpec`；`databaseService` 复用 DTO 类型；import 经 `databaseRecordFromLoad` 写入 `engine`，Detail `sourcePath` 即时可见。
+- [x] **Store `NodeData` → UI `Node` 单点桥接**：`nodeView.ts` 的 `toUiNode`；`useNodeView` 复用；渲染层改 `UINode`；去除 `CanvasNode` `as unknown as NodeModel`。
+- [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`LayoutTabType` / `EditorGroupSnapshot` / `layoutTabModel` 工厂与规范化；`useEditorGroups` 去 `any`；`openEditorTab` / TabBar split 共用。
+- [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts` 统一 exec 判别 / 展示标签 / 主题键；连接与 palette 以 `buildPinDataType` + `TypeSystemSnapshot` 为准；`setPinValue` 改读 store `dataType`；去除 `resolveNodePinSpecs` 裸 `type` fallback；5 项 vitest。
+
+> **注解型 `any` 残留**（`src/` 已无 `as any` / `as unknown as`；以下为 `: any` 注解债，按模块分期，新代码不得新增）
+
+- [ ] **`EventRegistry.dispatch` 异构事件联合**：`features/core/sync/registry/EventRegistry.ts` — `dispatch(event: any)` 改为 `BackendEvent` / 已注册 payload 判别联合或泛型 `dispatch<E extends BackendEventType>(...)`，与 `EventHandler<T>` 对齐。
+- [ ] **`commandRegistry` 泛型收口**：`features/core/history/commands/index.ts` — `CommandHandler<any, any>` 改为按 `CommandType` 映射的 `CommandHandlerMap`，`getCommandHandler` 返回窄化类型。
+- [ ] **DatabaseEditor 表格行 `any[][]`**：`useDataLoader` / `useEditActions` / `DataTable` — 对齐后端 cell 类型（`DataValue` 或 `string | number | null` 联合），消除 `loadedRows: any[][]`。
+- [ ] **`SettingsView` 表单 `onChange` 去 `any`**：`SettingsView.tsx` — 移除 `eslint-disable` + `onChange?: (val: any)`，按设置项 discriminated union 或泛型字段组件收窄。
+
+- [ ] **Pin 视觉语义统一架构（形状 / 颜色 / 连线）**：`pinSemantics` 仅为过渡层；`Pin.tsx` / `EdgesOverlay` / `pinTypeTheme` 各自维护形状与颜色分支，未覆盖 Date/Datetime/Time/Categorical/OneOf/嵌套容器等全量 `DataType`；需从 `dataType` 单点派生 `PinVisualSpec`，与 Rust `data_type_to_pin_type` / `data_type_to_container` 对齐并扩展。见下「Pin 视觉语义」设计说明。
+
+> **Pin 视觉语义 — v1.0 设计说明**（源于 2026.07.08 `pinThemeTypeKey` 颜色回归复盘）
+
+**问题**
+
+- **逻辑分散**：形状判断在 `Pin.tsx`（`getPinTheme` + 大段 SVG 分支），颜色在 `pinTypeTheme.ts` + `pinSemantics.dataTypeToThemePinType`，连线在 `EdgesOverlay` / `ConnectionLine` / `Edge.tsx`（exec/data 流动态硬编码色，与 pin 类型色脱节）。
+- **类型覆盖不全**：`ThemeSettings` 已有 `dateColor` / `categoricalColor` / `oneofColor` 等，但 pin 渲染未系统映射；`Struct<OLSModel>` 与 `Struct<OLSResult>` 同色同形，无法区分 model/result 族。
+- **字段语义混用**：`type`（历史展示串）、`containerType`（形状）、`typeDisplay`（标签）、`dataType`（连接）四套字段，视觉层无统一「规范 → 渲染」函数，改一处易漏另一处（如此次容器类型颜色回归）。
+
+**目标架构**
+
+从 **`dataType`（+ `isExec`）单点派生** `PinVisualSpec`，消费方只读 spec，不再散落 `pin.type` 字符串判断：
+
+```ts
+interface PinVisualSpec {
+  label: string;              // tooltip / Detail：typeDisplay ?? dataTypeDisplay
+  shape: PinShape;            // 形式区分：exec | circle | diamond | roundedRect | gridRect | hexagon | …
+  colorKey: ThemeColorKey;    // 连线 & pin 描边/填充：叶子标量或 struct 族
+  container?: 'array' | 'dataseries'; // 仅影响形状叠加，不改变 colorKey 递归规则
+  edgeKind: 'exec' | 'data';  // 连线动画语义（flow / pull）
+}
+```
+
+**视觉维度分工（形式 vs 语义）**
+
+| 维度 | 表达什么 | 规则 |
+|------|----------|------|
+| **形状 `shape`** | 容器 / 控制流 / 复合类型 | Exec→箭头；DataFrame→网格方框；Array→圆角方框；DataSeries→菱形；Struct→六边形；标量→圆 |
+| **颜色 `colorKey`** | 数据「含义」 | 镜像 Rust `data_type_to_pin_type`：**容器递归到内层标量**；DataFrame→dataframe；Struct→struct（或按 `TypeSystemSnapshot.category` 分 model/result 色） |
+| **连线颜色** | 与 source pin 一致 | `EdgesOverlay` / 拖拽预览统一 `resolvePinVisualSpec(fromPin).colorKey`，禁止另写 `fromPin.type` |
+| **连线动画** | exec vs data 行为 | 保留 `EdgeKind`；颜色跟 pin，动画跟 kind |
+| **标签 `label`** | 人类可读完整类型 | 仅展示，不参与颜色/形状/连接 |
+
+**全量 `DataType` 覆盖矩阵（验收基线）**
+
+| DataType | 形状 | 颜色键 | 备注 |
+|----------|------|--------|------|
+| Exec | 箭头 | exec | 无 dataType |
+| Boolean / Int64 / Float64 / String | 圆 | bool / Int64 / Float64 / string | 可编辑标量 |
+| Date / Datetime / Time / Categorical | 圆 | date / datetime / time / categorical | 补齐当前缺失映射 |
+| Object / Any | 圆 | object / any | |
+| DataFrame | 网格方框 | dataframe | 无内层泛型 |
+| Array\<T\> | 圆角方框 | colorKey(T) | 形状看外层，颜色看内层 |
+| DataSeries\<T\> | 菱形 | colorKey(T) | 同上 |
+| Struct\<K\> | 六边形 | struct 或 category 色 | 可选：model/result 分色 |
+| OneOf\<…\> | 圆 + 虚线描边？ | oneof | 产品确认差异化方案 |
+
+**实现路径**
+
+1. **前端**：`shared/types/domain/pinVisual.ts`（或 `features/core/pin/pinVisual.ts`）导出 `resolvePinVisualSpec(pin)`；`pinSemantics` 收敛为 re-export 或删除重复函数。
+2. **后端**：Rust `schema/pin.rs` 增加 `pin_visual_spec(dt) -> PinVisualSpecDTO`（或与现有 DTO 合并下发），保证 IPC 与前端单测同一套 golden case。
+3. **消费方迁移**：`Pin.tsx`（删 `getPinTheme` 内联分支）、`EdgesOverlay`、`ConnectionLine` 拖拽线、`NodePinSpecRow` 类型徽章、主题设置预览页。
+4. **测试**：vitest 矩阵覆盖上表 + 嵌套样例（`DataSeries<Float64>`、`Array<String>`、`OneOf<Float64,String>`）；截图或 SVG 快照可选。
+5. **弃用**：逐步停止视觉层读取 `pin.type`；`type` 字段保留 IPC 兼容至 v1.0 前，仅非视觉路径使用。
+
+**完成标准**
+
+- 新增/修改 pin 视觉只需改 `resolvePinVisualSpec` 一处；`Pin.tsx` 无 `dataType.kind ===` 硬编码。
+- 调色板拖线、静态连线、执行 flow/pull 动画三线颜色与 source pin 一致。
+- 上表每种 DataType 至少 1 个 vitest + 1 个手动验收图（含嵌套容器）。
+
+- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；`InfoView/shared/types.ts` 薄 re-export；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
+- [x] **Info 报告 IPC 边界 `normalize*` 补齐**：`parseReportPayload(report, raw)` 覆盖全部 `ReportKind`；回归五类共用 `parseRegressionResultData`；`ReportView` 无效 payload 展示错误文案；`serialTests`/`correlogram`/`iv` 共用 `parseCommon`；11 项 vitest。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)
+- [x] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。→ 见 [DESIGN_RULE.md §2.9](./docs/DESIGN_RULE.md#29-infoview-统计数值展示)
+- [x] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。→ 见 [DESIGN_RULE.md §3.8](./docs/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)、[DTO_TYPE_MAPPING.md §十二–十四](./docs/DTO_TYPE_MAPPING.md#十二nodeinstanceparams节点实例参数)
+- [x] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。→ 见 [DESIGN_RULE.md §2.10](./docs/DESIGN_RULE.md#210-plotview-d3-工具层)
+- [x] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。→ 见 [DESIGN_RULE.md §2.11](./docs/DESIGN_RULE.md#211-tauri--webview-平台类型)
+- [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
+- [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
+- [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
+
 
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
 
@@ -837,8 +929,10 @@ src/app/appConfig/appLinks.ts
 - [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
 - [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 - [ ] 节点样式问题
-- [ ] OLS Summary 取数样式不发光：见上条「取数连线动画验证」（与本节重复项合并跟进时可删此条）
-- [ ] ols 取数的逻辑是一个个的，之前为什么是一批一批的？见上条「逐边 vs 批量语义文档化」
+- [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
+- [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
+- [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
+
 
 # TODOLIST
 
@@ -953,3 +1047,49 @@ PinInstance 新增字段:
 **优先级链**：`type_narrowing` > 类型推断结果 > Pin 定义默认值
 
 结构估计
+
+
+
+本轮继续深挖，又发现并修复了以下问题：
+
+## 新发现与修复
+
+### 8. 重复逻辑：双重 `loadGraph`
+- **问题**：`useGraphManagement.openCreatedGraph` 先 `loadGraph`，再调 `openGraph` → `openGraphInEditor` 又 `loadGraph` 一次。
+- **修复**：`openGraphInEditor` 在 `hasGraph(id)` 为真时跳过加载（`openGraphInEditor.ts`）。
+
+### 9. 多事实源：`activeGroupId` vs `activeEditorGroupId`（续）
+- **问题**：`useTabManagement.setActiveTabId` 用 `activeGroupId` 回退；`useEditorGroup.ensureActiveGroup` 比较的是 `activeGroupId` 而非编辑器组。
+- **修复**：`setActiveTabId` 改用 `resolveEditorGroupId`；`ensureActiveGroup` 改为比较 `activeEditorGroupId`。
+
+### 10. 重复逻辑：Plot 时间轴与容器尺寸
+- **问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
+- **修复**：
+  - 新增 `shared/plot/plotTime.ts`（`numToPlotDate`、`plotAxisTickFormatter`）
+  - 新增 `shared/plot/usePlotContainerSize.ts`
+  - `plotShellStyles.ts` 统一 `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN`
+  - 已迁移：`Scatter`、`Line`、`Histogram`、`BarChart`
+
+### 11. 无效逻辑：deprecated `buildPinResultSearchEntries`
+- **问题**：仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
+- **修复**：删除该函数，测试改为 `buildPinResultSearchEntry`，并从 `execution/index.ts` 移除导出。
+
+---
+
+## 仍待收敛（未改，风险较低）
+
+| 领域 | 说明 |
+|------|------|
+| Plot 其余组件 | `ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart` 仍有内联 `ResizeObserver`，可逐步改用 `usePlotContainerSize` |
+| Plot 网格线绘制 | 各 XY 图内联 d3 grid 逻辑相似，但 `axisScale.ts` 注释明确单图可内联，暂不强制抽取 |
+| InfoView 类型导入 | 多处仍从 deprecated `views/InfoView/shared/types` 导入，实际 re-export 到 `@/shared/types/report`，可批量改 import 路径 |
+| `normalizeVariables` | `projectIOStore` 本地 helper 与 `variableService` 模式略重复，但边界清晰，暂保留 |
+
+---
+
+## 验证
+
+- `npx tsc --noEmit` — 通过
+- vitest：plotTime、pinResultSearch、dnd、graphModel、layoutTabModel — 22 项全部通过
+
+如需继续，建议下一批处理 **InfoView 类型 import 路径统一** 或 **剩余 Plot 组件迁移 `usePlotContainerSize`**。要我先做哪一块？

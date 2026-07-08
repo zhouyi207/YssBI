@@ -6,22 +6,16 @@ import { GraphService } from '@/services/graph/graphService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { logger } from '@/utils/appLogger';
 
-import type { DatabaseRecord } from './databaseStore';
+import type { DatabaseRecord } from '@/shared/types/dto/database';
+import { normalizeDatabases } from '@/shared/types/dto/database';
+import { domainGraphRecordToGraphData, graphDataRecordToDomainGraphs } from '@/shared/types/dto/graphModel';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
-import type { GraphData } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
 import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
-import { useGraphMetaStore } from './graphMetaStore';
-import { useEditStateStore } from './editStateStore';
-import { useColumnStatsStore } from './columnStatsStore';
-import { useColumnDistributionStore } from './columnDistributionStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { useDatasetOverviewStore } from './datasetOverviewStore';
-import { useHistoryStore } from '@/features/core/history';
-import { getViewport, useViewportStore, ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { markResourceLoaded, resourceKey, useDocumentStateStore, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+import { ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
+import { markResourceLoaded, resourceKey, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
@@ -32,6 +26,8 @@ import {
   applyVariableCatalogFromIndex,
   variableCatalogToResourceMetas,
 } from '@/features/core/variable/variableCatalog';
+import { resetClientProjectState } from './projectClientReset';
+import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -49,42 +45,6 @@ interface ProjectIOStore {
   exportSnapshot(): ProjectData;
 }
 
-/** 从 engine path 提取显示名称 */
-function nameFromEngine(record: Record<string, unknown>): string | undefined {
-  const engine = record?.engine as Record<string, unknown> | undefined;
-  if (!engine) return undefined;
-  const csv = engine.csv as { path?: string } | undefined;
-  const parquet = engine.parquet as { path?: string } | undefined;
-  const path = csv?.path ?? parquet?.path;
-  if (typeof path === 'string') {
-    const parts = path.replace(/\\/g, '/').split('/');
-    const file = parts[parts.length - 1] || '';
-    const stem = file.replace(/\.[^.]+$/, '');
-    return stem || file || undefined;
-  }
-  return undefined;
-}
-
-/** 规范化数据库记录：补充 name（从 engine path 推导），合并已有富元数据 */
-function normalizeDatabases(
-  dbs: Record<string, DatabaseRecord>
-): Record<string, DatabaseRecord> {
-  const existing = useDatabaseStore.getState().databases;
-  const result: Record<string, DatabaseRecord> = {};
-  for (const [id, db] of Object.entries(dbs)) {
-    const rec: Record<string, unknown> = typeof db === 'object' && db !== null ? { ...db } : { id };
-    if (!rec.name) {
-      rec.name = nameFromEngine(rec) ?? (existing[id] as Record<string, unknown>)?.name ?? id;
-    }
-    const prev = existing[id] as Record<string, unknown> | undefined;
-    if (prev?.columns && !rec.columns) rec.columns = prev.columns;
-    if (prev?.rowCount != null && rec.rowCount == null) rec.rowCount = prev.rowCount;
-    if (prev?.columnCount != null && rec.columnCount == null) rec.columnCount = prev.columnCount;
-    result[id] = rec as DatabaseRecord;
-  }
-  return result;
-}
-
 /** 将后端变量 DTO 规范化为前端 Variable */
 function normalizeVariables(
   vars: Record<string, Variable | Record<string, unknown>>
@@ -95,6 +55,14 @@ function normalizeVariables(
     result[id] = normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
   return result;
+}
+
+function isGraphBackendLoaded(graphId: string): boolean {
+  const resources = useResourceStore.getState().resources;
+  return (
+    resources[resourceKey({ id: graphId, kind: 'event' })]?.loaded === true ||
+    resources[resourceKey({ id: graphId, kind: 'function' })]?.loaded === true
+  );
 }
 
 function buildResourceIndex(params: {
@@ -111,7 +79,7 @@ function buildResourceIndex(params: {
       name: graph.name,
       uri: `yssbi://graph/${graph.type}/${graph.id}`,
       exists: true,
-      loaded: useGraphDataStore.getState().hasGraph(graph.id),
+      loaded: false,
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -214,75 +182,11 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
   }
 }
 
-function buildGraphSnapshot(): ProjectData['graphs'] {
-  const resourceStore = useResourceStore.getState();
-  const dataStore = useGraphDataStore.getState();
-
-  return Object.fromEntries(
-    resourceStore.graphOrder
-      .map((graphId) => {
-        const eventMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'event' })];
-        const functionMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'function' })];
-        const meta = eventMeta ?? functionMeta;
-        if (!meta || !meta.exists) return null;
-
-        const nodeIds = dataStore.getGraphNodeIds(graphId);
-        const nodes = nodeIds
-          .map((nodeId) => dataStore.getGraphNode(graphId, nodeId))
-          .filter((n): n is NonNullable<typeof n> => n != null);
-        const pins = nodeIds.flatMap((nodeId) =>
-          dataStore.getGraphNodePins(graphId, nodeId)
-            .map((pinId) => dataStore.getGraphPin(graphId, pinId))
-            .filter((p): p is NonNullable<typeof p> => p != null)
-        );
-        const connectionIds = new Set<string>();
-        for (const pin of pins) {
-          for (const connectionId of dataStore.getGraphPinConnections(graphId, pin.id)) {
-            connectionIds.add(connectionId);
-          }
-        }
-        const connections = Array.from(connectionIds)
-          .map((connectionId) => dataStore.getGraphConnection(graphId, connectionId))
-          .filter((c): c is NonNullable<typeof c> => c != null)
-          .map((connection) => ({ fromPin: connection.from, toPin: connection.to }));
-
-        return [
-          graphId,
-          {
-            id: graphId,
-            name: meta.name,
-            type: meta.kind === 'function' ? 'function' : 'event',
-            nodes,
-            pins,
-            connections: { connections },
-            canvas: getViewport(graphId),
-          },
-        ] as [string, GraphData];
-      })
-      .filter((entry): entry is [string, GraphData] => entry !== null),
-  ) as unknown as ProjectData['graphs'];
-}
-
-/**
- * Drop every per-project frontend cache: open graph tabs, viewports, history,
- * data-view caches. Called before hydrating a fresh project so the previous
- * project leaves no residue behind.
- *
- * Variables / databases / graphMeta / graphData are intentionally NOT cleared
- * here because the caller writes their replacement values immediately after.
- */
-function resetClientProjectState(): void {
-  useLayoutStore.getState().closeAllGraphTabs();
-  useViewportStore.getState().clear();
-  useHistoryStore.getState().clear();
-  useEditStateStore.getState().clear();
-  useColumnStatsStore.getState().clear();
-  useColumnDistributionStore.getState().clear();
-  useDatasetOverviewStore.getState().clear();
-  useWorksheetStore.getState().clear();
-  useResourceStore.getState().clear();
-  useDocumentStateStore.getState().clear();
-  useGraphMetaStore.getState().clear();
+/** 将后端/快照 databases 规范化并写入 store（合并已有富元数据） */
+function applyDatabasesFromRaw(raw: Record<string, unknown>): Record<string, DatabaseRecord> {
+  const normalized = normalizeDatabases(raw, useDatabaseStore.getState().databases);
+  useDatabaseStore.getState().setDatabases(normalized);
+  return normalized;
 }
 
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
@@ -315,12 +219,11 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         resetClientProjectState();
 
         const { databases } = await ProjectService.getDatabasesVariables();
-        const normalizedDatabases = normalizeDatabases(databases as Record<string, DatabaseRecord>);
+        const normalizedDatabases = applyDatabasesFromRaw(databases as Record<string, unknown>);
 
         const index = await ProjectService.getProjectIndex();
         const normalizedVariables = applyVariableCatalogFromIndex(index.variables);
         useVariableStore.getState().setVariables(normalizedVariables);
-        useDatabaseStore.getState().setDatabases(normalizedDatabases);
 
         const graphOrder = index.graphs.map((graph) => graph.id);
         const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
@@ -370,10 +273,9 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   loadProjectFromData: (project, path) => {
     resetClientProjectState();
     const normalizedVariables = normalizeVariables(project.variables);
-    const normalizedDatabases = normalizeDatabases(project.databases as unknown as Record<string, DatabaseRecord>);
+    const normalizedDatabases = applyDatabasesFromRaw(project.databases as Record<string, unknown>);
     useVariableStore.getState().setVariables(normalizedVariables);
-    useDatabaseStore.getState().setDatabases(normalizedDatabases);
-    useGraphDataStore.getState().hydrateGraphs(project.graphs);
+    useGraphDataStore.getState().hydrateGraphs(domainGraphRecordToGraphData(project.graphs));
     useResourceStore.getState().setSnapshot({
       resources: buildResourceIndex({
         graphs: Object.values(project.graphs).map((graph) => ({
@@ -393,7 +295,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
 
   loadGraph: async (graphId) => {
     const dataStore = useGraphDataStore.getState();
-    if (dataStore.hasGraph(graphId)) return true;
+    if (dataStore.hasGraph(graphId) && isGraphBackendLoaded(graphId)) return true;
 
     const existing = loadGraphInFlight.get(graphId);
     if (existing) return existing;
@@ -448,15 +350,13 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     return pending;
   },
 
-  exportSnapshot: () => {
-    return {
-      variables: useVariableStore.getState().variables,
-      databases: useDatabaseStore.getState().databases,
-      graphs: buildGraphSnapshot(),
-      metadata: {
-        exportTime: new Date().toISOString(),
-        appVersion: '1.0.0',
-      },
-    } as unknown as ProjectData;
-  },
+  exportSnapshot: (): ProjectData => ({
+    variables: useVariableStore.getState().variables,
+    databases: useDatabaseStore.getState().databases,
+    graphs: graphDataRecordToDomainGraphs(buildGraphSnapshotFromStores()),
+    metadata: {
+      exportTime: new Date().toISOString(),
+      appVersion: '1.0.0',
+    },
+  }),
 }));

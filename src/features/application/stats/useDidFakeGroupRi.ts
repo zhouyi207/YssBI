@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { PanelDidService } from '@/features/application/stats/statsActions';
-import type { DidPlaceboFakeGroupBlock, PanelDidResultData } from '@/views/InfoView/shared/types';
+import type { DidPlaceboFakeGroupBlock, PanelDidResultData } from '@/shared/types/report';
 
 export function useDidFakeGroupRi(
   fakeGroupEngine: PanelDidResultData['fake_group_engine'],

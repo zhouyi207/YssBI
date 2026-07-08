@@ -114,12 +114,10 @@ export function MulticollinearityBlock({ diag }: { diag: DiagnosticInfo }) {
         {diag.vif && diag.vif.length > 0
           ? (() => {
               const meanVif = meanFiniteVif(diag.vif);
-              const fmt = (v: number) =>
-                !Number.isFinite(v) ? 'Inf' : v >= 1e6 ? v.toExponential(2) : v.toFixed(4);
               return meanVif != null ? (
                 <StatCard
                   label="Mean VIF"
-                  value={fmt(meanVif)}
+                  value={formatNum(meanVif)}
                   sub={meanVif > 10 ? 'High multicollinearity' : meanVif > 5 ? 'Moderate' : 'Low'}
                 />
               ) : null;

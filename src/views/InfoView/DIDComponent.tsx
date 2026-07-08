@@ -13,6 +13,8 @@ import {
   HypothesisTestBlock,
   DidEventStudyChart,
   OmittedVariablesAlert,
+  formatNum,
+  formatNullableNum,
 } from './shared';
 import type { PanelDidResultData, OLSResultData } from './shared/types';
 
@@ -88,11 +90,11 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
         {didRow && (
           <p className="mt-2 text-muted-foreground">
             点估计（{didLabel}）:{' '}
-            <span className="font-mono tabular-nums text-foreground">{didRow.coef.toFixed(6)}</span>
+            <span className="font-mono tabular-nums text-foreground">{formatNum(didRow.coef, 6)}</span>
             {' · '}
             p ={' '}
             <span className="font-mono tabular-nums text-foreground">
-              {(didRow.p_value ?? 0).toFixed(4)}
+              {formatNullableNum(didRow.p_value)}
             </span>
           </p>
         )}
@@ -125,11 +127,11 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
           parallel_trends.p_value != null ? (
             <div className="space-y-2">
               <p className="tabular-nums">
-                Wald χ² = <span className="font-mono text-foreground">{parallel_trends.chi2.toFixed(4)}</span>
+                Wald χ² = <span className="font-mono text-foreground">{formatNum(parallel_trends.chi2)}</span>
                 {' · '}
                 df = <span className="font-mono text-foreground">{parallel_trends.df}</span>
                 {' · '}
-                p = <span className="font-mono text-foreground">{parallel_trends.p_value.toFixed(4)}</span>
+                p = <span className="font-mono text-foreground">{formatNum(parallel_trends.p_value)}</span>
               </p>
               {parallel_trends.reference_rel != null ? (
                 <p className="text-xs text-muted-foreground">
@@ -162,13 +164,13 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
             <div className="space-y-2">
               <p className="tabular-nums">
                 H = {placebo.horizon} 期伪窗口 · coef ={' '}
-                <span className="font-mono text-foreground">{placebo.coef.toFixed(6)}</span>
+                <span className="font-mono text-foreground">{formatNum(placebo.coef, 6)}</span>
                 {' · '}
-                se = <span className="font-mono text-foreground">{placebo.std_err.toFixed(6)}</span>
+                se = <span className="font-mono text-foreground">{formatNum(placebo.std_err, 6)}</span>
                 {' · '}
-                t = <span className="font-mono text-foreground">{placebo.t_value.toFixed(4)}</span>
+                t = <span className="font-mono text-foreground">{formatNum(placebo.t_value)}</span>
                 {' · '}
-                p = <span className="font-mono text-foreground">{placebo.p_value.toFixed(4)}</span>
+                p = <span className="font-mono text-foreground">{formatNum(placebo.p_value)}</span>
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">{placebo.method_note}</p>
             </div>
@@ -238,16 +240,16 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
                   </span>
                   {' · '}
                   主回归 coef_obs ={' '}
-                  <span className="font-mono text-foreground">{fakeGroup.display.observed_coef.toFixed(6)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.observed_coef, 6)}</span>
                 </p>
                 <p className="tabular-nums">
                   置换系数 mean ={' '}
-                  <span className="font-mono text-foreground">{fakeGroup.display.perm_coef_mean.toFixed(6)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.perm_coef_mean, 6)}</span>
                   {' · '}
-                  sd = <span className="font-mono text-foreground">{fakeGroup.display.perm_coef_std.toFixed(6)}</span>
+                  sd = <span className="font-mono text-foreground">{formatNum(fakeGroup.display.perm_coef_std, 6)}</span>
                   {' · '}
                   RI p（双侧）={' '}
-                  <span className="font-mono text-foreground">{fakeGroup.display.p_value_ri.toFixed(4)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.p_value_ri)}</span>
                 </p>
                 <p className="text-xs leading-relaxed text-muted-foreground">{fakeGroup.display.method_note}</p>
               </div>

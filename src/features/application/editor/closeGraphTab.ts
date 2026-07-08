@@ -2,7 +2,7 @@ import {
   getActiveLayoutTabAmongGroups,
   locateLayoutTab,
 } from '@/features/core/layout/layoutTabQueries';
-import type { LayoutTab } from '@/shared/types';
+import { isGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
@@ -14,10 +14,6 @@ import { syncVariablesGraphScopeAfterClose } from '@/features/core/editor/detail
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { clearResourceDocumentState, markResourceDirty } from '@/features/core/resource';
 
-function isGraphTab(tab: LayoutTab | null | undefined): tab is LayoutTab & { type: 'event' | 'function' } {
-  return tab?.type === 'event' || tab?.type === 'function';
-}
-
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
   const layoutStore = useLayoutStore.getState();
   const activeTab = getActiveLayoutTabAmongGroups(
@@ -27,7 +23,7 @@ async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<vo
     layoutStore.nodes,
   );
 
-  if (!isGraphTab(activeTab)) return;
+  if (!isGraphLayoutTab(activeTab)) return;
   if (useGraphDataStore.getState().hasGraph(activeTab.id)) return;
   await useProjectIOStore.getState().loadGraph(activeTab.id);
 }
@@ -47,7 +43,7 @@ export async function closeGraphTab(graphId: string, nodeId?: string, skipDirtyP
     if (shouldSave) {
       try {
         await GraphService.saveProjectGraph(graphId);
-        if (located.tab.type === 'event' || located.tab.type === 'function') {
+        if (isGraphLayoutTab(located.tab)) {
           markResourceDirty({ id: graphId, kind: located.tab.type }, false);
         } else {
           useLayoutStore.getState().setTabDirty(graphId, false);
@@ -66,7 +62,7 @@ export async function closeGraphTab(graphId: string, nodeId?: string, skipDirtyP
     focusDetailOnActiveGraph(located.nodeId);
   }
   await restoreActiveGraphAfterClose(located.nodeId);
-  if (located.tab.type === 'event' || located.tab.type === 'function') {
+  if (isGraphLayoutTab(located.tab)) {
     clearResourceDocumentState({ id: graphId, kind: located.tab.type });
   }
   releaseGraphCacheIfClosed(graphId);

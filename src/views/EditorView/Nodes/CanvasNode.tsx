@@ -1,6 +1,5 @@
 import React, { useCallback } from "react";
 import type { Pin as PinModel } from "@/shared/types/domain";
-import type { Node as NodeModel } from "@/shared/types/ui";
 import { useNodeView } from "@/features/core/dataStore";
 import { Node } from "./Node";
 
@@ -55,7 +54,7 @@ export const CanvasNode = React.memo(function CanvasNode(props: CanvasNodeProps)
   return (
     <Node
       id={id}
-      node={node as unknown as NodeModel}
+      node={node}
       selected={selected}
       activePinId={activePin?.id}
       activePin={activePin}

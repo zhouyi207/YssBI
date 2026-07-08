@@ -17,12 +17,17 @@ import {
   useDatabaseManagement,
   useNodeManagement,
 } from '@/features/application/dataManagement';
+import type { EditorSession } from './editorSessionTypes';
+import {
+  pickEditorSessionLayoutBindings,
+  pickEditorSessionNodeActions,
+} from './editorSessionTypes';
 
 /**
  * Builds the shared editor session once per Editor window.
  * Canvas pointer interaction is mounted separately via useEditorGroup({ withCanvasInteraction: true }).
  */
-export function useEditorSessionValue() {
+export function useEditorSessionValue(): EditorSession {
   const active = useActiveEditorGroup();
   const collections = useEditorCollections();
   const groups = useEditorGroups();
@@ -45,19 +50,20 @@ export function useEditorSessionValue() {
   const dataFrameMgmt = useDatabaseManagement();
   const nodeMgmt = useNodeManagement();
 
+  const layoutBindings = useMemo(
+    () => pickEditorSessionLayoutBindings(actions),
+    [actions],
+  );
+
+  const nodeActions = useMemo(
+    () => pickEditorSessionNodeActions(nodeMgmt),
+    [nodeMgmt],
+  );
+
   return useMemo(
-    () => ({
+    (): EditorSession => ({
       ...state,
-      setNodes: actions.setNodes,
-      setCanvas: actions.setCanvas,
-      setActiveGroupId: actions.setActiveGroupId,
-      setContextMenu: actions.setContextMenu,
-      setDetailFocus: actions.setDetailFocus,
-      clearDetailFocus: actions.clearDetailFocus,
-      setPendingConnection: actions.setPendingConnection,
-      activeGroupIdRef: actions.activeGroupIdRef,
-      activeTabIdRef: actions.activeTabIdRef,
-      viewportRef: actions.viewportRef,
+      ...layoutBindings,
       ...editorOps,
       ...tabMgmt,
       openWorksheet,
@@ -66,16 +72,11 @@ export function useEditorSessionValue() {
       ...graphMgmt,
       ...variableMgmt,
       ...dataFrameMgmt,
-      createNode: nodeMgmt.createNode,
-      createNodes: nodeMgmt.createNodes,
-      deleteNode: nodeMgmt.deleteNode,
-      deleteNodes: nodeMgmt.deleteNodes,
-      handleNodeCreated: nodeMgmt.handleNodeCreated,
-      handleNodeDeleted: nodeMgmt.handleNodeDeleted,
+      ...nodeActions,
     }),
     [
       state,
-      actions,
+      layoutBindings,
       editorOps,
       tabMgmt,
       openWorksheet,
@@ -84,9 +85,9 @@ export function useEditorSessionValue() {
       graphMgmt,
       variableMgmt,
       dataFrameMgmt,
-      nodeMgmt,
+      nodeActions,
     ],
   );
 }
 
-export type EditorSession = ReturnType<typeof useEditorSessionValue>;
+export type { EditorSession } from './editorSessionTypes';

@@ -22,6 +22,7 @@ import {
   type NodeCatalogItem,
   type TreeCategory,
 } from '@/features/domain/nodeCatalog';
+import type { NodeTemplateDragData } from '@/features/core/dnd';
 import {
   SidebarChevron,
   SidebarDraggableItem,
@@ -52,7 +53,7 @@ export interface NodeCatalogTreeViewProps {
   variant?: 'sidebar' | 'popover';
   selectedKey?: string | null;
   onLeafClick?: (item: NodeCatalogItem) => void;
-  getLeafDragData?: (item: NodeCatalogItem) => { type: string; template?: unknown } | null;
+  getLeafDragData?: (item: NodeCatalogItem) => NodeTemplateDragData | null;
   className?: string;
   scrollClassName?: string;
   autoFocusSearch?: boolean;
@@ -306,7 +307,7 @@ const CatalogLeafRow = React.memo(function CatalogLeafRow({
   variant: 'sidebar' | 'popover';
   selected: boolean;
   onLeafClick?: (item: NodeCatalogItem) => void;
-  dragData: { type: string; template?: unknown } | null;
+  dragData: NodeTemplateDragData | null;
 }) {
   if (!item?.nodeType) return null;
 

@@ -1,5 +1,5 @@
 import { NodeService } from '@/services';
-import type { GraphUndoPatch } from '@/services/graph/node/graphUndoPatch';
+import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 import type { CommandHandler } from '../types';
 
 export interface DeleteNodesArgs {

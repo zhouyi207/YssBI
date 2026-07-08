@@ -22,7 +22,7 @@ export interface PinResultSearchPinRef {
   pinId: string;
   nodeId: string;
   direction: PinResultSearchDirection;
-  pinType: string;
+  isExec: boolean;
   connectionIds: readonly string[];
 }
 
@@ -57,7 +57,7 @@ export function collectPinResultSearchEntries(
   const entries: PinResultSearchEntry[] = [];
 
   for (const pin of pins) {
-    if (!isInspectableDataPin(pin.pinType)) continue;
+    if (!isInspectableDataPin(pin.isExec)) continue;
 
     if (pin.direction === 'output') {
       const pinResult = pinResults.get(pin.pinId);
@@ -80,7 +80,7 @@ export function collectPinResultSearchEntries(
       graphId,
       pinId: pin.pinId,
       direction: 'input',
-      pinType: pin.pinType,
+      isExec: pin.isExec,
       connectionIds: pin.connectionIds,
       pinResults,
     });
@@ -102,21 +102,6 @@ export function collectPinResultSearchEntries(
     }
     return left.searchText.localeCompare(right.searchText);
   });
-}
-
-/** @deprecated Use collectPinResultSearchEntries */
-export function buildPinResultSearchEntries(
-  pinResults: Iterable<PinResultState>,
-  resolveLabels: (pinResult: PinResultState) => PinResultSearchLabels,
-): PinResultSearchEntry[] {
-  return Array.from(pinResults, (pinResult) =>
-    buildPinResultSearchEntry(
-      `output:${pinResult.pinId}`,
-      'output',
-      pinResult,
-      resolveLabels(pinResult),
-    ),
-  ).sort((left, right) => left.searchText.localeCompare(right.searchText));
 }
 
 export function filterPinResultSearchEntries(

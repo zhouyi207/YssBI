@@ -4,6 +4,7 @@ import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import { pinThemeTypeKey, isExecPin, pinTypeLabel, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
@@ -31,8 +32,6 @@ function toDisplayValue(v: unknown): unknown {
   return v;
 }
 
-const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int64", "Float64", "string"]);
-
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 
 export interface PinProps extends PinModel {
@@ -51,10 +50,15 @@ export interface PinProps extends PinModel {
   forceShowInput?: boolean;
 }
 
-const getPinTheme = (type: string, isConnected: boolean, baseColor: string, containerType?: string) => {
-  const isExec = type === "exec";
-  const isDataFrame = type === "dataframe";
-  const isStruct = type === "struct";
+const getPinTheme = (
+  pin: { type: string; dataType?: PinModel['dataType'] },
+  isConnected: boolean,
+  baseColor: string,
+  containerType?: string,
+) => {
+  const isExec = isExecPin(pin);
+  const isDataFrame = pin.dataType?.kind === 'DataFrame';
+  const isStruct = pin.dataType?.kind === 'Struct';
   return {
     isExec,
     isDataFrame,
@@ -88,6 +92,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     pinDragState = "normal",
     containerType,
     typeDisplay,
+    dataType,
     optional,
     defaultValue,
     userValue,
@@ -99,11 +104,15 @@ export const Pin: React.FC<PinProps> = (props) => {
   const { t } = useTranslation();
   const { theme: appTheme } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const baseColor = ui?.color ?? getPinTypeColor(type ?? "any", appTheme);
+  const pinSemantics = useMemo(
+    () => ({ type: type ?? 'object', typeDisplay, dataType }),
+    [type, typeDisplay, dataType],
+  );
+  const baseColor = ui?.color ?? getPinTypeColor(pinThemeTypeKey(pinSemantics), appTheme);
 
   const theme = useMemo(
-    () => getPinTheme(type, isConnected, baseColor, containerType),
-    [type, isConnected, baseColor, containerType]
+    () => getPinTheme(pinSemantics, isConnected, baseColor, containerType),
+    [pinSemantics, isConnected, baseColor, containerType],
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -129,13 +138,13 @@ export const Pin: React.FC<PinProps> = (props) => {
             graphId: subgraphId,
             pinId: id,
             direction,
-            pinType: type,
+            isExec: isExecPin(pinSemantics),
             connectionIds,
             pinResults,
             executionStatus,
           })
         : null,
-    [subgraphId, id, direction, type, connectionIds, pinResults, executionStatus],
+    [subgraphId, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
   );
 
   const showViewMenu = viewParams ? shouldShowPinViewMenuItem(viewParams) : false;
@@ -161,9 +170,11 @@ export const Pin: React.FC<PinProps> = (props) => {
   }, [viewParams, t]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
+  const scalarInputKey = scalarPinInputKey(dataType);
   const canReset =
     direction === "input" &&
-    PRIMITIVE_PIN_TYPES.has(type) &&
+    scalarInputKey != null &&
+    PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
     !containerType &&
     userValue != null &&
     userValue !== undefined;
@@ -177,12 +188,13 @@ export const Pin: React.FC<PinProps> = (props) => {
     []
   );
 
-  const shouldPulse = !optional && !isConnected && direction === "input" && type !== "exec";
+  const shouldPulse = !optional && !isConnected && direction === "input" && !isExecPin(pinSemantics);
 
   const isDropdownPin = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
   const showInput =
     (!isConnected || forceShowInput === true) &&
-    (PRIMITIVE_PIN_TYPES.has(type) || (type === "string" && isDropdownPin)) &&
+    scalarInputKey != null &&
+    (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) || (scalarInputKey === "string" && isDropdownPin)) &&
     !containerType &&
     (direction === "input" || forceShowInput === true) &&
     subgraphId &&
@@ -196,7 +208,7 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const pinTooltip = `${name} (${typeDisplay ?? type})`;
+  const pinTooltip = `${name} (${pinTypeLabel(pinSemantics)})`;
 
   return (
     <Tooltip>
@@ -405,7 +417,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           pinId={id}
           nodeId={nodeId}
           subgraphId={subgraphId}
-          pinType={type}
+          dataType={dataType}
           metaData={metaData}
           value={toDisplayValue(userValue ?? defaultValue)}
           onValueChange={(value) => onValueChange?.(id, value)}

@@ -2,22 +2,29 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { PinService } from '@/services';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { dataValueToBackend } from '@/shared/types/dto/dataValue';
-import { dataTypeFromPinType } from '@/shared/types/domain/dataType';
+import type { Pin } from '@/shared/types/domain/pin';
+import { isExecPin } from '@/shared/types/domain/pinSemantics';
+import { buildPinDataType } from '@/shared/utils/pinCompatibility';
 import type { CommandHandler } from '../types';
 
 export interface SetPinValueArgs {
   pinId: string;
   nodeId: string;
-  pinType: string;
   newValue: unknown;
 }
 
 export interface SetPinValueContext {
   pinId: string;
   nodeId: string;
-  pinType: string;
   oldValue: unknown;
   newValue: unknown;
+}
+
+function resolvePinDataType(graphId: string, pinId: string) {
+  const pin = useGraphDataStore.getState().getGraphPin(graphId, pinId);
+  if (!pin) throw new Error(`Pin ${pinId} not found`);
+  if (isExecPin(pin)) throw new Error(`Cannot set value on exec pin ${pinId}`);
+  return buildPinDataType(pin as Pin);
 }
 
 export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueContext> = {
@@ -26,7 +33,7 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueCont
     const pin = store.getGraphPin(graphId, args.pinId);
     const oldValue = pin?.userValue ?? null;
 
-    const dataType = dataTypeFromPinType(args.pinType);
+    const dataType = resolvePinDataType(graphId, args.pinId);
     const dv = dataValueFromRaw(args.newValue, dataType);
     const dto = dataValueToBackend(dv);
 
@@ -36,7 +43,6 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueCont
     return {
       pinId: args.pinId,
       nodeId: args.nodeId,
-      pinType: args.pinType,
       oldValue,
       newValue: args.newValue,
     };
@@ -47,7 +53,7 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueCont
       await PinService.clearPinUserValue(graphId, context.nodeId, context.pinId);
       useGraphDataStore.getState().updatePin(context.pinId, { userValue: undefined }, graphId);
     } else {
-      const dataType = dataTypeFromPinType(context.pinType);
+      const dataType = resolvePinDataType(graphId, context.pinId);
       const dv = dataValueFromRaw(context.oldValue, dataType);
       const dto = dataValueToBackend(dv);
       await PinService.updatePinUserValue(graphId, context.nodeId, context.pinId, dto);
@@ -56,7 +62,7 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueCont
   },
 
   async redo(graphId, context) {
-    const dataType = dataTypeFromPinType(context.pinType);
+    const dataType = resolvePinDataType(graphId, context.pinId);
     const dv = dataValueFromRaw(context.newValue, dataType);
     const dto = dataValueToBackend(dv);
     await PinService.updatePinUserValue(graphId, context.nodeId, context.pinId, dto);

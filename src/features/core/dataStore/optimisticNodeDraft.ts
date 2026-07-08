@@ -20,17 +20,13 @@ import type {
   PinDataTypeDefinition,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import {
   resolveEffectiveDefinition,
   type ResolveEffectiveOptions,
 } from '@/features/domain/nodeDefinition';
 
-export interface CreateNodeDraftParams extends ResolveEffectiveOptions {
-  variableId?: string;
-  variableName?: string;
-  variableType?: string;
-  dataframeId?: string;
-}
+export type CreateNodeDraftParams = NodeSpawnParams & ResolveEffectiveOptions;
 
 export interface NodeDraft {
   node: NodeData;

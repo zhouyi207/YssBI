@@ -3,6 +3,7 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { buildNodeDraft } from '@/features/core/dataStore/optimisticNodeDraft';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import { trackPending } from '@/features/core/sync/utils/echoSuppressor';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import type { CommandHandler } from '../types';
 
 /** Echo 抑制域：create 期间后端回传的 NodeCreated 事件 key（按 nodeId） */
@@ -12,13 +13,7 @@ export interface CreateNodeArgs {
   nodeType: string;
   x: number;
   y: number;
-  params?: {
-    variableId?: string;
-    variableName?: string;
-    variableType?: string;
-    subGraphId?: string;
-    dataframeId?: string;
-  };
+  params?: NodeSpawnParams;
 }
 
 export interface CreateNodeContext {

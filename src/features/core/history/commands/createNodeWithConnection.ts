@@ -6,6 +6,7 @@ import { findAutoConnectPinIndex } from '@/shared/utils/pinCompatibility';
 import { trackPending } from '@/features/core/sync/utils/echoSuppressor';
 import { waitForPinOffset } from '@/features/core/canvas/pinOffsetWaiter';
 import type { Pin } from '@/shared/types/domain/pin';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import type { CommandHandler } from '../types';
 import { NODE_CREATE_ECHO_DOMAIN } from './createNode';
 import { CONNECTION_ECHO_DOMAIN } from './connectPins';
@@ -19,13 +20,7 @@ export interface CreateNodeWithConnectionArgs {
   nodeType: string;
   x: number;
   y: number;
-  params?: {
-    variableId?: string;
-    variableName?: string;
-    variableType?: string;
-    subGraphId?: string;
-    dataframeId?: string;
-  };
+  params?: NodeSpawnParams;
   /** 拖拽的源 pin（完整对象，用于计算自动连线的目标 pin） */
   sourcePin: Pin;
 }

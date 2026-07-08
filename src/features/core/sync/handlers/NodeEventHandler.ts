@@ -4,22 +4,45 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, RuntimeSourcesInvalidatedPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { resolveNodeViewMeta } from '@/features/core/dataStore/serialization';
 import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
 import { isPending } from '../utils/echoSuppressor';
 import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
+import { flattenInstanceParams } from '@/shared/types/dto/nodeInstanceParams';
+import { runtimePinRefsToIds } from '@/shared/types/dto/graphModel';
 import { dataTypeFromBackend } from '@/shared/types/dto/dataType';
 
-function resolveNodeTitle(dto: NodeInstanceDTO): string {
-    const raw = dto.title ?? '';
-    const nodeType = dto.nodeType ?? '';
-    if (raw && raw !== nodeType) return raw;
-    const def = useNodeRegistryStore.getState().getDefinition(nodeType);
-    return def?.name ?? raw ?? nodeType;
+function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): NodeData {
+    const meta = resolveNodeViewMeta({
+        nodeType: d.nodeType,
+        title: d.title,
+        category: d.category,
+        uiStyle: d.uiStyle,
+        description: d.description,
+    });
+    const params = flattenInstanceParams(d);
+    return {
+        id: nodeId,
+        graphId,
+        nodeType: meta.nodeType,
+        category: meta.category,
+        title: meta.title,
+        inputs: runtimePinRefsToIds(d.inputs),
+        outputs: runtimePinRefsToIds(d.outputs),
+        uiStyle: meta.uiStyle,
+        description: meta.description,
+        position: d.position ?? { x: 0, y: 0 },
+        paramsKind: params.paramsKind,
+        variableId: params.variableId,
+        variableName: params.variableName,
+        variableType: params.variableType,
+        subGraphId: params.subGraphId,
+        dataframeId: params.dataframeId,
+    };
 }
 
 export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
@@ -40,27 +63,6 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
         markGraphTabDirty(payload.graphId);
         callbacks?.onNodeCreated?.(payload.graphId, payload.nodeId, payload.data);
     }
-}
-
-function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): NodeData {
-    return {
-        id: nodeId,
-        graphId,
-        nodeType: d.nodeType,
-        category: d.category ?? [],
-        title: resolveNodeTitle(d),
-        inputs: d.inputs ?? [],
-        outputs: d.outputs ?? [],
-        uiStyle: d.uiStyle ?? 'default',
-        description: d.description,
-        position: d.position ?? { x: 0, y: 0 },
-        paramsKind: d.paramsKind ?? 'none',
-        variableId: d.variableId,
-        variableName: d.variableName,
-        variableType: d.variableType,
-        subGraphId: d.subGraphId,
-        dataframeId: d.dataframeId,
-    };
 }
 
 export class NodesBatchCreatedHandler extends BaseEventHandler<NodesBatchCreatedPayload> {

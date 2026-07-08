@@ -1,8 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
+import {
+  attachHoverTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  tooltipTwoLine,
+} from '@/shared/plot/d3Tooltip';
 import { cn } from '@/lib/utils';
-import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
+import { COMPACT_PLOT_MARGIN, DEFAULT_PLOT_MARGIN, plotContainerClass, plotTooltipClass } from './plotShellStyles';
 
 export interface HistogramBin {
   label: string;
@@ -23,9 +30,6 @@ export interface HistogramProps {
   embedded?: boolean;
 }
 
-const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-const COMPACT_MARGIN = { top: 4, right: 4, bottom: 4, left: 4 };
-
 const Histogram: React.FC<HistogramProps> = ({
   data,
   xLabel,
@@ -36,26 +40,14 @@ const Histogram: React.FC<HistogramProps> = ({
   compact = false,
   embedded = false,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
   const plotColor = color ?? seriesColors.primary;
 
-  const margin = marginProp ?? (compact ? COMPACT_MARGIN : DEFAULT_MARGIN);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
+  const margin = marginProp ?? (compact ? COMPACT_PLOT_MARGIN : DEFAULT_PLOT_MARGIN);
+  const { containerRef, size } = usePlotContainerSize();
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -94,9 +86,9 @@ const Histogram: React.FC<HistogramProps> = ({
         .attr('stroke', chartTheme.grid).attr('stroke-dasharray', '2,3');
     }
 
-    const tooltip = select(tooltipRef.current);
+    const tooltip = new PlotTooltipController(tooltipRef.current, container);
 
-    g.selectAll('rect.bar')
+    const bars = g.selectAll('rect.bar')
       .data(data)
       .join('rect')
       .attr('class', 'bar')
@@ -112,23 +104,12 @@ const Histogram: React.FC<HistogramProps> = ({
       .attr('rx', compact ? 1 : 0);
 
     if (compact) {
-      g.selectAll('rect.bar')
-        .on('mouseenter', function (_event, d: any) {
-          select(this).attr('fill-opacity', 1);
-          tooltip
-            .style('opacity', '1')
-            .html(`<div style="font-size:10px;color:${chartTheme.tooltipFg}">${d.label}</div><div style="font-size:11px;font-weight:600;color:${plotColor}">${d.count}</div>`);
-        })
-        .on('mousemove', function (event) {
-          const rect = container!.getBoundingClientRect();
-          tooltip
-            .style('left', `${event.clientX - rect.left + 8}px`)
-            .style('top', `${event.clientY - rect.top - 36}px`);
-        })
-        .on('mouseleave', function () {
-          select(this).attr('fill-opacity', 0.75);
-          tooltip.style('opacity', '0');
-        });
+      attachHoverTooltip(bars as D3Onable<SVGRectElement, HistogramBin>, {
+        tooltip,
+        getHtml: (d) => tooltipTwoLine(chartTheme, d.label, String(d.count), plotColor),
+        onEnter: (el) => select(el).attr('fill-opacity', 1),
+        onLeave: (el) => select(el).attr('fill-opacity', 0.75),
+      });
     }
 
     if (!compact) {

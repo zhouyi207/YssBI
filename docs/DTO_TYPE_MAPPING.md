@@ -198,6 +198,9 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | Store → DTO | `connectionDataToItem` (graphConverters) | ConnectionData → ConnectionItemDTO |
 | 项目加载 | `loadProject` / `refreshResourceIndex` | 后端 ProjectIndex + graph 文档直接写入 Store |
 | Pin 连接状态派生 | `derivePinConnectionView` (pinLinks) | 从 `pinConnections[pinId]` 派生 `connected` / `linkCount` / `connectionIds` |
+| Spawn → IPC params | `spawnParamsToInstanceParams` (nodeInstanceParams.ts) | 创建节点打 tag |
+| NodeCreated → Store | `flattenInstanceParams` (NodeEventHandler) | flatten DTO 写入 NodeData |
+| Undo apply | `NodeService.applyGraphPatch` | GraphUndoPatch 透传 |
 
 ---
 
@@ -207,3 +210,159 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 2. **Connection 命名**：JSON 统一使用 camelCase `fromPin`/`toPin`；Store 的 ConnectionData 使用 `from`/`to` 并派生 `id`。
 3. **Pin direction**：后端序列化为 `"input"`/`"output"`，与前端 PinDirection 一致。
 4. **Node 命名**：Domain/Store 使用 snake_case（node_type, ui_style），DTO 使用 camelCase（nodeType, uiStyle）；转换时需注意字段映射。
+5. **节点 params 与 Layout params**：`NodeInstanceParams`（tagged union）与 `EditorGroupNodeParams`（布局选中态）是两套类型，详见 [DESIGN_RULE.md §3.8](./DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)。
+
+---
+
+## 十二、NodeInstanceParams（节点实例参数）
+
+Rust：`graph/node/node_instance.rs` — `#[serde(tag = "paramsKind")]`。
+
+前端单点：`src/shared/types/dto/nodeInstanceParams.ts`。
+
+### 12.1 变体对照
+
+| paramsKind | Rust 变体 | JSON 字段（camelCase） | 典型节点 |
+| --- | --- | --- | --- |
+| `none` | `None` | `{ paramsKind: "none" }` | 普通运算 / 控制流节点 |
+| `variable` | `Variable { variable_id, variable_name?, variable_type? }` | `variableId`, `variableName?`, `variableType?` | Get/Set Variable |
+| `subGraph` | `SubGraph { sub_graph_id }` | `subGraphId` | Call Function |
+| `dataFrame` | `DataFrame { dataframe_id }` | `dataframeId` | Get DataFrame |
+
+### 12.2 序列化形态差异
+
+| 载体 | 序列化 | 前端类型 |
+| --- | --- | --- |
+| `NodeInstanceDTO` | `#[serde(flatten)]` 展开到节点顶层 | `NodeInstanceCoreDTO & NodeInstanceParamsDTO` |
+| `NodeSubgraphDTO`（undo） | 嵌套在 `instanceParams` | `instanceParams?: NodeInstanceParamsDTO` |
+| `batch_create_nodes` 请求项 | `params: NodeInstanceParamsDTO \| null` | `BatchCreateNodeIpcItem` |
+
+### 12.3 创建路径扁平参数 → tagged union
+
+创建命令使用扁平 `NodeSpawnParams`（`variableId` / `subGraphId` / `dataframeId` 等），经 `spawnParamsToInstanceParams` 打 tag 后 invoke 后端。
+
+事件回传 `NodeInstanceDTO` 经 `flattenInstanceParams` 写入 `NodeData` 扁平字段。
+
+**禁止**在 `createNode.ts`、`useClipboardStore` 等 command 层重复 inline 定义 params 形状；统一 `import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams'`。
+
+---
+
+## 十三、GraphUndoPatch（结构性 Undo）
+
+Rust：`schema/history.rs` — `GraphUndoPatch`, `NodeSubgraphDTO`。
+
+前端：`src/shared/types/dto/graphUndoPatch.ts`（`services/graph/node/graphUndoPatch.ts` 仅 re-export）。
+
+### 13.1 结构
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `nodes` | `NodeSubgraphDTO[]` | 被删 / 断连涉及的主节点子图快照 |
+| `neighborNodes` | `NodeSubgraphDTO[]`（可选） | 动态邻居在变更时刻的 pin 冻结 |
+| `connections` | `ConnectionRebuildDTO[]` | `{ fromPin, toPin }` 连线重建列表 |
+
+### 13.2 NodeSubgraphDTO
+
+| 字段 | 后端 | 前端 | 说明 |
+| --- | --- | --- | --- |
+| id | `NodeId` | `string` | 节点 ID（undo 时保留原 ID） |
+| nodeType | `String` | `string` | 节点类型名 |
+| position | `NodePosition` | `NodePosition` | `{ x, y }` |
+| instanceParams | `NodeInstanceParams` | `NodeInstanceParamsDTO` | **嵌套** tagged union |
+| typeVarMap | `HashMap<TypeVarId, TypeVarDefinition>` | `Record<string, TypeVarDefinitionDTO>` | 类型变量绑定 |
+| pins | `Vec<PinInstance>` | `SubgraphPinInstanceDTO[]` | 完整 pin 快照（含 id） |
+
+### 13.3 SubgraphPinInstanceDTO（Pin 磁盘形态）
+
+与运行时 `PinInstanceDTO`（画布事件用）不同，undo 使用磁盘序列化形态：
+
+| 字段 | 说明 |
+| --- | --- |
+| `definition?` | 完整 `PinDefinitionDTO`（动态 / 需持久化全定义的 pin） |
+| `pinContract?` | 精简契约 `{ name, direction, kind, role, optional? }`（固定 pin） |
+| `order?` | Pin 排序 |
+| `typeVarId?` | 关联类型变量 |
+| `userValue?` | 用户输入值 |
+
+二者**二选一**，由 Rust `PinInstance` 的 `should_persist_full_definition()` 决定。
+
+### 13.4 数据流
+
+```
+delete / disconnect / paste redo
+  → 后端 capture_subgraph / capture_disconnect_undo_patch
+  → GraphUndoPatch JSON
+  → 前端 history context 原样保存
+  → undo: NodeService.applyGraphPatch(graphId, patch) 透传
+  → 后端 apply_graph_patch 恢复节点 + 邻居 + 连线
+```
+
+空 patch 使用常量 `EMPTY_GRAPH_UNDO_PATCH`，避免各处手写 `{ nodes: [], ... }` 不一致。
+
+### 13.5 扩展约定
+
+- 新增 `NodeInstanceParams` 变体：同步 §十二，并确认 undo 捕获路径 `instance_params.clone()` 自动携带新字段。
+- 变更 `PinInstance` 磁盘序列化：同步 `SubgraphPinInstanceDTO` 与 `PinDefinitionDTO` / `PinContractDTO`。
+- 前端**不得**在 apply 前裁剪 patch 字段；若需变换，应在 Rust `apply_graph_patch` 单点处理。
+
+---
+
+## 十四、转换函数补充（节点 params / undo）
+
+| 场景 | 函数/位置 | 说明 |
+| --- | --- | --- |
+| 创建 → IPC | `spawnParamsToInstanceParams` | `NodeSpawnParams` → `NodeInstanceParamsDTO \| null` |
+| 批量创建 | `toBatchCreateNodeIpcItems` | `batchCreateNode.ts` |
+| 事件 → Store | `flattenInstanceParams` | `NodeEventHandler.dtoToNodeData` |
+| Undo 空快照 | `EMPTY_GRAPH_UNDO_PATCH` | `graphUndoPatch.ts` |
+| Undo 空快照 | `EMPTY_GRAPH_UNDO_PATCH` | `graphUndoPatch.ts` |
+| Apply undo | `NodeService.applyGraphPatch` | patch 透传，无前端重组 |
+
+---
+
+## 十五、InfoView 统计数值（展示层 DTO 防御）
+
+与 §十二/十三 的 IPC 边界不同，报告数值在展示层须二次防御。单点模块：`src/views/InfoView/shared/formatStat.ts`。
+
+| 函数 | 用途 |
+| --- | --- |
+| `coerceFiniteNumber` | 拒绝对象/数组，窄化为有限 number |
+| `formatNum` | 通用数值字符串（含 `Inf` / `—`） |
+| `formatNullableNum` | 可空字段 + 自定义 fallback |
+| `formatPercent` | 0–1 比例 → 百分比字符串 |
+
+约定详见 [DESIGN_RULE.md §2.9](./DESIGN_RULE.md#29-infoview-统计数值展示)。
+
+---
+
+## 十六、Info 报告 Payload（IPC 边界）
+
+与 §十二/十三 的图节点 DTO 不同，报告 JSON 来自 `get_value` / `publish_report`，按 `ReportKind` 在边界窄化。
+
+| 层级 | 模块 | 说明 |
+| --- | --- | --- |
+| 入口分发 | `parseReportPayload(report, raw)` | 覆盖全部 `ReportPayloadKind`；`null` = 无效 |
+| 回归族 | `parseRegressionResultData` | OLS / WLS / GLS / Logit / Probit 等共用 |
+| 面板 / VAR / VEC / DF-ADF | `parsePanel` / `parseVar` / `parseVec` / `parseDfadf` | 按模型单文件维护 |
+| 共享字段 | `parseCommon` | 系数、`serialTests`、`correlogram` |
+| 类型真源 | `shared/types/report/*.ts` | `InfoView/shared/types.ts` 仅 re-export |
+
+**扩展**：新增 `ReportKind` 时同步 Rust struct、`parseReportPayload` 分支、`ReportView` 渲染分支与 `report.test.ts`。展示层数值仍须 [§2.9](./DESIGN_RULE.md#29-infoview-统计数值展示) / §十五 二次防御。
+
+约定详见 [DESIGN_RULE.md §2.13](./DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)。
+
+---
+
+## 十七、Graph store hydrate
+
+| 层级 | 模块 | 说明 |
+| --- | --- | --- |
+| 类型契约 | `shared/types/store/graph.ts` | `GraphData` / `GraphDataLike` / `RuntimeNodeInput` |
+| normalize 单点 | `normalizeGraphDataLike` | 所有入站图数据规范化 |
+| Pin 引用窄化 | `runtimePinRefToId` / `runtimePinRefsToIds` | `RuntimeNodeInput.inputs/outputs` |
+| 连接兼容 | `normalizeGraphConnections` | DTO / domain / 历史快照多形态 |
+| Store 写入 | `graphDataStore.buildGraphBucket` | 实体桶索引 |
+| 同步入站 | `graphUpdatedPayloadToGraphDataLike` | `GraphEventHandler` |
+| 测试夹具 | `makeTestGraph()` | hydrate-safe `GraphDataLike` |
+
+约定详见 [DESIGN_RULE.md §2.14](./DESIGN_RULE.md#214-graph-store-hydrate)、[adr/graph-store-hydrate.md](./adr/graph-store-hydrate.md)。

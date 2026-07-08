@@ -1,4 +1,4 @@
-import { Node } from '@/shared/types/ui';
+import type { UINode } from '@/shared/types/ui';
 
 /**
  * Node Style Hook
@@ -11,7 +11,7 @@ import { Node } from '@/shared/types/ui';
  * - Math Node 需要显示中心符号
  * - 需要根据 schema 获取样式配置
  */
-export function useNodeStyle(node: Node) {
+export function useNodeStyle(node: UINode) {
   return {
     centerSymbol: node.centerSymbol,
     uiStyle: node.uiStyle,

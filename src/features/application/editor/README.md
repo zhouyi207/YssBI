@@ -7,7 +7,9 @@ Editor UI orchestration lives under `features/application/editor/`. Core editor 
 ```
 features/application/editor/
 ├── EditorSessionContext.tsx  # Single EditorSessionProvider per Editor window
-├── useEditorSessionValue.ts  # Builds shared session (state + commands, no pointer loop)
+├── editorSessionTypes.ts     # 显式 EditorSession / EditorGroupSession 切片契约
+├── useEditorSessionSlices.ts # useEditorSessionResources / DetailActions 等窄接口
+├── useEditorSessionValue.ts  # 组装 session（无 pointer loop）
 ├── useEditorGroup.ts         # Group-scoped wrapper; optional canvas pointer loop
 ├── useEditorOperations.ts    # Clipboard, history, node ops
 ├── useTabManagement.ts       # Tab open/close/switch
@@ -57,10 +59,14 @@ const editor = useEditorSession();
 |------|------|----------|
 | `EditorSessionProvider` | 全窗口单例 session | `EditorWindow` 根节点 |
 | `useEditorSession()` | 读共享 session（命令、tab、资源） | Provider 内任意 hook/组件 |
+| `useEditorSessionResources()` | 仅 events/functions/variables/dataframes | Detail、侧栏资源列表 |
+| `useEditorGroup()` | group 工作区 + 可选 canvas 交互 + 完整 session | Workspace / Canvas / Menubar |
 | `useEditorGroup()` | 组级 scope + 可选 pointer 包装 | Sidebar、Menubar、Overlays 等 |
 | `useEditorGroup({ withCanvasInteraction: true })` | 启用 canvas pointer loop | **仅** `Canvas.tsx` |
 
-> `useEditor()` 已删除。Provider 外不应再构建独立 editor session；测试需包裹 `EditorSessionProvider` 或直接使用 core/application 下层 hook。
+> `useEditor()` 已删除。Provider 外不应再构建独立 editor session。新 hook **禁止** `...session` 透传；使用 `editorSessionTypes` 中的 `PickEditorSession` / 切片 hook / `composeEditorGroupSession`。
+
+设计约定详见 [DESIGN_RULE.md §2.12](../../../docs/DESIGN_RULE.md#212-editorsession-显式契约)。
 
 ## Related modules
 

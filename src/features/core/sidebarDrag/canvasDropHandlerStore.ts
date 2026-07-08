@@ -3,10 +3,11 @@
  * Workspace calls this when a sidebar node template is dropped on the canvas.
  */
 import { createStore } from "zustand/vanilla";
+import type { NodeTemplateDragState } from "@/features/core/dnd";
 
 type DropHandler = (
-  dragState: { type: string; template: any; x: number; y: number },
-  event: { altKey: boolean; ctrlKey: boolean }
+  dragState: NodeTemplateDragState,
+  event: { altKey: boolean; ctrlKey: boolean },
 ) => void | Promise<void>;
 
 interface CanvasDropHandlerState {

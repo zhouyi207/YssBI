@@ -2,6 +2,7 @@ import { useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { splitComponentForTab } from "@/features/core/layout/layoutTabModel";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
@@ -97,7 +98,7 @@ export function useMenubar() {
     if (activeEditorGroupId) {
       const nodes = useLayoutStore.getState().nodes;
       const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
-      splitNode(activeEditorGroupId, "row", activeTab?.component || "GraphEditor");
+      splitNode(activeEditorGroupId, "row", splitComponentForTab(activeTab));
     }
   }, [activeEditorGroupId, splitNode]);
 
@@ -105,7 +106,7 @@ export function useMenubar() {
     if (activeEditorGroupId) {
       const nodes = useLayoutStore.getState().nodes;
       const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
-      splitNode(activeEditorGroupId, "col", activeTab?.component || "GraphEditor");
+      splitNode(activeEditorGroupId, "col", splitComponentForTab(activeTab));
     }
   }, [activeEditorGroupId, splitNode]);
 

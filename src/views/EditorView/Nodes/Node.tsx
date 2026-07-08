@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Pin as PinModel } from "@/shared/types/domain";
-import { Node as NodeModel } from "@/shared/types/ui";
+import type { UINode } from "@/shared/types/ui";
 import { NodeContainer } from "./NodeContainer";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 import { MathNodeLayout } from "./MathNodeLayout";
@@ -8,7 +8,7 @@ import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 export interface NodeProps {
   id: string;
-  node: NodeModel;
+  node: UINode;
   selected?: boolean;
   activePinId?: string | null;
   activePin?: PinModel | null;

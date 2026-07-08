@@ -9,5 +9,17 @@ export {
   resolveEditorGroupId,
   resolveEditorTargetGroupId,
   isEditorGroupNode,
+  updateEditorGroupSelectedNodeIds,
 } from './layoutTabQueries';
+export {
+  buildGraphLayoutTab,
+  buildWorksheetLayoutTab,
+  isGraphLayoutTab,
+  isWorksheetLayoutTab,
+  normalizeLayoutTab,
+  normalizeLayoutTabs,
+  readEditorGroupSnapshot,
+  splitComponentForTab,
+} from './layoutTabModel';
+export type { LayoutTabInput } from './layoutTabModel';
 export type { LocatedLayoutTab, LayoutGroupContext } from './layoutTabQueries';

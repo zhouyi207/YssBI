@@ -12,6 +12,15 @@ import {
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 
+import type { Graph } from '@/shared/types/domain';
+
+type OpenGraphFn = (
+  id: string,
+  name: string,
+  type: 'event' | 'function',
+  initialData?: Graph,
+) => void | Promise<void>;
+
 /**
  * Graph Management Hook
  *
@@ -21,7 +30,7 @@ import { logger } from '@/utils/appLogger';
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
 export function useGraphManagement(
-  openGraph: (id: string, name: string, type: any, data?: any) => void,
+  openGraph: OpenGraphFn,
 ) {
   const switchSidebarTab = useSidebarTab();
 
@@ -30,7 +39,7 @@ export function useGraphManagement(
     if (!loaded) return;
     const graph = getGraphById(id);
     if (!graph) return;
-    openGraph(id, graph.name, kind, graph);
+    await openGraph(id, graph.name, kind);
   }, [openGraph]);
 
   /** 创建后是否自动打开（WatermarkView/Menubar 为 true，Sidebar 为 false） */

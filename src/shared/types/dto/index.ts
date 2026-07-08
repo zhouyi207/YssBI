@@ -5,7 +5,9 @@
  * 用于前后端数据交换
  */
 
+export * from './database';
 export * from './graph';
+export * from './graphModel';
 export * from './api';
 export * from './converters';
 export * from './dataType';

@@ -1,6 +1,15 @@
-import type { DataType } from "@/shared/types/domain";
-import { DRAG_TYPES } from "@/features/core/dnd";
-import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
+import {
+  DRAG_TYPES,
+  type GraphResourceDragData,
+  type GraphResourceDragPayload,
+  type NodeTemplateDragData,
+  type SidebarDragPayload,
+} from "@/features/core/dnd";
+import {
+  dataFrameNodeSpawnTemplate,
+  functionCallNodeSpawnTemplate,
+  variableNodeSpawnTemplate,
+} from "@/features/core/dnd/nodeSpawnTemplate";
 
 /**
  * Build drag data for sidebar items (variables, functions, events, data).
@@ -9,54 +18,34 @@ export function buildSidebarDragData(
   id: string,
   name: string,
   type: "variable" | "function" | "event" | "data",
-  extra?: { dataType?: DataType | string },
-) {
-  void extra;
-  const sidebarResource = type === "event" || type === "function"
-    ? { id, name, type }
-    : undefined;
+): SidebarDragPayload | null {
+  const sidebarResource: GraphResourceDragData | undefined =
+    type === "event" || type === "function" ? { id, name, type } : undefined;
 
   if (type === "variable") {
     return {
       type: DRAG_TYPES.NODE_TEMPLATE,
-      template: {
-        title: name,
-        nodeType: "Variables:Get Variable",
-        category: "Variable",
-        variableId: id,
-        variableName: name,
-      },
-    };
+      template: variableNodeSpawnTemplate(id, name),
+    } satisfies NodeTemplateDragData;
   }
   if (type === "function") {
     return {
       type: DRAG_TYPES.NODE_TEMPLATE,
       sidebarResource,
-      template: {
-        title: name,
-        nodeType: CALL_FUNCTION_NODE_TYPE,
-        category: "Functions",
-        subGraphId: id,
-      },
-    };
+      template: functionCallNodeSpawnTemplate(id, name),
+    } satisfies NodeTemplateDragData;
   }
   if (type === "event") {
     return {
       type: DRAG_TYPES.GRAPH_RESOURCE,
-      sidebarResource,
-    };
+      sidebarResource: sidebarResource!,
+    } satisfies GraphResourceDragPayload;
   }
   if (type === "data") {
     return {
       type: DRAG_TYPES.NODE_TEMPLATE,
-      template: {
-        title: name,
-        nodeType: "Data:Get DataFrame",
-        category: "Data",
-        variableId: id,
-        variableName: name,
-      },
-    };
+      template: dataFrameNodeSpawnTemplate(id, name),
+    } satisfies NodeTemplateDragData;
   }
   return null;
 }

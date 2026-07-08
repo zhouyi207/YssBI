@@ -1,4 +1,5 @@
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
+import { getSidebarDragOverlayLabel } from "@/features/core/dnd";
 
 /**
  * Overlay content for sidebar item drag (node-template).
@@ -11,7 +12,7 @@ export function SidebarDragOverlay() {
     <div className="flex cursor-grabbing items-center gap-2 rounded-md border border-primary/60 bg-card/95 px-3 py-1.5 shadow-xl backdrop-blur-sm">
       <div className="h-2 w-2 rounded-full bg-primary" />
       <span className="text-xs font-bold text-foreground">
-        {activeDrag.template?.title || activeDrag.template?.nodeType}
+        {getSidebarDragOverlayLabel(activeDrag)}
       </span>
     </div>
   );

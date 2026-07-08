@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
 import type { FunctionSignaturePatch } from "@/shared/types";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
+import { markResourceLoaded, resourceKey, useResourceStore } from "@/features/core/resource";
 import type { BackendProjectResourceMeta } from "@/features/core/resource";
 import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
@@ -118,6 +119,12 @@ export class GraphService {
 
     static async unloadProjectGraph(graphId: string): Promise<void> {
         await invoke("unload_project_graph", { graphId });
+        const resources = useResourceStore.getState().resources;
+        if (resources[resourceKey({ id: graphId, kind: 'event' })]) {
+            markResourceLoaded({ id: graphId, kind: 'event' }, false);
+        } else if (resources[resourceKey({ id: graphId, kind: 'function' })]) {
+            markResourceLoaded({ id: graphId, kind: 'function' }, false);
+        }
     }
 
     static async saveProjectGraph(graphId: string): Promise<void> {
