@@ -14,8 +14,8 @@ import { ContextMenu } from "@/shared/ui/contextMenu";
 import type { ContextMenuPosition } from "@/shared/ui/contextMenu";
 import {
   editorTabBarActionsClass,
-  editorTabBarEmptyStripClass,
   editorTabBarShellClass,
+  editorTabBarStripClass,
   editorTabCloseButtonClass,
   editorTabItemVariants,
   editorTabReorderGapClass,
@@ -38,15 +38,15 @@ import { resourceKey, useDocumentStateStore, useResourceStore } from "@/features
 import { isUntitledGraphPath } from "@/shared/types/domain/graphResourcePath";
 
 interface TabBarProps {
-    layoutNodeId: string;
-    tabs: LayoutTab[];
-    activeTabId?: string;
+  layoutNodeId: string;
+  tabs: LayoutTab[];
+  activeTabId?: string;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeTabId }) => {
   const { t } = useTranslation();
   const switchSidebarTab = useSidebarTab();
-  const { isAltPressed, isDragging } = useLayoutStore(useShallow(s => ({
+  const { isAltPressed, isDragging } = useLayoutStore(useShallow((s) => ({
     isAltPressed: s.isAltPressed,
     isDragging: s.isDragging,
   })));
@@ -59,14 +59,27 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length },
   });
 
-  const handleTabClick = (tab: LayoutTab) => {
+  const handleTabStripClick = useCallback((e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
+    if (!target) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    const tabId = target.dataset.tabId;
+    if (!tabId) return;
+    const tab = tabs.find((item) => item.id === tabId);
+    if (!tab) return;
     void switchTab(layoutNodeId, tab.id, tab);
-  };
+  }, [layoutNodeId, tabs]);
 
-  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
+  const handleTabStripAuxClick = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 1) return;
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
+    if (!target) return;
+    const tabId = target.dataset.tabId;
+    if (!tabId) return;
+    e.preventDefault();
     e.stopPropagation();
     void closeTab(layoutNodeId, tabId);
-  };
+  }, [layoutNodeId]);
 
   const handleSplit = (e: Pick<PointerEvent, 'altKey' | 'stopPropagation'>) => {
     e.stopPropagation();
@@ -89,9 +102,16 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !activeTabId) return;
-    const activeEl = container.querySelector(`[data-tab-id="${activeTabId}"]`) as HTMLElement;
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    const activeEl = container.querySelector(`[data-tab-id="${activeTabId}"]`) as HTMLElement | null;
+    if (!activeEl) return;
+
+    const tabRect = activeEl.getBoundingClientRect();
+    const viewportRect = container.getBoundingClientRect();
+    const isVisible =
+      tabRect.left >= viewportRect.left
+      && tabRect.right <= viewportRect.right;
+    if (!isVisible) {
+      activeEl.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
     }
   }, [activeTabId]);
 
@@ -107,27 +127,15 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   }, [isDragging]);
 
   const handleEmptyStripDoubleClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-tab-id]')) return;
     e.stopPropagation();
     void createUntitledEventInGroup(layoutNodeId);
   };
 
-  const tabList = (
-    <>
-      {tabs.map((tab, index) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          index={index}
-          layoutNodeId={layoutNodeId}
-          isActive={activeTabId === tab.id}
-          reorderPreview={showReorderPreview ? reorderPreview : null}
-          onClick={() => handleTabClick(tab)}
-          onClose={(e) => handleCloseTab(tab.id, e)}
-          onRevealInSidebar={() => revealInSidebar(tab)}
-        />
-      ))}
-    </>
-  );
+  const handleTabClose = useCallback((tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    void closeTab(layoutNodeId, tabId);
+  }, [layoutNodeId]);
 
   return (
     <div className={editorTabBarShellClass}>
@@ -139,10 +147,28 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
         <OverlayScrollbar
           ref={containerRef}
           direction="horizontal"
-          className="flex-1 flex items-stretch h-full"
+          className="flex min-h-0 flex-1 items-stretch h-full"
         >
-          <div data-tab-strip={layoutNodeId} className="relative flex h-full min-h-full items-stretch overflow-visible">
-            {tabList}
+          <div
+            data-tab-strip={layoutNodeId}
+            className={editorTabBarStripClass}
+            onClick={handleTabStripClick}
+            onAuxClick={handleTabStripAuxClick}
+            onDoubleClick={handleEmptyStripDoubleClick}
+            aria-label={t('tabBar.newUntitledHint')}
+          >
+            {tabs.map((tab, index) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                index={index}
+                layoutNodeId={layoutNodeId}
+                isActive={activeTabId === tab.id}
+                reorderPreview={showReorderPreview ? reorderPreview : null}
+                onClose={handleTabClose}
+                onRevealInSidebar={() => revealInSidebar(tab)}
+              />
+            ))}
             {showReorderPreview && reorderPreview ? (
               <div
                 className={editorTabReorderGapClass}
@@ -154,11 +180,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             ) : null}
           </div>
         </OverlayScrollbar>
-        <div
-          className={editorTabBarEmptyStripClass}
-          onDoubleClick={handleEmptyStripDoubleClick}
-          aria-label={t('tabBar.newUntitledHint')}
-        />
       </div>
 
       <div className={editorTabBarActionsClass}>
@@ -207,147 +228,151 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 };
 
 interface TabItemProps {
-    tab: LayoutTab;
-    index: number;
-    layoutNodeId: string;
-    isActive: boolean;
-    reorderPreview: TabBarReorderPreview | null;
-    onClick: () => void;
-    onClose: (e: React.MouseEvent) => void;
-    onRevealInSidebar: () => void;
+  tab: LayoutTab;
+  index: number;
+  layoutNodeId: string;
+  isActive: boolean;
+  reorderPreview: TabBarReorderPreview | null;
+  onClose: (tabId: string, e: React.MouseEvent) => void;
+  onRevealInSidebar: () => void;
+}
+
+function areTabItemPropsEqual(prev: TabItemProps, next: TabItemProps): boolean {
+  if (prev.tab.id !== next.tab.id) return false;
+  if (prev.tab.pinned !== next.tab.pinned) return false;
+  if (prev.isActive !== next.isActive) return false;
+  if (prev.index !== next.index) return false;
+  if (prev.layoutNodeId !== next.layoutNodeId) return false;
+  if (prev.onClose !== next.onClose) return false;
+  if (prev.onRevealInSidebar !== next.onRevealInSidebar) return false;
+  if (prev.reorderPreview !== next.reorderPreview) return false;
+  return true;
 }
 
 const TabItem: React.FC<TabItemProps> = React.memo(({
-  tab, index, layoutNodeId, isActive, reorderPreview, onClick, onClose, onRevealInSidebar,
+  tab, index, layoutNodeId, isActive, reorderPreview, onClose, onRevealInSidebar,
 }) => {
-    const { t } = useTranslation();
-    const [menuPosition, setMenuPosition] = useState<ContextMenuPosition | null>(null);
-    const resourceRef = layoutTabResourceRef(tab);
-    const resourceTitle = useResourceStore((state) => {
-        if (!resourceRef) return undefined;
-        return state.resources[resourceKey(resourceRef)]?.name;
-    });
-    const documentState = useDocumentStateStore((state) => {
-        if (!resourceRef) return undefined;
-        return state.documents[resourceKey(resourceRef)];
-    });
+  const { t } = useTranslation();
+  const [menuPosition, setMenuPosition] = useState<ContextMenuPosition | null>(null);
+  const resourceRef = layoutTabResourceRef(tab);
+  const resourceTitle = useResourceStore((state) => {
+    if (!resourceRef) return undefined;
+    return state.resources[resourceKey(resourceRef)]?.name;
+  });
+  const documentState = useDocumentStateStore((state) => {
+    if (!resourceRef) return undefined;
+    return state.documents[resourceKey(resourceRef)];
+  });
 
-    const baseTitle = resolveTabDisplayName(resourceRef, tab.id);
-    const title = isUntitledGraphPath(tab.id)
-      ? `${t('tabBar.unsavedPrefix')}: ${baseTitle}`
-      : (resourceTitle ?? baseTitle);
+  const baseTitle = resolveTabDisplayName(resourceRef, tab.id);
+  const title = isUntitledGraphPath(tab.id)
+    ? `${t('tabBar.unsavedPrefix')}: ${baseTitle}`
+    : (resourceTitle ?? baseTitle);
 
-    const isPreview = isPreviewLayoutTab(tab);
+  const isPreview = isPreviewLayoutTab(tab);
 
-    const statusKey = documentState?.missing
-        ? 'missing'
-        : documentState?.conflict
-            ? 'conflict'
-            : documentState?.stale
-                ? 'stale'
-                : null;
+  const statusKey = documentState?.missing
+    ? 'missing'
+    : documentState?.conflict
+      ? 'conflict'
+      : documentState?.stale
+        ? 'stale'
+        : null;
 
-    const statusIcon = statusKey === 'missing'
-      ? <VscError size={12} className="text-red-500" />
-      : statusKey === 'conflict'
-        ? <VscWarning size={12} className="text-amber-500" />
-        : statusKey === 'stale'
-          ? <VscSync size={12} className="text-amber-500" />
-          : null;
+  const statusIcon = statusKey === 'missing'
+    ? <VscError size={12} className="text-red-500" />
+    : statusKey === 'conflict'
+      ? <VscWarning size={12} className="text-amber-500" />
+      : statusKey === 'stale'
+        ? <VscSync size={12} className="text-amber-500" />
+        : null;
 
-    const isDirty = resourceRef ? (documentState?.dirty ?? false) : false;
+  const isDirty = resourceRef ? (documentState?.dirty ?? false) : false;
 
-    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-        id: `tab-${layoutNodeId}-${tab.id}`,
-        data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId }
-    });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `tab-${layoutNodeId}-${tab.id}`,
+    data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId },
+  });
 
-    const shiftX = !isDragging && reorderPreview && reorderPreview.sourceGroupId === layoutNodeId
-      ? computeTabShiftOffset(
-          index,
-          reorderPreview.draggedIndex,
-          reorderPreview.insertIndex,
-          reorderPreview.gapWidth,
-        )
-      : 0;
+  const shiftX = !isDragging && reorderPreview && reorderPreview.sourceGroupId === layoutNodeId
+    ? computeTabShiftOffset(
+        index,
+        reorderPreview.draggedIndex,
+        reorderPreview.insertIndex,
+        reorderPreview.gapWidth,
+      )
+    : 0;
 
-    const style: React.CSSProperties = {
-      transform: shiftX !== 0 ? `translate3d(${shiftX}px, 0, 0)` : undefined,
-      height: 'var(--titlebar-height)',
-    };
+  const style: React.CSSProperties = {
+    transform: shiftX !== 0 ? `translate3d(${shiftX}px, 0, 0)` : undefined,
+    height: 'var(--titlebar-height)',
+  };
 
-    return (
-        <>
-        <div
-            ref={setNodeRef}
-            style={style}
-            {...attributes}
-            {...listeners}
-            data-tab-id={tab.id}
-            data-tab-group={layoutNodeId}
-            data-tab-title={title}
-            onClick={onClick}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              if (isPreview) pinTab(layoutNodeId, tab.id);
-            }}
-            onAuxClick={(e) => {
-              if (e.button !== 1) return;
-              e.preventDefault();
-              e.stopPropagation();
-              onClose(e);
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setMenuPosition({ x: e.clientX, y: e.clientY });
-            }}
-            className={editorTabItemVariants({ active: isActive, dragging: isDragging, preview: isPreview })}
-        >
-            {isPreview ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="max-w-[120px] truncate">{title}</span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">{t('tabBar.previewHint')}</TooltipContent>
-              </Tooltip>
-            ) : (
+  return (
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        data-tab-id={tab.id}
+        data-tab-group={layoutNodeId}
+        data-tab-title={title}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (isPreview) pinTab(layoutNodeId, tab.id);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuPosition({ x: e.clientX, y: e.clientY });
+        }}
+        className={editorTabItemVariants({ active: isActive, dragging: isDragging, preview: isPreview })}
+      >
+        {isPreview ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
               <span className="max-w-[120px] truncate">{title}</span>
-            )}
-            {statusKey && statusIcon ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="ml-1 flex items-center">{statusIcon}</span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">{t(`tabBar.status.${statusKey}`)}</TooltipContent>
-                </Tooltip>
-            ) : null}
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                data-dirty={isDirty ? 'true' : 'false'}
-                onClick={onClose}
-                className={editorTabCloseButtonClass}
-            >
-                {isDirty ? (
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                )}
-            </Button>
-        </div>
-        {menuPosition ? (
-          <ContextMenu
-            position={menuPosition}
-            sections={buildTabContextMenuSections(layoutNodeId, tab, t, {
-              revealInSidebar: () => onRevealInSidebar(),
-            })}
-            onClose={() => setMenuPosition(null)}
-          />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('tabBar.previewHint')}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="max-w-[120px] truncate">{title}</span>
+        )}
+        {statusKey && statusIcon ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-1 flex items-center">{statusIcon}</span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t(`tabBar.status.${statusKey}`)}</TooltipContent>
+          </Tooltip>
         ) : null}
-        </>
-    );
-});
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          data-dirty={isDirty ? 'true' : 'false'}
+          onClick={(e) => onClose(tab.id, e)}
+          className={editorTabCloseButtonClass}
+        >
+          {isDirty ? (
+            <span className="h-2 w-2 rounded-full bg-current" />
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+        </Button>
+      </div>
+      {menuPosition ? (
+        <ContextMenu
+          position={menuPosition}
+          sections={buildTabContextMenuSections(layoutNodeId, tab, t, {
+            revealInSidebar: () => onRevealInSidebar(),
+          })}
+          onClose={() => setMenuPosition(null)}
+        />
+      ) : null}
+    </>
+  );
+}, areTabItemPropsEqual);

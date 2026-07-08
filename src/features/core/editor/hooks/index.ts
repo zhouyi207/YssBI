@@ -13,5 +13,6 @@ export { useEditorLayoutActions } from './useEditorLayoutActions';
 export { useEditorActions } from './useEditorActions';
 
 export { useEditorGroupWorkspace } from './useEditorGroupWorkspace';
+export { useEditorGroupTabStrip } from './useEditorGroupTabStrip';
 export { useEditorGroupUI } from './useEditorGroupUI';
 export { useEditorGroupCatalog } from './useEditorGroupCatalog';

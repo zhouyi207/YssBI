@@ -4,7 +4,7 @@ import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQuer
 import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 import { openEditorTab } from './openEditorTab';
-import { switchEditorGraphTab } from './switchEditorGraphTab';
+import { switchEditorTab } from './switchEditorTab';
 
 export interface OpenGraphInEditorOptions {
   /** `false` = preview tab (sidebar single-click). Default: pinned. */
@@ -22,9 +22,10 @@ export async function openGraphInEditor(
   logger.graph.trace(`openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`, 'TabManagement');
 
   const pinned = options?.pinned !== false;
-  openEditorTab(buildGraphLayoutTab(graphPath, name, type, { pinned }), { targetGroupId, pinned });
+  const tab = buildGraphLayoutTab(graphPath, name, type, { pinned });
+  openEditorTab(tab, { targetGroupId, pinned });
   const groupId = resolveEditorTargetGroupId(targetGroupId);
-  const activated = await switchEditorGraphTab(groupId, graphPath, { id: graphPath, type });
+  const activated = await switchEditorTab(groupId, tab);
   if (!activated) return;
 
   if (initialData?.canvas) {

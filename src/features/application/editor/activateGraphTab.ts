@@ -1,9 +1,10 @@
-import { useProjectIOStore } from '@/features/core/dataStore';
-import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
+import { useProjectIOStore } from '@/features/core/dataStore';
 import { deactivateInactiveGraphPath } from './deactivateInactiveGraphPath';
+import { activateCachedGraph, isGraphCachedInMemory } from './graphLoadPolicy';
 
-/** Session bookkeeping + backend reload for a graph path in a group. */
+/** Session bookkeeping + backend load for a graph path in a group. */
 export async function activateGraphTab(
   graphPath: string,
   targetGroupId?: string,
@@ -11,9 +12,15 @@ export async function activateGraphTab(
   const groupId = resolveEditorTargetGroupId(targetGroupId);
   const sessionStore = useGraphSessionStore.getState();
   const previous = sessionStore.setGroupActivePath(groupId, graphPath);
+
   if (previous && previous !== graphPath) {
     await deactivateInactiveGraphPath(previous);
   }
+
+  if (isGraphCachedInMemory(graphPath)) {
+    return activateCachedGraph(graphPath);
+  }
+
   const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
   if (loaded) return true;
 

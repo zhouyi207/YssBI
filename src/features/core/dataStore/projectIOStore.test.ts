@@ -6,7 +6,8 @@ import { LoadStatus } from '@/shared/types/ui/common';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 import { useProjectIOStore } from './projectIOStore';
-import { useResourceStore } from '@/features/core/resource';
+import { useResourceStore, resourceKey, markResourceLoaded } from '@/features/core/resource';
+import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { toGraphResourceUri } from '@/shared/types/domain/graphResourcePath';
 import { useVariableStore } from './variableStore';
 import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
@@ -157,30 +158,48 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(useDatabaseStore.getState().databases['df-1']?.name).toBe('Data');
   });
 
-  it('loadGraph always reloads from backend', async () => {
-    const graphData = makeEventGraphData('evt-1', 'Main Event');
-    useGraphDataStore.getState().addGraphFromData('evt-1', graphData);
+  it('loadGraph skips backend when graph is already cached', async () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const graphData = makeEventGraphData(graphPath, 'Main Event');
+    useGraphDataStore.getState().addGraphFromData(graphPath, graphData);
+    markResourceLoaded({ id: graphPath, kind: 'event' });
     useResourceStore.getState().setSnapshot({
       resources: [
         {
-          id: 'evt-1',
+          id: graphPath,
           kind: 'event',
           name: 'Main Event',
-          uri: toGraphResourceUri('event', 'evt-1'),
+          uri: toGraphResourceUri('event', graphPath),
           exists: true,
-          loaded: false,
+          loaded: true,
           hasDirtyDocument: false,
           hasStaleDocument: false,
           hasConflictDocument: false,
         },
       ],
-      graphOrder: ['evt-1'],
+      graphOrder: [graphPath],
     });
+
+    const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
+
+    expect(loaded).toBe(true);
+    expect(ProjectService.loadProjectGraph).not.toHaveBeenCalled();
+  });
+
+  it('loadGraph reloads from backend when cached graph is stale', async () => {
+    const graphPath = 'events/Stale.yssbi-event';
+    const graphData = makeEventGraphData(graphPath, 'Stale Event');
+    useGraphDataStore.getState().addGraphFromData(graphPath, graphData);
+    markResourceLoaded({ id: graphPath, kind: 'event' });
+    useDocumentStateStore.getState().patchDocument(
+      resourceKey({ id: graphPath, kind: 'event' }),
+      { stale: true },
+    );
 
     vi.mocked(ProjectService.loadProjectGraph).mockResolvedValue({
       graph: {
-        path: 'evt-1',
-        name: 'Main Event',
+        path: graphPath,
+        name: 'Stale Event',
         type: 'event',
         nodes: [],
         pins: [],
@@ -192,9 +211,9 @@ describe('useProjectIOStore snapshot paths', () => {
     vi.mocked(toFrontendGraph).mockReturnValue(graphDataToDomainGraph(graphData));
     vi.mocked(GraphService.resolveGraphDynamicPins).mockResolvedValue(graphDataToDomainGraph(graphData));
 
-    const loaded = await useProjectIOStore.getState().loadGraph('evt-1');
+    const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
 
     expect(loaded).toBe(true);
-    expect(ProjectService.loadProjectGraph).toHaveBeenCalledWith('evt-1');
+    expect(ProjectService.loadProjectGraph).toHaveBeenCalledWith(graphPath);
   });
 });

@@ -54,6 +54,8 @@ export interface LayoutState {
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
     setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
+    /** Patch only activeTabId (+ clear selection on change). Avoids full node spread on tab switch. */
+    setEditorGroupActiveTab: (nodeId: string, tabId: string | null) => void;
     /**
      * Drop every graph (event/function) tab from every editor group, regardless
      * of dirty state. Use during destructive project transitions (load / clear /
@@ -705,6 +707,20 @@ export const useLayoutStore = create<LayoutState>()(
             const tab = state.nodes[nodeId]?.data?.tabs?.find((item) => item.id === tabId);
             if (!tab) return;
             tab.pinned = pinned;
+        }),
+
+        setEditorGroupActiveTab: (nodeId, tabId) => set((state) => {
+            const node = state.nodes[nodeId];
+            if (!node?.data?.tabs) return;
+
+            const nextActiveId = tabId || undefined;
+            if (node.data.activeTabId === nextActiveId) return;
+
+            node.data.activeTabId = nextActiveId;
+            node.data.params = {
+                ...node.data.params,
+                selectedNodeIds: [],
+            };
         }),
 
         closeAllGraphTabs: () => set((state) => {

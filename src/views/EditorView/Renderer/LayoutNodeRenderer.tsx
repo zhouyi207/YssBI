@@ -7,6 +7,7 @@ import { viewRegistry } from './viewRegistry';
 import { LayoutNode } from '@/shared/types/ui';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { GroupContext } from '@/features/core/editor';
+import { useEditorGroupTabStrip } from '@/features/core/editor/hooks/useEditorGroupTabStrip';
 import { TabBar } from '../Layout/TabBar';
 import { DROP_TYPES, DRAG_TYPES } from '@/features/core/dnd';
 
@@ -114,25 +115,23 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
     const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
     const isActive = activeGroupId === node.id;
 
-    // 1. 获取 Tab 数据
-    const tabs = node?.data?.tabs || [];
+    const hasTabs = (node?.data?.tabs?.length ?? 0) > 0;
     const activeTabId = node?.data?.activeTabId;
-    const hasTabs = tabs.length > 0;
 
     // 2. 确定当前要渲染的业务组件
     const ActiveComponent = useMemo(() => {
         if (!node) return null;
-        let componentName = node.data?.component || ''; // 默认使用基础组件
-        
-        if (hasTabs) {
-            const activeTab = tabs.find(t => t?.id === activeTabId);
+        let componentName = node.data?.component || '';
+
+        if (hasTabs && activeTabId) {
+            const activeTab = node.data?.tabs?.find((t) => t?.id === activeTabId);
             if (activeTab) {
                 componentName = activeTab.component;
             }
         }
-        
+
         return componentName ? viewRegistry.get(componentName) : null;
-    }, [hasTabs, tabs, activeTabId, node?.data?.component]);
+    }, [hasTabs, activeTabId, node?.data?.component, node?.data?.tabs]);
 
     // DND 拖拽支持 - 只有非固定节点可以拖动
     const isFixed = !!node.data?.isFixed;
@@ -163,11 +162,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
                 {/* 统一 Header 区域 */}
                 {hasTabs ? (
                     <div className="flex-none flex items-center bg-[var(--workbench-bg)] select-none">
-                        <TabBar
-                            layoutNodeId={node.id}
-                            tabs={tabs}
-                            activeTabId={activeTabId}
-                        />
+                        <EditorGroupTabStrip layoutNodeId={node.id} />
                     </div>
                 ) : !isFixed ? (
                     // <div
@@ -193,6 +188,19 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
                 </div>
             </div>
         </GroupContext.Provider>
+    );
+};
+
+/** Tab strip with narrow layout subscription — avoids re-rendering editor content on tab chrome changes. */
+const EditorGroupTabStrip = ({ layoutNodeId }: { layoutNodeId: string }) => {
+    const { tabs, activeTabId } = useEditorGroupTabStrip(layoutNodeId);
+    if (!tabs.length) return null;
+    return (
+        <TabBar
+            layoutNodeId={layoutNodeId}
+            tabs={tabs}
+            activeTabId={activeTabId}
+        />
     );
 };
 

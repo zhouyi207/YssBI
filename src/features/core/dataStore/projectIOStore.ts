@@ -28,6 +28,7 @@ import {
 } from '@/features/core/variable/variableCatalog';
 import { resetClientProjectState } from './projectClientReset';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
+import { activateCachedGraph, isGraphCachedInMemory } from '@/features/application/editor/graphLoadPolicy';
 import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
 
 interface ProjectIOStore {
@@ -280,6 +281,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   },
 
   loadGraph: async (graphPath) => {
+    if (isGraphCachedInMemory(graphPath)) {
+      return activateCachedGraph(graphPath);
+    }
+
     const existing = loadGraphInFlight.get(graphPath);
     if (existing) return existing;
 

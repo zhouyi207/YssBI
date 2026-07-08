@@ -838,6 +838,55 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 - [x] **P3 — Preview / Pin tab**：侧栏单击 preview、双击/显式打开 pin；每组至多一个 preview；脏状态自动 pin；Tab 斜体 + 右键「保持打开」。
 - [x] **P3 — 布局恢复与资源索引对齐**：`reconcileOpenLayoutTabsWithResources` 在 load / refresh index 后剥离 `LayoutTab.title` 快照。
 
+#### Tab 激活性能架构（对标 VS Code Model 缓存）
+
+> **结论**：TabBar 卡顿主因不是标签 DOM，而是 **每次切换都 `loadGraph` 打后端 IPC** + **layout 节点粗粒度订阅**。目标：Tab = 轻量引用；正文常驻 `graphEntities`；切换 = 内存命中 + 窄订阅重绘。
+
+##### VS Code vs YssBI（激活热路径）
+
+| 维度 | VS Code | YssBI 改造前 | 目标 |
+|------|---------|--------------|------|
+| **Tab 存什么** | `EditorInput`（URI 句柄） | `LayoutTab` 嵌在 `layoutStore.nodes` | [x] 保持引用模型；[ ] 长期拆 `editorTabsStore` |
+| **切换 Tab** | 显示已有 `ITextModel` | 每次 `ProjectService.loadProjectGraph` | [x] `graphLoadPolicy` 内存命中跳过 IPC |
+| **正文缓存** | `ModelService` 单例 per URI | `graphDataStore` 已有 | [x] `isGraphCachedInMemory`；stale/conflict 仍强制 reload |
+| **激活编排** | `EditorService.openEditor` | `switchEditorTab` → `activateGraphTab` | [x] 缓存命中走 `activateCachedGraph` |
+| **layout 更新** | Grid 与 model 分离 | `updateNode` 整包 spread `data` | [x] `setEditorGroupActiveTab` 仅 patch `activeTabId` |
+| **TabBar 订阅** | 轻量 tab 模型事件 | `LeafNodeRenderer` 读整节点 | [x] `useEditorGroupTabStrip` 窄订阅 |
+| **TabBar 渲染** | 自定义 pointer 拖拽 | N×`useDraggable` + smooth scroll | [x] 事件委托 + `scrollIntoView auto` + `TabItem` 精准 memo |
+
+##### 目标架构（分层）
+
+```
+TabBar (View)
+  → useEditorGroupTabStrip(groupId)     // tabs + activeTabId only
+  → tabCommands / switchEditorTab       // application 编排
+      → applyEditorTabSelection         // layoutStore.setEditorGroupActiveTab
+      → activateGraphTab
+          → graphLoadPolicy             // isGraphCachedInMemory?
+          │     ├─ hit  → activateCachedGraph (viewport + loaded flag)
+          │     └─ miss → projectIOStore.loadGraph (IPC once)
+          └─ graphSessionStore.setGroupActivePath
+graphDataStore[graphPath]               // 正文单实例（与 Tab 解耦）
+```
+
+##### 收敛原则
+
+1. **已打开且非 stale/conflict 的图禁止重复 load**：同 path 多 Tab / 多组共享 `graphEntities`。
+2. **Tab 切换先同步 layout activeTabId，再异步激活正文**：UI 立即反馈；缓存命中时激活近即时。
+3. **TabBar 订阅粒度 ≤ `{ tabs, activeTabId }`**：不因 editor content / selection 变化重绘 Tab 条。
+4. **删除重复激活 API**：统一 `switchEditorTab`；移除 `switchEditorGraphTab` 兼容层。
+
+##### 待办 checklist
+
+- [x] **P0 — 图加载缓存策略**：`graphLoadPolicy.ts` + `loadGraph` / `activateGraphTab` 内存命中。
+- [x] **P0 — 轻量 activeTab 更新**：`layoutStore.setEditorGroupActiveTab` 替代 `updateNode` spread。
+- [x] **P1 — TabBar 窄订阅**：`useEditorGroupTabStrip` + `EditorGroupTabStrip` 包裹层。
+- [x] **P1 — TabBar 渲染瘦身**：strip 事件委托、可见时才 `scrollIntoView`、 `TabItem` 比较函数 memo。
+- [x] **P1 — 删除重复 API**：移除 `switchEditorGraphTab.ts`；`openGraphInEditor` 直调 `switchEditorTab`。
+- [ ] **P2 — editorTabsStore 与 layout 持久化分离**：运行时 Tab 顺序/激活态独立 store；layout 仅 hydrate/dehydrate。
+- [ ] **P2 — Tab 拖拽去 dnd-kit 逐 Tab 注册**：改 strip 级 pointer 监听或虚拟化 Tab 列表。
+- [ ] **P3 — 多 Canvas 保活**（大图频繁切换可选）：隐藏保活 vs 单 Canvas 换 model 权衡。
+
 #### TabBar 收敛原则（写入规则 / PR checklist）
 
 1. **Tab 不拥有正文与脏状态**：仅引用 `ResourceRef`；正文在 `graphEntities` / worksheet store；脏在 `DocumentStateStore`。
@@ -885,6 +934,7 @@ editorSplitLayout.ts（纯函数：edge → direction/isAfter）
 - [x] **P0 — 编排门面**：`editorGroupCommands.ts`（`splitEditorWithTab` / `splitEditorAtEdge` / `createUntitledEventInGroup`）。
 - [x] **P1 — TabBar 空白双击**：新建 `Untitled-N` event 并激活于当前组。
 - [x] **P1 — Tab 样式 VS Code 化**：底边 active accent、inactive 底色、hover 关闭按钮。
+
 ##### 统一拖放预览（`EditorDropPreview`）
 
 ```

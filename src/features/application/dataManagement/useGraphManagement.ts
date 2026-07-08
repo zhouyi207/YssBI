@@ -33,7 +33,7 @@ type OpenGraphFn = (
  *
  * 作为编辑器 UI 的 graph 操作门面：
  * - graph resource CRUD 委托给 graphActions
- * - 创建后自动打开时，经 openGraphInEditor → switchEditorGraphTab 拉取正文
+ * - 创建后自动打开时，经 openGraphInEditor → switchEditorTab 激活正文
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
 export function useGraphManagement(
