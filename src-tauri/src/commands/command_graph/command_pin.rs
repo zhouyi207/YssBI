@@ -90,7 +90,7 @@ pub fn update_pin_user_value(
 
 /// 清除 Pin 的用户输入值（恢复为 None，使用默认值或连接值）
 ///
-/// 前端 PinService.clearPinUserValue(subgraphId, nodeId, pinId)
+/// 前端 PinService.clearPinUserValue(graphPath, nodeId, pinId)
 #[tauri::command]
 pub fn clear_pin_user_value(
     state: State<ProjectState>,
@@ -132,7 +132,7 @@ pub struct RemoveRepeatablePinResult {
 
 /// 向节点的 Repeatable 槽位追加一个新 pin
 ///
-/// 前端调用 `PinService.addRepeatablePin(subgraphId, nodeId, slotIndex)`
+/// 前端调用 `PinService.addRepeatablePin(graphPath, nodeId, slotIndex)`
 #[tauri::command]
 pub fn add_repeatable_pin(
     app: AppHandle,
@@ -179,7 +179,7 @@ pub fn add_repeatable_pin(
 
 /// 从节点移除一个 Repeatable 槽位的 pin
 ///
-/// 前端调用 `PinService.removeRepeatablePin(subgraphId, nodeId, pinId)`
+/// 前端调用 `PinService.removeRepeatablePin(graphPath, nodeId, pinId)`
 #[tauri::command]
 pub fn remove_repeatable_pin(
     app: AppHandle,

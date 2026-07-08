@@ -38,6 +38,7 @@ export interface LayoutState {
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
+    setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
     /**
      * Drop every graph (event/function) tab from every editor group, regardless
      * of dirty state. Use during destructive project transitions (load / clear /
@@ -232,9 +233,13 @@ export const useLayoutStore = create<LayoutState>()(
             const parentNode = state.nodes[targetNode.parentId];
             const requiredDirection = direction;
 
-            // 只复制当前激活的标签页
+            // 只复制当前激活的标签页（分屏视为显式固定）
             const activeTab = getActiveLayoutTab(targetId, state.nodes)?.tab;
-            const newTabs = activeTab ? [{ ...activeTab }] : [];
+            if (activeTab) {
+                const sourceTab = targetNode.data?.tabs?.find((t) => t.id === activeTab.id);
+                if (sourceTab) sourceTab.pinned = true;
+            }
+            const newTabs = activeTab ? [{ ...activeTab, pinned: true as const }] : [];
 
             const newNodeId = generateId();
             const newNode: LayoutNode = {
@@ -396,6 +401,7 @@ export const useLayoutStore = create<LayoutState>()(
             const sourceTabs = sourceNode.data?.tabs || [];
             const tabToMove = sourceTabs.find(t => t.id === tabId);
             if (!tabToMove) return;
+            tabToMove.pinned = true;
 
             // 检查目标节点是否已经有这个标签页
             const targetTabs = targetNode.data?.tabs || [];
@@ -662,6 +668,12 @@ export const useLayoutStore = create<LayoutState>()(
                 activeTabId: tab.id,
                 component: node.data?.component || 'GraphEditor'
             };
+        }),
+
+        setTabPinned: (nodeId, tabId, pinned) => set((state) => {
+            const tab = state.nodes[nodeId]?.data?.tabs?.find((item) => item.id === tabId);
+            if (!tab) return;
+            tab.pinned = pinned;
         }),
 
         closeAllGraphTabs: () => set((state) => {

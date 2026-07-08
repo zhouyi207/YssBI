@@ -156,7 +156,7 @@ impl ProjectState {
         let project_data = self.project_data.read().unwrap();
         let mut syncs = Vec::new();
 
-        for (graph_id, graph) in project_data.graphs.iter() {
+        for (graph_path, graph) in project_data.graphs.iter() {
             let data_state = graph.data_state.read().unwrap();
             let mut inferred_pins = Vec::new();
 
@@ -223,7 +223,7 @@ impl ProjectState {
 
             if !inferred_pins.is_empty() {
                 syncs.push(VariableReferenceSync {
-                    graph_path: graph_id.clone(),
+                    graph_path: graph_path.clone(),
                     pin_types: inferred_pins,
                 });
             }

@@ -8,7 +8,6 @@ import type {
 import {
   getDocumentState,
   normalizeBackendResourceMeta,
-  updateOpenResourceLabels,
   useResourceStore,
 } from '@/features/core/resource';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
@@ -68,9 +67,6 @@ export class ResourceChangedHandler extends BaseEventHandler<ResourceChangedPayl
       hasConflictDocument: doc?.conflict ?? meta.hasConflictDocument,
       loaded: doc?.loaded ?? meta.loaded,
     });
-    if (meta.kind === 'event' || meta.kind === 'function') {
-      updateOpenResourceLabels({ id: meta.id, kind: meta.kind }, meta.name);
-    }
   }
 }
 

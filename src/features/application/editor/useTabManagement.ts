@@ -1,44 +1,34 @@
 import { useCallback } from 'react';
 import { Graph } from '@/shared/types/domain';
 import { openGraphInEditor } from './openGraphInEditor';
-import { getGraphByPath } from '@/features/core/dataStore';
+import { getActiveLayoutTab, locateLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
-import { releaseGraphCacheIfClosed } from './releaseGraphCache';
-import { closeEditorTab } from './closeEditorTab';
-import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 import { applyEditorTabSelection } from './editorTabSelection';
-import { switchEditorGraphTab } from './switchEditorGraphTab';
+import {
+  closeEditorGroup,
+  closeTab as closeTabCommand,
+  splitEditorGroup,
+  switchTab,
+} from './tabCommands';
 
 /**
- * Tab Management Hook
- * Handles opening, closing, and switching between tabs
+ * Tab Management Hook — thin React facade over tabCommands.
  */
 export function useTabManagement() {
   const handleSetActiveTabId = useCallback((
     newId: string | null,
-    forceType?: 'event' | 'function' | 'setting',
-    initialData?: Graph,
-    targetGroupId?: string
+    _forceType?: 'event' | 'function' | 'setting',
+    _initialData?: Graph,
+    targetGroupId?: string,
   ) => {
-    logger.graph.trace(`handleSetActiveTabId called: newId=${newId}, forceType=${forceType}, targetGroupId=${targetGroupId}`, 'TabManagement');
+    logger.graph.trace(`handleSetActiveTabId called: newId=${newId}, targetGroupId=${targetGroupId}`, 'TabManagement');
 
     const groupId = resolveEditorGroupId(targetGroupId);
     if (groupId) applyEditorTabSelection(groupId, newId);
-    if (!newId) return;
+    if (!newId || !groupId) return;
 
-    const resolvedType = forceType || (initialData as { type?: string })?.type
-      || (getGraphByPath(newId) as { type?: string })?.type;
-
-    if (resolvedType === 'event' || resolvedType === 'function') {
-      void switchEditorGraphTab(groupId!, newId);
-    } else {
-      const tabSource = initialData || getGraphByPath(newId);
-      ensureGraphViewport(newId, tabSource?.canvas);
-    }
-
-    logger.graph.trace(`handleSetActiveTabId final type: ${resolvedType}`, 'TabManagement');
+    void switchTab(groupId, newId);
   }, []);
 
   const activateTab = useCallback((id: string | null, targetGroupId?: string) => {
@@ -49,9 +39,16 @@ export function useTabManagement() {
     id: string,
     name: string,
     type: "event" | "function",
-    initialData?: Graph
+    options?: { initialData?: Graph; pinned?: boolean; targetGroupId?: string },
   ) => {
-    await openGraphInEditor(id, name, type, undefined, initialData);
+    await openGraphInEditor(
+      id,
+      name,
+      type,
+      options?.targetGroupId,
+      options?.initialData,
+      { pinned: options?.pinned },
+    );
   }, []);
 
   const openSettingsTab = useCallback(() => {
@@ -61,25 +58,20 @@ export function useTabManagement() {
     handleSetActiveTabId("settings", "setting", undefined, targetGroupId);
   }, [handleSetActiveTabId]);
 
-  const closeTab = useCallback((id: string, e?: React.MouseEvent, options?: { skipDirtyPrompt?: boolean }) => {
+  /** Close by tab id (keyboard / global); resolves owning editor group. */
+  const closeTab = useCallback((tabId: string, e?: React.MouseEvent, options?: { skipDirtyPrompt?: boolean }) => {
     if (e) e.stopPropagation();
-    void closeEditorTab(id, undefined, options?.skipDirtyPrompt);
+    const located = locateLayoutTab(tabId);
+    if (!located) return;
+    void closeTabCommand(located.nodeId, tabId, options?.skipDirtyPrompt);
   }, []);
 
   const splitEditorRight = useCallback((sourceGroupId: string) => {
-    const nodes = useLayoutStore.getState().nodes;
-    const activeTab = getActiveLayoutTab(sourceGroupId, nodes)?.tab;
-    useLayoutStore.getState().splitNode(sourceGroupId, 'row', activeTab?.component || 'GraphEditor');
+    splitEditorGroup(sourceGroupId, 'row');
   }, []);
 
-  const closeGroup = useCallback(async (id: string) => {
-    const tabIds = useLayoutStore.getState().nodes[id]?.data?.tabs?.map((tab) => tab.id) ?? [];
-    for (const tabId of tabIds) {
-      const closed = await closeEditorTab(tabId, id);
-      if (!closed) return;
-    }
-    useLayoutStore.getState().removeNode(id);
-    tabIds.forEach(releaseGraphCacheIfClosed);
+  const closeGroup = useCallback(async (groupId: string) => {
+    await closeEditorGroup(groupId);
   }, []);
 
   return {
@@ -89,5 +81,9 @@ export function useTabManagement() {
     closeTab,
     splitEditorRight,
     closeGroup,
+    switchTab,
+    splitEditorGroup,
+    closeEditorGroup,
+    getActiveLayoutTab,
   };
 }

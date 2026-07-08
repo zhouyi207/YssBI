@@ -6,16 +6,16 @@
 
 | Owner | 含义 | 索引 |
 |-------|------|------|
-| `RuntimePin { graphId, pinId, runId }` | 画布 output pin 上次 run 的可检视结果 | `(graphId, pinId) → sourceId` |
+| `RuntimePin { graphPath, pinId, runId }` | 画布 output pin 上次 run 的可检视结果 | `(graphPath, pinId) → sourceId` |
 | `Window` | Plot / Info / SourceInspector 等弹窗独占 payload | 仅 `sourceId` |
 
 ## 2. RuntimePin 规则
 
 | 事件 | 行为 |
 |------|------|
-| **Run 开始** | `clear_runtime_graph(graphId)` — 整图 runtime pin 失效 |
+| **Run 开始** | `clear_runtime_graph(graphPath)` — 整图 runtime pin 失效 |
 | **Run 结束** | **保留** — 用户继续看 Detail、Canvas overlay、embedded preview |
-| **拓扑破坏** | `invalidate_runtime_pins(graphId, pinIds)` — 按 pin 失效 |
+| **拓扑破坏** | `invalidate_runtime_pins(graphPath, pinIds)` — 按 pin 失效 |
 | **Undo restore**（`apply_graph_patch` 等） | **不失效** — 拓扑恢复，上次 run 结果仍可能有效 |
 | **项目 unload / new / save-as** | `clear_all()` |
 
@@ -24,7 +24,7 @@
 - `PinChangeSet.removed_pin_ids`（dynamic pin strip）
 - 删除节点时该节点全部 pin
 
-实现：`RuntimeSourcesInvalidated` project-event → 前端 `clearPinResults(graphId, pinIds)`。
+实现：`RuntimeSourcesInvalidated` project-event → 前端 `clearPinResults(graphPath, pinIds)`。
 
 ## 3. Window Source 规则
 

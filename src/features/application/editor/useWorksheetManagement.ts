@@ -48,7 +48,7 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
 export function useOpenWorksheet() {
   const switchSidebarTab = useSidebarTab();
 
-  return useCallback(async (id: string, name: string) => {
+  return useCallback(async (id: string, _name: string) => {
     if (!useWorksheetStore.getState().documents[id]) {
       try {
         const loaded = await WorksheetService.loadWorksheet(id);
@@ -58,7 +58,7 @@ export function useOpenWorksheet() {
       }
     }
 
-    openEditorTab(buildWorksheetLayoutTab(id, name), { focusDetail: { kind: 'worksheet', id } });
+    openEditorTab(buildWorksheetLayoutTab(id), { focusDetail: { kind: 'worksheet', id } });
 
     switchSidebarTab('charts');
   }, [switchSidebarTab]);

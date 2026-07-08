@@ -1289,7 +1289,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_index_identity_is_derived_from_project_path_not_file_graph_id() {
+    fn graph_index_identity_is_derived_from_project_path_not_file_graph_path() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let event = state.add_event("Path Identity");
@@ -1328,7 +1328,7 @@ mod tests {
     }
 
     #[test]
-    fn saved_graph_file_does_not_persist_graph_identity() {
+    fn saved_graph_file_does_not_persist_separate_graph_path_identity() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         state.add_event("No Persisted Id");

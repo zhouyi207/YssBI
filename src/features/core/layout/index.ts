@@ -14,8 +14,11 @@ export {
 export {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,
+  findPreviewTabInTabs,
   isGraphLayoutTab,
+  isPreviewLayoutTab,
   isWorksheetLayoutTab,
+  layoutTabResourceRef,
   normalizeLayoutTab,
   normalizeLayoutTabs,
   readEditorGroupSnapshot,

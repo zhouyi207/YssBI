@@ -766,7 +766,9 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.07.10
 
-> **源于 2026.07.08 Graph 身份收敛（path 取代 graph id）**：Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`、Store `GraphData.path`、`GraphPath` 类型别名、执行/历史/画布 API 参数 `graphPath`、`playbackGraphPath`、`variablesGraphScopePath`、`getGraphByPath` 已落地；Rust `command_node` IPC 参数 `graph_path` 与前端 `graphPath` invoke 对齐。
+### 身份收敛（path 取代 graph id）
+
+Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`、Store `GraphData.path`、`GraphPath` 类型别名、执行/历史/画布 API 参数 `graphPath`、`playbackGraphPath`、`variablesGraphScopePath`、`getGraphByPath` 已落地；Rust `command_node` IPC 参数 `graph_path` 与前端 `graphPath` invoke 对齐。
 
 - [x] **消灭前端 Graph 资源 `graphId` 命名**：`GraphId` → `GraphPath`；`NodeData.graphId` → `graphPath`；`graphDataToDomainGraph` / hydrate / 测试夹具同步；`resolveExecutionGraphPath` 取代 `resolveExecutionGraphId`。
 - [x] **图级 IPC 参数统一 `graphPath`**：`NodeService` / `ConnectionService` / `PinService` / `SourceService.getPinDescriptor` invoke 键与 Rust `graph_path` 对齐（去除 `subgraphId` / `graphId` invoke 键漂移）；删除未使用的 Rust `graph_id.rs`（UUID `GraphId` 包装）。
@@ -794,6 +796,55 @@ src/app/appConfig/appLinks.ts
 3. **Node/Pin/Connection** 继续 UUID，类比 VS Code 文档内符号。
 4. **ResourceStore** 逻辑键 = `ProjectResourceMeta.uri`；`ResourceRef.id` / `Graph.path` 保留为磁盘相对路径（见原则 1）。
 5. **文档脏/版本/冲突** 以 `DocumentStateStore`（键 = `resourceKey`）为单源；Tab 仅引用资源，禁止再写 `LayoutTab.isDirty`。
+
+### tabbar 收敛
+
+> **结论**：**可以向 VS Code 收敛，且主体模型已基本对齐**——Tab = 资源引用（`LayoutTab.id` = graph path / worksheet id）、标题与脏状态外置（`ResourceStore` + `DocumentStateStore`）、正文单实例（`graphEntities[graphPath]` + 后端单 loaded graph）。剩余差距不在「能不能收敛」，而在 **TabBar 职责分层**、**Tab 元数据去重**、**统一切换/关闭门面**，以及部分交互细节与 `useTabManagement` / `TabBar.tsx` 重复编排。
+
+#### VS Code vs YssBI（TabBar / EditorGroup 专项）
+
+| 概念 | VS Code | YssBI 当前 | 差距 / 待办 |
+|------|---------|------------|-------------|
+| **Tab 身份** | `ITabInput` → resource URI | `LayoutTab.id` = path / worksheet id | [x] graph path 已收敛；[x] `layoutTabResourceRef` + `resourceKey` |
+| **Tab 标题** | `IEditorLabelService` 从资源派生 | `resolveTabDisplayName` + ResourceStore | [x] 删除 `updateOpenResourceLabels`；title 仅 hydrate 快照 |
+| **Tab 脏点** | `ITextDocument.isDirty` | `DocumentStateStore` → TabBar 圆点 | [x] 已单源读取；[x] 不再读 `LayoutTab.isDirty` |
+| **Tab 状态装饰** | problem / readonly / preview / pinned | icon + tooltip（missing/stale/conflict）+ preview 斜体 | [x] preview / pin |
+| **Tab 切换** | `IEditorService.openEditor` 统一入口 | `switchEditorTab` | [x] graph + worksheet 统一入口 |
+| **Tab 关闭** | `closeEditor` / `closeEditors` / 中键 | `closeEditorTab` → graph / worksheet | [x] `resolveTabDisplayName` 用于确认文案 |
+| **TabBar 职责** | View 薄层 + `EditorService` 编排 | `tabCommands` + 薄 `TabBar` | [x] 编排下沉 |
+| **组操作** | 关闭组 / 拆分编辑器 | `closeEditorGroup` / `splitEditorGroup` | [x] 单点实现，无重复 release |
+
+#### 已对齐（可视为收敛基线）
+
+- [x] **Tab.id = 资源 path**：graph `events/…` / `untitled:…`；worksheet id；禁止 tab 级 UUID（见身份收敛表）。
+- [x] **Tab 标题优先 ResourceStore**：`resolveTabDisplayName` + `ResourceStore`。
+- [x] **脏状态单源**：`DocumentStateStore`；`collectDirtyGraphTabs` / TabBar 圆点不读 `LayoutTab.isDirty`。
+- [x] **打开/激活单入口（graph）**：`openGraphInEditor` → `openEditorTab` + `switchEditorGraphTab`。
+- [x] **关闭单入口**：`closeEditorTab` 按 type 分发 graph / worksheet。
+- [x] **跨组 Tab 移动**：`layoutStore.moveTab` + 空组折叠（注释已标 VS Code 逻辑）。
+- [x] **分屏复制 Tab**：拖画布边缘创建新 editor group 并复制当前 tab（`Workspace.tsx`）。
+- [x] **重命名/路径迁移同步 Tab**：`migrateGraphResourcePath` 更新 `LayoutTab.id`；标题由 `ResourceStore` 派生，不再写回 `LayoutTab.title`。
+
+#### 待收敛（按优先级）
+
+- [x] **P0 — TabBar 编排下沉**：`tabCommands.ts` 收敛 `switchTab` / `closeTab` / `closeEditorGroup` / `splitEditorGroup`；`TabBar.tsx` 仅调用 commands；`useTabManagement` 为薄封装。
+- [x] **P0 — 统一 Tab 切换 API**：`switchEditorTab(groupId, tab)` 覆盖 graph + worksheet；`switchEditorGraphTab` 保留为薄兼容层。
+- [x] **P1 — Tab 元数据单源**：`LayoutTab.title` 改为可选 hydrate 快照；删除 `updateOpenResourceLabels`；`reconcileOpenLayoutTabsWithResources` 在 project load 剥离 title。
+- [x] **P1 — Tab 资源引用显式化**：`layoutTabResourceRef(tab)`；TabBar / close / dirty 统一走 `resourceKey`。
+- [x] **P1 — 关闭/保存文案单源**：`resolveTabDisplayName` 供 `closeGraphTab` / `closeEditorTab` / `collectDirtyGraphTabs` 使用。
+- [x] **P2 — 组关闭去重**：`closeEditorGroup` 单点关闭 + `removeNode`；移除多余 `releaseGraphCacheIfClosed` 批量调用。
+- [x] **P2 — Tab 状态 UI 规范**：`missing` / `stale` / `conflict` icon + tooltip（i18n）；untitled 显示「未保存」前缀。
+- [x] **P2 — Tab 上下文菜单**：右键 Close / Close Others / Close All / Close Saved；Reveal in Sidebar。
+- [x] **P3 — Preview / Pin tab**：侧栏单击 preview、双击/显式打开 pin；每组至多一个 preview；脏状态自动 pin；Tab 斜体 + 右键「保持打开」。
+- [x] **P3 — 布局恢复与资源索引对齐**：`reconcileOpenLayoutTabsWithResources` 在 load / refresh index 后剥离 `LayoutTab.title` 快照。
+
+#### TabBar 收敛原则（写入规则 / PR checklist）
+
+1. **Tab 不拥有正文与脏状态**：仅引用 `ResourceRef`；正文在 `graphEntities` / worksheet store；脏在 `DocumentStateStore`。
+2. **TabBar 是 View**：用户手势 → application `tabCommands`；禁止在 `TabBar.tsx` 新增业务分支（save/load/migrate）。
+3. **同 path 多 Tab 合法**：允许多 editor group 引用同一 `graphPath`；禁止为「避免重复」复制 `graphEntities` 或二次 load 后端。
+4. **切换/关闭必须带 `groupId`**：session（`GraphSessionStore`）、viewport、selection 清理与组上下文绑定。
+5. **标题与状态只读派生**：`ResourceStore.name` + `DocumentStateStore`；`LayoutTab` 仅存 `id` / `type` / `component`（+ 可选 hydrate 快照）。
 
 ## v1.0 待办
 

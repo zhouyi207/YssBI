@@ -301,6 +301,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           );
           if (type === "event" || type === "function") {
             setVariablesGraphScopeFromResource(id);
+            void openGraph(id, name, type, { pinned: false });
           }
         }}
         onDoubleClick={(e) => {

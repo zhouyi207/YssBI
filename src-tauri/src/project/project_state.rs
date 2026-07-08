@@ -184,7 +184,7 @@ impl ProjectState {
             let data = self.project_data.read().unwrap();
             data.graphs
                 .iter()
-                .filter_map(|(graph_id, graph)| {
+                .filter_map(|(graph_path, graph)| {
                     let seeds: Vec<_> = graph
                         .data_state
                         .read()
@@ -199,22 +199,22 @@ impl ProjectState {
                     if seeds.is_empty() {
                         None
                     } else {
-                        Some((graph_id.clone(), seeds))
+                        Some((graph_path.clone(), seeds))
                     }
                 })
                 .collect()
         };
 
         let mut data = self.project_data.write().unwrap();
-        for (graph_id, seeds) in seed_nodes {
-            let graph_kind = match data.graphs.get(&graph_id) {
+        for (graph_path, seeds) in seed_nodes {
+            let graph_kind = match data.graphs.get(&graph_path) {
                 Some(graph) => graph.kind.clone(),
                 None => continue,
             };
             let variable_symbols =
-                Self::variable_symbols_from_variables(&data.variables, &graph_id, &graph_kind);
+                Self::variable_symbols_from_variables(&data.variables, &graph_path, &graph_kind);
             let dataframe_symbols = Self::dataframe_symbols_from_databases(&data.databases);
-            let Some(graph) = data.graphs.get_mut(&graph_id) else {
+            let Some(graph) = data.graphs.get_mut(&graph_path) else {
                 continue;
             };
             Self::bind_graph_runtime(graph, self);

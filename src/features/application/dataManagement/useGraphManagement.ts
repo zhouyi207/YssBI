@@ -15,11 +15,17 @@ import { resourceKey, useResourceStore } from '@/features/core/resource';
 
 import type { Graph } from '@/shared/types/domain';
 
+type OpenGraphOptions = {
+  initialData?: Graph;
+  pinned?: boolean;
+  targetGroupId?: string;
+};
+
 type OpenGraphFn = (
   id: string,
   name: string,
   type: 'event' | 'function',
-  initialData?: Graph,
+  options?: OpenGraphOptions,
 ) => void | Promise<void>;
 
 /**

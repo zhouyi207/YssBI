@@ -195,7 +195,7 @@ pub fn disconnect_pin(
 
 /// 删除连接（按 from->to 格式的 connectionId 断开）
 ///
-/// 前端 ConnectionService.deleteConnection(subgraphId, connectionId)
+/// 前端 ConnectionService.deleteConnection(graphPath, connectionId)
 #[tauri::command]
 pub fn delete_connection(
     app: AppHandle,
@@ -266,7 +266,7 @@ pub struct ConnectionDTO {
 
 /// 获取子图的所有连接
 ///
-/// 前端 ConnectionService.getConnections(subgraphId)
+/// 前端 ConnectionService.getConnections(graphPath)
 #[tauri::command]
 pub fn get_connections(
     state: State<ProjectState>,
@@ -297,7 +297,7 @@ pub fn get_connections(
 
 /// 断开 Pin 的所有连接（与 disconnect_pin 功能相同，兼容旧接口）
 ///
-/// 前端 ConnectionService.deleteConnectionsForPin(subgraphId, pinId)
+/// 前端 ConnectionService.deleteConnectionsForPin(graphPath, pinId)
 #[tauri::command]
 pub fn delete_connections_for_pin(
     app: AppHandle,
@@ -351,7 +351,7 @@ pub fn delete_connections_for_pin(
 
 /// 删除节点的所有连接
 ///
-/// 前端 ConnectionService.deleteConnectionsForNode(subgraphId, nodeId)
+/// 前端 ConnectionService.deleteConnectionsForNode(graphPath, nodeId)
 #[tauri::command]
 pub fn delete_connections_for_node(
     app: AppHandle,

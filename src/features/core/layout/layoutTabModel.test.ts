@@ -5,6 +5,7 @@ import {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,
   isGraphLayoutTab,
+  isPreviewLayoutTab,
   normalizeLayoutTab,
   readEditorGroupSnapshot,
   splitComponentForTab,
@@ -33,7 +34,8 @@ describe('layoutTabModel', () => {
       id: 'untitled:function:Untitled-1',
       type: 'function',
     });
-    expect(buildWorksheetLayoutTab('w1', 'Chart')).toMatchObject({
+    expect(buildWorksheetLayoutTab('w1')).toMatchObject({
+      id: 'w1',
       type: 'worksheet',
       component: 'WorksheetEditor',
     });
@@ -59,6 +61,8 @@ describe('layoutTabModel', () => {
   it('isGraphLayoutTab and splitComponentForTab', () => {
     const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'G', 'event');
     expect(isGraphLayoutTab(graphTab)).toBe(true);
+    expect(isPreviewLayoutTab(graphTab)).toBe(false);
+    expect(isPreviewLayoutTab(buildGraphLayoutTab('events/P.yssbi-event', 'P', 'event', { pinned: false }))).toBe(true);
     expect(splitComponentForTab(graphTab)).toBe('GraphEditor');
     expect(splitComponentForTab(null)).toBe('GraphEditor');
   });

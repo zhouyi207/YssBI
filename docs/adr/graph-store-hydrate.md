@@ -17,7 +17,7 @@
 
 ### 2. 入站联合 `GraphDataLike`
 
-`hydrateGraphs` / `addGraphFromData` 只接受 `GraphDataLike`，**必须**经 `normalizeGraphDataLike(graphId, graph)` 再 `buildGraphBucket`。
+`hydrateGraphs` / `addGraphFromData` 只接受 `GraphDataLike`，**必须**经 `normalizeGraphDataLike(graphPath, graph)` 再 `buildGraphBucket`。
 
 | 入站 | 典型来源 |
 | --- | --- |

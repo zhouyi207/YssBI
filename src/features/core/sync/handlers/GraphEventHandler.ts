@@ -10,7 +10,6 @@ import {
   buildGraphResourceMeta,
   lookupGraphResource,
   markResourceLoaded,
-  updateOpenResourceLabels,
   useResourceStore,
 } from '@/features/core/resource';
 import type { Graph } from '@/shared/types/domain';
@@ -28,7 +27,6 @@ function syncGraphResource(payload: GraphUpdatedPayload, kind: 'event' | 'functi
     const name = payload.data.name;
     if (name === undefined) return;
     useResourceStore.getState().patchResource({ id: payload.path, kind }, { name });
-    updateOpenResourceLabels({ id: payload.path, kind }, name);
 }
 
 function buildGraphUpdateData(

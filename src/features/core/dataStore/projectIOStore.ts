@@ -28,6 +28,7 @@ import {
 } from '@/features/core/variable/variableCatalog';
 import { resetClientProjectState } from './projectClientReset';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
+import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
 
 interface ProjectIOStore {
   status: LoadStatus;
@@ -155,6 +156,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       graphOrder,
     });
     hydrateFunctionSignaturesFromProjectIndex(index.graphs);
+    reconcileOpenLayoutTabsWithResources();
     return true;
   } catch (err) {
     const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
@@ -228,6 +230,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
           graphOrder,
         });
         hydrateFunctionSignaturesFromProjectIndex(index.graphs);
+        reconcileOpenLayoutTabsWithResources();
 
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -272,6 +275,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
       graphOrder: Object.values(project.graphs).map((graph) => graph.path),
     });
     syncGraphViewportsFromRecords(project.graphs);
+    reconcileOpenLayoutTabsWithResources();
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
 

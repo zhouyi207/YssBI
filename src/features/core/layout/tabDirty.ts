@@ -1,18 +1,23 @@
 import type { LayoutTab } from "@/shared/types/ui";
 import { useLayoutStore } from "./layoutStore";
 import { isGraphResourceDirty, markResourceDirty } from "@/features/core/resource";
+import { layoutTabResourceRef } from "./layoutTabModel";
+import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 
 export function markGraphTabDirty(graphPath: string): void {
-    const tab = findResourceTab(graphPath);
-    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
-        markResourceDirty({ id: graphPath, kind: tab.type }, true);
+    const located = findResourceTabLocation(graphPath);
+    if (located?.tab.type === "event" || located?.tab.type === "function" || located?.tab.type === "worksheet") {
+        markResourceDirty({ id: graphPath, kind: located.tab.type }, true);
+        if (located.tab.pinned === false) {
+            useLayoutStore.getState().setTabPinned(located.nodeId, graphPath, true);
+        }
     }
 }
 
-function findResourceTab(tabId: string): LayoutTab | null {
+function findResourceTabLocation(tabId: string): { nodeId: string; tab: LayoutTab } | null {
     for (const node of Object.values(useLayoutStore.getState().nodes)) {
         const tab = node.data?.tabs?.find((item) => item.id === tabId);
-        if (tab) return tab;
+        if (tab) return { nodeId: node.id, tab };
     }
     return null;
 }
@@ -40,7 +45,11 @@ export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
             if (seen.has(tab.id)) continue;
             if (!isGraphResourceDirty(tab.id, tab.type)) continue;
             seen.add(tab.id);
-            out.push({ nodeId: node.id , graphPath: tab.id, title: tab.title ?? tab.id });
+            out.push({
+              nodeId: node.id,
+              graphPath: tab.id,
+              title: resolveTabDisplayName(layoutTabResourceRef(tab), tab.id),
+            });
         }
     }
     return out;

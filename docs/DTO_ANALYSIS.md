@@ -15,7 +15,7 @@
 | ui_style | ✅ | ✅ | ✅ | 一致 |
 | description | ✅ Option | ✅ optional | ✅ | 一致 |
 | position | ✅ NodePosition | ❌ 在 UINode | ✅ { x, y } | Domain Node 无 position |
-| graphId | ❌ | ❌ | ✅ | Store 专用，用于索引 |
+| graphPath | ❌ | ❌ | ✅ | Store 专用，用于索引 |
 
 ### 2. Pin（针脚）
 

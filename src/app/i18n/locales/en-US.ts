@@ -368,6 +368,21 @@ export const enUS = {
     splitDownAlt: "Split Editor Down (Alt)",
     splitRight: "Split Editor Right",
     closeGroup: "Close Group",
+    unsavedPrefix: "Untitled",
+    status: {
+      missing: "Resource missing on disk",
+      stale: "File changed on disk",
+      conflict: "Disk changes conflict with unsaved edits",
+    },
+    contextMenu: {
+      close: "Close",
+      closeOthers: "Close Others",
+      closeSaved: "Close Saved",
+      closeAll: "Close All",
+      revealInSidebar: "Reveal in Sidebar",
+      keepOpen: "Keep Open",
+    },
+    previewHint: "Preview tab — double-click or edit to pin",
   },
   activityBar: {
     graphs: "Graphs",

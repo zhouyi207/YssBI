@@ -1,4 +1,5 @@
 import { useGraphDataStore, useVariableStore } from '@/features/core/dataStore';
+import { useExecutionStore } from '@/features/core/execution';
 import { isGraphOpenInAnyTab, isGraphTabDirty } from '@/features/core/layout/graphTabQueries';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { markResourceLoaded } from '@/features/core/resource';
@@ -14,6 +15,7 @@ export async function deactivateInactiveGraphPath(graphPath: string): Promise<vo
 
   useGraphDataStore.getState().clearGraph(graphPath);
   useVariableStore.getState().clearGraphVariables(graphPath);
+  useExecutionStore.getState().releaseGraphExecutionState(graphPath);
 
   const kind = inferGraphResourceKind(graphPath);
   if (kind) {

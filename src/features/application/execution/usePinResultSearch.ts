@@ -2,10 +2,12 @@ import { useMemo } from 'react';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import {
   collectPinResultSearchEntries,
+  collectPinResultSearchEntriesFromCache,
   filterPinResultSearchEntries,
   type PinResultSearchEntry,
   type PinResultSearchPinRef,
 } from '@/features/core/execution/pinResultSearch';
+import { graphBucketHasPinResults } from '@/features/core/execution/normalizePinResult';
 import { useExecutionStore } from '@/features/core/execution';
 import type { PinResultState } from '@/shared/types/ui';
 import { isExecPin } from '@/shared/types/domain/pinSemantics';
@@ -36,13 +38,16 @@ function collectGraphPins(graphPath: string): PinResultSearchPinRef[] {
 }
 
 export function usePinResultSearch(graphPath: string, query: string) {
+  const pinResultCount = useExecutionStore(
+    (state) => state.graphs[graphPath]?.pinResults?.size ?? 0,
+  );
   const pinResults = useExecutionStore(
     (state) => state.graphs[graphPath]?.pinResults ?? EMPTY_PIN_RESULTS,
   );
   const graphBucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
 
   const entries = useMemo(() => {
-    if (pinResults.size === 0 || !graphBucket) return [];
+    if (!graphBucketHasPinResults(pinResults)) return [];
 
     const resolveLabels = (nodeId: string, pinId: string) => {
       const graphStore = useGraphDataStore.getState();
@@ -54,13 +59,17 @@ export function usePinResultSearch(graphPath: string, query: string) {
       };
     };
 
+    if (!graphBucket) {
+      return collectPinResultSearchEntriesFromCache(graphPath, pinResults, resolveLabels);
+    }
+
     return collectPinResultSearchEntries(
       graphPath,
       pinResults,
       collectGraphPins(graphPath),
       resolveLabels,
     );
-  }, [graphPath, graphBucket, pinResults]);
+  }, [graphPath, graphBucket, pinResults, pinResultCount]);
 
   const filteredEntries = useMemo(
     () => filterPinResultSearchEntries(entries, query),
@@ -68,7 +77,7 @@ export function usePinResultSearch(graphPath: string, query: string) {
   );
 
   return {
-    hasResults: entries.length > 0,
+    hasResults: pinResultCount > 0,
     entries: filteredEntries,
   };
 }

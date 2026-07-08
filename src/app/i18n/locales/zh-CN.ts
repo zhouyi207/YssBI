@@ -368,6 +368,21 @@ export const zhCN = {
     splitDownAlt: "向下拆分编辑器（Alt）",
     splitRight: "向右拆分编辑器",
     closeGroup: "关闭分组",
+    unsavedPrefix: "未保存",
+    status: {
+      missing: "磁盘上找不到此资源",
+      stale: "磁盘上的文件已更新",
+      conflict: "磁盘变更与未保存编辑冲突",
+    },
+    contextMenu: {
+      close: "关闭",
+      closeOthers: "关闭其他",
+      closeSaved: "关闭已保存",
+      closeAll: "全部关闭",
+      revealInSidebar: "在侧栏中显示",
+      keepOpen: "保持打开",
+    },
+    previewHint: "预览标签页 — 双击或编辑以固定",
   },
   activityBar: {
     graphs: "图",

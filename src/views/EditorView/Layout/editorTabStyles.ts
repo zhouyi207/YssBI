@@ -29,10 +29,15 @@ export const editorTabItemVariants = cva(
         true: "cursor-grabbing opacity-50",
         false: "",
       },
+      preview: {
+        true: "italic font-normal",
+        false: "",
+      },
     },
     defaultVariants: {
       active: false,
       dragging: false,
+      preview: false,
     },
   },
 );

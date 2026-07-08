@@ -2,7 +2,6 @@ import { useGraphDataStore, useGraphMetaStore, useProjectIOStore, useDatabaseSto
 import {
   graphResourceRef,
   normalizeBackendResourceMeta,
-  updateOpenResourceLabels,
   useResourceStore,
   type ResourceRef,
 } from '@/features/core/resource';
@@ -35,7 +34,6 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
       loaded: meta.loaded,
     });
     useGraphMetaStore.getState().updateGraph(meta.id, { name: meta.name });
-    updateOpenResourceLabels(targetRef, meta.name);
     return;
   }
 

@@ -14,6 +14,7 @@ import {
   snapshotToGraphPatch,
 } from './executionVisualSession';
 import { clearedRunArtifactsPatch } from './graphRunArtifacts';
+import { normalizePinResultState, type PinResultWirePayload } from './normalizePinResult';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -61,11 +62,13 @@ interface ExecutionStore extends ExecutionState {
   clearGraphRunArtifacts: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
-  recordPinResult: (graphPath: string, result: PinResultState) => void;
+  recordPinResult: (graphPath: string, result: PinResultWirePayload | PinResultState) => void;
   setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphPath?: string) => void;
   markGraphDirty: (graphPath: string) => void;
   clearPinResults: (graphPath: string, pinIds: string[]) => void;
+  /** Drop all execution state when a graph is fully closed (no open tab). */
+  releaseGraphExecutionState: (graphPath: string) => void;
   /** Clear node/connection visuals only; keep pin results and recording (replay start). */
   resetGraphVisuals: (graphPath: string) => void;
   /** Side-effect events only (pin results). Visual events use executionVisualSession. */
@@ -153,8 +156,9 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   recordPinResult: (graphPath, result) => set((state) => {
     const g = state.graphs[graphPath] ?? emptyGraphState();
+    const normalized = normalizePinResultState(graphPath, result);
     const next = new Map(g.pinResults);
-    next.set(result.pinId, result);
+    next.set(normalized.pinId, normalized);
     return updateGraph(state, graphPath, { pinResults: next });
   }),
 
@@ -167,12 +171,15 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
 
   markGraphDirty: (graphPath) => set((state) => {
     const g = state.graphs[graphPath];
-    if (!g || (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath))) return state;
+    if (!g) return state;
+    if (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath)) {
+      return state;
+    }
     clearExecutionVisual();
     return {
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
-        ...clearedRunArtifactsPatch(true),
+        graphDirty: true,
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     };
@@ -187,6 +194,17 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       next.delete(pinId);
     }
     return updateGraph(state, graphPath, { pinResults: next });
+  }),
+
+  releaseGraphExecutionState: (graphPath) => set((state) => {
+    if (!state.graphs[graphPath]) return state;
+    const graphs = { ...state.graphs };
+    delete graphs[graphPath];
+    clearExecutionVisual();
+    return {
+      graphs,
+      ...stopPlaybackIfGraph(state, graphPath),
+    };
   }),
 
   resetGraphVisuals: (graphPath) => set((state) => {

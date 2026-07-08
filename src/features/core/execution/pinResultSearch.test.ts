@@ -3,8 +3,10 @@ import type { PinResultState } from '@/shared/types/ui';
 import {
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
+  collectPinResultSearchEntriesFromCache,
   filterPinResultSearchEntries,
 } from './pinResultSearch';
+import { graphBucketHasPinResults } from './normalizePinResult';
 
 function pinResult(pinId: string, title: string, nodeId = 'node-1'): PinResultState {
   return {
@@ -93,5 +95,15 @@ describe('pinResultSearch', () => {
     expect(entries[1]?.nodeTitle).toBe('Summary');
     expect(entries[1]?.pinName).toBe('Data');
     expect(entries[1]?.pinResult.pinId).toBe('out-1');
+  });
+
+  it('lists cached output results without graph body', () => {
+    const pinResults = new Map([['out-1', pinResult('out-1', 'Cached Table')]]);
+    expect(graphBucketHasPinResults(pinResults)).toBe(true);
+    expect(graphBucketHasPinResults(new Map())).toBe(false);
+
+    const entries = collectPinResultSearchEntriesFromCache('graph-1', pinResults);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.sourceTitle).toBe('Cached Table');
   });
 });

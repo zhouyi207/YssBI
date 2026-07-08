@@ -31,11 +31,15 @@ export type LayoutTabComponent = 'GraphEditor' | 'WorksheetEditor';
 export interface LayoutTab {
   /** Graph tab: project-relative graph path; worksheet tab: worksheet resource id */
   id: string;
-  title: string;
+  /** @deprecated Hydrate-only snapshot; display via ResourceStore / resolveTabDisplayName. */
+  title?: string;
   component: LayoutTabComponent;
   type: LayoutTabType;
-  /** @deprecated Read dirty from DocumentState via resourceKey; not persisted. */
-  isDirty?: boolean;
+  /**
+   * `false` = preview tab (italic, one per editor group, replaceable until pinned).
+   * `true` or omitted = pinned / permanent.
+   */
+  pinned?: boolean;
 }
 
 /** 编辑器组节点 `data.params`（非 Tab 级字段） */

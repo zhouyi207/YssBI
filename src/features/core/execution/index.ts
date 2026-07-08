@@ -33,8 +33,13 @@ export {
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
 export {
+  graphBucketHasPinResults,
+  normalizePinResultState,
+} from './normalizePinResult';
+export {
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
+  collectPinResultSearchEntriesFromCache,
   filterPinResultSearchEntries,
   type PinResultSearchDirection,
   type PinResultSearchEntry,

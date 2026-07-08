@@ -5,7 +5,6 @@ import {
   clearResourceDocumentState,
   markResourceDirty,
   markResourceLoaded,
-  updateOpenResourceLabels,
   useResourceStore,
 } from '@/features/core/resource';
 
@@ -73,7 +72,6 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
         { id: worksheetId, kind: 'worksheet' },
         { name: patch.name },
       );
-      updateOpenResourceLabels({ id: worksheetId, kind: 'worksheet' }, patch.name);
     }
 
     return next;

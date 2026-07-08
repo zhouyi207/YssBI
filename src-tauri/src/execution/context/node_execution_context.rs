@@ -70,7 +70,7 @@ impl NodeExecutionContext {
             record,
         );
         self.pin_result_events.push(ExecutionEvent::PinResultReady {
-            graph_id: graph_path.to_string(),
+            graph_path: graph_path.to_string(),
             node_id: self.node_id.to_string(),
             pin_id: pin_id.to_string(),
             source_id,

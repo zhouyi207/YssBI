@@ -551,7 +551,7 @@ impl ProjectState {
     }
 
     /// 目标函数签名变化后，同步所有引用该函数的 Call 节点 pin（含未加载的调用方图）。
-    /// 返回每个受影响图的 `(graph_id, graph, change_sets)` 供命令层发事件。
+    /// 返回每个受影响图的 `(graph_path, graph, change_sets)` 供 command 层发事件。
     pub fn sync_call_nodes_for_function(
         &self,
         function_path: &GraphResourcePath,

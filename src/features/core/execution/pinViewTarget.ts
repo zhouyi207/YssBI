@@ -39,12 +39,12 @@ export function resolveUpstreamPinIds(
 export function resolvePinViewTargetFromCache(
   params: ResolvePinViewTargetParams,
 ): PinViewTarget | null {
-  const { graphPath, pinId, direction, isExec, connectionIds, pinResults } = params;
+  const { pinId, direction, isExec, connectionIds, pinResults } = params;
   if (!isInspectableDataPin(isExec) || !pinResults) return null;
 
   if (direction === 'output') {
     const pinResult = pinResults.get(pinId);
-    if (pinResult?.graphPath === graphPath) {
+    if (pinResult) {
       return { sourcePinId: pinId, pinResult };
     }
     return null;
@@ -52,7 +52,7 @@ export function resolvePinViewTargetFromCache(
 
   for (const upstreamPinId of resolveUpstreamPinIds(pinId, connectionIds)) {
     const pinResult = pinResults.get(upstreamPinId);
-    if (pinResult?.graphPath === graphPath) {
+    if (pinResult) {
       return { sourcePinId: upstreamPinId, pinResult };
     }
   }

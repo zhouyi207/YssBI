@@ -14,6 +14,23 @@ export {
 export { useEditorOperations } from './useEditorOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';
+export {
+  switchEditorTab,
+  activateCurrentEditorTab,
+} from './switchEditorTab';
+export {
+  switchTab,
+  closeTab,
+  closeEditorGroup,
+  splitEditorGroup,
+  splitEditorGroupFromPointer,
+  closeOtherTabs,
+  closeAllTabsInGroup,
+  closeSavedTabsInGroup,
+  pinTab,
+} from './tabCommands';
+export { resolveTabDisplayName } from './resolveTabDisplayName';
+export { reconcileOpenLayoutTabsWithResources } from './reconcileOpenLayoutTabs';
 export { useProjectOperations } from './useProjectOperations';
 export { useEditorGroup } from './useEditorGroup';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';

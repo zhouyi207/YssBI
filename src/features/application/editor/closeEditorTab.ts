@@ -1,11 +1,13 @@
+import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { isResourceDocumentDirty } from '@/features/core/resource';
-import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
 
 export async function closeWorksheetTab(
   worksheetId: string,
@@ -16,9 +18,10 @@ export async function closeWorksheetTab(
   if (!located?.tab) return false;
 
   if (isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' }) && !skipDirtyPrompt) {
+    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetId);
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
-      message: `“${located.tab.title}” 已修改。关闭前是否保存？`,
+      message: `“${displayName}” 已修改。关闭前是否保存？`,
       confirmText: '保存',
       cancelText: '不保存',
       type: 'info',

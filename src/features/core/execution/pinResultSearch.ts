@@ -61,7 +61,7 @@ export function collectPinResultSearchEntries(
 
     if (pin.direction === 'output') {
       const pinResult = pinResults.get(pin.pinId);
-      if (!pinResult || pinResult.graphPath !== graphPath) continue;
+      if (!pinResult) continue;
 
       entries.push(
         buildPinResultSearchEntry(
@@ -111,4 +111,30 @@ export function filterPinResultSearchEntries(
   const normalized = query.trim().toLowerCase();
   if (!normalized) return entries;
   return entries.filter((entry) => entry.searchText.includes(normalized));
+}
+
+/** Fallback when graph body is unloaded: list cached output pin results only. */
+export function collectPinResultSearchEntriesFromCache(
+  _graphPath: string,
+  pinResults: ReadonlyMap<string, PinResultState>,
+  resolveLabels?: (nodeId: string, pinId: string) => PinResultSearchLabels,
+): PinResultSearchEntry[] {
+  const entries: PinResultSearchEntry[] = [];
+
+  for (const pinResult of pinResults.values()) {
+    const labels = resolveLabels?.(pinResult.nodeId, pinResult.pinId) ?? {
+      nodeTitle: pinResult.nodeId,
+      pinName: pinResult.pinId,
+    };
+    entries.push(
+      buildPinResultSearchEntry(
+        `output:${pinResult.pinId}`,
+        'output',
+        pinResult,
+        labels,
+      ),
+    );
+  }
+
+  return entries.sort((left, right) => left.searchText.localeCompare(right.searchText));
 }

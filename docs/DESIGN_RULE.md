@@ -361,7 +361,7 @@ Store 图实体桶的权威形态为 `GraphData`；所有入站数据须经 `nor
 ```
 GraphInstanceDTO / Graph / GraphDataInput / GraphData
         ↓
-normalizeGraphDataLike(graphId, graph)     ← dto/graphModel.ts 单点
+normalizeGraphDataLike(graphPath, graph)     ← dto/graphModel.ts 单点
         ↓
 buildGraphBucket → GraphEntityBucket
 ```
@@ -388,8 +388,8 @@ buildGraphBucket → GraphEntityBucket
 
 | 场景           | 约定                   | 示例                           |
 | -------------- | ---------------------- | ------------------------------ |
-| Domain / Store | snake_case             | node_type, ui_style, graph_id  |
-| DTO（JSON）    | camelCase              | nodeType, uiStyle, graphId     |
+| Domain / Store | snake_case             | node_type, ui_style, graph_path  |
+| DTO（JSON）    | camelCase              | nodeType, uiStyle, graphPath     |
 | 组件 / Hook    | PascalCase / camelCase | PinInput, useCanvasInteraction |
 | 文件           | camelCase              | graphDataStore.ts              |
 
@@ -425,7 +425,7 @@ src-tauri/src/
 │   ├─ core/                # 图实例与状态
 │   │   ├─ graph_instance.rs      # GraphInstance（持有 data_state，提供 mutation API）
 │   │   ├─ graph_data_state.rs    # GraphDataState（nodes、pins、connections 的容器）
-│   │   ├─ graph_id.rs            # GraphId（UUID 包装）
+│   │   ├─ graph_path.rs            # GraphId（UUID 包装）
 │   │   ├─ graph_kind.rs          # GraphKind（Event/Function）
 │   │   └─ graph_position.rs      # 画布位置 { x, y, scale }
 │   ├─ node/                # 节点系统
