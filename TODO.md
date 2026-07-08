@@ -1122,6 +1122,8 @@ interface PinVisualSpec {
 - [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
 - [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
+- [ ] 目前 search pin 查看数据都是无法找到，有 bug
+- [ ] 在执行图的时候，首先需要递归加载外部图，并进行存储，避免修改外部图的时候导致原来的执行出现变化
 
 
 # TODOLIST
