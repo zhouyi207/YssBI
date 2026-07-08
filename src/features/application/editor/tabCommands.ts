@@ -1,5 +1,5 @@
-import { getActiveLayoutTab, locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { splitComponentForTab } from '@/features/core/layout/layoutTabModel';
+import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { isGraphResourceDirty } from '@/features/core/resource';
 import type { LayoutTab } from '@/shared/types/ui';
@@ -71,9 +71,7 @@ export async function closeEditorGroup(groupId: string): Promise<boolean> {
 }
 
 export function splitEditorGroup(groupId: string, direction: 'row' | 'col' = 'row'): void {
-  const nodes = useLayoutStore.getState().nodes;
-  const activeTab = getActiveLayoutTab(groupId, nodes)?.tab;
-  useLayoutStore.getState().splitNode(groupId, direction, splitComponentForTab(activeTab));
+  splitEditorAtEdge(groupId, direction === 'row' ? 'right' : 'bottom');
 }
 
 export function splitEditorGroupFromPointer(groupId: string, altPressed: boolean): void {

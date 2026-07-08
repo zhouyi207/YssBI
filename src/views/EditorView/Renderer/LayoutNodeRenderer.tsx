@@ -181,7 +181,7 @@ const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
                 ) : null}
 
                 {/* 内容区域 */}
-                <div className="flex-1 relative min-h-0">
+                <div className="flex-1 relative min-h-0" data-editor-content={node.id}>
                     {ActiveComponent ? (
                         <ActiveComponent />
                     ) : (
@@ -220,7 +220,7 @@ const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
 };
 
 const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: string, className: string }) => {
-    const { setNodeRef, isOver } = useDroppable({
+    const { setNodeRef } = useDroppable({
         id: `${nodeId}-${zone}`,
         data: { dropType: DROP_TYPES.LAYOUT_REGION, dropPosition: zone, targetNodeId: nodeId }
     });
@@ -229,7 +229,7 @@ const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: stri
         <div
             id={`${nodeId}-${zone}`}
             ref={setNodeRef}
-            className={`${className} ${isOver ? 'bg-blue-500/20 transition-colors' : ''}`}
+            className={className}
         />
     );
 };

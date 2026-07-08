@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
 import { getActiveLayoutTab } from './layoutTabQueries';
+import {
+    createEditorGroupId,
+    resolveEditorSplitPlacement,
+    type EditorSplitEdge,
+} from './editorSplitLayout';
 import { logger } from '@/utils/appLogger';
 
 // Helper to generate IDs
@@ -31,6 +36,16 @@ export interface LayoutState {
 
     // High level actions
     splitNode: (targetId: string, direction: LayoutDirection, newComponentType: string) => void;
+    splitEditorGroupAtEdge: (
+        targetGroupId: string,
+        edge: EditorSplitEdge,
+        payload: {
+            component: string;
+            tabs: LayoutTab[];
+            activeTabId?: string;
+            pinSourceActiveTab?: boolean;
+        },
+    ) => string | null;
     resizeNode: (nodeId: string, size: number) => void;
 
     // DND Actions
@@ -226,67 +241,83 @@ export const useLayoutStore = create<LayoutState>()(
             }
         }),
 
-        splitNode: (targetId, direction, newComponentType) => set((state) => {
-            const targetNode = state.nodes[targetId];
-            if (!targetNode || !targetNode.parentId) return;
+        splitNode: (targetId, direction, newComponentType) => {
+            const activeTab = getActiveLayoutTab(targetId, get().nodes)?.tab;
+            get().splitEditorGroupAtEdge(targetId, direction === 'row' ? 'right' : 'bottom', {
+                component: newComponentType,
+                tabs: activeTab ? [{ ...activeTab, pinned: true as const }] : [],
+                activeTabId: activeTab?.id,
+                pinSourceActiveTab: true,
+            });
+        },
 
-            const parentNode = state.nodes[targetNode.parentId];
-            const requiredDirection = direction;
+        splitEditorGroupAtEdge: (targetGroupId, edge, payload) => {
+            let createdGroupId: string | null = null;
+            set((state) => {
+                const { direction, isAfter } = resolveEditorSplitPlacement(edge);
+                const targetNode = state.nodes[targetGroupId];
+                if (!targetNode || !targetNode.parentId) return;
 
-            // 只复制当前激活的标签页（分屏视为显式固定）
-            const activeTab = getActiveLayoutTab(targetId, state.nodes)?.tab;
-            if (activeTab) {
-                const sourceTab = targetNode.data?.tabs?.find((t) => t.id === activeTab.id);
-                if (sourceTab) sourceTab.pinned = true;
-            }
-            const newTabs = activeTab ? [{ ...activeTab, pinned: true as const }] : [];
+                const parentNode = state.nodes[targetNode.parentId];
+                if (!parentNode) return;
 
-            const newNodeId = generateId();
-            const newNode: LayoutNode = {
-                id: newNodeId,
-                type: 'component',
-                parentId: parentNode.id,
-                children: [],
-                size: 1,
-                data: {
-                    component: newComponentType,
-                    tabs: newTabs,
-                    activeTabId: activeTab?.id
+                if (payload.pinSourceActiveTab) {
+                    const activeTab = getActiveLayoutTab(targetGroupId, state.nodes)?.tab;
+                    if (activeTab) {
+                        const sourceTab = targetNode.data?.tabs?.find((t) => t.id === activeTab.id);
+                        if (sourceTab) sourceTab.pinned = true;
+                    }
                 }
-            };
 
-            if (parentNode.type === requiredDirection) {
-                const targetIndex = parentNode.children?.indexOf(targetId) || 0;
-                parentNode.children?.splice(targetIndex + 1, 0, newNodeId);
-                state.nodes[newNodeId] = newNode;
-            } else {
-                const branchId = generateId();
-                const branch: LayoutNode = {
-                    id: branchId,
-                    type: requiredDirection,
+                const newNodeId = createEditorGroupId();
+                const newNode: LayoutNode = {
+                    id: newNodeId,
+                    type: 'component',
                     parentId: parentNode.id,
-                    children: [targetId, newNodeId],
-                    size: targetNode.size,
-                    pixelSize: targetNode.pixelSize
+                    children: [],
+                    size: 1,
+                    data: {
+                        component: payload.component,
+                        tabs: payload.tabs,
+                        activeTabId: payload.activeTabId,
+                    },
                 };
 
-                const targetIndex = parentNode.children?.indexOf(targetId) || 0;
-                parentNode.children![targetIndex] = branchId;
+                if (parentNode.type === direction) {
+                    const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;
+                    const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
+                    parentNode.children?.splice(insertIndex, 0, newNodeId);
+                    state.nodes[newNodeId] = newNode;
+                } else {
+                    const branchId = createEditorGroupId();
+                    const branch: LayoutNode = {
+                        id: branchId,
+                        type: direction,
+                        parentId: parentNode.id,
+                        children: isAfter ? [targetGroupId, newNodeId] : [newNodeId, targetGroupId],
+                        size: targetNode.size,
+                        pixelSize: targetNode.pixelSize,
+                    };
 
-                targetNode.parentId = branchId;
-                targetNode.size = 1;
-                targetNode.pixelSize = undefined;
+                    const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;
+                    parentNode.children![targetIndex] = branchId;
 
-                newNode.parentId = branchId;
+                    targetNode.parentId = branchId;
+                    targetNode.size = 1;
+                    targetNode.pixelSize = undefined;
 
-                state.nodes[newNodeId] = newNode;
-                state.nodes[branchId] = branch;
-            }
+                    newNode.parentId = branchId;
 
-            // 自动聚焦到新分屏的面板
-            state.activeGroupId = newNodeId;
-            state.activeEditorGroupId = newNodeId;
-        }),
+                    state.nodes[newNodeId] = newNode;
+                    state.nodes[branchId] = branch;
+                }
+
+                state.activeGroupId = newNodeId;
+                state.activeEditorGroupId = newNodeId;
+                createdGroupId = newNodeId;
+            });
+            return createdGroupId;
+        },
 
         resizeNode: (nodeId, size) => set((state) => {
             const node = state.nodes[nodeId];

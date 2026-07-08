@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VscSplitHorizontal, VscSplitVertical, VscChromeClose, VscWarning, VscSync, VscError } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { computeTabShiftOffset } from "@/features/core/layout/tabBarInsertIndex";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
@@ -13,11 +14,12 @@ import { ContextMenu } from "@/shared/ui/contextMenu";
 import type { ContextMenuPosition } from "@/shared/ui/contextMenu";
 import {
   editorTabBarActionsClass,
+  editorTabBarEmptyStripClass,
   editorTabBarShellClass,
-  editorTabDropIndicatorClass,
+  editorTabCloseButtonClass,
   editorTabItemVariants,
+  editorTabReorderGapClass,
 } from "./editorTabStyles";
-import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import {
   closeEditorGroup,
@@ -26,6 +28,8 @@ import {
   splitEditorGroupFromPointer,
   switchTab,
 } from "@/features/application/editor/tabCommands";
+import { createUntitledEventInGroup } from "@/features/application/editor/editorGroupCommands";
+import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/application/editor/tabBarReorderStore";
 import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { isPreviewLayoutTab } from "@/features/core/layout/layoutTabModel";
@@ -46,20 +50,14 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     isAltPressed: s.isAltPressed,
     isDragging: s.isDragging,
   })));
+  const reorderPreview = useTabBarReorderStore((state) => state.preview);
+  const showReorderPreview = reorderPreview?.targetGroupId === layoutNodeId;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null);
-
-  const { setNodeRef: setDropRef, isOver: isTabBarOver } = useDroppable({
+  const { setNodeRef: setTabBarDropRef } = useDroppable({
     id: `tabbar-${layoutNodeId}`,
-    data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length }
+    data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length },
   });
-
-  React.useEffect(() => {
-    if (isTabBarOver && isDragging) {
-      setDropIndicatorIndex(tabs.length);
-    }
-  }, [isTabBarOver, isDragging, tabs.length]);
 
   const handleTabClick = (tab: LayoutTab) => {
     void switchTab(layoutNodeId, tab.id, tab);
@@ -98,10 +96,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   }, [activeTabId]);
 
   useEffect(() => {
-    if (!isDragging) setDropIndicatorIndex(null);
-  }, [isDragging]);
-
-  useEffect(() => {
     const container = containerRef.current;
     if (!container || !isDragging) return;
     const preventScroll = (e: WheelEvent) => {
@@ -112,6 +106,11 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     return () => container.removeEventListener('wheel', preventScroll);
   }, [isDragging]);
 
+  const handleEmptyStripDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void createUntitledEventInGroup(layoutNodeId);
+  };
+
   const tabList = (
     <>
       {tabs.map((tab, index) => (
@@ -121,9 +120,9 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
           index={index}
           layoutNodeId={layoutNodeId}
           isActive={activeTabId === tab.id}
+          reorderPreview={showReorderPreview ? reorderPreview : null}
           onClick={() => handleTabClick(tab)}
           onClose={(e) => handleCloseTab(tab.id, e)}
-          onDragOver={(idx) => setDropIndicatorIndex(idx)}
           onRevealInSidebar={() => revealInSidebar(tab)}
         />
       ))}
@@ -131,35 +130,35 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   );
 
   return (
-    <div ref={setDropRef} className={editorTabBarShellClass}>
-      <div className="relative flex-1 flex items-start h-full min-w-0">
-        {isDragging ? (
-          <div ref={containerRef} className="absolute inset-0 overflow-hidden flex items-start">
+    <div className={editorTabBarShellClass}>
+      <div
+        ref={setTabBarDropRef}
+        data-tabbar-drop={layoutNodeId}
+        className="relative flex min-h-0 flex-1 items-stretch h-full min-w-0"
+      >
+        <OverlayScrollbar
+          ref={containerRef}
+          direction="horizontal"
+          className="flex-1 flex items-stretch h-full"
+        >
+          <div data-tab-strip={layoutNodeId} className="relative flex h-full min-h-full items-stretch overflow-visible">
             {tabList}
-            {dropIndicatorIndex !== null && (
+            {showReorderPreview && reorderPreview ? (
               <div
-                className={editorTabDropIndicatorClass}
+                className={editorTabReorderGapClass}
                 style={{
-                  left: (() => {
-                    const container = containerRef.current;
-                    if (!container) return 0;
-                    const tabElement = container.children[dropIndicatorIndex] as HTMLElement;
-                    if (!tabElement) {
-                      const lastTab = container.children[tabs.length - 1] as HTMLElement;
-                      if (lastTab) return lastTab.offsetLeft + lastTab.offsetWidth;
-                      return 0;
-                    }
-                    return tabElement.offsetLeft;
-                  })(),
+                  left: reorderPreview.gapLeft,
+                  width: reorderPreview.gapWidth,
                 }}
               />
-            )}
+            ) : null}
           </div>
-        ) : (
-          <OverlayScrollbar ref={containerRef} direction="horizontal" className="flex-1 flex items-start h-full">
-            {tabList}
-          </OverlayScrollbar>
-        )}
+        </OverlayScrollbar>
+        <div
+          className={editorTabBarEmptyStripClass}
+          onDoubleClick={handleEmptyStripDoubleClick}
+          aria-label={t('tabBar.newUntitledHint')}
+        />
       </div>
 
       <div className={editorTabBarActionsClass}>
@@ -212,17 +211,16 @@ interface TabItemProps {
     index: number;
     layoutNodeId: string;
     isActive: boolean;
+    reorderPreview: TabBarReorderPreview | null;
     onClick: () => void;
     onClose: (e: React.MouseEvent) => void;
-    onDragOver: (index: number) => void;
     onRevealInSidebar: () => void;
 }
 
 const TabItem: React.FC<TabItemProps> = React.memo(({
-  tab, index, layoutNodeId, isActive, onClick, onClose, onDragOver, onRevealInSidebar,
+  tab, index, layoutNodeId, isActive, reorderPreview, onClick, onClose, onRevealInSidebar,
 }) => {
     const { t } = useTranslation();
-    const tabRef = React.useRef<HTMLDivElement>(null);
     const [menuPosition, setMenuPosition] = useState<ContextMenuPosition | null>(null);
     const resourceRef = layoutTabResourceRef(tab);
     const resourceTitle = useResourceStore((state) => {
@@ -259,55 +257,45 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
 
     const isDirty = resourceRef ? (documentState?.dirty ?? false) : false;
 
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `tab-${layoutNodeId}-${tab.id}`,
         data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId }
     });
 
-    const { setNodeRef: setDropRef, isOver } = useDroppable({
-        id: `tab-drop-${layoutNodeId}-${index}`,
-        data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: index }
-    });
+    const shiftX = !isDragging && reorderPreview && reorderPreview.sourceGroupId === layoutNodeId
+      ? computeTabShiftOffset(
+          index,
+          reorderPreview.draggedIndex,
+          reorderPreview.insertIndex,
+          reorderPreview.gapWidth,
+        )
+      : 0;
 
-    const setRefs = React.useCallback((node: HTMLDivElement | null) => {
-        tabRef.current = node;
-        setNodeRef(node);
-        setDropRef(node);
-    }, [setNodeRef, setDropRef]);
-
-    React.useEffect(() => {
-        if (!isOver || !tabRef.current) return;
-        const handleMouseMove = (e: MouseEvent) => {
-            const rect = tabRef.current!.getBoundingClientRect();
-            const mouseX = e.clientX;
-            const tabCenter = rect.left + rect.width / 2;
-            onDragOver(mouseX < tabCenter ? index : index + 1);
-        };
-        return addGlobalEventListener(window, 'mousemove', handleMouseMove);
-    }, [isOver, index, onDragOver]);
-
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: 100,
-        opacity: isDragging ? 0.5 : 1,
-        height: 'var(--titlebar-height)',
-    } : {
-        opacity: isDragging ? 0.5 : 1,
-        height: 'var(--titlebar-height)',
+    const style: React.CSSProperties = {
+      transform: shiftX !== 0 ? `translate3d(${shiftX}px, 0, 0)` : undefined,
+      height: 'var(--titlebar-height)',
     };
 
     return (
         <>
         <div
-            ref={setRefs}
+            ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
             data-tab-id={tab.id}
+            data-tab-group={layoutNodeId}
+            data-tab-title={title}
             onClick={onClick}
             onDoubleClick={(e) => {
               e.stopPropagation();
               if (isPreview) pinTab(layoutNodeId, tab.id);
+            }}
+            onAuxClick={(e) => {
+              if (e.button !== 1) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onClose(e);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -338,8 +326,9 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
+                data-dirty={isDirty ? 'true' : 'false'}
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground"
+                className={editorTabCloseButtonClass}
             >
                 {isDirty ? (
                     <span className="h-2 w-2 rounded-full bg-current" />

@@ -822,7 +822,7 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 - [x] **打开/激活单入口（graph）**：`openGraphInEditor` → `openEditorTab` + `switchEditorGraphTab`。
 - [x] **关闭单入口**：`closeEditorTab` 按 type 分发 graph / worksheet。
 - [x] **跨组 Tab 移动**：`layoutStore.moveTab` + 空组折叠（注释已标 VS Code 逻辑）。
-- [x] **分屏复制 Tab**：拖画布边缘创建新 editor group 并复制当前 tab（`Workspace.tsx`）。
+- [x] **分屏复制 Tab**：拖画布边缘创建新 editor group 并复制当前 tab（`editorGroupCommands` + `splitEditorGroupAtEdge`）。
 - [x] **重命名/路径迁移同步 Tab**：`migrateGraphResourcePath` 更新 `LayoutTab.id`；标题由 `ResourceStore` 派生，不再写回 `LayoutTab.title`。
 
 #### 待收敛（按优先级）
@@ -841,10 +841,67 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 #### TabBar 收敛原则（写入规则 / PR checklist）
 
 1. **Tab 不拥有正文与脏状态**：仅引用 `ResourceRef`；正文在 `graphEntities` / worksheet store；脏在 `DocumentStateStore`。
-2. **TabBar 是 View**：用户手势 → application `tabCommands`；禁止在 `TabBar.tsx` 新增业务分支（save/load/migrate）。
+2. **TabBar 是 View**：用户手势 → application `tabCommands` / `editorGroupCommands`；禁止在 `TabBar.tsx` 新增业务分支（save/load/migrate）。
 3. **同 path 多 Tab 合法**：允许多 editor group 引用同一 `graphPath`；禁止为「避免重复」复制 `graphEntities` 或二次 load 后端。
 4. **切换/关闭必须带 `groupId`**：session（`GraphSessionStore`）、viewport、selection 清理与组上下文绑定。
 5. **标题与状态只读派生**：`ResourceStore.name` + `DocumentStateStore`；`LayoutTab` 仅存 `id` / `type` / `component`（+ 可选 hydrate 快照）。
+
+#### 编辑器拆分 / EditorGroup 架构收敛（对标 VS Code）
+
+> **结论**：Tab 元数据已收敛，但 **EditorGroup 布局树操作仍分散**——`layoutStore.splitNode`（按钮分屏）、`Workspace.handleDragEnd`（内联 `setState` 四向分屏）、`moveTab`（TabBar 合并）三套逻辑重复且能力不对齐。需将 **布局树插入** 收敛到 `layoutStore.splitEditorGroupAtEdge`，将 **用户手势编排** 收敛到 `editorGroupCommands`，TabBar / Workspace 仅转发。
+
+##### VS Code vs YssBI（EditorGroup 专项）
+
+| 行为 | VS Code | YssBI 改造前 | 目标 |
+|------|---------|--------------|------|
+| **拖 Tab → 编辑器四边** | 新 EditorGroup + 复制 Tab | `Workspace.tsx` 内联 ~80 行 `setState` | [x] `splitEditorWithTab` → `splitEditorGroupAtEdge` |
+| **拖 Tab → 另一组 TabBar** | `moveEditor` 移动 Tab | `layoutStore.moveTab` | [x] 保持；经 `editorGroupCommands` 导出 |
+| **按钮分屏（右/下）** | `splitEditor` | `splitEditorGroup` → `splitNode`（仅右/下） | [x] 统一走 `splitEditorGroupAtEdge` |
+| **双击 TabBar 空白** | 新建 `Untitled-1` | 未实现 | [x] `createUntitledEventInGroup` |
+| **中键关闭 Tab** | `closeEditor` | 未实现 | [x] TabItem `auxclick` |
+| **Tab 视觉** | 底边高亮、inactive 底色差、hover 显关闭 | 顶边 `before:bg-primary` | [x] `editorTabStyles` 底边 accent |
+
+##### 目标架构（分层）
+
+```
+TabBar / Workspace (View)
+    → editorGroupCommands（application 编排）
+        → layoutStore.splitEditorGroupAtEdge / moveTab（布局树单点）
+        → openGraphInEditor / createUntitledGraphResource（资源打开）
+editorSplitLayout.ts（纯函数：edge → direction/isAfter）
+```
+
+##### 收敛原则
+
+1. **禁止在 View 内联布局树 mutation**：`Workspace` 不得再 `useLayoutStore.setState` 手写分屏。
+2. **四向分屏与按钮分屏共用同一 store action**：`splitEditorGroupAtEdge(targetId, edge, payload)`。
+3. **拖边分屏 = 复制 Tab**；**拖 TabBar = 移动 Tab**（VS Code 语义，源组保留）。
+4. **新建 Untitled 走资源层**：`createEvent('')` → 后端 `untitled:event:Untitled-N` + 名称对齐 label；`openGraphInEditor(..., targetGroupId)`。
+5. **样式与交互分离**：`editorTabStyles.ts` 管视觉；`TabBar.tsx` 仅绑事件到 commands。
+
+##### 待办 checklist
+
+- [x] **P0 — 布局树分屏单点**：`editorSplitLayout.ts` + `layoutStore.splitEditorGroupAtEdge`；删除 `Workspace` 内联分屏。
+- [x] **P0 — 编排门面**：`editorGroupCommands.ts`（`splitEditorWithTab` / `splitEditorAtEdge` / `createUntitledEventInGroup`）。
+- [x] **P1 — TabBar 空白双击**：新建 `Untitled-N` event 并激活于当前组。
+- [x] **P1 — Tab 样式 VS Code 化**：底边 active accent、inactive 底色、hover 关闭按钮。
+##### 统一拖放预览（`EditorDropPreview`）
+
+```
+useEditorDragPreviewMonitor（DndContext 子组件）
+  ├── tabBarReorderStore     → Tab 重排槽位 + TabDragOverlay
+  ├── editorDropPreviewStore → EditorDropPreviewOverlay
+  │     ├── kind: split        → Tab 拖向编辑器四边（半屏高亮）
+  │     └── kind: canvas-open  → Sidebar Event/Function 拖向画布/Watermark（全屏高亮）
+  └── WorkspaceDragOverlay     → 浮动拖拽芯片（Tab / Sidebar 共用 editorDragChipClass）
+```
+
+- [x] **P1 — 侧栏 graph 打开预览收敛**：删除 `CanvasDropZone` 内联蓝色预览，并入 `EditorDropPreviewOverlay`。
+- [x] **P1 — Tab 重排预览（VS Code 挤开槽）**：`tabBarInsertIndex` + `useEditorDragPreviewMonitor`。
+- [x] **P1 — 分屏拖放预览**：`editorDropPreview` + `EditorDropPreviewOverlay`（半屏淡色高亮）。
+- [ ] **P2 — 拖 Tab 到组边缘合并**（center drop 合并 editor group，对标 VS Code dock）。
+- [ ] **P2 — 空组自动折叠**（最后一 tab 拖走后折叠组，已有 `moveTab` 部分逻辑，需与四向分屏联调）。
+- [ ] **P3 — Tab 溢出菜单**（`…` 列出不可见 tabs，对标 VS Code tab actions）。
 
 ## v1.0 待办
 

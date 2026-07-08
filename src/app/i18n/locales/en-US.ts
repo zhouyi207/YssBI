@@ -364,6 +364,9 @@ export const enUS = {
       noMatches: "No matches found",
     },
   },
+  editorDropPreview: {
+    openResource: "Open {{name}}",
+  },
   tabBar: {
     splitDownAlt: "Split Editor Down (Alt)",
     splitRight: "Split Editor Right",
@@ -383,6 +386,7 @@ export const enUS = {
       keepOpen: "Keep Open",
     },
     previewHint: "Preview tab — double-click or edit to pin",
+    newUntitledHint: "Double-click to create a new untitled event",
   },
   activityBar: {
     graphs: "Graphs",

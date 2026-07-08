@@ -59,6 +59,13 @@ export async function createGraphResource(kind: GraphResourceKind, name?: string
     : GraphService.createFunction(graphName);
 }
 
+/** VS Code-style untitled draft — backend assigns `untitled:{kind}:Untitled-N` and matching display name. */
+export async function createUntitledGraphResource(kind: GraphResourceKind): Promise<string> {
+  return kind === 'event'
+    ? GraphService.createEvent('')
+    : GraphService.createFunction('');
+}
+
 export async function duplicateGraphResource(graphPath: string): Promise<void> {
   await GraphService.duplicateGraph(graphPath);
   await refreshResourceIndex();

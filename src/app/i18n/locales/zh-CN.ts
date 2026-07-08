@@ -364,6 +364,9 @@ export const zhCN = {
       noMatches: "未找到匹配项",
     },
   },
+  editorDropPreview: {
+    openResource: "打开 {{name}}",
+  },
   tabBar: {
     splitDownAlt: "向下拆分编辑器（Alt）",
     splitRight: "向右拆分编辑器",
@@ -383,6 +386,7 @@ export const zhCN = {
       keepOpen: "保持打开",
     },
     previewHint: "预览标签页 — 双击或编辑以固定",
+    newUntitledHint: "双击空白处新建未命名 Event",
   },
   activityBar: {
     graphs: "图",

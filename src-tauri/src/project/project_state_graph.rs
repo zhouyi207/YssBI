@@ -157,6 +157,18 @@ impl ProjectState {
         graph_kind: GraphKind,
         existing_names: Vec<String>,
     ) -> GraphInstance {
+        let graph_register = {
+            let store = self.project_store.read().unwrap();
+            Arc::clone(&store.node_register)
+        };
+        let resource_path = self
+            .allocate_untitled_graph_path(&graph_kind)
+            .expect("failed to allocate untitled graph resource path");
+        let base_name = if graph_name.trim().is_empty() {
+            resource_path.display_name().to_string()
+        } else {
+            graph_name.to_string()
+        };
         let unique_graph_name = {
             let project_data = self.project_data.read().unwrap();
             let mut existing: Vec<String> = project_data
@@ -166,16 +178,9 @@ impl ProjectState {
                 .map(|g| g.name.clone())
                 .collect();
             existing.extend(existing_names);
-            unique_name::unique_name(graph_name, existing)
+            unique_name::unique_name(&base_name, existing)
         };
 
-        let graph_register = {
-            let store = self.project_store.read().unwrap();
-            Arc::clone(&store.node_register)
-        };
-        let resource_path = self
-            .allocate_untitled_graph_path(&graph_kind)
-            .expect("failed to allocate untitled graph resource path");
         let graph_data = GraphInstance::new_with_path(
             &unique_graph_name,
             graph_kind,
