@@ -17,7 +17,7 @@ export function NodePalette({
   variables = {},
   functions = {},
   graphKind,
-  graphId,
+  graphPath,
 }: {
   x: number;
   y: number;
@@ -26,7 +26,7 @@ export function NodePalette({
   variables?: Record<string, Variable>;
   functions?: Record<string, FunctionCatalogEntry>;
   graphKind?: 'event' | 'function';
-  graphId?: string;
+  graphPath?: string;
 }) {
   const definitions = useNodeRegistryStore((s) => s.definitionsArray);
 
@@ -41,9 +41,9 @@ export function NodePalette({
         variables,
         functions,
         graphKind,
-        graphId,
+        graphPath,
       }),
-    [definitions, filterPin, variableKeysStr, functionKeysStr, variables, functions, graphKind, graphId],
+    [definitions, filterPin, variableKeysStr, functionKeysStr, variables, functions, graphKind, graphPath],
   );
 
   return (

@@ -137,7 +137,7 @@ describe('findAutoConnectPinIndex via effective call definition', () => {
 
   it('connects exec output drag to exec input on projected call pinSlots', () => {
     const effective = resolveEffectiveDefinition(callBase, {
-      subGraphId: 'fn-1',
+      subGraphPath: 'fn-1',
       ...defaultFunctionSignature(),
     });
     const draggedExecOutput = pin({ direction: 'output', type: 'exec' });

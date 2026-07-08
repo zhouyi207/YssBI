@@ -9,14 +9,14 @@ pub fn get_result_source_descriptor(
     Ok(state.get_descriptor(&source_id))
 }
 
-/// 通过 graphId + pinId 读取最新 runtime pin source descriptor。
+/// 通过 graphPath + pinId 读取最新 runtime pin source descriptor。
 #[tauri::command]
 pub fn get_pin_result_descriptor(
     state: State<crate::execution::ResultSourceStore>,
-    graph_id: String,
+    graph_path: String,
     pin_id: String,
 ) -> Result<Option<crate::execution::SourceDescriptor>, String> {
-    Ok(state.get_pin_descriptor(&graph_id, &pin_id))
+    Ok(state.get_pin_descriptor(&graph_path, &pin_id))
 }
 
 /// 读取 JSON source value。

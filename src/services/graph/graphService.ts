@@ -1,29 +1,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
 import type { FunctionSignaturePatch } from "@/shared/types";
-import type { GraphInstanceDTO } from "@/shared/types/dto";
-import { markResourceLoaded, resourceKey, useResourceStore } from "@/features/core/resource";
+import type { GraphInstanceDTO, FunctionCallSiteDTO } from "@/shared/types/dto";
+import { markResourceLoaded } from "@/features/core/resource";
 import type { BackendProjectResourceMeta } from "@/features/core/resource";
+import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
 
 /**
  * Graph Service - 管理 Event、Function 的创建、删除、更新和查询
- * 
- * 注意：创建方法只需要传递 graph_name，后端会自动创建完整的 Graph 结构
+ *
+ * 创建返回 untitled 草稿句柄；正文由 EventCreated/FunctionCreated 事件注入并保持 loaded。
  */
 export class GraphService {
     /**
      * 创建 Event
      * @param graphName - Event 的名称
-     * @returns 后端生成的 Graph ID
+     * @returns 草稿 graph path（`untitled:event:…`）
      */
     static async createEvent(graphName: string): Promise<string> {
         try {
-            const id = await invoke<string>("create_event", { graphName });
-            logger.graph.info(`Event '${graphName}' created with ID: ${id}`, 'GraphService');
-            await this.unloadProjectGraph(id);
-            return id;
+            const graphPath = await invoke<string>("create_event", { graphName });
+            logger.graph.info(`Event '${graphName}' created with path: ${graphPath}`, 'GraphService');
+            return graphPath;
         } catch (error) {
             logger.graph.error(`Error creating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
@@ -33,14 +33,13 @@ export class GraphService {
     /**
      * 创建 Function
      * @param graphName - Function 的名称
-     * @returns 后端生成的 Graph ID
+     * @returns 草稿 graph path（`untitled:function:…`）
      */
     static async createFunction(graphName: string): Promise<string> {
         try {
-            const id = await invoke<string>("create_function", { graphName });
-            logger.graph.info(`Function '${graphName}' created with ID: ${id}`, 'GraphService');
-            await this.unloadProjectGraph(id);
-            return id;
+            const graphPath = await invoke<string>("create_function", { graphName });
+            logger.graph.info(`Function '${graphName}' created with path: ${graphPath}`, 'GraphService');
+            return graphPath;
         } catch (error) {
             logger.graph.error(`Error creating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
@@ -49,12 +48,12 @@ export class GraphService {
 
     /**
      * 删除 Graph (Event/Function)
-     * @param graphId - Graph 的 ID
+     * @param graphPath - Graph 路径
      */
-    static async removeGraph(graphId: string): Promise<void> {
+    static async removeGraph(graphPath: string): Promise<void> {
         try {
-            await invoke("remove_graph", { graphId });
-            logger.graph.info(`Graph '${graphId}' removed successfully`, 'GraphService');
+            await invoke("remove_graph", { graphPath });
+            logger.graph.info(`Graph '${graphPath}' removed successfully`, 'GraphService');
         } catch (error) {
             logger.graph.error(`Error removing graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
@@ -62,7 +61,7 @@ export class GraphService {
     }
 
     static async updateFunctionSignature(
-        functionId: string,
+        functionPath: string,
         patch: FunctionSignaturePatch,
     ): Promise<{ graph: Graph; callerGraphs: Graph[]; sideEffectWarning: boolean }> {
         try {
@@ -73,12 +72,12 @@ export class GraphService {
             }>(
                 "update_function_signature",
                 {
-                    functionId,
+                    functionPath,
                     inputs: patch.inputs,
                     outputs: patch.outputs,
                 },
             );
-            logger.graph.info(`Function '${functionId}' signature updated successfully`, 'GraphService');
+            logger.graph.info(`Function '${functionPath}' signature updated successfully`, 'GraphService');
             return {
                 graph: toFrontendGraph(result.graph),
                 callerGraphs: (result.callerGraphs ?? []).map(toFrontendGraph),
@@ -92,13 +91,13 @@ export class GraphService {
 
     /**
      * 获取 Graph 详情
-     * @param graphId - Graph 的 ID
+     * @param graphPath - Graph 路径
      * @returns Graph 对象
      */
-    static async getGraph(graphId: string): Promise<Graph> {
+    static async getGraph(graphPath: string): Promise<Graph> {
         try {
-            const graph = await invoke<GraphInstanceDTO>("get_graph", { graphId });
-            logger.graph.info(`Graph '${graphId}' retrieved successfully`, 'GraphService');
+            const graph = await invoke<GraphInstanceDTO>("get_graph", { graphPath });
+            logger.graph.info(`Graph '${graphPath}' retrieved successfully`, 'GraphService');
             return toFrontendGraph(graph);
         } catch (error) {
             logger.graph.error(`Error getting graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
@@ -106,10 +105,10 @@ export class GraphService {
         }
     }
 
-    static async resolveGraphDynamicPins(graphId: string): Promise<Graph> {
+    static async resolveGraphDynamicPins(graphPath: string): Promise<Graph> {
         try {
-            const graph = await invoke<GraphInstanceDTO>("resolve_graph_dynamic_pins", { graphId });
-            logger.graph.info(`Graph '${graphId}' dynamic pins materialized`, 'GraphService');
+            const graph = await invoke<GraphInstanceDTO>("resolve_graph_dynamic_pins", { graphPath });
+            logger.graph.info(`Graph '${graphPath}' dynamic pins materialized`, 'GraphService');
             return toFrontendGraph(graph);
         } catch (error) {
             logger.graph.error(`Error resolving graph dynamic pins: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
@@ -117,30 +116,37 @@ export class GraphService {
         }
     }
 
-    static async unloadProjectGraph(graphId: string): Promise<void> {
-        await invoke("unload_project_graph", { graphId });
-        const resources = useResourceStore.getState().resources;
-        if (resources[resourceKey({ id: graphId, kind: 'event' })]) {
-            markResourceLoaded({ id: graphId, kind: 'event' }, false);
-        } else if (resources[resourceKey({ id: graphId, kind: 'function' })]) {
-            markResourceLoaded({ id: graphId, kind: 'function' }, false);
+    static async getFunctionCallSites(functionPath: string): Promise<FunctionCallSiteDTO[]> {
+        return invoke<FunctionCallSiteDTO[]>("get_function_call_sites", { functionPath });
+    }
+
+    static async purgeFunctionCallSites(functionPath: string): Promise<Graph[]> {
+        const graphs = await invoke<GraphInstanceDTO[]>("purge_function_call_sites", { functionPath });
+        return graphs.map(toFrontendGraph);
+    }
+
+    static async unloadProjectGraph(graphPath: string): Promise<void> {
+        await invoke("unload_project_graph", { graphPath });
+        const kind = inferGraphResourceKind(graphPath);
+        if (kind) {
+            markResourceLoaded({ id: graphPath, kind }, false);
         }
     }
 
-    static async saveProjectGraph(graphId: string): Promise<void> {
-        await invoke("save_project_graph", { graphId });
+    static async saveProjectGraph(graphPath: string): Promise<string> {
+        const result = await invoke<{ path: string }>("save_project_graph", { graphPath });
+        return result.path;
     }
 
-    static async duplicateGraph(graphId: string): Promise<Graph> {
-        const graph = await invoke<GraphInstanceDTO>("duplicate_graph", { graphId });
-        await this.unloadProjectGraph(graph.id);
+    static async duplicateGraph(graphPath: string): Promise<Graph> {
+        const graph = await invoke<GraphInstanceDTO>("duplicate_graph", { graphPath });
         return toFrontendGraph(graph);
     }
 
     static async renameGraphResource(
-        graphId: string,
+        graphPath: string,
         newName: string,
     ): Promise<BackendProjectResourceMeta> {
-        return invoke('rename_graph_resource', { graphId, newName });
+        return invoke('rename_graph_resource', { graphPath, newName });
     }
 }

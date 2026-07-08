@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   NodeId,
   PinId,
-  GraphId,
+  GraphPath,
   ConnectionId,
   GraphDataLike,
   NodeData,
@@ -46,32 +46,32 @@ function cloneGraphBucket(bucket: GraphEntityBucket): GraphEntityBucket {
 }
 
 function commitGraphBucket(
-  state: { graphEntities: Record<GraphId, GraphEntityBucket> },
-  graphId: GraphId,
+  state: { graphEntities: Record<GraphPath, GraphEntityBucket> },
+  graphPath: GraphPath,
   bucket: GraphEntityBucket,
 ) {
   return {
-    graphEntities: { ...state.graphEntities, [graphId]: bucket },
+    graphEntities: { ...state.graphEntities, [graphPath]: bucket },
   };
 }
 
 function withGraphBucket(
-  state: { graphEntities: Record<GraphId, GraphEntityBucket> },
-  graphId: GraphId,
+  state: { graphEntities: Record<GraphPath, GraphEntityBucket> },
+  graphPath: GraphPath,
   mutate: (bucket: GraphEntityBucket) => GraphEntityBucket | null,
   notFoundLabel?: string,
 ) {
-  const current = state.graphEntities[graphId];
+  const current = state.graphEntities[graphPath];
   if (!current) {
     if (notFoundLabel) {
-      logger.graph.warn(`${notFoundLabel}: graph "${graphId}" not loaded`, 'GraphDataStore');
+      logger.graph.warn(`${notFoundLabel}: graph "${graphPath}" not loaded`, 'GraphDataStore');
     }
     return state;
   }
   const bucket = cloneGraphBucket(current);
   const next = mutate(bucket);
   if (!next) return state;
-  return commitGraphBucket(state, graphId, next);
+  return commitGraphBucket(state, graphPath, next);
 }
 
 function disconnectBucketConnection(bucket: GraphEntityBucket, connectionId: ConnectionId): void {
@@ -113,8 +113,8 @@ function toStoredPin(pin: PinDataInput): PinData {
   return stored;
 }
 
-function buildGraphBucket(graphId: GraphId, graph: GraphDataLike): GraphEntityBucket {
-  const normalized = normalizeGraphDataLike(graphId, graph);
+function buildGraphBucket(graphPath: GraphPath, graph: GraphDataLike): GraphEntityBucket {
+  const normalized = normalizeGraphDataLike(graphPath, graph);
   const bucket = emptyGraphBucket();
 
   normalized.nodes.forEach((node) => {
@@ -147,57 +147,57 @@ export interface ConnectionDraft {
 }
 
 interface GraphDataStore {
-  graphEntities: Record<GraphId, GraphEntityBucket>;
+  graphEntities: Record<GraphPath, GraphEntityBucket>;
 
-  addNode(graphId: GraphId, node: NodeData): void;
-  updateNode(nodeId: NodeId, patch: Partial<NodeData>, graphId: GraphId): void;
-  batchUpdateNodePositions(updates: Array<{ nodeId: NodeId; x: number; y: number }>, graphId: GraphId): void;
-  deleteNode(nodeId: NodeId, graphId: GraphId): void;
-  batchAddNodesAndPins(graphId: GraphId, items: Array<{ node: NodeData; pins: PinData[] }>): void;
-  batchDeleteNodes(nodeIds: NodeId[], graphId: GraphId): void;
-  applyNodeDraft(graphId: GraphId, node: NodeData, pins: PinData[]): void;
-  revertNodeDraft(nodeId: NodeId, graphId: GraphId): void;
-  reconcileNode(graphId: GraphId, node: NodeData, pins: PinData[]): void;
+  addNode(graphPath: GraphPath, node: NodeData): void;
+  updateNode(nodeId: NodeId, patch: Partial<NodeData> , graphPath: GraphPath): void;
+  batchUpdateNodePositions(updates: Array<{ nodeId: NodeId; x: number; y: number }> , graphPath: GraphPath): void;
+  deleteNode(nodeId: NodeId , graphPath: GraphPath): void;
+  batchAddNodesAndPins(graphPath: GraphPath, items: Array<{ node: NodeData; pins: PinData[] }>): void;
+  batchDeleteNodes(nodeIds: NodeId[] , graphPath: GraphPath): void;
+  applyNodeDraft(graphPath: GraphPath, node: NodeData, pins: PinData[]): void;
+  revertNodeDraft(nodeId: NodeId , graphPath: GraphPath): void;
+  reconcileNode(graphPath: GraphPath, node: NodeData, pins: PinData[]): void;
 
-  addPin(nodeId: NodeId, pin: PinData, graphId: GraphId): void;
-  updatePin(pinId: PinId, patch: Partial<PinData>, graphId: GraphId): void;
-  batchUpdatePinFields(updates: Array<{ pinId: PinId; patch: Partial<PinData> }>, graphId: GraphId): void;
-  deletePin(pinId: PinId, graphId: GraphId): void;
+  addPin(nodeId: NodeId, pin: PinData , graphPath: GraphPath): void;
+  updatePin(pinId: PinId, patch: Partial<PinData> , graphPath: GraphPath): void;
+  batchUpdatePinFields(updates: Array<{ pinId: PinId; patch: Partial<PinData> }> , graphPath: GraphPath): void;
+  deletePin(pinId: PinId , graphPath: GraphPath): void;
   batchUpdatePins(params: {
     disconnectIds: ConnectionId[];
     removePinIds: PinId[];
     updatePins?: Array<{ pinId: PinId; patch: Partial<PinData> }>;
     addPins: Array<{ nodeId: NodeId; pin: PinData }>;
-    graphId: GraphId;
+    graphPath: GraphPath;
   }): void;
-  reorderNodePins(nodeId: NodeId, pinOrder: PinId[], graphId: GraphId): void;
+  reorderNodePins(nodeId: NodeId, pinOrder: PinId[] , graphPath: GraphPath): void;
 
-  connect(from: PinId, to: PinId, graphId: GraphId): void;
-  disconnect(connectionId: ConnectionId, graphId: GraphId): void;
-  batchDisconnect(connectionIds: ConnectionId[], graphId: GraphId): void;
-  applyConnectionDraft(pinA: PinId, pinB: PinId, graphId: GraphId): ConnectionDraft | null;
-  revertConnectionDraft(draft: ConnectionDraft, graphId: GraphId): void;
-  batchConnect(pairs: Array<{ from: PinId; to: PinId }>, graphId: GraphId): void;
+  connect(from: PinId, to: PinId , graphPath: GraphPath): void;
+  disconnect(connectionId: ConnectionId , graphPath: GraphPath): void;
+  batchDisconnect(connectionIds: ConnectionId[] , graphPath: GraphPath): void;
+  applyConnectionDraft(pinA: PinId, pinB: PinId , graphPath: GraphPath): ConnectionDraft | null;
+  revertConnectionDraft(draft: ConnectionDraft , graphPath: GraphPath): void;
+  batchConnect(pairs: Array<{ from: PinId; to: PinId }> , graphPath: GraphPath): void;
 
-  getGraphNode(graphId: GraphId, nodeId: NodeId): NodeData | undefined;
-  getGraphPin(graphId: GraphId, pinId: PinId): PinData | undefined;
-  getGraphNodeIds(graphId: GraphId): NodeId[];
-  getGraphNodePins(graphId: GraphId, nodeId: NodeId): PinId[];
-  getGraphPinConnections(graphId: GraphId, pinId: PinId): ConnectionId[];
-  getGraphConnection(graphId: GraphId, connectionId: ConnectionId): ConnectionData | undefined;
-  getGraphConnections(graphId: GraphId): ConnectionData[];
-  hasGraph(graphId: GraphId): boolean;
-  clearGraph(graphId: GraphId): void;
-  hydrateGraphs(graphs: Record<GraphId, GraphDataLike>): void;
-  addGraphFromData(graphId: GraphId, graph: GraphDataLike): void;
+  getGraphNode(graphPath: GraphPath, nodeId: NodeId): NodeData | undefined;
+  getGraphPin(graphPath: GraphPath, pinId: PinId): PinData | undefined;
+  getGraphNodeIds(graphPath: GraphPath): NodeId[];
+  getGraphNodePins(graphPath: GraphPath, nodeId: NodeId): PinId[];
+  getGraphPinConnections(graphPath: GraphPath, pinId: PinId): ConnectionId[];
+  getGraphConnection(graphPath: GraphPath, connectionId: ConnectionId): ConnectionData | undefined;
+  getGraphConnections(graphPath: GraphPath): ConnectionData[];
+  hasGraph(graphPath: GraphPath): boolean;
+  clearGraph(graphPath: GraphPath): void;
+  hydrateGraphs(graphs: Record<GraphPath, GraphDataLike>): void;
+  addGraphFromData(graphPath: GraphPath, graph: GraphDataLike): void;
 }
 
 export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
   graphEntities: {},
 
-  addNode: (graphId, node) =>
+  addNode: (graphPath, node) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         if (bucket.nodes[node.id]) {
           logger.graph.warn(`Node "${node.id}" already exists`, 'GraphDataStore');
           return null;
@@ -209,9 +209,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  updateNode: (nodeId, patch, graphId) =>
+  updateNode: (nodeId, patch, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         const prev = bucket.nodes[nodeId];
         if (!prev) {
           logger.graph.warn(`updateNode: Node "${nodeId}" not found`, 'GraphDataStore');
@@ -222,10 +222,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }, 'updateNode'),
     ),
 
-  batchUpdateNodePositions: (updates, graphId) =>
+  batchUpdateNodePositions: (updates, graphPath) =>
     set((state) => {
       if (updates.length === 0) return state;
-      return withGraphBucket(state, graphId, (bucket) => {
+      return withGraphBucket(state, graphPath, (bucket) => {
         let changed = false;
         for (const { nodeId, x, y } of updates) {
           const prev = bucket.nodes[nodeId];
@@ -238,9 +238,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       });
     }),
 
-  deleteNode: (nodeId, graphId) =>
+  deleteNode: (nodeId, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         if (!bucket.nodes[nodeId]) {
           logger.graph.warn(`deleteNode: Node "${nodeId}" not found`, 'GraphDataStore');
           return null;
@@ -250,10 +250,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  batchAddNodesAndPins: (graphId, items) =>
+  batchAddNodesAndPins: (graphPath, items) =>
     set((state) => {
       if (items.length === 0) return state;
-      return withGraphBucket(state, graphId, (bucket) => {
+      return withGraphBucket(state, graphPath, (bucket) => {
         for (const { node, pins } of items) {
           if (bucket.nodes[node.id]) continue;
           bucket.nodes[node.id] = node;
@@ -272,13 +272,13 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       });
     }),
 
-  applyNodeDraft: (graphId, node, pins) => get().batchAddNodesAndPins(graphId, [{ node, pins }]),
+  applyNodeDraft: (graphPath, node, pins) => get().batchAddNodesAndPins(graphPath, [{ node, pins }]),
 
-  revertNodeDraft: (nodeId, graphId) => get().deleteNode(nodeId, graphId),
+  revertNodeDraft: (nodeId, graphPath) => get().deleteNode(nodeId, graphPath),
 
-  reconcileNode: (graphId, node, pins) =>
+  reconcileNode: (graphPath, node, pins) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         const existing = bucket.nodes[node.id];
         bucket.nodes[node.id] = existing ? { ...existing, ...node } : node;
         if (!existing) bucket.graphNodes = [...bucket.graphNodes, node.id];
@@ -301,10 +301,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }, 'reconcileNode'),
     ),
 
-  batchDeleteNodes: (nodeIds, graphId) =>
+  batchDeleteNodes: (nodeIds, graphPath) =>
     set((state) => {
       if (nodeIds.length === 0) return state;
-      return withGraphBucket(state, graphId, (bucket) => {
+      return withGraphBucket(state, graphPath, (bucket) => {
         for (const nodeId of nodeIds) {
           if (bucket.nodes[nodeId]) deleteBucketNode(bucket, nodeId);
         }
@@ -312,9 +312,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       });
     }),
 
-  addPin: (nodeId, pin, graphId) =>
+  addPin: (nodeId, pin, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         if (bucket.pins[pin.id]) {
           logger.graph.warn(`Pin "${pin.id}" already exists`, 'GraphDataStore');
           return null;
@@ -326,9 +326,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  updatePin: (pinId, patch, graphId) =>
+  updatePin: (pinId, patch, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         const prev = bucket.pins[pinId];
         if (!prev) {
           logger.graph.warn(`updatePin: Pin "${pinId}" not found`, 'GraphDataStore');
@@ -339,10 +339,10 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }, 'updatePin'),
     ),
 
-  batchUpdatePinFields: (updates, graphId) =>
+  batchUpdatePinFields: (updates, graphPath) =>
     set((state) => {
       if (updates.length === 0) return state;
-      return withGraphBucket(state, graphId, (bucket) => {
+      return withGraphBucket(state, graphPath, (bucket) => {
         for (const { pinId, patch } of updates) {
           const prev = bucket.pins[pinId];
           if (!prev) continue;
@@ -352,9 +352,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       });
     }),
 
-  deletePin: (pinId, graphId) =>
+  deletePin: (pinId, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         const pin = bucket.pins[pinId];
         if (!pin) {
           logger.graph.warn(`deletePin: Pin "${pinId}" not found`, 'GraphDataStore');
@@ -370,9 +370,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  batchUpdatePins: ({ disconnectIds, removePinIds, updatePins, addPins, graphId }) =>
+  batchUpdatePins: ({ disconnectIds, removePinIds, updatePins, addPins, graphPath }) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         for (const connId of disconnectIds) disconnectBucketConnection(bucket, connId);
         for (const pinId of removePinIds) {
           const pin = bucket.pins[pinId];
@@ -400,9 +400,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  reorderNodePins: (nodeId, pinOrder, graphId) =>
+  reorderNodePins: (nodeId, pinOrder, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         const current = bucket.nodePins[nodeId];
         if (!current) return null;
         const currentSet = new Set(current);
@@ -413,17 +413,17 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  connect: (from, to, graphId) =>
+  connect: (from, to, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         connectBucketPins(bucket, from, to);
         return bucket;
       }),
     ),
 
-  disconnect: (connectionId, graphId) =>
+  disconnect: (connectionId, graphPath) =>
     set((state) =>
-      withGraphBucket(state, graphId, (bucket) => {
+      withGraphBucket(state, graphPath, (bucket) => {
         if (!bucket.connections[connectionId]) {
           logger.graph.warn(`disconnect: Connection "${connectionId}" not found`, 'GraphDataStore');
           return null;
@@ -433,20 +433,20 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  batchDisconnect: (connectionIds, graphId) =>
+  batchDisconnect: (connectionIds, graphPath) =>
     set((state) => {
       if (connectionIds.length === 0) return state;
-      return withGraphBucket(state, graphId, (bucket) => {
+      return withGraphBucket(state, graphPath, (bucket) => {
         for (const connectionId of connectionIds) disconnectBucketConnection(bucket, connectionId);
         return bucket;
       });
     }),
 
-  applyConnectionDraft: (pinA, pinB, graphId) => {
+  applyConnectionDraft: (pinA, pinB, graphPath) => {
     const state = get();
-    const readPin = (pinId: PinId) => state.getGraphPin(graphId, pinId);
-    const readPinConnections = (pinId: PinId) => state.getGraphPinConnections(graphId, pinId);
-    const readConnection = (connectionId: ConnectionId) => state.getGraphConnection(graphId, connectionId);
+    const readPin = (pinId: PinId) => state.getGraphPin(graphPath, pinId);
+    const readPinConnections = (pinId: PinId) => state.getGraphPinConnections(graphPath, pinId);
+    const readConnection = (connectionId: ConnectionId) => state.getGraphConnection(graphPath, connectionId);
 
     const dirA = readPin(pinA)?.direction;
     const dirB = readPin(pinB)?.direction;
@@ -483,7 +483,7 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     }
 
     set((s) =>
-      withGraphBucket(s, graphId, (bucket) => {
+      withGraphBucket(s, graphPath, (bucket) => {
         for (const cid of disconnectedIds) disconnectBucketConnection(bucket, cid);
         connectBucketPins(bucket, from, to);
         return bucket;
@@ -493,9 +493,9 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
     return { from, to, connectionId, disconnectedIds };
   },
 
-  revertConnectionDraft: (draft, graphId) =>
+  revertConnectionDraft: (draft, graphPath) =>
     set((s) =>
-      withGraphBucket(s, graphId, (bucket) => {
+      withGraphBucket(s, graphPath, (bucket) => {
         disconnectBucketConnection(bucket, draft.connectionId);
         for (const cid of draft.disconnectedIds) {
           const parts = cid.split('->');
@@ -506,54 +506,54 @@ export const useGraphDataStore = create<GraphDataStore>((set, get) => ({
       }),
     ),
 
-  batchConnect: (pairs, graphId) =>
+  batchConnect: (pairs, graphPath) =>
     set((s) => {
       if (pairs.length === 0) return s;
-      return withGraphBucket(s, graphId, (bucket) => {
+      return withGraphBucket(s, graphPath, (bucket) => {
         for (const { from, to } of pairs) connectBucketPins(bucket, from, to);
         return bucket;
       });
     }),
 
-  getGraphNode: (graphId, nodeId) => get().graphEntities[graphId]?.nodes[nodeId],
+  getGraphNode: (graphPath, nodeId) => get().graphEntities[graphPath]?.nodes[nodeId],
 
-  getGraphPin: (graphId, pinId) => get().graphEntities[graphId]?.pins[pinId],
+  getGraphPin: (graphPath, pinId) => get().graphEntities[graphPath]?.pins[pinId],
 
-  getGraphNodeIds: (graphId) => getGraphNodeIds(get(), graphId),
+  getGraphNodeIds: (graphPath) => getGraphNodeIds(get(), graphPath),
 
-  getGraphNodePins: (graphId, nodeId) => get().graphEntities[graphId]?.nodePins[nodeId] ?? [],
+  getGraphNodePins: (graphPath, nodeId) => get().graphEntities[graphPath]?.nodePins[nodeId] ?? [],
 
-  getGraphPinConnections: (graphId, pinId) => get().graphEntities[graphId]?.pinConnections[pinId] ?? [],
+  getGraphPinConnections: (graphPath, pinId) => get().graphEntities[graphPath]?.pinConnections[pinId] ?? [],
 
-  getGraphConnection: (graphId, connectionId) => getGraphConnection(get(), graphId, connectionId),
+  getGraphConnection: (graphPath, connectionId) => getGraphConnection(get(), graphPath, connectionId),
 
-  getGraphConnections: (graphId) => {
-    const bucket = get().graphEntities[graphId];
+  getGraphConnections: (graphPath) => {
+    const bucket = get().graphEntities[graphPath];
     return bucket ? Object.values(bucket.connections) : [];
   },
 
-  hasGraph: (graphId) => hasGraphData(get(), graphId),
+  hasGraph: (graphPath) => hasGraphData(get(), graphPath),
 
-  clearGraph: (graphId) =>
+  clearGraph: (graphPath) =>
     set((state) => {
-      if (!state.graphEntities[graphId]) return state;
+      if (!state.graphEntities[graphPath]) return state;
       const graphEntities = { ...state.graphEntities };
-      delete graphEntities[graphId];
+      delete graphEntities[graphPath];
       return { graphEntities };
     }),
 
   hydrateGraphs: (graphs) => {
-    const graphEntities: Record<GraphId, GraphEntityBucket> = {};
-    Object.values(graphs).forEach((graph) => {
-      graphEntities[graph.id] = buildGraphBucket(graph.id, graph);
+    const graphEntities: Record<GraphPath, GraphEntityBucket> = {};
+    Object.entries(graphs).forEach(([graphPath, graph]) => {
+      graphEntities[graphPath] = buildGraphBucket(graphPath, graph);
     });
     set({ graphEntities });
   },
 
-  addGraphFromData: (graphId, graph) => {
+  addGraphFromData: (graphPath, graph) => {
     set((state) => {
-      const bucket = buildGraphBucket(graphId, graph);
-      return commitGraphBucket(state, graphId, bucket);
+      const bucket = buildGraphBucket(graphPath, graph);
+      return commitGraphBucket(state, graphPath, bucket);
     });
   },
 }));

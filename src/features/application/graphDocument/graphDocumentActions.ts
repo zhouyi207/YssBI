@@ -13,130 +13,67 @@ import {
 
 import { syncFunctionSignatureFromGraph } from './functionSignatureSync';
 
-
-
 export async function updateFunctionSignature(
-
-  functionId: string,
-
+  functionPath: string,
   patch: import('@/shared/types').FunctionSignaturePatch,
-
 ): Promise<{ sideEffectWarning: boolean }> {
-
   if (!patch.inputs && !patch.outputs) return { sideEffectWarning: false };
 
-
-
   const { graph, callerGraphs, sideEffectWarning } = await GraphService.updateFunctionSignature(
-
-    functionId,
-
+    functionPath,
     patch,
-
   );
 
   const releaseGuard = guardFullGraphPinRefresh([
-
-    functionId,
-
-    ...callerGraphs.map((g) => g.id),
-
+    functionPath,
+    ...callerGraphs.map((g) => g.path),
   ]);
 
   try {
-
     syncFunctionSignatureFromGraph(graph);
-
-    useGraphDataStore.getState().addGraphFromData(functionId, graph);
-
-    await applyCallerGraphUpdates(functionId, callerGraphs);
-
+    useGraphDataStore.getState().addGraphFromData(functionPath, graph);
+    await applyCallerGraphUpdates(functionPath, callerGraphs);
   } finally {
-
     releaseGuard();
-
   }
 
   return { sideEffectWarning };
-
 }
 
-
-
-function graphHasCallToFunction(graphId: string, functionId: string): boolean {
-
-  const bucket = useGraphDataStore.getState().graphEntities[graphId];
-
+function graphHasCallToFunction(callerGraphPath: string, functionPath: string): boolean {
+  const bucket = useGraphDataStore.getState().graphEntities[callerGraphPath];
   if (!bucket) return false;
 
   return Object.values(bucket.nodes).some(
-
-    (node) => node.nodeType === CALL_FUNCTION_NODE_TYPE && node.subGraphId === functionId,
-
+    (node) => node.nodeType === CALL_FUNCTION_NODE_TYPE && node.subGraphPath === functionPath,
   );
-
 }
 
-
-
-/**
-
- * 将 invoke 回包中已同步 Call pin 的调用方图写入前端 store（仅已加载的图）。
-
- * 若某已打开图含 Call 但不在回包中，再向后台 resolve 一次作为兜底。
-
- */
-
+/** 将 invoke 回包中已同步 Call pin 的调用方图写入前端 store（仅已加载的图）。 */
 export async function applyCallerGraphUpdates(
-
-  functionId: string,
-
+  functionPath: string,
   callerGraphs: Graph[],
-
 ): Promise<void> {
-
   const store = useGraphDataStore.getState();
-
-  const appliedIds = new Set<string>();
-
-
+  const appliedPaths = new Set<string>();
 
   for (const graph of callerGraphs) {
-
-    if (!store.hasGraph(graph.id)) continue;
-
-    store.addGraphFromData(graph.id, graph);
-
-    appliedIds.add(graph.id);
-
+    if (!store.hasGraph(graph.path)) continue;
+    store.addGraphFromData(graph.path, graph);
+    appliedPaths.add(graph.path);
   }
 
-
-
-  const fallbackIds = Object.keys(store.graphEntities).filter((graphId) => {
-
-    if (graphId === functionId || appliedIds.has(graphId)) return false;
-
-    return graphHasCallToFunction(graphId, functionId);
-
+  const fallbackPaths = Object.keys(store.graphEntities).filter((callerGraphPath) => {
+    if (callerGraphPath === functionPath || appliedPaths.has(callerGraphPath)) return false;
+    return graphHasCallToFunction(callerGraphPath, functionPath);
   });
 
-
-
   await Promise.all(
-
-    fallbackIds.map(async (graphId) => {
-
-      const graph = await GraphService.resolveGraphDynamicPins(graphId);
-
-      useGraphDataStore.getState().addGraphFromData(graphId, graph);
-
+    fallbackPaths.map(async (callerGraphPath) => {
+      const graph = await GraphService.resolveGraphDynamicPins(callerGraphPath);
+      useGraphDataStore.getState().addGraphFromData(callerGraphPath, graph);
     }),
-
   );
-
 }
-
-
 
 export { shouldSuppressIncrementalPinUpdate };

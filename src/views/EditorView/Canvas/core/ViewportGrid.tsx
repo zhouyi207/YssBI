@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import {
   applyViewportGrid,
   getViewport,
@@ -7,18 +7,18 @@ import {
 } from '@/features/core/viewport';
 import { GRID } from '@/app/appConfig/default';
 
-export const ViewportGrid = ({ graphId }: { graphId: string }) => {
+export const ViewportGrid = ({ graphPath }: { graphPath: string }) => {
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!graphId) return;
-    return subscribeToViewport(graphId, (viewport) => {
+    if (!graphPath) return;
+    return subscribeToViewport(graphPath, (viewport) => {
       const el = gridRef.current;
       if (el) applyViewportGrid(el, viewport, GRID);
     });
-  }, [graphId]);
+  }, [graphPath]);
 
-  const initial = graphId ? getViewport(graphId) : { x: 0, y: 0, scale: 1 };
+  const initial = graphPath ? getViewport(graphPath) : { x: 0, y: 0, scale: 1 };
 
   return (
     <div

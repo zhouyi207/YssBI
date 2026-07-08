@@ -24,13 +24,13 @@ const callBase: NodeDefinition = {
 describe('resolveEffectiveDefinition', () => {
   it('returns base unchanged for non-call nodes', () => {
     const ols = { ...callBase, nodeType: 'Data:OLS', pinSlots: [{ slotKind: 'fixed' as const, pin: {} as never }] };
-    expect(resolveEffectiveDefinition(ols, { subGraphId: 'x' })).toBe(ols);
+    expect(resolveEffectiveDefinition(ols, { subGraphPath: 'x' })).toBe(ols);
   });
 
   it('projects default exec in/out pinSlots for call function', () => {
     const defaults = defaultFunctionSignature();
     const effective = resolveEffectiveDefinition(callBase, {
-      subGraphId: 'fn-1',
+      subGraphPath: 'fn-1',
       ...defaults,
     });
 

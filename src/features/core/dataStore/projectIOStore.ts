@@ -15,7 +15,7 @@ import { useGraphDataStore } from './graphDataStore';
 import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
-import { markResourceLoaded, resourceKey, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+import { buildGraphResourceMeta, markResourceLoaded, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
@@ -41,7 +41,7 @@ interface ProjectIOStore {
   /** 只刷新资源索引，不重置 tab、viewport、history 或已加载 graph 正文。 */
   refreshResourceIndex(): Promise<boolean>;
   loadProjectFromData(project: ProjectData, path: string | null): void;
-  loadGraph(graphId: string): Promise<boolean>;
+  loadGraph(graphPath: string): Promise<boolean>;
   exportSnapshot(): ProjectData;
 }
 
@@ -57,33 +57,15 @@ function normalizeVariables(
   return result;
 }
 
-function isGraphBackendLoaded(graphId: string): boolean {
-  const resources = useResourceStore.getState().resources;
-  return (
-    resources[resourceKey({ id: graphId, kind: 'event' })]?.loaded === true ||
-    resources[resourceKey({ id: graphId, kind: 'function' })]?.loaded === true
-  );
-}
-
 function buildResourceIndex(params: {
-  graphs: Array<{ id: string; name: string; type: 'event' | 'function' }>;
+  graphs: Array<{ path: string; name: string; type: 'event' | 'function' }>;
   worksheets: Array<{ id: string; name: string; databaseId: string; chartType: import('@/shared/types/domain/worksheet').WorksheetChartType }>;
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
 }): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = [];
   for (const graph of params.graphs) {
-    resources.push({
-      id: graph.id,
-      kind: graph.type,
-      name: graph.name,
-      uri: `yssbi://graph/${graph.type}/${graph.id}`,
-      exists: true,
-      loaded: false,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
+    resources.push(buildGraphResourceMeta(graph.type, graph.path, graph.name));
   }
   for (const worksheet of params.worksheets) {
     resources.push({
@@ -147,7 +129,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     const variableCatalog = applyVariableCatalogFromIndex(index.variables);
     useVariableStore.getState().setVariables(variableCatalog);
 
-    const graphOrder = index.graphs.map((graph) => graph.id);
+    const graphOrder = index.graphs.map((graph) => graph.path);
 
     const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
       id: ws.id,
@@ -225,7 +207,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         const normalizedVariables = applyVariableCatalogFromIndex(index.variables);
         useVariableStore.getState().setVariables(normalizedVariables);
 
-        const graphOrder = index.graphs.map((graph) => graph.id);
+        const graphOrder = index.graphs.map((graph) => graph.path);
         const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
             id: ws.id,
             name: ws.name,
@@ -279,7 +261,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     useResourceStore.getState().setSnapshot({
       resources: buildResourceIndex({
         graphs: Object.values(project.graphs).map((graph) => ({
-          id: graph.id,
+          path: graph.path,
           name: graph.name,
           type: graph.type,
         })),
@@ -287,25 +269,22 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         variables: normalizedVariables,
         databases: normalizedDatabases,
       }),
-      graphOrder: Object.keys(project.graphs),
+      graphOrder: Object.values(project.graphs).map((graph) => graph.path),
     });
     syncGraphViewportsFromRecords(project.graphs);
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
 
-  loadGraph: async (graphId) => {
-    const dataStore = useGraphDataStore.getState();
-    if (dataStore.hasGraph(graphId) && isGraphBackendLoaded(graphId)) return true;
-
-    const existing = loadGraphInFlight.get(graphId);
+  loadGraph: async (graphPath) => {
+    const existing = loadGraphInFlight.get(graphPath);
     if (existing) return existing;
 
     const pending = (async (): Promise<boolean> => {
       try {
-        const { graph, variables } = await ProjectService.loadProjectGraph(graphId);
+        const { graph, variables } = await ProjectService.loadProjectGraph(graphPath);
         let frontendGraph;
         try {
-          frontendGraph = await GraphService.resolveGraphDynamicPins(graphId);
+          frontendGraph = await GraphService.resolveGraphDynamicPins(graphPath);
         } catch (resolveErr) {
           logger.sys.warn(
             'Dynamic pin materialize failed, using loaded graph: ' +
@@ -318,23 +297,15 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
           ...useVariableStore.getState().variables,
           ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
         });
-        useResourceStore.getState().upsertResource({
-          id: graphId,
-          kind: frontendGraph.type,
-          name: frontendGraph.name,
-          uri: `yssbi://graph/${frontendGraph.type}/${graphId}`,
-          exists: true,
-          loaded: true,
-          hasDirtyDocument: false,
-          hasStaleDocument: false,
-          hasConflictDocument: false,
-        });
-        markResourceLoaded({ id: graphId, kind: frontendGraph.type });
+        useResourceStore.getState().upsertResource(
+          buildGraphResourceMeta(frontendGraph.type, graphPath, frontendGraph.name),
+        );
+        markResourceLoaded({ id: graphPath, kind: frontendGraph.type });
         syncFunctionSignatureFromGraph({
           ...frontendGraph,
         });
-        useGraphDataStore.getState().addGraphFromData(graphId, frontendGraph);
-        ensureGraphViewport(graphId, frontendGraph.canvas);
+        useGraphDataStore.getState().addGraphFromData(graphPath, frontendGraph);
+        ensureGraphViewport(graphPath, frontendGraph.canvas);
         return true;
       } catch (err) {
         const errorMessage = formatErrorMessage(err, 'Failed to load graph');
@@ -342,11 +313,11 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         set({ error: errorMessage });
         return false;
       } finally {
-        loadGraphInFlight.delete(graphId);
+        loadGraphInFlight.delete(graphPath);
       }
     })();
 
-    loadGraphInFlight.set(graphId, pending);
+    loadGraphInFlight.set(graphPath, pending);
     return pending;
   },
 

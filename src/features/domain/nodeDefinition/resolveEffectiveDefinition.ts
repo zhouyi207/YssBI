@@ -41,7 +41,7 @@ export function defaultFunctionSignature(): {
 }
 
 export type ResolveEffectiveOptions = {
-  subGraphId?: string;
+  subGraphPath?: string;
   functionInputs?: FunctionSignaturePin[];
   functionOutputs?: FunctionSignaturePin[];
 };
@@ -128,9 +128,9 @@ function resolveSignature(options: ResolveEffectiveOptions): {
   }
 
   const defaults = defaultFunctionSignature();
-  if (!options.subGraphId) return defaults;
+  if (!options.subGraphPath) return defaults;
 
-  const meta = useGraphMetaStore.getState().graphs[options.subGraphId];
+  const meta = useGraphMetaStore.getState().graphs[options.subGraphPath];
   return {
     functionInputs: meta?.functionInputs ?? defaults.functionInputs,
     functionOutputs: meta?.functionOutputs ?? defaults.functionOutputs,
@@ -139,13 +139,13 @@ function resolveSignature(options: ResolveEffectiveOptions): {
 
 /**
  * 将注册表定义解析为实例有效定义。
- * Call Function + subGraphId/签名 → 注入投影后的 pinSlots / typeCapabilities。
+ * Call Function + subGraphPath/签名 → 注入投影后的 pinSlots / typeCapabilities。
  */
 export function resolveEffectiveDefinition(
   base: NodeDefinition,
   options?: ResolveEffectiveOptions,
 ): NodeDefinition {
-  if (base.nodeType !== CALL_FUNCTION_NODE_TYPE || !options?.subGraphId) {
+  if (base.nodeType !== CALL_FUNCTION_NODE_TYPE || !options?.subGraphPath) {
     return base;
   }
 

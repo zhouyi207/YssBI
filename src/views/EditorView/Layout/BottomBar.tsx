@@ -77,26 +77,26 @@ const StatusItem = ({
   );
 };
 
-function formatViewportStatus(graphId: string | null) {
-  if (!graphId) return `X 0 Y 0 100%`;
-  const viewport = getViewport(graphId);
+function formatViewportStatus(graphPath: string | null) {
+  if (!graphPath) return `X 0 Y 0 100%`;
+  const viewport = getViewport(graphPath);
   return `X ${Math.round(viewport.x)} Y ${Math.round(viewport.y)} ${Math.round(viewport.scale * 100)}%`;
 }
 
-function ViewportStatus({ graphId }: { graphId: string | null }) {
+function ViewportStatus({ graphPath }: { graphPath: string | null }) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!graphId) return;
+    if (!graphPath) return;
     const update = () => {
-      if (ref.current) ref.current.textContent = formatViewportStatus(graphId);
+      if (ref.current) ref.current.textContent = formatViewportStatus(graphPath);
     };
 
     update();
-    return subscribeToViewport(graphId, update);
-  }, [graphId]);
+    return subscribeToViewport(graphPath, update);
+  }, [graphPath]);
 
-  return <span ref={ref}>{formatViewportStatus(graphId)}</span>;
+  return <span ref={ref}>{formatViewportStatus(graphPath)}</span>;
 }
 
 export function BottomBar() {
@@ -204,7 +204,7 @@ export function BottomBar() {
         </StatusItem>
         <StatusItem tooltip={t("bottomBar.canvasViewport")}>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
-          <ViewportStatus graphId={editor.activeTabId} />
+          <ViewportStatus graphPath={editor.activeTabId} />
         </StatusItem>
         <StatusItem tooltip={t("bottomBar.themeMode")} className="capitalize text-foreground">
           {themeMode}

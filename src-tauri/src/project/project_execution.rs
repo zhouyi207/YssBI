@@ -1,8 +1,8 @@
 use crate::execution::{ChannelEventEmitter, ExecutionEvent, Executor, ResultSourceStore};
-use crate::graph::{GraphId, GraphInstance, GraphKind, NodeId};
+use crate::graph::{GraphInstance, GraphKind, NodeId};
 use crate::log::LogLevel;
 use crate::log_exec;
-use crate::project::{ProjectData, ProjectStore};
+use crate::project::{GraphResourcePath, ProjectData, ProjectStore};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::ipc::Channel;
@@ -12,14 +12,16 @@ use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 /// Collect Event graphs to run under a brief read lock (no full `ProjectData` clone).
 fn collect_event_graphs(
     project_data: &ProjectData,
-    target_graph_id: Option<GraphId>,
+    target_graph_path: Option<GraphResourcePath>,
 ) -> Vec<GraphInstance> {
     project_data
         .graphs
         .iter()
-        .filter(|(graph_id, graph)| {
+        .filter(|(graph_path, graph)| {
             graph.kind == GraphKind::Event
-                && target_graph_id.is_none_or(|target| **graph_id == target)
+                && target_graph_path
+                    .as_ref()
+                    .is_none_or(|target| graph_path == &target)
         })
         .map(|(_, graph)| graph.clone())
         .collect()
@@ -39,12 +41,12 @@ pub fn execute_project_data(
     project_store: Arc<RwLock<ProjectStore>>,
     source_store: ResultSourceStore,
     on_event: Channel<ExecutionEvent>,
-    target_graph_id: Option<GraphId>,
+    target_graph_path: Option<GraphResourcePath>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<Value, String> {
     let event_graphs = {
         let data = project_data_state.read().map_err(|e| e.to_string())?;
-        collect_event_graphs(&data, target_graph_id)
+        collect_event_graphs(&data, target_graph_path)
     };
 
     let mut all_logs = Vec::new();

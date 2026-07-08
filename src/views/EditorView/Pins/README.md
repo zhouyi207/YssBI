@@ -12,7 +12,7 @@
 - Pin 是输入方向（`direction === "input"`）
 - Pin 是数据类型（`type !== "exec"`）
 - Pin 未连接（`connected === false` 且 `linkCount === 0`）
-- 有有效的 `subgraphId` 和 `nodeId`
+- 有有效的 `graphPath` 和 `nodeId`
 
 ### 2. 支持的数据类型
 
@@ -42,7 +42,7 @@ import { Pin } from "./Pins/Pin";
 
 <Pin
   {...pinData}
-  subgraphId="event-1"  // 必需：子图 ID
+  graphPath="event-1"  // 必需：当前图资源路径
   nodeId="node-123"     // 必需：节点 ID（通过 Pin 的 nodeId 属性）
   onValueChange={(pinId, value) => {
     console.log(`Pin ${pinId} changed to:`, value);
@@ -57,7 +57,7 @@ import { Pin } from "./Pins/Pin";
 ```typescript
 // 更新 Pin 值
 await invoke("update_pin_user_value", {
-  subgraphId: "event-1",
+  graphPath: "event-1",
   nodeId: "node-123",
   pinId: "pin-456",
   value: 42
@@ -65,7 +65,7 @@ await invoke("update_pin_user_value", {
 
 // 清除 Pin 值（恢复默认值）
 await invoke("clear_pin_user_value", {
-  subgraphId: "event-1",
+  graphPath: "event-1",
   nodeId: "node-123",
   pinId: "pin-456"
 });

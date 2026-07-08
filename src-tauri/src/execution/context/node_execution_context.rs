@@ -3,7 +3,6 @@ use crate::execution::{
     Executor, ExecutionEvent, NoopEmitter, PlotChart, Presentation, ReportKind, ResultSourceRecord,
     ResultSourceStore,
 };
-use crate::graph::GraphId;
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId, NodeInstanceParams};
@@ -57,21 +56,21 @@ impl NodeExecutionContext {
 
     fn register_output_source(
         &mut self,
-        graph_id: GraphId,
+        graph_path: &str,
         pin_id: PinId,
         value: &DataValue,
     ) -> Result<(), String> {
-        let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_id, pin_id);
+        let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_path, pin_id);
         let record = self.build_source_record_for_value(source_id.clone(), "", value, None)?;
 
         let descriptor = self.result_source_store.insert_runtime_pin_source(
-            graph_id.to_string(),
+            graph_path.to_string(),
             pin_id.to_string(),
             self.run_id.clone(),
             record,
         );
         self.pin_result_events.push(ExecutionEvent::PinResultReady {
-            graph_id: graph_id.to_string(),
+            graph_id: graph_path.to_string(),
             node_id: self.node_id.to_string(),
             pin_id: pin_id.to_string(),
             source_id,
@@ -170,7 +169,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     }
 
     fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String> {
-        let (graph_id, pin_id) = {
+        let (graph_path, pin_id) = {
             let mut graph = self.graph.lock().unwrap();
             let pin = graph
                 .get_pin_instance_by_pin_role(self.node_id, role)
@@ -181,10 +180,10 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             }
 
             graph.set_pin_current_value(pin.id, value.clone());
-            (graph.graph_id(), pin.id)
+            (graph.graph_path(), pin.id)
         };
 
-        self.register_output_source(graph_id, pin_id, &value)?;
+        self.register_output_source(graph_path.as_str(), pin_id, &value)?;
 
         Ok(())
     }
@@ -194,7 +193,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         role: &PinRole,
         values: Vec<DataValue>,
     ) -> Result<(), String> {
-        let (graph_id, output_pins) = {
+        let (graph_path, output_pins) = {
             let graph = self.graph.lock().unwrap();
             let pins = graph.get_pin_instances_by_pin_role(self.node_id, role);
             let output_pins: Vec<PinId> = pins
@@ -202,7 +201,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 .filter(|p| !p.is_input())
                 .map(|p| p.id)
                 .collect();
-            (graph.graph_id(), output_pins)
+            (graph.graph_path(), output_pins)
         };
 
         if output_pins.len() != values.len() {
@@ -218,7 +217,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 let mut graph = self.graph.lock().unwrap();
                 graph.set_pin_current_value(pin_id, value.clone());
             }
-            self.register_output_source(graph_id, pin_id, &value)?;
+            self.register_output_source(graph_path.as_str(), pin_id, &value)?;
         }
 
         Ok(())
@@ -328,17 +327,16 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         let call_node_id = self.node_id;
 
         // 目标函数 id（来自 Call 节点 SubGraph 参数）
-        let sub_graph_id = {
+        let sub_graph_path = {
             let rt = self.graph.lock().unwrap();
             rt.get_node_instance_params(call_node_id)
-                .sub_graph_id()
+                .sub_graph_path()
                 .map(|s| s.to_string())
         }
-        .ok_or_else(|| "Call Function: subGraphId 未设置".to_string())?;
+        .ok_or_else(|| "Call Function: subGraphPath 未设置".to_string())?;
 
-        let gid = uuid::Uuid::parse_str(&sub_graph_id)
-            .map(GraphId::from)
-            .map_err(|e| format!("Call Function: 无效 subGraphId '{}': {}", sub_graph_id, e))?;
+        let function_path = crate::project::GraphResourcePath::new(sub_graph_path.clone())
+            .map_err(|e| format!("Call Function: 无效 subGraphPath '{}': {}", sub_graph_path, e))?;
 
         // 取项目引用 + 目标函数图（clone 共享 data_state Arc，执行期只读，安全）
         let (project_data, project_store, function_graph) = {
@@ -349,9 +347,9 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 .read()
                 .unwrap()
                 .graphs
-                .get(&gid)
+                .get(&function_path)
                 .cloned()
-                .ok_or_else(|| format!("Call Function: 目标函数图 {} 未加载", sub_graph_id))?;
+                .ok_or_else(|| format!("Call Function: 目标函数图 {} 未加载", sub_graph_path))?;
             (pd, ps, fg)
         };
 

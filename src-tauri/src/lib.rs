@@ -146,6 +146,8 @@ pub fn run() {
             create_event,
             create_function,
             update_function_signature,
+            get_function_call_sites,
+            purge_function_call_sites,
             // ==================== Variable CRUD ====================
             create_variable,
             get_variable,

@@ -69,7 +69,7 @@ impl GraphInstance {
 impl std::fmt::Debug for GraphInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GraphInstance")
-            .field("id", &self.id)
+            .field("resource_path", &self.resource_path)
             .field("name", &self.name)
             .field("kind", &self.kind)
             .field("position", &self.position)

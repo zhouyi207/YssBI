@@ -65,12 +65,12 @@ export async function spawnNodeFromTemplate(
   }
 
   if (template.nodeType === CALL_FUNCTION_NODE_TYPE) {
-    if (!template.subGraphId) {
-      logger.graph.warn('Function call drop missing subGraphId', 'CanvasDrop');
+    if (!template.subGraphPath) {
+      logger.graph.warn('Function call drop missing subGraphPath', 'CanvasDrop');
       return;
     }
-    if (!isFunctionAvailable(template.subGraphId, ctx.functions)) return;
-    await ctx.createNode(CALL_FUNCTION_NODE_TYPE, worldPosition, { subGraphId: template.subGraphId });
+    if (!isFunctionAvailable(template.subGraphPath, ctx.functions)) return;
+    await ctx.createNode(CALL_FUNCTION_NODE_TYPE, worldPosition, { subGraphPath: template.subGraphPath });
     return;
   }
 

@@ -52,8 +52,8 @@ export function useEditorKeyboard({
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const graphId = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
-    const currentCanvas = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
+    const graphPath = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
+    const currentCanvas = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
     return {
       x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
       y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,

@@ -19,7 +19,7 @@ export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
     variableId?: string;
     variableName?: string;
     variableType?: string;
-    subGraphId?: string;
+    subGraphPath?: string;
     dataframeId?: string;
     centerSymbol?: string;
     inputs: PinView[];
@@ -45,7 +45,7 @@ export class Node implements UINode {
     variableId?: string;
     variableName?: string;
     variableType?: string;
-    subGraphId?: string;
+    subGraphPath?: string;
     dataframeId?: string;
     centerSymbol?: string;
 
@@ -64,7 +64,7 @@ export class Node implements UINode {
         this.variableId = data.variableId;
         this.variableName = data.variableName;
         this.variableType = data.variableType;
-        this.subGraphId = data.subGraphId;
+        this.subGraphPath = data.subGraphPath;
         this.dataframeId = data.dataframeId;
         this.centerSymbol = data.centerSymbol;
     }
@@ -98,7 +98,7 @@ export class Node implements UINode {
             variableId: this.variableId,
             variableName: this.variableName,
             variableType: this.variableType,
-            subGraphId: this.subGraphId,
+            subGraphPath: this.subGraphPath,
             dataframeId: this.dataframeId,
             centerSymbol: this.centerSymbol,
         });

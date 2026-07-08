@@ -1,32 +1,26 @@
 import { Graph } from '@/shared/types/domain';
-import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
-import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
+import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
+import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
-import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { openEditorTab } from './openEditorTab';
+import { switchEditorGraphTab } from './switchEditorGraphTab';
 
 export async function openGraphInEditor(
-  id: string,
+  graphPath: string,
   name: string,
   type: 'event' | 'function',
   targetGroupId?: string,
   initialData?: Graph,
 ): Promise<void> {
-  logger.graph.trace(`openGraphInEditor called: id=${id}, name=${name}, type=${type}`, 'TabManagement');
+  logger.graph.trace(`openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`, 'TabManagement');
 
-  // Always hydrate the Rust backend before editing; frontend graphEntities alone is not authoritative.
-  if (!initialData) {
-    const loaded = await useProjectIOStore.getState().loadGraph(id);
-    if (!loaded) return;
+  openEditorTab(buildGraphLayoutTab(graphPath, name, type), { targetGroupId });
+  const groupId = resolveEditorTargetGroupId(targetGroupId);
+  const activated = await switchEditorGraphTab(groupId, graphPath, { id: graphPath, type });
+  if (!activated) return;
+
+  if (initialData?.canvas) {
+    ensureGraphViewport(graphPath, initialData.canvas);
   }
-
-  openEditorTab(buildGraphLayoutTab(id, name, type), {
-      targetGroupId,
-      focusDetail: { kind: type, id },
-    });
-
-  const tabSource = initialData || getGraphById(id);
-  ensureGraphViewport(id, tabSource?.canvas);
-  syncVariablesGraphScopeFromActiveTab();
 }

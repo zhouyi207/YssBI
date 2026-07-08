@@ -136,7 +136,7 @@ function buildInitialPins(definition: NodeDefinition, nodeId: string): PinData[]
  * 构建乐观节点草稿（节点 + 初始 pin），id 在内部生成。
  */
 export function buildNodeDraft(
-  graphId: string,
+  graphPath: string,
   nodeType: string,
   definition: NodeDefinition,
   x: number,
@@ -152,7 +152,7 @@ export function buildNodeDraft(
 
   const paramsKind: NodeData['paramsKind'] = params?.variableId
     ? 'variable'
-    : params?.subGraphId
+    : params?.subGraphPath
       ? 'subGraph'
       : params?.dataframeId
         ? 'dataFrame'
@@ -160,7 +160,7 @@ export function buildNodeDraft(
 
   const node: NodeData = {
     id: nodeId,
-    graphId,
+    graphPath,
     nodeType,
     category: definition.category ?? [],
     title: definition.name ?? nodeType,
@@ -175,7 +175,7 @@ export function buildNodeDraft(
     variableId: params?.variableId,
     variableName: params?.variableName,
     variableType: params?.variableType,
-    subGraphId: params?.subGraphId,
+    subGraphPath: params?.subGraphPath,
     dataframeId: params?.dataframeId,
   };
 

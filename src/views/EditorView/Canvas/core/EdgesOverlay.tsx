@@ -10,7 +10,7 @@ import { pinThemeTypeKey } from '@/shared/types/domain/pinSemantics';
 import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
-  graphId: string;
+  graphPath: string;
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
   dimmed?: boolean;
 }
@@ -49,13 +49,13 @@ export function buildEdgeData(
   return result;
 }
 
-export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorldPos, dimmed }) => {
+export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWorldPos, dimmed }) => {
   const { theme } = useTheme();
   const visual = useSyncExternalStore(subscribeExecutionVisual, getExecutionVisual, getExecutionVisual);
-  const graphState = useExecutionStore((s) => s.graphs[graphId]);
-  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphId === graphId);
+  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
+  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphPath === graphPath);
 
-  const useVisual = (visual.active && visual.graphId === graphId) || isReplay;
+  const useVisual = (visual.active && visual.graphPath === graphPath) || isReplay;
   const status = useVisual ? visual.status : (graphState?.status ?? "idle");
   const completedConnections = useVisual ? visual.completedConnections : graphState?.completedConnections;
   const flowingConnections = useVisual ? visual.flowingConnections : graphState?.flowingConnections;
@@ -63,16 +63,16 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
   const isRunning = status === "running";
 
   const graphNodeIds = useGraphDataStore(
-    useShallow((s) => s.getGraphNodeIds(graphId)),
+    useShallow((s) => s.getGraphNodeIds(graphPath)),
   );
   const connections = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId)),
+    useShallow((s) => s.getGraphConnections(graphPath)),
   );
   const sourcePins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.from))),
+    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.from))),
   );
   const targetPins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.to))),
+    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.to))),
   );
 
   const edges = useMemo<EdgeData[]>(() => {

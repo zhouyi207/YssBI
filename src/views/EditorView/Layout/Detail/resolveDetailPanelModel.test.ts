@@ -57,7 +57,7 @@ describe('resolveDetailPanelModel', () => {
 
   it('merges function signature pins into function panel model', () => {
     const model = resolveDetailPanelModel({
-      target: { kind: 'function', id: 'fn-1' },
+      target: { kind: 'function', path: 'fn-1' },
       selectedLog: null,
       worksheetDocument: null,
       functionSignature: {
@@ -69,9 +69,9 @@ describe('resolveDetailPanelModel', () => {
 
     expect(model).toEqual({
       kind: 'function',
-      id: 'fn-1',
+      path: 'fn-1',
       fn: {
-        id: 'fn-1',
+        path: 'fn-1',
         name: 'Add',
         inputs: [{ id: 'in-1', name: 'A', type: 'Float64' }],
         outputs: [{ id: 'out-1', name: 'R', type: 'Float64' }],
@@ -82,7 +82,7 @@ describe('resolveDetailPanelModel', () => {
   it('returns empty when catalog entry is missing or log is not selected', () => {
     expect(
       resolveDetailPanelModel({
-        target: { kind: 'event', id: 'missing' },
+        target: { kind: 'event', path: 'missing' },
         selectedLog: null,
         worksheetDocument: null,
         ...catalog,

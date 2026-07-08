@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useResourceStore } from '@/features/core/resource';
+import { lookupGraphResourceKind, useResourceStore } from '@/features/core/resource';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useSidebarStore } from '@/features/core/sidebar';
@@ -20,17 +20,14 @@ export function useVariableManagement() {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const variablesGraphScopeId = useEditorStore((s) => s.variablesGraphScopeId);
-  const localGraphId = variablesGraphScopeId ?? activeTabId;
-  const graphTypeFromTab = localGraphId && activeEditorNode?.data?.tabs
-    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === localGraphId)?.type
+  const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
+  const localGraphPath = variablesGraphScopePath ?? activeTabId;
+  const graphTypeFromTab = localGraphPath && activeEditorNode?.data?.tabs
+    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === localGraphPath)?.type
     : undefined;
-  const graphTypeFromResource = useResourceStore((s) => {
-    if (!localGraphId) return undefined;
-    if (s.resources[`graph:event:${localGraphId}`]?.exists) return 'event';
-    if (s.resources[`graph:function:${localGraphId}`]?.exists) return 'function';
-    return undefined;
-  });
+  const graphTypeFromResource = useResourceStore((s) =>
+    localGraphPath ? lookupGraphResourceKind(s.resources, localGraphPath) : undefined,
+  );
   const rawType = graphTypeFromTab || graphTypeFromResource;
   const graphType = (rawType === 'event' || rawType === 'function' ? rawType : undefined) as 'event' | 'function' | undefined;
 
@@ -43,7 +40,7 @@ export function useVariableManagement() {
       name,
       type,
       isGlobal,
-      activeGraphId: isGlobal ? null : localGraphId,
+      activeGraphPath: isGlobal ? null : localGraphPath,
       graphType: isGlobal ? undefined : graphType,
     });
     if (created) {
@@ -55,7 +52,7 @@ export function useVariableManagement() {
         sidebar.setSectionExpanded('variablesLocal', true);
       }
     }
-  }, [localGraphId, graphType, switchSidebarTab]);
+  }, [localGraphPath, graphType, switchSidebarTab]);
 
   const updateVariable = useCallback(async (id: string, data: Parameters<typeof updateVariableAction>[1]) => {
     await updateVariableAction(id, data);

@@ -24,7 +24,7 @@ export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
 }
 
 export type FunctionDetailModel = {
-  id: string;
+  path: string;
   name: string;
   inputs: FunctionPinSpec[];
   outputs: FunctionPinSpec[];
@@ -36,8 +36,8 @@ export type DetailPanelModel =
   | { kind: 'node'; nodeId: string }
   | { kind: 'nodeDefinition'; nodeType: string }
   | { kind: 'variable'; id: string; variable: Variable }
-  | { kind: 'event'; id: string; event: { id: string; name: string } }
-  | { kind: 'function'; id: string; fn: FunctionDetailModel }
+  | { kind: 'event'; path: string; event: { path: string; name: string } }
+  | { kind: 'function'; path: string; fn: FunctionDetailModel }
   | { kind: 'worksheet'; document: WorksheetDocument }
   | { kind: 'data'; id: string; dataframe: DatabaseRecord };
 
@@ -68,17 +68,19 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
       return variable ? { kind: 'variable', id: target.id, variable } : { kind: 'empty' };
     }
     case 'event': {
-      const event = events[target.id];
-      return event ? { kind: 'event', id: target.id, event } : { kind: 'empty' };
+      const event = events[target.path];
+      return event
+        ? { kind: 'event', path: target.path, event: { path: target.path, name: event.name } }
+        : { kind: 'empty' };
     }
     case 'function': {
-      const fnRecord = functions[target.id];
+      const fnRecord = functions[target.path];
       if (!fnRecord) return { kind: 'empty' };
       return {
         kind: 'function',
-        id: target.id,
+        path: target.path,
         fn: {
-          id: fnRecord.id,
+          path: fnRecord.id,
           name: fnRecord.name,
           inputs: functionSignature?.functionInputs ?? [],
           outputs: functionSignature?.functionOutputs ?? [],

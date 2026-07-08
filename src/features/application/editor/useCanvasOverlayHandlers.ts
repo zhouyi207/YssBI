@@ -30,7 +30,7 @@ export function useCanvasOverlayHandlers({
   createNode: CreateNodeFn;
   setCanvas: (
     updater: import('@/shared/types/domain/graph').GraphPosition | ((prev: import('@/shared/types/domain/graph').GraphPosition) => import('@/shared/types/domain/graph').GraphPosition),
-    targetGraphId?: string,
+    targetGraphPath?: string,
   ) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
@@ -69,7 +69,7 @@ export function useCanvasOverlayHandlers({
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
       if (item.nodeType === CALL_FUNCTION_NODE_TYPE) {
-        const subId = item.overrides?.subGraphId;
+        const subId = item.overrides?.subGraphPath;
         if (!subId || !isFunctionAvailable(subId, functions)) {
           setContextMenu(null);
           setPendingConnection(null);

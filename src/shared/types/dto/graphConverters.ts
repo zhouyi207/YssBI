@@ -35,7 +35,7 @@ export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
 } {
   const errors: string[] = [];
 
-  if (!graphDTO.id) errors.push('Missing graph id');
+  if (!graphDTO.path) errors.push('Missing graph path');
   if (!graphDTO.name) errors.push('Missing graph name');
   if (!graphDTO.type) errors.push('Missing graph type');
   if (!Array.isArray(graphDTO.nodes)) errors.push('Invalid nodes array');

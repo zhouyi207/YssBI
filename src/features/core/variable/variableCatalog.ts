@@ -31,9 +31,9 @@ export function variableCatalogToResourceMetas(
   return Object.entries(variables).map(([id, variable]) => {
     const scope =
       variable.scope.type === 'event'
-        ? { type: 'event' as const, graphId: variable.scope.eventId }
+        ? { type: 'event' as const , graphPath: variable.scope.eventPath }
         : variable.scope.type === 'function'
-          ? { type: 'function' as const, graphId: variable.scope.functionId }
+          ? { type: 'function' as const , graphPath: variable.scope.functionPath }
           : { type: 'global' as const };
     return {
       id,

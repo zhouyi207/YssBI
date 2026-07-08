@@ -4,7 +4,7 @@ import type { ProjectGraphIndexRow } from '@/services/project/projectService';
 
 /** 从后端图 DTO / 领域图读取签名并写入 graphMetaStore（Detail 面板唯一来源）。 */
 export type FunctionSignatureSource = {
-  id: string;
+  path: string;
   name: string;
   type: GraphType;
   functionInputs?: FunctionSignaturePin[];
@@ -15,19 +15,19 @@ export function syncFunctionSignatureFromGraph(graph: FunctionSignatureSource): 
   if (graph.type !== 'function') return;
 
   const graphMetaStore = useGraphMetaStore.getState();
-  const existing = graphMetaStore.graphs[graph.id];
+  const existing = graphMetaStore.graphs[graph.path];
   const signaturePatch = {
     functionInputs: graph.functionInputs ?? existing?.functionInputs ?? [],
     functionOutputs: graph.functionOutputs ?? existing?.functionOutputs ?? [],
   };
 
   if (existing) {
-    graphMetaStore.updateGraph(graph.id, signaturePatch);
+    graphMetaStore.updateGraph(graph.path, signaturePatch);
     return;
   }
 
   graphMetaStore.addGraph({
-    id: graph.id,
+    path: graph.path,
     name: graph.name,
     type: graph.type,
     ...signaturePatch,
@@ -41,17 +41,17 @@ export function hydrateFunctionSignaturesFromProjectIndex(
   const graphMetaStore = useGraphMetaStore.getState();
   for (const row of graphs) {
     if (row.type !== 'function') continue;
-    const existing = graphMetaStore.graphs[row.id];
+    const existing = graphMetaStore.graphs[row.path];
     const patch = {
       functionInputs: row.functionInputs ?? [],
       functionOutputs: row.functionOutputs ?? [],
     };
     if (existing) {
-      graphMetaStore.updateGraph(row.id, patch);
+      graphMetaStore.updateGraph(row.path, patch);
       continue;
     }
     graphMetaStore.addGraph({
-      id: row.id,
+      path: row.path,
       name: row.name,
       type: 'function',
       ...patch,

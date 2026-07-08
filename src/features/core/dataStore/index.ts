@@ -4,7 +4,7 @@
  * 分层：
  * - *Store：Zustand 状态
  * - projectSnapshot / projectSnapshotBridge：图导出纯函数与跨 store 桥接
- * - projectHelpers：initProjectSync / getGraphById 等应用辅助
+ * - projectHelpers：initProjectSync / getGraphByPath 等应用辅助
  * - projectIOStore：load / export / loadGraph 编排
  *
  * 跨 store 依赖须集中在 projectSnapshotBridge / projectClientReset / projectIOStore，

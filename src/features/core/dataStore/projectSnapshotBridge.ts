@@ -14,19 +14,19 @@ export function buildGraphSnapshotFromStores(): Record<string, GraphData> {
 
   return buildGraphSnapshot({
     graphOrder: resourceStore.graphOrder,
-    getResourceMeta: (graphId) => {
-      const eventMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'event' })];
-      const functionMeta = resourceStore.resources[resourceKey({ id: graphId, kind: 'function' })];
+    getResourceMeta: (graphPath) => {
+      const eventMeta = resourceStore.resources[resourceKey({ id: graphPath, kind: 'event' })];
+      const functionMeta = resourceStore.resources[resourceKey({ id: graphPath, kind: 'function' })];
       const meta = eventMeta ?? functionMeta;
       return meta ? { name: meta.name, kind: meta.kind, exists: meta.exists } : null;
     },
-    getGraphNodeIds: (graphId) => dataStore.getGraphNodeIds(graphId),
-    getGraphNode: (graphId, nodeId) => dataStore.getGraphNode(graphId, nodeId) ?? null,
-    getGraphNodePins: (graphId, nodeId) => dataStore.getGraphNodePins(graphId, nodeId),
-    getGraphPin: (graphId, pinId) => dataStore.getGraphPin(graphId, pinId) ?? null,
-    getGraphPinConnections: (graphId, pinId) => dataStore.getGraphPinConnections(graphId, pinId),
-    getGraphConnection: (graphId, connectionId) =>
-      dataStore.getGraphConnection(graphId, connectionId) ?? null,
+    getGraphNodeIds: (graphPath) => dataStore.getGraphNodeIds(graphPath),
+    getGraphNode: (graphPath, nodeId) => dataStore.getGraphNode(graphPath, nodeId) ?? null,
+    getGraphNodePins: (graphPath, nodeId) => dataStore.getGraphNodePins(graphPath, nodeId),
+    getGraphPin: (graphPath, pinId) => dataStore.getGraphPin(graphPath, pinId) ?? null,
+    getGraphPinConnections: (graphPath, pinId) => dataStore.getGraphPinConnections(graphPath, pinId),
+    getGraphConnection: (graphPath, connectionId) =>
+      dataStore.getGraphConnection(graphPath, connectionId) ?? null,
     getViewport,
   });
 }

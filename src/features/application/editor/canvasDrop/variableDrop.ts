@@ -18,12 +18,12 @@ export interface VariableDropMenu {
 
 export function clientToWorldInCanvas(
   canvasEl: HTMLElement,
-  graphId: string | null,
+  graphPath: string | null,
   clientX: number,
   clientY: number,
 ): { x: number; y: number } {
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
+  const viewport = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,

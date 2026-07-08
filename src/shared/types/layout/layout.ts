@@ -23,13 +23,18 @@ export type LayoutTabComponent = 'GraphEditor' | 'WorksheetEditor';
 
 /**
  * 布局标签页
- * 表示布局组件中的一个标签页
+ *
+ * - **Graph tab**（`type: 'event' | 'function'`）：`id` 即图资源相对路径（`Graph.path`），
+ *   与 `ResourceRef.id`、`GraphData.path`、`graphPath` API 参数同值；禁止 tab 级 UUID。
+ * - **Worksheet tab**：`id` 为 worksheet 资源 id（非图 path）。
  */
 export interface LayoutTab {
+  /** Graph tab: project-relative graph path; worksheet tab: worksheet resource id */
   id: string;
   title: string;
   component: LayoutTabComponent;
   type: LayoutTabType;
+  /** @deprecated Read dirty from DocumentState via resourceKey; not persisted. */
   isDirty?: boolean;
 }
 

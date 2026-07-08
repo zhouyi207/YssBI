@@ -40,8 +40,6 @@ struct GraphNodeSer<'a> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphDocDe {
-    #[serde(default)]
-    id: Option<GraphId>,
     name: String,
     kind: GraphKind,
     #[serde(default)]
@@ -130,7 +128,7 @@ impl<'de> Deserialize<'de> for GraphInstance {
     {
         let doc = GraphDocDe::deserialize(deserializer)?;
         Ok(Self::from_persisted_parts(
-            doc.id.unwrap_or_else(GraphId::new),
+            GraphResourcePath::from_normalized_unchecked(String::new()),
             doc.name,
             doc.kind,
             doc.position,
@@ -146,7 +144,7 @@ impl GraphInstance {
     /// 从持久化的扁平节点 + 连接重建 `GraphInstance`（无 registry，
     /// 静态 pin 的完整定义随后由 `set_registry` 重挂）。
     pub(super) fn from_persisted_parts(
-        id: GraphId,
+        resource_path: GraphResourcePath,
         name: String,
         kind: GraphKind,
         position: GraphPosition,
@@ -184,7 +182,7 @@ impl GraphInstance {
         }
 
         Self {
-            id,
+            resource_path,
             name,
             kind,
             position,

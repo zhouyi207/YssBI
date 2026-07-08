@@ -22,9 +22,9 @@ function snapshotToServiceEntries(snapshot: ClipboardSnapshot) {
 }
 
 export const batchCreateCommand: CommandHandler<BatchCreateArgs, BatchCreateContext> = {
-  async execute(graphId, args) {
+  async execute(graphPath, args) {
     const result = await NodeService.batchCreateWithConnections(
-      graphId,
+      graphPath,
       snapshotToServiceEntries(args.snapshot),
       args.snapshot.internalConnections,
     );
@@ -34,14 +34,14 @@ export const batchCreateCommand: CommandHandler<BatchCreateArgs, BatchCreateCont
     };
   },
 
-  async undo(graphId, context) {
+  async undo(graphPath, context) {
     const nodeIds = context.undoPatch.nodes.map((n) => n.id);
     if (nodeIds.length > 0) {
-      await NodeService.batchDeleteNodes(graphId, nodeIds);
+      await NodeService.batchDeleteNodes(graphPath, nodeIds);
     }
   },
 
-  async redo(graphId, context) {
-    await NodeService.applyGraphPatch(graphId, context.undoPatch);
+  async redo(graphPath, context) {
+    await NodeService.applyGraphPatch(graphPath, context.undoPatch);
   },
 };

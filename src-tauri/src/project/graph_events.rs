@@ -3,14 +3,15 @@ use crate::event::{Event, EventNode, emit_project_event};
 use crate::execution::{
     ResultSourceStore, apply_runtime_pin_invalidation, collect_invalidation_pins,
 };
-use crate::graph::{DataType, GraphId, GraphInstance, PinChangeSet, PinId};
+use crate::graph::{DataType, GraphInstance, PinChangeSet, PinId};
+use crate::project::GraphResourcePath;
 use crate::schema::PinInstanceDTO;
 use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
 use tauri::AppHandle;
 
 pub fn emit_pin_change_events(
     app: &AppHandle,
-    graph_id: GraphId,
+    graph_path: &GraphResourcePath,
     graph: &GraphInstance,
     change_sets: &[PinChangeSet],
 ) {
@@ -42,7 +43,7 @@ pub fn emit_pin_change_events(
         emit_project_event(
             app,
             Event::Node(EventNode::NodePinsUpdated {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 node_id: cs.node_id,
                 removed_pin_ids,
                 added_pins: added_dtos,
@@ -54,7 +55,11 @@ pub fn emit_pin_change_events(
     }
 }
 
-pub fn emit_inferred_types(app: &AppHandle, graph_id: GraphId, inferred: Vec<(PinId, DataType)>) {
+pub fn emit_inferred_types(
+    app: &AppHandle,
+    graph_path: &GraphResourcePath,
+    inferred: Vec<(PinId, DataType)>,
+) {
     if inferred.is_empty() {
         return;
     }
@@ -71,7 +76,7 @@ pub fn emit_inferred_types(app: &AppHandle, graph_id: GraphId, inferred: Vec<(Pi
     emit_project_event(
         app,
         Event::Node(EventNode::PinTypesInferred {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             pin_types,
         }),
     );
@@ -80,7 +85,7 @@ pub fn emit_inferred_types(app: &AppHandle, graph_id: GraphId, inferred: Vec<(Pi
 pub fn emit_runtime_source_invalidation(
     app: &AppHandle,
     store: &ResultSourceStore,
-    graph_id: GraphId,
+    graph_path: &GraphResourcePath,
     change_sets: &[PinChangeSet],
     deleted_node_pin_ids: &[PinId],
 ) {
@@ -88,14 +93,14 @@ pub fn emit_runtime_source_invalidation(
     if pin_ids.is_empty() {
         return;
     }
-    let invalidated = apply_runtime_pin_invalidation(store, graph_id, &pin_ids);
+    let invalidated = apply_runtime_pin_invalidation(store, graph_path.as_str(), &pin_ids);
     if invalidated.is_empty() {
         return;
     }
     emit_project_event(
         app,
         Event::Node(EventNode::RuntimeSourcesInvalidated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             pin_ids: invalidated,
         }),
     );
@@ -105,13 +110,13 @@ pub fn emit_runtime_source_invalidation(
 pub fn emit_graph_pin_mutation_sync(
     app: &AppHandle,
     source_store: &ResultSourceStore,
-    graph_id: GraphId,
+    graph_path: &GraphResourcePath,
     graph: &GraphInstance,
     change_sets: &[PinChangeSet],
     inferred: Vec<(PinId, DataType)>,
     deleted_pin_ids: &[PinId],
 ) {
-    emit_pin_change_events(app, graph_id, graph, change_sets);
-    emit_inferred_types(app, graph_id, inferred);
-    emit_runtime_source_invalidation(app, source_store, graph_id, change_sets, deleted_pin_ids);
+    emit_pin_change_events(app, graph_path, graph, change_sets);
+    emit_inferred_types(app, graph_path, inferred);
+    emit_runtime_source_invalidation(app, source_store, graph_path, change_sets, deleted_pin_ids);
 }

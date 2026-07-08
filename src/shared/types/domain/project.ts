@@ -22,7 +22,7 @@ export interface ProjectMetadata {
  */
 export interface ProjectData {
     variables: Record<string, Variable>;  // 变量集合（ID -> Variable）
-    graphs: Record<string, Graph>;        // 图集合（ID -> Graph）
+    graphs: Record<string, Graph>;        // 图集合（path -> Graph，键与 Graph.path 一致）
     databases: Record<string, DatabaseDecl>;  // 数据库集合（ID -> DatabaseDecl）
     metadata: ProjectMetadata;            // 元数据
 }

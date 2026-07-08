@@ -6,11 +6,12 @@ use crate::application::database::bind_duckdb_instance;
 use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::graph::core::SchemaProvider;
 use crate::graph::value::DataType;
-use crate::graph::{GraphId, GraphInstance, GraphKind, GraphRecompileScope, PinChangeSet, PinId};
+use crate::graph::{GraphInstance, GraphKind, GraphRecompileScope, PinChangeSet, PinId};
 use crate::log::log_sys;
 use crate::project::{
-    GraphDocument, ProjectData, ProjectStore, load_project_graph_from_file,
-    save_project_graph_to_file, save_project_to_file,
+    GraphDocument, GraphResourcePath, ProjectData, ProjectStore, cascade_graph_path_references_on_disk,
+    load_project_graph_from_file, project_root_from_path, save_project_graph_to_file,
+    save_project_to_file,
 };
 use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -179,7 +180,7 @@ impl ProjectState {
     /// 变量变更后，重编译引用该变量的图（schema 传播 + schema 派生 pin 物化）。
     pub fn recompile_graphs_for_variable(&self, variable_id: &VariableId) {
         let var_id_str = variable_id.to_string();
-        let seed_nodes: Vec<(GraphId, Vec<crate::graph::NodeId>)> = {
+        let seed_nodes: Vec<(GraphResourcePath, Vec<crate::graph::NodeId>)> = {
             let data = self.project_data.read().unwrap();
             data.graphs
                 .iter()
@@ -198,7 +199,7 @@ impl ProjectState {
                     if seeds.is_empty() {
                         None
                     } else {
-                        Some((*graph_id, seeds))
+                        Some((graph_id.clone(), seeds))
                     }
                 })
                 .collect()
@@ -230,11 +231,11 @@ impl ProjectState {
     /// Always called by `insert_graph` — do not call from elsewhere.
     fn prepare_graph_runtime(&self, graph: &mut GraphInstance) {
         Self::bind_graph_runtime(graph, self);
-        let graph_id = graph.id;
+        let graph_path = graph.resource_path.clone();
         let graph_kind = graph.kind.clone();
         let data = self.project_data.read().unwrap();
         let variable_symbols =
-            Self::variable_symbols_from_variables(&data.variables, &graph_id, &graph_kind);
+            Self::variable_symbols_from_variables(&data.variables, &graph_path, &graph_kind);
         let dataframe_symbols = Self::dataframe_symbols_from_databases(&data.databases);
         drop(data);
         Self::apply_runtime_symbols(graph, &variable_symbols, &dataframe_symbols);
@@ -243,17 +244,17 @@ impl ProjectState {
 
     pub(crate) fn variable_symbols_from_variables(
         variables: &HashMap<VariableId, VariableInstance>,
-        graph_id: &GraphId,
+        graph_path: &GraphResourcePath,
         graph_kind: &GraphKind,
     ) -> HashMap<String, (String, DataType)> {
-        let graph_id = graph_id.to_string();
+        let graph_path = graph_path.as_str();
         variables
             .values()
             .filter(|variable| match (&variable.scope, graph_kind) {
                 (VariableScope::Global, _) => true,
-                (VariableScope::Event { event_id }, GraphKind::Event) => event_id == &graph_id,
-                (VariableScope::Function { function_id }, GraphKind::Function) => {
-                    function_id == &graph_id
+                (VariableScope::Event { event_path }, GraphKind::Event) => event_path == graph_path,
+                (VariableScope::Function { function_path }, GraphKind::Function) => {
+                    function_path == graph_path
                 }
                 _ => false,
             })
@@ -281,14 +282,16 @@ impl ProjectState {
     /// 消除「本图 unload 期间目标函数改过签名」导致的 Call pin 陈旧。
     pub fn resolve_graph_dynamic_pins(
         &self,
-        graph_id: &GraphId,
+        graph_path: &GraphResourcePath,
     ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
-        let mut call_sets = self.sync_all_call_nodes_in_graph(graph_id);
+        let mut shell_sets = self.sync_function_shell_pins_in_graph(graph_path);
+        let mut call_sets = self.sync_all_call_nodes_in_graph(graph_path);
 
         let graph = self
-            .get_graph(graph_id)
-            .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+            .get_graph(graph_path)
+            .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
         let (mut change_sets, inferred) = graph.materialize_dynamic_pins();
+        change_sets.append(&mut shell_sets);
         change_sets.append(&mut call_sets);
         Ok((graph, change_sets, inferred))
     }
@@ -304,19 +307,19 @@ impl ProjectState {
     pub fn insert_graph(&self, mut graph: GraphInstance) -> GraphInstance {
         self.prepare_graph_runtime(&mut graph);
         self.mark_graph_runtime_prepared(&mut graph);
-        let graph_id = graph.id;
+        let graph_path = graph.resource_path.clone();
         self.project_data
             .write()
             .unwrap()
             .graphs
-            .insert(graph_id, graph.clone());
+            .insert(graph_path.clone(), graph.clone());
         if graph.kind == GraphKind::Function {
             self.function_signatures()
                 .write()
                 .unwrap()
                 .upsert_from_graph(&graph);
         }
-        self.refresh_call_sites_for_caller(&graph_id);
+        self.refresh_call_sites_for_caller(&graph_path);
         graph
     }
 
@@ -340,9 +343,9 @@ impl ProjectState {
 
     pub fn load_graph_from_current_project(
         &self,
-        graph_id: &GraphId,
+        graph_path: &GraphResourcePath,
     ) -> Result<GraphDocument, String> {
-        if let Some(existing) = self.get_graph(graph_id) {
+        if let Some(existing) = self.get_graph(graph_path) {
             if self.graph_runtime_is_current(&existing) {
                 return Ok(Self::graph_document_from_instance(existing));
             }
@@ -350,7 +353,8 @@ impl ProjectState {
             return Ok(Self::graph_document_from_instance(graph));
         }
         let path = self.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-        let document = load_project_graph_from_file(&path, graph_id).map_err(|e| e.to_string())?;
+        let document =
+            load_project_graph_from_file(&path, graph_path).map_err(|e| e.to_string())?;
         let GraphDocument {
             schema_version,
             kind,
@@ -417,7 +421,10 @@ impl ProjectState {
         save_project_to_file(&snapshot, &path).map_err(|e| e.to_string())
     }
 
-    pub fn persist_loaded_graph(&self, graph_id: &GraphId) -> Result<(), String> {
+    pub fn persist_loaded_graph(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Result<Option<GraphResourcePath>, String> {
         let Some(path) = self.get_path() else {
             return Err("项目尚未加载".to_string());
         };
@@ -426,7 +433,25 @@ impl ProjectState {
             data.update_metadata();
             data.clone()
         };
-        save_project_graph_to_file(&snapshot, &path, graph_id).map_err(|e| e.to_string())
+        let saved_path =
+            save_project_graph_to_file(&snapshot, &path, graph_path).map_err(|e| e.to_string())?;
+        let new_path = GraphResourcePath::new(saved_path).map_err(|e| e.to_string())?;
+        if new_path.as_str() == graph_path.as_str() {
+            return Ok(None);
+        }
+
+        let root = project_root_from_path(&path);
+        cascade_graph_path_references_on_disk(
+            root.as_path(),
+            graph_path.as_str(),
+            new_path.as_str(),
+            Some(root.join(new_path.as_str()).as_path()),
+        )
+        .map_err(|e| e.to_string())?;
+
+        self.move_graph_resource_path(graph_path, &new_path)?;
+        let _ = self.persist_loaded_graph(&new_path)?;
+        Ok(Some(new_path))
     }
 }
 
@@ -438,16 +463,16 @@ mod runtime_load_tests {
     fn load_graph_skips_prepare_when_runtime_is_current() {
         let state = ProjectState::new();
         let inserted = state.add_event("Event A");
-        let graph_id = inserted.id;
+        let graph_path = inserted.resource_path.clone();
         let epoch_after_insert = inserted.runtime_prepared_epoch;
 
         let first = state
-            .load_graph_from_current_project(&graph_id)
+            .load_graph_from_current_project(&graph_path)
             .expect("first load should succeed");
         assert_eq!(first.graph.runtime_prepared_epoch, epoch_after_insert);
 
         let second = state
-            .load_graph_from_current_project(&graph_id)
+            .load_graph_from_current_project(&graph_path)
             .expect("second load should succeed");
         assert_eq!(second.graph.runtime_prepared_epoch, epoch_after_insert);
     }
@@ -456,16 +481,16 @@ mod runtime_load_tests {
     fn load_graph_reprepares_after_runtime_invalidation() {
         let state = ProjectState::new();
         let inserted = state.add_event("Event B");
-        let graph_id = inserted.id;
+        let graph_path = inserted.resource_path.clone();
         let epoch_after_insert = inserted.runtime_prepared_epoch;
 
         state
-            .load_graph_from_current_project(&graph_id)
+            .load_graph_from_current_project(&graph_path)
             .expect("warm load");
 
         state.invalidate_graph_runtime();
         let reloaded = state
-            .load_graph_from_current_project(&graph_id)
+            .load_graph_from_current_project(&graph_path)
             .expect("reload after invalidation");
         assert_ne!(reloaded.graph.runtime_prepared_epoch, epoch_after_insert);
         assert_eq!(

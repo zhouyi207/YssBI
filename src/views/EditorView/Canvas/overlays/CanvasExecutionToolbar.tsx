@@ -31,20 +31,20 @@ function CanvasToolbarButton({
 }
 
 export function CanvasExecutionToolbar({
-  graphId,
+  graphPath,
   onExecute,
   onCancelExecution,
   onClearArtifacts,
 }: {
-  graphId: string;
+  graphPath: string;
   onExecute: () => void;
   onCancelExecution: () => void;
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
   const { stop: stopReplay, togglePlayPause, isPlaying, isPaused, hasRecording, graphDirty } =
-    useExecutionPlayback(graphId);
-  const graphState = useExecutionStore((s) => s.graphs[graphId]);
+    useExecutionPlayback(graphPath);
+  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 
   const playbackActive = isPlaying || isPaused;

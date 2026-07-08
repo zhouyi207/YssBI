@@ -16,7 +16,7 @@ interface DefaultNodeLayoutProps {
   node: UINode;
   activePinId?: string | null;
   activePin?: PinModel | null;
-  subgraphId?: string;
+  graphPath?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -43,7 +43,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
   activePinId,
   activePin,
-  subgraphId,
+  graphPath,
   onAddInput,
   onRemovePin,
   onPinClick,
@@ -122,7 +122,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     key={pin.id}
                     {...pin}
                     metaData={metaData}
-                    subgraphId={subgraphId}
+                    graphPath={graphPath}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -143,7 +143,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     key={pin.id}
                     {...pin}
                     metaData={metaData}
-                    subgraphId={subgraphId}
+                    graphPath={graphPath}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -168,7 +168,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   metaData={metaData}
-                  subgraphId={subgraphId}
+                  graphPath={graphPath}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}
@@ -189,7 +189,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   metaData={metaData}
-                  subgraphId={subgraphId}
+                  graphPath={graphPath}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}

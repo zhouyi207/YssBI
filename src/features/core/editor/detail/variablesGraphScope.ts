@@ -24,7 +24,7 @@ export function syncVariablesGraphScopeFromActiveTab(): void {
   }
 }
 
-export function syncVariablesGraphScopeAfterClose(closedGraphId: string): void {
+export function syncVariablesGraphScopeAfterClose(closedGraphPath: string): void {
   const store = useEditorStore.getState();
   const activeGraph = readActiveGraphTab();
 
@@ -33,11 +33,11 @@ export function syncVariablesGraphScopeAfterClose(closedGraphId: string): void {
     return;
   }
 
-  if (store.variablesGraphScopeId === closedGraphId) {
+  if (store.variablesGraphScopePath === closedGraphPath) {
     return;
   }
 }
 
-export function setVariablesGraphScopeFromResource(graphId: string): void {
-  useEditorStore.getState().setVariablesGraphScope(graphId);
+export function setVariablesGraphScopeFromResource(graphPath: string): void {
+  useEditorStore.getState().setVariablesGraphScope(graphPath);
 }

@@ -76,7 +76,7 @@ export type GraphTypeDTO = 'event' | 'function';
 
 /** 后端 GraphInstanceDTO 对应 */
 export interface GraphInstanceDTO {
-  id: string;
+  path: string;
   name: string;
   type: GraphTypeDTO;
   functionInputs?: FunctionSignaturePinDTO[];
@@ -92,4 +92,9 @@ export interface FunctionSignaturePinDTO {
   name: string;
   type: string;
   containerType?: string;
+}
+
+export interface FunctionCallSiteDTO {
+  callerGraphPath: string;
+  nodeIds: string[];
 }

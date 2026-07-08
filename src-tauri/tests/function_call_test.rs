@@ -12,7 +12,7 @@ use yssbi_lib::graph::{FunctionSignaturePin, NodeId, PinId};
 use yssbi_lib::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use yssbi_lib::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use yssbi_lib::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
-use yssbi_lib::project::ProjectState;
+use yssbi_lib::project::{GraphResourcePath, ProjectState};
 
 fn sig(id: &str, name: &str, pin_type: &str) -> FunctionSignaturePin {
     FunctionSignaturePin {
@@ -52,7 +52,7 @@ fn build_identity_function(
     state: &ProjectState,
     pin_type: &str,
     with_exec: bool,
-) -> yssbi_lib::graph::GraphId {
+) -> GraphResourcePath {
     let func = state.add_function("Identity");
     let entry = func
         .create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 0.0, 0.0, None)
@@ -79,10 +79,12 @@ fn build_identity_function(
     };
 
     state
-        .update_function_signature(&func.id, Some(inputs), Some(outputs))
+        .update_function_signature(&func.resource_path, Some(inputs), Some(outputs))
         .expect("update signature");
 
-    let func_graph = state.get_graph(&func.id).expect("function loaded");
+    let func_graph = state
+        .get_graph(&func.resource_path)
+        .expect("function loaded");
 
     let entry_a = pin_by_role(&func_graph, entry, &PinRole::Data(DataRole::Custom("a".into())));
     let ret_r = pin_by_role(&func_graph, ret, &PinRole::Data(DataRole::Custom("r".into())));
@@ -94,7 +96,7 @@ fn build_identity_function(
         func_graph.connect(entry_exec, ret_exec).expect("connect exec");
     }
 
-    func.id
+    func.resource_path.clone()
 }
 
 #[test]
@@ -112,16 +114,18 @@ fn exec_call_passes_value_through_control_flow() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
 
     let (_graph, _cs) = state
-        .sync_call_node(&event.id, call, &func_id)
+        .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
 
     assert!(has_role(&event_graph, call, &exec_in_role()));
     assert!(has_role(&event_graph, call, &exec_out_role()));
@@ -167,7 +171,7 @@ fn data_only_call_has_no_exec_pins_and_is_pulled() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
@@ -176,10 +180,12 @@ fn data_only_call_has_no_exec_pins_and_is_pulled() {
         .expect("create print");
 
     state
-        .sync_call_node(&event.id, call, &func_id)
+        .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
 
     assert!(!has_role(&event_graph, call, &exec_in_role()));
     assert!(!has_role(&event_graph, call, &exec_out_role()));
@@ -240,15 +246,15 @@ fn call_node_input_output_directions_match_signature() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
     state
-        .sync_call_node(&event.id, call, &func_id)
+        .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let g = state.get_graph(&event.id).expect("event loaded");
+    let g = state.get_graph(&event.resource_path).expect("event loaded");
     assert_eq!(
         pin_direction(&g, call, &PinRole::Data(DataRole::Custom("a".into()))),
         PinDirection::Input,
@@ -273,15 +279,17 @@ fn removing_exec_from_signature_updates_call_pins() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
     state
-        .sync_call_node(&event.id, call, &func_id)
+        .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(has_role(&event_graph, call, &exec_out_role()));
 
     state
@@ -292,10 +300,12 @@ fn removing_exec_from_signature_updates_call_pins() {
         )
         .expect("remove exec from signature");
     for (gid, _graph, _sets) in state.sync_call_nodes_for_function(&func_id) {
-        assert_eq!(gid, event.id);
+        assert_eq!(gid, event.resource_path);
     }
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -318,27 +328,31 @@ fn project_call_node_pins_after_create_with_id_path() {
             10.0,
             20.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call raw");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert_eq!(event_graph.get_pin_instances_by_node_id(call).len(), 0);
 
     state
         .project_call_node_pins(
-            &event.id,
+            &event.resource_path,
             call,
             CALL_FUNCTION_NODE_TYPE,
             Some(&NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("project pins")
         .expect("should project");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(has_role(
         &event_graph,
         call,
@@ -364,15 +378,17 @@ fn data_only_function_signature_change_syncs_call_data_pins() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
     state
-        .sync_call_node(&event.id, call, &func_id)
+        .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -394,11 +410,13 @@ fn data_only_function_signature_change_syncs_call_data_pins() {
         .expect("update signature");
 
     for (gid, _graph, sets) in state.sync_call_nodes_for_function(&func_id) {
-        assert_eq!(gid, event.id);
+        assert_eq!(gid, event.resource_path);
         assert!(!sets.is_empty());
     }
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -431,7 +449,7 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
     let func_id = build_identity_function(&state, "int", true);
     let event = state.add_event("Main");
     let params = NodeInstanceParams::SubGraph {
-        sub_graph_id: func_id.to_string(),
+        sub_graph_path: func_id.to_string(),
     };
 
     let signature = state
@@ -440,7 +458,7 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
         .expect("signature");
 
     let call = state
-        .with_graph_mut(&event.id, |mut ctx| {
+        .with_graph_mut(&event.resource_path, |mut ctx| {
             let call = ctx
                 .graph()
                 .create_node_with_position(
@@ -460,7 +478,9 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
         })
         .expect("graph mut");
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     assert!(has_role(&event_graph, call, &exec_in_role()));
     assert!(has_role(
         &event_graph,
@@ -482,42 +502,42 @@ fn call_site_index_tracks_create_and_delete_without_full_graph_scan() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
 
     state.register_call_site_for_node(
-        &event.id,
+        &event.resource_path,
         call,
         CALL_FUNCTION_NODE_TYPE,
         Some(&NodeInstanceParams::SubGraph {
-            sub_graph_id: func_id.to_string(),
+            sub_graph_path: func_id.to_string(),
         }),
     );
 
     let sites = state.get_function_call_sites(&func_id);
     assert_eq!(sites.len(), 1);
-    assert_eq!(sites[0].0, event.id);
+    assert_eq!(sites[0].0, event.resource_path);
     assert_eq!(sites[0].1, vec![call]);
 
     assert!(state.get_function_call_sites(&other_func).is_empty());
 
     state
-        .with_graph_mut(&event.id, |mut ctx| {
+        .with_graph_mut(&event.resource_path, |mut ctx| {
             ctx.graph().remove_node_raw(call)?;
             Ok(())
         })
         .expect("remove call node");
 
-    state.unregister_call_site_for_node(&event.id, call, CALL_FUNCTION_NODE_TYPE);
+    state.unregister_call_site_for_node(&event.resource_path, call, CALL_FUNCTION_NODE_TYPE);
     assert!(state.get_function_call_sites(&func_id).is_empty());
 }
 
 #[test]
 fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
     let state = ProjectState::new();
-    let func_id = state.add_function("F").id;
+    let func_id = state.add_function("F").resource_path;
     let signature = state
         .get_function_signature(&func_id)
         .expect("signature");
@@ -531,7 +551,7 @@ fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
             0.0,
             0.0,
             Some(NodeInstanceParams::SubGraph {
-                sub_graph_id: func_id.to_string(),
+                sub_graph_path: func_id.to_string(),
             }),
         )
         .expect("create call");
@@ -546,11 +566,65 @@ fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
         Some(&[exec_in_id, exec_out_id]),
     );
 
-    let event_graph = state.get_graph(&event.id).expect("event loaded");
+    let event_graph = state
+        .get_graph(&event.resource_path)
+        .expect("event loaded");
     let pin_ids: Vec<PinId> = event_graph
         .get_pin_instances_by_node_id(call)
         .into_iter()
         .map(|p| p.id)
         .collect();
     assert_eq!(pin_ids, vec![exec_in_id, exec_out_id]);
+}
+
+#[test]
+fn resolve_graph_dynamic_pins_reconciles_function_shell_pins() {
+    let state = ProjectState::new();
+    let func_path = state.add_function("Sum").resource_path;
+
+    state
+        .with_graph_mut(&func_path, |ctx| {
+            ctx.graph_ref()
+                .create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
+            ctx.graph_ref()
+                .create_node_with_position(FUNCTION_RETURN_NODE_TYPE, 560.0, 160.0, None)?;
+            let _ = ctx.graph_ref().sync_function_shell_pins();
+            Ok(())
+        })
+        .expect("seed function shell");
+
+    let before = entry_data_pin_count(&state, &func_path);
+
+    state
+        .with_graph_mut(&func_path, |mut ctx| {
+            ctx.graph().function_inputs.push(sig("extra", "extra", "float"));
+            Ok(())
+        })
+        .expect("drift signature");
+
+    let drifted = entry_data_pin_count(&state, &func_path);
+    assert_eq!(drifted, before, "shell pins should stay stale until tab open reconcile");
+
+    state
+        .resolve_graph_dynamic_pins(&func_path)
+        .expect("resolve dynamic pins");
+
+    let after = entry_data_pin_count(&state, &func_path);
+    assert_eq!(after, before + 1, "tab open should project new signature input to Entry shell");
+}
+
+fn entry_data_pin_count(state: &ProjectState, func_path: &GraphResourcePath) -> usize {
+    let graph = state.get_graph(func_path).expect("function graph loaded");
+    let data_state = graph.data_state.read().unwrap();
+    let entry_id = data_state
+        .nodes
+        .values()
+        .find(|n| n.definition.node_type == FUNCTION_ENTRY_NODE_TYPE)
+        .map(|n| n.id)
+        .expect("entry shell node");
+    data_state
+        .pins
+        .values()
+        .filter(|p| p.node_id == entry_id && p.is_data())
+        .count()
 }

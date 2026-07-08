@@ -30,23 +30,23 @@ describe('detailFocusCommands', () => {
   });
 
   it('focuses the active graph on blank click gesture', () => {
-    useEditorStore.getState().setDetailFocus({ kind: 'node', id: 'n1', graphId: 'g1' });
+    useEditorStore.getState().setDetailFocus({ kind: 'node', id: 'n1' , graphPath: 'g1' });
 
     applyCanvasDetailFocus({ type: 'blank-click', groupId: 'editor' });
 
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g1' });
   });
 
   it('focuses a single node after box-select gesture', () => {
-    useEditorStore.getState().setDetailFocus({ kind: 'event', id: 'g1' });
+    useEditorStore.getState().setDetailFocus({ kind: 'event', path: 'g1' });
 
     applyCanvasDetailFocus({ type: 'box-select', groupId: 'editor', selectedIds: ['n2'] });
 
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n2', graphId: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n2' , graphPath: 'g1' });
   });
 
   it('keeps detail unchanged after multi box-select gesture', () => {
-    useEditorStore.getState().setDetailFocus({ kind: 'event', id: 'g1' });
+    useEditorStore.getState().setDetailFocus({ kind: 'event', path: 'g1' });
 
     applyCanvasDetailFocus({
       type: 'box-select',
@@ -54,19 +54,19 @@ describe('detailFocusCommands', () => {
       selectedIds: ['n1', 'n2'],
     });
 
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g1' });
   });
 
   it('focuses node on node-click gesture', () => {
     applyCanvasDetailFocus({ type: 'node-click', groupId: 'editor', nodeId: 'n3' });
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n3', graphId: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n3' , graphPath: 'g1' });
   });
 
   it('focusDetailOnActiveGraph and focusDetailOnNode are direct helpers', () => {
     focusDetailOnActiveGraph('editor');
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g1' });
 
     focusDetailOnNode('n9', 'editor');
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n9', graphId: 'g1' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n9' , graphPath: 'g1' });
   });
 });

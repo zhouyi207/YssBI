@@ -126,9 +126,9 @@ impl<E: EventEmitter> Executor<E> {
 
     /// 主执行循环（错误容错）
     fn run(&mut self) -> Result<(), String> {
-        let graph_id = { self.graph.lock().unwrap().graph_id().to_string() };
+        let graph_path = { self.graph.lock().unwrap().graph_path().as_str().to_string() };
         self.graph.lock().unwrap().reset_execution_state();
-        self.result_source_store.clear_runtime_graph(&graph_id);
+        self.result_source_store.clear_runtime_graph(&graph_path);
         self.emit(ExecutionEvent::ExecutionStart);
 
         match self.drain() {

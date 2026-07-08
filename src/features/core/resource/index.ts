@@ -1,4 +1,5 @@
 export * from './documentStateActions';
+export * from './documentStateQueries';
 export * from './documentStateStore';
 export * from './openResourceLabels';
 export * from './resourceSelectors';

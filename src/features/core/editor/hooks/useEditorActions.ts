@@ -26,10 +26,10 @@ export function useEditorActions(active: ActiveEditorGroup) {
   const viewportRef = useRef(getViewport(active.activeTabId ?? ''));
 
   useEffect(() => {
-    const graphId = activeTabIdRef.current;
-    if (!graphId) return;
-    viewportRef.current = getViewport(graphId);
-    return subscribeToViewport(graphId, (viewport) => {
+    const graphPath = activeTabIdRef.current;
+    if (!graphPath) return;
+    viewportRef.current = getViewport(graphPath);
+    return subscribeToViewport(graphPath, (viewport) => {
       viewportRef.current = viewport;
     });
   }, [active.activeTabId]);

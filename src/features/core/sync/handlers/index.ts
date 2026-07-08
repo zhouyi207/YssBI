@@ -38,6 +38,7 @@ import {
 import {
     ResourceChangedHandler,
     ResourceDeletedHandler,
+    GraphResourceMovedHandler,
     ProjectIndexInvalidatedHandler,
 } from './ResourceEventHandler';
 import {
@@ -93,6 +94,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new ProjectIndexInvalidatedHandler() as EventHandler<unknown>,
         new ResourceChangedHandler() as EventHandler<unknown>,
         new ResourceDeletedHandler() as EventHandler<unknown>,
+        new GraphResourceMovedHandler() as EventHandler<unknown>,
         
         // Node
         new NodeCreatedHandler() as EventHandler<unknown>,

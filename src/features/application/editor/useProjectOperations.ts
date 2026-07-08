@@ -12,7 +12,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import {
   useExecutionStore,
   getExecutionEventGraph,
-  resolveExecutionGraphId,
+  resolveExecutionGraphPath,
   graphHasClearableArtifacts,
   enqueueLiveExecutionEvent,
 } from '@/features/core/execution';
@@ -95,8 +95,8 @@ export function useProjectOperations() {
         return;
       }
 
-      await GraphService.saveProjectGraph(activeTabId);
-      markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
+      const savedPath = await GraphService.saveProjectGraph(activeTabId);
+      markResourceDirty({ id: savedPath, kind: activeTab.type }, false);
       uiStore.showToast("图已保存", "success", 2000);
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
@@ -150,34 +150,34 @@ export function useProjectOperations() {
   }, []);
 
   const finalizeExecutionRun = useCallback((
-    graphId: string,
+    graphPath: string,
     recording: RecordedEvent[],
     outcome: 'success' | 'cancelled' | 'error',
   ) => {
     const store = useExecutionStore.getState();
 
     if (outcome === 'cancelled') {
-      store.interruptExecution(graphId);
+      store.interruptExecution(graphPath);
       return;
     }
 
-    store.commitExecutionVisual(graphId);
+    store.commitExecutionVisual(graphPath);
 
     if (recording.length > 0) {
-      store.setRecording(graphId, recording);
+      store.setRecording(graphPath, recording);
     }
 
-    ensureGraphExecutionTerminal(graphId, outcome === 'error' ? 'error' : 'success');
+    ensureGraphExecutionTerminal(graphPath, outcome === 'error' ? 'error' : 'success');
   }, []);
 
-  const executeGraph = useCallback(async (targetGraphId?: string) => {
-    const graphId = resolveExecutionGraphId(targetGraphId);
-    if (!graphId) {
+  const executeGraph = useCallback(async (targetGraphPath?: string) => {
+    const graphPath = resolveExecutionGraphPath(targetGraphPath);
+    if (!graphPath) {
       uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
       return;
     }
 
-    const target = getExecutionEventGraph(graphId);
+    const target = getExecutionEventGraph(graphPath);
     if (!target) {
       uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
       return;
@@ -187,12 +187,12 @@ export function useProjectOperations() {
 
     try {
       syncActiveToCollection();
-      logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphId})`);
+      logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
 
       const recording: RecordedEvent[] = [];
       const pendingWindows: Promise<void>[] = [];
       const { startExecution, applySideEffectEvent } = useExecutionStore.getState();
-      startExecution(graphId);
+      startExecution(graphPath);
 
       const res = await ProjectService.executeProject((event: ExecutionEvent) => {
         if (event.event === 'openSourceWindow') {
@@ -204,13 +204,13 @@ export function useProjectOperations() {
           );
           return;
         }
-        enqueueLiveExecutionEvent(graphId, event, (_gid, e) => applySideEffectEvent(graphId, e));
+        enqueueLiveExecutionEvent(graphPath, event, (_gid, e) => applySideEffectEvent(graphPath, e));
         recording.push({ event, timestamp: Date.now() });
-      }, graphId);
+      }, graphPath);
 
       await Promise.all(pendingWindows);
       const hadError = recordingHadError(recording);
-      finalizeExecutionRun(graphId, recording, hadError ? 'error' : 'success');
+      finalizeExecutionRun(graphPath, recording, hadError ? 'error' : 'success');
 
       if (res.logs.length > 0) {
         logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
@@ -228,14 +228,14 @@ export function useProjectOperations() {
       }
     } catch (e) {
       if (isExecutionCancelledError(e)) {
-        logger.exec.info(`执行已中断: ${currentGraph.name} (${graphId})`);
-        finalizeExecutionRun(graphId, [], 'cancelled');
+        logger.exec.info(`执行已中断: ${currentGraph.name} (${graphPath})`);
+        finalizeExecutionRun(graphPath, [], 'cancelled');
         uiStore.showToast(t('canvas.executionCancelled'), "warning", 2500);
         return;
       }
 
       logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
-      finalizeExecutionRun(graphId, [], 'error');
+      finalizeExecutionRun(graphPath, [], 'error');
       uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
     }
   }, [handleOpenSourceWindow, syncActiveToCollection, finalizeExecutionRun, t]);
@@ -249,15 +249,15 @@ export function useProjectOperations() {
     }
   }, []);
 
-  const clearGraphArtifacts = useCallback(async (targetGraphId?: string) => {
-    const graphId = resolveExecutionGraphId(targetGraphId);
-    if (!graphId) {
+  const clearGraphArtifacts = useCallback(async (targetGraphPath?: string) => {
+    const graphPath = resolveExecutionGraphPath(targetGraphPath);
+    if (!graphPath) {
       uiStore.showToast("请先打开一个 Event", "warning", 3000);
       return;
     }
 
     const store = useExecutionStore.getState();
-    const graphState = store.getGraph(graphId);
+    const graphState = store.getGraph(graphPath);
     if (graphState.status === "running") {
       return;
     }
@@ -266,8 +266,8 @@ export function useProjectOperations() {
     }
 
     try {
-      await ProjectService.clearGraphExecutionArtifacts(graphId);
-      store.clearGraphRunArtifacts(graphId);
+      await ProjectService.clearGraphExecutionArtifacts(graphPath);
+      store.clearGraphRunArtifacts(graphPath);
       uiStore.showToast(t("canvas.executionArtifactsCleared"), "success", 2000);
     } catch (e) {
       logger.exec.error(`清除运行结果失败: ${formatErrorMessage(e)}`);

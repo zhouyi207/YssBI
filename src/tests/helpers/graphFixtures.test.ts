@@ -3,7 +3,7 @@ import { makeOverlappingLocalIdGraphPair, makeTestGraph } from './graphFixtures'
 
 describe('makeTestGraph', () => {
   it('builds connected local-id graph with typed pin directions', () => {
-    const graph = makeTestGraph({ id: 'g1', title: 'One' });
+    const graph = makeTestGraph({ path: 'g1', title: 'One' });
     expect(graph.pins[0].direction).toBe('input');
     expect(graph.pins[1].direction).toBe('output');
     expect(graph.connections).toEqual([
@@ -13,7 +13,7 @@ describe('makeTestGraph', () => {
 
   it('supports legacy pin links and custom pin ids', () => {
     const graph = makeTestGraph({
-      id: 'g1',
+      path: 'g1',
       name: 'Test',
       title: 'A',
       nodeId: 'node-a',
@@ -27,8 +27,8 @@ describe('makeTestGraph', () => {
 
   it('builds overlapping graph pairs for scope tests', () => {
     const pair = makeOverlappingLocalIdGraphPair(
-      { id: 'graph-1', title: 'First' },
-      { id: 'graph-2', title: 'Second' },
+      { path: 'graph-1', title: 'First' },
+      { path: 'graph-2', title: 'Second' },
     );
     expect(Object.keys(pair)).toEqual(['graph-1', 'graph-2']);
     expect(pair['graph-1'].nodes[0].title).toBe('First');

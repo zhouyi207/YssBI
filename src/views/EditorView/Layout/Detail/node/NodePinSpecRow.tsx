@@ -17,14 +17,14 @@ import { openPinView } from '@/features/application/execution/pinViewActions';
 import type { ExecutionStatus } from '@/shared/types/ui';
 
 interface NodePinSpecRowProps {
-  graphId: string;
+  graphPath: string;
   pin: ResolvedPinSpec;
   pinResults?: Map<string, PinResultState>;
   executionStatus?: ExecutionStatus;
 }
 
 export function NodePinSpecRow({
-  graphId,
+  graphPath,
   pin,
   pinResults,
   executionStatus,
@@ -34,7 +34,7 @@ export function NodePinSpecRow({
   const viewParams = useMemo(
     () =>
       buildPinViewParams({
-        graphId,
+        graphPath,
         pinId: pin.id,
         direction: pin.direction,
         isExec: pin.kind === 'Exec',
@@ -42,7 +42,7 @@ export function NodePinSpecRow({
         pinResults,
         executionStatus,
       }),
-    [graphId, pin, pinResults, executionStatus],
+    [graphPath, pin, pinResults, executionStatus],
   );
 
   const showView = shouldShowPinViewMenuItem(viewParams);

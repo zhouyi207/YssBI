@@ -10,8 +10,8 @@ describe('EdgesOverlay', () => {
 
   it('renders edges from the active graph bucket when local pin ids overlap', () => {
     useGraphDataStore.getState().hydrateGraphs({
-      'graph-1': makeTestGraph({ id: 'graph-1', outputPinColor: '#ff0000' }),
-      'graph-2': makeTestGraph({ id: 'graph-2', outputPinColor: '#0000ff' }),
+      'graph-1': makeTestGraph({ path: 'graph-1', outputPinColor: '#ff0000' }),
+      'graph-2': makeTestGraph({ path: 'graph-2', outputPinColor: '#0000ff' }),
     });
 
     const store = useGraphDataStore.getState();

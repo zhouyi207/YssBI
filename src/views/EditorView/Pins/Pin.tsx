@@ -40,7 +40,7 @@ export interface PinProps extends PinModel {
   connectionIds?: string[];
   /** 来自 schema 的 pin metaData（如 dropdown 的 widgetOptions） */
   metaData?: PinMetaDataDTO;
-  subgraphId?: string;
+  graphPath?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
@@ -85,7 +85,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     linkCount = 0,
     ui,
     metaData,
-    subgraphId,
+    graphPath,
     onPinClick,
     onPinPointerDown,
     isActive,
@@ -117,25 +117,25 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuActions = useCanvasContextMenuActionsOptional();
-  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, subgraphId);
+  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, graphPath);
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
 
   const connectionIds = useGraphDataStore((s) =>
-    subgraphId ? s.getGraphPinConnections(subgraphId, id) : [],
+    graphPath ? s.getGraphPinConnections(graphPath, id) : [],
   );
   const pinResults = useExecutionStore((s) =>
-    subgraphId ? s.graphs[subgraphId]?.pinResults : undefined,
+    graphPath ? s.graphs[graphPath]?.pinResults : undefined,
   );
   const executionStatus = useExecutionStore((s) =>
-    subgraphId ? s.graphs[subgraphId]?.status : undefined,
+    graphPath ? s.graphs[graphPath]?.status : undefined,
   );
 
   const viewParams = useMemo(
     () =>
-      subgraphId
+      graphPath
         ? buildPinViewParams({
-            graphId: subgraphId,
+            graphPath: graphPath,
             pinId: id,
             direction,
             isExec: isExecPin(pinSemantics),
@@ -144,7 +144,7 @@ export const Pin: React.FC<PinProps> = (props) => {
             executionStatus,
           })
         : null,
-    [subgraphId, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
+    [graphPath, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
   );
 
   const showViewMenu = viewParams ? shouldShowPinViewMenuItem(viewParams) : false;
@@ -197,7 +197,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) || (scalarInputKey === "string" && isDropdownPin)) &&
     !containerType &&
     (direction === "input" || forceShowInput === true) &&
-    subgraphId &&
+    graphPath &&
     nodeId;
 
   const effectivePinDragState = contextMenu ? "highlighted" : pinDragState;
@@ -416,7 +416,7 @@ export const Pin: React.FC<PinProps> = (props) => {
         <PinInput
           pinId={id}
           nodeId={nodeId}
-          subgraphId={subgraphId}
+          graphPath={graphPath}
           dataType={dataType}
           metaData={metaData}
           value={toDisplayValue(userValue ?? defaultValue)}

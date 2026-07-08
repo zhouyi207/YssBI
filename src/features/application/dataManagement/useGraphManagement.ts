@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
-import { getGraphById, useProjectIOStore } from '@/features/core/dataStore';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import {
   createGraphResource,
@@ -9,8 +8,10 @@ import {
   renameGraph,
   type GraphResourceKind,
 } from '@/features/application/dataManagement/graphActions';
+import { deleteFunctionWithConfirm } from '@/features/application/dataManagement/deleteGraphWithConfirm';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
+import { resourceKey, useResourceStore } from '@/features/core/resource';
 
 import type { Graph } from '@/shared/types/domain';
 
@@ -26,7 +27,7 @@ type OpenGraphFn = (
  *
  * 作为编辑器 UI 的 graph 操作门面：
  * - graph resource CRUD 委托给 graphActions
- * - 创建后自动打开时，通过 ProjectIOStore.loadGraph 拉取正文
+ * - 创建后自动打开时，经 openGraphInEditor → switchEditorGraphTab 拉取正文
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
 export function useGraphManagement(
@@ -34,12 +35,10 @@ export function useGraphManagement(
 ) {
   const switchSidebarTab = useSidebarTab();
 
-  const openCreatedGraph = useCallback(async (id: string, kind: 'event' | 'function') => {
-    const loaded = await useProjectIOStore.getState().loadGraph(id);
-    if (!loaded) return;
-    const graph = getGraphById(id);
-    if (!graph) return;
-    await openGraph(id, graph.name, kind);
+  const openCreatedGraph = useCallback(async (path: string, kind: 'event' | 'function') => {
+    const name =
+      useResourceStore.getState().resources[resourceKey({ id: path, kind })]?.name ?? path;
+    await openGraph(path, name, kind);
   }, [openGraph]);
 
   /** 创建后是否自动打开（WatermarkView/Menubar 为 true，Sidebar 为 false） */
@@ -126,7 +125,7 @@ export function useGraphManagement(
 
   const deleteFunction = useCallback(async (id: string) => {
     try {
-      await deleteGraph(id, 'function');
+      await deleteFunctionWithConfirm(id);
     } catch (error) {
       logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       throw error;

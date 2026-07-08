@@ -29,14 +29,14 @@ export function getDefaultValue(dataType: DataType | undefined): unknown {
 export function usePinInput({
   pinId,
   nodeId,
-  subgraphId,
+  graphPath,
   dataType,
   initialValue,
   onValueChange,
 }: {
   pinId: string;
   nodeId: string;
-  subgraphId: string;
+  graphPath: string;
   dataType?: DataType;
   initialValue?: unknown;
   onValueChange?: (value: unknown) => void;
@@ -65,7 +65,7 @@ export function usePinInput({
       const raw = val !== undefined ? val : value;
       try {
         await executeCommand(
-          subgraphId,
+          graphPath,
           'SetPinValue',
           { pinId, nodeId, newValue: raw },
           { mergeKey: `pin-value-${pinId}` },
@@ -74,7 +74,7 @@ export function usePinInput({
         logger.graph.error(`Failed to update pin value: ${error instanceof Error ? error.message : String(error)}`, 'PinInput');
       }
     },
-    [subgraphId, nodeId, pinId, value]
+    [graphPath, nodeId, pinId, value]
   );
 
   const cancelBlurCommit = useCallback(() => {

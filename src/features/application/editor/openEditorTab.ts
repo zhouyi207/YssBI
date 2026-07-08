@@ -7,6 +7,7 @@ import {
   resolveEditorTargetGroupId,
   useLayoutStore,
 } from '@/features/core/layout';
+import { applyEditorTabSelection } from './editorTabSelection';
 import { ensureDetailVisible } from './ensureDetailVisible';
 
 export interface OpenEditorTabOptions {
@@ -27,9 +28,7 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
     const existingNode = layoutStore.nodes[existing.nodeId];
     if (isEditorGroupNode(existingNode)) {
       if (existingNode.data?.activeTabId !== tab.id) {
-        layoutStore.updateNode(existing.nodeId, {
-          data: { ...existingNode.data, activeTabId: tab.id },
-        });
+        applyEditorTabSelection(existing.nodeId, tab.id);
       }
       layoutStore.setActiveGroup(existing.nodeId);
     } else {

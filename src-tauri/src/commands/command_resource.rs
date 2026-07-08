@@ -1,5 +1,4 @@
 use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
-use crate::graph::GraphId;
 use crate::project::ProjectState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -41,27 +40,30 @@ fn graph_kind_to_resource_kind(kind: &crate::graph::GraphKind) -> &'static str {
     }
 }
 
-fn graph_uri(kind: &crate::graph::GraphKind, graph_id: &GraphId) -> String {
-    format!(
-        "yssbi://graph/{}/{}",
-        graph_kind_to_resource_kind(kind),
-        graph_id
+fn graph_uri(kind: &crate::graph::GraphKind, graph_path: &crate::project::GraphResourcePath) -> String {
+    if crate::project::is_untitled_graph_path(graph_path.as_str()) {
+        return graph_path.as_str().to_string();
+    }
+    crate::project::to_graph_resource_uri(
+        crate::project::GraphDocumentKind::from(kind),
+        graph_path,
     )
 }
 
 fn graph_resource_meta(
     state: &ProjectState,
-    graph_id: &GraphId,
+    graph_path: &crate::project::GraphResourcePath,
     name: String,
     kind: crate::graph::GraphKind,
 ) -> Result<ProjectResourceMetaDTO, String> {
+    let is_draft = crate::project::is_untitled_graph_path(graph_path.as_str());
     Ok(ProjectResourceMetaDTO {
-        id: graph_id.to_string(),
+        id: graph_path.as_str().to_string(),
         kind: graph_kind_to_resource_kind(&kind).to_string(),
         name,
-        uri: graph_uri(&kind, graph_id),
-        exists: true,
-        loaded: state.get_graph(graph_id).is_some(),
+        uri: graph_uri(&kind, graph_path),
+        exists: !is_draft,
+        loaded: state.get_graph(graph_path).is_some(),
         has_dirty_document: false,
         has_stale_document: false,
         has_conflict_document: false,
@@ -72,12 +74,14 @@ fn graph_resource_meta(
 pub fn rename_graph_resource(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: String,
     new_name: String,
 ) -> Result<ProjectResourceMetaDTO, String> {
-    let (final_name, kind) = state.rename_graph(&graph_id, &new_name)?;
+    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+    let (final_name, kind, moved_to) = state.rename_graph(&graph_path, &new_name)?;
 
-    let meta = graph_resource_meta(state.inner(), &graph_id, final_name, kind)?;
+    let effective_path = moved_to.as_ref().unwrap_or(&graph_path);
+    let meta = graph_resource_meta(state.inner(), effective_path, final_name, kind)?;
     emit_project_event(
         &app,
         Event::Resource(EventResource::ResourceChanged {
@@ -87,6 +91,16 @@ pub fn rename_graph_resource(
             data: (&meta).into(),
         }),
     );
+    if let Some(to) = moved_to {
+        emit_project_event(
+            &app,
+            Event::Resource(EventResource::GraphResourceMoved {
+                from: graph_path.as_str().to_string(),
+                to: to.as_str().to_string(),
+                kind: meta.kind.clone(),
+            }),
+        );
+    }
 
     Ok(meta)
 }

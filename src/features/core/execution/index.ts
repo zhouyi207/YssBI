@@ -1,6 +1,6 @@
 export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
-export { resolveExecutionGraphId, getExecutionEventGraph } from './resolveExecutionGraphId';
+export { resolveExecutionGraphPath, getExecutionEventGraph } from './resolveExecutionGraphPath';
 export {
   clearedRunArtifactsPatch,
   graphHasClearableArtifacts,

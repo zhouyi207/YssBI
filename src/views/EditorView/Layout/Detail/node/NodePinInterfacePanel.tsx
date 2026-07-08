@@ -8,7 +8,7 @@ import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
 
 interface NodePinInterfacePanelProps {
-  graphId: string;
+  graphPath: string;
   inputs: ResolvedPinSpec[];
   outputs: ResolvedPinSpec[];
   pinResults?: Map<string, PinResultState>;
@@ -18,13 +18,13 @@ interface NodePinInterfacePanelProps {
 type PinTab = 'inputs' | 'outputs';
 
 function PinList({
-  graphId,
+  graphPath,
   emptyLabel,
   pins,
   pinResults,
   executionStatus,
 }: {
-  graphId: string;
+  graphPath: string;
   emptyLabel: string;
   pins: ResolvedPinSpec[];
   pinResults?: Map<string, PinResultState>;
@@ -36,7 +36,7 @@ function PinList({
         pins.map((pin) => (
           <NodePinSpecRow
             key={pin.id}
-            graphId={graphId}
+            graphPath={graphPath}
             pin={pin}
             pinResults={pinResults}
             executionStatus={executionStatus}
@@ -50,7 +50,7 @@ function PinList({
 }
 
 export function NodePinInterfacePanel({
-  graphId,
+  graphPath,
   inputs,
   outputs,
   pinResults,
@@ -88,7 +88,7 @@ export function NodePinInterfacePanel({
           </TabsList>
           <TabsContent value="inputs" className="mt-2">
             <PinList
-              graphId={graphId}
+              graphPath={graphPath}
               emptyLabel={t('detail.nodeDoc.noInputs')}
               pins={inputs}
               pinResults={pinResults}
@@ -97,7 +97,7 @@ export function NodePinInterfacePanel({
           </TabsContent>
           <TabsContent value="outputs" className="mt-2">
             <PinList
-              graphId={graphId}
+              graphPath={graphPath}
               emptyLabel={t('detail.nodeDoc.noOutputs')}
               pins={outputs}
               pinResults={pinResults}

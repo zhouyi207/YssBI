@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useGraphMetaStore } from '@/features/core/dataStore';
-import { useResourceStore } from '@/features/core/resource';
+import { buildGraphResourceMeta, useResourceStore } from '@/features/core/resource';
 import { FunctionCreatedHandler, FunctionUpdatedHandler } from './GraphEventHandler';
 
 describe('Graph event handlers', () => {
@@ -11,9 +11,9 @@ describe('Graph event handlers', () => {
 
   it('syncs function signature metadata from FunctionCreated events', () => {
     new FunctionCreatedHandler().handle({
-      id: 'function-1',
+      path: 'functions/Compute.yssbi-function',
       data: {
-        id: 'function-1',
+        path: 'functions/Compute.yssbi-function',
         name: 'Compute',
         type: 'function',
         functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
@@ -25,7 +25,7 @@ describe('Graph event handlers', () => {
       },
     });
 
-    expect(useGraphMetaStore.getState().graphs['function-1']).toEqual(
+    expect(useGraphMetaStore.getState().graphs['functions/Compute.yssbi-function']).toEqual(
       expect.objectContaining({
         functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
         functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
@@ -34,22 +34,14 @@ describe('Graph event handlers', () => {
   });
 
   it('syncs function signature metadata from FunctionUpdated events', () => {
-    useResourceStore.getState().upsertResource({
-      id: 'function-1',
-      kind: 'function',
-      name: 'Compute',
-      uri: 'yssbi://graph/function/function-1',
-      exists: true,
-      loaded: true,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
+    useResourceStore.getState().upsertResource(
+      buildGraphResourceMeta('function', 'functions/Compute.yssbi-function', 'Compute', { loaded: true }),
+    );
 
     new FunctionUpdatedHandler().handle({
-      id: 'function-1',
+      path: 'functions/Compute.yssbi-function',
       data: {
-        id: 'function-1',
+        path: 'functions/Compute.yssbi-function',
         name: 'Compute',
         type: 'function',
         functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
@@ -57,7 +49,7 @@ describe('Graph event handlers', () => {
       },
     });
 
-    expect(useGraphMetaStore.getState().graphs['function-1']).toEqual(
+    expect(useGraphMetaStore.getState().graphs['functions/Compute.yssbi-function']).toEqual(
       expect.objectContaining({
         functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
         functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
@@ -67,12 +59,12 @@ describe('Graph event handlers', () => {
 
   it('does not create function metadata from partial FunctionUpdated events without resource metadata', () => {
     new FunctionUpdatedHandler().handle({
-      id: 'function-1',
+      path: 'functions/Compute.yssbi-function',
       data: {
         functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
       },
     });
 
-    expect(useGraphMetaStore.getState().graphs['function-1']).toBeUndefined();
+    expect(useGraphMetaStore.getState().graphs['functions/Compute.yssbi-function']).toBeUndefined();
   });
 });

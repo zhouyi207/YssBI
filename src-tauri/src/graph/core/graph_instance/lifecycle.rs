@@ -2,7 +2,32 @@ use super::*;
 
 /// 创建和清理
 impl GraphInstance {
-    pub fn new(name: impl Into<String>, kind: GraphKind, registry: Arc<NodeRegistry>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        kind: GraphKind,
+        registry: Arc<NodeRegistry>,
+    ) -> Self {
+        let (dir, extension) = match kind {
+            GraphKind::Event => (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION),
+            GraphKind::Function => (
+                crate::project::FUNCTIONS_DIR,
+                crate::project::FUNCTION_EXTENSION,
+            ),
+        };
+        let transient = GraphResourcePath::from_normalized_unchecked(format!(
+            "{dir}/transient-{}.{}",
+            uuid::Uuid::new_v4().simple(),
+            extension
+        ));
+        Self::new_with_path(name, kind, registry, transient)
+    }
+
+    pub fn new_with_path(
+        name: impl Into<String>,
+        kind: GraphKind,
+        registry: Arc<NodeRegistry>,
+        resource_path: GraphResourcePath,
+    ) -> Self {
         let (function_inputs, function_outputs) = if kind == GraphKind::Function {
             (
                 super::types::default_function_exec_inputs(),
@@ -12,7 +37,7 @@ impl GraphInstance {
             (Vec::new(), Vec::new())
         };
         Self {
-            id: GraphId::new(),
+            resource_path,
             name: name.into(),
             position: GraphPosition::default(),
             kind,

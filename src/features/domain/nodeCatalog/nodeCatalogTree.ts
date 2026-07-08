@@ -44,7 +44,7 @@ export function buildTreeFromItems(items: NodeCatalogItem[]): {
       }
       current = current.children[cat] as TreeCategory;
     });
-    const leafKey = `${item.nodeType}-${item.overrides?.variableId ?? item.overrides?.subGraphId ?? ''}`;
+    const leafKey = `${item.nodeType}-${item.overrides?.variableId ?? item.overrides?.subGraphPath ?? ''}`;
     current.children[leafKey] = { name: item.title, isLeaf: true, item };
   });
 

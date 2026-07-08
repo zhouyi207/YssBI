@@ -17,15 +17,15 @@ function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-function getGraphMetaFromResourceStore(graphId: string): { id: string; name: string; type: 'event' | 'function' } | null {
+function getGraphMetaFromResourceStore(graphPath: string): { path: string; name: string; type: 'event' | 'function' } | null {
   const resources = useResourceStore.getState().resources;
-  const eventMeta = resources[resourceKey({ id: graphId, kind: 'event' })];
+  const eventMeta = resources[resourceKey({ id: graphPath, kind: 'event' })];
   if (eventMeta?.exists) {
-    return { id: graphId, name: eventMeta.name, type: 'event' };
+    return { path: graphPath, name: eventMeta.name, type: 'event' };
   }
-  const functionMeta = resources[resourceKey({ id: graphId, kind: 'function' })];
+  const functionMeta = resources[resourceKey({ id: graphPath, kind: 'function' })];
   if (functionMeta?.exists) {
-    return { id: graphId, name: functionMeta.name, type: 'function' };
+    return { path: graphPath, name: functionMeta.name, type: 'function' };
   }
   return null;
 }
@@ -33,23 +33,23 @@ function getGraphMetaFromResourceStore(graphId: string): { id: string; name: str
 /**
  * 从 ResourceStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
  */
-export function getGraphById(graphId: string): GraphData | null {
-  const meta = getGraphMetaFromResourceStore(graphId);
+export function getGraphByPath(graphPath: string): GraphData | null {
+  const meta = getGraphMetaFromResourceStore(graphPath);
   if (!meta) return null;
 
   const dataState = useGraphDataStore.getState();
-  const graphMeta = useGraphMetaStore.getState().graphs[graphId];
-  const nodeIds = dataState.getGraphNodeIds(graphId);
-  const nodes = nodeIds.map((nid) => dataState.getGraphNode(graphId, nid)).filter(isPresent);
+  const graphMeta = useGraphMetaStore.getState().graphs[graphPath];
+  const nodeIds = dataState.getGraphNodeIds(graphPath);
+  const nodes = nodeIds.map((nid) => dataState.getGraphNode(graphPath, nid)).filter(isPresent);
   const pins = nodeIds.flatMap((nid) =>
-    dataState.getGraphNodePins(graphId, nid).map((pid) => dataState.getGraphPin(graphId, pid)).filter(isPresent),
+    dataState.getGraphNodePins(graphPath, nid).map((pid) => dataState.getGraphPin(graphPath, pid)).filter(isPresent),
   );
   const connIds = new Set<string>();
   pins.forEach((p) => {
-    (p ? dataState.getGraphPinConnections(graphId, p.id) : []).forEach((cid) => connIds.add(cid));
+    (p ? dataState.getGraphPinConnections(graphPath, p.id) : []).forEach((cid) => connIds.add(cid));
   });
   const connections = Array.from(connIds)
-    .map((cid) => dataState.getGraphConnection(graphId, cid))
+    .map((cid) => dataState.getGraphConnection(graphPath, cid))
     .filter(isPresent);
 
   return {
@@ -59,7 +59,7 @@ export function getGraphById(graphId: string): GraphData | null {
     nodes,
     pins,
     connections,
-    canvas: getViewport(graphId),
+    canvas: getViewport(graphPath),
   };
 }
 
@@ -70,7 +70,7 @@ export function getGraphs(): Record<string, GraphData> {
   const graphOrder = useResourceStore.getState().graphOrder;
   const result: Record<string, GraphData> = {};
   for (const gid of graphOrder) {
-    const g = getGraphById(gid);
+    const g = getGraphByPath(gid);
     if (g) result[gid] = g;
   }
   return result;
@@ -85,11 +85,11 @@ export function useGraphData(activeTabId: string | null) {
     if (!activeTabId) return null;
     const eventMeta = s.resources[resourceKey({ id: activeTabId, kind: 'event' })];
     if (eventMeta?.exists) {
-      return { id: activeTabId, name: eventMeta.name, type: 'event' as const };
+      return { path: activeTabId, name: eventMeta.name, type: 'event' as const };
     }
     const functionMeta = s.resources[resourceKey({ id: activeTabId, kind: 'function' })];
     if (functionMeta?.exists) {
-      return { id: activeTabId, name: functionMeta.name, type: 'function' as const };
+      return { path: activeTabId, name: functionMeta.name, type: 'function' as const };
     }
     return null;
   });

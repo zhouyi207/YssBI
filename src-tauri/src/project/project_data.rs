@@ -1,16 +1,17 @@
 use super::ProjectError;
 use super::ProjectMetadata;
 use crate::database::DatabaseDecl;
-use crate::graph::{GraphId, GraphInstance};
+use crate::graph::GraphInstance;
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
+use crate::project::GraphResourcePath;
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectData {
     pub variables: HashMap<VariableId, VariableInstance>,
-    pub graphs: HashMap<GraphId, GraphInstance>,
+    pub graphs: HashMap<GraphResourcePath, GraphInstance>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }

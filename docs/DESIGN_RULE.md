@@ -591,8 +591,9 @@ RuntimeState（执行态快照） ─ 持有 ID + 当前状态 + 运行时值，
 
 **ID 类型**（newtype wrapper over UUID）：
 
-- `GraphId(Uuid)`、`NodeId(Uuid)`、`PinId(Uuid)`、`TypeVarId(Uuid)`
-- 统一提供 `new()`（随机）、`nil()`（空）、`from(Uuid)` 方法。
+- `GraphResourcePath`：Event/Function **项目资源**身份（相对路径，如 `events/Foo.yssbi-event`）；IPC/Store/Tab 使用 `graphPath`。
+- `NodeId(Uuid)`、`PinId(Uuid)`、`TypeVarId(Uuid)`：图内实体仍用 UUID。
+- 统一提供 `new()`（随机）、`nil()`（空）、`from(Uuid)` 方法（节点/Pin 等）。
 
 **模块文档**：每个 `mod.rs` 使用 `//!` 注释说明模块职责。
 
@@ -721,7 +722,7 @@ Rust NodeInstanceParams (#[serde(tag = "paramsKind")])
         ↕
 NodeInstanceParamsDTO          ← shared/types/dto/nodeInstanceParams.ts（tagged union，单一真源）
         ↕ spawnParamsToInstanceParams / flattenInstanceParams
-NodeSpawnParams                ← 创建命令用的扁平 spawn 参数（variableId / subGraphId / …）
+NodeSpawnParams                ← 创建命令用的扁平 spawn 参数（variableId / subGraphPath / …）
         ↕
 NodeData（store）              ← 扁平字段 + paramsKind，便于 UI 读写
 ```

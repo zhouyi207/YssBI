@@ -11,14 +11,14 @@ import { uiStore } from '@/features/core/ui/UIStore';
 
 function buildScope(
   isGlobal: boolean,
-  activeGraphId: string | null,
+  activeGraphPath: string | null,
   graphType: 'event' | 'function' | undefined,
 ): VariableScope {
-  if (isGlobal || !activeGraphId) return { type: 'global' };
+  if (isGlobal || !activeGraphPath) return { type: 'global' };
   const scopeType = graphType ?? 'event';
   return scopeType === 'function'
-    ? { type: 'function', functionId: activeGraphId }
-    : { type: 'event', eventId: activeGraphId };
+    ? { type: 'function', functionPath: activeGraphPath }
+    : { type: 'event', eventPath: activeGraphPath };
 }
 
 export function rebuildVariableResourceProjection(): void {
@@ -42,7 +42,7 @@ export async function createVariableAction(params: {
   name?: string;
   type?: string;
   isGlobal?: boolean;
-  activeGraphId: string | null;
+  activeGraphPath: string | null;
   graphType?: 'event' | 'function';
 }): Promise<string | null> {
   try {
@@ -57,7 +57,7 @@ export async function createVariableAction(params: {
       dataType,
       dataValue: dataValueFromRaw(getDefaultValue(dataType), dataType),
       description: '',
-      scope: buildScope(Boolean(params.isGlobal), params.activeGraphId, params.graphType),
+      scope: buildScope(Boolean(params.isGlobal), params.activeGraphPath, params.graphType),
       tags: [],
     };
 

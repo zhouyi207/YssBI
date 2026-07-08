@@ -56,7 +56,7 @@ export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPane
         )}
       </DetailForm>
       <NodePinInterfacePanel
-        graphId=""
+        graphPath=""
         inputs={pinSpecs.inputs}
         outputs={pinSpecs.outputs}
       />

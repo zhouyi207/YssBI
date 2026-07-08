@@ -1,10 +1,12 @@
-import { forwardRef, useCallback, useContext, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useEditorGroup } from "@/features/application/editor";
 import { GroupContext } from "@/features/core/editor";
 import { useDetailTarget } from "@/features/core/editor";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { setVariablesGraphScopeFromResource } from "@/features/core/editor/detail/variablesGraphScope";
+import { partitionVariableCatalog } from "@/features/core/variable/variableScopeSelectors";
+import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import {
   VscDatabase,
   VscSymbolEvent,
@@ -120,34 +122,22 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
   const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const variablesGraphScopeId = useEditorStore((s) => s.variablesGraphScopeId);
-  const variablesScopeId = variablesGraphScopeId ?? activeTabId;
+  const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
+  const variablesScopeId = variablesGraphScopePath ?? activeTabId;
   const variablesScopeGraphType: GraphResourceType | undefined = variablesScopeId
-    ? (variablesScopeId in events ? "event" : variablesScopeId in functions ? "function" : undefined)
+    ? inferGraphResourceKind(variablesScopeId)
     : undefined;
 
-  const { variablesGlobal, localVariables } = (() => {
-    const global: Record<string, { name: string; dataType?: unknown }> = {};
-    const local: Record<string, { name: string; dataType?: unknown }> = {};
-
-    for (const [id, v] of Object.entries(variables)) {
-      const scope = (v as { scope?: { type: string; eventId?: string; functionId?: string } }).scope;
-      const data = v as { name: string; dataType?: unknown };
-      if (scope?.type === "global") {
-        global[id] = data;
-        continue;
-      }
-      if (
-        variablesScopeId &&
-        scope &&
-        (scope.eventId === variablesScopeId || scope.functionId === variablesScopeId)
-      ) {
-        local[id] = data;
-      }
-    }
-
-    return { variablesGlobal: global, localVariables: local };
-  })();
+  const { global: variablesGlobal, local: localVariables } = useMemo(
+    () =>
+      partitionVariableCatalog(
+        variables,
+        variablesScopeGraphType && variablesScopeId
+          ? { graphPath: variablesScopeId, graphKind: variablesScopeGraphType }
+          : undefined,
+      ),
+    [variables, variablesScopeId, variablesScopeGraphType],
+  );
 
   const eventsCount = Object.keys(events).length;
   const functionsCount = Object.keys(functions).length;
@@ -304,7 +294,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         label={name}
         onClick={(e) => {
           e.stopPropagation();
-          setDetailFocus({ kind: type, id });
+          setDetailFocus(
+            type === 'event' || type === 'function'
+              ? { kind: type, path: id }
+              : { kind: type, id },
+          );
           if (type === "event" || type === "function") {
             setVariablesGraphScopeFromResource(id);
           }
@@ -530,8 +524,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
-                {Object.entries(localVariables).map(([id, data]: [string, { name: string }]) =>
-                  renderItem(id, data.name, "variable", { ...data, isGlobal: false }, false, (e) =>
+                {Object.entries(localVariables).map(([id, data]) =>
+                  renderItem(id, data.name, "variable", { dataType: data.dataType, isGlobal: false }, false, (e) =>
                     openVariableContextMenu(e, id, data.name)
                   )
                 )}
@@ -551,8 +545,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
-                  {Object.entries(variablesGlobal).map(([id, data]: [string, { name: string }]) =>
-                    renderItem(id, data.name, "variable", { ...data, isGlobal: true }, false, (e) =>
+                  {Object.entries(variablesGlobal).map(([id, data]) =>
+                    renderItem(id, data.name, "variable", { dataType: data.dataType, isGlobal: true }, false, (e) =>
                       openVariableContextMenu(e, id, data.name)
                     )
                   )}

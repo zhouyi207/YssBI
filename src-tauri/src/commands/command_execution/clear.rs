@@ -1,5 +1,4 @@
 use crate::execution::ResultSourceStore;
-use crate::graph::GraphId;
 use tauri::State;
 
 /// Clear runtime pin result sources for one graph (manual "clear run artifacts").
@@ -7,11 +6,9 @@ use tauri::State;
 #[tauri::command]
 pub fn clear_graph_execution_artifacts(
     source_store: State<'_, ResultSourceStore>,
-    graph_id: String,
+    graph_path: String,
 ) -> Result<(), String> {
-    let graph_id = uuid::Uuid::parse_str(&graph_id)
-        .map(GraphId::from)
-        .map_err(|e| format!("Invalid graph_id '{}': {}", graph_id, e))?;
-    source_store.clear_runtime_graph(&graph_id.to_string());
+    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+    source_store.clear_runtime_graph(graph_path.as_str());
     Ok(())
 }

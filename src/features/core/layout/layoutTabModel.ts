@@ -5,6 +5,10 @@ import type {
   LayoutTabComponent,
   LayoutTabType,
 } from '@/shared/types';
+import {
+  isValidGraphResourceTabId,
+  type GraphResourceKind,
+} from '@/shared/types/domain/graphResourcePath';
 
 /** hydrate 入站：历史 Tab 可能缺 type / component */
 export type LayoutTabInput = Omit<LayoutTab, 'type' | 'component'> & {
@@ -27,11 +31,14 @@ export function normalizeLayoutTabs(tabs: readonly LayoutTabInput[]): LayoutTab[
 }
 
 export function buildGraphLayoutTab(
-  id: string,
+  path: string,
   title: string,
-  type: 'event' | 'function',
+  type: GraphResourceKind,
 ): LayoutTab {
-  return { id, title, type, component: 'GraphEditor' };
+  if (!isValidGraphResourceTabId(path, type)) {
+    throw new Error(`Invalid graph tab id for ${type}: ${path}`);
+  }
+  return { id: path, title, type, component: 'GraphEditor' };
 }
 
 export function buildWorksheetLayoutTab(id: string, title: string): LayoutTab {

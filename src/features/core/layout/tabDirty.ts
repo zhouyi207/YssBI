@@ -1,14 +1,12 @@
 import type { LayoutTab } from "@/shared/types/ui";
 import { useLayoutStore } from "./layoutStore";
-import { markResourceDirty } from "@/features/core/resource";
+import { isGraphResourceDirty, markResourceDirty } from "@/features/core/resource";
 
-export function markGraphTabDirty(graphId: string): void {
-    const tab = findResourceTab(graphId);
-    if (tab?.type === "event" || tab?.type === "function") {
-        markResourceDirty({ id: graphId, kind: tab.type }, true);
-        return;
+export function markGraphTabDirty(graphPath: string): void {
+    const tab = findResourceTab(graphPath);
+    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
+        markResourceDirty({ id: graphPath, kind: tab.type }, true);
     }
-    useLayoutStore.getState().setTabDirty(graphId, true);
 }
 
 function findResourceTab(tabId: string): LayoutTab | null {
@@ -22,17 +20,15 @@ function findResourceTab(tabId: string): LayoutTab | null {
 export interface DirtyTabSnapshot {
     /** Layout container that owns the tab (editor group node id). */
     nodeId: string;
-    /** Graph id == tab id. */
-    graphId: string;
+    /** Graph path or worksheet id == tab id. */
+    graphPath: string;
     /** Display title for prompts. */
     title: string;
 }
 
 /**
  * Collect every dirty editor tab (Event/Function/Worksheet) across all editor groups,
- * deduplicated by graphId. Use before destructive flows (window close, project
- * switch) to ask the user once. Non-graph tabs (project picker, settings) are
- * skipped because they have no on-disk graph file to persist.
+ * deduplicated by graphPath. DocumentState is the single source of truth for dirty.
  */
 export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
     const seen = new Set<string>();
@@ -40,11 +36,11 @@ export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
     for (const node of Object.values(useLayoutStore.getState().nodes)) {
         if (node.type !== "component" || !node.data?.tabs) continue;
         for (const tab of node.data.tabs as LayoutTab[]) {
-            if (!tab.isDirty) continue;
-            if (tab.type && tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
+            if (tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
             if (seen.has(tab.id)) continue;
+            if (!isGraphResourceDirty(tab.id, tab.type)) continue;
             seen.add(tab.id);
-            out.push({ nodeId: node.id, graphId: tab.id, title: tab.title ?? tab.id });
+            out.push({ nodeId: node.id , graphPath: tab.id, title: tab.title ?? tab.id });
         }
     }
     return out;

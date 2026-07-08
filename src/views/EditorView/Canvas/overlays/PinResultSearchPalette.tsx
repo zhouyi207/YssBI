@@ -40,17 +40,17 @@ function PinResultSearchRow({
 }
 
 interface PinResultSearchProps {
-  graphId: string;
+  graphPath: string;
 }
 
-export function PinResultSearch({ graphId }: PinResultSearchProps) {
+export function PinResultSearch({ graphPath }: PinResultSearchProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [shellMotion, setShellMotion] = useState<'idle' | 'expand' | 'collapse'>('idle');
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { hasResults, entries } = usePinResultSearch(graphId, query);
+  const { hasResults, entries } = usePinResultSearch(graphPath, query);
   const showPanel = open && shellMotion !== 'expand';
 
   useEffect(() => {

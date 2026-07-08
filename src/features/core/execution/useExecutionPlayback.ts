@@ -7,10 +7,10 @@ import {
   EXECUTION_REPLAY_DELAYS_MS,
 } from './executionReplayDelays';
 
-export function useExecutionPlayback(graphId: string) {
-  const graphState = useExecutionStore((s) => s.graphs[graphId]);
+export function useExecutionPlayback(graphPath: string) {
+  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
   const recording = graphState?.recording ?? [];
-  const isPlaying = useExecutionStore((s) => s.isPlaying && s.playbackGraphId === graphId);
+  const isPlaying = useExecutionStore((s) => s.isPlaying && s.playbackGraphPath === graphPath);
   const hasRecording = recording.length > 0;
   const graphDirty = graphState?.graphDirty ?? false;
 
@@ -35,9 +35,9 @@ export function useExecutionPlayback(graphId: string) {
       const idx = indexRef.current;
       if (idx >= rec.length) {
         clearTimer();
-        commitExecutionVisual(graphId);
+        commitExecutionVisual(graphPath);
         ensureGraphExecutionTerminal(
-          graphId,
+          graphPath,
           recordingHadError(rec) ? 'error' : 'success',
         );
         setPlaying(false);
@@ -46,12 +46,12 @@ export function useExecutionPlayback(graphId: string) {
       const entry = rec[idx];
       const event = entry.event;
       if (event.event === 'pinResultReady') {
-        applySideEffectEvent(graphId, event);
+        applySideEffectEvent(graphPath, event);
       } else if (event.event === 'executionStart') {
         // Do not call startExecution — it clears recording and breaks repeat replay.
-        resetExecutionVisual(graphId);
+        resetExecutionVisual(graphPath);
       } else {
-        applyExecutionVisualEvent(graphId, event);
+        applyExecutionVisualEvent(graphPath, event);
       }
       indexRef.current = idx + 1;
       const delay = EXECUTION_REPLAY_DELAYS_MS[event.event] ?? EXECUTION_REPLAY_DEFAULT_DELAY_MS;
@@ -59,22 +59,22 @@ export function useExecutionPlayback(graphId: string) {
     };
 
     step();
-  }, [graphId, clearTimer]);
+  }, [graphPath, clearTimer]);
 
   const play = useCallback(() => {
     const store = useExecutionStore.getState();
-    const rec = [...(store.graphs[graphId]?.recording ?? [])];
+    const rec = [...(store.graphs[graphPath]?.recording ?? [])];
     if (rec.length === 0) return;
 
     clearTimer();
-    store.resetGraphVisuals(graphId);
-    store.setPlaying(true, graphId);
+    store.resetGraphVisuals(graphPath);
+    store.setPlaying(true, graphPath);
     setIsPaused(false);
     pausedRef.current = false;
     indexRef.current = 0;
 
     scheduleSteps(rec);
-  }, [graphId, scheduleSteps, clearTimer]);
+  }, [graphPath, scheduleSteps, clearTimer]);
 
   const pause = useCallback(() => {
     pausedRef.current = true;
@@ -88,36 +88,36 @@ export function useExecutionPlayback(graphId: string) {
     setIsPaused(false);
 
     const store = useExecutionStore.getState();
-    store.setPlaying(true, graphId);
-    scheduleSteps(store.graphs[graphId]?.recording ?? []);
-  }, [graphId, scheduleSteps]);
+    store.setPlaying(true, graphPath);
+    scheduleSteps(store.graphs[graphPath]?.recording ?? []);
+  }, [graphPath, scheduleSteps]);
 
   const stop = useCallback(() => {
     pausedRef.current = false;
     setIsPaused(false);
     clearTimer();
-    useExecutionStore.getState().resetGraphVisuals(graphId);
-  }, [graphId, clearTimer]);
+    useExecutionStore.getState().resetGraphVisuals(graphPath);
+  }, [graphPath, clearTimer]);
 
   useEffect(() => {
     return () => {
       clearTimer();
       const store = useExecutionStore.getState();
-      if (store.playbackGraphId === graphId) {
+      if (store.playbackGraphPath === graphPath) {
         store.setPlaying(false);
       }
     };
-  }, [graphId, clearTimer]);
+  }, [graphPath, clearTimer]);
 
   const togglePlayPause = useCallback(() => {
     if (pausedRef.current) {
       resume();
-    } else if (useExecutionStore.getState().isPlaying && useExecutionStore.getState().playbackGraphId === graphId) {
+    } else if (useExecutionStore.getState().isPlaying && useExecutionStore.getState().playbackGraphPath === graphPath) {
       pause();
     } else {
       play();
     }
-  }, [graphId, play, pause, resume]);
+  }, [graphPath, play, pause, resume]);
 
   return {
     play,

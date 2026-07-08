@@ -11,7 +11,7 @@ describe('graphDataStore connection truth', () => {
     useGraphDataStore.getState().addGraphFromData(
       'graph-1',
       makeTestGraph({
-        id: 'graph-1',
+        path: 'graph-1',
         name: 'Test',
         title: 'A',
         nodeId: 'node-a',
@@ -42,8 +42,8 @@ describe('graphDataStore connection truth', () => {
   it('keeps remaining graph bucket when graph-local node and pin ids overlap', () => {
     useGraphDataStore.getState().hydrateGraphs(
       makeOverlappingLocalIdGraphPair(
-        { id: 'graph-1', title: 'First' },
-        { id: 'graph-2', title: 'Second' },
+        { path: 'graph-1', title: 'First' },
+        { path: 'graph-2', title: 'Second' },
       ),
     );
 

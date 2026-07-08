@@ -11,9 +11,9 @@ describe('batchCreateNode DTO', () => {
       paramsKind: 'variable',
       variableId: 'v1',
     });
-    expect(spawnParamsToInstanceParams({ subGraphId: 'fn-1' })).toEqual({
+    expect(spawnParamsToInstanceParams({ subGraphPath: 'fn-1' })).toEqual({
       paramsKind: 'subGraph',
-      subGraphId: 'fn-1',
+      subGraphPath: 'fn-1',
     });
     expect(spawnParamsToInstanceParams(undefined)).toBeNull();
   });

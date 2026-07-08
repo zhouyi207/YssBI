@@ -1,5 +1,4 @@
 use crate::application::database_schema::enriched_database_dtos;
-use crate::graph::GraphId;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
@@ -68,7 +67,7 @@ pub fn get_project_graphs(state: State<ProjectState>) -> GraphsWithValidationDTO
     let graphs = data
         .graphs
         .iter()
-        .map(|(graph_id, graph)| (*graph_id, GraphInstanceDTO::from(graph)))
+        .map(|(graph_path, graph)| (graph_path.as_str().to_string(), GraphInstanceDTO::from(graph)))
         .collect();
 
     GraphsWithValidationDTO {
@@ -101,9 +100,10 @@ pub fn get_project_index(state: State<ProjectState>) -> Result<ProjectIndex, Str
 #[tauri::command]
 pub fn load_project_graph(
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: String,
 ) -> Result<LoadedProjectGraphDTO, String> {
-    let document = state.load_graph_from_current_project(&graph_id)?;
+    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+    let document = state.load_graph_from_current_project(&graph_path)?;
     Ok(LoadedProjectGraphDTO {
         graph: GraphInstanceDTO::from(&document.graph),
         variables: document

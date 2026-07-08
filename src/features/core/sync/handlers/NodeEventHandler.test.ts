@@ -11,12 +11,12 @@ describe('Node event handlers', () => {
   it('scopes node deletion by graph id when local node ids overlap', () => {
     useGraphDataStore.getState().hydrateGraphs(
       makeOverlappingLocalIdGraphPair(
-        { id: 'graph-1', title: 'First' },
-        { id: 'graph-2', title: 'Second' },
+        { path: 'graph-1', title: 'First' },
+        { path: 'graph-2', title: 'Second' },
       ),
     );
 
-    new NodeDeletedHandler().handle({ graphId: 'graph-1', nodeId: 'local-node' });
+    new NodeDeletedHandler().handle({ graphPath: 'graph-1', nodeId: 'local-node' });
 
     const store = useGraphDataStore.getState();
     expect(store.getGraphNode('graph-1', 'local-node')).toBeUndefined();
@@ -26,13 +26,13 @@ describe('Node event handlers', () => {
   it('scopes pin type updates by graph id when local pin ids overlap', () => {
     useGraphDataStore.getState().hydrateGraphs(
       makeOverlappingLocalIdGraphPair(
-        { id: 'graph-1', title: 'First' },
-        { id: 'graph-2', title: 'Second' },
+        { path: 'graph-1', title: 'First' },
+        { path: 'graph-2', title: 'Second' },
       ),
     );
 
     new PinTypesInferredHandler().handle({
-      graphId: 'graph-1',
+      graphPath: 'graph-1',
       pinTypes: [
         {
           pinId: 'local-out',

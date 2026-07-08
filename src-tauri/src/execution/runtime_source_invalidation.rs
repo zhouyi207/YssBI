@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::graph::{GraphId, PinChangeSet, PinId};
+use crate::graph::{PinChangeSet, PinId};
 
 use super::ResultSourceStore;
 
@@ -20,13 +20,13 @@ pub fn collect_invalidation_pins(
 /// Invalidate runtime pin sources and return pin ids that were actually removed.
 pub fn apply_runtime_pin_invalidation(
     store: &ResultSourceStore,
-    graph_id: GraphId,
+    graph_path: &str,
     pin_ids: &[PinId],
 ) -> Vec<PinId> {
     if pin_ids.is_empty() {
         return Vec::new();
     }
-    store.invalidate_runtime_pins(&graph_id.to_string(), pin_ids)
+    store.invalidate_runtime_pins(graph_path, pin_ids)
 }
 
 #[cfg(test)]

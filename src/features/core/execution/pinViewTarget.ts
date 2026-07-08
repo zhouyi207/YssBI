@@ -14,7 +14,7 @@ export interface PinViewTarget {
 }
 
 export interface ResolvePinViewTargetParams {
-  graphId: string;
+  graphPath: string;
   pinId: string;
   direction: 'input' | 'output';
   isExec: boolean;
@@ -39,12 +39,12 @@ export function resolveUpstreamPinIds(
 export function resolvePinViewTargetFromCache(
   params: ResolvePinViewTargetParams,
 ): PinViewTarget | null {
-  const { graphId, pinId, direction, isExec, connectionIds, pinResults } = params;
+  const { graphPath, pinId, direction, isExec, connectionIds, pinResults } = params;
   if (!isInspectableDataPin(isExec) || !pinResults) return null;
 
   if (direction === 'output') {
     const pinResult = pinResults.get(pinId);
-    if (pinResult?.graphId === graphId) {
+    if (pinResult?.graphPath === graphPath) {
       return { sourcePinId: pinId, pinResult };
     }
     return null;
@@ -52,7 +52,7 @@ export function resolvePinViewTargetFromCache(
 
   for (const upstreamPinId of resolveUpstreamPinIds(pinId, connectionIds)) {
     const pinResult = pinResults.get(upstreamPinId);
-    if (pinResult?.graphId === graphId) {
+    if (pinResult?.graphPath === graphPath) {
       return { sourcePinId: upstreamPinId, pinResult };
     }
   }
@@ -94,7 +94,7 @@ export function pinViewDisabledTitle(
 }
 
 export function buildPinViewParams(input: {
-  graphId: string;
+  graphPath: string;
   pinId: string;
   direction: 'input' | 'output';
   isExec: boolean;

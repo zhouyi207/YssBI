@@ -12,9 +12,9 @@ describe('nodeInstanceParams', () => {
       variableId: 'v1',
       variableName: 'x',
     });
-    expect(spawnParamsToInstanceParams({ subGraphId: 'fn-1' })).toEqual({
+    expect(spawnParamsToInstanceParams({ subGraphPath: 'fn-1' })).toEqual({
       paramsKind: 'subGraph',
-      subGraphId: 'fn-1',
+      subGraphPath: 'fn-1',
     });
     expect(spawnParamsToInstanceParams(undefined)).toBeNull();
     expect(spawnParamsToInstanceParams({})).toEqual(NODE_INSTANCE_PARAMS_NONE);

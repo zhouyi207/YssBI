@@ -39,167 +39,167 @@ function clearedVisualPatch(): Pick<
 
 function stopPlaybackIfGraph(
   state: ExecutionState,
-  graphId: string,
-): Pick<ExecutionState, 'isPlaying' | 'playbackGraphId'> {
-  const stop = state.playbackGraphId === graphId;
+  graphPath: string,
+): Pick<ExecutionState, 'isPlaying' | 'playbackGraphPath'> {
+  const stop = state.playbackGraphPath === graphPath;
   return {
     isPlaying: stop ? false : state.isPlaying,
-    playbackGraphId: stop ? null : state.playbackGraphId,
+    playbackGraphPath: stop ? null : state.playbackGraphPath,
   };
 }
 
 interface ExecutionStore extends ExecutionState {
-  getGraph: (graphId: string) => GraphExecutionState;
+  getGraph: (graphPath: string) => GraphExecutionState;
 
   /** Mark graph as running; clears prior run artifacts and node visuals. */
-  startExecution: (graphId: string) => void;
-  completeExecution: (graphId: string) => void;
-  failExecution: (graphId: string) => void;
+  startExecution: (graphPath: string) => void;
+  completeExecution: (graphPath: string) => void;
+  failExecution: (graphPath: string) => void;
   /** User cancelled a live run; clear partial pin results and replay data. */
-  interruptExecution: (graphId: string) => void;
+  interruptExecution: (graphPath: string) => void;
   /** User cleared last run without executing again. */
-  clearGraphRunArtifacts: (graphId: string) => void;
+  clearGraphRunArtifacts: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
-  commitExecutionVisual: (graphId: string) => void;
-  recordPinResult: (graphId: string, result: PinResultState) => void;
-  setRecording: (graphId: string, recording: RecordedEvent[]) => void;
-  setPlaying: (playing: boolean, graphId?: string) => void;
-  markGraphDirty: (graphId: string) => void;
-  clearPinResults: (graphId: string, pinIds: string[]) => void;
+  commitExecutionVisual: (graphPath: string) => void;
+  recordPinResult: (graphPath: string, result: PinResultState) => void;
+  setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
+  setPlaying: (playing: boolean, graphPath?: string) => void;
+  markGraphDirty: (graphPath: string) => void;
+  clearPinResults: (graphPath: string, pinIds: string[]) => void;
   /** Clear node/connection visuals only; keep pin results and recording (replay start). */
-  resetGraphVisuals: (graphId: string) => void;
+  resetGraphVisuals: (graphPath: string) => void;
   /** Side-effect events only (pin results). Visual events use executionVisualSession. */
-  applySideEffectEvent: (graphId: string, event: ExecutionEvent) => void;
+  applySideEffectEvent: (graphPath: string, event: ExecutionEvent) => void;
 }
 
 function updateGraph(
   state: ExecutionState,
-  graphId: string,
+  graphPath: string,
   patch: Partial<GraphExecutionState>,
 ): { graphs: Record<string, GraphExecutionState> } {
-  const prev = state.graphs[graphId] ?? emptyGraphState();
+  const prev = state.graphs[graphPath] ?? emptyGraphState();
   return {
     graphs: {
       ...state.graphs,
-      [graphId]: { ...prev, ...patch },
+      [graphPath]: { ...prev, ...patch },
     },
   };
 }
 
 function commitVisualSnapshot(
-  graphId: string,
+  graphPath: string,
   set: (fn: (state: ExecutionState) => Partial<ExecutionState> | ExecutionState) => void,
 ): void {
   const snap = getExecutionVisual();
-  if (snap.graphId !== graphId) {
+  if (snap.graphPath !== graphPath) {
     clearExecutionVisual();
     return;
   }
   const patch = snapshotToGraphPatch(snap);
   clearExecutionVisual();
-  set((state) => updateGraph(state, graphId, patch));
+  set((state) => updateGraph(state, graphPath, patch));
 }
 
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   graphs: {},
-  playbackGraphId: null,
+  playbackGraphPath: null,
   isPlaying: false,
 
-  getGraph: (graphId) => get().graphs[graphId] ?? emptyGraphState(),
+  getGraph: (graphPath) => get().graphs[graphPath] ?? emptyGraphState(),
 
-  startExecution: (graphId) => {
-    resetExecutionVisual(graphId);
-    set((state) => updateGraph(state, graphId, {
+  startExecution: (graphPath) => {
+    resetExecutionVisual(graphPath);
+    set((state) => updateGraph(state, graphPath, {
       ...clearedVisualPatch(),
       ...clearedRunArtifactsPatch(),
       status: "running",
     }));
   },
 
-  completeExecution: (graphId) => set((state) => updateGraph(state, graphId, {
+  completeExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
     status: "completed",
   })),
 
-  failExecution: (graphId) => set((state) => updateGraph(state, graphId, {
+  failExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
     status: "error",
   })),
 
-  interruptExecution: (graphId) => {
+  interruptExecution: (graphPath) => {
     clearExecutionVisual();
     set((state) => ({
-      ...updateGraph(state, graphId, {
+      ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunArtifactsPatch(),
       }),
-      ...stopPlaybackIfGraph(state, graphId),
+      ...stopPlaybackIfGraph(state, graphPath),
     }));
   },
 
-  clearGraphRunArtifacts: (graphId) => {
+  clearGraphRunArtifacts: (graphPath) => {
     clearExecutionVisual();
     set((state) => ({
-      ...updateGraph(state, graphId, {
+      ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunArtifactsPatch(),
       }),
-      ...stopPlaybackIfGraph(state, graphId),
+      ...stopPlaybackIfGraph(state, graphPath),
     }));
   },
 
-  commitExecutionVisual: (graphId) => {
+  commitExecutionVisual: (graphPath) => {
     flushLiveExecutionEventsNow();
-    commitVisualSnapshot(graphId, set);
+    commitVisualSnapshot(graphPath, set);
   },
 
-  recordPinResult: (graphId, result) => set((state) => {
-    const g = state.graphs[graphId] ?? emptyGraphState();
+  recordPinResult: (graphPath, result) => set((state) => {
+    const g = state.graphs[graphPath] ?? emptyGraphState();
     const next = new Map(g.pinResults);
     next.set(result.pinId, result);
-    return updateGraph(state, graphId, { pinResults: next });
+    return updateGraph(state, graphPath, { pinResults: next });
   }),
 
-  setRecording: (graphId, recording) => set((state) => updateGraph(state, graphId, { recording })),
+  setRecording: (graphPath, recording) => set((state) => updateGraph(state, graphPath, { recording })),
 
-  setPlaying: (playing, graphId) => set({
+  setPlaying: (playing, graphPath) => set({
     isPlaying: playing,
-    playbackGraphId: playing ? (graphId ?? get().playbackGraphId) : null,
+    playbackGraphPath: playing ? (graphPath ?? get().playbackGraphPath) : null,
   }),
 
-  markGraphDirty: (graphId) => set((state) => {
-    const g = state.graphs[graphId];
-    if (!g || (g.status === "idle" && !(state.isPlaying && state.playbackGraphId === graphId))) return state;
+  markGraphDirty: (graphPath) => set((state) => {
+    const g = state.graphs[graphPath];
+    if (!g || (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath))) return state;
     clearExecutionVisual();
     return {
-      ...updateGraph(state, graphId, {
+      ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunArtifactsPatch(true),
       }),
-      ...stopPlaybackIfGraph(state, graphId),
+      ...stopPlaybackIfGraph(state, graphPath),
     };
   }),
 
-  clearPinResults: (graphId, pinIds) => set((state) => {
+  clearPinResults: (graphPath, pinIds) => set((state) => {
     if (pinIds.length === 0) return state;
-    const g = state.graphs[graphId];
+    const g = state.graphs[graphPath];
     if (!g || g.pinResults.size === 0) return state;
     const next = new Map(g.pinResults);
     for (const pinId of pinIds) {
       next.delete(pinId);
     }
-    return updateGraph(state, graphId, { pinResults: next });
+    return updateGraph(state, graphPath, { pinResults: next });
   }),
 
-  resetGraphVisuals: (graphId) => set((state) => {
+  resetGraphVisuals: (graphPath) => set((state) => {
     clearExecutionVisual();
     return {
-      ...updateGraph(state, graphId, clearedVisualPatch()),
-      ...stopPlaybackIfGraph(state, graphId),
+      ...updateGraph(state, graphPath, clearedVisualPatch()),
+      ...stopPlaybackIfGraph(state, graphPath),
     };
   }),
 
-  applySideEffectEvent: (graphId, event) => {
+  applySideEffectEvent: (graphPath, event) => {
     if (event.event === 'pinResultReady') {
-      get().recordPinResult(graphId, event.data);
+      get().recordPinResult(graphPath, event.data);
     }
   },
 }));

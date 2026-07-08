@@ -1,7 +1,7 @@
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { isUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
 import { useResourceStore } from './resourceStore';
-import type { ResourceRef } from './resourceTypes';
+import type { ResourceKind, ResourceRef } from './resourceTypes';
 import { resourceKey, type ResourceKey } from './resourceTypes';
 
 function emptyDocumentState(key: ResourceKey): DocumentState {
@@ -42,7 +42,7 @@ export function markResourceLoaded(ref: ResourceRef, loaded = true): void {
 }
 
 export function markResourceDirty(ref: ResourceRef, dirty: boolean): void {
-  const next = updateDocumentState(ref, (previous) => ({
+  updateDocumentState(ref, (previous) => ({
     ...previous,
     loaded: true,
     dirty,
@@ -52,7 +52,6 @@ export function markResourceDirty(ref: ResourceRef, dirty: boolean): void {
     version: previous.version + 1,
     lastSavedAt: dirty ? previous.lastSavedAt : Date.now(),
   }));
-  useLayoutStore.getState().setTabDirty(ref.id, next.dirty);
 }
 
 export function markResourceExternalChanged(ref: ResourceRef): void {
@@ -79,11 +78,38 @@ export function markResourceMissing(ref: ResourceRef): void {
 export function clearResourceDocumentState(ref: ResourceRef): void {
   const key = resourceKey(ref);
   useDocumentStateStore.getState().removeDocument(key);
+  if (isUntitledGraphPath(ref.id)) {
+    useResourceStore.getState().removeResource(ref);
+    return;
+  }
   useResourceStore.getState().patchResource(ref, {
     loaded: false,
     exists: true,
     hasDirtyDocument: false,
     hasStaleDocument: false,
     hasConflictDocument: false,
+  });
+}
+
+/** Move document state when a graph resource path changes on disk. */
+export function migrateDocumentStatePath(
+  from: string,
+  to: string,
+  kind: Extract<ResourceKind, 'event' | 'function'>,
+): void {
+  const fromKey = resourceKey({ id: from, kind });
+  const toKey = resourceKey({ id: to, kind });
+  const store = useDocumentStateStore.getState();
+  const previous = store.documents[fromKey];
+  if (!previous) return;
+
+  store.removeDocument(fromKey);
+  store.upsertDocument({ ...previous, resourceKey: toKey });
+  useResourceStore.getState().patchResource({ id: to, kind }, {
+    loaded: previous.loaded,
+    exists: !previous.missing,
+    hasDirtyDocument: previous.dirty,
+    hasStaleDocument: previous.stale,
+    hasConflictDocument: previous.conflict,
   });
 }

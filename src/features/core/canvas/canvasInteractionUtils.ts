@@ -12,7 +12,7 @@ export function resolveTabId(groupId: string, activeTabIdRef: RefObject<string |
 
 export function getCanvasWorldPoint(
   groupId: string,
-  graphId: string | null,
+  graphPath: string | null,
   clientX: number,
   clientY: number,
 ) {
@@ -22,7 +22,7 @@ export function getCanvasWorldPoint(
   }
 
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = graphId ? getViewport(graphId) : { x: 0, y: 0, scale: 1 };
+  const viewport = graphPath ? getViewport(graphPath) : { x: 0, y: 0, scale: 1 };
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,

@@ -8,7 +8,7 @@ import {
 
 function pinResult(pinId: string, title: string, nodeId = 'node-1'): PinResultState {
   return {
-    graphId: 'graph-1',
+    graphPath: 'graph-1',
     nodeId,
     pinId,
     sourceId: `source-${pinId}`,

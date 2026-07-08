@@ -21,20 +21,19 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         try {
             const layoutTab = Object.values(layout.nodes)
                 .flatMap((node) => node.data?.tabs ?? [])
-                .find((item) => item.id === tab.graphId);
+                .find((item) => item.id === tab.graphPath);
 
             if (layoutTab?.type === 'worksheet') {
-                await useWorksheetStore.getState().saveDocument(tab.graphId);
+                await useWorksheetStore.getState().saveDocument(tab.graphPath);
+                markResourceDirty({ id: tab.graphPath, kind: 'worksheet' }, false);
             } else if (layoutTab?.type === 'event' || layoutTab?.type === 'function') {
-                await GraphService.saveProjectGraph(tab.graphId);
-                markResourceDirty({ id: tab.graphId, kind: layoutTab.type }, false);
-            } else {
-                layout.setTabDirty(tab.graphId, false);
+                const savedPath = await GraphService.saveProjectGraph(tab.graphPath);
+                markResourceDirty({ id: savedPath, kind: layoutTab.type }, false);
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             logger.app.error(
-                `Failed to save graph '${tab.title}' (${tab.graphId}): ${message}`,
+                `Failed to save graph '${tab.title}' (${tab.graphPath}): ${message}`,
                 "saveAllDirtyGraphs"
             );
             uiStore.showToast(`保存「${tab.title}」失败：${message}`, "error", 3000);

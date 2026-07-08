@@ -14,23 +14,23 @@ describe('replay recording retention', () => {
     useExecutionStore.setState({
       graphs: {},
       isPlaying: false,
-      playbackGraphId: null,
+      playbackGraphPath: null,
     });
   });
 
   it('startExecution clears recording (live run only)', () => {
-    const graphId = 'g1';
-    useExecutionStore.getState().setRecording(graphId, SAMPLE_RECORDING);
-    useExecutionStore.getState().startExecution(graphId);
-    expect(useExecutionStore.getState().getGraph(graphId).recording).toHaveLength(0);
+    const graphPath = 'g1';
+    useExecutionStore.getState().setRecording(graphPath, SAMPLE_RECORDING);
+    useExecutionStore.getState().startExecution(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).recording).toHaveLength(0);
   });
 
   it('replay executionStart path keeps recording for repeat playback', () => {
-    const graphId = 'g1';
-    useExecutionStore.getState().setRecording(graphId, SAMPLE_RECORDING);
-    useExecutionStore.getState().resetGraphVisuals(graphId);
-    resetExecutionVisual(graphId);
+    const graphPath = 'g1';
+    useExecutionStore.getState().setRecording(graphPath, SAMPLE_RECORDING);
+    useExecutionStore.getState().resetGraphVisuals(graphPath);
+    resetExecutionVisual(graphPath);
 
-    expect(useExecutionStore.getState().getGraph(graphId).recording).toEqual(SAMPLE_RECORDING);
+    expect(useExecutionStore.getState().getGraph(graphPath).recording).toEqual(SAMPLE_RECORDING);
   });
 });

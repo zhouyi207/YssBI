@@ -87,7 +87,7 @@ export default function Canvas() {
   } = useCanvasDrop({
     canvasElementRef,
     groupId,
-    graphId: activeTabId,
+    graphPath: activeTabId,
     variables,
     functions,
     setContextMenu,
@@ -138,7 +138,7 @@ export default function Canvas() {
       data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
-      <ViewportGrid graphId={activeTabId ?? ""} />
+      <ViewportGrid graphPath={activeTabId ?? ""} />
 
       <div
         className="absolute inset-0"
@@ -146,16 +146,16 @@ export default function Canvas() {
         onContextMenu={handleContextMenu}
       >
         <ConnectionLine
-          graphId={activeTabId ?? ""}
+          graphPath={activeTabId ?? ""}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
           pendingConnection={pendingConnection}
           menuPos={contextMenu}
         />
 
-        <TransformContainer graphId={activeTabId ?? ""}>
+        <TransformContainer graphPath={activeTabId ?? ""}>
           <EdgesOverlay
-            graphId={activeTabId ?? ""}
+            graphPath={activeTabId ?? ""}
             getPinWorldPos={getPinWorldPos}
             dimmed={isDraggingPin}
           />
@@ -166,7 +166,7 @@ export default function Canvas() {
               <CanvasNode
                 key={nodeId}
                 id={nodeId}
-                graphId={activeTabId || undefined}
+                graphPath={activeTabId || undefined}
                 groupId={groupId}
                 selected={isSelected}
                 activePin={activePin}

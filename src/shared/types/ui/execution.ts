@@ -23,7 +23,7 @@ export type ExecutionEvent =
   | {
       event: 'pinResultReady';
       data: {
-        graphId: string;
+        graphPath: string;
         nodeId: string;
         pinId: string;
         sourceId: string;
@@ -50,7 +50,7 @@ export interface NodeExecutionState {
 }
 
 export interface PinResultState {
-  graphId: string;
+  graphPath: string;
   nodeId: string;
   pinId: string;
   sourceId: string;
@@ -73,9 +73,9 @@ export interface GraphExecutionState {
 
 /** 全局执行状态 */
 export interface ExecutionState {
-  /** 按 graphId 存储的执行状态 */
+  /** 按 graphPath 存储的执行状态 */
   graphs: Record<string, GraphExecutionState>;
-  /** 当前正在回放的 graphId */
-  playbackGraphId: string | null;
+  /** 当前正在回放的 graphPath */
+  playbackGraphPath: string | null;
   isPlaying: boolean;
 }

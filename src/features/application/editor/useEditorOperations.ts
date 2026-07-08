@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { getGraphById } from '@/features/core/dataStore';
+import { getGraphByPath } from '@/features/core/dataStore';
 import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
@@ -208,7 +208,7 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
-    const currentGraph = getGraphById(tid);
+    const currentGraph = getGraphByPath(tid);
     if (!currentGraph) return;
 
     const currentNodes = currentGraph.nodes;

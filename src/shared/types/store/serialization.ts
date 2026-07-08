@@ -25,7 +25,7 @@ export interface SerializedNode {
   variableId?: string;
   variableType?: string;
   variableName?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
   inputs: SerializedPin[];
   outputs: SerializedPin[];

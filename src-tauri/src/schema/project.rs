@@ -1,5 +1,4 @@
 use super::{DatabaseDeclDTO, GraphInstanceDTO, VariableInstanceDTO};
-use crate::graph::GraphId;
 use crate::project::{ProjectData, ProjectMetadata};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,7 +23,7 @@ impl From<&ProjectMetadata> for ProjectMetadataDTO {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDataDTO {
     pub variables: HashMap<String, VariableInstanceDTO>,
-    pub graphs: HashMap<GraphId, GraphInstanceDTO>,
+    pub graphs: HashMap<String, GraphInstanceDTO>,
     pub databases: HashMap<String, DatabaseDeclDTO>,
     pub metadata: ProjectMetadataDTO,
 }
@@ -40,7 +39,7 @@ impl From<&ProjectData> for ProjectDataDTO {
             graphs: value
                 .graphs
                 .iter()
-                .map(|(k, v)| (*k, GraphInstanceDTO::from(v)))
+                .map(|(k, v)| (k.as_str().to_string(), GraphInstanceDTO::from(v)))
                 .collect(),
             databases: value
                 .databases
@@ -64,9 +63,9 @@ pub struct DatabasesVariablesDTO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphsWithValidationDTO {
-    pub graphs: HashMap<GraphId, GraphInstanceDTO>,
-    /// 每个 graph 的无效引用：nodeId -> { variableId?, dataframeId?, subGraphId? }
-    pub invalid_references: HashMap<GraphId, Vec<InvalidReferenceDTO>>,
+    pub graphs: HashMap<String, GraphInstanceDTO>,
+    /// 每个 graph 的无效引用：nodeId -> { variableId?, dataframeId?, subGraphPath? }
+    pub invalid_references: HashMap<String, Vec<InvalidReferenceDTO>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,5 +77,5 @@ pub struct InvalidReferenceDTO {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dataframe_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sub_graph_id: Option<String>,
+    pub sub_graph_path: Option<String>,
 }

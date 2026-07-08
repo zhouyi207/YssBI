@@ -20,25 +20,25 @@ export interface SetPinValueContext {
   newValue: unknown;
 }
 
-function resolvePinDataType(graphId: string, pinId: string) {
-  const pin = useGraphDataStore.getState().getGraphPin(graphId, pinId);
+function resolvePinDataType(graphPath: string, pinId: string) {
+  const pin = useGraphDataStore.getState().getGraphPin(graphPath, pinId);
   if (!pin) throw new Error(`Pin ${pinId} not found`);
   if (isExecPin(pin)) throw new Error(`Cannot set value on exec pin ${pinId}`);
   return buildPinDataType(pin as Pin);
 }
 
 export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueContext> = {
-  async execute(graphId, args) {
+  async execute(graphPath, args) {
     const store = useGraphDataStore.getState();
-    const pin = store.getGraphPin(graphId, args.pinId);
+    const pin = store.getGraphPin(graphPath, args.pinId);
     const oldValue = pin?.userValue ?? null;
 
-    const dataType = resolvePinDataType(graphId, args.pinId);
+    const dataType = resolvePinDataType(graphPath, args.pinId);
     const dv = dataValueFromRaw(args.newValue, dataType);
     const dto = dataValueToBackend(dv);
 
-    await PinService.updatePinUserValue(graphId, args.nodeId, args.pinId, dto);
-    useGraphDataStore.getState().updatePin(args.pinId, { userValue: args.newValue }, graphId);
+    await PinService.updatePinUserValue(graphPath, args.nodeId, args.pinId, dto);
+    useGraphDataStore.getState().updatePin(args.pinId, { userValue: args.newValue }, graphPath);
 
     return {
       pinId: args.pinId,
@@ -48,24 +48,24 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, SetPinValueCont
     };
   },
 
-  async undo(graphId, context) {
+  async undo(graphPath, context) {
     if (context.oldValue === null || context.oldValue === undefined) {
-      await PinService.clearPinUserValue(graphId, context.nodeId, context.pinId);
-      useGraphDataStore.getState().updatePin(context.pinId, { userValue: undefined }, graphId);
+      await PinService.clearPinUserValue(graphPath, context.nodeId, context.pinId);
+      useGraphDataStore.getState().updatePin(context.pinId, { userValue: undefined }, graphPath);
     } else {
-      const dataType = resolvePinDataType(graphId, context.pinId);
+      const dataType = resolvePinDataType(graphPath, context.pinId);
       const dv = dataValueFromRaw(context.oldValue, dataType);
       const dto = dataValueToBackend(dv);
-      await PinService.updatePinUserValue(graphId, context.nodeId, context.pinId, dto);
-      useGraphDataStore.getState().updatePin(context.pinId, { userValue: context.oldValue }, graphId);
+      await PinService.updatePinUserValue(graphPath, context.nodeId, context.pinId, dto);
+      useGraphDataStore.getState().updatePin(context.pinId, { userValue: context.oldValue }, graphPath);
     }
   },
 
-  async redo(graphId, context) {
-    const dataType = resolvePinDataType(graphId, context.pinId);
+  async redo(graphPath, context) {
+    const dataType = resolvePinDataType(graphPath, context.pinId);
     const dv = dataValueFromRaw(context.newValue, dataType);
     const dto = dataValueToBackend(dv);
-    await PinService.updatePinUserValue(graphId, context.nodeId, context.pinId, dto);
-    useGraphDataStore.getState().updatePin(context.pinId, { userValue: context.newValue }, graphId);
+    await PinService.updatePinUserValue(graphPath, context.nodeId, context.pinId, dto);
+    useGraphDataStore.getState().updatePin(context.pinId, { userValue: context.newValue }, graphPath);
   },
 };

@@ -17,19 +17,19 @@ describe('resolveDetailTarget', () => {
   it('returns event detail focus from sidebar click', () => {
     expect(
       resolveDetailTarget({
-        detailFocus: { kind: 'event', id: 'g1' },
+        detailFocus: { kind: 'event', path: 'g1' },
         selectedLog: null,
       }),
-    ).toEqual({ kind: 'event', id: 'g1' });
+    ).toEqual({ kind: 'event', path: 'g1' });
   });
 
   it('returns node detail focus without competing with active tab', () => {
     expect(
       resolveDetailTarget({
-        detailFocus: { kind: 'node', id: 'node-1', graphId: 'g1' },
+        detailFocus: { kind: 'node', id: 'node-1' , graphPath: 'g1' },
         selectedLog: null,
       }),
-    ).toEqual({ kind: 'node', id: 'node-1', graphId: 'g1' });
+    ).toEqual({ kind: 'node', id: 'node-1' , graphPath: 'g1' });
   });
 
   it('returns log detail when focus is log and a log is selected', () => {

@@ -55,8 +55,8 @@ impl GraphRuntime {
         )
     }
 
-    pub fn graph_id(&self) -> crate::graph::GraphId {
-        self.graph_instance.id
+    pub fn graph_path(&self) -> crate::project::GraphResourcePath {
+        self.graph_instance.resource_path.clone()
     }
 
     /// 项目数据引用（用于函数调用时加载目标函数图）。
@@ -487,10 +487,10 @@ impl GraphRuntime {
             .variables
             .get(&var_id)
             .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
-        if !Self::variable_visible_in_graph(&var.scope, &self.graph_instance.id) {
+        if !Self::variable_visible_in_graph(&var.scope, &self.graph_instance.resource_path) {
             return Err(format!(
                 "Variable '{}' is not visible in graph '{}'",
-                variable_id, self.graph_instance.id
+                variable_id, self.graph_instance.resource_path
             ));
         }
 
@@ -506,10 +506,10 @@ impl GraphRuntime {
             .get(&var_id)
             .map(|v| v.scope.clone())
             .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
-        if !Self::variable_visible_in_graph(&scope, &self.graph_instance.id) {
+        if !Self::variable_visible_in_graph(&scope, &self.graph_instance.resource_path) {
             return Err(format!(
                 "Variable '{}' is not visible in graph '{}'",
-                variable_id, self.graph_instance.id
+                variable_id, self.graph_instance.resource_path
             ));
         }
         let var = data
@@ -520,11 +520,14 @@ impl GraphRuntime {
         Ok(())
     }
 
-    fn variable_visible_in_graph(scope: &VariableScope, graph_id: &crate::graph::GraphId) -> bool {
+    fn variable_visible_in_graph(
+        scope: &VariableScope,
+        graph_path: &crate::project::GraphResourcePath,
+    ) -> bool {
         match scope {
             VariableScope::Global => true,
-            VariableScope::Event { event_id } => event_id == &graph_id.to_string(),
-            VariableScope::Function { function_id } => function_id == &graph_id.to_string(),
+            VariableScope::Event { event_path } => event_path == graph_path.as_str(),
+            VariableScope::Function { function_path } => function_path == graph_path.as_str(),
         }
     }
 
@@ -562,11 +565,11 @@ mod tests {
             DataValue::Int64(2),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -593,11 +596,11 @@ mod tests {
             DataValue::DataFrame(r#"{"a":[1,2]}"#.to_string()),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -626,11 +629,11 @@ mod tests {
             DataValue::Int64(9),
             "",
             VariableScope::Event {
-                event_id: event_a.id.to_string(),
+                event_path: event_a.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph_b = state.get_graph(&event_b.id).unwrap();
+        let graph_b = state.get_graph(&event_b.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph_b.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -647,10 +650,11 @@ mod tests {
     fn reset_execution_state_clears_pins_and_loop_counters() {
         let registry = Arc::new(crate::graph::register::NodeRegistry::new());
         crate::graph::register::catalog::register_builtin_nodes(&registry);
-        let graph = Arc::new(GraphInstance::new(
+        let graph = Arc::new(GraphInstance::new_with_path(
             "Reset State",
             crate::graph::GraphKind::Event,
             registry,
+            crate::project::GraphResourcePath::new("events/Reset State.yssbi-event").unwrap(),
         ));
         let const_node = graph
             .create_node("Value:Constants:Int64")

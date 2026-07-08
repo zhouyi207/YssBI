@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     graph::{
-        FunctionSignaturePin, GraphDataState, GraphId, GraphInstance, GraphKind, GraphPosition,
-        NodeId, PinId,
+        FunctionSignaturePin, GraphDataState, GraphInstance, GraphKind, GraphPosition, NodeId,
+        PinId,
     },
     schema::{ConnectionDTO, NodeInstanceDTO, PinInstanceDTO},
 };
@@ -30,7 +30,7 @@ impl From<&GraphKind> for GraphTypeDTO {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphInstanceDTO {
-    pub id: GraphId,
+    pub path: String,
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphTypeDTO,
@@ -88,7 +88,7 @@ impl From<&GraphInstance> for GraphInstanceDTO {
             .collect();
 
         Self {
-            id: value.id,
+            path: value.resource_path.as_str().to_string(),
             name: value.name.clone(),
             graph_type: GraphTypeDTO::from(&value.kind),
             nodes,

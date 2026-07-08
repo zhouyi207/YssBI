@@ -47,7 +47,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
   CreateNodeWithConnectionArgs,
   CreateNodeWithConnectionContext
 > = {
-  async execute(graphId, args) {
+  async execute(graphPath, args) {
     const store = useGraphDataStore.getState();
     const definition = useNodeRegistryStore.getState().getDefinition(args.nodeType);
     if (!definition) {
@@ -55,7 +55,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
     }
 
     const { node, pins, effectiveDefinition } = buildNodeDraft(
-      graphId,
+      graphPath,
       args.nodeType,
       definition,
       args.x,
@@ -64,24 +64,24 @@ export const createNodeWithConnectionCommand: CommandHandler<
     );
     const nodeId = node.id;
     const pinIds = pins.map((p) => p.id);
-    store.applyNodeDraft(graphId, node, pins);
+    store.applyNodeDraft(graphPath, node, pins);
 
     let targetPinId: string | null = null;
     let connDraft: ReturnType<typeof store.applyConnectionDraft> = null;
     const matchIdx = findAutoConnectPinIndex(effectiveDefinition.pinSlots, args.sourcePin);
     if (matchIdx >= 0 && matchIdx < pinIds.length) {
       targetPinId = pinIds[matchIdx];
-      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphId);
+      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphPath);
     }
 
     let finalX = args.x;
     let finalY = args.y;
     if (targetPinId) {
-      const offset = await waitForPinOffset(graphId, targetPinId);
+      const offset = await waitForPinOffset(graphPath, targetPinId);
       if (offset) {
         finalX = args.x - offset.x;
         finalY = args.y - offset.y;
-        store.updateNode(nodeId, { position: { x: finalX, y: finalY } }, graphId);
+        store.updateNode(nodeId, { position: { x: finalX, y: finalY } }, graphPath);
       }
     }
 
@@ -90,7 +90,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
         NODE_CREATE_ECHO_DOMAIN,
         [nodeId],
         NodeService.createNodeWithId(
-          graphId,
+          graphPath,
           nodeId,
           pinIds,
           args.nodeType,
@@ -100,8 +100,8 @@ export const createNodeWithConnectionCommand: CommandHandler<
         ),
       );
     } catch (error) {
-      if (connDraft) store.revertConnectionDraft(connDraft, graphId);
-      store.revertNodeDraft(nodeId, graphId);
+      if (connDraft) store.revertConnectionDraft(connDraft, graphPath);
+      store.revertNodeDraft(nodeId, graphPath);
       throw error;
     }
 
@@ -112,11 +112,11 @@ export const createNodeWithConnectionCommand: CommandHandler<
         const result = await trackPending(
           CONNECTION_ECHO_DOMAIN,
           keys,
-          ConnectionService.connectPins(graphId, args.sourcePin.id, targetPinId),
+          ConnectionService.connectPins(graphPath, args.sourcePin.id, targetPinId),
         );
         autoDisconnectedList = result.autoDisconnected;
       } catch {
-        store.revertConnectionDraft(connDraft, graphId);
+        store.revertConnectionDraft(connDraft, graphPath);
         targetPinId = null;
       }
     }
@@ -134,16 +134,16 @@ export const createNodeWithConnectionCommand: CommandHandler<
     };
   },
 
-  async undo(graphId, context) {
-    await NodeService.deleteNode(graphId, context.nodeId);
+  async undo(graphPath, context) {
+    await NodeService.deleteNode(graphPath, context.nodeId);
     for (const entry of context.autoDisconnectedList) {
-      await ConnectionService.connectPins(graphId, entry.fromPin, entry.toPin);
+      await ConnectionService.connectPins(graphPath, entry.fromPin, entry.toPin);
     }
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     await NodeService.createNodeWithId(
-      graphId,
+      graphPath,
       context.nodeId,
       context.pinIds,
       context.nodeType,
@@ -152,7 +152,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
       context.params,
     );
     if (context.targetPinId) {
-      await ConnectionService.connectPins(graphId, context.sourcePinId, context.targetPinId);
+      await ConnectionService.connectPins(graphPath, context.sourcePinId, context.targetPinId);
     }
   },
 };

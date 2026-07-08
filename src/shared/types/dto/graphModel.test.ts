@@ -13,7 +13,7 @@ function makeGraphData(): GraphData {
   return normalizeGraphDataLike(
     'graph-1',
     makeTestGraph({
-      id: 'graph-1',
+      path: 'graph-1',
       name: 'Main',
       title: 'A',
       nodeId: 'node-a',
@@ -42,7 +42,7 @@ describe('graphModel converters', () => {
 
     expect(restored.nodes[0]).toMatchObject({
       id: 'node-a',
-      graphId: 'graph-1',
+      graphPath: 'graph-1',
       position: { x: 0, y: 0 },
       inputs: ['pin-in'],
       outputs: ['pin-out'],
@@ -64,7 +64,7 @@ describe('graphModel converters', () => {
 
   it('normalizeGraphDataLike accepts RuntimeNodeInput with embedded pin objects', () => {
     const base = makeTestGraph({
-      id: 'g1',
+      path: 'g1',
       nodeId: 'n1',
       inputPinId: 'in-1',
       outputPinId: 'out-1',
@@ -74,7 +74,7 @@ describe('graphModel converters', () => {
     const pinOut = base.pins[1];
 
     const normalized = normalizeGraphDataLike('g1', {
-      id: 'g1',
+      path: 'g1',
       name: 'g1',
       type: 'event',
       canvas: base.canvas,
@@ -97,7 +97,7 @@ describe('graphModel converters', () => {
   it('graphInstanceDtoToGraphData + graphDataToDomainGraph matches hydrate shape', () => {
     const dtoGraph = graphDataToDomainGraph(
       graphInstanceDtoToGraphData({
-        id: 'evt-1',
+        path: 'evt-1',
         name: 'Event',
         type: 'event',
         nodes: [

@@ -4,16 +4,16 @@ import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegist
 import { canRemoveRepeatablePin } from "./repeatablePinUtils";
 
 /** Live removability from store + node registry (avoids stale layout props after +/- pin). */
-export function useRepeatablePinRemovable(nodeId: string, pinId: string, graphId?: string): boolean {
-  if (!graphId) return false;
-  const nodeType = useGraphDataStore((s) => s.getGraphNode(graphId, nodeId)?.nodeType);
+export function useRepeatablePinRemovable(nodeId: string, pinId: string, graphPath?: string): boolean {
+  if (!graphPath) return false;
+  const nodeType = useGraphDataStore((s) => s.getGraphNode(graphPath, nodeId)?.nodeType);
   const nodeDef = useNodeRegistryStore((s) =>
     nodeType ? s.definitions.get(nodeType) : undefined
   );
   const pinsOnNode = useGraphDataStore(
     useShallow((s) =>
-      s.getGraphNodePins(graphId, nodeId)
-        .map((id) => s.getGraphPin(graphId, id))
+      s.getGraphNodePins(graphPath, nodeId)
+        .map((id) => s.getGraphPin(graphPath, id))
         .filter((pin) => pin != null)
     )
   );

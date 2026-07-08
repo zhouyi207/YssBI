@@ -10,7 +10,7 @@ export interface NodeSpawnParams {
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
 }
 
@@ -25,7 +25,7 @@ export type NodeInstanceParamsDTO =
       variableName?: string;
       variableType?: string;
     }
-  | { paramsKind: 'subGraph'; subGraphId: string }
+  | { paramsKind: 'subGraph'; subGraphPath: string }
   | { paramsKind: 'dataFrame'; dataframeId: string };
 
 export const NODE_INSTANCE_PARAMS_NONE: NodeInstanceParamsDTO = { paramsKind: 'none' };
@@ -42,8 +42,8 @@ export function spawnParamsToInstanceParams(
       ...(params.variableType ? { variableType: params.variableType } : {}),
     };
   }
-  if (params.subGraphId) {
-    return { paramsKind: 'subGraph', subGraphId: params.subGraphId };
+  if (params.subGraphPath) {
+    return { paramsKind: 'subGraph', subGraphPath: params.subGraphPath };
   }
   if (params.dataframeId) {
     return { paramsKind: 'dataFrame', dataframeId: params.dataframeId };
@@ -65,8 +65,8 @@ export function nodeSpawnFieldsToInstanceParams(
       ...(fields.variableType ? { variableType: fields.variableType } : {}),
     };
   }
-  if (fields.paramsKind === 'subGraph' && fields.subGraphId) {
-    return { paramsKind: 'subGraph', subGraphId: fields.subGraphId };
+  if (fields.paramsKind === 'subGraph' && fields.subGraphPath) {
+    return { paramsKind: 'subGraph', subGraphPath: fields.subGraphPath };
   }
   if (fields.paramsKind === 'dataFrame' && fields.dataframeId) {
     return { paramsKind: 'dataFrame', dataframeId: fields.dataframeId };
@@ -87,7 +87,7 @@ export function flattenInstanceParams(
         variableType: params.variableType,
       };
     case 'subGraph':
-      return { paramsKind: 'subGraph', subGraphId: params.subGraphId };
+      return { paramsKind: 'subGraph', subGraphPath: params.subGraphPath };
     case 'dataFrame':
       return { paramsKind: 'dataFrame', dataframeId: params.dataframeId };
     default:

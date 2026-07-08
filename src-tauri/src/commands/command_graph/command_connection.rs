@@ -1,13 +1,17 @@
 use crate::event::{Event, EventConnection, emit_project_event};
 use crate::execution::ResultSourceStore;
-use crate::graph::{GraphId, NodeId, PinId};
+use crate::graph::{NodeId, PinId};
 use crate::log::log_app;
-use crate::project::{ProjectState, emit_graph_pin_mutation_sync};
+use crate::project::{GraphResourcePath, ProjectState, emit_graph_pin_mutation_sync};
 use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
+
+fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
+    GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
+}
 
 // ==================== 结果 DTO ====================
 
@@ -56,26 +60,24 @@ pub fn connect_pins(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    subgraph_id: String,
+    graph_path: String,
     pin_a: String,
     pin_b: String,
 ) -> Result<ConnectPinsResult, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let id_a = PinId::from(Uuid::parse_str(&pin_a).map_err(|e| format!("Invalid pin_a: {}", e))?);
     let id_b = PinId::from(Uuid::parse_str(&pin_b).map_err(|e| format!("Invalid pin_b: {}", e))?);
 
     log_app::info!(
         "[command.connect_pins] graph={}, a={}, b={}",
-        subgraph_id,
+        graph_path,
         pin_a,
         pin_b
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (from_pin, to_pin, auto_disconnected_list, change_sets, inferred) =
         graph.connect(id_a, id_b)?;
@@ -84,7 +86,7 @@ pub fn connect_pins(
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionDeleted {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 from_pin: *old_from,
                 to_pin: *old_to,
             }),
@@ -94,7 +96,7 @@ pub fn connect_pins(
     emit_project_event(
         &app,
         Event::Connection(EventConnection::ConnectionCreated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             from_pin,
             to_pin,
         }),
@@ -103,7 +105,7 @@ pub fn connect_pins(
     emit_graph_pin_mutation_sync(
         &app,
         &source_store,
-        graph_id,
+        &graph_path,
         &graph,
         &change_sets,
         inferred,
@@ -138,23 +140,21 @@ pub fn disconnect_pin(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    subgraph_id: String,
+    graph_path: String,
     pin_id: String,
 ) -> Result<DisconnectPinResult, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.disconnect_pin] graph={}, pin={}",
-        subgraph_id,
+        graph_path,
         pin_id
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (removed_connections, undo_patch, change_sets, inferred) = graph.disconnect_pin(pin);
 
@@ -170,7 +170,7 @@ pub fn disconnect_pin(
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionsBatchDeleted {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 removed_connections,
             }),
         );
@@ -179,7 +179,7 @@ pub fn disconnect_pin(
     emit_graph_pin_mutation_sync(
         &app,
         &source_store,
-        graph_id,
+        &graph_path,
         &graph,
         &change_sets,
         inferred,
@@ -201,12 +201,10 @@ pub fn delete_connection(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    subgraph_id: String,
+    graph_path: String,
     connection_id: String,
 ) -> Result<(), String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
 
     // connectionId 格式："{from_pin_uuid}->{to_pin_uuid}"
     let parts: Vec<&str> = connection_id.split("->").collect();
@@ -226,20 +224,20 @@ pub fn delete_connection(
 
     log_app::info!(
         "[command.delete_connection] graph={}, connection={}",
-        subgraph_id,
+        graph_path,
         connection_id
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (change_sets, inferred) = graph.disconnect(from_pin, to_pin);
 
     emit_project_event(
         &app,
         Event::Connection(EventConnection::ConnectionDeleted {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             from_pin,
             to_pin,
         }),
@@ -248,7 +246,7 @@ pub fn delete_connection(
     emit_graph_pin_mutation_sync(
         &app,
         &source_store,
-        graph_id,
+        &graph_path,
         &graph,
         &change_sets,
         inferred,
@@ -272,15 +270,13 @@ pub struct ConnectionDTO {
 #[tauri::command]
 pub fn get_connections(
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
 ) -> Result<Vec<ConnectionDTO>, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let connections: Vec<ConnectionDTO> = graph
         .all_connections()
@@ -307,23 +303,21 @@ pub fn delete_connections_for_pin(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    subgraph_id: String,
+    graph_path: String,
     pin_id: String,
 ) -> Result<Vec<String>, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.delete_connections_for_pin] graph={}, pin={}",
-        subgraph_id,
+        graph_path,
         pin_id
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin);
 
@@ -336,7 +330,7 @@ pub fn delete_connections_for_pin(
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionsBatchDeleted {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 removed_connections,
             }),
         );
@@ -345,7 +339,7 @@ pub fn delete_connections_for_pin(
     emit_graph_pin_mutation_sync(
         &app,
         &source_store,
-        graph_id,
+        &graph_path,
         &graph,
         &change_sets,
         inferred,
@@ -363,24 +357,22 @@ pub fn delete_connections_for_node(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    subgraph_id: String,
+    graph_path: String,
     node_id: String,
 ) -> Result<Vec<String>, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
 
     log_app::info!(
         "[command.delete_connections_for_node] graph={}, node={}",
-        subgraph_id,
+        graph_path,
         node_id
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let pin_instances = graph.get_pin_instances_by_node_id(nid);
     let mut all_removed_connections = Vec::new();
@@ -402,7 +394,7 @@ pub fn delete_connections_for_node(
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionsBatchDeleted {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 removed_connections: all_removed_connections,
             }),
         );
@@ -411,7 +403,7 @@ pub fn delete_connections_for_node(
     emit_graph_pin_mutation_sync(
         &app,
         &source_store,
-        graph_id,
+        &graph_path,
         &graph,
         &all_change_sets,
         all_inferred,
@@ -427,16 +419,14 @@ pub fn delete_connections_for_node(
 #[tauri::command]
 pub fn update_canvas(
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
     canvas: Value,
 ) -> Result<(), String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid graph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
 
-    log_app::debug!("[command.update_canvas] graph={}", subgraph_id);
+    log_app::debug!("[command.update_canvas] graph={}", graph_path);
 
-    state.with_graph_mut(&graph_id, |mut ctx| {
+    state.with_graph_mut(&graph_path, |mut ctx| {
         if let Some(x) = canvas.get("x").and_then(|v| v.as_f64()) {
             ctx.graph().position.x = x;
         }

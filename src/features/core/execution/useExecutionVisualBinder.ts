@@ -8,15 +8,15 @@ import { syncExecutionVisualDom, clearExecutionVisualDom } from './executionVisu
 /** Imperative node execution highlights — no per-event React re-render. */
 export function useExecutionVisualBinder(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
-  graphId: string | undefined,
+  graphPath: string | undefined,
 ): void {
   useEffect(() => {
     const canvas = canvasElementRef.current;
-    if (!canvas || !graphId) return;
+    if (!canvas || !graphPath) return;
 
     const sync = () => {
       const snap = getExecutionVisual();
-      if (!snap.active || snap.graphId !== graphId) {
+      if (!snap.active || snap.graphPath !== graphPath) {
         clearExecutionVisualDom(canvas);
         return;
       }
@@ -25,5 +25,5 @@ export function useExecutionVisualBinder(
 
     sync();
     return subscribeExecutionVisual(sync);
-  }, [canvasElementRef, graphId]);
+  }, [canvasElementRef, graphPath]);
 }

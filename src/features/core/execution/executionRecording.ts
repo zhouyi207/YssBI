@@ -23,14 +23,14 @@ export function firstNodeErrorMessage(recording: RecordedEvent[]): string | unde
 
 /** `commitExecutionVisual` usually sets terminal status; this covers snapshot mismatch edge cases. */
 export function ensureGraphExecutionTerminal(
-  graphId: string,
+  graphPath: string,
   outcome: 'success' | 'error',
 ): void {
   const store = useExecutionStore.getState();
-  if (store.graphs[graphId]?.status !== 'running') return;
+  if (store.graphs[graphPath]?.status !== 'running') return;
   if (outcome === 'error') {
-    store.failExecution(graphId);
+    store.failExecution(graphPath);
   } else {
-    store.completeExecution(graphId);
+    store.completeExecution(graphPath);
   }
 }

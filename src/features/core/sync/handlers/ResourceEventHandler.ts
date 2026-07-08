@@ -3,13 +3,16 @@ import type {
   ProjectIndexInvalidatedPayload,
   ResourceChangedPayload,
   ResourceDeletedPayload,
+  GraphResourceMovedPayload,
 } from '../types';
 import {
+  getDocumentState,
   normalizeBackendResourceMeta,
   updateOpenResourceLabels,
   useResourceStore,
 } from '@/features/core/resource';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { migrateGraphResourcePath } from '@/features/application/editor/migrateGraphResourcePath';
 
 let invalidationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let invalidationRefreshPromise: Promise<boolean> | null = null;
@@ -54,7 +57,17 @@ export class ResourceChangedHandler extends BaseEventHandler<ResourceChangedPayl
   handle(payload: ResourceChangedPayload): void {
     this.log('Resource changed:', payload.kind, payload.id);
     const meta = normalizeBackendResourceMeta(payload.data);
-    useResourceStore.getState().upsertResource(meta);
+    const doc =
+      meta.kind === 'event' || meta.kind === 'function' || meta.kind === 'worksheet'
+        ? getDocumentState({ id: meta.id, kind: meta.kind })
+        : undefined;
+    useResourceStore.getState().upsertResource({
+      ...meta,
+      hasDirtyDocument: doc?.dirty ?? meta.hasDirtyDocument,
+      hasStaleDocument: doc?.stale ?? meta.hasStaleDocument,
+      hasConflictDocument: doc?.conflict ?? meta.hasConflictDocument,
+      loaded: doc?.loaded ?? meta.loaded,
+    });
     if (meta.kind === 'event' || meta.kind === 'function') {
       updateOpenResourceLabels({ id: meta.id, kind: meta.kind }, meta.name);
     }
@@ -67,5 +80,16 @@ export class ResourceDeletedHandler extends BaseEventHandler<ResourceDeletedPayl
   handle(payload: ResourceDeletedPayload): void {
     this.log('Resource deleted:', payload.kind, payload.id);
     useResourceStore.getState().removeResource({ id: payload.id, kind: payload.kind });
+  }
+}
+
+export class GraphResourceMovedHandler extends BaseEventHandler<GraphResourceMovedPayload> {
+  eventType = 'GraphResourceMoved';
+
+  handle(payload: GraphResourceMovedPayload): void {
+    this.log('Graph resource moved:', payload.from, '->', payload.to);
+    if (payload.kind !== 'event' && payload.kind !== 'function') return;
+    migrateGraphResourcePath(payload.from, payload.to, payload.kind);
+    void scheduleResourceIndexRefresh();
   }
 }

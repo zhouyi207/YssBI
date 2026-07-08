@@ -28,7 +28,8 @@ export interface GraphPosition {
  * 代表一个完整的节点图
  */
 export interface Graph {
-    id: string;                 // 图 ID
+    /** 图资源相对路径（如 `events/Main.yssbi-event`） */
+    path: string;
     name: string;               // 图名称
     type: GraphType;            // 图类型
     functionInputs?: FunctionSignaturePin[];

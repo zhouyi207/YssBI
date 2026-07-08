@@ -1,4 +1,4 @@
-use crate::graph::{DataType, GraphId, NodeId, PinId};
+use crate::graph::{DataType, NodeId, PinId};
 use crate::schema::{NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 
@@ -7,34 +7,34 @@ use serde::{Deserialize, Serialize};
 pub enum EventNode {
     #[serde(rename_all = "camelCase")]
     NodeCreated {
-        graph_id: GraphId,
+        graph_path: String,
         node_id: NodeId,
         data: NodeInstanceDTO,
         pins: Vec<PinInstanceDTO>,
     },
     #[serde(rename_all = "camelCase")]
-    NodeDeleted { graph_id: GraphId, node_id: NodeId },
+    NodeDeleted { graph_path: String, node_id: NodeId },
     #[serde(rename_all = "camelCase")]
     NodesBatchDeleted {
-        graph_id: GraphId,
+        graph_path: String,
         node_ids: Vec<NodeId>,
     },
     #[serde(rename_all = "camelCase")]
     NodePositionsUpdated {
-        graph_id: GraphId,
+        graph_path: String,
         updates: Vec<(NodeId, f32, f32)>,
     },
     #[serde(rename_all = "camelCase")]
     NodesBatchCreated {
-        graph_id: GraphId,
+        graph_path: String,
         nodes: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)>,
     },
     #[serde(rename_all = "camelCase")]
-    NodesUpdated { subgraph_id: String },
+    NodesUpdated { subgraph_path: String },
     /// 节点的动态 pins 发生变化（由 PinResolver 触发）
     #[serde(rename_all = "camelCase")]
     NodePinsUpdated {
-        graph_id: GraphId,
+        graph_path: String,
         node_id: NodeId,
         /// 被移除的 pin IDs
         removed_pin_ids: Vec<PinId>,
@@ -52,13 +52,13 @@ pub enum EventNode {
     /// 类型推断后 pin 的解析类型发生变化
     #[serde(rename_all = "camelCase")]
     PinTypesInferred {
-        graph_id: GraphId,
+        graph_path: String,
         pin_types: Vec<InferredPinType>,
     },
     /// Runtime pin result sources invalidated after topology destruction.
     #[serde(rename_all = "camelCase")]
     RuntimeSourcesInvalidated {
-        graph_id: GraphId,
+        graph_path: String,
         pin_ids: Vec<PinId>,
     },
 }

@@ -6,8 +6,8 @@ export class SourceService {
     return invoke<SourceDescriptor | null>('get_result_source_descriptor', { sourceId });
   }
 
-  static async getPinDescriptor(graphId: string, pinId: string): Promise<SourceDescriptor | null> {
-    return invoke<SourceDescriptor | null>('get_pin_result_descriptor', { graphId, pinId });
+  static async getPinDescriptor(graphPath: string, pinId: string): Promise<SourceDescriptor | null> {
+    return invoke<SourceDescriptor | null>('get_pin_result_descriptor', { graphPath, pinId });
   }
 
   static async getPage(

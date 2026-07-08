@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 export interface PinInputProps {
   pinId: string;
   nodeId: string;
-  subgraphId: string;
+  graphPath: string;
   dataType?: DataType;
   metaData?: PinMetaDataDTO;
   value?: unknown;
@@ -67,7 +67,7 @@ function useAutoWidth(text: string, placeholder?: string) {
 export const PinInput: React.FC<PinInputProps> = ({
   pinId,
   nodeId,
-  subgraphId,
+  graphPath,
   dataType,
   metaData,
   value: initialValue,
@@ -86,7 +86,7 @@ export const PinInput: React.FC<PinInputProps> = ({
   } = usePinInput({
     pinId,
     nodeId,
-    subgraphId,
+    graphPath,
     dataType,
     initialValue,
     onValueChange,

@@ -3,11 +3,11 @@ import type { GraphPosition } from '@/shared/types/domain/graph';
 import type { GraphDataLike, PinData } from '@/shared/types/store/graph';
 
 export interface MakeTestGraphOptions {
-  id: string;
+  path: string;
   name?: string;
   type?: 'event' | 'function';
   canvas?: GraphPosition;
-  /** Node `title`; defaults to `name` or `id` */
+  /** Node `title`; defaults to `name` or `path` */
   title?: string;
   nodeId?: string;
   nodeType?: string;
@@ -54,11 +54,11 @@ export function makeTestGraph(
 ): GraphDataLike {
   const options: MakeTestGraphOptions =
     typeof optionsOrId === 'string'
-      ? { id: optionsOrId, name: legacyTitle ?? optionsOrId, title: legacyTitle }
+      ? { path: optionsOrId, name: legacyTitle ?? optionsOrId, title: legacyTitle }
       : optionsOrId;
 
-  const id = options.id;
-  const name = options.name ?? id;
+  const path = options.path;
+  const name = options.name ?? path;
   const nodeId = options.nodeId ?? 'local-node';
   const nodeTitle = options.title ?? name;
   const inputPinId = options.inputPinId ?? 'local-in';
@@ -66,7 +66,7 @@ export function makeTestGraph(
   const connected = options.connected !== false;
 
   return {
-    id,
+    path,
     name,
     type: options.type ?? 'event',
     canvas: options.canvas ?? { x: 0, y: 0, scale: 1 },
@@ -106,11 +106,11 @@ export function makeTestGraph(
 
 /** Two graphs sharing local node/pin ids (multi-graph isolation tests). */
 export function makeOverlappingLocalIdGraphPair(
-  first: { id: string; title: string },
-  second: { id: string; title: string },
+  first: { path: string; title: string },
+  second: { path: string; title: string },
 ): Record<string, GraphDataLike> {
   return {
-    [first.id]: makeTestGraph({ id: first.id, title: first.title }),
-    [second.id]: makeTestGraph({ id: second.id, title: second.title }),
+    [first.path]: makeTestGraph({ path: first.path, title: first.title }),
+    [second.path]: makeTestGraph({ path: second.path, title: second.title }),
   };
 }

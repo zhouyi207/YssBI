@@ -16,12 +16,12 @@ import {
 } from '@/features/core/execution/pinViewTarget';
 
 function pinResultFromDescriptor(
-  graphId: string,
+  graphPath: string,
   pinId: string,
   descriptor: SourceDescriptor,
 ): PinResultState {
   return {
-    graphId,
+    graphPath,
     nodeId: '',
     pinId,
     sourceId: descriptor.sourceId,
@@ -35,7 +35,7 @@ export async function resolvePinViewTarget(
   const cached = resolvePinViewTargetFromCache(params);
   if (cached) return cached;
 
-  const { graphId, pinId, direction, isExec, connectionIds } = params;
+  const { graphPath, pinId, direction, isExec, connectionIds } = params;
   if (!isInspectableDataPin(isExec)) return null;
 
   let descriptorPinIds: string[] = [];
@@ -47,11 +47,11 @@ export async function resolvePinViewTarget(
   }
 
   for (const descriptorPinId of descriptorPinIds) {
-    const descriptor = await SourceService.getPinDescriptor(graphId, descriptorPinId);
+    const descriptor = await SourceService.getPinDescriptor(graphPath, descriptorPinId);
     if (descriptor) {
       return {
         sourcePinId: descriptorPinId,
-        pinResult: pinResultFromDescriptor(graphId, descriptorPinId, descriptor),
+        pinResult: pinResultFromDescriptor(graphPath, descriptorPinId, descriptor),
       };
     }
   }

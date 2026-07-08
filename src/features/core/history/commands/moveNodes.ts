@@ -22,12 +22,12 @@ export interface MoveNodesContext {
 }
 
 export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> = {
-  execute(graphId, args) {
+  execute(graphPath, args) {
     const store = useGraphDataStore.getState();
     const updates: MoveNodesContext['updates'] = [];
 
     for (const id of args.nodeIds) {
-      const node = store.getGraphNode(graphId, id);
+      const node = store.getGraphNode(graphPath, id);
       if (node?.position) {
         updates.push({
           nodeId: id,
@@ -42,11 +42,11 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     if (updates.length > 0) {
       const positions = updates.map((u) => ({ nodeId: u.nodeId, x: u.newX, y: u.newY }));
       const ids = positions.map((p) => p.nodeId);
-      store.batchUpdateNodePositions(positions, graphId);
+      store.batchUpdateNodePositions(positions, graphPath);
       trackPending(
         NODE_POSITION_ECHO_DOMAIN,
         ids,
-        NodeService.updateNodePositions(graphId, positions),
+        NodeService.updateNodePositions(graphPath, positions),
       ).catch((e) =>
         logger.graph.warn(`updateNodePositions failed: ${e instanceof Error ? e.message : String(e)}`, 'MoveNodes'),
       );
@@ -55,27 +55,27 @@ export const moveNodesCommand: CommandHandler<MoveNodesArgs, MoveNodesContext> =
     return { updates };
   },
 
-  async undo(graphId, context) {
+  async undo(graphPath, context) {
     const store = useGraphDataStore.getState();
     const positions = context.updates.map((u) => ({ nodeId: u.nodeId, x: u.oldX, y: u.oldY }));
     const ids = positions.map((p) => p.nodeId);
-    store.batchUpdateNodePositions(positions, graphId);
+    store.batchUpdateNodePositions(positions, graphPath);
     await trackPending(
       NODE_POSITION_ECHO_DOMAIN,
       ids,
-      NodeService.updateNodePositions(graphId, positions),
+      NodeService.updateNodePositions(graphPath, positions),
     );
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     const store = useGraphDataStore.getState();
     const positions = context.updates.map((u) => ({ nodeId: u.nodeId, x: u.newX, y: u.newY }));
     const ids = positions.map((p) => p.nodeId);
-    store.batchUpdateNodePositions(positions, graphId);
+    store.batchUpdateNodePositions(positions, graphPath);
     await trackPending(
       NODE_POSITION_ECHO_DOMAIN,
       ids,
-      NodeService.updateNodePositions(graphId, positions),
+      NodeService.updateNodePositions(graphPath, positions),
     );
   },
 };

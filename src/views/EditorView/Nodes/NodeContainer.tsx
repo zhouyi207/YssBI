@@ -10,7 +10,7 @@ import { NodeContextMenu } from "../ContextMenu";
 
 interface NodeContainerProps {
   node: UINode;
-  graphId?: string;
+  graphPath?: string;
   groupId?: string;
   selected?: boolean;
   dimmed?: boolean;
@@ -20,7 +20,7 @@ interface NodeContainerProps {
 
 export const NodeContainer = React.memo<NodeContainerProps>(({
   node,
-  graphId: _graphId,
+  graphPath: _graphPath,
   groupId,
   selected,
   dimmed,
@@ -29,17 +29,17 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
 }) => {
   const posX = node.position.x;
   const posY = node.position.y;
-  const graphStatus = useExecutionStore((s) => (_graphId ? s.graphs[_graphId]?.status ?? 'idle' : 'idle'));
-  const isReplay = useExecutionStore((s) => !!_graphId && s.isPlaying && s.playbackGraphId === _graphId);
+  const graphStatus = useExecutionStore((s) => (_graphPath ? s.graphs[_graphPath]?.status ?? 'idle' : 'idle'));
+  const isReplay = useExecutionStore((s) => !!_graphPath && s.isPlaying && s.playbackGraphPath === _graphPath);
   const useStoreExecVisual = graphStatus !== 'running' && !isReplay;
 
-  const { isCompleted, hasError } = useNodeExecution(node.id, _graphId, useStoreExecVisual);
+  const { isCompleted, hasError } = useNodeExecution(node.id, _graphPath, useStoreExecVisual);
   const menuActions = useCanvasContextMenuActionsOptional();
 
   const hasLinks = useGraphDataStore((s) => {
-    if (!_graphId) return false;
-    const pinIds = s.getGraphNodePins(_graphId, node.id);
-    return pinIds.some((pid) => s.getGraphPinConnections(_graphId, pid).length > 0);
+    if (!_graphPath) return false;
+    const pinIds = s.getGraphNodePins(_graphPath, node.id);
+    return pinIds.some((pid) => s.getGraphPinConnections(_graphPath, pid).length > 0);
   });
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);

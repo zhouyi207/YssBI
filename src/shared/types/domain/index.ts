@@ -21,6 +21,7 @@ export * from './pin';
 export * from './pinSemantics';
 export * from './connection';
 export * from './graph';
+export * from './graphResourcePath';
 export * from './dataType';
 export * from './typeSystem';
 export * from './dataValue';

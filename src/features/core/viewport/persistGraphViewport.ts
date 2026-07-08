@@ -1,7 +1,7 @@
 import { ProjectService } from '@/services/project/projectService';
 import { getViewport } from './viewportSession';
 
-export function persistGraphViewport(graphId: string | null | undefined): void {
-  if (!graphId) return;
-  ProjectService.updateCanvas(graphId, getViewport(graphId)).catch(() => {});
+export function persistGraphViewport(graphPath: string | null | undefined): void {
+  if (!graphPath) return;
+  ProjectService.updateCanvas(graphPath, getViewport(graphPath)).catch(() => {});
 }

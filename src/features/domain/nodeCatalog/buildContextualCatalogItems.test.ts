@@ -80,7 +80,7 @@ describe('buildContextualCatalogItems', () => {
       expect.objectContaining({
         nodeType: CALL_FUNCTION_NODE_TYPE,
         title: 'My Func',
-        overrides: { subGraphId: 'fn-1', title: 'My Func' },
+        overrides: { subGraphPath: 'fn-1', title: 'My Func' },
       }),
     ]);
   });

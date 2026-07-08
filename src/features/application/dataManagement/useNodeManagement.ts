@@ -20,7 +20,7 @@ import { logger } from '@/utils/appLogger';
  * - 通过事件系统自动同步状态
  * - 支持多窗口同步
  * - 异步非阻塞操作
- * - 数据直接存储在 ProjectStore 的 graphs[graphId].nodes 中
+ * - 数据直接存储在 ProjectStore 的 graphs[graphPath].nodes 中
  */
 export function useNodeManagement() {
     // 获取当前活动的 tab ID
@@ -37,7 +37,7 @@ export function useNodeManagement() {
      * 创建单个节点（CQRS模式）
      * @param nodeType 节点类型
      * @param position 节点位置
-     * @param params 实例参数（variableId、subGraphId 等，用于 variable/function/dataframe 节点）
+     * @param params 实例参数（variableId、subGraphPath 等，用于 variable/function/dataframe 节点）
      * @returns Promise<void>
      */
     const createNode = useCallback(
@@ -166,8 +166,8 @@ export function useNodeManagement() {
      * Store 已由 NodeEventHandler 更新，此处仅做 UI 相关逻辑（如聚焦、打开属性面板等）
      */
     const handleNodeCreated = useCallback(
-        (graphId: string, _nodeId: string, _data: DomainNode) => {
-            if (graphId !== activeTabId) return;
+        (graphPath: string, _nodeId: string, _data: DomainNode) => {
+            if (graphPath !== activeTabId) return;
             // 可选：聚焦新节点、打开属性面板等
         },
         [activeTabId]
@@ -178,8 +178,8 @@ export function useNodeManagement() {
      * Store 已由 NodeEventHandler 更新
      */
     const handleNodeDeleted = useCallback(
-        (graphId: string, _nodeId: string) => {
-            if (graphId !== activeTabId) return;
+        (graphPath: string, _nodeId: string) => {
+            if (graphPath !== activeTabId) return;
             // 可选：清除选中状态等
         },
         [activeTabId]

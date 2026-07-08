@@ -1,7 +1,7 @@
 import type {
   ConnectionData,
   ConnectionId,
-  GraphId,
+  GraphPath,
   NodeData,
   NodeId,
   PinData,
@@ -19,28 +19,28 @@ export interface GraphEntityBucket {
 }
 
 export interface GraphEntitiesState {
-  graphEntities: Record<GraphId, GraphEntityBucket>;
+  graphEntities: Record<GraphPath, GraphEntityBucket>;
 }
 
 export function getGraphBucket(
   state: GraphEntitiesState,
-  graphId: GraphId,
+  graphPath: GraphPath,
 ): GraphEntityBucket | undefined {
-  return state.graphEntities[graphId];
+  return state.graphEntities[graphPath];
 }
 
-export function hasGraphData(state: GraphEntitiesState, graphId: GraphId): boolean {
-  return graphId in state.graphEntities;
+export function hasGraphData(state: GraphEntitiesState , graphPath: GraphPath): boolean {
+  return graphPath in state.graphEntities;
 }
 
-export function getGraphNodeIds(state: GraphEntitiesState, graphId: GraphId): NodeId[] {
-  return state.graphEntities[graphId]?.graphNodes ?? [];
+export function getGraphNodeIds(state: GraphEntitiesState , graphPath: GraphPath): NodeId[] {
+  return state.graphEntities[graphPath]?.graphNodes ?? [];
 }
 
 export function getGraphConnection(
   state: GraphEntitiesState,
-  graphId: GraphId,
+  graphPath: GraphPath,
   connectionId: ConnectionId,
 ): ConnectionData | undefined {
-  return state.graphEntities[graphId]?.connections[connectionId];
+  return state.graphEntities[graphPath]?.connections[connectionId];
 }

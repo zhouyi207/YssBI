@@ -20,7 +20,7 @@ export type NodeSpawnTemplate = {
   category?: string;
   variableId?: string;
   variableName?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
 };
 
 export type GraphResourceDragData = {

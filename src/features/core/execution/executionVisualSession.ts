@@ -2,7 +2,7 @@ import type { ExecutionEvent } from '@/shared/types/ui/execution';
 
 export type ExecutionVisualSnapshot = {
   active: boolean;
-  graphId: string | null;
+  graphPath: string | null;
   status: 'idle' | 'running' | 'completed' | 'error';
   executingNodeId: string | null;
   executedNodeIds: Set<string>;
@@ -21,7 +21,7 @@ export function connectionKey(fromPinId: string, toPinId: string): string {
 function idleSnapshot(): ExecutionVisualSnapshot {
   return {
     active: false,
-    graphId: null,
+    graphPath: null,
     status: 'idle',
     executingNodeId: null,
     executedNodeIds: new Set(),
@@ -48,10 +48,10 @@ export function subscribeExecutionVisual(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function resetExecutionVisual(graphId: string): void {
+export function resetExecutionVisual(graphPath: string): void {
   snapshot = {
     active: true,
-    graphId,
+    graphPath,
     status: 'running',
     executingNodeId: null,
     executedNodeIds: new Set(),
@@ -69,10 +69,10 @@ export function clearExecutionVisual(): void {
 }
 
 /** Apply one channel event to the live visual snapshot (no React store). */
-export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent): void {
-  if (!snapshot.active || snapshot.graphId !== graphId) {
+export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEvent): void {
+  if (!snapshot.active || snapshot.graphPath !== graphPath) {
     if (event.event === 'executionStart') {
-      resetExecutionVisual(graphId);
+      resetExecutionVisual(graphPath);
       return;
     }
     return;
@@ -80,7 +80,7 @@ export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent
 
   switch (event.event) {
     case 'executionStart':
-      resetExecutionVisual(graphId);
+      resetExecutionVisual(graphPath);
       break;
     case 'executionComplete':
       snapshot = {

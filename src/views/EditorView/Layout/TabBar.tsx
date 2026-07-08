@@ -20,8 +20,7 @@ import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
 import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
-import { useEditorStore } from "@/features/core/editor";
-import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
+import { switchEditorGraphTab } from "@/features/application/editor/switchEditorGraphTab";
 import { resourceKey, resourceRefFromLayoutTab, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
 interface TabBarProps {
@@ -34,17 +33,13 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   const { t } = useTranslation();
   // 使用 useShallow 和单个选择器订阅所有需要的状态，避免多次重渲染
   const { 
-    updateNode, 
     splitNode, 
     removeNode, 
-    setActiveGroup, 
     isAltPressed, 
     isDragging 
   } = useLayoutStore(useShallow(s => ({
-    updateNode: s.updateNode,
     splitNode: s.splitNode,
     removeNode: s.removeNode,
-    setActiveGroup: s.setActiveGroup,
     isAltPressed: s.isAltPressed,
     isDragging: s.isDragging,
   })));
@@ -66,24 +61,9 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
   }, [isTabBarOver, isDragging, tabs.length]);
 
   const handleTabClick = (id: string) => {
-    setActiveGroup(layoutNodeId);
     const currentData = useLayoutStore.getState().nodes[layoutNodeId].data;
     const tab = currentData?.tabs?.find((item) => item.id === id);
-    updateNode(layoutNodeId, {
-        data: {
-            ...currentData,
-            activeTabId: id,
-            params: currentData?.activeTabId === id
-              ? currentData?.params
-              : { ...currentData?.params, selectedNodeIds: [] },
-        }
-    });
-    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
-      useEditorStore.getState().setDetailFocus({ kind: tab.type, id });
-    }
-    if (tab?.type === "event" || tab?.type === "function") {
-      syncVariablesGraphScopeFromActiveTab();
-    }
+    void switchEditorGraphTab(layoutNodeId, id, tab);
   };
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
@@ -283,7 +263,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, 
             : documentState?.stale
                 ? "stale"
                 : null;
-    const isDirty = documentState?.dirty ?? tab.isDirty;
+    const isDirty = resourceRef ? (documentState?.dirty ?? false) : false;
     
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `tab-${layoutNodeId}-${tab.id}`,

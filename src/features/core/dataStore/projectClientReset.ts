@@ -12,6 +12,7 @@ import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
 import { useDatasetOverviewStore } from './datasetOverviewStore';
 import { useGraphMetaStore } from './graphMetaStore';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 
 /** 清空 tab / viewport / history / 数据视图缓存等；变量与 graph 正文由调用方立即覆写。 */
 export function resetClientProjectState(): void {
@@ -26,4 +27,5 @@ export function resetClientProjectState(): void {
   useResourceStore.getState().clear();
   useDocumentStateStore.getState().clear();
   useGraphMetaStore.getState().clear();
+  useGraphSessionStore.getState().reset();
 }

@@ -15,39 +15,44 @@ import { toUiNode } from './nodeView';
 
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
-export function useNodeView(nodeId: string, graphId?: string): UINode | null {
-  const nodeData = useGraphDataStore((s) => (graphId ? s.getGraphNode(graphId, nodeId) : undefined));
+export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
+  const nodeData = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
 
   // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
   // 名称以 ResourceStore 为准（重命名的单一事实来源）。
   const callFunctionName = useResourceStore((s) => {
-    if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphId) return undefined;
-    const meta = s.resources[resourceKey({ id: nodeData.subGraphId, kind: 'function' })];
+    if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphPath) return undefined;
+    const meta = s.resources[resourceKey({ id: nodeData.subGraphPath, kind: 'function' })];
     return meta?.exists ? meta.name : undefined;
   });
 
+  const callTitleOverride =
+    nodeData?.nodeType === CALL_FUNCTION_NODE_TYPE && nodeData.subGraphPath
+      ? (callFunctionName ?? '(missing function)')
+      : callFunctionName;
+
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
-      graphId ? s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPin(graphId, pid)) : [],
+      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPin(graphPath, pid)) : [],
     ),
   );
 
   const pinConns = useGraphDataStore(
     useShallow((s) =>
-      graphId ? s.getGraphNodePins(graphId, nodeId).map((pid) => s.getGraphPinConnections(graphId, pid)) : [],
+      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPinConnections(graphPath, pid)) : [],
     ),
   );
 
   return useMemo(() => {
-    if (!graphId || !nodeData) return null;
+    if (!graphPath || !nodeData) return null;
 
     const pins = pinObjs.flatMap((pin, index) =>
       pin ? [{ pin, connectionIds: pinConns[index] ?? [] }] : [],
     );
 
     return toUiNode(nodeData, {
-      title: callFunctionName,
+      title: callTitleOverride,
       pins,
     });
-  }, [graphId, nodeData, pinObjs, pinConns, callFunctionName]);
+  }, [graphPath, nodeData, pinObjs, pinConns, callTitleOverride]);
 }

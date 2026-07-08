@@ -68,13 +68,13 @@ export default function CanvasOverlays({
         <>
             {isEventTab && (
                 <div className="absolute left-3 top-3 z-40">
-                    <PinResultSearch graphId={tabId} />
+                    <PinResultSearch graphPath={tabId} />
                 </div>
             )}
 
             {isEventTab && (
                 <CanvasExecutionToolbar
-                    graphId={tabId}
+                    graphPath={tabId}
                     onExecute={() => executeGraph(tabId)}
                     onCancelExecution={() => void cancelGraphExecution()}
                     onClearArtifacts={() => void clearGraphArtifacts(tabId)}
@@ -92,7 +92,7 @@ export default function CanvasOverlays({
                         variables={variables}
                         functions={functions}
                         graphKind={graphKind}
-                        graphId={activeTabId ?? undefined}
+                        graphPath={activeTabId ?? undefined}
                     />
                 </div>,
                 document.body

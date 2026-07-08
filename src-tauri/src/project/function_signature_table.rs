@@ -3,7 +3,8 @@
 //! - **读**：优先已加载 `GraphInstance`，其次内存表（由 `read_project_index` 填充），最后图文件头。
 //! - **写**：`update_function_signature` / 函数图持久化后 `upsert`；函数删除时 `remove`。
 
-use crate::graph::{FunctionSignaturePin, GraphId, GraphInstance, GraphKind};
+use crate::graph::{FunctionSignaturePin, GraphInstance, GraphKind};
+use crate::project::GraphResourcePath;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -14,7 +15,7 @@ pub struct FunctionSignatureEntry {
 
 #[derive(Clone, Debug, Default)]
 pub struct FunctionSignatureTable {
-    entries: HashMap<GraphId, FunctionSignatureEntry>,
+    entries: HashMap<GraphResourcePath, FunctionSignatureEntry>,
 }
 
 impl FunctionSignatureTable {
@@ -24,11 +25,12 @@ impl FunctionSignatureTable {
 
     pub fn upsert(
         &mut self,
-        id: GraphId,
+        path: GraphResourcePath,
         inputs: Vec<FunctionSignaturePin>,
         outputs: Vec<FunctionSignaturePin>,
     ) {
-        self.entries.insert(id, FunctionSignatureEntry { inputs, outputs });
+        self.entries
+            .insert(path, FunctionSignatureEntry { inputs, outputs });
     }
 
     pub fn upsert_from_graph(&mut self, graph: &GraphInstance) {
@@ -36,21 +38,21 @@ impl FunctionSignatureTable {
             return;
         }
         self.upsert(
-            graph.id,
+            graph.resource_path.clone(),
             graph.function_inputs.clone(),
             graph.function_outputs.clone(),
         );
     }
 
-    pub fn get(&self, id: &GraphId) -> Option<&FunctionSignatureEntry> {
-        self.entries.get(id)
+    pub fn get(&self, path: &GraphResourcePath) -> Option<&FunctionSignatureEntry> {
+        self.entries.get(path)
     }
 
-    pub fn get_cloned(&self, id: &GraphId) -> Option<FunctionSignatureEntry> {
-        self.entries.get(id).cloned()
+    pub fn get_cloned(&self, path: &GraphResourcePath) -> Option<FunctionSignatureEntry> {
+        self.entries.get(path).cloned()
     }
 
-    pub fn remove(&mut self, id: &GraphId) {
-        self.entries.remove(id);
+    pub fn remove(&mut self, path: &GraphResourcePath) {
+        self.entries.remove(path);
     }
 }

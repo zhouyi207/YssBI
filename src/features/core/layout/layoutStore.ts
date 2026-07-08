@@ -38,7 +38,6 @@ export interface LayoutState {
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
-    setTabDirty: (tabId: string, isDirty: boolean) => void;
     /**
      * Drop every graph (event/function) tab from every editor group, regardless
      * of dirty state. Use during destructive project transitions (load / clear /
@@ -663,14 +662,6 @@ export const useLayoutStore = create<LayoutState>()(
                 activeTabId: tab.id,
                 component: node.data?.component || 'GraphEditor'
             };
-        }),
-
-        setTabDirty: (tabId, isDirty) => set((state) => {
-            for (const node of Object.values(state.nodes)) {
-                if (node.type !== 'component' || !node.data?.tabs) continue;
-                const tab = node.data.tabs.find(t => t.id === tabId);
-                if (tab) tab.isDirty = isDirty;
-            }
         }),
 
         closeAllGraphTabs: () => set((state) => {

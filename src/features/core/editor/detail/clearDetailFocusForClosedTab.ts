@@ -11,8 +11,11 @@ export function clearDetailFocusForClosedTab(tabId: string, _tabType?: string): 
 }
 
 function shouldClearFocus(focus: DetailFocus, tabId: string): boolean {
-  if (focus.kind === 'node' && focus.graphId === tabId) return true;
-  if (focus.kind === 'event' || focus.kind === 'function' || focus.kind === 'worksheet') {
+  if (focus.kind === 'node' && focus.graphPath === tabId) return true;
+  if (focus.kind === 'event' || focus.kind === 'function') {
+    return focus.path === tabId;
+  }
+  if (focus.kind === 'worksheet') {
     return focus.id === tabId;
   }
   return false;

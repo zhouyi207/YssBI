@@ -19,7 +19,7 @@ export interface GlobalScope {
  */
 export interface EventScope {
   type: 'event';
-  eventId: string;
+  eventPath: string;
 }
 
 /**
@@ -27,7 +27,7 @@ export interface EventScope {
  */
 export interface FunctionScope {
   type: 'function';
-  functionId: string;
+  functionPath: string;
 }
 
 /**
@@ -55,16 +55,16 @@ export interface Variable {
  */
 export function variableVisibleInGraph(
   scope: VariableScope,
-  graphId: string | undefined,
+  graphPath: string | undefined,
   graphKind: 'event' | 'function' | undefined,
 ): boolean {
   switch (scope.type) {
     case 'global':
       return true;
     case 'event':
-      return graphKind === 'event' && !!graphId && scope.eventId === graphId;
+      return graphKind === 'event' && !!graphPath && scope.eventPath === graphPath;
     case 'function':
-      return graphKind === 'function' && !!graphId && scope.functionId === graphId;
+      return graphKind === 'function' && !!graphPath && scope.functionPath === graphPath;
     default:
       return false;
   }

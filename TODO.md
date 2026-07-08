@@ -764,7 +764,39 @@ src/app/appConfig/appLinks.ts
 - [x] **InfoView 报告类型分层**：`shared/types/report/` 按模型拆分 + `guards` 去重；`types.ts` 薄 re-export；IV 契约测试 7 项 vitest。
 - [x] **Info 报告 IPC 边界窄化**：`parseReportPayload` 单点分发 + `parseRegression`/`parsePanel`/`parseVar` 等；`ReportView` 渲染前校验；`parseCommon` 去重系数解析；11 项 vitest。
 
+## 2026.07.10
+
+> **源于 2026.07.08 Graph 身份收敛（path 取代 graph id）**：Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`、Store `GraphData.path`、`GraphPath` 类型别名、执行/历史/画布 API 参数 `graphPath`、`playbackGraphPath`、`variablesGraphScopePath`、`getGraphByPath` 已落地；Rust `command_node` IPC 参数 `graph_path` 与前端 `graphPath` invoke 对齐。
+
+- [x] **消灭前端 Graph 资源 `graphId` 命名**：`GraphId` → `GraphPath`；`NodeData.graphId` → `graphPath`；`graphDataToDomainGraph` / hydrate / 测试夹具同步；`resolveExecutionGraphPath` 取代 `resolveExecutionGraphId`。
+- [x] **图级 IPC 参数统一 `graphPath`**：`NodeService` / `ConnectionService` / `PinService` / `SourceService.getPinDescriptor` invoke 键与 Rust `graph_path` 对齐（去除 `subgraphId` / `graphId` invoke 键漂移）；删除未使用的 Rust `graph_id.rs`（UUID `GraphId` 包装）。
+
+> **VS Code 架构对照 & YssBI 收敛方向**（目标：图编辑器向「资源 URI + 单文档实例 + Tab 引用」模型靠拢）
+
+| 概念 | VS Code | YssBI 当前（收敛后） | 差距 / 待办 |
+|------|---------|----------------------|-------------|
+| **资源身份** | `URI`（`file:///…`、`untitled:…`） | `Graph.path` + `GraphResourceUri` helpers | [x] `toGraphResourceUri` / `parseGraphResourceUri`；[x] ResourceStore 逻辑键 = `meta.uri`（`resourceKey` / `buildGraphResourceMeta` / `lookupGraphResource`） |
+| **已打开文档** | `ITextDocument` / model，按 URI 单实例 | `graphEntities[graphPath]` + `GraphSessionStore` 单活跃 reload | [x] 单活跃图加载；[x] 未打开图零正文（`deactivateInactiveGraphPath` unload）；[x] 脏/版本/冲突状态机（`DocumentStateStore` 单源；`reconcileResourceSnapshot` stale/conflict；Tab 读 `documentState`） |
+| **Tab / Editor** | Tab = 资源 URI 引用，可重复打开同 URI 多组 | `LayoutTab.id` = graph path | [x] 值已是 path；[x] `LayoutTab` / `buildGraphLayoutTab` 文档化 + 校验；[x] 禁止 tab 级 UUID（规则 + `isValidGraphResourceTabId`） |
+| **工作区索引** | `workspace.fs` 扫描 + 文件监听 | `scan_graph_resource_index` + `ResourceStore` | [x] 扫描索引；[x] Rust `project_watcher` + `ProjectIndexInvalidated` → `refreshResourceIndex` |
+| **图内实体** | 符号/AST 局部 id（非文件路径） | `NodeId` / `PinId` UUID | [x] 正确分层，保持 |
+| **跨文件引用** | Import path、Find References | `subGraphPath` on Call、`FunctionCallSiteIndex` | [x] `get_function_call_sites` IPC + Function Detail 调用方列表（基础 Find References）；[x] 跳转定义（`openGraphResource` + Node Detail）；[x] 重命名 path 级联（Rust `move_graph_resource_path` + 前端 `cascadeGraphPathReferences` / `migrateGraphResourcePath`） |
+| **局部状态** | 函数内变量不在文件 URI 层 | `VariableScope::{Event,Function}` + `variablesGraphScopePath` | [x] scope path 字段；[x] Function Detail 局部变量区块（`variableScopeSelectors` + `GraphLocalVariablesSection`） |
+| **Pin 画布上下文** | N/A | React props `graphPath` | [x] `Pin`/`Node`/`CanvasNode`/`usePinInput` props `subgraphId` → `graphPath`，与 store 一致 |
+| **Detail 选中** | Resource 选中 | `DetailFocus` event/function 用 `path` | [x] `DetailFocus` 图资源分支 `id` → `path`；`ResourceRef.id` 保留（值=path，见原则 4） |
+| **临时资源** | `untitled:Untitled-1` | 未实现 | [x] 新建未保存图草稿 + 保存落盘换 path（`add_draft_graph` / `save_project_graph` → `GraphResourceMoved`）；[x] `untitled:{kind}:{label}` 句柄与 TS/Rust 校验、`resourceKey` / `inferGraphResourceKind` 基础层 |
+| **执行上下文** | 无直接对标 | `playbackGraphPath`、`targetGraphPath` | [x] 已改名；保持与活跃 tab path 一致 |
+
+**收敛原则（写进后续 PR / 规则）**
+
+1. **图资源只认 path（或 URI）**，禁止新增 `graphId` / `GraphId` / UUID 图键。
+2. **Tab / 执行 / 历史 / viewport / 变量 scope** 全部传递 `graphPath: GraphPath`，禁止第二套别名；**Tab.id 禁止 UUID**。
+3. **Node/Pin/Connection** 继续 UUID，类比 VS Code 文档内符号。
+4. **ResourceStore** 逻辑键 = `ProjectResourceMeta.uri`；`ResourceRef.id` / `Graph.path` 保留为磁盘相对路径（见原则 1）。
+5. **文档脏/版本/冲突** 以 `DocumentStateStore`（键 = `resourceKey`）为单源；Tab 仅引用资源，禁止再写 `LayoutTab.isDirty`。
+
 ## v1.0 待办
+
 
 > **源于 2026.07.08 `tsc` 清零复盘**：以下多为根因治理与类型债清扫，避免修复回潮；优先级按「阻断开发 → 架构单点 → 体验验证」排列。
 
@@ -889,15 +921,15 @@ interface PinVisualSpec {
 
 **P0 — 正确性 / 引用生命周期**
 
-- [ ] **删除函数前引用检查**：`FunctionCallSiteIndex` 已维护 `by_function`，但无前端 IPC（`get_function_call_sites` 未暴露 command）；删除 Function 前应统计调用方 Event 图与 Call 节点数，应用内确认（非 `window.confirm`），可选「取消 / 仍删除 / 删除并移除所有 Call 节点」。
-- [ ] **删除函数后孤儿 Call 与索引清理**：`remove_graph` 仅 `remove_caller(被删图)`，不清理「指向被删函数」的 `by_function` 条目；caller 图内 Call 节点保留无效 `subGraphId`，执行时报错、`useNodeView` 仅回退默认标题。需：删函数时 purge `by_function[function_id]`、画布标记「目标缺失」、或批量删除 orphan Call。
-- [ ] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 只清 `GraphDataStore` + `ResourceStore`，未调 `useGraphMetaStore.deleteGraph` → 已删函数签名仍可能出现在 `useFunctionCatalog` / palette，直至重开项目。
-- [ ] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 只 `sync_all_call_nodes_in_graph`（caller 侧 Call pin），**不**对 Function 图跑 `sync_function_shell_pins`；磁盘壳 pin 与签名头漂移时，重开 Tab 不会自愈（仅 Detail 改签名才触发）。应在 tab 打开路径对 `GraphKind::Function` 追加壳同步 + integration test。
+- [x] **删除函数前引用检查**：`deleteFunctionWithConfirm` + `uiStore.confirm3`（取消 / 仍删除 / 删除并清理 Call）；`purge_function_call_sites` IPC。
+- [x] **删除函数后 `by_function` 索引清理**：`remove_graph` + `remove_function`；可选 `purge_function_call_sites` 批量移除 Call 节点并刷新 caller 图 store。
+- [x] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 调用 `useGraphMetaStore.deleteGraph`。
+- [x] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 对 Function 图先 `sync_function_shell_pins_in_graph`；`function_call_test::resolve_graph_dynamic_pins_reconciles_function_shell_pins` 回归。
 
 **P1 — 亟需补齐的 UE5 式功能**
 
-- [ ] **Find References（调用方列表）**：基于 `get_function_call_sites` 在 `FunctionDetailPanel` 或 Sidebar 展示「被 N 处调用」，双击打开 caller 图并选中 Call 节点；需新增薄 command + 前端 service。
-- [ ] **Call Function「跳转定义」**：Call 节点双击 / 右键 / Node Detail「打开函数」→ `openGraphInEditor(subGraphId)`；与 Find References 共用导航逻辑。
+- [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
+- [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
 - [ ] **Call Function 目标重绑定**：`subGraphId` 仅在 palette/sidebar 拖放时写入，创建后无法改目标；新增 `update_call_function_target`（改 `subGraphId` + 重投影 pin + 维护 call-site 索引）+ Node Detail 或右键入口。
 - [ ] **PinEditor 保护默认 exec 引脚**：新建函数默认含 `exec-in`/`exec-out`，但 Detail 可删至「纯数据函数」且无确认；删除最后一个 exec 入/出前应确认，并与 `sideEffectWarning` 文案一致。
 - [ ] **签名变更断连用户反馈**：`reconcile_shell_pins` / Call 投影删除 pin 时会断连接（设计如此），但无「N 条连接已断开」toast 或 Validation 面板；避免用户以为 bug。
@@ -906,8 +938,8 @@ interface PinVisualSpec {
 **P2 — 重复 / 失效逻辑清理**
 
 - [ ] **签名投影三处手写 → 契约测试**：Rust `function_shell.rs`（`signature_data_type` / `pins_from_signature`）↔ TS `resolveEffectiveDefinition.ts` ↔ `dataTypeFromFunctionSignaturePin` 须手动同步；增加 exec/data/Array/DataSeries 样例 roundtrip 测试（Rust unit + vitest），防 palette 自动连接与后端 pin 漂移。
-- [ ] **`get_function_call_sites` 全量 rescan 优化**：每次查询先 `sync_call_site_index_from_loaded_graphs()` 扫描**所有**已加载图重建索引，与增量 `register_call_site_for_node` 重复；改为「索引脏时才 rescan」，并删除 `collect_function_call_sites` 一行包装死代码。
-- [ ] **Call 节点 Node Detail 走有效定义层**：`resolveNodePinSpecs` 对 Call Function 仍用 registry 静态定义（空 pinSlots），未用 `resolveEffectiveDefinition`；Detail 接口列表与画布/runtime pin 不一致，应统一。
+- [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
+- [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
 - [ ] **签名更新刷新路径收敛**：单用户改签名仍走 invoke 全量 `addGraphFromData` + `applyCallerGraphUpdates` + 后端 `FunctionUpdated`/`NodePinsUpdated` 三路（`incrementalPinUpdateGuard` 仅抑制重复）；长期应让 invoke 回包为唯一权威，事件只做增量补洞或删除冗余 handler。
 - [ ] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`（加载时 `functionInputs/Outputs`）；`Detail.tsx` 手合并 `selectedFunction` + `selectedFunctionSignature`。与「Detail 单入口」待办联动，禁止第四份签名拷贝。
 
@@ -1093,3 +1125,10 @@ PinInstance 新增字段:
 - vitest：plotTime、pinResultSearch、dnd、graphModel、layoutTabModel — 22 项全部通过
 
 如需继续，建议下一批处理 **InfoView 类型 import 路径统一** 或 **剩余 Plot 组件迁移 `usePlotContainerSize`**。要我先做哪一块？
+
+
+
+1. loadGraph 每次激活会 loadProjectGraph + resolveGraphDynamicPins 两次 IPC——为保证动态 pin 物化，属有意设计
+2. 路径变更时 persist_loaded_graph 可能二次保存——保证 local variables scope 正确
+
+这两点可以优化吗？

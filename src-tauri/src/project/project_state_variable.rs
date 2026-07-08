@@ -1,9 +1,9 @@
 use super::ProjectState;
 use super::unique_name;
 use crate::event::InferredPinType;
-use crate::graph::GraphId;
 use crate::graph::pin::PinKind;
 use crate::graph::value::{DataType, DataValue};
+use crate::project::GraphResourcePath;
 use crate::schema::{data_type_to_container, data_type_to_pin_type};
 use crate::tabular::{normalize_variable_tabular, remove_variable_cache, sync_variable_cache};
 use crate::variable::VariableId;
@@ -11,7 +11,7 @@ use crate::variable::{VariableInstance, VariableScope};
 
 #[derive(Debug, Clone)]
 pub struct VariableReferenceSync {
-    pub graph_id: GraphId,
+    pub graph_path: GraphResourcePath,
     pub pin_types: Vec<InferredPinType>,
 }
 
@@ -223,7 +223,7 @@ impl ProjectState {
 
             if !inferred_pins.is_empty() {
                 syncs.push(VariableReferenceSync {
-                    graph_id: *graph_id,
+                    graph_path: graph_id.clone(),
                     pin_types: inferred_pins,
                 });
             }

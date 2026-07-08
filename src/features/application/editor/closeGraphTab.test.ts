@@ -63,10 +63,10 @@ describe('closeGraphTab', () => {
   });
 
   it('moves detail focus to the remaining active graph when the closed tab was focused', async () => {
-    useEditorStore.getState().setDetailFocus({ kind: 'event', id: 'g1' });
+    useEditorStore.getState().setDetailFocus({ kind: 'event', path: 'g1' });
 
     await closeGraphTab('g1', 'editor', true);
 
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g2' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g2' });
   });
 });

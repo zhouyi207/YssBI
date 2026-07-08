@@ -6,59 +6,59 @@ function viewportEqual(a: GraphPosition, b: GraphPosition): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
 }
 
-function storeViewport(graphId: string): GraphPosition {
-  return useViewportStore.getState().viewports[graphId] ?? DEFAULT_VIEWPORT;
+function storeViewport(graphPath: string): GraphPosition {
+  return useViewportStore.getState().viewports[graphPath] ?? DEFAULT_VIEWPORT;
 }
 
 const liveByGraph = new Map<string, GraphPosition>();
 const listenersByGraph = new Map<string, Set<(viewport: GraphPosition) => void>>();
 
-function notify(graphId: string, viewport: GraphPosition): void {
-  listenersByGraph.get(graphId)?.forEach((listener) => listener(viewport));
+function notify(graphPath: string, viewport: GraphPosition): void {
+  listenersByGraph.get(graphPath)?.forEach((listener) => listener(viewport));
 }
 
 /** Authoritative in-memory viewport (live preview ⊃ committed store). */
-export function getViewport(graphId: string): GraphPosition {
-  return liveByGraph.get(graphId) ?? storeViewport(graphId);
+export function getViewport(graphPath: string): GraphPosition {
+  return liveByGraph.get(graphPath) ?? storeViewport(graphPath);
 }
 
 export function setViewportLive(
-  graphId: string,
+  graphPath: string,
   updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition),
 ): void {
-  const prev = getViewport(graphId);
+  const prev = getViewport(graphPath);
   const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
   if (viewportEqual(prev, next)) return;
-  liveByGraph.set(graphId, next);
-  notify(graphId, next);
+  liveByGraph.set(graphPath, next);
+  notify(graphPath, next);
 }
 
 /** Flush live viewport into zustand (persistence / cross-panel reads). */
-export function commitViewport(graphId: string): void {
-  const live = liveByGraph.get(graphId);
+export function commitViewport(graphPath: string): void {
+  const live = liveByGraph.get(graphPath);
   if (!live) return;
-  useViewportStore.getState().setViewport(graphId, live);
+  useViewportStore.getState().setViewport(graphPath, live);
 }
 
-export function resetLiveViewports(graphId?: string): void {
-  if (graphId) liveByGraph.delete(graphId);
+export function resetLiveViewports(graphPath?: string): void {
+  if (graphPath) liveByGraph.delete(graphPath);
   else liveByGraph.clear();
 }
 
 export function subscribeToViewport(
-  graphId: string,
+  graphPath: string,
   listener: (viewport: GraphPosition) => void,
 ): () => void {
-  const set = listenersByGraph.get(graphId) ?? new Set();
+  const set = listenersByGraph.get(graphPath) ?? new Set();
   set.add(listener);
-  listenersByGraph.set(graphId, set);
-  listener(getViewport(graphId));
+  listenersByGraph.set(graphPath, set);
+  listener(getViewport(graphPath));
 
   const unsubStore = useViewportStore.subscribe((state, prevState) => {
-    const next = state.viewports[graphId] ?? DEFAULT_VIEWPORT;
-    const prev = prevState.viewports[graphId] ?? DEFAULT_VIEWPORT;
+    const next = state.viewports[graphPath] ?? DEFAULT_VIEWPORT;
+    const prev = prevState.viewports[graphPath] ?? DEFAULT_VIEWPORT;
     if (viewportEqual(next, prev)) return;
-    liveByGraph.set(graphId, next);
+    liveByGraph.set(graphPath, next);
     listener(next);
   });
 
@@ -69,19 +69,19 @@ export function subscribeToViewport(
 }
 
 export function scheduleViewportCommit(
-  graphId: string,
+  graphPath: string,
   timers: { commit?: number | null },
   delayMs = 80,
 ): void {
   if (timers.commit != null) window.clearTimeout(timers.commit);
   timers.commit = window.setTimeout(() => {
     timers.commit = null;
-    commitViewport(graphId);
+    commitViewport(graphPath);
   }, delayMs);
 }
 
 export function scheduleViewportPersist(
-  graphId: string,
+  graphPath: string,
   persist: () => void,
   timers: { persist?: number | null },
   delayMs = 300,
@@ -89,7 +89,7 @@ export function scheduleViewportPersist(
   if (timers.persist != null) window.clearTimeout(timers.persist);
   timers.persist = window.setTimeout(() => {
     timers.persist = null;
-    commitViewport(graphId);
+    commitViewport(graphPath);
     persist();
   }, delayMs);
 }

@@ -1,7 +1,7 @@
 import type { ExecutionEvent } from '@/shared/types/ui/execution';
 import { applyExecutionVisualEvent } from './executionVisualSession';
 
-type SideEffectHandler = (graphId: string, event: ExecutionEvent) => void;
+type SideEffectHandler = (graphPath: string, event: ExecutionEvent) => void;
 
 const IMMEDIATE_EVENTS = new Set<ExecutionEvent['event']>(['pinResultReady', 'openSourceWindow']);
 
@@ -10,23 +10,23 @@ const pendingByGraph = new Map<string, ExecutionEvent[]>();
 
 function flushLiveEvents(): void {
   rafId = null;
-  const deferredFlows: Array<{ graphId: string; event: ExecutionEvent }> = [];
+  const deferredFlows: Array<{ graphPath: string; event: ExecutionEvent }> = [];
 
-  for (const [graphId, events] of pendingByGraph) {
+  for (const [graphPath, events] of pendingByGraph) {
     for (const event of events) {
       if (event.event === 'connectionFlow') {
-        deferredFlows.push({ graphId, event });
+        deferredFlows.push({ graphPath, event });
         continue;
       }
-      applyExecutionVisualEvent(graphId, event);
+      applyExecutionVisualEvent(graphPath, event);
     }
   }
   pendingByGraph.clear();
 
   if (deferredFlows.length > 0) {
     requestAnimationFrame(() => {
-      for (const { graphId, event } of deferredFlows) {
-        applyExecutionVisualEvent(graphId, event);
+      for (const { graphPath, event } of deferredFlows) {
+        applyExecutionVisualEvent(graphPath, event);
       }
     });
   }
@@ -39,18 +39,18 @@ function scheduleFlush(): void {
 
 /** Batch visual events per frame; side-effect events (pin results, windows) run immediately. */
 export function enqueueLiveExecutionEvent(
-  graphId: string,
+  graphPath: string,
   event: ExecutionEvent,
   onSideEffect?: SideEffectHandler,
 ): void {
   if (IMMEDIATE_EVENTS.has(event.event)) {
-    onSideEffect?.(graphId, event);
+    onSideEffect?.(graphPath, event);
     return;
   }
 
-  const queue = pendingByGraph.get(graphId) ?? [];
+  const queue = pendingByGraph.get(graphPath) ?? [];
   queue.push(event);
-  pendingByGraph.set(graphId, queue);
+  pendingByGraph.set(graphPath, queue);
   scheduleFlush();
 }
 

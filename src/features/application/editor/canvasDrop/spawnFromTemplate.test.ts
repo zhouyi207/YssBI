@@ -85,7 +85,7 @@ describe('spawnNodeFromTemplate', () => {
     expect(createNode).toHaveBeenCalledWith(
       CALL_FUNCTION_NODE_TYPE,
       { x: 0, y: 0 },
-      { subGraphId: 'fn-1' },
+      { subGraphPath: 'fn-1' },
     );
   });
 });

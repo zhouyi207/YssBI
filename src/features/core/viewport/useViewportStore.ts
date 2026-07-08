@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { GraphPosition } from '@/shared/types/domain';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { resetLiveViewports } from './viewportSession';
@@ -7,7 +7,7 @@ interface ViewportStore {
   /** Committed viewports (persisted / loaded from project). Live gesture preview stays in viewportSession. */
   viewports: Record<string, GraphPosition>;
   setViewport: (
-    graphId: string,
+    graphPath: string,
     updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition),
   ) => void;
   clear: () => void;
@@ -15,9 +15,9 @@ interface ViewportStore {
 
 export const useViewportStore = create<ViewportStore>((set) => ({
   viewports: {},
-  setViewport: (graphId, updater) =>
+  setViewport: (graphPath, updater) =>
     set((state) => {
-      const current = state.viewports[graphId] ?? { ...DEFAULT_VIEWPORT };
+      const current = state.viewports[graphPath] ?? { ...DEFAULT_VIEWPORT };
       const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
 
       if (current.x === next.x && current.y === next.y && current.scale === next.scale) {
@@ -27,7 +27,7 @@ export const useViewportStore = create<ViewportStore>((set) => ({
       return {
         viewports: {
           ...state.viewports,
-          [graphId]: next,
+          [graphPath]: next,
         },
       };
     }),
@@ -36,6 +36,19 @@ export const useViewportStore = create<ViewportStore>((set) => ({
     set({ viewports: {} });
   },
 }));
+
+export function remapGraphViewport(from: string, to: string): void {
+  if (from === to) return;
+  resetLiveViewports(from);
+  useViewportStore.setState((state) => {
+    const viewport = state.viewports[from];
+    if (!viewport) return state;
+    const viewports = { ...state.viewports };
+    delete viewports[from];
+    viewports[to] = viewport;
+    return { viewports };
+  });
+}
 
 export function normalizeGraphCanvas(canvas?: GraphPosition | null): GraphPosition {
   if (!canvas) return { ...DEFAULT_VIEWPORT };
@@ -46,20 +59,20 @@ export function normalizeGraphCanvas(canvas?: GraphPosition | null): GraphPositi
   };
 }
 
-export function applyGraphViewport(graphId: string, canvas?: GraphPosition | null): void {
-  useViewportStore.getState().setViewport(graphId, normalizeGraphCanvas(canvas));
+export function applyGraphViewport(graphPath: string, canvas?: GraphPosition | null): void {
+  useViewportStore.getState().setViewport(graphPath, normalizeGraphCanvas(canvas));
 }
 
 /** 首次打开 tab 时从 graph.canvas 恢复；会话内已 pan 过则保留内存值 */
-export function ensureGraphViewport(graphId: string, canvas?: GraphPosition | null): void {
-  if (useViewportStore.getState().viewports[graphId]) return;
-  applyGraphViewport(graphId, canvas);
+export function ensureGraphViewport(graphPath: string, canvas?: GraphPosition | null): void {
+  if (useViewportStore.getState().viewports[graphPath]) return;
+  applyGraphViewport(graphPath, canvas);
 }
 
 export function syncGraphViewportsFromRecords(
   graphs: Record<string, { canvas?: GraphPosition | null }>,
 ): void {
-  for (const [graphId, graph] of Object.entries(graphs)) {
-    applyGraphViewport(graphId, graph.canvas);
+  for (const [graphPath, graph] of Object.entries(graphs)) {
+    applyGraphViewport(graphPath, graph.canvas);
   }
 }

@@ -6,12 +6,12 @@ export function useEditorCanvasActions(activeTabIdRef: RefObject<string | null>)
   const setCanvas = useCallback(
     (
       updater: GraphPosition | ((prev: GraphPosition) => GraphPosition),
-      targetGraphId?: string,
+      targetGraphPath?: string,
     ) => {
-      const graphId = targetGraphId ?? activeTabIdRef.current;
-      if (!graphId) return;
-      setViewportLive(graphId, updater);
-      commitViewport(graphId);
+      const graphPath = targetGraphPath ?? activeTabIdRef.current;
+      if (!graphPath) return;
+      setViewportLive(graphPath, updater);
+      commitViewport(graphPath);
     },
     [activeTabIdRef],
   );

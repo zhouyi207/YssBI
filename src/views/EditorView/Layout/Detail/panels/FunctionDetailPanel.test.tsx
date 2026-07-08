@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailNameField } from '../shared/DetailForm';
+import { GraphLocalVariablesSection } from '../shared/GraphLocalVariablesSection';
 import { FunctionDetailPanel } from './FunctionDetailPanel';
 
 vi.mock('react-i18next', () => ({
@@ -29,7 +30,7 @@ describe('FunctionDetailPanel', () => {
     const onSignatureChange = vi.fn();
     const element = FunctionDetailPanel({
       fn: {
-        id: 'function-1',
+        path: 'function-1',
         name: 'Compute',
         inputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
         outputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
@@ -56,5 +57,25 @@ describe('FunctionDetailPanel', () => {
     expect(onSignatureChange).toHaveBeenNthCalledWith(2, {
       outputs: [{ id: 'output-2', name: 'Done', type: 'bool' }],
     });
+  });
+
+  it('renders local variables section with selection callback', () => {
+    const onSelectLocalVariable = vi.fn();
+    const element = FunctionDetailPanel({
+      fn: {
+        path: 'functions/A.yssbi-function',
+        name: 'Compute',
+        inputs: [],
+        outputs: [],
+      },
+      localVariables: [{ id: 'var-1', name: 'Counter', typeLabel: 'Int64', dataType: { kind: 'Int64' } }],
+      onSelectLocalVariable,
+      onRename: vi.fn(),
+      onSignatureChange: vi.fn(),
+    }) as ReactElement;
+
+    const section = findAllByType(element, GraphLocalVariablesSection)[0];
+    (section.props as { onSelectVariable: (id: string) => void }).onSelectVariable('var-1');
+    expect(onSelectLocalVariable).toHaveBeenCalledWith('var-1');
   });
 });

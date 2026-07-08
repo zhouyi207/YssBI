@@ -24,7 +24,7 @@ export type { VariableDropMenu } from "./canvasDrop";
 interface UseCanvasDropParams {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
   groupId: string;
-  graphId: string | null;
+  graphPath: string | null;
   variables: EditorVariables;
   functions: EditorFunctions;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
@@ -38,7 +38,7 @@ interface UseCanvasDropParams {
 export function useCanvasDrop({
   canvasElementRef,
   groupId,
-  graphId,
+  graphPath,
   variables,
   functions,
   setContextMenu,
@@ -74,8 +74,8 @@ export function useCanvasDrop({
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
-      if (!graphId) return;
-      const nodeData = useGraphDataStore.getState().getGraphNode(graphId, nodeId);
+      if (!graphPath) return;
+      const nodeData = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
       const nodeType = nodeData?.nodeType;
       let slotIndex = 0;
       if (nodeType) {
@@ -83,20 +83,20 @@ export function useCanvasDrop({
         const idx = def?.pinSlots.findIndex(s => s.slotKind === 'repeatable') ?? -1;
         if (idx >= 0) slotIndex = idx;
       }
-      executeCommand(graphId, 'AddRepeatablePin', { nodeId, slotIndex });
+      executeCommand(graphPath, 'AddRepeatablePin', { nodeId, slotIndex });
     },
-    [graphId]
+    [graphPath]
   );
 
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
-      if (!graphId) return Promise.resolve();
-      return executeCommand(graphId, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined).catch((err) => {
+      if (!graphPath) return Promise.resolve();
+      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined).catch((err) => {
         uiStore.showToast(err instanceof Error ? err.message : String(err), "error");
         throw err;
       });
     },
-    [graphId]
+    [graphPath]
   );
 
   const handleContextMenu = useCallback(
@@ -143,7 +143,7 @@ export function useCanvasDrop({
 
       if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
 
-      const worldPosition = clientToWorldInCanvas(el, graphId, dragState.x, dragState.y);
+      const worldPosition = clientToWorldInCanvas(el, graphPath, dragState.x, dragState.y);
 
       await spawnNodeFromTemplate(
         dragState.template,
@@ -158,7 +158,7 @@ export function useCanvasDrop({
         },
       );
     },
-    [canvasElementRef, graphId, variables, functions, createNode],
+    [canvasElementRef, graphPath, variables, functions, createNode],
   );
 
   useEffect(() => {

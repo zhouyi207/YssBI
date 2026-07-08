@@ -3,11 +3,11 @@ import { attachCanvasWheelZoom } from '@/features/core/viewport';
 
 export function useCanvasWheelZoom(
   canvasElementRef: RefObject<HTMLDivElement | null>,
-  graphId: string | null,
+  graphPath: string | null,
 ) {
   useEffect(() => {
     const canvasEl = canvasElementRef.current;
-    if (!canvasEl || !graphId) return;
-    return attachCanvasWheelZoom(canvasEl, graphId);
-  }, [canvasElementRef, graphId]);
+    if (!canvasEl || !graphPath) return;
+    return attachCanvasWheelZoom(canvasEl, graphPath);
+  }, [canvasElementRef, graphPath]);
 }

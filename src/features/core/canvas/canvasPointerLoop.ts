@@ -33,7 +33,7 @@ export type CanvasPointerLoopDeps = {
   viewportRef: RefObject<GraphPosition>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
-  persistViewport: (graphId?: string | null) => void;
+  persistViewport: (graphPath?: string | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
   setPendingConnection: (pin: Pin | null) => void;
 };
@@ -77,9 +77,9 @@ function installPointerLoop(): () => void {
       const dx = e.clientX - g.lastX;
       const dy = e.clientY - g.lastY;
       const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-      const graphId = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-      if (graphId) {
-        setViewportLive(graphId, (prev) => ({
+      const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
+      if (graphPath) {
+        setViewportLive(graphPath, (prev) => ({
           ...prev,
           x: prev.x + dx,
           y: prev.y + dy,
@@ -186,9 +186,9 @@ function installPointerLoop(): () => void {
         deps.setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
       } else if (g.moved) {
         const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-        const graphId = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-        if (graphId) commitViewport(graphId);
-        deps.persistViewport(graphId);
+        const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
+        if (graphPath) commitViewport(graphPath);
+        deps.persistViewport(graphPath);
       }
     } else if (g.type === 'connect') {
       const gid = g.groupId || deps.activeGroupIdRef.current;

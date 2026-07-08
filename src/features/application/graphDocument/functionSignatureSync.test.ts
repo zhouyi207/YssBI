@@ -12,7 +12,7 @@ describe('functionSignatureSync', () => {
 
   it('writes function signature fields into graph meta store', () => {
     syncFunctionSignatureFromGraph({
-      id: 'function-1',
+      path: 'function-1',
       name: 'Compute',
       type: 'function',
       functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
@@ -30,21 +30,21 @@ describe('functionSignatureSync', () => {
   it('hydrates signatures from project index rows', () => {
     hydrateFunctionSignaturesFromProjectIndex([
       {
-        id: 'function-2',
+        path: 'functions/Add.yssbi-function',
         name: 'Add',
         type: 'function',
         functionInputs: [{ id: 'a', name: 'A', type: 'int' }],
         functionOutputs: [{ id: 'r', name: 'R', type: 'int' }],
       },
-      { id: 'event-1', name: 'Main', type: 'event' },
+      { path: 'events/Main.yssbi-event', name: 'Main', type: 'event' },
     ]);
 
-    expect(useGraphMetaStore.getState().graphs['function-2']).toEqual(
+    expect(useGraphMetaStore.getState().graphs['functions/Add.yssbi-function']).toEqual(
       expect.objectContaining({
         functionInputs: [{ id: 'a', name: 'A', type: 'int' }],
         functionOutputs: [{ id: 'r', name: 'R', type: 'int' }],
       }),
     );
-    expect(useGraphMetaStore.getState().graphs['event-1']).toBeUndefined();
+    expect(useGraphMetaStore.getState().graphs['events/Main.yssbi-event']).toBeUndefined();
   });
 });

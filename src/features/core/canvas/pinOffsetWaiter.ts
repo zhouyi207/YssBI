@@ -15,7 +15,7 @@ export interface PinOffset {
 }
 
 interface Waiter {
-  graphId: string;
+  graphPath: string;
   pinId: string;
   resolve: (offset: PinOffset | null) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -28,13 +28,13 @@ const waiters: Waiter[] = [];
  * 超时（节点被裁剪/未渲染等）则以 null 兑现，调用方应回退为不对齐。
  */
 export function waitForPinOffset(
-  graphId: string,
+  graphPath: string,
   pinId: string,
   timeoutMs = 500,
 ): Promise<PinOffset | null> {
   return new Promise((resolve) => {
     const waiter: Waiter = {
-      graphId,
+      graphPath,
       pinId,
       resolve,
       timer: setTimeout(() => {
@@ -51,13 +51,13 @@ export function waitForPinOffset(
  * 由 `useCanvasViewport` 在每次测量后调用：兑现所有偏移已可用的等待者。
  */
 export function resolvePinOffsetWaiters(
-  graphId: string,
+  graphPath: string,
   offsets: Record<string, PinOffset>,
 ): void {
   if (waiters.length === 0) return;
   for (let i = waiters.length - 1; i >= 0; i--) {
     const w = waiters[i];
-    if (w.graphId !== graphId) continue;
+    if (w.graphPath !== graphPath) continue;
     const offset = offsets[w.pinId];
     if (offset) {
       clearTimeout(w.timer);

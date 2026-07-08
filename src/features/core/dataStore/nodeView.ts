@@ -50,7 +50,7 @@ export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
     variableId: nodeData.variableId,
     variableName: nodeData.variableName,
     variableType: nodeData.variableType,
-    subGraphId: nodeData.subGraphId,
+    subGraphPath: nodeData.subGraphPath,
     dataframeId: nodeData.dataframeId,
     inputs,
     outputs,

@@ -26,7 +26,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 
 | 字段 | 后端原始类型 (GraphInstance) | DTO 类型 (GraphInstanceDTO) | 前端 Domain (Graph) | 前端 Store (GraphData) | 说明 |
 |------|------------------------------|-----------------------------|---------------------|------------------------|------|
-| id | GraphId (UUID) | id | string | string | 图唯一标识 |
+| path | GraphResourcePath (relative path) | path | string | string | 图稳定路径标识（如 `events/Foo.yssbi-event`） |
 | name | String | name | string | string | 图名称 |
 | type | GraphKind (enum) | type (graph_type → rename) | GraphType | 'event'\|'function' | 图类型，DTO 用 `type` 避免 JS 保留字 |
 | nodes | HashMap<NodeId, NodeInstance> | NodeInstanceDTO[] | Node[] | NodeData[] | 节点列表，DTO 展平为数组 |
@@ -57,7 +57,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | uiStyle | definition.metadata.ui_style | uiStyle (ui_style → camelCase) | ui_style | ui_style | UI 样式名（如 "default", "math"） |
 | description | definition.metadata.description | description? | description? | description? | 可选描述 |
 | position | NodePosition { x, y } | position | (在 Node 中) | { x, y } | 画布坐标 |
-| graphId | - | - | - | string | Store 专用，所属图 ID |
+| graphPath | - | - | - | string | Store 专用，所属图资源路径 |
 
 ### 3.2 字段说明
 
@@ -142,7 +142,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | 字段 | 后端 (ProjectData) | DTO (ProjectDataDTO) | 前端 (ProjectData) | 说明 |
 |------|--------------------|----------------------|-------------------|------|
 | variables | HashMap<String, VariableDefinition> | variables | Record<string, Variable> | 变量定义 |
-| graphs | HashMap<GraphId, GraphInstance> | graphs | Record<string, GraphInstanceDTO> | 图实例 |
+| graphs | HashMap<GraphResourcePath, GraphInstance> | graphs | Record<string, GraphInstanceDTO> | 图实例（key 为 graph path） |
 | databases | HashMap<String, DatabaseDecl> | databases | Record<string, DatabaseDeclDTO> | 数据库声明 |
 | metadata | ProjectMetadata | metadata | ProjectMetadata | 项目元数据 |
 
@@ -158,7 +158,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | name | name | name | name | 变量名 |
 | dataType | data_type | dataType | dataType | 数据类型枚举 |
 | description | description | description | description | 描述 |
-| scope | scope | scope | scope | 作用域 (Global/Event/Function) |
+| scope | scope | scope | scope | 作用域 (Global/Event/Function；局部作用域字段为 `eventPath` / `functionPath`) |
 | staticValue | static_value? | staticValue? | - | 静态初始值 |
 | sourceConfig | source_config? | sourceConfig? | - | 数据来源配置 |
 | isArray | is_array | isArray | isArray | 是否数组 |
@@ -226,7 +226,7 @@ Rust：`graph/node/node_instance.rs` — `#[serde(tag = "paramsKind")]`。
 | --- | --- | --- | --- |
 | `none` | `None` | `{ paramsKind: "none" }` | 普通运算 / 控制流节点 |
 | `variable` | `Variable { variable_id, variable_name?, variable_type? }` | `variableId`, `variableName?`, `variableType?` | Get/Set Variable |
-| `subGraph` | `SubGraph { sub_graph_id }` | `subGraphId` | Call Function |
+| `subGraph` | `SubGraph { sub_graph_path }` | `subGraphPath` | Call Function |
 | `dataFrame` | `DataFrame { dataframe_id }` | `dataframeId` | Get DataFrame |
 
 ### 12.2 序列化形态差异
@@ -239,7 +239,7 @@ Rust：`graph/node/node_instance.rs` — `#[serde(tag = "paramsKind")]`。
 
 ### 12.3 创建路径扁平参数 → tagged union
 
-创建命令使用扁平 `NodeSpawnParams`（`variableId` / `subGraphId` / `dataframeId` 等），经 `spawnParamsToInstanceParams` 打 tag 后 invoke 后端。
+创建命令使用扁平 `NodeSpawnParams`（`variableId` / `subGraphPath` / `dataframeId` 等），经 `spawnParamsToInstanceParams` 打 tag 后 invoke 后端。
 
 事件回传 `NodeInstanceDTO` 经 `flattenInstanceParams` 写入 `NodeData` 扁平字段。
 
@@ -293,7 +293,7 @@ delete / disconnect / paste redo
   → 后端 capture_subgraph / capture_disconnect_undo_patch
   → GraphUndoPatch JSON
   → 前端 history context 原样保存
-  → undo: NodeService.applyGraphPatch(graphId, patch) 透传
+  → undo: NodeService.applyGraphPatch(graphPath, patch) 透传
   → 后端 apply_graph_patch 恢复节点 + 邻居 + 连线
 ```
 

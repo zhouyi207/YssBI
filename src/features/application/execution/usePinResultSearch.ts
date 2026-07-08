@@ -12,14 +12,14 @@ import { isExecPin } from '@/shared/types/domain/pinSemantics';
 
 const EMPTY_PIN_RESULTS = new Map<string, PinResultState>();
 
-function collectGraphPins(graphId: string): PinResultSearchPinRef[] {
+function collectGraphPins(graphPath: string): PinResultSearchPinRef[] {
   const graphStore = useGraphDataStore.getState();
-  const nodeIds = graphStore.getGraphNodeIds(graphId);
+  const nodeIds = graphStore.getGraphNodeIds(graphPath);
   const pins: PinResultSearchPinRef[] = [];
 
   for (const nodeId of nodeIds) {
-    for (const pinId of graphStore.getGraphNodePins(graphId, nodeId)) {
-      const pin = graphStore.getGraphPin(graphId, pinId);
+    for (const pinId of graphStore.getGraphNodePins(graphPath, nodeId)) {
+      const pin = graphStore.getGraphPin(graphPath, pinId);
       if (!pin) continue;
 
       pins.push({
@@ -27,7 +27,7 @@ function collectGraphPins(graphId: string): PinResultSearchPinRef[] {
         nodeId: pin.nodeId,
         direction: pin.direction,
         isExec: isExecPin(pin),
-        connectionIds: graphStore.getGraphPinConnections(graphId, pinId),
+        connectionIds: graphStore.getGraphPinConnections(graphPath, pinId),
       });
     }
   }
@@ -35,19 +35,19 @@ function collectGraphPins(graphId: string): PinResultSearchPinRef[] {
   return pins;
 }
 
-export function usePinResultSearch(graphId: string, query: string) {
+export function usePinResultSearch(graphPath: string, query: string) {
   const pinResults = useExecutionStore(
-    (state) => state.graphs[graphId]?.pinResults ?? EMPTY_PIN_RESULTS,
+    (state) => state.graphs[graphPath]?.pinResults ?? EMPTY_PIN_RESULTS,
   );
-  const graphBucket = useGraphDataStore((state) => state.graphEntities[graphId]);
+  const graphBucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
 
   const entries = useMemo(() => {
     if (pinResults.size === 0 || !graphBucket) return [];
 
     const resolveLabels = (nodeId: string, pinId: string) => {
       const graphStore = useGraphDataStore.getState();
-      const node = graphStore.getGraphNode(graphId, nodeId);
-      const pin = graphStore.getGraphPin(graphId, pinId);
+      const node = graphStore.getGraphNode(graphPath, nodeId);
+      const pin = graphStore.getGraphPin(graphPath, pinId);
       return {
         nodeTitle: node?.title ?? nodeId,
         pinName: pin?.name ?? pinId,
@@ -55,12 +55,12 @@ export function usePinResultSearch(graphId: string, query: string) {
     };
 
     return collectPinResultSearchEntries(
-      graphId,
+      graphPath,
       pinResults,
-      collectGraphPins(graphId),
+      collectGraphPins(graphPath),
       resolveLabels,
     );
-  }, [graphId, graphBucket, pinResults]);
+  }, [graphPath, graphBucket, pinResults]);
 
   const filteredEntries = useMemo(
     () => filterPinResultSearchEntries(entries, query),

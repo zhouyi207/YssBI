@@ -7,6 +7,7 @@ import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 import { useProjectIOStore } from './projectIOStore';
 import { useResourceStore } from '@/features/core/resource';
+import { toGraphResourceUri } from '@/shared/types/domain/graphResourcePath';
 import { useVariableStore } from './variableStore';
 import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
@@ -32,16 +33,16 @@ vi.mock('@/features/application/graphDocument/functionSignatureSync', () => ({
   syncFunctionSignatureFromGraph: vi.fn(),
 }));
 
-function makeEventGraphData(id: string, name: string): GraphData {
+function makeEventGraphData(path: string, name: string): GraphData {
   return {
-    id,
+    path,
     name,
     type: 'event',
     canvas: { x: 5, y: 6, scale: 1 },
     nodes: [
       {
         id: 'node-a',
-        graphId: id,
+        graphPath: path,
         nodeType: 'Control:Begin',
         category: ['Control'],
         title: 'Begin',
@@ -123,7 +124,7 @@ describe('useProjectIOStore snapshot paths', () => {
     const snapshot = useProjectIOStore.getState().exportSnapshot();
 
     expect(snapshot.graphs['evt-1']).toMatchObject({
-      id: 'evt-1',
+      path: 'evt-1',
       name: 'Main Event',
       type: 'event',
       canvas: { x: 5, y: 6, scale: 1 },
@@ -140,7 +141,7 @@ describe('useProjectIOStore snapshot paths', () => {
     });
     vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
       projectName: 'Demo',
-      graphs: [{ id: 'evt-1', name: 'Main', type: 'event' }],
+      graphs: [{ path: 'evt-1', name: 'Main', type: 'event' }],
       variables: [],
       worksheets: [],
       exportTime: '2026-07-08T00:00:00.000Z',
@@ -156,7 +157,7 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(useDatabaseStore.getState().databases['df-1']?.name).toBe('Data');
   });
 
-  it('loadGraph still calls backend when frontend cache exists but resource is not loaded', async () => {
+  it('loadGraph always reloads from backend', async () => {
     const graphData = makeEventGraphData('evt-1', 'Main Event');
     useGraphDataStore.getState().addGraphFromData('evt-1', graphData);
     useResourceStore.getState().setSnapshot({
@@ -165,7 +166,7 @@ describe('useProjectIOStore snapshot paths', () => {
           id: 'evt-1',
           kind: 'event',
           name: 'Main Event',
-          uri: 'yssbi://graph/event/evt-1',
+          uri: toGraphResourceUri('event', 'evt-1'),
           exists: true,
           loaded: false,
           hasDirtyDocument: false,
@@ -178,7 +179,7 @@ describe('useProjectIOStore snapshot paths', () => {
 
     vi.mocked(ProjectService.loadProjectGraph).mockResolvedValue({
       graph: {
-        id: 'evt-1',
+        path: 'evt-1',
         name: 'Main Event',
         type: 'event',
         nodes: [],

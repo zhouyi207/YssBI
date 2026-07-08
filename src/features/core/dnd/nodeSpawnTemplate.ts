@@ -29,14 +29,14 @@ export function dataFrameNodeSpawnTemplate(
 }
 
 export function functionCallNodeSpawnTemplate(
-  subGraphId: string,
+  subGraphPath: string,
   name: string,
 ): NodeSpawnTemplate {
   return {
     title: name,
     nodeType: CALL_FUNCTION_NODE_TYPE,
     category: 'Functions',
-    subGraphId,
+    subGraphPath,
   };
 }
 
@@ -55,10 +55,10 @@ export function catalogItemNodeSpawnTemplate(item: NodeCatalogItem): NodeSpawnTe
     };
   }
 
-  if (item.overrides?.subGraphId) {
+  if (item.overrides?.subGraphPath) {
     return {
       ...base,
-      subGraphId: item.overrides.subGraphId,
+      subGraphPath: item.overrides.subGraphPath,
       category: 'Functions',
     };
   }

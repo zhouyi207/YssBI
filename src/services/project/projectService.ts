@@ -68,7 +68,7 @@ export function isScanCancelledError(error: unknown): boolean {
 }
 
 export interface ProjectGraphIndexRow {
-    id: string;
+    path: string;
     name: string;
     type: "event" | "function";
     functionInputs?: import('@/shared/types/domain').FunctionSignaturePin[];
@@ -90,7 +90,7 @@ export interface ProjectVariableIndexRow {
   description: string;
   scope: import('@/shared/types/domain/variable').VariableScope;
   tags: string[];
-  ownerGraphId?: string | null;
+  ownerGraphPath?: string | null;
   ownerGraphName?: string | null;
   ownerGraphKind?: 'event' | 'function' | null;
 }
@@ -189,11 +189,11 @@ export class ProjectService {
      */
     static async getProjectGraphs(): Promise<{
         graphs: Record<string, GraphInstanceDTO>;
-        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
     }> {
         const data = await invoke<{
             graphs: Record<string, GraphInstanceDTO>;
-            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
         }>("get_project_graphs");
         return {
             graphs: data.graphs || {},
@@ -212,8 +212,8 @@ export class ProjectService {
         return await invoke("get_project_index");
     }
 
-    static async loadProjectGraph(graphId: string): Promise<LoadedProjectGraphRow> {
-        return await invoke("load_project_graph", { graphId });
+    static async loadProjectGraph(graphPath: string): Promise<LoadedProjectGraphRow> {
+        return await invoke("load_project_graph", { graphPath });
     }
 
     /**
@@ -379,23 +379,23 @@ export class ProjectService {
         }
     }
 
-    static async updateCanvas(subgraphId: string, canvas: CanvasState): Promise<void> {
-        await invoke("update_canvas", { subgraphId, canvas });
+    static async updateCanvas(graphPath: string, canvas: CanvasState): Promise<void> {
+        await invoke("update_canvas", { graphPath, canvas });
     }
 
     /**
      * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
-     * @param graphId 要执行的 graph ID，传 undefined 则执行所有 Event 图
+     * @param graphPath 要执行的 graph 路径，传 undefined 则执行所有 Event 图
      */
     static async executeProject(
         onEvent?: (event: ExecutionEvent) => void,
-        graphId?: string,
+        graphPath?: string,
     ): Promise<{ executedGraphs: number; logs: string[] }> {
         const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
         try {
             const res = await invoke<{ executedGraphs: number; logs: string[] }>(
                 "execute_project",
-                { onEvent: channel, graphId: graphId ?? null },
+                { onEvent: channel , graphPath: graphPath ?? null },
             );
             await waitForStreamEnd(res.executedGraphs);
             return res;
@@ -408,8 +408,8 @@ export class ProjectService {
         await invoke("cancel_execution");
     }
 
-    static async clearGraphExecutionArtifacts(graphId: string): Promise<void> {
-        await invoke("clear_graph_execution_artifacts", { graphId });
+    static async clearGraphExecutionArtifacts(graphPath: string): Promise<void> {
+        await invoke("clear_graph_execution_artifacts", { graphPath });
     }
 
     static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {

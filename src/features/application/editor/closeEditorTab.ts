@@ -1,4 +1,5 @@
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { isResourceDocumentDirty } from '@/features/core/resource';
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -14,7 +15,7 @@ export async function closeWorksheetTab(
   const located = locateLayoutTab(worksheetId, nodeId);
   if (!located?.tab) return false;
 
-  if (located.tab.isDirty && !skipDirtyPrompt) {
+  if (isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' }) && !skipDirtyPrompt) {
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
       message: `“${located.tab.title}” 已修改。关闭前是否保存？`,

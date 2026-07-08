@@ -1,7 +1,7 @@
 use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::execution::ResultSourceStore;
 use crate::graph::{
-    DataType, DataValue, GraphId, GraphRecompileScope, NodeId, NodeInstanceParams, PinChangeSet,
+    DataType, DataValue, GraphRecompileScope, NodeId, NodeInstanceParams, PinChangeSet,
     PinDirection, PinId,
 };
 use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
@@ -9,7 +9,8 @@ use crate::graph::core::GraphInstance;
 use crate::project::FunctionSignatureEntry;
 use crate::log::log_app;
 use crate::project::{
-    ProjectState, emit_inferred_types, emit_pin_change_events, emit_runtime_source_invalidation,
+    GraphResourcePath, ProjectState, emit_inferred_types, emit_pin_change_events,
+    emit_runtime_source_invalidation,
 };
 use crate::schema::{GraphUndoPatch, NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
@@ -62,14 +63,16 @@ fn node_create_dto_from_graph(
 fn preload_call_projection_signatures(
     state: &ProjectState,
     entries: impl IntoIterator<Item = (impl AsRef<str>, Option<NodeInstanceParams>)>,
-) -> Result<HashMap<GraphId, FunctionSignatureEntry>, String> {
+) -> Result<HashMap<GraphResourcePath, FunctionSignatureEntry>, String> {
     let mut targets = HashMap::new();
     for (node_type, params) in entries {
         let node_type = node_type.as_ref();
         let params_ref = params.as_ref();
         if let Some(signature) = state.resolve_call_projection_signature(node_type, params_ref)? {
-            if let Some(target_id) = ProjectState::call_function_target_id(node_type, params_ref) {
-                targets.entry(target_id).or_insert(signature);
+            if let Some(target_path) =
+                ProjectState::call_function_target_path(node_type, params_ref)
+            {
+                targets.entry(target_path).or_insert(signature);
             }
         }
     }
@@ -78,21 +81,21 @@ fn preload_call_projection_signatures(
 
 fn index_call_site_after_create(
     state: &ProjectState,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     node_id: NodeId,
     node_type: &str,
     params: Option<&NodeInstanceParams>,
 ) {
-    state.register_call_site_for_node(&graph_id, node_id, node_type, params);
+    state.register_call_site_for_node(&graph_path, node_id, node_type, params);
 }
 
 fn index_call_sites_after_delete(
     state: &ProjectState,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     removed: impl IntoIterator<Item = (NodeId, String)>,
 ) {
     for (node_id, node_type) in removed {
-        state.unregister_call_site_for_node(&graph_id, node_id, &node_type);
+        state.unregister_call_site_for_node(&graph_path, node_id, &node_type);
     }
 }
 
@@ -100,15 +103,15 @@ fn index_call_sites_after_delete(
 pub fn create_node(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     node_type: &str,
     x: Option<f32>,
     y: Option<f32>,
     params: Option<NodeInstanceParams>,
 ) -> Result<CreateNodeResult, String> {
     log_app::info!(
-        "create_node called: graph_id={}, node_type={}, x={:?}, y={:?}",
-        graph_id,
+        "create_node called: graph_path={}, node_type={}, x={:?}, y={:?}",
+        graph_path,
         node_type,
         x,
         y
@@ -118,7 +121,7 @@ pub fn create_node(
     let signature = state.resolve_call_projection_signature(node_type, params.as_ref())?;
     let params_for_index = params.clone();
 
-    let (node_id, node_dto, pins_dto, pin_id_strings) = state.with_graph_mut(&graph_id, |mut ctx| {
+    let (node_id, node_dto, pins_dto, pin_id_strings) = state.with_graph_mut(&graph_path, |mut ctx| {
         let node_id = ctx.graph().create_node_with_position(
             node_type,
             x.unwrap_or(0.0),
@@ -143,7 +146,7 @@ pub fn create_node(
     emit_project_event(
         &app,
         Event::Node(EventNode::NodeCreated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             node_id,
             data: node_dto,
             pins: pins_dto,
@@ -152,7 +155,7 @@ pub fn create_node(
 
     index_call_site_after_create(
         &state,
-        graph_id,
+        graph_path.clone(),
         node_id,
         node_type,
         params_for_index.as_ref(),
@@ -179,12 +182,12 @@ pub struct BatchCreateNodeRequest {
 pub fn batch_create_nodes(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     requests: Vec<BatchCreateNodeRequest>,
 ) -> Result<Vec<String>, String> {
     log_app::info!(
-        "batch_create_nodes called: graph_id={}, count={}",
-        graph_id,
+        "batch_create_nodes called: graph_path={}, count={}",
+        graph_path,
         requests.len()
     );
 
@@ -195,7 +198,7 @@ pub fn batch_create_nodes(
             .map(|req| (&req.node_type, req.params.clone())),
     )?;
 
-    let (results, node_ids) = state.with_graph_mut(&graph_id, |mut ctx| {
+    let (results, node_ids) = state.with_graph_mut(&graph_path, |mut ctx| {
         let mut created_ids: Vec<NodeId> = Vec::with_capacity(requests.len());
 
         for req in &requests {
@@ -212,7 +215,7 @@ pub fn batch_create_nodes(
 
         for (req, &node_id) in requests.iter().zip(&created_ids) {
             if let Some(target_id) =
-                ProjectState::call_function_target_id(&req.node_type, req.params.as_ref())
+                ProjectState::call_function_target_path(&req.node_type, req.params.as_ref())
             {
                 if let Some(target) = targets.get(&target_id) {
                     ctx.graph().sync_call_function_pins_from_signature(
@@ -241,7 +244,7 @@ pub fn batch_create_nodes(
     for (req, (node_id, _, _)) in requests.iter().zip(&results) {
         index_call_site_after_create(
             &state,
-            graph_id,
+            graph_path.clone(),
             *node_id,
             &req.node_type,
             req.params.as_ref(),
@@ -251,7 +254,7 @@ pub fn batch_create_nodes(
     emit_project_event(
         &app,
         Event::Node(EventNode::NodesBatchCreated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             nodes: results,
         }),
     );
@@ -264,10 +267,10 @@ pub fn delete_node(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     node_id: NodeId,
 ) -> Result<(), String> {
-    let (deleted_pin_ids, removed_node_type) = state.with_graph_mut(&graph_id, |mut ctx| {
+    let (deleted_pin_ids, removed_node_type) = state.with_graph_mut(&graph_path, |mut ctx| {
         if ctx.graph_ref().is_shell_node(node_id) {
             return Err("System-managed shell node cannot be deleted".to_string());
         }
@@ -291,14 +294,17 @@ pub fn delete_node(
         Ok((deleted_pin_ids, removed_node_type))
     })?;
 
-    index_call_sites_after_delete(&state, graph_id, [(node_id, removed_node_type)]);
+    index_call_sites_after_delete(&state, graph_path.clone(), [(node_id, removed_node_type)]);
 
     emit_project_event(
         &app,
-        Event::Node(EventNode::NodeDeleted { graph_id, node_id }),
+        Event::Node(EventNode::NodeDeleted {
+            graph_path: graph_path.as_str().to_string(),
+            node_id,
+        }),
     );
 
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &[], &deleted_pin_ids);
+    emit_runtime_source_invalidation(&app, &source_store, &graph_path, &[], &deleted_pin_ids);
 
     Ok(())
 }
@@ -309,17 +315,17 @@ pub fn batch_delete_nodes(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     node_ids: Vec<NodeId>,
 ) -> Result<GraphUndoPatch, String> {
     log_app::info!(
-        "batch_delete_nodes called: graph_id={}, count={}",
-        graph_id,
+        "batch_delete_nodes called: graph_path={}, count={}",
+        graph_path,
         node_ids.len()
     );
 
     let (snapshot, deleted_pin_ids, node_ids, removed_node_types) =
-        state.with_graph_mut(&graph_id, |mut ctx| {
+        state.with_graph_mut(&graph_path, |mut ctx| {
         // 壳节点（Event Begin / Function Entry/Return）不可删除，静默跳过。
         let node_ids: Vec<NodeId> = node_ids
             .into_iter()
@@ -355,14 +361,17 @@ pub fn batch_delete_nodes(
         Ok((snapshot, deleted_pin_ids, node_ids, removed_node_types))
     })?;
 
-    index_call_sites_after_delete(&state, graph_id, removed_node_types);
+    index_call_sites_after_delete(&state, graph_path.clone(), removed_node_types);
 
     emit_project_event(
         &app,
-        Event::Node(EventNode::NodesBatchDeleted { graph_id, node_ids }),
+        Event::Node(EventNode::NodesBatchDeleted {
+            graph_path: graph_path.as_str().to_string(),
+            node_ids,
+        }),
     );
 
-    emit_runtime_source_invalidation(&app, &source_store, graph_id, &[], &deleted_pin_ids);
+    emit_runtime_source_invalidation(&app, &source_store, &graph_path, &[], &deleted_pin_ids);
 
     Ok(snapshot)
 }
@@ -372,18 +381,18 @@ pub fn batch_delete_nodes(
 pub fn apply_graph_patch(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     patch: GraphUndoPatch,
 ) -> Result<(), String> {
     log_app::info!(
         "[apply_graph_patch] graph={}, nodes={}, neighbors={}, connections={}",
-        graph_id,
+        graph_path,
         patch.nodes.len(),
         patch.neighbor_nodes.len(),
         patch.connections.len()
     );
 
-    let (result, graph) = state.with_graph_mut(&graph_id, |mut ctx| {
+    let (result, graph) = state.with_graph_mut(&graph_path, |mut ctx| {
         let variable_symbols = ctx.variable_symbols.clone();
         let dataframe_symbols = ctx.dataframe_symbols.clone();
         let result = ctx
@@ -397,26 +406,26 @@ pub fn apply_graph_patch(
         emit_project_event(
             &app,
             Event::Node(EventNode::NodesBatchCreated {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 nodes: result.node_batches,
             }),
         );
     }
 
-    emit_pin_change_events(&app, graph_id, &graph, &result.change_sets);
+    emit_pin_change_events(&app, &graph_path, &graph, &result.change_sets);
 
     if !result.established_connections.is_empty() {
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionsBatchCreated {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 connections: result.established_connections,
             }),
         );
     }
-    emit_inferred_types(&app, graph_id, result.inferred);
+    emit_inferred_types(&app, &graph_path, result.inferred);
 
-    state.refresh_call_sites_for_caller(&graph_id);
+    state.refresh_call_sites_for_caller(&graph_path);
 
     Ok(())
 }
@@ -426,13 +435,13 @@ pub fn apply_graph_patch(
 pub fn update_node_positions(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     updates: Vec<NodePositionUpdate>,
 ) -> Result<(), String> {
     let updates_tuple: Vec<(NodeId, f32, f32)> =
         updates.iter().map(|u| (u.node_id, u.x, u.y)).collect();
 
-    state.with_graph_mut(&graph_id, |mut ctx| {
+    state.with_graph_mut(&graph_path, |mut ctx| {
         ctx.graph().set_node_positions(&updates_tuple)?;
         Ok(())
     })?;
@@ -440,7 +449,7 @@ pub fn update_node_positions(
     emit_project_event(
         &app,
         Event::Node(EventNode::NodePositionsUpdated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             updates: updates_tuple,
         }),
     );
@@ -455,7 +464,7 @@ pub fn update_node_positions(
 pub fn create_node_with_id(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     node_id: String,
     pin_ids: Vec<String>,
     node_type: String,
@@ -476,7 +485,7 @@ pub fn create_node_with_id(
 
     log_app::info!(
         "[create_node_with_id] graph={}, node={}, type={}, pins={}",
-        graph_id,
+        graph_path,
         node_id,
         node_type,
         pids.len()
@@ -494,7 +503,7 @@ pub fn create_node_with_id(
     };
     let create_pin_ids: &[PinId] = if is_call_function { &[] } else { &pids };
 
-    let (node_dto, pins_dto) = state.with_graph_mut(&graph_id, |mut ctx| {
+    let (node_dto, pins_dto) = state.with_graph_mut(&graph_path, |mut ctx| {
         ctx.graph().create_node_raw_with_ids(
             &node_type,
             nid,
@@ -520,7 +529,7 @@ pub fn create_node_with_id(
     emit_project_event(
         &app,
         Event::Node(EventNode::NodeCreated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             node_id: nid,
             data: node_dto,
             pins: pins_dto,
@@ -529,7 +538,7 @@ pub fn create_node_with_id(
 
     index_call_site_after_create(
         &state,
-        graph_id,
+        graph_path.clone(),
         nid,
         &node_type,
         projection_params.as_ref(),
@@ -580,13 +589,13 @@ pub struct BatchCreateWithConnectionsResult {
 pub fn batch_create_with_connections(
     app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: GraphResourcePath,
     entries: Vec<BatchNodeEntry>,
     connections: Vec<BatchConnectionEntry>,
 ) -> Result<BatchCreateWithConnectionsResult, String> {
     log_app::info!(
         "[batch_create_with_connections] graph={}, entries={}, connections={}",
-        graph_id,
+        graph_path,
         entries.len(),
         connections.len()
     );
@@ -607,7 +616,7 @@ pub fn batch_create_with_connections(
         all_change_sets,
         last_inferred,
         graph,
-    ) = state.with_graph_mut(&graph_id, |mut ctx| {
+    ) = state.with_graph_mut(&graph_path, |mut ctx| {
         let mut all_results: Vec<(NodeId, NodeInstanceDTO, Vec<PinInstanceDTO>)> = Vec::new();
         let mut created_node_ids: Vec<NodeId> = Vec::new();
         let mut pin_mapping: HashMap<String, String> = HashMap::new();
@@ -644,7 +653,7 @@ pub fn batch_create_with_connections(
             ctx.sync_runtime_symbols();
 
             if let Some(target_id) =
-                ProjectState::call_function_target_id(&entry.node_type, entry.params.as_ref())
+                ProjectState::call_function_target_path(&entry.node_type, entry.params.as_ref())
             {
                 if let Some(target) = targets.get(&target_id) {
                     ctx.graph().sync_call_function_pins_from_signature(
@@ -758,7 +767,7 @@ pub fn batch_create_with_connections(
     for (entry, (node_id, _, _)) in entries.iter().zip(&all_results) {
         index_call_site_after_create(
             &state,
-            graph_id,
+            graph_path.clone(),
             *node_id,
             &entry.node_type,
             entry.params.as_ref(),
@@ -768,7 +777,7 @@ pub fn batch_create_with_connections(
     emit_project_event(
         &app,
         Event::Node(EventNode::NodesBatchCreated {
-            graph_id,
+            graph_path: graph_path.as_str().to_string(),
             nodes: all_results,
         }),
     );
@@ -777,13 +786,13 @@ pub fn batch_create_with_connections(
         emit_project_event(
             &app,
             Event::Connection(EventConnection::ConnectionsBatchCreated {
-                graph_id,
+                graph_path: graph_path.as_str().to_string(),
                 connections: established,
             }),
         );
     }
-    emit_pin_change_events(&app, graph_id, &graph, &all_change_sets);
-    emit_inferred_types(&app, graph_id, last_inferred);
+    emit_pin_change_events(&app, &graph_path, &graph, &all_change_sets);
+    emit_inferred_types(&app, &graph_path, last_inferred);
 
     Ok(BatchCreateWithConnectionsResult {
         node_ids: node_id_strings,

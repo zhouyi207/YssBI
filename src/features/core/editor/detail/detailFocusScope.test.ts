@@ -35,7 +35,7 @@ describe('variablesGraphScope', () => {
     useLayoutStore.getState().removeTab('editor', 'g1');
     syncVariablesGraphScopeAfterClose('g1');
 
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g2');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g2');
   });
 
   it('keeps scope when the last open tab is closed', () => {
@@ -60,11 +60,11 @@ describe('variablesGraphScope', () => {
 
     syncVariablesGraphScopeAfterClose('g1');
 
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g1');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g1');
   });
 
   it('syncs scope from active tab', () => {
     syncVariablesGraphScopeFromActiveTab();
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g2');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g2');
   });
 });

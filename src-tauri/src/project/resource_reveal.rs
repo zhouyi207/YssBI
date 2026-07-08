@@ -2,17 +2,16 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use uuid::Uuid;
 
 use crate::database::{DatabaseDecl, DatabaseEngine};
-use crate::graph::GraphId;
+use crate::project::GraphResourcePath;
 
 use super::{ProjectError, ProjectState, project_root_from_path, worksheet_absolute_path};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum RevealProjectResourceRequest {
-    Graph { graph_id: String },
+    Graph { graph_path: String },
     Database { database_id: String },
     Worksheet { worksheet_id: String },
 }
@@ -21,7 +20,7 @@ impl RevealProjectResourceRequest {
     pub fn from_parts(kind: &str, resource_id: String) -> Result<Self, String> {
         match kind {
             "graph" => Ok(Self::Graph {
-                graph_id: resource_id,
+                graph_path: resource_id,
             }),
             "database" => Ok(Self::Database {
                 database_id: resource_id,
@@ -44,8 +43,8 @@ pub fn resolve_reveal_path(
     let root = project_root_from_path(&project_path);
 
     match request {
-        RevealProjectResourceRequest::Graph { graph_id } => {
-            absolute_path_for_graph(root.as_path(), &graph_id)
+        RevealProjectResourceRequest::Graph { graph_path } => {
+            absolute_path_for_graph(root.as_path(), &graph_path)
         }
         RevealProjectResourceRequest::Database { database_id } => {
             let databases = state.get_data().databases;
@@ -59,11 +58,11 @@ pub fn resolve_reveal_path(
     }
 }
 
-pub fn absolute_path_for_graph(root: &Path, graph_id: &str) -> Result<PathBuf, ProjectError> {
-    let graph_id = parse_graph_id(graph_id)?;
-    super::find_graph_document_path(root, &graph_id)?
+pub fn absolute_path_for_graph(root: &Path, graph_path: &str) -> Result<PathBuf, ProjectError> {
+    let graph_path = GraphResourcePath::new(graph_path)?;
+    super::find_graph_document_path(root, &graph_path)?
         .map(|(path, _, _)| path)
-        .ok_or_else(|| ProjectError::InvalidProjectFormat(format!("Graph '{graph_id}' not found")))
+        .ok_or_else(|| ProjectError::InvalidProjectFormat(format!("Graph '{graph_path}' not found")))
 }
 
 pub fn absolute_path_for_database(
@@ -100,8 +99,3 @@ pub fn absolute_path_for_database(
     Ok(path)
 }
 
-fn parse_graph_id(graph_id: &str) -> Result<GraphId, ProjectError> {
-    Uuid::parse_str(graph_id).map(GraphId::from).map_err(|e| {
-        ProjectError::InvalidProjectFormat(format!("Invalid graph id '{graph_id}': {e}"))
-    })
-}

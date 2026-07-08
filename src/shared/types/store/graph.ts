@@ -4,7 +4,7 @@
  * ## Hydrate 契约（权威类型：`GraphData`）
  *
  * `graphDataStore` 的实体桶（`GraphEntityBucket`）只接受经 `normalizeGraphDataLike` 规范化后的形态。
- * 入站 API：`hydrateGraphs` / `addGraphFromData(graphId, graph: GraphDataLike)`。
+ * 入站 API：`hydrateGraphs` / `addGraphFromData(graphPath, graph: GraphDataLike)`。
  *
  * ### `GraphDataLike`（入站联合）
  *
@@ -25,7 +25,7 @@
  *
  * ### 规范化规则（`normalizeGraphDataLike` — 见 `dto/graphModel.ts`）
  *
- * 1. **节点**：`graphId` 强制为入参 `graphId`；`inputs/outputs` → `runtimePinRefsToIds`
+ * 1. **节点**：`graphPath` 强制为入参 `graphPath`；`inputs/outputs` → `runtimePinRefsToIds`
  * 2. **Pin**：原样写入实体表；`toStoredPin` 剥离废弃 `links`
  * 3. **连接**：`normalizeGraphConnections` 兼容 `{ connections }` / `ConnectionData[]` / 历史 map
  * 4. **画布**：`canvas` 优先，其次 DTO `position`，默认 `{ x:0, y:0, scale:1 }`
@@ -43,8 +43,8 @@
  * 设计说明：[docs/adr/graph-store-hydrate.md](../../../docs/adr/graph-store-hydrate.md)
  */
 
-import type { NodeId, PinId, GraphId, ConnectionId } from '../domain/ids';
-export type { NodeId, PinId, GraphId, ConnectionId };
+import type { NodeId, PinId, GraphPath, ConnectionId } from '../domain/ids';
+export type { NodeId, PinId, GraphPath, ConnectionId };
 import type { GraphPosition, Graph } from '../domain/graph';
 import type { PinDirection, PinType, PinUI } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
@@ -56,7 +56,7 @@ import type { ParamsKind } from '../dto/nodeInstanceParams';
 /** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */
 export interface NodeData {
   id: string;
-  graphId: string;
+  graphPath: string;
   nodeType: string;
   category: string[];
   title: string;
@@ -72,7 +72,7 @@ export interface NodeData {
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
 }
 
@@ -111,7 +111,8 @@ export interface ConnectionData {
 // ==================== GraphData ====================
 /** 图完整数据（store 权威格式；`connections` 为 `ConnectionData[]`，持久化经 `graphDataToDomainGraph` 包装） */
 export interface GraphData {
-  id: string;
+  /** 图资源相对路径（与 Domain `Graph.path`、store 桶键一致） */
+  path: string;
   name: string;
   type: 'event' | 'function';
   functionInputs?: import('../domain/graph').FunctionSignaturePin[];
@@ -128,7 +129,7 @@ export interface GraphData {
  */
 export interface RuntimeNodeInput {
   id: string;
-  graphId?: string;
+  graphPath?: string;
   nodeType: string;
   category?: string[];
   title?: string;
@@ -142,7 +143,7 @@ export interface RuntimeNodeInput {
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
 }
 
@@ -153,6 +154,6 @@ export interface GraphDataInput extends Omit<GraphData, 'nodes'> {
 
 /**
  * `addGraphFromData` / `hydrateGraphs` 入站联合类型。
- * 一律经 `normalizeGraphDataLike(graphId, graph)` 写入 store。
+ * 一律经 `normalizeGraphDataLike(graphPath, graph)` 写入 store。
  */
 export type GraphDataLike = GraphData | GraphDataInput | Graph | GraphInstanceDTO;

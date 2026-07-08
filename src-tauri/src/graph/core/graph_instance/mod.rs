@@ -21,7 +21,8 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::value::DataType;
 use crate::graph::value::DataValue;
-use crate::graph::{GraphId, TypeVarDefinition, TypeVarId};
+use crate::graph::{TypeVarDefinition, TypeVarId};
+use crate::project::GraphResourcePath;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -33,8 +34,8 @@ use std::sync::{Arc, RwLock};
 /// - 类型推断上下文
 #[derive(Clone)]
 pub struct GraphInstance {
-    // 图 id
-    pub id: GraphId,
+    /// 项目内稳定身份：相对于项目根的规范化路径。
+    pub resource_path: GraphResourcePath,
 
     // 图 name
     pub name: String,

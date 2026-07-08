@@ -49,7 +49,7 @@ export function buildPinResultSearchEntry(
 }
 
 export function collectPinResultSearchEntries(
-  graphId: string,
+  graphPath: string,
   pinResults: ReadonlyMap<string, PinResultState>,
   pins: readonly PinResultSearchPinRef[],
   resolveLabels: (nodeId: string, pinId: string) => PinResultSearchLabels,
@@ -61,7 +61,7 @@ export function collectPinResultSearchEntries(
 
     if (pin.direction === 'output') {
       const pinResult = pinResults.get(pin.pinId);
-      if (!pinResult || pinResult.graphId !== graphId) continue;
+      if (!pinResult || pinResult.graphPath !== graphPath) continue;
 
       entries.push(
         buildPinResultSearchEntry(
@@ -77,7 +77,7 @@ export function collectPinResultSearchEntries(
     if (pin.connectionIds.length === 0) continue;
 
     const target = resolvePinViewTargetFromCache({
-      graphId,
+      graphPath,
       pinId: pin.pinId,
       direction: 'input',
       isExec: pin.isExec,

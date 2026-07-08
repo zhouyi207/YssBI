@@ -9,7 +9,7 @@ import {
 
 function result(pinId: string): PinResultState {
   return {
-    graphId: 'g1',
+    graphPath: 'g1',
     nodeId: 'n1',
     pinId,
     sourceId: `src-${pinId}`,
@@ -26,7 +26,7 @@ describe('resolvePinViewTarget', () => {
   it('resolves output pin from cache', () => {
     const pinResults = new Map([['out-1', result('out-1')]]);
     const target = resolvePinViewTargetFromCache({
-      graphId: 'g1',
+      graphPath: 'g1',
       pinId: 'out-1',
       direction: 'output',
       isExec: false,
@@ -38,7 +38,7 @@ describe('resolvePinViewTarget', () => {
   it('resolves connected input via upstream cache', () => {
     const pinResults = new Map([['out-1', result('out-1')]]);
     const target = resolvePinViewTargetFromCache({
-      graphId: 'g1',
+      graphPath: 'g1',
       pinId: 'in-1',
       direction: 'input',
       isExec: false,
@@ -51,7 +51,7 @@ describe('resolvePinViewTarget', () => {
   it('hides view for exec and unconnected input', () => {
     expect(
       shouldShowPinViewMenuItem({
-        graphId: 'g1',
+        graphPath: 'g1',
         pinId: 'exec',
         direction: 'input',
         isExec: true,
@@ -59,7 +59,7 @@ describe('resolvePinViewTarget', () => {
     ).toBe(false);
     expect(
       shouldShowPinViewMenuItem({
-        graphId: 'g1',
+        graphPath: 'g1',
         pinId: 'in-1',
         direction: 'input',
         isExec: false,
@@ -70,7 +70,7 @@ describe('resolvePinViewTarget', () => {
   it('shows disabled view for output without result', () => {
     expect(
       resolvePinViewDisabledReason({
-        graphId: 'g1',
+        graphPath: 'g1',
         pinId: 'out-1',
         direction: 'output',
         isExec: false,

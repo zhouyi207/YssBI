@@ -117,7 +117,7 @@ export interface EditorGroupInteractionSlice {
   connectPins: ConnectPinsHandler;
   setCanvas: (
     updater: GraphPosition | ((prev: GraphPosition) => GraphPosition),
-    targetGraphId?: string,
+    targetGraphPath?: string,
   ) => void;
 }
 

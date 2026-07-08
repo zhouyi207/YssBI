@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { getGraphById } from "@/features/core/dataStore";
+import { getGraphByPath } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { persistGraphViewport } from '@/features/core/viewport';
@@ -41,15 +41,15 @@ export function useCanvasInteraction({
     const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
     setSelectedNodeIdsRef.current = setSelectedNodeIds;
 
-    const persistViewport = useCallback((graphId?: string | null) => {
-        persistGraphViewport(graphId ?? activeTabIdRef.current);
+    const persistViewport = useCallback((graphPath?: string | null) => {
+        persistGraphViewport(graphPath ?? activeTabIdRef.current);
     }, [activeTabIdRef]);
 
     const connectPins = useCallback(async (groupId: string, a: string, b: string) => {
         const tid = resolveTabId(groupId, activeTabIdRef);
         if (!tid) return;
 
-        const graph = getGraphById(tid);
+        const graph = getGraphByPath(tid);
         const pinA = graph?.pins.find((pin) => pin.id === a);
         const pinB = graph?.pins.find((pin) => pin.id === b);
         if (pinA && pinB && !canConnectPins(pinA as Pin, pinB as Pin)) {

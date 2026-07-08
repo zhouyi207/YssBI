@@ -1,6 +1,7 @@
 use super::ProjectState;
 use crate::graph::value::DataType;
-use crate::graph::{GraphId, GraphInstance, GraphRecompileResult, GraphRecompileScope};
+use crate::graph::{GraphInstance, GraphRecompileResult, GraphRecompileScope};
+use crate::project::GraphResourcePath;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -52,17 +53,17 @@ impl ProjectState {
     /// `std::sync::RwLock` is not re-entrant — doing so deadlocks the IPC thread.
     pub fn with_graph_mut<R>(
         &self,
-        graph_id: &GraphId,
+        graph_path: &GraphResourcePath,
         f: impl FnOnce(GraphMutContext<'_>) -> Result<R, String>,
     ) -> Result<R, String> {
         let (variable_symbols, dataframe_symbols) = {
             let data = self.project_data.read().unwrap();
             let graph = data
                 .graphs
-                .get(graph_id)
-                .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+                .get(graph_path)
+                .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
             (
-                Self::variable_symbols_from_variables(&data.variables, graph_id, &graph.kind),
+                Self::variable_symbols_from_variables(&data.variables, graph_path, &graph.kind),
                 Self::dataframe_symbols_from_databases(&data.databases),
             )
         };
@@ -70,8 +71,8 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let graph = data
             .graphs
-            .get_mut(graph_id)
-            .ok_or_else(|| format!("Graph '{}' not found", graph_id))?;
+            .get_mut(graph_path)
+            .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
         Self::bind_graph_runtime(graph, self);
 

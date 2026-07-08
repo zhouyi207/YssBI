@@ -15,7 +15,7 @@ describe('graphDocumentActions', () => {
     const outputs = [{ id: 'output-1', name: 'Result', type: 'float', containerType: 'array' }];
     const serviceSpy = vi.spyOn(GraphService, 'updateFunctionSignature').mockResolvedValue({
       graph: {
-        id: 'function-1',
+        path: 'function-1',
         name: 'Compute',
         type: 'function',
         functionInputs: inputs,

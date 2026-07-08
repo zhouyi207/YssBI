@@ -7,7 +7,7 @@ export interface NodeCatalogItem {
   title: string;
   category: string[];
   overrides?: Partial<Node> & {
-    subGraphId?: string;
+    subGraphPath?: string;
     variableId?: string;
   };
 }
@@ -20,5 +20,5 @@ export const RESOURCE_SPAWNED_NODE_TYPES = new Set([
 ]);
 
 export function catalogItemKey(item: NodeCatalogItem): string {
-  return `${item.nodeType}:${item.overrides?.variableId ?? item.overrides?.subGraphId ?? ''}`;
+  return `${item.nodeType}:${item.overrides?.variableId ?? item.overrides?.subGraphPath ?? ''}`;
 }

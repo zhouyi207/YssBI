@@ -13,8 +13,8 @@ export interface DisconnectPinContext {
 }
 
 export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, DisconnectPinContext> = {
-  async execute(graphId, args) {
-    const result = await ConnectionService.disconnectPin(graphId, args.pinId);
+  async execute(graphPath, args) {
+    const result = await ConnectionService.disconnectPin(graphPath, args.pinId);
 
     return {
       pinId: args.pinId,
@@ -23,13 +23,13 @@ export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, DisconnectP
     };
   },
 
-  async undo(graphId, context) {
-    await NodeService.applyGraphPatch(graphId, context.undoPatch);
+  async undo(graphPath, context) {
+    await NodeService.applyGraphPatch(graphPath, context.undoPatch);
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     if (context.removedConnections.length > 0) {
-      await ConnectionService.disconnectPin(graphId, context.pinId);
+      await ConnectionService.disconnectPin(graphPath, context.pinId);
     }
   },
 };

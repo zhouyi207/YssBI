@@ -26,7 +26,7 @@ type DomainGraphNode = Graph['nodes'][number] & {
   variableId?: string;
   variableName?: string;
   variableType?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
   isInternal?: boolean;
 };
@@ -125,7 +125,7 @@ function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph[
     variableId: node.variableId,
     variableName: node.variableName,
     variableType: node.variableType,
-    subGraphId: node.subGraphId,
+    subGraphPath: node.subGraphPath,
     dataframeId: node.dataframeId,
     isInternal: node.isInternal,
   })) as Graph['nodes'];
@@ -137,7 +137,7 @@ export function graphDataToDomainGraph(data: GraphData): Graph {
   const pinMap = new Map(domainPins.map((pin) => [pin.id, pin]));
 
   return {
-    id: data.id,
+    path: data.path,
     name: data.name,
     type: data.type,
     functionInputs: data.functionInputs,
@@ -149,10 +149,10 @@ export function graphDataToDomainGraph(data: GraphData): Graph {
   };
 }
 
-function domainNodeToNodeData(graphId: string, node: DomainGraphNode): NodeData {
+function domainNodeToNodeData(graphPath: string, node: DomainGraphNode): NodeData {
   return {
     id: node.id,
-    graphId,
+    graphPath,
     nodeType: node.nodeType,
     category: node.category,
     title: node.title,
@@ -165,7 +165,7 @@ function domainNodeToNodeData(graphId: string, node: DomainGraphNode): NodeData 
     variableId: node.variableId,
     variableName: node.variableName,
     variableType: node.variableType,
-    subGraphId: node.subGraphId,
+    subGraphPath: node.subGraphPath,
     dataframeId: node.dataframeId,
     isInternal: node.isInternal,
   };
@@ -175,12 +175,12 @@ function domainNodeToNodeData(graphId: string, node: DomainGraphNode): NodeData 
 export function domainGraphToGraphData(graph: Graph): GraphData {
   const pins = graph.pins.map(domainPinToPinData);
   return {
-    id: graph.id,
+    path: graph.path,
     name: graph.name,
     type: graph.type,
     functionInputs: graph.functionInputs,
     functionOutputs: graph.functionOutputs,
-    nodes: graph.nodes.map((node) => domainNodeToNodeData(graph.id, node as DomainGraphNode)),
+    nodes: graph.nodes.map((node) => domainNodeToNodeData(graph.path, node as DomainGraphNode)),
     pins,
     connections: normalizeGraphConnections(graph.connections),
     canvas: graph.canvas,
@@ -205,7 +205,7 @@ export function domainGraphRecordToGraphData(
 
 /** GraphInstanceDTO → GraphData（IPC 入站；委托 `normalizeGraphDataLike` 单点） */
 export function graphInstanceDtoToGraphData(dto: GraphInstanceDTO): GraphData {
-  return normalizeGraphDataLike(dto.id, {
+  return normalizeGraphDataLike(dto.path, {
     ...dto,
     canvas:
       dto.canvas ??
@@ -240,11 +240,11 @@ export function runtimePinRefsToIds(arr: unknown): string[] {
   return arr.map((pin) => runtimePinRefToId(pin as string | PinData)).filter(Boolean);
 }
 
-function runtimeNodeInputToNodeData(graphId: string, node: RuntimeNodeInput): NodeData {
+function runtimeNodeInputToNodeData(graphPath: string, node: RuntimeNodeInput): NodeData {
   const stored = node as NodeData;
   return {
     ...(node as NodeData),
-    graphId,
+    graphPath,
     nodeType: stored.nodeType ?? node.nodeType ?? '',
     category: stored.category ?? [],
     title: stored.title ?? '',
@@ -257,7 +257,7 @@ function runtimeNodeInputToNodeData(graphId: string, node: RuntimeNodeInput): No
 
 /** Graph 同步事件 patch → `GraphDataLike`（`GraphEventHandler` 入站） */
 export function graphUpdatedPayloadToGraphDataLike(
-  graphId: string,
+  graphPath: string,
   kind: 'event' | 'function',
   fallbackName: string,
   data: Partial<Graph> & {
@@ -266,7 +266,7 @@ export function graphUpdatedPayloadToGraphDataLike(
   },
 ): GraphDataLike {
   return {
-    id: graphId,
+    path: graphPath,
     name: data.name ?? fallbackName,
     type: kind,
     ...data,
@@ -278,17 +278,17 @@ export function graphUpdatedPayloadToGraphDataLike(
 }
 
 /** hydrate 入口：将 `GraphDataLike` 规范化为 store 权威 `GraphData` */
-export function normalizeGraphDataLike(graphId: string, graph: GraphDataLike): GraphData {
+export function normalizeGraphDataLike(graphPath: string, graph: GraphDataLike): GraphData {
   const graphType = resolveGraphType(graph);
-  const name = (graph as GraphData).name ?? (graph as Graph).name ?? graphId;
+  const name = (graph as GraphData).name ?? (graph as Graph).name ?? graphPath;
 
   return {
-    id: graphId,
+    path: graphPath,
     name,
     type: graphType,
     functionInputs: (graph as GraphData).functionInputs ?? (graph as Graph).functionInputs,
     functionOutputs: (graph as GraphData).functionOutputs ?? (graph as Graph).functionOutputs,
-    nodes: resolveGraphNodes(graph).map((node) => runtimeNodeInputToNodeData(graphId, node)),
+    nodes: resolveGraphNodes(graph).map((node) => runtimeNodeInputToNodeData(graphPath, node)),
     pins: resolveGraphPins(graph),
     connections: normalizeGraphConnections((graph as GraphDataLike & { connections?: unknown }).connections),
     canvas:

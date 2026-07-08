@@ -31,14 +31,14 @@ backend and the React frontend in sync. New features must follow it.
    `ProjectLoaded`. Frontend `ProjectIOStore.loadProject()` then pulls
    `databases + variables` and `project index`. Graph bodies are NOT loaded
    here.
-3. **Graph open**: `useProjectIOStore.loadGraph(graphId)` →
+3. **Graph open**: `useProjectIOStore.loadGraph(graphPath)` →
    `load_project_graph` command → backend reads the file, calls
    `ProjectState::insert_graph(...)` (which binds the runtime: registry,
    schema provider, schema propagation, dynamic pin resolution), and returns
    the graph DTO. Frontend hydrates `useGraphDataStore` with it.
 4. **Graph edit**: every modification goes through a backend command
    (`create_node`, `connect_pins`, `update_node_positions`, ...). The command
-   mutates `project_data.graphs[graphId]` and emits the corresponding event.
+   mutates `project_data.graphs[graphPath]` and emits the corresponding event.
    Frontend handlers in `src/features/core/sync/handlers/` apply the event to
    the projection store.
 5. **Graph close**: `closeGraphTab` prompts to save dirty graphs, calls
@@ -86,6 +86,27 @@ backend and the React frontend in sync. New features must follow it.
   (`uiStore.confirm` / `uiStore.confirm3`); never a browser-native
   `confirm` (per `no-native-dialogs-except-path`).
 
+## Graph Resource Identity
+
+- Event/Function **项目资源**身份：`events/...` / `functions/...` 磁盘相对路径，或内存草稿
+  `untitled:{event|function}:{label}`（保存前不落盘；禁止 UUID 图键）。
+- `metadata.yssbi` 只保存项目元数据；图列表由扫描 `events/` / `functions/` 派生。
+- **Tab.id** = 图资源 path 或 untitled 句柄；禁止 tab 级 UUID。用 `buildGraphLayoutTab` 创建 graph tab。
+- IPC / Store / Call Function 引用一律使用 `graphPath`（DTO 字段 `path`）。
+- ResourceStore 逻辑键：已落盘用 `yssbi://graph/...` URI；untitled 草稿用 `untitled:...` 句柄本身。
+- Node/Pin/Connection 仍使用 UUID；不要把 `GraphId` 用于 Event/Function 资源身份。
+
+## Active Graph Session (per Editor Group)
+
+- 每个 Editor Group 在 Rust 内存中**最多保留一张当前激活的图**。
+- 所有 Tab 激活必须经过 `switchEditorGraphTab` / `activateGraphTab`：
+  1. 记录本组上一张 `activePath`
+  2. 对上一张 clean 且不再 active 的图调用 `deactivateInactiveGraphPath`（unload）
+  3. `loadGraph(graphPath)` 从后端 reload + `resolveGraphDynamicPins`
+- `graphEntities[path]` 不得单独作为「后端已加载」依据；以 `GraphSessionStore` +
+  `resource.loaded` 为准。
+- 分屏时允许同时加载 N 张图（N = 有激活 graph tab 的 editor group 数）。
+
 ## Anti-Patterns
 
 ```rust
@@ -95,7 +116,7 @@ state
     .write()
     .unwrap()
     .graphs
-    .insert(graph_id, graph);
+    .insert(graph_path, graph);
 ```
 
 ```rust
@@ -114,13 +135,13 @@ await NodeService.updateNodeTitle(nodeId, newTitle);
 ```ts
 // ❌ Optimistic write without echo tracking — risk of stale-event flicker
 store.batchUpdateNodePositions(positions);
-NodeService.updateNodePositions(graphId, positions).catch(...);
+NodeService.updateNodePositions(graphPath, positions).catch(...);
 
 // ✅ Tag pending keys so the echo handler skips self-originated updates
 store.batchUpdateNodePositions(positions);
 trackPending(
     NODE_POSITION_ECHO_DOMAIN,
     positions.map((p) => p.nodeId),
-    NodeService.updateNodePositions(graphId, positions),
+    NodeService.updateNodePositions(graphPath, positions),
 ).catch(...);
 ```

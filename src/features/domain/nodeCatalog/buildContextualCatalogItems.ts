@@ -19,9 +19,9 @@ export function buildContextualCatalogItems(options: {
   variables?: Record<string, Variable>;
   functions?: Record<string, FunctionCatalogEntry>;
   graphKind?: 'event' | 'function';
-  graphId?: string;
+  graphPath?: string;
 }): NodeCatalogItem[] {
-  const { definitions, filterPin, variables = {}, functions = {}, graphKind, graphId } = options;
+  const { definitions, filterPin, variables = {}, functions = {}, graphKind, graphPath } = options;
   const items: NodeCatalogItem[] = [];
   const callBase = definitions.find((d) => d.nodeType === CALL_FUNCTION_NODE_TYPE);
 
@@ -37,7 +37,7 @@ export function buildContextualCatalogItems(options: {
 
   Object.values(variables).forEach((v) => {
     if (!v?.name || !v?.id) return;
-    if (!variableVisibleInGraph(v.scope, graphId, graphKind)) return;
+    if (!variableVisibleInGraph(v.scope, graphPath, graphKind)) return;
     const varName = v.name;
     const varId = v.id;
     const varType = v.dataType;
@@ -75,7 +75,7 @@ export function buildContextualCatalogItems(options: {
     Object.values(functions).forEach((sub) => {
       if (!sub?.name || !sub?.id) return;
       const effective = resolveEffectiveDefinition(callBase, {
-        subGraphId: sub.id,
+        subGraphPath: sub.id,
         functionInputs: sub.functionInputs,
         functionOutputs: sub.functionOutputs,
       });
@@ -85,7 +85,7 @@ export function buildContextualCatalogItems(options: {
         nodeType: CALL_FUNCTION_NODE_TYPE,
         title: sub.name,
         category: ['Functions'],
-        overrides: { subGraphId: sub.id, title: sub.name },
+        overrides: { subGraphPath: sub.id, title: sub.name },
       });
     });
   }

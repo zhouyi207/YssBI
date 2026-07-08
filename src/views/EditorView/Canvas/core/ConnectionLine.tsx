@@ -9,13 +9,13 @@ import { Pin } from "@/shared/types/domain";
 import { getConnectGesture } from "@/shared/types/ui";
 
 export const ConnectionLine = ({
-    graphId,
+    graphPath,
     getPinWorldPos,
     getCanvasLocalPoint,
     pendingConnection,
     menuPos,
 }: {
-    graphId: string;
+    graphPath: string;
     getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
     getCanvasLocalPoint: (x: number, y: number) => { x: number; y: number };
     pendingConnection?: Pin | null;
@@ -78,7 +78,7 @@ export const ConnectionLine = ({
 
             if (!activeStart || !endWorld) return;
 
-            const viewport = getViewport(graphId);
+            const viewport = getViewport(graphPath);
             const currentTheme = themeRef.current;
 
             ctx.save();
@@ -107,11 +107,11 @@ export const ConnectionLine = ({
             previousGesture = state.gesture;
             render();
         });
-        const unsubViewport = graphId ? subscribeToViewport(graphId, render) : () => {};
+        const unsubViewport = graphPath ? subscribeToViewport(graphPath, render) : () => {};
         render();
 
         return () => { unsubGesture(); unsubViewport(); };
-    }, [graphId]);
+    }, [graphPath]);
 
     // Handle canvas resizing
     useEffect(() => {

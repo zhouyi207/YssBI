@@ -24,7 +24,7 @@ export function useDetailPanelModel(): {
   );
 
   const functionSignature = useGraphMetaStore((s) =>
-    target?.kind === 'function' && 'id' in target ? s.graphs[target.id] : undefined,
+    target?.kind === 'function' ? s.graphs[target.path] : undefined,
   );
 
   const model = useMemo(

@@ -4,7 +4,7 @@ import { toUiNode, uiNodeHasNoHeader } from './nodeView';
 
 const baseNode: NodeData = {
   id: 'node-1',
-  graphId: 'graph-1',
+  graphPath: 'graph-1',
   nodeType: 'Math:Add',
   category: ['Math'],
   title: 'Add',
